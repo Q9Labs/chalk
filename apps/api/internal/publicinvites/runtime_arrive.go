@@ -98,39 +98,13 @@ func (r Runtime) newArrival(ctx context.Context, input PublicInviteArrivalInput,
 	if err != nil {
 		return PublicSpaceArrival{}, err
 	}
-	space, err := r.loadPublicSpace(ctx, invite.TenantID, invite.SpaceID)
+	space, accountAuthorized, err := r.arrivalSpace(ctx, input, invite)
 	if err != nil {
 		return PublicSpaceArrival{}, err
 	}
-	if space.Archived {
-		return PublicSpaceArrival{}, ErrInviteUnavailable
-	}
-	accountAuthorized, err := r.authorizeAccount(ctx, input.AccountID, invite.TenantID)
+	create, err := r.arrivalInput(input, invite, token, name, accountAuthorized)
 	if err != nil {
 		return PublicSpaceArrival{}, err
-	}
-	if space.AdmissionMode == AdmissionMembersOnly && !accountAuthorized {
-		return PublicSpaceArrival{}, ErrInviteUnavailable
-	}
-	create := CreateArrivalInput{
-		TenantID:         invite.TenantID,
-		SpaceID:          invite.SpaceID,
-		Invite:           token,
-		InviteStateEpoch: invite.StateEpoch,
-		IdentityMode:     IdentityGuest,
-		DisplayName:      name,
-		IdempotencyKey:   input.RequestKey,
-	}
-	if accountAuthorized {
-		create.IdentityMode, create.AccountID = IdentityAccount, input.AccountID
-	}
-	if create.GuestCredential, err = decodeGuestCredential(input.GuestCredential); err != nil {
-		return PublicSpaceArrival{}, err
-	}
-	if create.IdentityMode == IdentityGuest && len(create.GuestCredential) == 0 {
-		if create.GuestCredential, err = r.deriveGuestCredential(token, input.RequestKey); err != nil {
-			return PublicSpaceArrival{}, err
-		}
 	}
 	created, err := r.service.CreateArrival(ctx, create)
 	if err != nil {
@@ -145,6 +119,51 @@ func (r Runtime) newArrival(ctx context.Context, input PublicInviteArrivalInput,
 	}
 	result.GuestCredential = base64.RawURLEncoding.EncodeToString(created.Credential)
 	return result, nil
+}
+
+// arrivalSpace loads the invite's Space and reports whether the caller's account may enter it as a member.
+func (r Runtime) arrivalSpace(ctx context.Context, input PublicInviteArrivalInput, invite Invite) (PublicSpace, bool, error) {
+	space, err := r.loadPublicSpace(ctx, invite.TenantID, invite.SpaceID)
+	if err != nil {
+		return PublicSpace{}, false, err
+	}
+	if space.Archived {
+		return PublicSpace{}, false, ErrInviteUnavailable
+	}
+	accountAuthorized, err := r.authorizeAccount(ctx, input.AccountID, invite.TenantID)
+	if err != nil {
+		return PublicSpace{}, false, err
+	}
+	if space.AdmissionMode == AdmissionMembersOnly && !accountAuthorized {
+		return PublicSpace{}, false, ErrInviteUnavailable
+	}
+	return space, accountAuthorized, nil
+}
+
+// arrivalInput builds the Arrival record for an account member or a guest; a guest without a credential gets a derived one.
+func (r Runtime) arrivalInput(input PublicInviteArrivalInput, invite Invite, token Token, name string, accountAuthorized bool) (CreateArrivalInput, error) {
+	create := CreateArrivalInput{
+		TenantID:         invite.TenantID,
+		SpaceID:          invite.SpaceID,
+		Invite:           token,
+		InviteStateEpoch: invite.StateEpoch,
+		IdentityMode:     IdentityGuest,
+		DisplayName:      name,
+		IdempotencyKey:   input.RequestKey,
+	}
+	if accountAuthorized {
+		create.IdentityMode, create.AccountID = IdentityAccount, input.AccountID
+	}
+	var err error
+	if create.GuestCredential, err = decodeGuestCredential(input.GuestCredential); err != nil {
+		return CreateArrivalInput{}, err
+	}
+	if create.IdentityMode == IdentityGuest && len(create.GuestCredential) == 0 {
+		if create.GuestCredential, err = r.deriveGuestCredential(token, input.RequestKey); err != nil {
+			return CreateArrivalInput{}, err
+		}
+	}
+	return create, nil
 }
 
 // admitNewArrival applies the Space's admission mode to a recorded Arrival.

@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -99,26 +100,7 @@ func NewLifecycleWorkerWithBatch(lifecycle Lifecycle, actions LifecycleActions, 
 
 func (w LifecycleWorker) Run(ctx context.Context) (result LifecycleWorkerResult, resultErr error) {
 	ctx, span := lifecycleWorkerTracer.Start(ctx, "public_invites.lifecycle")
-	defer func() {
-		outcome := "succeeded"
-		if resultErr != nil {
-			outcome = "failed"
-			span.RecordError(resultErr)
-			span.SetStatus(codes.Error, "public Space lifecycle failed")
-		}
-		span.SetAttributes(
-			attribute.String("chalk.public_invites.lifecycle.outcome", outcome),
-			attribute.Int("chalk.public_invites.lifecycle.batches", result.Batches),
-			attribute.Int("chalk.public_invites.lifecycle.listed", result.Listed),
-			attribute.Int("chalk.public_invites.lifecycle.claimed", result.Claimed),
-			attribute.Int("chalk.public_invites.lifecycle.archived", result.Archived),
-			attribute.Int("chalk.public_invites.lifecycle.retried", result.Retried),
-			attribute.Int("chalk.public_invites.lifecycle.skipped", result.Skipped),
-			attribute.Int("chalk.public_invites.lifecycle.failed", result.Failed),
-		)
-		lifecycleWorkerRuns.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
-		span.End()
-	}()
+	defer func() { recordLifecycleRun(ctx, span, result, resultErr) }()
 
 	if err := w.validate(); err != nil {
 		return result, err
@@ -144,17 +126,7 @@ func (w LifecycleWorker) Run(ctx context.Context) (result LifecycleWorkerResult,
 				result.Claimed++
 			}
 			lifecycleWorkerItems.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", lifecycleItemOutcome(status))))
-			switch status {
-			case lifecycleItemArchived:
-				result.Archived++
-			case lifecycleItemRetried:
-				result.Retried++
-				result.Failed++
-			case lifecycleItemSkipped:
-				result.Skipped++
-			case lifecycleItemFailed:
-				result.Failed++
-			}
+			result.tally(status)
 			if err != nil {
 				failures = append(failures, err)
 			}
@@ -164,6 +136,42 @@ func (w LifecycleWorker) Run(ctx context.Context) (result LifecycleWorkerResult,
 		}
 	}
 	return result, errors.Join(failures...)
+}
+
+func recordLifecycleRun(ctx context.Context, span trace.Span, result LifecycleWorkerResult, resultErr error) {
+	outcome := "succeeded"
+	if resultErr != nil {
+		outcome = "failed"
+		span.RecordError(resultErr)
+		span.SetStatus(codes.Error, "public Space lifecycle failed")
+	}
+	span.SetAttributes(
+		attribute.String("chalk.public_invites.lifecycle.outcome", outcome),
+		attribute.Int("chalk.public_invites.lifecycle.batches", result.Batches),
+		attribute.Int("chalk.public_invites.lifecycle.listed", result.Listed),
+		attribute.Int("chalk.public_invites.lifecycle.claimed", result.Claimed),
+		attribute.Int("chalk.public_invites.lifecycle.archived", result.Archived),
+		attribute.Int("chalk.public_invites.lifecycle.retried", result.Retried),
+		attribute.Int("chalk.public_invites.lifecycle.skipped", result.Skipped),
+		attribute.Int("chalk.public_invites.lifecycle.failed", result.Failed),
+	)
+	lifecycleWorkerRuns.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+	span.End()
+}
+
+// tally counts one processed lifecycle; a retried item counts as failed too.
+func (r *LifecycleWorkerResult) tally(status lifecycleItemStatus) {
+	switch status {
+	case lifecycleItemArchived:
+		r.Archived++
+	case lifecycleItemRetried:
+		r.Retried++
+		r.Failed++
+	case lifecycleItemSkipped:
+		r.Skipped++
+	case lifecycleItemFailed:
+		r.Failed++
+	}
 }
 
 type lifecycleItemStatus uint8

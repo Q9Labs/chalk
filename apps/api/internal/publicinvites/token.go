@@ -156,17 +156,11 @@ func (s Signer) Verify(raw string) (Token, error) {
 }
 
 func (v Verifier) Verify(raw string) (Token, error) {
-	if len(raw) == 0 || len(raw) > TokenMaxBytes || !isASCII(raw) {
-		return Token{}, ErrInvalidToken
-	}
-	segments := strings.Split(raw, ".")
-	if len(segments) != 4 || segments[0] != TokenVersion || !validBase64URLSegment(segments[2]) || !validBase64URLSegment(segments[3]) {
+	segments, ok := splitToken(raw)
+	if !ok {
 		return Token{}, ErrInvalidToken
 	}
 	keyID := segments[1]
-	if validateKeyID(keyID) != nil {
-		return Token{}, ErrInvalidToken
-	}
 	key, ok := v.verifiers[keyID]
 	if !ok {
 		return Token{}, ErrUnknownKey
@@ -188,6 +182,18 @@ func (v Verifier) Verify(raw string) (Token, error) {
 		return Token{}, ErrInvalidPayload
 	}
 	return Token{KeyID: keyID, Handle: handle, Generation: decoded.Generation}, nil
+}
+
+// splitToken checks the token's size, characters and shape and returns its four dot-separated segments.
+func splitToken(raw string) ([]string, bool) {
+	if len(raw) == 0 || len(raw) > TokenMaxBytes || !isASCII(raw) {
+		return nil, false
+	}
+	segments := strings.Split(raw, ".")
+	if len(segments) != 4 || segments[0] != TokenVersion || !validBase64URLSegment(segments[2]) || !validBase64URLSegment(segments[3]) {
+		return nil, false
+	}
+	return segments, validateKeyID(segments[1]) == nil
 }
 
 // decodePayload parses a signed payload strictly: no unknown fields, no trailing data.
