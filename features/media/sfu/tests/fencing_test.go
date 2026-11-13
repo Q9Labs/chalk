@@ -17,7 +17,7 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-// These scenarios replay the media-control model's counterexamples against the real
+// These scenarios replay the counterexamples of the retired media-control TLA+ model against the real
 // service: real HTTP, real Pion peers and real RTP.
 
 func scopeIn(episode, participant string, generation int64) protocol.Scope {
