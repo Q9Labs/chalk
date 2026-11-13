@@ -13,8 +13,9 @@ name: Gate
 # this; every job below stands down when it was skipped.
 #
 # Runner: a merge group or a manual run uses the label in the repository variable CHALK_GATE_RUNNER (or the manual run's
-# runner input) for every job, and the hosted runners when both are empty. A pull request always runs on the hosted
-# runners, whatever the variable says, so the code of a fork never reaches a machine of ours.
+# runner input) for every job, and the hosted runners when both are empty. This file sends no pull request job to that
+# label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
+# runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
 
 on:
   pull_request:
@@ -42,6 +43,8 @@ concurrency:
 
 env:
   CI: "true"
+  # setup-beam reads the image name from ImageOS. The hosted ubuntu-24.04 runner sets the same value; a self-hosted runner sets none.
+  ImageOS: ubuntu24
   # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
   PNPM_CONFIG_FETCH_RETRIES: "5"
   PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
