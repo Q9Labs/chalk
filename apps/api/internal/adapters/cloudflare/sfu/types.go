@@ -23,12 +23,6 @@ type providerErrorEnvelope struct {
 	} `json:"errors"`
 }
 
-type ConnectionMetadata struct {
-	Provider mediaplane.Provider
-	Ref      string
-	Metadata map[string]string
-}
-
 type createSessionResponse struct {
 	SessionID string `json:"sessionId"`
 }

@@ -62,11 +62,6 @@ func (p *Peer) RegisterTracks(tracks []captureplane.PulledCaptureTrack) error {
 	return nil
 }
 
-// RegisterCaptureTracks is a vocabulary alias for RegisterTracks.
-func (p *Peer) RegisterCaptureTracks(tracks []captureplane.PulledCaptureTrack) error {
-	return p.RegisterTracks(tracks)
-}
-
 // Tracks returns a deterministic snapshot of tracks bound by OnTrack.
 func (p *Peer) Tracks() []*MediaTrack {
 	if p == nil {

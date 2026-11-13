@@ -131,11 +131,6 @@ func (p *Peer) AnswerRemoteOffer(ctx context.Context, negotiation captureplane.N
 	return localDescription(p.pc)
 }
 
-// AcceptOffer is a vocabulary alias for AnswerRemoteOffer.
-func (p *Peer) AcceptOffer(ctx context.Context, negotiation captureplane.Negotiation) (captureplane.Description, error) {
-	return p.AnswerRemoteOffer(ctx, negotiation)
-}
-
 // ApplyRemoteAnswer applies the terminal remote_answer produced for the
 // pending local offer. It never creates a new capture epoch or SDP offer.
 func (p *Peer) ApplyRemoteAnswer(ctx context.Context, negotiation captureplane.Negotiation) error {

@@ -153,18 +153,6 @@ func (p *Peer) State() PeerState {
 	}
 }
 
-// TerminalState reports whether this peer has reached a state that requires a
-// worker-level new capture epoch. The peer itself never creates that epoch.
-func (p *Peer) TerminalState() (webrtc.PeerConnectionState, bool) {
-	if p == nil {
-		return webrtc.PeerConnectionStateClosed, true
-	}
-	p.stateMu.RLock()
-	state := p.terminalState
-	p.stateMu.RUnlock()
-	return state, state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed
-}
-
 // Error reports asynchronous track-binding or terminal connection failure.
 func (p *Peer) Error() error {
 	if p == nil {

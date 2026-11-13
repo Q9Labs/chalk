@@ -118,9 +118,6 @@ func loadPool(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// NodeID is the stable name of the node this adapter calls.
-func (a *Adapter) NodeID() string { return a.node }
-
 func (a *Adapter) EnsureEpisode(_ context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
 	if input.Provider != mediaplane.ProviderChalkSFU {
 		return mediaplane.Episode{}, mediaplane.ErrInvalidProvider
