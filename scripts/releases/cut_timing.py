@@ -10,9 +10,6 @@ import os
 import subprocess
 from datetime import datetime
 
-# A job is created the moment its last `needs` job completes; allow for clock rounding.
-SLACK_SECONDS = 2
-
 
 def moment(value):
     return datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -35,13 +32,16 @@ def timings(started, jobs):
 
 
 def critical_path(rows, until):
-    """The jobs that gated `until`, found backwards: each one was released by the latest job that ended before it was created."""
+    """The jobs that gated `until`, found backwards: each one was released by the latest job that ended no later than it was created.
+
+    A job retried by hand is created when someone retries it, not when a prerequisite ends, so such a run shows a shorter path than it took."""
     ends = [row for row in rows if until in row['name']]
     if not ends:
         raise ValueError(f'no finished job matches {until!r}')
     path = [max(ends, key=lambda row: row['ended'])]
     while True:
-        earlier = [row for row in rows if row is not path[-1] and (path[-1]['created'] - row['ended']).total_seconds() >= -SLACK_SECONDS]
+        # Strictly earlier ends keep the walk moving backwards, and a job that ended after this one was created cannot have released it.
+        earlier = [row for row in rows if row['ended'] <= path[-1]['created'] and row['ended'] < path[-1]['ended']]
         if not earlier:
             return path[::-1]
         path.append(max(earlier, key=lambda row: row['ended']))
