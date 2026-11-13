@@ -68,7 +68,7 @@ func TestSignedTokenRoundTripsAndRejectsTampering(t *testing.T) {
 	for name, tampered := range map[string]string{
 		"empty":         "",
 		"short":         "a.b",
-		"signature":     strings.Join(append(segments[:3:3], segments[3][:len(segments[3])-2]+"AA"), "."),
+		"signature":     strings.Join(append(segments[:3:3], flipFirstCharacter(segments[3])), "."),
 		"unknown key":   strings.Join([]string{segments[0], "k2", segments[2], segments[3]}, "."),
 		"non ascii":     encoded + "é",
 		"trailing dot":  encoded + ".",
@@ -78,4 +78,12 @@ func TestSignedTokenRoundTripsAndRejectsTampering(t *testing.T) {
 			t.Errorf("%s: Verify accepted a bad token", name)
 		}
 	}
+}
+
+// flipFirstCharacter returns value with its first character changed, so the result always differs.
+func flipFirstCharacter(value string) string {
+	if value[0] == 'A' {
+		return "B" + value[1:]
+	}
+	return "A" + value[1:]
 }

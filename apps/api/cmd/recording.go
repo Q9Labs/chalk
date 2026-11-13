@@ -92,21 +92,9 @@ func (w *wiring) buildRecorderFleet(capturePlanRepository postgres.RecordingCapt
 	w.opts.RecorderFleetController = fleet.service
 	w.opts.RecorderFleetWorker = fleet.service
 	w.opts.RecorderFleetVerifier = fleet.controllerVerifier
-	managedBinding, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, cfg.CloudflareRealtime.RealtimeAppID)
+	captureRegistrations, err := w.captureProviderRegistrations()
 	if err != nil {
-		return fmt.Errorf("configure recording application identity: %w", err)
-	}
-	captureRegistrations := []captureproviders.Registration{{
-		Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: w.managedSFU,
-	}}
-	if w.ownCapture {
-		ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, w.chalkSFU.ApplicationID())
-		if err != nil {
-			return fmt.Errorf("configure own SFU recording identity: %w", err)
-		}
-		captureRegistrations = append(captureRegistrations, captureproviders.Registration{
-			Provider: ownBinding.Provider, AdapterFingerprint: ownBinding.AdapterFingerprint, Nodes: w.chalkSFU,
-		})
+		return err
 	}
 	captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(w.queries), captureRegistrations...)
 	if err != nil {
@@ -127,6 +115,27 @@ func (w *wiring) buildRecorderFleet(capturePlanRepository postgres.RecordingCapt
 	}
 	w.opts.RecorderCaptureSignaling = observability.NewObservedCaptureSignalingExecutor(captureSignalingService)
 	return nil
+}
+
+// captureProviderRegistrations lists the media plane providers a recording can capture from: the managed Cloudflare plane, and the own SFU when it is configured for capture.
+func (w *wiring) captureProviderRegistrations() ([]captureproviders.Registration, error) {
+	managedBinding, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, w.cfg.CloudflareRealtime.RealtimeAppID)
+	if err != nil {
+		return nil, fmt.Errorf("configure recording application identity: %w", err)
+	}
+	registrations := []captureproviders.Registration{{
+		Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: w.managedSFU,
+	}}
+	if !w.ownCapture {
+		return registrations, nil
+	}
+	ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, w.chalkSFU.ApplicationID())
+	if err != nil {
+		return nil, fmt.Errorf("configure own SFU recording identity: %w", err)
+	}
+	return append(registrations, captureproviders.Registration{
+		Provider: ownBinding.Provider, AdapterFingerprint: ownBinding.AdapterFingerprint, Nodes: w.chalkSFU,
+	}), nil
 }
 
 // buildRecordingAuthority wires the keys, objects and lifecycle authorities the
