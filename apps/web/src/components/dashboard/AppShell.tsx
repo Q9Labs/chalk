@@ -15,12 +15,14 @@ import { useSession } from "./use-dashboard";
 /** The signed-in dashboard: checks the session, then draws the top bar around the page. */
 export function AppShell({ children }: { readonly children: ReactNode }) {
   const { profile, failure, retry } = useSession();
+  // The router moves its location first and draws the next page once that page's code has loaded.
+  const pending = useRouterState({ select: (state) => state.resolvedLocation !== undefined && state.location.pathname !== state.resolvedLocation.pathname });
   // The page draws its header and placeholders while the session check runs, so the first frame is never blank. Its
   // own reads wait on the same cookie, and a signed-out answer to either goes to sign-in.
   return (
     <div className="app">
       <TopBar profile={profile} dim={Boolean(failure)} />
-      <main className="main">
+      <main className="main" data-pending={pending || undefined} aria-busy={pending || undefined}>
         {failure ? (
           <div className="wrap">
             <ErrorPanel
