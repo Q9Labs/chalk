@@ -1,9 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
-import { CloudflareSFUClient, CloudflareSFUError } from "./cloudflare-sfu";
-import type { CloudflareSFUBootstrap, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
-import { bootstrap, failAddTracks, FakeTrack, FakeTransport, fakeStream, publicationSnapshot, receiverExpired, versionedPublicationID } from "./cloudflare-sfu.test.helpers";
+import { CloudflareSFUError } from "./cloudflare-sfu";
+import type { CloudflareSFUBootstrap, CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
+import { bootstrap, createSfuHarness, failAddTracks, FakeTrack, fakeStream, publicationSnapshot, receiverExpired, versionedPublicationID, type HarnessOptions } from "./cloudflare-sfu.test.helpers";
 it("does not publish a microphone muted during remote connection replacement", async () => {
   const replacementStarted = Promise.withResolvers<void>();
   const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
@@ -401,7 +400,7 @@ describe("pulling many remote publications", () => {
     sequence: 1,
     publications: Array.from({ length: size }, (_, index) => ({ participantId: `participant-${index + 2}`, source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", `microphone-${index}`) })),
   });
-  const remotePulls = (h: ReturnType<typeof createHarness>) => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"));
+  const remotePulls = (h: Harness) => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"));
 
   it("pulls at most 16 tracks per request", async () => {
     await withTimedHarness(async (h) => {
@@ -448,7 +447,7 @@ describe("pulling many remote publications", () => {
 
 const CAMERA_ON = { operationId: "camera-on", participantId: "participant-1", source: "camera", enabled: true } as const;
 
-async function startDormantWithCamera(h: ReturnType<typeof createHarness>): Promise<FakeTrack> {
+async function startDormantWithCamera(h: Harness): Promise<FakeTrack> {
   await h.client.start(fakeStream());
   await vi.advanceTimersByTimeAsync(0);
   const track = new FakeTrack("local-camera", "video");
@@ -703,7 +702,7 @@ describe("pull-published first poll", () => {
 const remoteMicrophone = (connectionId: string, trackName: string) => ({ participantId: "participant-2", source: "microphone", publicationId: versionedPublicationID(connectionId, "0", trackName) }) as const;
 
 // Records the SFU requests in the order the client sends them.
-function recordSfuRequests(h: ReturnType<typeof createHarness>): string[] {
+function recordSfuRequests(h: Harness): string[] {
   const calls: string[] = [];
   const addTracks = h.transport.addTracks.bind(h.transport);
   vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
@@ -721,14 +720,14 @@ function recordSfuRequests(h: ReturnType<typeof createHarness>): string[] {
 const syncPullBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } };
 
 // A started receiver whose roster lists one remote microphone, with the SFU requests it sends recorded.
-async function receiverListing(h: ReturnType<typeof createHarness>) {
+async function receiverListing(h: Harness) {
   const calls = await startReceiver(h);
   const publication = remoteMicrophone("remote-connection", "microphone-1");
   h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
   return { calls, publication };
 }
 
-async function startReceiver(h: ReturnType<typeof createHarness>): Promise<string[]> {
+async function startReceiver(h: Harness): Promise<string[]> {
   await h.client.start(fakeStream());
   await vi.advanceTimersByTimeAsync(0);
   h.client.remoteParticipantsChanged(["participant-2"]);
@@ -1020,45 +1019,8 @@ it("publishes a new microphone when the SFU no longer holds the parked one", asy
   );
 });
 
-function createHarness(
-  options: {
-    readonly autoConnect?: boolean;
-    /** Decides per peer, by creation index, whether it ever connects. */
-    readonly connectsPeer?: (index: number) => boolean;
-    readonly onError?: (error: unknown, binding: string) => void;
-    readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
-    readonly onScreenEnded?: () => void;
-    readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
-    readonly pollIntervalMs?: number;
-    readonly unreportedVideoTileWaitMs?: number;
-    readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
-    readonly bootstrap?: CloudflareSFUBootstrap;
-    readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
-  } = {},
-) {
-  const peers: FakePeerConnection[] = [];
-  const transport = new FakeTransport(() => peers.at(-1));
-  const peerConnectionFactory = vi.fn(() => {
-    const peer = new FakePeerConnection(options.connectsPeer?.(peers.length) ?? options.autoConnect ?? true);
-    peers.push(peer);
-    return peer as unknown as RTCPeerConnection;
-  });
-  const client = new CloudflareSFUClient({
-    bootstrap: options.bootstrap ?? bootstrap("connection-1"),
-    participantId: "participant-1",
-    transport,
-    replaceMediaConnection: options.replaceMediaConnection,
-    pollIntervalMs: options.pollIntervalMs ?? 60000,
-    // Most tests never report tiles and expect video in the first pull.
-    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
-    onError: options.onError,
-    onDiagnostic: options.onDiagnostic,
-    onScreenEnded: options.onScreenEnded,
-    onReceiveHealth: options.onReceiveHealth,
-    onRemoteTrack: options.onRemoteTrack,
-    peerConnectionFactory,
-  });
-  return { client, peers, transport, peerConnectionFactory };
+function createHarness(options: HarnessOptions = {}) {
+  return createSfuHarness(options, (autoConnect) => new FakePeerConnection(autoConnect));
 }
 
 class FakePeerConnection extends EventTarget {
@@ -1214,14 +1176,7 @@ class FakePeerConnection extends EventTarget {
   }
 }
 
-async function withTimedHarness(exercise: (harness: ReturnType<typeof createHarness>) => Promise<void>, options: Parameters<typeof createHarness>[0] = {}): Promise<void> {
+async function withTimedHarness(exercise: (harness: Harness) => Promise<void>, options: HarnessOptions = {}): Promise<void> {
   vi.useFakeTimers();
-  const harness = createHarness(options);
-  try {
-    await exercise(harness);
-  } finally {
-    harness.client.stop();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  }
+  await exercise(createHarness(options));
 }
