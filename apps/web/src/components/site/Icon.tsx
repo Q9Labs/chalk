@@ -164,8 +164,8 @@ const PATHS = {
   trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />,
   archive: (
     <>
-      <rect x="2.5" y="3.5" width="19" height="5" rx="1.5" />
-      <path d="M4.5 8.5V18a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8.5M10 12.5h4" />
+      <rect x="3" y="3.5" width="18" height="5" rx="1.5" />
+      <path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5M10 12.5h4" />
     </>
   ),
   send: <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />,
