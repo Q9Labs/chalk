@@ -1,7 +1,7 @@
 import { WHITEBOARD_PATH } from "../urls";
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
-import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
+import { encodedWhiteboardV1FrameBytes, WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
   ChalkWhiteboardV1Error,
@@ -23,7 +23,7 @@ import {
 } from "./types";
 import { decodeWhiteboardV1WireFrame, elementFromFrame, elementToFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 import { BARE_HELLO, FIRST_HELLO, helloFrame, nextHelloLevel, type HelloLevel } from "./v1-hello";
-import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes, type WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
+import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, type WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
 import { WhiteboardV1Watchdog, type WhiteboardV1WatchdogReplacement } from "./v1-watchdog";
 import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 
@@ -438,7 +438,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #validRestoredOperation(pending: ChalkWhiteboardV1PendingOperation): boolean {
     try {
       whiteboardV1OperationFrames(pending.frame);
-      return pending.operationId === pending.frame.operation_id && pending.bytes === whiteboardV1PendingOperationBytes(pending.frame);
+      return pending.operationId === pending.frame.operation_id && pending.bytes === encodedWhiteboardV1FrameBytes(pending.frame);
     } catch {
       return false;
     }
@@ -739,7 +739,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       operationId: frame.operation_id,
       frame,
       createdAt: (this.#lastCreatedAt = Math.max(this.#now(), this.#lastCreatedAt + 1)),
-      bytes: whiteboardV1PendingOperationBytes(frame),
+      bytes: encodedWhiteboardV1FrameBytes(frame),
     } satisfies ChalkWhiteboardV1PendingOperation;
     const queuedBytes = this.#pendingEntries().reduce((total, entry) => total + entry.pending.bytes, 0);
     if (queuedBytes + pending.bytes > WhiteboardV1ProtocolLimits.multipartUpdateMaxBytes) {

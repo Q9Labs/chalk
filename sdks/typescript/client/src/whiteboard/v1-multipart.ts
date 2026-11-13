@@ -30,10 +30,6 @@ export function whiteboardV1OperationFrames(frame: WhiteboardV1LogicalOperationF
   return multipartSubmitFrames(frame);
 }
 
-export function whiteboardV1PendingOperationBytes(frame: WhiteboardV1LogicalOperationFrame): number {
-  return encodedWhiteboardV1FrameBytes(frame);
-}
-
 export class WhiteboardV1UpdateAssembler {
   readonly #assemblies = new Map<string, UpdateAssembly>();
   #bytes = 0;
