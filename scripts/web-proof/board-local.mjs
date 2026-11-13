@@ -11,8 +11,7 @@ const boardTests = ["the live board keeps its canvas and drawing coordinates", "
 const { origin, cleanup } = await createDashboardProofFixture();
 // The public Space page creates its Space in the managed Tenant that real-engine.sh names; the dashboard fixture makes its own Tenant, so this one is added.
 const managedTenant = process.env.CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID;
-execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-qAtc", `insert into tenants (id, name) values ('${managedTenant}', 'Managed public Tenant') on conflict do nothing`]);
-console.log("managed tenants:", execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-qAtc", "select id, name from tenants order by created_at"]).toString(), "api sees", managedTenant, "database", process.env.CHALK_DATABASE_URL?.replace(/:\/\/[^@]*@/, "://"));
+execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-qAtc", `insert into tenants (id, name) values ('${managedTenant}', 'Managed public Tenant') on conflict do nothing; insert into tenant_artifact_policies (tenant_id) values ('${managedTenant}') on conflict do nothing`]);
 let code = 1;
 try {
   const child = spawn("pnpm", ["exec", "e2e", "run", "tests/board.e2e.ts", ...boardTests.flatMap((title) => ["--grep", title])], {
