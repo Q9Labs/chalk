@@ -5382,13 +5382,12 @@ it("a stop that overtakes the resume still closes the publication once the resum
   try {
     const { transport } = call.harness;
     transport.holdTrackUpdates = gate.promise;
-    const enabling = call.enable().catch((cause: unknown) => cause);
+    void call.enable().catch(() => {});
     await vi.waitFor(() => expect(transport.log).toContain("update paused=false"));
     call.harness.client.stop();
     expect(transport.closeInputs).toHaveLength(0);
     gate.resolve();
-    await enabling;
-    await vi.waitFor(() => expect(transport.closeInputs).toHaveLength(1));
+    await vi.waitFor(() => expect(transport.closeInputs, transport.log.join(" | ")).toHaveLength(1));
   } finally {
     gate.resolve();
     call.dispose();
