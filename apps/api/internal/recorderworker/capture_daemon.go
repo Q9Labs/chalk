@@ -327,6 +327,12 @@ func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) (err er
 	for {
 		select {
 		case runErr := <-result:
+			// Cancelling ctx also cancels the attempt, so both cases can be ready.
+			// An attempt that stopped because of that cancellation was interrupted,
+			// not failed, and must relinquish instead of reporting a failure.
+			if ctx.Err() != nil && errors.Is(runErr, ctx.Err()) {
+				return d.interruptCaptureAttempt(ctx, attempt, cancelAttempt, result, lease, leaseExpiresAt, errors.Join(ErrCaptureDaemonStopped, ctx.Err()))
+			}
 			return d.finishCaptureAttempt(ctx, attempt, cancelAttempt, result, runErr, lease, leaseExpiresAt)
 		case <-d.drain:
 			select {
