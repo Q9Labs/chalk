@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { ChalkSheet } from "../chalk-ui";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 import { VolumeHighIcon } from "../../utils/icons";
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
@@ -62,9 +63,7 @@ function Check({ on }: { readonly on: boolean }) {
   return (
     <span className="chalk-sheet-lead" aria-hidden="true">
       {on ? (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
+        <MenuIcon name="selected" />
       ) : null}
     </span>
   );

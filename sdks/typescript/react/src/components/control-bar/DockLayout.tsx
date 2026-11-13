@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ChalkIconButton, ChalkSegmentedControl, ChalkSheet } from "../chalk-ui";
+import { ShellIcon } from "./ShellIcon";
 
 export function DockLayout({ layout, onLayoutChange, devices, children }: { readonly children?: ReactNode; readonly devices?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
   const [open, setOpen] = useState(false);
@@ -20,12 +21,7 @@ export function DockLayout({ layout, onLayoutChange, devices, children }: { read
         >
           {children}
           <div data-part="dock-layout-row" className="chalk-sheet-row">
-            <svg data-part="dock-layout-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
-              <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
-              <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
-              <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
-            </svg>
+            <ShellIcon name="grid" />
             <span data-part="dock-layout-label">Layout</span>
             <ChalkSegmentedControl
               label="Layout"

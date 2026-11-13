@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChalkButton } from "../chalk-ui/ChalkButton";
 import { ChalkPopover } from "../chalk-ui";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 import type { Toast } from "./ToastStack";
 export interface NoticeButtonProps {
   readonly toasts: readonly Toast[];
@@ -28,9 +29,7 @@ export function NoticeButton({ toasts, onDismiss }: NoticeButtonProps) {
           <span>{toast.message}</span>
           {toast.action ? <ChalkButton onClick={toast.action.onClick}>{toast.action.label}</ChalkButton> : null}
           <button type="button" className="chalk-dismiss" aria-label="Dismiss" onClick={() => onDismiss(toast.id)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m6 6 12 12M6 18 18 6" />
-            </svg>
+            <MenuIcon name="close" />
           </button>
         </div>
       ))}

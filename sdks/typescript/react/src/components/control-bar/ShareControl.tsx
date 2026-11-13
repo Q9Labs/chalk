@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { ShellIcon } from "./ShellIcon";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 
@@ -110,9 +111,7 @@ export function ShareControl({
                 </span>
                 <span className="chalk-menu-check" aria-hidden="true">
                   {surface === option.value ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
+                    <MenuIcon name="selected" />
                   ) : null}
                 </span>
               </Menu.Item>

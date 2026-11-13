@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { noticeIdentity } from "../toast-stack/notice-announcement";
+import { MenuIcon } from "./MenuIcon";
 export interface ChalkToastProps {
   readonly message: ReactNode;
   /** Stable semantic identity for rich message content. Change it when the message changes. */
@@ -46,9 +47,7 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
       ) : null}
       {duration === Infinity ? (
         <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setLifetime({ identity, exiting: true })}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m6 6 12 12M6 18 18 6" />
-          </svg>
+          <MenuIcon name="close" />
         </button>
       ) : null}
     </div>

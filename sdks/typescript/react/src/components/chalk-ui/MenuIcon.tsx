@@ -14,6 +14,8 @@ const GLYPHS = {
     </>
   ),
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  selected: <path d="M20 6L9 17l-5-5" />,
+  close: <path d="m6 6 12 12M6 18 18 6" />,
 };
 
 /** One call-menu glyph on the same 24 grid and 1.75 stroke as ShellIcon. */

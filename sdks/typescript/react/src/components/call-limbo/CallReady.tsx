@@ -4,6 +4,7 @@ import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQue
 import { ChalkSheet } from "../chalk-ui";
 import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 
 export interface CallReadyProps {
   readonly open: boolean;
@@ -48,9 +49,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
           Your call is ready
         </h2>
         <button type="button" data-part="ready-dismiss" className="chalk-dismiss !h-8 !w-8 max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
-          <svg width="18" height="18" style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
-            <path d="m6 6 12 12M6 18 18 6" />
-          </svg>
+          <MenuIcon name="close" />
         </button>
       </div>
       {qr ? (
