@@ -170,7 +170,7 @@ defmodule ChalkSync.ProtocolV1 do
             "command_id" => decision.command_id,
             "delivery" => delivery,
             "outcome" => Atom.to_string(result),
-            "reason" => Atom.to_string(decision.reason)
+            "reason" => wire_reason(decision.reason)
           }
       end
 
@@ -385,9 +385,13 @@ defmodule ChalkSync.ProtocolV1 do
       "command_id" => decision.request_key,
       "delivery" => operation_delivery(decision),
       "outcome" => "rejected",
-      "reason" => Atom.to_string(reason)
+      "reason" => wire_reason(reason)
     })
   end
+
+  # A call whose policy turns recording off rejects start_recording with a reason protocol v1 does not carry. To the participant it is a capability the call does not grant, and an unlisted reason would make the frame invalid and crash the socket.
+  defp wire_reason(:recording_policy_disabled), do: "capability_denied"
+  defp wire_reason(reason), do: Atom.to_string(reason)
 
   defp operation_delivery(%{delivery: delivery}) when delivery in [:original, :duplicate],
     do: Atom.to_string(delivery)

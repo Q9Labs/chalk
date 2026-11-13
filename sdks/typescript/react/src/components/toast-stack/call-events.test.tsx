@@ -20,3 +20,8 @@ it("names a failed recording start, and lets it leave on the normal timer since 
   expect(toast?.duration).toBe(8000);
   expect(mediaFailureToast(new SpaceClientError({ code: "media.permission_denied", recoverable: false, message: "denied" }), "camera")?.duration).toBeUndefined();
 });
+
+it("says recording is off when the call's policy refuses it, without promising a retry", () => {
+  const toast = mediaFailureToast(recordingFailure(new SpaceClientError({ code: "command.rejected", recoverable: false, message: "capability_denied" }), "start"));
+  expect(toast?.message).toBe("Recording is off for this call.");
+});

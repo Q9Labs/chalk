@@ -126,7 +126,9 @@ export function commandFailurePresentation(failure: ClientFailure, source?: Medi
 /** A recording command's failure, named for the task, so it never reads as a device problem or a bare "That didn’t work". */
 export function recordingFailure(cause: unknown, action: "start" | "stop"): ClientFailure {
   const failure = commandFailure(cause);
-  return new SpaceClientError({ code: failure.code, recoverable: failure.recoverable, message: action === "start" ? "Couldn’t start recording. Try again in a moment." : "Couldn’t stop recording. Try again in a moment." });
+  // Sync answers capability_denied when the call's policy keeps recording off, so a retry can't help.
+  const message = failure.message === "capability_denied" ? "Recording is off for this call." : action === "start" ? "Couldn’t start recording. Try again in a moment." : "Couldn’t stop recording. Try again in a moment.";
+  return new SpaceClientError({ code: failure.code, recoverable: failure.recoverable, message });
 }
 
 export function commandFailureMessage(failure: ClientFailure, source?: MediaCommandSource, operation?: MediaCommandAction): string {
