@@ -361,7 +361,7 @@ func TestRetiringAMutedMicrophoneAdvancesTheCursorOnceAndStopsHoldingIt(t *testi
 				t.Fatalf("publish microphone: %v", err)
 			}
 			microphone := repository.appended.Publications[0]
-			mute := func(source, publicationID string) {
+			mute := func(source mediaplane.PublicationSource, publicationID string) {
 				t.Helper()
 				if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: source, PublicationID: publicationID, Enabled: false}); err != nil {
 					t.Fatalf("mute %s: %v", source, err)
