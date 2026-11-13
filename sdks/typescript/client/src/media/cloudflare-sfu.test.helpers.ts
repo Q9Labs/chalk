@@ -1,6 +1,7 @@
-import { vi } from "vitest";
-import { CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
-import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import { afterEach, vi } from "vitest";
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import { CloudflareSFUClient, CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 /** The part of a fake peer connection that the fake transport drives when the SFU hands out a remote track. */
 export interface TransportPeer {
@@ -256,4 +257,56 @@ export function failAddTracks(transport: FakeTransport, shouldFail: (input: Para
     if (shouldFail(input)) throw error();
     return addTracks(input);
   });
+}
+
+export interface HarnessOptions {
+  readonly autoConnect?: boolean;
+  /** Decides per peer, by creation index, whether it ever connects. */
+  readonly connectsPeer?: (index: number) => boolean;
+  readonly onError?: (error: unknown, binding: string) => void;
+  readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
+  readonly onScreenEnded?: () => void;
+  readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+  readonly pollIntervalMs?: number;
+  readonly unreportedVideoTileWaitMs?: number;
+  readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
+  readonly bootstrap?: CloudflareSFUBootstrap;
+  readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
+}
+
+// Every harness client is stopped, and every global and mock restored, after each test, so a test body needs no try/finally.
+const startedClients: CloudflareSFUClient[] = [];
+afterEach(() => {
+  for (const client of startedClients.splice(0)) client.stop();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
+
+/** A client over the fake transport and the fake peers that `createPeer` makes. */
+export function createSfuHarness<Peer extends TransportPeer>(options: HarnessOptions, createPeer: (autoConnect: boolean) => Peer) {
+  const peers: Peer[] = [];
+  const transport = new FakeTransport(() => peers.at(-1));
+  const peerConnectionFactory = vi.fn(() => {
+    const peer = createPeer(options.connectsPeer?.(peers.length) ?? options.autoConnect ?? true);
+    peers.push(peer);
+    return peer as unknown as RTCPeerConnection;
+  });
+  const client = new CloudflareSFUClient({
+    bootstrap: options.bootstrap ?? bootstrap("connection-1"),
+    participantId: "participant-1",
+    transport,
+    replaceMediaConnection: options.replaceMediaConnection,
+    pollIntervalMs: options.pollIntervalMs ?? 60000,
+    // Most tests never report tiles and expect video in the first pull.
+    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
+    onError: options.onError,
+    onDiagnostic: options.onDiagnostic,
+    onScreenEnded: options.onScreenEnded,
+    onReceiveHealth: options.onReceiveHealth,
+    onRemoteTrack: options.onRemoteTrack,
+    peerConnectionFactory,
+  });
+  startedClients.push(client);
+  return { client, peers, transport, peerConnectionFactory };
 }
