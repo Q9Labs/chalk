@@ -13,6 +13,7 @@ Usage:
 Commands:
   run       Run the full gate. This is also the default.
   basic     Check locked dependencies, formatting, and compilation only.
+  deps      Fetch the locked dependencies only.
   describe  Describe what the gate checks.
   help      Show this help.
 
@@ -21,6 +22,7 @@ Checks:
   - mix deps.get (check lockfile is honored)
   - mix format --check-formatted, non-mutating
   - mix compile --warnings-as-errors (test env, compiles test support too)
+  - mix xref graph --format cycles --fail-above 0 (no module cycle under lib/)
   - mix credo --strict
   - PostgreSQL-backed mix test with zero skipped cases
   - Real API bridge readiness while Cloudflare cleanup is blocked
@@ -29,7 +31,7 @@ EOF
 
 command="${1:-${CHALK_SYNC_GATE_MODE:-run}}"
 case "$command" in
-  run | basic) ;;
+  run | basic | deps) ;;
   describe | help | -h | --help)
     describe
     exit 0
@@ -54,6 +56,11 @@ fetch_dependencies() {
   return 1
 }
 
+if [[ "$command" == "deps" ]]; then
+  fetch_dependencies
+  exit
+fi
+
 run() {
   local label="$1"
   shift
@@ -65,6 +72,7 @@ run "Elixir version" elixir --version
 run "Dependencies" fetch_dependencies
 run "Format check" mix format --check-formatted
 run "Compile (warnings as errors)" env MIX_ENV=test mix compile --warnings-as-errors
+run "Module cycles" env MIX_ENV=test mix xref graph --format cycles --fail-above 0
 
 if [[ "$command" == "basic" ]]; then
   printf '\nSync server basic gate passed.\n'

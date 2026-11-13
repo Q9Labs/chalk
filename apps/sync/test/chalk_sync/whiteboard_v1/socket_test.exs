@@ -8,6 +8,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Reads
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.ViewOwner
@@ -798,7 +799,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       # While the connect check waits behind the admission, a read starts and finds no
       # Participant. The admission then commits and the connect check passes.
       Process.put(:whiteboard_connect_hook, fn ->
-        Authority.store(
+        Reads.store(
           identity.episode,
           %{status: "active", participants: %{}},
           System.monotonic_time(:millisecond),
@@ -1013,6 +1014,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       )
 
       read(state)
+      episode = state.identity.episode
 
       for participant_id <- participants do
         socket = %{state | identity: %{state.identity | participant_id: participant_id}}
@@ -1021,7 +1023,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                  SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, socket)
       end
 
-      refute_received {:episode_access_read, _episode}
+      refute_received {:episode_access_read, ^episode}
     end
   end
 
@@ -1034,16 +1036,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     )
   end
 
-  # Starts the Episode's poller for this test process and waits for its first read.
+  # Starts the Episode's poller for this test process and waits for its first read. A poller of
+  # another Episode that still runs from an earlier test also reports to this process, so the
+  # messages name the Episode.
   defp read(state) do
-    Authority.watch(state.identity.episode)
-    assert_receive {:episode_access_read, _episode}, 1_000
+    episode = state.identity.episode
+    Authority.watch(episode)
+    assert_receive {:episode_access_read, ^episode}, 1_000
 
     wait_for(fn ->
-      :ets.member(
-        ChalkSync.WhiteboardV1.Authority,
-        EpisodeKey.authority_key(state.identity.episode)
-      )
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(state.identity.episode))
     end)
   end
 

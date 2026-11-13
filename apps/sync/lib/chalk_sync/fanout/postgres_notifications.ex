@@ -14,15 +14,18 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
   alias ChalkSync.Chat
   alias ChalkSync.Database
   alias ChalkSync.Episodes.Coordinator
+  alias ChalkSync.Fanout.Collaboration.PostgresNotifications, as: CollaborationNotifications
   alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.Stateholder.Postgres.SQL.Control, as: ControlSQL
   alias ChalkSync.Telemetry
   alias ChalkSync.UUID
 
-  @channel "chalk_sync_heads"
+  @channel ControlSQL.head_channel()
+  # Raised by an API migration, so this module is the only Sync reader of the name.
   @publication_channel "chalk_media_publications"
   @collaboration_channels [
-    "chalk_collaboration_heads",
-    "chalk_collaboration_transient"
+    CollaborationNotifications.head_channel(),
+    CollaborationNotifications.transient_channel()
   ]
 
   def start_link(options \\ []) do

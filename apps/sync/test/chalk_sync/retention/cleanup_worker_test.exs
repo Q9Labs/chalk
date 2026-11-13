@@ -15,8 +15,6 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
   @now ~U[2026-07-12 00:00:00.000000Z]
   @retention_seconds 7 * 24 * 60 * 60
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
-
   setup_all do
     if @database_url do
       previous_connections = Application.get_env(:chalk_sync, :database_connections)
