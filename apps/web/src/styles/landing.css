@@ -1047,6 +1047,21 @@
   transform: rotate(28deg);
   pointer-events: none;
 }
+/* A panel is its own container, so it keeps the page's side margins instead of the container's padding. */
+.site .ctn.dpanel {
+  --dpanel-gutter: var(--space-14);
+  width: calc(100% - 2 * var(--dpanel-gutter));
+}
+@media (max-width: 1365px) {
+  .site .ctn.dpanel {
+    --dpanel-gutter: var(--space-10);
+  }
+}
+@media (max-width: 720px) {
+  .site .ctn.dpanel {
+    --dpanel-gutter: var(--space-5);
+  }
+}
 @media (max-width: 800px) {
   .site .dpanel {
     padding: var(--space-6) var(--space-5);
