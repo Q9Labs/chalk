@@ -276,7 +276,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
       const enqueue = <A, E>(effect: Effect.Effect<A, E>, join = false): Effect.Effect<A, E> =>
         Effect.gen(function* () {
-          if (model.closed) return yield* Effect.fail(closedFailure()) as Effect.Effect<never, E>;
+          if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) as Effect.Effect<never, E>;
           const deferred = yield* Deferred.make<A, E>();
           yield* Queue.offer(queue, { effect, deferred, join } as Work);
           return yield* Deferred.await(deferred);
@@ -629,7 +629,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             yield* scheduleRefresh();
           }),
         );
-      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(closedFailure()) : Effect.void));
+      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) : Effect.void));
       const withFreshAccess = <A, E>(operation: () => Effect.Effect<A, E>): Effect.Effect<A, ConnectionLifecycleFailure | E> =>
         Effect.gen(function* () {
           yield* requireOpen;
@@ -1253,14 +1253,14 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           enqueue(
             Effect.gen(function* () {
               const ports = portsFor(model);
-              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(interruptedFailure());
+              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
               return ports;
             }),
           ).pipe(
             Effect.flatMap((ports) =>
               withFreshAccess(() =>
                 Effect.suspend<A, E | ConnectionLifecycleFailure, never>(() => {
-                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(interruptedFailure());
+                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
                   return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection")))));
                 }),
               ),
@@ -1337,12 +1337,6 @@ function active(model: Model): boolean {
 }
 function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {
   return new ConnectionLifecycleFailure({ code, recoverable, message, ...(cause === undefined ? {} : { cause }) });
-}
-function closedFailure(): ConnectionLifecycleFailure {
-  return lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.");
-}
-function interruptedFailure(): ConnectionLifecycleFailure {
-  return lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected.");
 }
 function episodeEndedFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("episode_ended", false, "The Episode has ended");
