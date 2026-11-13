@@ -485,25 +485,33 @@ select
     episodes.space_id,
     episodes.id as episode_id,
     episodes.deadline_at,
-    episodes.deadline_generation
+    episodes.deadline_generation,
+    deadline_end.failed_attempts
 from episodes episodes
 join sync_episode_control control on
     control.tenant_id = episodes.tenant_id
     and control.space_id = episodes.space_id
     and control.episode_id = episodes.id
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "maximum-duration-<generation>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where operations.status <> 'failed') as live_attempts,
+        (count(*) filter (where operations.status = 'failed'))::integer as failed_attempts,
+        max(operations.completed_at) filter (where operations.status = 'failed') as last_failed_at
+    from sync_external_operations operations
+    where
+        operations.tenant_id = episodes.tenant_id
+        and operations.space_id = episodes.space_id
+        and operations.episode_id = episodes.id
+        and operations.operation_name = 'maximum_episode_duration_expired'
+        and operations.deadline_generation = episodes.deadline_generation
+) deadline_end
 where
     episodes.status = 'active'
     and episodes.deadline_at <= now()
-    and not exists (
-        select 1
-        from sync_external_operations operations
-        where
-            operations.tenant_id = episodes.tenant_id
-            and operations.space_id = episodes.space_id
-            and operations.episode_id = episodes.id
-            and operations.operation_name = 'maximum_episode_duration_expired'
-            and operations.deadline_generation = episodes.deadline_generation
-    )
+    and deadline_end.live_attempts = 0
+    and (deadline_end.failed_attempts = 0 or deadline_end.last_failed_at
+        + make_interval(mins => least(power(2, least(deadline_end.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.deadline_at, episodes.id
 for update of control skip locked

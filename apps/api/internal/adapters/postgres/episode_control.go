@@ -122,7 +122,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
 				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
 				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
-				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
+				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration, int(row.FailedAttempts))
 				if err != nil {
 					return err
 				}

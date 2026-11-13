@@ -280,3 +280,30 @@ func TestDeadlineCycleBusyBatchDoesNotStarveHealthyEpisode(t *testing.T) {
 		}
 	}
 }
+
+// The finalizer fails a maximum-duration end after its attempts run out and
+// restores the Episode to active. The scheduler must end it again, with a new
+// operation after the backoff, and not leave it past its cap.
+func TestDeadlineCycleRetriesFailedMaximumDurationEnd(t *testing.T) {
+	f := newSchedulerFixture(t)
+	// A participant keeps the linger phase from ending the Episode as empty.
+	episode := f.episode(`now() - interval '1 hour'`, 1, false)
+	const operationName = "maximum_episode_duration_expired"
+
+	f.run()
+	if got := f.operations(episode, operationName); got != 1 {
+		t.Fatalf("first cycle got %d deadline operations, want 1", got)
+	}
+	f.exec(`update sync_external_operations set status='failed', fence_active=false, last_error_code='provider_down', completed_at=now() - interval '2 minutes' where tenant_id=$1 and episode_id=$2 and operation_name=$3 and status='pending'`,
+		episode.tenantID.Bytes(), episode.episodeID.Bytes(), operationName)
+	f.exec(`update episodes set status='active' where tenant_id=$1 and id=$2 and status='ending'`, episode.tenantID.Bytes(), episode.episodeID.Bytes())
+	f.exec(`delete from sync_publication_fences where tenant_id=$1 and episode_id=$2`, episode.tenantID.Bytes(), episode.episodeID.Bytes())
+
+	cycle := f.run()
+	if got := f.operations(episode, operationName); got != 2 {
+		t.Fatalf("cycle after the backoff got %d deadline operations, want 2 (skipped %+v)", got, cycle.Skipped)
+	}
+	if got := f.count(`select count(*) from sync_external_operations where tenant_id=$1 and episode_id=$2 and operation_name=$3 and status='pending' and request_key like '%-retry-1'`, episode.tenantID.Bytes(), episode.episodeID.Bytes(), operationName); got != 1 {
+		t.Fatalf("retry operation with key suffix -retry-1: got %d, want 1", got)
+	}
+}
