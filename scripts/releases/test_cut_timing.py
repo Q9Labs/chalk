@@ -35,7 +35,22 @@ class CutTimingTests(unittest.TestCase):
 
     def test_the_report_totals_the_path(self):
         text = cut_timing.report(STARTED, SAVED['jobs'], 'Deploy selected web')
-        self.assertIn('total wait', text.split('Path to')[1])
+        self.assertIn('total wait 96.2, total work 19.3', text)
+
+    def test_a_job_that_ended_after_another_was_created_never_released_it(self):
+        def job(name, created, started, ended):
+            return dict(name=name, created_at=created, started_at=started, completed_at=ended)
+        jobs = [job('a', '2026-11-13T00:00:00Z', '2026-11-13T00:00:00Z', '2026-11-13T00:00:10Z'),
+                job('b', '2026-11-13T00:00:00Z', '2026-11-13T00:00:00Z', '2026-11-13T00:00:11Z'),
+                job('c', '2026-11-13T00:00:10Z', '2026-11-13T00:00:10Z', '2026-11-13T00:00:20Z')]
+        rows = cut_timing.timings(cut_timing.moment('2026-11-13T00:00:00Z'), jobs)
+        self.assertEqual([row['name'] for row in cut_timing.critical_path(rows, 'c')], ['a', 'c'])
+
+    def test_the_walk_ends_when_two_jobs_follow_each_other_closely(self):
+        jobs = [dict(name='a', created_at='2026-11-13T00:00:00Z', started_at='2026-11-13T00:00:00Z', completed_at='2026-11-13T00:00:01Z'),
+                dict(name='b', created_at='2026-11-13T00:00:01Z', started_at='2026-11-13T00:00:01Z', completed_at='2026-11-13T00:00:02Z')]
+        rows = cut_timing.timings(cut_timing.moment('2026-11-13T00:00:00Z'), jobs)
+        self.assertEqual([row['name'] for row in cut_timing.critical_path(rows, 'b')], ['a', 'b'])
 
 
 if __name__ == '__main__':
