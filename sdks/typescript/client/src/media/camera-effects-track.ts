@@ -48,7 +48,6 @@ export async function createCameraEffectsTrack(
   let image: HTMLImageElement | undefined;
   let stopped = false;
   let lastFrame = -Infinity;
-  let generation = 0;
   const performanceMeter = new CameraEffectPerformance();
   const loadSegmenter = () =>
     (loading ??= createSegmenter(files)
@@ -75,7 +74,6 @@ export async function createCameraEffectsTrack(
   resize("none");
   const usePlainCamera = () => {
     if (stopped) return;
-    generation++;
     background = "none";
     image = undefined;
     ready = true;
@@ -93,7 +91,6 @@ export async function createCameraEffectsTrack(
   const stop = () => {
     if (stopped) return;
     stopped = true;
-    generation++;
     source.removeEventListener("ended", ended);
     releaseBindings();
     segmenter?.close();
@@ -182,12 +179,12 @@ export async function createCameraEffectsTrack(
     stop,
     usePlainCamera,
     async prepare(next) {
-      const revision = generation;
       if (next !== "none") await loadSegmenter();
       const nextImage = next === "none" || next === "blur" ? undefined : await decodeBackgroundImage(images[next]);
-      if (stopped || generation !== revision) throw new Error("Camera effects stopped");
+      // A slow-frame fallback during the load does not cancel it: the newer choice wins.
+      if (stopped) throw new Error("Camera effects stopped");
       return () => {
-        if (!stopped && generation === revision) {
+        if (!stopped) {
           resize(next);
           background = next;
           image = nextImage;
