@@ -100,20 +100,31 @@ func validateCommittedObject(object CommittedObject, exactContentType string) er
 }
 
 func prepareSourceChunk(chunk *ChunkInput, expectedIndex int, generation int64) error {
-	if chunk.ID.IsZero() || chunk.Index != expectedIndex || chunk.Generation != generation || chunk.StartMS < 0 || chunk.EndMS <= chunk.StartMS || chunk.EndMS-chunk.StartMS > 15*60*1000 {
+	if chunk.ID.IsZero() || chunk.Index != expectedIndex || chunk.Generation != generation {
 		return ErrInvalidChunk
 	}
-	if chunk.SourceStartMS < 0 || chunk.SourceEndMS <= chunk.SourceStartMS || chunk.SourceEndMS-chunk.SourceStartMS != chunk.EndMS-chunk.StartMS {
-		return ErrInvalidChunk
-	}
-	if chunk.AllocationID.IsZero() || validateBoundedKey(chunk.StorageKey) != nil || len(chunk.Checksum) != 32 || chunk.Size < 1 || chunk.Size > 524288000 || chunk.ContentType != "audio/flac" {
-		return ErrInvalidChunk
-	}
-	if len(chunk.ParticipantRef) > 128 || len(chunk.TrackID) > 256 || len(chunk.TrackEpoch) > 128 || len(chunk.DisplayNameSnapshot) > 256 || len(chunk.ObjectVersion) > 256 || len(chunk.ObjectETag) < 1 || len(chunk.ObjectETag) > 256 {
-		return ErrInvalidChunk
-	}
-	if chunk.IdentityKind != "participant" || chunk.TrackClass != "microphone" || chunk.ParticipantRef == "" || chunk.ParticipantGeneration < 1 || chunk.TrackID == "" || chunk.TrackEpoch == "" || chunk.DisplayNameSnapshot == "" {
+	if !validChunkWindow(chunk) || !validChunkObject(chunk) || !validChunkFieldLengths(chunk) || !validChunkIdentity(chunk) {
 		return ErrInvalidChunk
 	}
 	return nil
+}
+
+func validChunkWindow(chunk *ChunkInput) bool {
+	duration := chunk.EndMS - chunk.StartMS
+	if chunk.StartMS < 0 || duration <= 0 || duration > 15*60*1000 {
+		return false
+	}
+	return chunk.SourceStartMS >= 0 && chunk.SourceEndMS > chunk.SourceStartMS && chunk.SourceEndMS-chunk.SourceStartMS == duration
+}
+
+func validChunkObject(chunk *ChunkInput) bool {
+	return !chunk.AllocationID.IsZero() && validateBoundedKey(chunk.StorageKey) == nil && len(chunk.Checksum) == 32 && chunk.Size >= 1 && chunk.Size <= 524288000 && chunk.ContentType == "audio/flac"
+}
+
+func validChunkFieldLengths(chunk *ChunkInput) bool {
+	return len(chunk.ParticipantRef) <= 128 && len(chunk.TrackID) <= 256 && len(chunk.TrackEpoch) <= 128 && len(chunk.DisplayNameSnapshot) <= 256 && len(chunk.ObjectVersion) <= 256 && len(chunk.ObjectETag) >= 1 && len(chunk.ObjectETag) <= 256
+}
+
+func validChunkIdentity(chunk *ChunkInput) bool {
+	return chunk.IdentityKind == "participant" && chunk.TrackClass == "microphone" && chunk.ParticipantRef != "" && chunk.ParticipantGeneration >= 1 && chunk.TrackID != "" && chunk.TrackEpoch != "" && chunk.DisplayNameSnapshot != ""
 }
