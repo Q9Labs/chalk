@@ -39,14 +39,14 @@ All seven hold on the real code at the bounds below. Two fixes keep them true:
 Run this, with the commit from the coverage record below:
 
 ```sh
-git diff --stat 3ef11270343fc4d462e6b9d68756d8d0204d9430 -- apps/api/internal/publicinvites apps/api/internal/publicinviteapp apps/api/internal/adapters/postgres/public_invites.go apps/api/internal/adapters/postgres/public_episode_admission.go apps/api/internal/adapters/postgres/episode_public_join.go apps/api/db/queries/sync_lifecycle.sql apps/api/db/queries/episode_live.sql
+git diff --stat e1814ad6e012e33d3966b6da6a2fadafbb18a25b -- apps/api/internal/publicinvites apps/api/internal/publicinviteapp apps/api/internal/adapters/postgres/public_invites.go apps/api/internal/adapters/postgres/public_episode_admission.go apps/api/internal/adapters/postgres/episode_public_join.go apps/api/db/queries/sync_lifecycle.sql apps/api/db/queries/episode_live.sql
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Commit: `3ef11270343fc4d462e6b9d68756d8d0204d9430`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
+Commit: `e1814ad6e012e33d3966b6da6a2fadafbb18a25b`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
 - `Rotate`, `SetInviteEnabled`: `Runtime.RotateInvite` and `Runtime.UpdateInvite` in `apps/api/internal/publicinvites/service.go`. Arrival creation checks the current generation of an enabled invite.
 - `Arrive`: `Runtime.Arrive` and `Service.CreateArrival` (`apps/api/internal/publicinvites/service.go`).
