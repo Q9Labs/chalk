@@ -29,4 +29,4 @@ func Parse(raw string) (Origin, error) {
 }
 
 // Secure reports whether links under the origin use https.
-func (o Origin) Secure() bool { return strings.HasPrefix(string(o), "https://") }
+func (o Origin) Secure() bool { return strings.HasPrefix(strings.ToLower(string(o)), "https://") }

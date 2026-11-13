@@ -13,6 +13,7 @@ func TestParse(t *testing.T) {
 		valid  bool
 	}{
 		{"https://chalk.example", "https://chalk.example", true, true},
+		{"HTTPS://chalk.example", "HTTPS://chalk.example", true, true},
 		{" http://localhost:3000 ", "http://localhost:3000", false, true},
 		{"", "", false, false},
 		{"chalk.example", "", false, false},
