@@ -151,3 +151,8 @@ it("keeps the reactions sheet open when a tap lands on a call notice", async () 
   await act(async () => document.body.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
+
+it("focuses the details sheet itself when it opens, not its close button", async () => {
+  const { sheet } = await open();
+  await vi.waitFor(() => expect(document.activeElement).toBe(sheet));
+});
