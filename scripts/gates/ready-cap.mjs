@@ -55,9 +55,7 @@ function backToDraft(self, result) {
   const body = [
     `Back to draft: ${result.others} other pull requests are ready against master (${result.queued} in the merge queue), and the cap is ${result.cap}.`,
     "",
-    "Every push to a ready pull request reruns the Gate, and a long line of them is mostly cancelled reruns. Keep working on this one as a draft (pushes to a draft run nothing), and mark it ready when `node scripts/gates/ready-cap.mjs --pr " +
-      self.number +
-      "` says there is room.",
+    `Every push to a ready pull request reruns the Gate, and a long line of them is mostly cancelled reruns. Keep working on this one as a draft (pushes to a draft run nothing), and mark it ready when \`node scripts/gates/ready-cap.mjs --pr ${self.number}\` says there is room.`,
     "",
     `Related changes belong in one pull request. Maintainers can raise the cap with the repository variable \`CHALK_READY_CAP\`, or let one pull request through with the \`${EXEMPT_LABEL}\` label.`,
   ].join("\n");
