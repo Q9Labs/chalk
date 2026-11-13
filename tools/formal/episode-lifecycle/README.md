@@ -1,6 +1,6 @@
 # Episode lifecycle model
 
-A TLA+ model of one Chalk Episode from admission to its end, with the steps that can race an end: joins, knock admissions, Leaves, deadline changes, a host pressing End and the maximum-duration end. TLC checks four rules over every order of those steps, reports one rule the real code breaks today, and checks that each of six broken variants of the code breaks its rule.
+A TLA+ model of one Chalk Episode from admission to its end, with the steps that can race an end: joins, knock admissions, Leaves, deadline changes, a host pressing End and the maximum-duration end. TLC checks five rules over every order of those steps, and checks that each of seven broken variants of the code breaks its rule.
 
 Run `./run.sh` (under a minute, Java 11 or later). CI runs it when a covered file changes. The rules, the finding, the coverage record, the sync commit and how to read a failure are in [`.agents/skills/episode-lifecycle-formal/SKILL.md`](../../../.agents/skills/episode-lifecycle-formal/SKILL.md).
 

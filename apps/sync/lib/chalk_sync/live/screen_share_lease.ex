@@ -86,6 +86,14 @@ defmodule ChalkSync.Live.ScreenShareLease do
     end
   end
 
+  @doc "Whether the lease's hard cap lasts through the renewal window a renewal at `:now` would grant."
+  @spec outlasts_renewal?(lease(), keyword()) :: boolean()
+  def outlasts_renewal?(lease, options \\ []) do
+    now = Keyword.get(options, :now, DateTime.utc_now())
+    renewal_ms = Keyword.get(options, :renewal_ms, @default_renewal_ms)
+    DateTime.compare(lease.hard_expires_at, DateTime.add(now, renewal_ms, :millisecond)) != :lt
+  end
+
   @spec release(Postgrex.conn(), EpisodeKey.t(), lease()) ::
           :ok | {:error, :lease_not_owned | :dependency_unavailable}
   def release(connection, episode, lease) do

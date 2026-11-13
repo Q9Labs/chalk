@@ -18,3 +18,4 @@ EnqueueMaximumDuration	apps/api/db/queries/sync_lifecycle.sql	and operations.ope
 EndRetriesExhausted	apps/sync/lib/chalk_sync/external_operation_consumer.ex	do: {:terminal_failure, :retry_exhausted},
 EndRetriesExhausted	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	SQL.restore_episode_active()
 FinalizeDeadline	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	validate_finalization_deadline(external, policy)
+EnqueueMaximumDuration	apps/api/db/queries/sync_lifecycle.sql	and deadline_end.live_attempts = 0

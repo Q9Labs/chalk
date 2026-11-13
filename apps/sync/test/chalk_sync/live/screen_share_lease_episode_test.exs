@@ -63,13 +63,33 @@ defmodule ChalkSync.Live.ScreenShareLeaseEpisodeTest do
 
     first = lease_row(connection, fixture)
 
-    # The coordinator's next look, 15 s after the first, reports the same cursor.
+    # The coordinator's next look reports the same cursor.
     assert {:ok, _live, _} =
-             LiveEpisode.reconcile(live, now: DateTime.add(acquired_at, 15_000, :millisecond))
+             LiveEpisode.reconcile(live, now: DateTime.add(acquired_at, 8_000, :millisecond))
 
     second = lease_row(connection, fixture)
     assert DateTime.compare(second.renewed_until, first.renewed_until) == :gt
     assert DateTime.compare(second.renewed_until, hard) in [:lt, :eq]
+  end
+
+  # The hard cap (30 s) would end the lease before the next look while the share still runs, and a guest could
+  # take the lapsed lease. The look replaces the lease before that.
+  test "a look near the hard cap replaces the lease of the sharer",
+       %{connections: [connection | _], fixture: fixture, host: host} do
+    use_adapter(observation(7, [screen(host)]))
+    live = LiveEpisode.new(fixture.episode)
+
+    {live, _} = enable_screen(live, host)
+    old = lease_row(connection, fixture)
+    acquired_at = DateTime.add(old.hard_expires_at, -30_000, :millisecond)
+
+    assert {:ok, _live, _} =
+             LiveEpisode.reconcile(live, now: DateTime.add(acquired_at, 25_000, :millisecond))
+
+    row = lease_row(connection, fixture)
+    refute row.lease_id == old.lease_id
+    assert DateTime.compare(row.hard_expires_at, old.hard_expires_at) == :gt
+    assert DateTime.compare(row.renewed_until, old.hard_expires_at) == :gt
   end
 
   # The release of an ended share failed, so the row stays. The same person's next share starts a new lease with a

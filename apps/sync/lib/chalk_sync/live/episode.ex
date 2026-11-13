@@ -713,7 +713,17 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
+  # A lease that its hard cap would end before the next look is replaced while the
+  # share still runs, so the lease never lapses under a sharer.
   defp renew_screen_lease(state, participant_id, lease, options) do
+    if ScreenShareLease.outlasts_renewal?(lease, options) do
+      extend_screen_lease(state, participant_id, lease, options)
+    else
+      rotate_screen_lease(state, participant_id, lease, options)
+    end
+  end
+
+  defp extend_screen_lease(state, participant_id, lease, options) do
     with {:ok, connection} <- database_connection(state),
          {:ok, renewed} <- ScreenShareLease.renew(connection, state.episode, lease, options) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, renewed)}}
@@ -736,7 +746,7 @@ defmodule ChalkSync.Live.Episode do
              state.episode,
              participant_id,
              lease.owner_generation,
-             options
+             Keyword.put(options, :replace_own, true)
            ) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, rotated)}}
     else

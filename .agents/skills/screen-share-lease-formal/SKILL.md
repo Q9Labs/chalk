@@ -5,57 +5,41 @@ description: 'Model-check the screen-share lease with TLA+. Use when a change to
 
 # Screen-share lease model
 
-One Chalk Episode allows one screen share at a time. A lease row in `sync_screen_share_leases` (one row per Episode) says who may share. `Live.Episode` acquires the lease before it asks the media plane to publish a screen, renews it while it follows the plane's observations, and releases it when the share ends. The renewal window is 10 seconds, the hard cap is 30 seconds, and the coordinator looks at the plane every 15 seconds. Tests reach the bad orderings only by luck, because each needs a clock, a media observation, a Leave and a failed database call to land in a specific order.
+One Chalk Episode allows one screen share at a time. A lease row in `sync_screen_share_leases` (one row per Episode) says who may share. `Live.Episode` acquires the lease before it asks the media plane to publish a screen, renews it while it follows the plane's observations, and releases it when the share ends. The renewal window is 20 seconds, the hard cap is 30 seconds, and the coordinator looks at the plane every 15 seconds. Tests reach the bad orderings only by luck, because each needs a clock, a media observation, a Leave and a failed database call to land in a specific order.
 
-`tools/formal/screen-share-lease/ScreenShareLease.tla` models those steps for two people and checks three rules in every order they can happen in. It also states two rules the real code breaks today (see Findings).
+`tools/formal/screen-share-lease/ScreenShareLease.tla` models those steps for two people and checks five rules in every order they can happen in.
 
 | Rule                    | Plain sentence                                                                                                                          | Harm when it breaks                                                                                                      |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `NoTakeoverWhileLive`   | A lease that is still live is never taken by another owner.                                                                             | Two people share at once, or the person who shares loses the lease while they still run.                                 |
 | `LeaseNeedsAuthority`   | A lease is acquired or renewed only for the participant generation that is authorised at that moment.                                   | A person who left, or an old tab, keeps a screen-share lease alive and blocks the next sharer.                           |
 | `NewestObservationWins` | `Live.Episode`'s projection of the media plane is the newest observation it ever applied: an older cursor never overwrites a newer one. | A late snapshot makes the call show a share that ended, or hides one that runs, and the lease follows the wrong picture. |
+| `AtMostOneShare`        | At most one participant in the call has a screen publication.                                                                           | Two people share at once, and the next observation stops with `{:error, :conflicting_screen_publications}`.              |
+| `ReshareGetsFullLease`  | A new share gets a lease with a full hard cap, so a person whose share ended does not inherit the old cap.                              | A share ends early because a failed release left the old lease in place.                                                 |
 
 ## Findings
 
-`AtMostOneShare` and `ReshareGetsFullLease` are rules the real code breaks. They are listed in `findings`, and `tools/formal/screen-share-lease/run.sh` reports them as known and stays green. Each fails once its rule holds, and the finding then moves into `ScreenShareLease.cfg`.
+No rule is broken today. `findings` is empty, and `tools/formal/screen-share-lease/run.sh` still checks every rule listed in it. Both rules below were findings and the code now holds them:
 
-**A second person can share while the first still shares** (`AtMostOneShare`). Steps, in Chalk's words:
-
-1. The host starts a screen share. `Live.Episode` acquires the lease with a 10-second renewal window, and the media plane reports the share.
-2. The coordinator looks at the plane every 15 seconds. The plane reports the same cursor, and an equal cursor only re-projects the snapshot (`apply_equal_media_observation`), so the lease is not renewed.
-3. The 10-second window passes while the host still shares, and the lease lapses.
-4. A guest turns on a screen share. `acquire` finds a lapsed lease, takes it and the plane accepts a second screen publication.
-5. The next observation shows two screen publications, and `reconcile_screen_leases` stops with `{:error, :conflicting_screen_publications}` before it changes any lease.
-
-Replay against the real code (a Postgres-backed test that drives `Live.Episode` with the media-plane test adapter): after step 3 the row still says `renewed_until = t0 + 10 s`, the guest's `acquire` returns `:ok`, and the next observation returns `{:error, :conflicting_screen_publications}`.
-
-**A failed release lets the next share inherit the old lease** (`ReshareGetsFullLease`). Steps:
-
-1. The host shares, and the lease starts with a 30-second hard cap.
-2. The share ends, and `Live.Episode` releases the lease with `_ = release_screen_lease(...)` and forgets it. The release fails, for example with `:dependency_unavailable` after the 1-second query timeout, because another transaction holds the row.
-3. The row stays in Postgres, and nothing in memory points to it.
-4. The host shares again 9 seconds later. `acquire` finds the same owner and generation with a live lease, keeps the old lease id and the old hard cap, and the new share ends at `t0 + 30 s` instead of `t0 + 39 s`.
-
-Replay against the real code: with the release forced to fail, the row stays after the share stops (one row left), and the second acquire returns the same lease id with `hard_expires_at = t0 + 30 s`.
-
-Both findings come from `Live.Episode` treating the lease as a soft thing it can drop or let lapse. A fix for the first renews the lease on an equal-cursor look, or makes the renewal window longer than the 15-second look. A fix for the second checks the result of `release_screen_lease` before it forgets the lease.
+- `AtMostOneShare`: the coordinator looks at the plane every 15 seconds. A look at an unchanged cursor now renews the lease (`apply_equal_media_observation` reconciles the leases), the renewal window is 20 seconds so it outlasts the 15-second look interval, and a lease whose hard cap ends before the next look is replaced while the share runs (`renew_screen_lease`, `ScreenShareLease.outlasts_renewal?`). The variants `equal_look_skips_renew`, `short_renewal` and `hard_cap_lapses` restore each old behavior.
+- `ReshareGetsFullLease`: `Live.Episode` ignores a failed release (`_ = release_screen_lease(...)`) and forgets the lease, so the row stays. A share that starts without a lease in memory now replaces the owner's old row (`:replace_own` in `acquire`), with a new lease id and a full hard cap. The variant `reshare_inherits` restores the old behavior.
 
 ## Does my change touch the model?
 
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- apps/sync/lib/chalk_sync/live/screen_share_lease.ex apps/sync/lib/chalk_sync/live/episode.ex apps/sync/lib/chalk_sync/episodes/coordinator.ex
+git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- apps/sync/lib/chalk_sync/live/screen_share_lease.ex apps/sync/lib/chalk_sync/live/episode.ex apps/sync/lib/chalk_sync/episodes/coordinator.ex
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as recording or chat code in the same file, needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Sync commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
+Sync commit: `98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
-- `Acquire`, `Renew`, `Release`: `apps/sync/lib/chalk_sync/live/screen_share_lease.ex` (`acquire` with `acquire_query` and `same_active_owner`, `renew`, `release`). The row is an upsert on (tenant, episode). The same active owner keeps the lease id and the hard cap.
-- `Time`: `@default_renewal_ms` (10 s) and `@default_hard_lifetime_ms` (30 s) in `apps/sync/lib/chalk_sync/live/screen_share_lease.ex`, and `@live_reconcile_interval_ms` (15 s) in `apps/sync/lib/chalk_sync/episodes/coordinator.ex`.
+- `Acquire`, `Renew`, `Release`: `apps/sync/lib/chalk_sync/live/screen_share_lease.ex` (`acquire` with `acquire_query`, `own_live_lease` and `keeps_lease`, `renew`, `outlasts_renewal?`, `release`). The row is an upsert on (tenant, episode). The same active owner keeps the lease id and the hard cap, unless the caller starts a new share (`:replace_own`).
+- `Time`: `@default_renewal_ms` (20 s) and `@default_hard_lifetime_ms` (30 s) in `apps/sync/lib/chalk_sync/live/screen_share_lease.ex`, and `@live_reconcile_interval_ms` (15 s) in `apps/sync/lib/chalk_sync/episodes/coordinator.ex`.
 - `EnableScreen`: `apps/sync/lib/chalk_sync/live/episode.ex` (`enable_reserved_publication` for `:screen`, `acquire_screen_lease`, `retain_or_release_screen_lease`).
 - `StopCommand`: `apps/sync/lib/chalk_sync/live/episode.ex` (`maybe_release_screen_lease`).
 - `Observe`, `Look`, `Conflict`: `apps/sync/lib/chalk_sync/live/episode.ex` (`apply_media_observation`, `compare_media_cursor`, `apply_equal_media_observation`, `apply_newer_media_observation`, `reconcile_screen_leases`).
@@ -76,7 +60,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 1. It checks that every fragment in `anchors` is still in its file.
 2. It runs TLC on `ScreenShareLease.cfg` (2 people, 1 generation each, time in 5-second units up to 25 seconds, `Break = "none"`), which is the real code, and needs every rule to hold.
-3. It checks each rule in `findings` and needs TLC to report it as broken, so a fixed finding does not go unnoticed.
+3. It checks each rule in `findings` (none today) and needs TLC to report it as broken, so a fixed finding does not go unnoticed.
 4. It runs each broken variant in `breaks`, and needs TLC to report the named rule as broken. This proves the check can still fail.
 
 The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/screen-share-lease/run.sh` in `.github/workflows/formal-screen-share-lease.yml` when a covered file or this model changes.
