@@ -54,23 +54,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if !clients.Runs(service.Provider()) {
 		return publicinvites.PublicAccessGrant{}, mediaplane.ErrClientUnsupported
 	}
-	// Guests of an account's Space inherit that account's relay allowance;
-	// anonymous public Spaces have no accountable owner.
-	allowRelay := arrival.TenantID != a.managedTenantID
-	var join mediaplane.Join
-	if refresh && !replaceMediaConnection {
-		join, err = service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
-			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
-			AllowRelay: allowRelay,
-		})
-	} else {
-		join, err = service.CreateJoin(ctx, mediaplane.CreateJoinInput{
-			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode,
-			ParticipantName: arrival.DisplayName, ExternalParticipantID: result.Participant.ID.String(), ParticipantPreset: "contributor",
-			Metadata:   map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
-			AllowRelay: allowRelay,
-		})
-	}
+	join, err := a.openJoin(ctx, service, episode, arrival, result, refresh && !replaceMediaConnection)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -107,6 +91,27 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,
 	}, nil
+}
+
+// openJoin resumes the participant's provider connection when resume is set, and creates a new one otherwise.
+func (a accessPort) openJoin(ctx context.Context, service *mediaplane.Service, episode mediaplane.Episode, arrival publicinvites.Arrival, result episodes.PublicJoinResult, resume bool) (mediaplane.Join, error) {
+	participant := result.Participant
+	scope := scopeOf(participant.TenantID, participant.EpisodeID, participant.ID, participant.Generation)
+	// Guests of an account's Space inherit that account's relay allowance;
+	// anonymous public Spaces have no accountable owner.
+	allowRelay := arrival.TenantID != a.managedTenantID
+	if resume {
+		return service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
+			Provider: service.Provider(), Scope: scope, Episode: episode, ExternalParticipantID: participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
+			AllowRelay: allowRelay,
+		})
+	}
+	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{
+		Provider: service.Provider(), Scope: scope, Episode: episode,
+		ParticipantName: arrival.DisplayName, ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor",
+		Metadata:   map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
+		AllowRelay: allowRelay,
+	})
 }
 
 func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episodeID utilities.ID, persistedProvider string) (*mediaplane.Service, mediaplane.Episode, error) {

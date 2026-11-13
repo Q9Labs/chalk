@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -46,23 +47,7 @@ func (s Service) CreateArrival(ctx context.Context, input CreateArrivalInput) (C
 	if err != nil {
 		return CreateArrivalResult{}, fmt.Errorf("generate public arrival handle: %w", err)
 	}
-	created, err := s.repository.CreateArrival(ctx, Arrival{
-		ArrivalHandle:          arrivalHandle,
-		TenantID:               input.TenantID,
-		SpaceID:                input.SpaceID,
-		InviteHandle:           append([]byte(nil), input.Invite.Handle...),
-		InviteGeneration:       input.Invite.Generation,
-		InviteStateEpoch:       input.InviteStateEpoch,
-		IdentityMode:           input.IdentityMode,
-		GuestCredentialHash:    append([]byte(nil), credentialHash...),
-		AccountID:              input.AccountID,
-		DisplayName:            input.DisplayName,
-		CredentialFamily:       input.CredentialFamily,
-		IdempotencyKey:         input.IdempotencyKey,
-		IdempotencyFingerprint: fingerprint,
-		State:                  ArrivalPending,
-		ExpiresAt:              expiresAt,
-	})
+	created, err := s.repository.CreateArrival(ctx, newPendingArrival(input, arrivalHandle, credentialHash, fingerprint, expiresAt))
 	if errors.Is(err, ErrIdempotencyConflict) {
 		// A concurrent request with the same key won the insert.
 		winner, lookupErr := s.repository.GetArrivalByIdempotency(ctx, input.TenantID, input.SpaceID, input.IdempotencyKey)
@@ -78,6 +63,26 @@ func (s Service) CreateArrival(ctx context.Context, input CreateArrivalInput) (C
 		return CreateArrivalResult{}, ErrIdempotencyConflict
 	}
 	return CreateArrivalResult{Arrival: created, Credential: credential}, nil
+}
+
+func newPendingArrival(input CreateArrivalInput, arrivalHandle utilities.ID, credentialHash []byte, fingerprint [32]byte, expiresAt time.Time) Arrival {
+	return Arrival{
+		ArrivalHandle:          arrivalHandle,
+		TenantID:               input.TenantID,
+		SpaceID:                input.SpaceID,
+		InviteHandle:           append([]byte(nil), input.Invite.Handle...),
+		InviteGeneration:       input.Invite.Generation,
+		InviteStateEpoch:       input.InviteStateEpoch,
+		IdentityMode:           input.IdentityMode,
+		GuestCredentialHash:    append([]byte(nil), credentialHash...),
+		AccountID:              input.AccountID,
+		DisplayName:            input.DisplayName,
+		CredentialFamily:       input.CredentialFamily,
+		IdempotencyKey:         input.IdempotencyKey,
+		IdempotencyFingerprint: fingerprint,
+		State:                  ArrivalPending,
+		ExpiresAt:              expiresAt,
+	}
 }
 
 // replayArrival answers a repeated request with the Arrival the first one made,
