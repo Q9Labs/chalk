@@ -15,11 +15,11 @@ type ReportedDiagnosticEventName =
   | "cleanup_unconfirmed"
   | "space_join_span";
 
-export type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
+type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
 
-export type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
+type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
 
 export type ConnectionJoinTraceEvent = ConnectionDiagnostic & {
   readonly event: "space_join_span";
@@ -29,12 +29,12 @@ export type ConnectionJoinTraceEvent = ConnectionDiagnostic & {
   readonly outcome: ConnectionJoinTraceOutcome;
 };
 
-export type ConnectionJoinTraceSpan = {
+type ConnectionJoinTraceSpan = {
   readonly spanId: string;
   readonly end: (input: ConnectionJoinTraceEnd) => void;
 };
 
-export type ConnectionJoinTraceEnd = {
+type ConnectionJoinTraceEnd = {
   readonly state: ConnectionState;
   readonly epoch: number;
   readonly outcome: Exclude<ConnectionJoinTraceOutcome, "started">;
