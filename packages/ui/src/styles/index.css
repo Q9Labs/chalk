@@ -1196,6 +1196,10 @@
 .chalk-sheet[data-ending-style] {
   transform: translateY(100%);
 }
+/* The sheet takes focus itself when it opens, so the panel is not a control and draws no ring. */
+.chalk-sheet:focus {
+  outline: none;
+}
 .chalk-sheet {
   /* The home indicator inset where the host page sets viewport-fit=cover, else a 16px floor, plus 8px. */
   --chalk-sheet-bottom: calc(max(env(safe-area-inset-bottom), var(--space-4)) + var(--space-2));
