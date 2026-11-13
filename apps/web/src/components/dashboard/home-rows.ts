@@ -1,11 +1,12 @@
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { readPage } from "../../lib/dashboard/client";
+import { shareableLink } from "../../lib/dashboard/format";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 export async function inviteLink(call: HomeCallDTO): Promise<string> {
   const link = call.inviteUrl ?? (await readPage("call-invite", { spaceId: call.id })).inviteUrl;
   if (!link) throw new Error("This call has no link yet");
-  return link;
+  return shareableLink(link);
 }
 
 /** A Home row: the call with its live Episode, which every status check answers along with whether it is archived. */
@@ -19,7 +20,16 @@ export const merge = (row: Row, call: CallDTO): Row => ({ ...row, ...call });
  */
 export type Home = { rows: Row[]; nextCursor: string | null };
 export const capped = (rows: Row[]): Row[] => rows.slice(0, HOME_STATUS_ROWS);
-export const shown = (home: Home): Row[] => home.rows.filter((row) => !row.archived);
+/** When a call was last used: its last session, else when it was made. */
+const usedAt = (row: Row): string => row.lastActiveAt ?? row.createdAt;
+/**
+ * What Home lists: unarchived calls, the one in use now first, then by last use, newest first. Home holds its rows by
+ * creation time, 25 to a page, and shows the first five of this order: it sorts everything it holds, then cuts, so a
+ * call used yesterday is never hidden behind calls made today.
+ */
+export const listed = (home: Home): Row[] => home.rows.filter((row) => !row.archived).sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || Date.parse(usedAt(b)) - Date.parse(usedAt(a)));
+/** How many rows Home shows at first, and how many more each Show more calls adds. */
+export const SHOWN_ROWS = 5;
 export const rowsOf = (page: HomeDTO): Row[] => page.calls.map((call) => ({ ...call, live: page.live.find((item) => item.spaceId === call.id)?.episode ?? null }));
 
 /** One status answer applied by Space ID: whether each call is archived, its activity, and its live Episode. */
@@ -67,7 +77,7 @@ export async function readHomeStatus(home: Home): Promise<Home> {
   const first = status.first;
   if (!first) return { ...home, rows };
   // Calls made elsewhere are the newest, so they sit above every call Home holds: put the first page's calls above
-  // the first one Home knows on top. With no known call on the page (five or more new calls), or an unknown call
+  // the first one Home knows on top. With no known call on the page (a whole page of new calls), or an unknown call
   // below a known one (a call archived before Home loaded, then restored), reload from this page into the rows
   // this answer just updated.
   const known = new Set(rows.map((row) => row.id));

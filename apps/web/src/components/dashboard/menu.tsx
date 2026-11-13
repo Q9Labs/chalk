@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Icon, type IconName } from "../site/Icon";
+import { useOutsidePress } from "./use-outside-press";
 
 /* ---------- popover menus: arrow keys move, Esc closes and returns focus ---------- */
 
@@ -22,14 +23,9 @@ export function Menu({ label, trigger, icon = "more", align, children }: MenuPro
     wrap.current?.querySelector<HTMLElement>("[aria-haspopup=menu]")?.focus();
     setOpen(false);
   }, []);
+  useOutsidePress(open, wrap, () => setOpen(false));
   useEffect(() => {
-    if (!open) return;
-    wrap.current?.querySelector<HTMLElement>("[role=menu] [role^=menuitem]")?.focus();
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !wrap.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    if (open) wrap.current?.querySelector<HTMLElement>("[role=menu] [role^=menuitem]")?.focus();
   }, [open]);
 
   function onKeyDown(event: KeyboardEvent<HTMLSpanElement>) {

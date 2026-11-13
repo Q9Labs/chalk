@@ -1,6 +1,7 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
+import { DASHBOARD_BOOT_SCRIPT } from "../lib/dashboard-boot";
 import { CALL_BOOT_CSS, THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
 import { installWhiteboardAssets } from "../lib/whiteboard-assets";
@@ -51,6 +52,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <style dangerouslySetInnerHTML={{ __html: CALL_BOOT_CSS }} />
       </head>
       <body>
+        {/* Draws the dashboard's opening frame before the app loads; does nothing on other pages. */}
+        <script dangerouslySetInnerHTML={{ __html: DASHBOARD_BOOT_SCRIPT }} />
         {children}
         <Scripts />
       </body>

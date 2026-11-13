@@ -60,6 +60,7 @@
   color: var(--chalk-muted-text);
   margin: var(--space-1-5) var(--space-1) 0;
   line-height: 1.4;
+  text-wrap: pretty;
 }
 
 .site .dash .field + .field {
@@ -126,18 +127,18 @@
 .site .dash .seg2 {
   position: relative;
   isolation: isolate;
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  display: inline-flex;
   padding: var(--space-1);
   border-radius: var(--corner-pill);
   background: var(--chalk-raised);
   max-width: 100%;
 }
 
+/* Each segment is as wide as its label, so a long label never spills out of the thumb. */
 .site .dash .seg2 button {
+  flex: none;
   height: 34px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-4);
   border-radius: var(--corner-pill);
   font-size: var(--type-body-sm);
   font-weight: 600;
@@ -156,10 +157,15 @@
   z-index: -1;
   top: var(--space-1);
   bottom: var(--space-1);
-  left: var(--space-1);
+  left: 0;
   border-radius: var(--corner-pill);
   background: var(--chalk-pressed);
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.site .dash .seg2 .seg-thumb.moves {
+  transition:
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .site[data-chalk-theme="light"] .dash .seg2 .seg-thumb {
@@ -168,7 +174,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site .dash .seg2 .seg-thumb {
+  .site .dash .seg2 .seg-thumb.moves {
     transition: none;
   }
 }
@@ -375,7 +381,8 @@
 
 .site .dash .sk {
   display: block;
-  background: var(--chalk-raised);
+  /* The same fill as the opening frame's blocks, so the hand-over between them can't be seen. */
+  background: var(--chalk-hover);
   border-radius: var(--corner-lg);
   animation: dash-shim 1.2s ease-in-out infinite alternate;
 }
@@ -550,6 +557,11 @@
 
 .site .dash .cbox .sib {
   text-align: initial;
+}
+
+/* A single way on is a pill as wide as its words, not a bar across the card. */
+.site .dash .sib.fit {
+  justify-content: center;
 }
 
 .site .dash .alogo {
@@ -745,54 +757,35 @@
 }
 
 .site .dash .murl {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-5);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
-  max-width: 640px;
-  background: var(--chalk-raised);
-  border: 1px solid var(--chalk-line);
-  border-radius: var(--corner-xl);
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+  max-width: 560px;
 }
 
+/* AI apps' section labels start on the column edge, under the page title and in line with the cards. */
 .site .dash .murl .lbl {
   margin: 0;
-  flex: none;
 }
 
-.site .dash .murl code {
-  flex: 1;
-  min-width: 0;
-  font: 500 var(--type-body-sm)/1.5 var(--chalk-font-mono);
-  overflow-wrap: anywhere;
+.site .dash .murl .help {
+  margin: 0;
 }
 
-.site .dash .cfind {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  margin: var(--space-8) 0 var(--space-4);
+/* The catalogue's two kinds, each a small heading over its tiles. */
+.site .dash .cgroup {
+  margin: var(--space-10) 0 var(--space-3);
+  font-size: var(--type-body-sm);
+  font-weight: 600;
+  color: var(--chalk-soft-text);
 }
 
-.site .dash .cquery {
-  position: relative;
-  display: block;
-  flex: 1 1 240px;
-  max-width: 380px;
-  color: var(--chalk-muted-text);
+.site .dash .cgroup + .cgrid {
+  margin-top: 0;
 }
 
-.site .dash .cquery svg {
-  position: absolute;
-  top: 13px;
-  left: 14px;
-  pointer-events: none;
-}
-
-.site .dash .cquery .inp {
-  padding-left: var(--space-10);
+.site .dash section + section > .cgroup {
+  margin-top: var(--space-6);
 }
 
 .site .dash .cgrid {
@@ -931,10 +924,8 @@
   overflow-wrap: anywhere;
 }
 
-.site .dash .cbox2 .btn {
-  flex: none;
-  height: 44px;
-  padding: 0 var(--space-4);
+.site .dash .cbox2 .ib {
+  align-self: flex-start;
 }
 
 .site .dash .csteps {
@@ -1014,23 +1005,8 @@
     flex: none;
   }
 
-  .site .dash .murl {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-1-5);
-    padding: var(--space-3);
-  }
-
-  .site .dash .murl code {
+  .site .dash .murl .lf-text {
     font-size: var(--type-caption);
-  }
-
-  .site .dash .cbox2 {
-    flex-wrap: wrap;
-  }
-
-  .site .dash .cbox2 .btn {
-    flex: 1 1 100%;
   }
 }
 
@@ -1104,6 +1080,11 @@
   padding: 0 var(--space-6);
   background: var(--chalk-canvas);
   border-bottom: 1px solid var(--chalk-line);
+}
+
+/* When the session check fails, the tabs step out: they lead nowhere until it succeeds. */
+.site .dash .topb.dim .ttabs {
+  visibility: hidden;
 }
 
 .site .dash .ttabs {
@@ -1187,10 +1168,6 @@
   min-width: 0;
 }
 
-.site .dash .wrap.wide {
-  max-width: 1280px;
-}
-
 .site .dash .pgh {
   display: flex;
   align-items: center;
@@ -1214,7 +1191,8 @@
   width: 100%;
   font-size: var(--type-body);
   color: var(--chalk-muted-text);
-  margin-top: calc(var(--space-1-5) * -1);
+  /* 4px under the title, past the head's 12px row gap. */
+  margin-top: calc((var(--space-3) - var(--space-1)) * -1);
 }
 
 .site .dash .back {
@@ -1269,7 +1247,7 @@
   align-items: center;
   gap: var(--space-3);
   min-height: 64px;
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  padding: var(--space-2);
   border-radius: var(--corner-xl);
 }
 
@@ -1335,6 +1313,10 @@
   font-size: var(--type-caption);
 }
 
+.site .dash .rt > span.ltext {
+  display: flex;
+}
+
 .site .dash .rm {
   font-size: var(--type-body-sm);
   color: var(--chalk-muted-text);
@@ -1343,24 +1325,56 @@
   min-width: 120px;
 }
 
-/* The people on a call sit beside its time, so every title starts at the same edge with no gap before it. */
+/* The people on a call lead its row, in a column as wide as three faces and set against the name, so one face sits
+   right beside the name and every name starts at the same edge. */
 .site .dash .fcol {
   display: flex;
   justify-content: flex-end;
+  flex: none;
+  width: 68px;
 }
 
-/* The overflow count joins the stack as one more face. */
+/* The overflow count is one more face: the same size and ring, a visible fill, and the same figures. */
 .site .dash .fcol .faces .more {
+  /* The face before it overlaps the chip by 8px, so the count centres in what stays visible. */
+  padding-left: var(--space-2);
   display: grid;
   place-items: center;
-  min-width: var(--space-8);
-  height: var(--space-8);
+  width: 28px;
+  height: 28px;
   margin-left: calc(var(--space-2) * -1);
-  padding: 0 var(--space-1-5);
-  border-radius: var(--corner-pill);
-  background: var(--chalk-raised);
+  border-radius: 50%;
+  /* A fill that reads as a face on the black canvas as well as on light. */
+  background: color-mix(in srgb, var(--chalk-text) 20%, var(--chalk-canvas));
   box-shadow: var(--elevation-halo-canvas);
-  color: var(--chalk-muted-text);
+  color: var(--chalk-text);
+  font: 600 var(--type-caption)/1 var(--chalk-font-family);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Home's rows: a hairline between calls, hidden beside the one under the pointer. */
+.site .dash .calls .row + .row::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-0-5) / -2 - 0.5px);
+  left: var(--space-3);
+  right: var(--space-3);
+  height: 1px;
+  background: var(--chalk-line);
+  pointer-events: none;
+}
+
+.site .dash .calls .row:hover::before,
+.site .dash .calls .row:hover + .row::before {
+  opacity: 0;
+}
+
+/* A call nobody has joined yet keeps one quiet outlined face, so its name starts where every other name does. */
+.site .dash .fcol .noface {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
 }
 
 .site .dash .row:hover .fcol .faces .more {
@@ -1446,10 +1460,15 @@
   align-items: flex-start;
 }
 
+/* "Recent calls" is Home's page title, at the one page-head scale. */
 .site .dash .secth.hhead h1 {
   display: flex;
   align-items: center;
   min-height: 36px;
+  font-size: var(--type-headline);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .site .dash .hfail {
@@ -1461,40 +1480,6 @@
   border-radius: var(--corner-2xl);
   background: var(--chalk-surface);
   border: 1px solid var(--chalk-line-strong);
-}
-
-.site .dash .hfail-art {
-  width: 160px;
-  height: 96px;
-  margin-bottom: var(--space-3);
-}
-
-.site .dash .hfail-tile {
-  fill: none;
-  stroke: var(--chalk-line-strong);
-  stroke-width: 1;
-}
-
-.site .dash .hfail-dot,
-.site .dash .hfail-bar {
-  fill: var(--chalk-line-strong);
-}
-
-.site .dash .hfail-line {
-  stroke: var(--chalk-line-strong);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-dasharray: 2 6;
-}
-
-.site .dash .hfail-badge {
-  fill: var(--chalk-danger-text);
-}
-
-.site .dash .hfail-mark {
-  stroke: var(--chalk-surface);
-  stroke-width: 1.8;
-  stroke-linecap: round;
 }
 
 .site .dash .hfail b {
@@ -1514,17 +1499,6 @@
   text-align: center;
   border-radius: var(--corner-2xl);
   background: var(--chalk-surface);
-}
-
-.site .dash .empty-icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  margin: 0 auto var(--space-4);
-  border-radius: var(--corner-xl);
-  background: var(--chalk-raised);
-  color: var(--chalk-muted-text);
 }
 
 .site .dash .empty .btn {
@@ -1548,52 +1522,149 @@
   align-items: center;
   gap: var(--space-3);
   height: 64px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-3) 0 var(--space-2);
 }
 
-.site .dash .linkbox {
+.site .dash .skrow-text {
   flex: 1;
   min-width: 0;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-4);
-  border-radius: var(--corner-pill);
-  background: var(--chalk-raised);
-  font: 500 var(--type-body-sm) var(--chalk-font-mono);
-  overflow: hidden;
-  white-space: nowrap;
 }
 
-.site .dash .linkbox span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.site .dash .linkrow {
+/* A link or value with its copy control inside the end, the one way the dashboard shows something to copy. */
+.site .dash .linkfield {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.site .dash .linkrow .btn {
+  min-width: 0;
   height: 44px;
+  padding: 0 var(--space-1) 0 var(--space-4);
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-canvas);
 }
 
-/* Call settings: link, who can join and transcript language, each a heading, one control and one help line. */
+.site .dash .linkfield .lf-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 var(--type-body-sm) var(--chalk-font-mono);
+}
+
+/* A link reads host then path. Out of room, the host gives way to a few characters first, and the path that names the
+   call keeps what is left. */
+.site .dash .ltext {
+  display: flex;
+  min-width: 0;
+}
+
+.site .dash .ltext > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site .dash .ltext .lt-host {
+  flex: 0 1000 auto;
+  min-width: 4ch;
+}
+
+.site .dash .ltext .lt-path {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.site .dash .linkfield .ib {
+  width: 36px;
+  height: 36px;
+}
+
+/* The copy icon turns into a check where it sits; the tooltip names what it copies. */
+.site .dash .copy-glyph {
+  display: grid;
+}
+
+.site .dash .copy-glyph > svg.site-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.site .dash .copy .copy-glyph > svg:last-child,
+.site .dash .copy.ok .copy-glyph > svg:first-child {
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.site .dash .copy.ok .copy-glyph > svg:last-child {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site .dash .copy-glyph > svg.site-icon {
+    transition: opacity 150ms ease-out;
+    transform: none !important;
+  }
+}
+
+/* A menu that is open covers its button, so the button's tooltip stays away. */
+.site .dash [data-tip][aria-expanded="true"]:hover::after {
+  display: none;
+}
+
+/* Call settings: link, who can join and transcript language. Each column is a heading, one 40px control and a help
+   line two lines tall, on shared rows, so the controls and the help lines line up across the columns. */
 .site .dash .cset {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-8);
+  gap: var(--space-6) var(--space-8);
   margin-top: var(--space-6);
 }
 
+.site .dash .cset > div {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  align-items: center;
+  min-width: 0;
+}
+
+.site .dash .cset h2 {
+  align-self: end;
+  font-size: var(--type-body-sm);
+  font-weight: 600;
+  color: var(--chalk-soft-text);
+  margin: 0 0 var(--space-2) var(--space-1);
+}
+
 .site .dash .cset .help {
-  margin-top: var(--space-2);
+  align-self: start;
+  min-height: 2lh;
+  margin: var(--space-2) 0 0 var(--space-1);
 }
 
 .site .dash .cset .help.swap {
   animation: dash-fade 180ms ease-out;
+}
+
+.site .dash .cset .seg2 {
+  justify-self: start;
+  border: 1px solid var(--chalk-line-strong);
+  background: var(--chalk-canvas);
+}
+
+/* 34px buttons, 4px inset and a 1px border make the 44px every control in a settings row shares. */
+.site .dash .cset .seg2 button {
+  height: 34px;
+}
+
+.site .dash .cset .lp-trigger {
+  height: 44px;
+  padding-left: var(--space-4);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1610,17 +1681,6 @@
   .site .dash .cset > :first-child {
     grid-column: 1 / -1;
   }
-}
-
-.site .dash .cset > div {
-  min-width: 0;
-}
-
-.site .dash .cset h2 {
-  font-size: var(--type-body-sm);
-  font-weight: 600;
-  color: var(--chalk-soft-text);
-  margin: 0 0 var(--space-2) var(--space-1);
 }
 
 .site .dash .liveb {
@@ -2051,11 +2111,12 @@
   color: var(--chalk-muted-text);
 }
 
+/* The page head's one muted line, 4px under the title. */
 .site .dash .intro {
-  color: var(--chalk-soft-text);
-  margin-top: var(--space-2);
-  max-width: 640px;
-  font-size: var(--type-body-lg);
+  color: var(--chalk-muted-text);
+  margin-top: var(--space-1);
+  max-width: 720px;
+  font-size: var(--type-body);
 }
 
 .site .dash .intro a {
@@ -2210,7 +2271,7 @@
   justify-self: start;
 }
 
-.site .dash .tpanel .errp svg.site-icon {
+.site .dash .tpanel .errp > svg.site-icon {
   margin-top: var(--space-0-5);
 }
 
@@ -2220,13 +2281,6 @@
 
 .site .dash .rt > span.err {
   color: var(--chalk-danger-text);
-}
-
-.site .dash .ohelp {
-  font-size: var(--type-body);
-  color: var(--chalk-muted-text);
-  margin: var(--space-1-5) var(--space-1) 0;
-  max-width: 560px;
 }
 
 .site .dash .sihead .lockup {
@@ -2315,7 +2369,7 @@
   }
 
   .site .dash .brk::before,
-  .site .dash .dlg::before {
+  .site .dash :is(.brk, .dlg)::before {
     content: "";
     position: absolute;
     top: 8px;
@@ -2404,26 +2458,29 @@
     padding: var(--space-4) var(--space-4) var(--space-14);
   }
 
-  .site .dash .pgh h1 {
+  .site .dash .pgh h1,
+  .site .dash .secth.hhead h1 {
     font-size: var(--type-title);
   }
 
   .site .dash .row {
     gap: var(--space-3);
-    padding: var(--space-2) var(--space-0-5) var(--space-2) var(--space-2-5);
+    padding: var(--space-2) var(--space-0-5) var(--space-2) var(--space-2);
   }
 
   .site .dash .rm {
     display: none;
   }
 
-  .site .dash .fcol {
-    flex: none;
-  }
-
   .site .dash .secth.hhead {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* Home's two actions share one 44px height on a phone, so their tops and bottoms line up. */
+  .site .dash .hhead .hact .btn,
+  .site .dash .hhead .hjoin-box {
+    height: 44px;
   }
 
   .site .dash .hact {
@@ -2436,17 +2493,13 @@
     width: auto;
   }
 
-  .site .dash .linkrow {
-    flex-wrap: wrap;
-  }
-
-  .site .dash .linkrow .btn {
-    width: 100%;
-  }
-
   .site .dash .cset {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
+  }
+
+  .site .dash .cset .help {
+    min-height: 0;
   }
 
   .site .dash .pctl .pb {
@@ -2905,5 +2958,72 @@
   }
   to {
     opacity: 0;
+  }
+}
+
+/* "Your call is ready": the link, who can join and the language, one under the other at the dialog's full width. */
+.site .dash .cready {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+}
+
+.site .dash .cready .field + .field {
+  margin-top: 0;
+}
+
+.site .dash .cready .lp,
+.site .dash .cready .lp-field {
+  display: flex;
+  max-width: none;
+}
+
+.site .dash .cready .lp-trigger {
+  height: 44px;
+  padding: 0 var(--space-4);
+}
+
+/* A setting shown as its current value that opens where it changes. */
+.site .dash .setrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 44px;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-canvas);
+  color: var(--chalk-text);
+  font-size: var(--type-body-sm);
+  font-weight: 500;
+}
+
+.site .dash .setrow:hover {
+  border-color: var(--edge);
+}
+
+.site .dash .setrow:focus-visible {
+  outline: 2px solid var(--chalk-accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.site .dash .setrow .site-icon {
+  color: var(--chalk-muted-text);
+}
+
+/* Home's loaded list, its empty state and its failure fade in where the placeholders were, instead of cutting in. */
+.site .dash .list.calls,
+.site .dash .list > .empty,
+.site .dash .hfail {
+  animation: dash-fade 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site .dash .list.calls,
+  .site .dash .list > .empty,
+  .site .dash .hfail {
+    animation: none;
   }
 }

@@ -1,5 +1,6 @@
 import type { TranscriptLanguage, WhisperLanguage } from "@chalk/transcript-language";
-import { act } from "../../lib/dashboard/client";
+import { act, intentKey } from "../../lib/dashboard/client";
+import { newCallName } from "../../lib/dashboard/format";
 import { asWhisper } from "./transcript-languages";
 
 /** What this device remembers about languages, and what the next new call starts with. */
@@ -50,10 +51,14 @@ export function readNewCallLanguage(): NewCallLanguage {
   return raw ? asWhisper(raw) : null;
 }
 
-/** Starts a call for the signed-in person, in the account default language unless this device chose another. No name: the server names it. */
-export function startCall(idempotencyKey: string) {
+/** One press of Start a call: a retry sends the same key and the same name, so it can't make a second call. */
+export type CallIntent = { readonly key: string; readonly name: string };
+export const newCallIntent = (): CallIntent => ({ key: intentKey(), name: newCallName() });
+
+/** Starts a call for the signed-in person, in the account default language unless this device chose another. The name is for when it was made; the person can rename it. */
+export function startCall(intent: CallIntent) {
   const language = readNewCallLanguage();
-  return act("home", { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey });
+  return act("home", { action: "create-call", name: intent.name, admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey: intent.key });
 }
 
 export function saveNewCallLanguage(value: NewCallLanguage) {
