@@ -7,7 +7,7 @@ import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { createCallAction, newCallIntent, readNewCallLanguage } from "./language-choice";
-import { inviteLink, type Row, type Home, merge, capped, listed, SHOWN_ROWS, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { inviteLink, type Row, type Home, merge, capped, listed, SHOWN_ROWS, shownRows, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
@@ -88,12 +88,12 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
         <>
           <div className="list calls">
             {listed(state.data)
-              .slice(0, limit)
+              .slice(0, shownRows(listed(state.data), limit))
               .map((call) => (
                 <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
               ))}
           </div>
-          {listed(state.data).length > limit ? (
+          {listed(state.data).length > shownRows(listed(state.data), limit) ? (
             <div className="more-row">
               <button type="button" className="btn sec sm" onClick={() => setLimit((value) => value + SHOWN_ROWS)}>
                 Show more calls

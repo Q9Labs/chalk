@@ -123,6 +123,10 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.public, config.urls.web])].join(","),
         // A new call needs a media plane; the local stack runs Cloudflare Realtime.
         CHALK_DEFAULT_MEDIA_PLANE: "cf_sfu",
+        // AI apps sign in to the local MCP server here and consent in the dashboard. Without OAuth the dashboard's
+        // connected apps list answers 503, so AI apps showed "Couldn't load" on every local stack and Orb.
+        CHALK_OAUTH_ISSUER: config.urls.api,
+        CHALK_OAUTH_CONSENT_URL: `${config.urls.public}/dashboard/connect`,
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
