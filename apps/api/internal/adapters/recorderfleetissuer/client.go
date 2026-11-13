@@ -79,12 +79,6 @@ func New(config Config) (*Client, error) {
 	})
 }
 
-// NewWithHTTPClient supplies the issuer transport explicitly. It is intended
-// for conformance tests and callers that already enforce equivalent mTLS.
-func NewWithHTTPClient(baseURL string, client *http.Client) (*Client, error) {
-	return newClient(baseURL, client)
-}
-
 func newClient(rawURL string, client *http.Client) (*Client, error) {
 	baseURL, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || baseURL.Scheme != "https" || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" || baseURL.Path != "" && baseURL.Path != "/" || client == nil {

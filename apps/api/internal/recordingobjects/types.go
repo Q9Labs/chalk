@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -250,10 +249,6 @@ func TokenHash(token string) []byte {
 	return append([]byte(nil), digest[:]...)
 }
 
-func SameCommit(left Bundle, facts objectstorage.ObjectFacts, manifestDigest []byte) bool {
-	return left.ObjectVersion == facts.VersionID && left.ObjectETag == facts.ETag && left.ByteSize() == facts.Size && bytes.Equal(left.ObjectChecksumSHA256, checksumBytes(facts)) && bytes.Equal(left.ManifestDigest, manifestDigest)
-}
-
 func sameLayer(left, right *string) bool {
 	if left == nil || right == nil {
 		return left == right
@@ -262,21 +257,3 @@ func sameLayer(left, right *string) bool {
 }
 
 func (b Bundle) ByteSize() int64 { return b.ExpectedByteSize }
-
-func checksumBytes(facts objectstorage.ObjectFacts) []byte {
-	if facts.ChecksumSHA256 != "" {
-		decoded, err := decodeChecksum(facts.ChecksumSHA256)
-		if err == nil {
-			return decoded
-		}
-	}
-	return nil
-}
-
-func decodeChecksum(value string) ([]byte, error) {
-	decoded, err := base64.StdEncoding.Strict().DecodeString(value)
-	if err != nil || len(decoded) != sha256.Size {
-		return nil, ErrObjectFactsMismatch
-	}
-	return decoded, nil
-}

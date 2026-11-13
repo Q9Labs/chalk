@@ -176,13 +176,6 @@ func ObjectChecksumHex(encoded []byte) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// ObjectChecksumBase64 is the RFC 4648 checksum used by S3-compatible
-// ChecksumSHA256 request and response fields.
-func ObjectChecksumBase64(encoded []byte) string {
-	digest := sha256.Sum256(encoded)
-	return base64.StdEncoding.EncodeToString(digest[:])
-}
-
 func canonicalBundle(bundle Bundle) ([]byte, Bundle, error) {
 	encoded, err := Encode(bundle)
 	if err != nil {

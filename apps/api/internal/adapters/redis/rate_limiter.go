@@ -66,10 +66,6 @@ func NewRateLimiter(client *goredis.Client) RateLimiter {
 	return RateLimiter{client: client}
 }
 
-func NewRateLimiterWithClient(client rateLimitScriptClient) RateLimiter {
-	return RateLimiter{client: client}
-}
-
 func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Policy, now time.Time) ratelimit.Decision {
 	if policy.Limit <= 0 || policy.Window <= 0 {
 		return ratelimit.Decision{State: ratelimit.Allowed}

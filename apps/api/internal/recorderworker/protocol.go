@@ -1,10 +1,8 @@
-// Package recorderworker contains provider-neutral recorder worker contracts and
-// deterministic media planning primitives. It deliberately has no database,
-// object-storage, or provider SDK dependency.
+// Package recorderworker holds the recorder worker job contract and the capture and render
+// daemons. It has no database, object-storage or provider SDK dependency.
 package recorderworker
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -15,9 +13,7 @@ import (
 const ProtocolVersion = "recorder-worker.v1"
 
 var (
-	ErrInvalidJob            = errors.New("invalid recorder worker job")
-	ErrFencedAttempt         = errors.New("recorder worker attempt is fenced")
-	ErrProviderUnimplemented = errors.New("recorder provider is not implemented")
+	ErrInvalidJob = errors.New("invalid recorder worker job")
 )
 
 // Job is the complete immutable identity and bounded authority given to one
@@ -117,122 +113,3 @@ func (i ObjectIntent) validate(now time.Time) error {
 	}
 	return nil
 }
-
-type EventType string
-
-const (
-	EventHeartbeat EventType = "heartbeat"
-	EventProgress  EventType = "progress"
-	EventTerminal  EventType = "terminal"
-)
-
-type WorkerEvent struct {
-	ProtocolVersion   string          `json:"protocol_version"`
-	Type              EventType       `json:"type"`
-	JobID             string          `json:"job_id"`
-	TenantID          string          `json:"tenant_id"`
-	EpisodeID         string          `json:"episode_id"`
-	Attempt           int             `json:"attempt"`
-	FencingGeneration int64           `json:"fencing_generation"`
-	JourneyID         string          `json:"journey_id,omitempty"`
-	TraceParent       string          `json:"traceparent,omitempty"`
-	At                time.Time       `json:"at"`
-	Heartbeat         *Heartbeat      `json:"heartbeat,omitempty"`
-	Progress          *Progress       `json:"progress,omitempty"`
-	Terminal          *TerminalResult `json:"terminal,omitempty"`
-}
-
-type Heartbeat struct {
-	LeaseExpiresAt time.Time   `json:"lease_expires_at"`
-	ResourceUse    ResourceUse `json:"resource_use"`
-}
-
-type Progress struct {
-	Stage     string `json:"stage"`
-	Completed int64  `json:"completed"`
-	Total     int64  `json:"total"`
-	Bytes     int64  `json:"bytes"`
-	ObjectKey string `json:"object_key,omitempty"`
-}
-
-type ResourceUse struct {
-	CPUSeconds  float64 `json:"cpu_seconds"`
-	MemoryBytes int64   `json:"memory_bytes"`
-	InputBytes  int64   `json:"input_bytes"`
-	OutputBytes int64   `json:"output_bytes"`
-}
-
-type TerminalResult struct {
-	Outcome      string      `json:"outcome"`
-	ErrorCode    string      `json:"error_code,omitempty"`
-	ErrorDetail  string      `json:"error_detail,omitempty"`
-	ResourceUse  ResourceUse `json:"resource_use"`
-	ArtifactKey  string      `json:"artifact_key,omitempty"`
-	ArtifactHash string      `json:"artifact_hash,omitempty"`
-}
-
-func (e WorkerEvent) MarshalJSON() ([]byte, error) {
-	type alias WorkerEvent
-	if e.ProtocolVersion == "" {
-		e.ProtocolVersion = ProtocolVersion
-	}
-	return json.Marshal(alias(e))
-}
-
-func (e WorkerEvent) Validate(now time.Time) error {
-	if e.ProtocolVersion != ProtocolVersion {
-		return errors.New("unsupported worker event protocol")
-	}
-	if e.JobID == "" || e.TenantID == "" || e.EpisodeID == "" || e.Attempt < 1 || e.FencingGeneration < 1 {
-		return errors.New("worker event identity is incomplete")
-	}
-	if e.At.IsZero() || e.At.After(now.Add(5*time.Minute)) {
-		return errors.New("worker event timestamp is invalid")
-	}
-	switch e.Type {
-	case EventHeartbeat:
-		if e.Heartbeat == nil || e.Heartbeat.LeaseExpiresAt.Before(e.At) {
-			return errors.New("heartbeat lease is missing or expired")
-		}
-	case EventProgress:
-		if e.Progress == nil || e.Progress.Stage == "" || e.Progress.Completed < 0 || e.Progress.Total < e.Progress.Completed {
-			return errors.New("progress payload is invalid")
-		}
-	case EventTerminal:
-		if e.Terminal == nil || e.Terminal.Outcome == "" {
-			return errors.New("terminal outcome is missing")
-		}
-	default:
-		return errors.New("unknown worker event type")
-	}
-	return nil
-}
-
-// CaptureProvider is the narrow provider boundary. Real Cloudflare/Pion
-// integration is intentionally absent until its authentication contract lands.
-type CaptureProvider interface {
-	Capture(Job) (CaptureConnection, error)
-}
-
-type RenderProvider interface {
-	Render(Job) (RenderSession, error)
-}
-
-type CaptureConnection interface{ Close() error }
-type RenderSession interface{ Close() error }
-
-type CloudflareCaptureProvider struct{}
-
-func (CloudflareCaptureProvider) Capture(Job) (CaptureConnection, error) {
-	return nil, ErrProviderUnimplemented
-}
-
-type PionCaptureProvider struct{}
-
-func (PionCaptureProvider) Capture(Job) (CaptureConnection, error) {
-	return nil, ErrProviderUnimplemented
-}
-
-type GPURenderProvider struct{}
-
-func (GPURenderProvider) Render(Job) (RenderSession, error) { return nil, ErrProviderUnimplemented }

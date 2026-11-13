@@ -6,83 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
-
-type RenderJob struct {
-	ID             string `json:"id"`
-	DeadlineMs     int64  `json:"deadline_ms"`
-	ServiceMs      int64  `json:"service_ms"`
-	InputBytes     int64  `json:"input_bytes"`
-	CaptureAttempt int    `json:"capture_attempt"`
-}
-
-type RenderNode struct {
-	Index     int         `json:"index"`
-	ServiceMs int64       `json:"service_ms"`
-	Jobs      []RenderJob `json:"jobs"`
-}
-
-type RenderSchedule struct {
-	Nodes []RenderNode `json:"nodes"`
-}
-
-// PackEDF returns the smallest number of nodes (bounded by maxNodes) for which
-// all jobs fit the per-node sub-budget. Jobs are sorted by earliest deadline,
-// then immutable ID, and are never split or preempted.
-func PackEDF(jobs []RenderJob, maxNodes int, subBudgetMs int64) (RenderSchedule, error) {
-	if len(jobs) == 0 || maxNodes <= 0 || maxNodes > 10 || subBudgetMs <= 0 {
-		return RenderSchedule{}, errors.New("jobs, node bound (at most ten), and positive sub-budget are required")
-	}
-	ordered := append([]RenderJob(nil), jobs...)
-	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].DeadlineMs != ordered[j].DeadlineMs {
-			return ordered[i].DeadlineMs < ordered[j].DeadlineMs
-		}
-		return ordered[i].ID < ordered[j].ID
-	})
-	for _, job := range ordered {
-		if job.ID == "" || job.ServiceMs <= 0 || job.ServiceMs > subBudgetMs || job.DeadlineMs <= 0 {
-			return RenderSchedule{}, fmt.Errorf("job %q does not fit render constraints", job.ID)
-		}
-	}
-	for count := 1; count <= maxNodes; count++ {
-		nodes := make([]RenderNode, count)
-		for i := range nodes {
-			nodes[i].Index = i
-		}
-		if packJobs(ordered, 0, nodes, subBudgetMs) {
-			return RenderSchedule{Nodes: nodes}, nil
-		}
-	}
-	return RenderSchedule{}, fmt.Errorf("jobs cannot fit within %d render nodes and %dms sub-budget", maxNodes, subBudgetMs)
-}
-
-func packJobs(jobs []RenderJob, index int, nodes []RenderNode, budget int64) bool {
-	if index == len(jobs) {
-		return true
-	}
-	job := jobs[index]
-	seenLoads := make(map[int64]struct{}, len(nodes))
-	for node := range nodes {
-		load := nodes[node].ServiceMs
-		if _, seen := seenLoads[load]; seen || load+job.ServiceMs > budget || load+job.ServiceMs > job.DeadlineMs {
-			continue
-		}
-		seenLoads[load] = struct{}{}
-		nodes[node].ServiceMs += job.ServiceMs
-		nodes[node].Jobs = append(nodes[node].Jobs, job)
-		if packJobs(jobs, index+1, nodes, budget) {
-			return true
-		}
-		nodes[node].ServiceMs = load
-		nodes[node].Jobs = nodes[node].Jobs[:len(nodes[node].Jobs)-1]
-	}
-	return false
-}
 
 type FFmpegPlan struct {
 	Input        string   `json:"input"`
@@ -143,10 +70,6 @@ type MediaFormat struct {
 	StartTime  string `json:"start_time"`
 	Size       string `json:"size"`
 	BitRate    string `json:"bit_rate"`
-}
-
-func VerifyMedia(ctx context.Context, runner CommandRunner, path string) (MediaFacts, error) {
-	return VerifyMediaWithExpectedDuration(ctx, runner, path, 0)
 }
 
 func VerifyMediaWithExpectedDuration(ctx context.Context, runner CommandRunner, path string, expected time.Duration) (MediaFacts, error) {

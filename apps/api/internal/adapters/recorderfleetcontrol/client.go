@@ -9,10 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -331,18 +329,6 @@ type commandRequest struct {
 type poolRequest struct {
 	SchemaVersion string `json:"schema_version"`
 	recorderfleet.PoolProjection
-}
-
-func ParseDurationSeconds(value string) (time.Duration, error) {
-	seconds, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-	if err != nil || seconds <= 0 {
-		return 0, recorderfleet.ErrInvalidConfig
-	}
-	duration := time.Duration(seconds) * time.Second
-	if duration/time.Second != time.Duration(seconds) {
-		return 0, recorderfleet.ErrInvalidConfig
-	}
-	return duration, nil
 }
 
 var (

@@ -13,7 +13,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 )
 
 const (
@@ -62,46 +61,6 @@ func NewBundleManifestWithCloseReason(recordingID, tenantID string, sequence int
 		return BundleManifest{}, errors.New("invalid capture bundle manifest")
 	}
 	return BundleManifest{Version: "capture-bundle.v1", RecordingID: recordingID, TenantID: tenantID, Sequence: sequence, Attempt: attempt, FencingGeneration: generation, StartMs: startMs, EndMs: endMs, MonotonicStartMs: startMs, MonotonicEndMs: endMs, Codec: codec, Layer: layer, Bytes: bytes, Checksum: checksum, ObjectKey: objectKey, Encryption: "AES-256-GCM", CloseReason: closeReason}, nil
-}
-
-func ValidateBundleFencing(manifest BundleManifest, attempt int, generation int64) error {
-	if manifest.Attempt != attempt || manifest.FencingGeneration != generation {
-		return fmt.Errorf("%w: bundle attempt=%d generation=%d expected attempt=%d generation=%d", ErrFencedAttempt, manifest.Attempt, manifest.FencingGeneration, attempt, generation)
-	}
-	return nil
-}
-
-func ValidateBundleContinuity(previous, next BundleManifest) (CaptureGap, error) {
-	if previous.RecordingID != next.RecordingID || previous.TenantID != next.TenantID {
-		return CaptureGap{}, errors.New("bundle identity changed")
-	}
-	if next.Sequence != previous.Sequence+1 {
-		return CaptureGap{}, fmt.Errorf("bundle sequence is not contiguous: previous=%d next=%d", previous.Sequence, next.Sequence)
-	}
-	if next.StartMs < previous.EndMs {
-		return CaptureGap{}, errors.New("capture bundles overlap")
-	}
-	gap, hasGap := AttributeCaptureGap(previous.EndMs, next.StartMs, "capture_worker_gap")
-	if hasGap {
-		return gap, nil
-	}
-	return CaptureGap{}, nil
-}
-
-type CaptureGap struct {
-	StartMs int64  `json:"start_ms"`
-	EndMs   int64  `json:"end_ms"`
-	Reason  string `json:"reason"`
-}
-
-func AttributeCaptureGap(previousEndMs, nextStartMs int64, reason string) (CaptureGap, bool) {
-	if nextStartMs <= previousEndMs {
-		return CaptureGap{}, false
-	}
-	if reason == "" {
-		reason = "worker_replacement"
-	}
-	return CaptureGap{StartMs: previousEndMs, EndMs: nextStartMs, Reason: reason}, true
 }
 
 type KeyProvider interface {
@@ -280,5 +239,3 @@ func DecryptBundle(key []byte, envelope EncryptedBundle) ([]byte, BundleManifest
 	}
 	return plaintext, metadata, nil
 }
-
-func BundleTime(now time.Time) int64 { return now.UnixMilli() }

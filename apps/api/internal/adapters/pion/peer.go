@@ -230,10 +230,6 @@ func NewPeer(config Config) (*Peer, error) {
 	return peer, nil
 }
 
-// NewPeerConnection is an explicit alias for callers that use the Pion
-// terminology while keeping NewPeer convenient for the capture worker.
-func NewPeerConnection(config Config) (*Peer, error) { return NewPeer(config) }
-
 // Epoch returns the immutable capture epoch owned by this peer.
 func (p *Peer) Epoch() captureplane.CaptureEpoch {
 	if p == nil {

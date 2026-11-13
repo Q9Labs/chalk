@@ -84,10 +84,6 @@ type Claims struct {
 	BootGeneration uint64
 }
 
-func (client *Client) Bootstrap(ctx context.Context, claims Claims, csrPEM string, privateKey ed25519.PrivateKey) (recorderbootstrapprotocol.BootstrapResponse, error) {
-	return client.bootstrap(ctx, claims, csrPEM, privateKey, 1)
-}
-
 func (client *Client) bootstrap(ctx context.Context, claims Claims, csrPEM string, privateKey ed25519.PrivateKey, attempt int) (recorderbootstrapprotocol.BootstrapResponse, error) {
 	challengeRequest := recorderbootstrapprotocol.ChallengeRequest{
 		SchemaVersion: recorderbootstrapprotocol.ChallengeSchemaVersion, ProviderID: claims.ProviderID,
