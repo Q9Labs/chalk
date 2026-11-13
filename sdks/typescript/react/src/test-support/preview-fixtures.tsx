@@ -19,22 +19,5 @@ export function PreviewSpaceView({ client, ...props }: PreviewSpaceViewProps): R
     </ChalkProvider>
   );
 }
-export function PreviewJoiningScreen({ displayName, message, supportingMessages = [] }: { readonly displayName?: string; readonly message: string; readonly supportingMessages?: readonly string[] }): React.JSX.Element {
-  return (
-    <main data-chalk className="chalk-root grid min-h-screen place-items-center bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]">
-      <div className="grid max-w-sm gap-3 justify-items-center">
-        <p className="text-sm font-semibold" role="status">
-          {message}
-        </p>
-        {displayName ? <p className="text-xs text-[var(--chalk-muted-text)]">Preparing for {displayName}</p> : null}
-        {supportingMessages.map((supportingMessage) => (
-          <p key={supportingMessage} className="text-xs text-[var(--chalk-muted-text)]">
-            {supportingMessage}
-          </p>
-        ))}
-      </div>
-    </main>
-  );
-}
 export { CommandErrorAlert };
 export type { SpaceLayout, SpacePanel, SpaceViewProps };

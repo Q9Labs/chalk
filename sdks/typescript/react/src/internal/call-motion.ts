@@ -6,7 +6,7 @@ export function captureFlip(elements: Iterable<HTMLElement>): () => void {
   const previous = Array.from(elements, (element) => ({ element, box: element.getBoundingClientRect() }));
   return () => playFlip(previous);
 }
-function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): { element: HTMLElement; box: DOMRect }[] {
+function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): void {
   for (const { element } of previous) moves.get(element)?.cancel();
   const reduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const next = previous.filter(({ element }) => element.isConnected).map((item) => ({ ...item, next: item.element.getBoundingClientRect(), transform: getComputedStyle(item.element).transform }));
@@ -24,28 +24,6 @@ function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): 
     );
     moves.set(element, animation);
   }
-  return next.map(({ element, next: box }) => ({ element, box }));
-}
-/** Bridge the current stage fitter to FLIP; the stage lane can call captureFlip directly around its own commits. */
-export function useStageRefit(root: RefObject<HTMLElement | null>): void {
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [animation] Observe mounted stage layout for FLIP animation; disconnect the observer and cancel outstanding moves on cleanup.
-  useEffect(() => {
-    const container = root.current;
-    if (!container) return;
-    let previous: { element: HTMLElement; box: DOMRect }[] = [];
-    const measure = () => Array.from(container.querySelectorAll<HTMLElement>('[data-testid="stage"] > div > *'), (element) => ({ element, box: element.getBoundingClientRect() }));
-    previous = measure();
-    const observer = new MutationObserver((records) => {
-      if (!records.some((record) => record.type === "childList" || (record.target instanceof Element && record.target.matches('[data-testid="stage"] > div > *')))) return;
-      const old = new Map(previous.map(({ element, box }) => [element, box]));
-      previous = playFlip(measure().map(({ element, box }) => ({ element, box: old.get(element) ?? box })));
-    });
-    observer.observe(container, { attributes: true, attributeFilter: ["style"], childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      for (const { element } of previous) moves.get(element)?.cancel();
-    };
-  }, [root]);
 }
 // Folded notices count as an open layer, because the header's notice button is the only way to reach them.
 const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-part="notice-button"],[data-part="access-waiting"],[data-chalk-drawer]';

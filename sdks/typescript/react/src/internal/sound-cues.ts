@@ -1,7 +1,5 @@
 import type { SpaceSnapshot } from "@q9labsai/chalk-client";
 export type SoundCue = "join" | "leave" | "message" | "hand-raise" | "reaction" | "knock" | "mute" | "unmute" | "recording" | "error";
-/** Cues raised by a snapshot change; the player decides whether they are audible. */
-export const SNAPSHOT_SOUND_CUES = ["join", "leave", "message", "hand-raise", "reaction", "knock", "mute", "unmute", "recording"] as const satisfies readonly SoundCue[];
 
 export function idsOf<T>(items: readonly T[], id: (item: T) => string): Set<string> {
   return new Set(items.map(id));

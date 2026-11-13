@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file
 import type { ChatUploadFile, ClientEventMap } from "@q9labsai/chalk-client";
 import type { ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 import type { ChalkThemeTokens } from "./theme";

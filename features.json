@@ -844,7 +844,6 @@
         "sdks/typescript/react/src/components/connection-notice",
         "sdks/typescript/react/src/components/connection-status",
         "sdks/typescript/react/src/components/index.ts",
-        "sdks/typescript/react/src/components/lazy.tsx",
         "sdks/typescript/react/src/components/logo",
         "sdks/typescript/react/src/components/toast-stack",
         "sdks/typescript/react/src/components/ui",

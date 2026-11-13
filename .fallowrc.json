@@ -50,7 +50,7 @@
     "sdks/typescript/client/src/generated/schemas.ts",
     "sdks/typescript/client/src/generated/sync.ts",
     "sdks/typescript/react/src/index.ts",
-    "sdks/typescript/react/src/components/lazy.tsx",
+    "sdks/typescript/react/src/public-surface.contract.ts",
     "sdks/typescript/react-native/src/**/*.{ts,tsx}",
     "tools/contract-fixture-proof/src/emitters/*.mjs",
     "tools/sdk-web-consumer-e2e/consumer/styles.css",

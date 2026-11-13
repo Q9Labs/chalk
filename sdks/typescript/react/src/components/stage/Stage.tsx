@@ -421,7 +421,3 @@ export function Stage({
 }
 
 Stage.displayName = "Stage";
-
-export function stageHasContent(items: readonly StageItem[]): boolean {
-  return items.some(isContentItem);
-}

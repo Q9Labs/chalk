@@ -3,12 +3,6 @@ import type { LocalMedia, MediaSource, Participant as SpaceParticipant, RemoteMe
 
 import type { AudioParticipant } from "../components/audio-output/AudioOutput";
 import type { Participant } from "../components/participant-grid/ParticipantGrid";
-import type { ParticipantListParticipant } from "../components/participants-panel/ParticipantsPanel";
-
-/** Returns the first participant with a live screen-share track for the Spotlight layout. */
-export function toActiveScreenShare(participants: readonly Participant[]): Participant | undefined {
-  return participants.find((participant) => participant.isScreenSharing && participant.screenShareTrack != null);
-}
 
 export function toVideoParticipants(participants: readonly SpaceParticipant[], remoteMedia: readonly RemoteMedia[], localId: string, displayName: string, localMedia: Readonly<Record<MediaSource, LocalMedia>>): Participant[] {
   const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>> & { cameraPausedForNetwork?: true }>();
@@ -83,23 +77,4 @@ export function toAudioParticipants(remoteMedia: readonly RemoteMedia[]): AudioP
     byParticipant.set(publication.participantId, participant);
   }
   return [...byParticipant.values()];
-}
-
-export function toParticipantNames(participants: readonly SpaceParticipant[], localId: string, displayName: string): Readonly<Record<string, string>> {
-  return Object.fromEntries([...participants.map((participant) => [participant.participantId, participant.displayName] as const), [localId, participants.find((participant) => participant.participantId === localId)?.displayName ?? displayName]]);
-}
-
-export function toListParticipants(tiles: readonly Participant[], participantMedia: Readonly<Record<string, SpaceParticipant["media"]>>): ParticipantListParticipant[] {
-  return tiles.map((participant) => {
-    const media = participantMedia[participant.id];
-    return {
-      id: participant.id,
-      displayName: participant.displayName,
-      deviceHint: participant.deviceHint,
-      isLocal: participant.isLocal,
-      isMuted: participant.isLocal ? participant.isMuted : media?.microphone !== "active",
-      isVideoEnabled: participant.isLocal ? participant.isVideoEnabled : media?.camera === "active",
-      isHandRaised: participant.isHandRaised,
-    };
-  });
 }
