@@ -80,7 +80,17 @@ try {
   const browser = await chromium.launch({ headless: true, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
   const joins = [];
   try {
-    for (let index = 0; index < joinsPerArm * 2; index += 1) joins.push(await join(browser, entry, index % 2 === 1));
+    for (let index = 0; index < joinsPerArm * 2; index += 1) {
+      const control = index % 2 === 1;
+      try {
+        const row = await join(browser, entry, control);
+        joins.push(row);
+        console.error(`join ${index} ${row.arm} ${row.joinMs} ms`);
+      } catch (error) {
+        console.error(`join ${index} ${control ? "control" : "direct"} failed: ${String(error.message).split("\n")[0]}`);
+        throw error;
+      }
+    }
   } finally {
     await browser.close();
   }
