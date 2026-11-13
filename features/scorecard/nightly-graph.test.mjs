@@ -11,11 +11,10 @@ const workflow = (name) => load(readFileSync(resolve(root, ".github/workflows", 
 const needsOf = (job) => [job.needs ?? []].flat();
 
 const nightly = workflow("nightly.yml");
-const cloudflare = workflow("nightly-cf-latency.yml");
 const proof = workflow("real-call-proof.yml");
 
-// The Cloudflare latency measurement gates only its own run. It lives in its own workflow so it cannot hold the nightly
-// deployment lock, delay the next cut, or change the conclusion of Cut nightly that the Android release reads.
+// Cut nightly carries no Cloudflare measurement, so it cannot hold the nightly deployment lock, delay the next cut, or
+// change the conclusion of Cut nightly that the Android release reads.
 test("Cut nightly has no Cloudflare job and no job needs one", () => {
   assert.equal(nightly.concurrency.group, "chalk-environment-nightly");
   for (const [name, job] of Object.entries(nightly.jobs)) {
@@ -76,45 +75,12 @@ test("the staging latency workflow measures the newest held nightly and records 
   assert.equal(latencyWorkflow.concurrency.group, "chalk-staging-sfu-latency-run", "a caller cannot share the callee's group");
 });
 
-test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {
-  const trigger = cloudflare.on;
-  assert.deepEqual(Object.keys(trigger), ["workflow_run"]);
-  assert.deepEqual(trigger.workflow_run, { workflows: ["Cut nightly"], types: ["completed"], branches: ["master"] });
-  assert.ok(cloudflare.concurrency.group);
-  assert.notEqual(cloudflare.concurrency.group, nightly.concurrency.group);
-  assert.notEqual(cloudflare.concurrency.group, proof.concurrency.group.match(/'(chalk-nightly-cf-latency)'/)?.[1]);
-  assert.equal(cloudflare.concurrency["cancel-in-progress"], false);
-
-  const { target, latency, history } = cloudflare.jobs;
-  assert.match(target.if, /workflow_run\.conclusion == 'success'/);
-  assert.match(JSON.stringify(target.steps), /nightly-attempt/);
-  assert.deepEqual(needsOf(latency), ["target"]);
-  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
-  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
-  assert.deepEqual(latency.with, {
-    environment: "nightly",
-    media_plane: "cf_sfu",
-    latency: true,
-    latency_only: true,
-    release_sha: "${{ needs.target.outputs.sha }}",
-    scorecard_label: "cf_sfu",
-  });
-  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
-  assert.deepEqual(needsOf(history), ["latency"]);
-  assert.match(history.if, /needs\.latency\.result == 'success'/);
-  const step = history.steps.find((item) => item.env?.SCORECARD_WARN_ONLY);
-  assert.equal(step.env.SCORECARD_WARN_ONLY, "true");
-  assert.match(step.run, /features\/scorecard\/nightly\.sh/);
-});
-
-test("the gate's scorecard download cannot match the Cloudflare card", () => {
+test("the gate's scorecard download cannot match a manual Cloudflare card", () => {
   const download = nightly.jobs.scorecard.steps.find((item) => item.with?.pattern);
   const glob = download.with.pattern;
   assert.equal(glob, "scorecard-nightly-*");
   const upload = proof.jobs.smoke.steps.find((item) => item.name === "Upload the scorecard");
   assert.match(upload.with.name, /latency_only && inputs\.media_plane == 'cf_sfu' && 'warn-scorecard' \|\| 'scorecard'/);
-  const download2 = cloudflare.jobs.history.steps.find((item) => item.with?.pattern);
-  assert.equal(download2.with.pattern, "warn-scorecard-nightly-*");
   // The glob is one trailing star, so it matches exactly the names that start with its prefix.
   assert.equal(glob.indexOf("*"), glob.length - 1);
   const matches = (name) => name.startsWith(glob.slice(0, -1));

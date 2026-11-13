@@ -850,36 +850,6 @@
       "sample": "Counted with the Android job above."
     },
     {
-      "id": "workflow:nightly-cf-latency.yml#target",
-      "owner": "Scorecard",
-      "catches": "Finds the revision a successful cut deployed, so the Cloudflare run measures the right build.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 0.1,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
-      "id": "workflow:nightly-cf-latency.yml#latency",
-      "owner": "Scorecard",
-      "catches": "Cloudflare-plane action latency over a gated budget; the job turns red and blocks nothing else.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 1.6,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
-      "id": "workflow:nightly-cf-latency.yml#history",
-      "owner": "Scorecard",
-      "catches": "A Cloudflare latency card that cannot be recorded in the scorecard history.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 0.3,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
       "id": "workflow:nightly.yml#plan",
       "owner": "Release chain",
       "catches": "A cut of the wrong revision, or a cut when nothing new is on master.",
@@ -1225,8 +1195,8 @@
     {
       "id": "scorecard:cf_sfu.action",
       "owner": "Media",
-      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling; only the Cloudflare latency run turns red.",
-      "runs": ["cut"],
+      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling; only a manual cf_sfu latency dispatch turns red.",
+      "runs": ["manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "never-failed",

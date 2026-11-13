@@ -430,7 +430,6 @@
         ".github/workflows/gate.yml",
         ".github/workflows/host-change-check.yml",
         ".github/workflows/hotfix.yml",
-        ".github/workflows/nightly-cf-latency.yml",
         ".github/workflows/nightly.yml",
         ".github/workflows/npm-publish.yml",
         ".github/workflows/osv-daily.yml",

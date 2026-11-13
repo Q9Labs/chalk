@@ -37,7 +37,7 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 Four workflows stay advisory because only a change to the repository ruleset can make them block, and that needs the repository owner: `mobile-ci` (the unsigned native builds need macOS and a long runner), `codeql` (findings go to the Security tab), `sdk-web-consumer-e2e` (Firefox and WebKit packed-consumer runs, beyond the Chromium run in the Gate) and `release-contracts` (the only pull request cover for the release workflow inputs).
 
-**Scorecard budgets.** Every budget in `perf/budgets.json` gates. `web.route`, `web.laptop` and `web.phone` fail the pull request in the Gate. `chalk_sfu.action` holds the nightly cut on a breach, and `proof.leave_median_ms` stops Promote after a rerun. `cf_sfu.action` fails only the Cloudflare `latency` job (so that night records no history card) and opens no issue, because the Cloudflare plane is not on the release path. A metric that nothing produces has no budget, and a budget cannot be set to warn.
+**Scorecard budgets.** Every budget in `perf/budgets.json` gates. `web.route`, `web.laptop` and `web.phone` fail the pull request in the Gate. `chalk_sfu.action` holds the nightly cut on a breach, and `proof.leave_median_ms` stops Promote after a rerun. `cf_sfu.action` is measured only by a manual `real-call-proof` dispatch with `latency_only` on `cf_sfu`; a breach fails that run alone and opens no issue, because the Cloudflare plane is not on the release path. A metric that nothing produces has no budget, and a budget cannot be set to warn.
 
 ## Scope and selection
 
