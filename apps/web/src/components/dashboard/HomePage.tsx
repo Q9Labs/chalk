@@ -1,13 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./language-choice";
-import { inviteLink, type Row, type Home, merge, capped, shown, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
+import { createCallAction, newCallIntent, readNewCallLanguage } from "./language-choice";
+import { inviteLink, type Row, type Home, merge, capped, listed, SHOWN_ROWS, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
@@ -17,7 +17,7 @@ type UpdateHome = Update<Home>;
 function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
-  const startKey = useRef(intentKey());
+  const startKey = useRef(newCallIntent());
 
   async function startCall() {
     if (starting) return;
@@ -25,14 +25,15 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
     try {
       // No name: the server names it, and the person can rename it from the row.
       const { call } = await act("home", createCallAction(startKey.current, readNewCallLanguage()));
-      startKey.current = intentKey();
+      startKey.current = newCallIntent();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
       show({ kind: "ready", call, link });
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
+    } catch {
+      // The reason belongs to the engine; the person needs the outcome and a way to retry.
+      toast("Couldn’t start a call", { icon: "alert", action: { label: "Try again", onClick: () => void startCall() } });
     } finally {
       setStarting(false);
     }
@@ -43,17 +44,19 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
       await act("home", { action: "archive-call", spaceId: call.id });
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, archived: true } : item)) }));
       toast(`Archived ${call.name}`, {
-        icon: "trash",
-        undo: () => {
-          act("home", { action: "restore-call", spaceId: call.id }).then(
-            ({ call: restored }) =>
-              update((home) => {
-                // New calls may have pushed the archived row out of the 300, so put it back in its place.
-                const row = home.rows.find((item) => item.id === call.id) ?? call;
-                return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
-              }),
-            (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-          );
+        action: {
+          label: "Undo",
+          onClick: () => {
+            act("home", { action: "restore-call", spaceId: call.id }).then(
+              ({ call: restored }) =>
+                update((home) => {
+                  // New calls may have pushed the archived row out of the 300, so put it back in its place.
+                  const row = home.rows.find((item) => item.id === call.id) ?? call;
+                  return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
+                }),
+              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+            );
+          },
         },
       });
     } catch (error) {
@@ -67,30 +70,36 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
 type HomeBodyProps = { readonly state: Load<Home>; readonly reload: () => void; readonly update: UpdateHome; readonly onRename: (call: HomeCallDTO) => void; readonly onArchive: (call: Row) => void };
 
 function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps) {
+  const [limit, setLimit] = useState(SHOWN_ROWS);
   return (
     <>
       {state.kind === "loading" ? (
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
-        <HomeLoadFailed detail={errorMessage(state.error)} onRetry={reload} />
-      ) : shown(state.data).length === 0 ? (
+        <HomeLoadFailed error={state.error} onRetry={reload} />
+      ) : listed(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
-            <span className="empty-icon" aria-hidden="true">
-              <Icon name="cam" />
-            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
           </div>
         </div>
       ) : (
         <>
-          <div className="list">
-            {shown(state.data).map((call) => (
-              <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
-            ))}
+          <div className="list calls">
+            {listed(state.data)
+              .slice(0, limit)
+              .map((call) => (
+                <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
+              ))}
           </div>
-          {state.data.rows.length >= HOME_STATUS_ROWS ? (
+          {listed(state.data).length > limit ? (
+            <div className="more-row">
+              <button type="button" className="btn sec sm" onClick={() => setLimit((value) => value + SHOWN_ROWS)}>
+                Show more calls
+              </button>
+            </div>
+          ) : state.data.rows.length >= HOME_STATUS_ROWS ? (
             <p className="help">Home shows your 300 most recent calls.</p>
           ) : state.data.nextCursor ? (
             <MoreButton
@@ -106,6 +115,7 @@ function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps)
                   },
                   { refresh: false },
                 );
+                setLimit((value) => value + SHOWN_ROWS);
               }}
             />
           ) : null}
@@ -158,24 +168,19 @@ export function HomePage() {
   );
 }
 
-function HomeLoadFailed({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
+/** What a failed Home read means for the person: their calls are safe, and what to do next. */
+function homeFailure(error: unknown): string {
+  if (!(error instanceof DashboardRequestError)) return "Your calls are still saved. Check your connection, then try again.";
+  if (error.status >= 500) return "Chalk couldn’t reach your calls just now. They’re still saved, so try again in a moment.";
+  return errorMessage(error);
+}
+
+/** The Home list could not load: what failed, what it means, and one way to retry. */
+function HomeLoadFailed({ error, onRetry }: { readonly error: unknown; readonly onRetry: () => void }) {
   return (
     <div className="hfail" role="alert">
-      <svg className="hfail-art" viewBox="0 0 160 96" fill="none" aria-hidden="true">
-        <rect x="14" y="10" width="132" height="24" rx="8" className="hfail-tile" />
-        <circle cx="30" cy="22" r="6" className="hfail-dot" />
-        <rect x="44" y="17" width="46" height="4" rx="2" className="hfail-bar" />
-        <rect x="44" y="24" width="28" height="3" rx="1.5" className="hfail-bar" />
-        <rect x="14" y="40" width="132" height="24" rx="8" className="hfail-tile" />
-        <circle cx="30" cy="52" r="6" className="hfail-dot" />
-        <rect x="44" y="47" width="38" height="4" rx="2" className="hfail-bar" />
-        <rect x="44" y="54" width="22" height="3" rx="1.5" className="hfail-bar" />
-        <path d="M14 82h50M96 82h50" className="hfail-line" />
-        <circle cx="80" cy="82" r="7" className="hfail-badge" />
-        <path d="M80 78.5v4M80 85.5v.01" className="hfail-mark" />
-      </svg>
       <b>Couldn’t load your calls</b>
-      <p>{detail}</p>
+      <p>{homeFailure(error)}</p>
       <button type="button" className="btn sec" onClick={onRetry}>
         <Icon name="retry" />
         Try again

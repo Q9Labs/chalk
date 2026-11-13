@@ -2,10 +2,9 @@ import { useState } from "react";
 
 import { act, errorMessage } from "../../lib/dashboard/client";
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
-import { displayLink } from "../../lib/dashboard/format";
 import { LanguagePicker } from "./LanguagePicker";
 import { rememberLanguage, type NewCallLanguage } from "./language-choice";
-import { CopyAction, Seg, useToast } from "./kit";
+import { LinkField, Seg, useToast } from "./kit";
 
 type Admission = CallPageDTO["call"]["admission"];
 type Call = CallPageDTO["call"];
@@ -51,12 +50,7 @@ export function CallSettings({ spaceId, call, inviteUrl, update }: { readonly sp
     <div className="cset">
       <div>
         <h2>Call link</h2>
-        <div className="linkrow">
-          <div className="linkbox">
-            <span>{displayLink(inviteUrl)}</span>
-          </div>
-          <CopyAction text={inviteUrl} pill />
-        </div>
+        <LinkField link={inviteUrl} />
         <p className="help">This link never changes. Share it once and use it every time.</p>
       </div>
       <div id="access">

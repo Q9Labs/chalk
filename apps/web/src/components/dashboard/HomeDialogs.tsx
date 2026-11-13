@@ -2,10 +2,9 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
-import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { Dialog } from "./Dialog";
-import { CopyAction, useToast } from "./kit";
+import { LinkField, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
 import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
@@ -43,26 +42,28 @@ export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { r
         </button>
       }
     >
-      <div className="linkrow" style={{ marginTop: "var(--space-4)" }}>
-        <div className="linkbox">
-          <span>{displayLink(link)}</span>
+      {/* The link, who can join and the language share one width, each a full-width control under its label. */}
+      <div className="cready">
+        <LinkField link={link} />
+        <div className="field">
+          <span className="lbl">Who can join</span>
+          <Link className="setrow" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access" aria-describedby="ready-access-help">
+            <span>{call.admission === "anyone" ? "Anyone with the link" : "Ask to join"}</span>
+            <Icon name="right" size={16} />
+          </Link>
+          <p className="help" id="ready-access-help">
+            {call.admission === "anyone" ? "Anyone with the link joins at once." : "People ask to join, and you let them in."}
+          </p>
         </div>
-        <CopyAction text={link} pill />
-      </div>
-      <p className="help" style={{ marginTop: "var(--space-3)" }}>
-        People ask to join, and you let them in.{" "}
-        <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
-          Change who can join
-        </Link>
-      </p>
-      <div className="field" style={{ marginTop: "var(--space-5)" }}>
-        <span className="lbl" id="ready-language-label">
-          Transcript language
-        </span>
-        <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
-        <p className="help" id="ready-language-help">
-          Your next calls start with this choice too.
-        </p>
+        <div className="field">
+          <span className="lbl" id="ready-language-label">
+            Transcript language
+          </span>
+          <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
+          <p className="help" id="ready-language-help">
+            Your next calls start with this choice too.
+          </p>
+        </div>
       </div>
     </Dialog>
   );

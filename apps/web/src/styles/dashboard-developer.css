@@ -1,10 +1,5 @@
 /* The Developer page: a section nav beside a summary and panels, in the call's kit. Everything is scoped to `.dev`, or to `.dlg.titled` for the dialogs that open from it. */
 
-/* The page brings its own frame, so the dashboard's padding steps aside. */
-.site .dash .main:has(.dev) {
-  padding: 0;
-}
-
 .site .dash .dev {
   --row-hover: var(--chalk-raised);
 }
@@ -13,10 +8,10 @@
   --row-hover: var(--chalk-hover);
 }
 
+/* Every dashboard page shares one column, so switching tabs never moves the content edge. */
 .site .dash .dev .dshell {
-  max-width: 1176px;
+  max-width: var(--dash-column);
   margin: 0 auto;
-  padding: var(--space-6) var(--space-8) var(--space-22);
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
   gap: var(--space-10);
@@ -113,7 +108,7 @@
   align-content: start;
 }
 
-/* ---------- Heading and summary ---------- */
+/* ---------- Heading ---------- */
 
 .site .dash .dev .pagehead {
   display: flex;
@@ -122,75 +117,22 @@
   padding-bottom: var(--space-1);
 }
 
-.site .dash .dev .pagehead .tile {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--corner-xl);
-  display: grid;
-  place-items: center;
-  background: var(--chalk-raised);
-  border: 1px solid var(--chalk-line-strong);
-  color: var(--chalk-soft-text);
-  flex: none;
-}
-
+/* Every dashboard page opens with the same head: a 28px title and one muted line 4px under it (dashboard.css .pgh). */
 .site .dash .dev .pagehead h1 {
-  font-size: var(--type-title-sm);
+  font-size: var(--type-headline);
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .site .dash .dev .pagehead p {
+  font-size: var(--type-body);
   color: var(--chalk-muted-text);
-  margin-top: var(--space-0-5);
+  margin-top: var(--space-1);
 }
 
 .site .dash .dev .pagehead .end {
   margin-left: auto;
-}
-
-.site .dash .dev .stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.site .dash .dev .stat {
-  padding: var(--space-3) var(--space-4);
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
-.site .dash .dev .stat + .stat {
-  border-left: 1px solid var(--chalk-line);
-}
-
-.site .dash .dev .stat .l {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  font-size: var(--type-caption);
-  color: var(--chalk-muted-text);
-  font-weight: 500;
-}
-
-.site .dash .dev .stat .v {
-  font-size: var(--type-title-sm);
-  line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-
-.site .dash .dev .stat .s {
-  font-size: var(--type-caption);
-  color: var(--chalk-muted-text);
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  min-height: 20px;
-  min-width: 0;
 }
 
 /* ---------- Panels, buttons, pills ---------- */
@@ -215,10 +157,6 @@
   gap: var(--space-2-5);
   min-height: 52px;
   padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
-}
-
-.site .dash .dev .ph > svg.site-icon {
-  color: var(--chalk-muted-text);
 }
 
 .site .dash .dev .ph h2 {
@@ -388,21 +326,6 @@
   gap: var(--space-2-5);
   min-width: 0;
   font-weight: 600;
-}
-
-.site .dash .dev .keys .nm .kt {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--corner-lg);
-  display: grid;
-  place-items: center;
-  background: var(--chalk-raised);
-  color: var(--chalk-muted-text);
-  flex: none;
-}
-
-.site[data-chalk-theme="dark"] .dash .dev .keys .nm .kt {
-  background: var(--chalk-hover);
 }
 
 .site .dash .dev .keys .row.new,
@@ -991,7 +914,7 @@
 
 .site .dash .dev .set {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: center;
   padding: var(--space-3) var(--space-4);
@@ -1000,20 +923,6 @@
 
 .site .dash .dev .set + .set {
   border-top: 1px solid var(--chalk-line);
-}
-
-.site .dash .dev .set .tile {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--corner-lg);
-  display: grid;
-  place-items: center;
-  background: var(--chalk-raised);
-  color: var(--chalk-muted-text);
-}
-
-.site[data-chalk-theme="dark"] .dash .dev .set .tile {
-  background: var(--chalk-hover);
 }
 
 .site .dash .dev .set b {
@@ -1203,7 +1112,6 @@
 @media (max-width: 720px) {
   .site .dash .dev .dshell {
     display: block;
-    padding: var(--space-4) var(--space-4) var(--space-16);
   }
 
   .site .dash .dev .side {
@@ -1242,29 +1150,16 @@
     gap: var(--space-4);
   }
 
-  .site .dash .dev .pagehead .tile,
-  .site .dash .dev .pagehead .end {
+  .site .dash .dev .pagehead .btn.end {
     display: none;
+  }
+
+  .site .dash .dev .pagehead h1 {
+    font-size: var(--type-title);
   }
 
   .site .dash .dev .pagehead p {
     max-width: 36ch;
-  }
-
-  .site .dash .dev .stats {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .site .dash .dev .stat:nth-child(3) {
-    border-left: 0;
-  }
-
-  .site .dash .dev .stat:nth-child(n + 3) {
-    border-top: 1px solid var(--chalk-line);
-  }
-
-  .site .dash .dev .stat .v {
-    font-size: var(--type-lead);
   }
 
   .site .dash .dev .creds {
@@ -1435,7 +1330,7 @@
   }
 
   .site .dash .dev .set {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 

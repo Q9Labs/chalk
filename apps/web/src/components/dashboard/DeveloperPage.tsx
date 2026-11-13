@@ -10,7 +10,7 @@ import { useLoad, type Update } from "./use-dashboard";
 import type { DeveloperDTO } from "../../lib/dashboard/contracts";
 import { ConnectPanel, type FreshSecret } from "./DeveloperConnect";
 import { CallsPanel } from "./DeveloperCalls";
-import { DeveloperSkeleton, LiveKeySearch, SectionNav, Shell, Summary } from "./DeveloperChrome";
+import { DeveloperSkeleton, LiveKeySearch, SectionNav, Shell } from "./DeveloperChrome";
 import { DeveloperDialogs, type OpenDialog } from "./DeveloperDialogs";
 import type { Secret } from "./developer-dialog-parts";
 import { KeysPanel } from "./DeveloperKeys";
@@ -68,7 +68,6 @@ export function DeveloperPage() {
 
   return (
     <Shell nav={<SectionNav soon={soon.length > 0} failing={failing.length > 0} />}>
-      <Summary keys={keys} used={listed} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
       {keys.length === 0 && data.nextKeyCursor ? <LiveKeySearch cursor={data.nextKeyCursor} onPage={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
       <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
       <KeysPanel

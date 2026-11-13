@@ -7,7 +7,7 @@ import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/clie
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./language-choice";
+import { createCallAction, newCallIntent, readNewCallLanguage } from "./language-choice";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
@@ -22,11 +22,11 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const apiBaseURL = publicAPIBaseURL();
   const owner = useMemo(() => ownerAccess(spaceId, profile?.id ?? ""), [spaceId, profile?.id]);
   const [client, setClient] = useState<SpaceClient | null>(null);
-  const startKey = useRef(intentKey());
+  const startKey = useRef(newCallIntent());
   const startingCall = useRef(false);
   const [startError, setStartError] = useState<string | null>(null);
   useEffect(() => {
-    startKey.current = intentKey();
+    startKey.current = newCallIntent();
     startingCall.current = false;
     setStartError(null);
   }, [spaceId]);
