@@ -22,13 +22,7 @@ type episodeAttendanceResponse struct {
 }
 
 func getEpisodeAttendanceEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[getEpisodeRequest, episodeAttendanceResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "getEpisodeAttendance", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeAttendanceResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
-			return episodeAttendanceResponse{}, err
-		}
-		if service == nil {
-			return episodeAttendanceResponse{}, apiErrorServiceUnavailable
-		}
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "getEpisodeAttendance", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeAttendanceResponse, error) {
 		participants, err := service.GetEpisodeAttendance(ctx, request.TenantID, request.SpaceID, request.EpisodeID)
 		if err != nil {
 			return episodeAttendanceResponse{}, err
@@ -42,7 +36,7 @@ func getEpisodeAttendanceEndpoint(service EpisodeLifecycleService, authorizer Te
 			})
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "EpisodeAttendance", episodeAttendanceResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorEpisodeNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorEpisodeNotFound, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
 }

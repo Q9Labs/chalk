@@ -4,7 +4,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { deriveRecordingMediaSourceId, parseRecordingPresentationTimelineV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import { parseDecodedMediaIndexV1, type DecodedMediaIndexV1 } from "../decoded-media.js";
-import type { FrameRenderRequestV1 } from "./request.js";
+import type { ComposeRequestV1 } from "./request.js";
 
 const MAXIMUM_PRESENTATION_BYTES = 64 << 20;
 const MAXIMUM_DECODED_INDEX_BYTES = 16 << 20;
@@ -19,13 +19,12 @@ export interface VerifiedRenderInputs {
   readonly workspaceDirectory: string;
   readonly timeline: RecordingPresentationTimelineV1;
   readonly media: DecodedMediaIndexV1;
-  readonly decodedMediaDocument: unknown;
   readonly assets: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mediaFiles: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mixPath: string;
 }
 
-export async function loadVerifiedRenderInputs(request: FrameRenderRequestV1): Promise<VerifiedRenderInputs> {
+export async function loadVerifiedRenderInputs(request: ComposeRequestV1): Promise<VerifiedRenderInputs> {
   const workspaceDirectory = await realpath(request.workspaceDirectory);
   const presentationPath = await confinedRealPath(workspaceDirectory, request.presentationPath);
   const decodedMediaPath = await confinedRealPath(workspaceDirectory, request.decodedMediaPath);
@@ -54,10 +53,10 @@ export async function loadVerifiedRenderInputs(request: FrameRenderRequestV1): P
   const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
   await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
 
-  return { workspaceDirectory, timeline, media, decodedMediaDocument: decodedMediaValue, assets, mediaFiles, mixPath };
+  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath };
 }
 
-async function validateSharedAuthority(request: FrameRenderRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): Promise<void> {
+async function validateSharedAuthority(request: ComposeRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): Promise<void> {
   validateRecordingAuthority(request, timeline, media);
   validateClockAuthority(request, timeline, media);
   validateProfileAuthority(request, timeline);
@@ -79,7 +78,7 @@ async function validateSharedAuthority(request: FrameRenderRequestV1, timeline: 
   }
 }
 
-function validateRecordingAuthority(request: FrameRenderRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): void {
+function validateRecordingAuthority(request: ComposeRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): void {
   validateSharedIdentifier(timeline.recordingId, media.recordingId, request.recordingId);
   validateSharedIdentifier(timeline.episodeId, media.episodeId, request.episodeId);
 }
@@ -89,7 +88,7 @@ function validateSharedIdentifier(timelineValue: string, mediaValue: string, req
   if (mediaValue !== requestedValue) throw new TypeError("render inputs do not match the requested Recording and Episode");
 }
 
-function validateClockAuthority(request: FrameRenderRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): void {
+function validateClockAuthority(request: ComposeRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): void {
   const clocksMatch = [
     timeline.clock.origin === media.clock.origin,
     timeline.clock.timebase === media.clock.timebase,
@@ -101,7 +100,7 @@ function validateClockAuthority(request: FrameRenderRequestV1, timeline: Recordi
   if (timeline.clock.durationMs !== request.durationMs) throw new TypeError("recording presentation and decoded media clocks do not match");
 }
 
-function validateProfileAuthority(request: FrameRenderRequestV1, timeline: RecordingPresentationTimelineV1): void {
+function validateProfileAuthority(request: ComposeRequestV1, timeline: RecordingPresentationTimelineV1): void {
   const viewport = timeline.initial.profile.viewport;
   if (viewport.width !== request.width) throw new TypeError("recording presentation profile does not match the renderer build or viewport");
   if (viewport.height !== request.height) throw new TypeError("recording presentation profile does not match the renderer build or viewport");
@@ -129,8 +128,8 @@ async function readVerifiedJson(path: string, expectedSha256: string, maximumByt
 
 async function validateJsonFileFacts(path: string, maximumBytes: number, label: string): Promise<void> {
   const facts = await stat(path);
-  if (!facts.isFile()) throw new TypeError(`${label} exceeds its byte bound`);
-  if (facts.size < 1) throw new TypeError(`${label} exceeds its byte bound`);
+  if (!facts.isFile()) throw new TypeError(`${label} is not a file`);
+  if (facts.size < 1) throw new TypeError(`${label} is empty`);
   if (facts.size > maximumBytes) throw new TypeError(`${label} exceeds its byte bound`);
 }
 

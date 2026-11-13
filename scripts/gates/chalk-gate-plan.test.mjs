@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, shareProvenGroups, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -11,7 +11,7 @@ const selected = (files, event) =>
 
 test("documentation selects only the always-on lane group on every event", () => {
   for (const event of ["pull_request", undefined]) {
-    assert.deepEqual(jobs(["docs/observability.md"], event), { api: false, sync: false, rootGroups: ["checks"] });
+    assert.deepEqual(jobs(["docs/observability.md"], event), { api: false, sync: false, rootGroups: ["checks"], planFull: false });
     assert.ok(selected(["docs/observability.md"], event).includes("feature-map"));
   }
 });
@@ -42,6 +42,25 @@ test("the Gate's own README is documentation and selects no gate definition on a
 
 test("a path no lane reads is classified on a pull request and fails closed elsewhere", () => {
   const file = "infrastructure/observability/production-alerts/collector.go";
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+});
+
+test("the feature map is read only by the always-on feature-map lane, so editing it selects no more than that on every event", () => {
+  for (const event of ["pull_request", "merge_group"]) {
+    const plan = createGatePlan(["features.json"], { scope: "merge base to HEAD", services: "external", event });
+    assert.equal(plan.full, false);
+    assert.ok(
+      plan.tasks
+        .filter((task) => task.selected)
+        .map((task) => task.id)
+        .includes("feature-map"),
+    );
+  }
+});
+
+test("a host-change-alert edit is classified on a pull request and fails closed elsewhere", () => {
+  const file = "infrastructure/host-change-alert/host-change-check.mjs";
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
 });
@@ -117,6 +136,47 @@ test("a test of the workflow-graph lane reads only paths that lane selects", () 
   for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock", "scripts/staging-sfu/gate-lease", "scripts/prod-proof/cleanup.mjs", "scripts/deploy/deploy-managed-release.mjs"]) {
     assert.ok(selected([file], "pull_request").includes("workflow-graph"), file);
   }
+});
+
+const queueJobs = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"], full: false };
+const proof = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] };
+const noDrift = { api: false, sync: false, rootGroups: ["checks"], planFull: false, entries: 1 };
+
+test("a queue group skips what its pull request proved and master did not touch since", () => {
+  const shared = shareProvenGroups(queueJobs, proof, noDrift);
+  assert.deepEqual(shared.rootGroups, ["checks", "dashboard-refresh"]);
+  assert.equal(shared.api, false);
+  assert.deepEqual(shared.shared.sort(), ["api", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3", "dashboard-engine"]);
+});
+
+test("a group whose inputs master changed since the pull request run runs again", () => {
+  const drift = { ...noDrift, api: true, rootGroups: ["checks", "dashboard-engine"] };
+  const shared = shareProvenGroups(queueJobs, proof, drift);
+  assert.ok(shared.rootGroups.includes("dashboard-engine"));
+  assert.equal(shared.api, true);
+  assert.ok(!shared.rootGroups.includes("build"));
+});
+
+test("the leak shards are skipped together or not at all", () => {
+  const partial = { ...proof, rootGroups: ["checks", "call-leaks-1", "call-leaks-2"] };
+  assert.ok(shareProvenGroups(queueJobs, partial, noDrift).rootGroups.filter((group) => group.startsWith("call-leaks-")).length === 3);
+  const drifted = { ...noDrift, rootGroups: ["checks", "call-leaks-2"] };
+  assert.ok(shareProvenGroups(queueJobs, proof, drifted).rootGroups.filter((group) => group.startsWith("call-leaks-")).length === 3);
+});
+
+test("nothing is shared when master changed the Gate itself, or the plan failed", () => {
+  assert.deepEqual(shareProvenGroups(queueJobs, proof, { ...noDrift, planFull: true }).rootGroups, queueJobs.rootGroups);
+  assert.deepEqual(shareProvenGroups({ ...queueJobs, full: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
+  assert.deepEqual(shareProvenGroups({ ...queueJobs, planFull: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
+});
+
+test("a group that holds more than one pull request shares nothing", () => {
+  assert.deepEqual(shareProvenGroups(queueJobs, proof, { ...noDrift, entries: 2 }).rootGroups, queueJobs.rootGroups);
+  assert.equal(shareProvenGroups(queueJobs, proof, { ...noDrift, entries: 2 }).api, true);
+});
+
+test("the checks group always runs", () => {
+  assert.ok(shareProvenGroups(queueJobs, proof, noDrift).rootGroups.includes("checks"));
 });
 
 test("the register check runs when a check input changes, and the formal Sync check runs when its model inputs change", () => {

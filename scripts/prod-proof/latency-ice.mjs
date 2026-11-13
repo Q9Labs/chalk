@@ -4,9 +4,10 @@
 import { ICE_CANDIDATE_TYPES, ICE_RELAY_PROTOCOLS } from "../../features/scorecard/diagnostics.mjs";
 import { summarize } from "./latency-stats.mjs";
 
-/** @typedef {{ local_type: string | null, remote_type: string | null, relay_protocol: string | null, requests_sent: number | null, responses_received: number | null, read_after_ms: number | null }} IceReading */
+/** @typedef {{ local_type: string | null, remote_type: string | null, protocol: string | null, relay_protocol: string | null, requests_sent: number | null, responses_received: number | null, read_after_ms: number | null }} IceReading */
 
 const candidateType = (value) => (ICE_CANDIDATE_TYPES.includes(value) ? value : null);
+const transport = (value) => (value === "udp" || value === "tcp" ? value : null);
 const relayProtocol = (value) => (ICE_RELAY_PROTOCOLS.includes(value) ? value : null);
 const milliseconds = (value) => (Number.isFinite(value) && value >= 0 ? value : null);
 const counter = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
@@ -36,6 +37,7 @@ export function icePairOf(events, t0) {
     return {
       local_type: candidateType(reading.local),
       remote_type: candidateType(reading.remote),
+      protocol: transport(reading.protocol),
       relay_protocol: relayProtocol(reading.relayProtocol),
       requests_sent: counter(reading.requestsSent),
       responses_received: counter(reading.responsesReceived),

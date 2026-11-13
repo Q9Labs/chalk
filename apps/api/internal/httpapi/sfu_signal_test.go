@@ -423,7 +423,12 @@ func TestSFUSignalRefusesTheSameCredentialsAsPerOperationRoutes(t *testing.T) {
 					service := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, signalPlane{})
 					router := chi.NewRouter()
 					router.Route("/v1", func(v1 chi.Router) {
-						mountParticipantMediaRoutes(v1, signalSpaces{}, signalEpisodes{}, signalTenants{}, signalResolver{service: &service}, signalRegistry{}, c.verifier, c.authorizer, RateLimitOptions{Limiter: &signalLimiter{exhaustAfter: 1000}, Now: time.Now})
+						v1.Group(func(r chi.Router) {
+							r.Use(requireParticipantMedia(c.verifier, c.authorizer))
+							for _, endpoint := range sfuSignalingEndpoints(signalSpaces{}, signalEpisodes{}, signalTenants{}, signalResolver{service: &service}, signalRegistry{}) {
+								endpoint.Mount(r, RateLimitOptions{Limiter: &signalLimiter{exhaustAfter: 1000}, Now: time.Now})
+							}
+						})
 					})
 					request := httptest.NewRequest(method, path, strings.NewReader(body))
 					request.Header.Set("Content-Type", "application/json")

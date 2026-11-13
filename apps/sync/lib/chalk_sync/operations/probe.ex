@@ -11,7 +11,6 @@ defmodule ChalkSync.Operations.Probe do
   alias ChalkSync.ProviderBridge.Client, as: ProviderBridgeClient
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
-  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @query_timeout_ms 1_000
@@ -41,20 +40,16 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp production_modules do
-    adapter = Application.fetch_env!(:chalk_sync, :stateholder)
     verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     require_auth? = Application.get_env(:chalk_sync, :require_production_auth, false)
 
-    with :ok <- validate_production_modules(adapter, verifier, require_auth?) do
+    with :ok <- validate_production_modules(verifier, require_auth?) do
       validate_provider_bridge_config(require_auth?)
     end
   end
 
-  defp validate_production_modules(adapter, verifier, require_auth?) do
+  defp validate_production_modules(verifier, require_auth?) do
     cond do
-      adapter != ChalkSync.Stateholder.Postgres ->
-        {:error, :non_production_stateholder}
-
       require_auth? and verifier == ChalkSync.Auth.DevTokenVerifier ->
         {:error, :development_token_verifier}
 
@@ -95,7 +90,7 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp database_observations do
-    connection = Database.connection(readiness_episode())
+    connection = Database.connection_for(:readiness)
 
     with {:ok,
           %{
@@ -558,10 +553,6 @@ defmodule ChalkSync.Operations.Probe do
       )
     )
     |> Map.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp readiness_episode do
-    %EpisodeKey{tenant_id: "readiness", space_id: "readiness", episode_id: "readiness"}
   end
 
   defp role_query do

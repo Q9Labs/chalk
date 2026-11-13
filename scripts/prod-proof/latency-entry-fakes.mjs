@@ -31,7 +31,7 @@ globalThis.proofTrace = {
   // A guest that connected 10 ms after the call, over a host to server-reflexive pair that sent 6 checks and got 4 replies.
   take: (from) => [
     { t: from + 10, k: "ice_connected", peer: 1 },
-    { t: from + 11, k: "ice_pair", d: JSON.stringify({ peer: 1, readAfterMs: 400, local: "host", remote: "srflx", requestsSent: 6, responsesReceived: 4 }) },
+    { t: from + 11, k: "ice_pair", d: JSON.stringify({ peer: 1, readAfterMs: 400, local: process.env.FAKE_ICE_LOCAL ?? "host", remote: "srflx", protocol: "udp", requestsSent: 6, responsesReceived: 4 }) },
   ],
   readIce: async () => undefined,
   sfuRtt: async () => 40,

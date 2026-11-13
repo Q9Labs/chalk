@@ -2,17 +2,11 @@ import { ChalkArrival } from "@q9labsai/chalk-react-native";
 import { Limbo, useTheme, type ColorScheme } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { cleanupSpaceArrival, createPublicSpaceRoute, prepareSpaceArrival, waitForAdmission, type MobileSpaceArrival, type SpaceArrivalStep, type SpaceRoute, type StoredSpaceArrival } from "../lib/spaces";
+import type { ArrivedCall } from "../lib/arrived-call";
+import { cleanupSpaceArrival, createPublicSpaceRoute, prepareSpaceArrival, waitForAdmission, type SpaceArrivalStep, type SpaceRoute, type StoredSpaceArrival } from "../lib/spaces";
 
 /** Where a join is headed: a new call, or a call someone shared. */
 export type JoinTarget = { readonly kind: "start" } | { readonly kind: "link"; readonly route: SpaceRoute };
-
-export type ArrivedCall = {
-  readonly route: SpaceRoute;
-  readonly arrival: MobileSpaceArrival;
-  /** True when this person just started the call, so the app offers its link. */
-  readonly started: boolean;
-};
 
 type JoiningScreenProps = {
   readonly apiBaseURL: string;

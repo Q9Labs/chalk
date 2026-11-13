@@ -28,7 +28,7 @@ type Claim struct {
 	TenantID, EndpointID, EndpointRevisionID, DeliveryID, EventID    utilities.ID
 	AttemptID                                                        utilities.ID
 	AttemptNumber                                                    int
-	EventName                                                        string
+	EventName                                                        EventName
 	APIVersion                                                       int
 	OccurredAt                                                       time.Time
 	Body                                                             []byte

@@ -15,7 +15,7 @@ defmodule ChalkSync.Stateholder.Postgres.CommandDecision do
   alias ChalkSync.UUID
 
   def resolve_receipt(%Identity{} = identity, %Command{} = command) do
-    connection = Database.connection(identity.episode, 1)
+    connection = Database.alternate_connection(identity.episode)
     params = Scope.receipt(identity, command)
 
     case Postgrex.query(connection, SQL.select_receipt(), params, timeout: 1_000) do

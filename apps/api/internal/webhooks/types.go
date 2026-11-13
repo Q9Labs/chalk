@@ -42,13 +42,6 @@ var (
 	ErrEncryptionUnavailable    = errors.New("webhook encryption unavailable")
 )
 
-var CoreEventTypes = []string{
-	"episode.ended", "episode.started", "participant.joined", "participant.left",
-	"recording.started", "recording.completed", "recording.failed",
-	"transcript.started", "transcript.completed", "transcript.failed",
-	"space.archived", "space.created", "space.restored", "space.updated",
-}
-
 type Endpoint struct {
 	ID          utilities.ID
 	TenantID    utilities.ID

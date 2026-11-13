@@ -102,7 +102,7 @@ type HealthSnapshot struct {
 	OldestUnterminatedAge     time.Duration
 }
 
-func RecordEventMetrics(ctx context.Context, eventName string, apiVersion, fanout int) {
+func RecordEventMetrics(ctx context.Context, eventName EventName, apiVersion, fanout int) {
 	labels := metric.WithAttributes(eventAttributes(eventName, apiVersion)...)
 	webhookEventsCommitted.Add(ctx, 1, labels)
 	webhookEventFanout.Record(ctx, int64(fanout), labels)
@@ -224,15 +224,15 @@ func statusClassMetric(status int) string {
 	return strconv.Itoa(status/100) + "xx"
 }
 
-func eventAttributes(eventName string, apiVersion int) []attribute.KeyValue {
+func eventAttributes(eventName EventName, apiVersion int) []attribute.KeyValue {
 	return []attribute.KeyValue{attribute.String("event_name", boundedMetricEventName(eventName)), attribute.Int("api_version", boundedMetricAPIVersion(apiVersion))}
 }
 
-func boundedMetricEventName(eventName string) string {
-	if !knownMetricEventName(eventName) {
+func boundedMetricEventName(eventName EventName) string {
+	if !eventName.Known() {
 		return "other"
 	}
-	return eventName
+	return string(eventName)
 }
 
 func boundedMetricAPIVersion(apiVersion int) int {
@@ -240,16 +240,4 @@ func boundedMetricAPIVersion(apiVersion int) int {
 		return 0
 	}
 	return apiVersion
-}
-
-func knownMetricEventName(name string) bool {
-	if name == "endpoint.test" {
-		return true
-	}
-	for _, candidate := range CoreEventTypes {
-		if name == candidate {
-			return true
-		}
-	}
-	return false
 }

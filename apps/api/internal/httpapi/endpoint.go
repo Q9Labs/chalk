@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type RouteEndpoint interface {
@@ -17,14 +21,13 @@ type RouteEndpoint interface {
 
 type EndpointDecoder[Request any] func(r *http.Request) (Request, error)
 type EndpointHandler[Request any, Response any] func(ctx context.Context, request Request) (Response, error)
-type EndpointErrorMapper func(err error) (APIError, bool)
 type EndpointWriter[Response any] func(w http.ResponseWriter, r *http.Request, status int, response Response)
 
 type Endpoint[Request any, Response any] struct {
 	contract       APIRouteContract
 	decode         EndpointDecoder[Request]
 	handle         EndpointHandler[Request, Response]
-	mapError       EndpointErrorMapper
+	rules          errorRules
 	middlewares    []func(http.Handler) http.Handler
 	afterRateLimit []func(http.Handler) http.Handler
 	write          EndpointWriter[Response]
@@ -32,35 +35,38 @@ type Endpoint[Request any, Response any] struct {
 	// operations from one URL uses it so each operation keeps its own policy.
 	limitFor func(Request) (ratelimit.Policy, bool)
 	limits   RateLimitOptions
+	// needs are the services the route cannot run without, and authorizer
+	// enforces contract.Permission. Both answer 503 when absent.
+	needs      []any
+	authorizer TenantAuthorizer
 }
 
-func Get[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodGet, path, mountPath, operationID, decode, handle)
+func Get[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodGet, path, operationID, decode, handle)
 }
 
-func Post[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPost, path, mountPath, operationID, decode, handle)
+func Post[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPost, path, operationID, decode, handle)
 }
 
-func Put[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPut, path, mountPath, operationID, decode, handle)
+func Put[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPut, path, operationID, decode, handle)
 }
 
-func Patch[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPatch, path, mountPath, operationID, decode, handle)
+func Patch[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPatch, path, operationID, decode, handle)
 }
 
-func Delete[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodDelete, path, mountPath, operationID, decode, handle)
+func Delete[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodDelete, path, operationID, decode, handle)
 }
 
-func newEndpoint[Request any, Response any](method string, path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+func newEndpoint[Request any, Response any](method string, path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return Endpoint[Request, Response]{
 		contract: APIRouteContract{
 			OperationID: operationID,
 			Method:      method,
 			Path:        path,
-			MountPath:   mountPath,
 		},
 		decode: decode,
 		handle: handle,
@@ -79,6 +85,25 @@ func (e Endpoint[Request, Response]) Auth(auth APIAuth) Endpoint[Request, Respon
 
 func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
 	return e.Auth(APIAuthSessionOrBearer)
+}
+
+// Needs lists the services the route cannot run without. When one is nil, the
+// route answers 503 once the request decodes and passes its rate limit.
+func (e Endpoint[Request, Response]) Needs(services ...any) Endpoint[Request, Response] {
+	e.needs = append(e.needs, services...)
+	return e
+}
+
+// Permission makes the route require permission on the Tenant named by its
+// {tenant_id} path parameter. The route checks it after the request decodes,
+// so the contract and the enforcement are the same declaration.
+func (e Endpoint[Request, Response]) Permission(authorizer TenantAuthorizer, permission authorization.TenantPermission) Endpoint[Request, Response] {
+	if !strings.Contains(e.contract.Path, "{tenant_id}") {
+		panic("httpapi: " + e.contract.OperationID + " declares a Tenant permission but its path has no {tenant_id}")
+	}
+	e.authorizer = authorizer
+	e.contract.Permission = &permission
+	return e
 }
 
 func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint[Request, Response] {
@@ -149,8 +174,13 @@ func (e Endpoint[Request, Response]) Errors(errors ...APIError) Endpoint[Request
 	return e
 }
 
-func (e Endpoint[Request, Response]) MapErrors(mapper EndpointErrorMapper) Endpoint[Request, Response] {
-	e.mapError = mapper
+// ErrorRules sets how domain errors become API errors. Earlier sets win, so an
+// endpoint lists its own rules before the shared ones.
+func (e Endpoint[Request, Response]) ErrorRules(sets ...errorRules) Endpoint[Request, Response] {
+	e.rules = nil
+	for _, set := range sets {
+		e.rules = append(e.rules, set...)
+	}
 	return e
 }
 
@@ -182,7 +212,7 @@ func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions
 	for i := len(e.middlewares) - 1; i >= 0; i-- {
 		handler = e.middlewares[i](handler)
 	}
-	r.Method(e.contract.Method, e.contract.MountPath, handler)
+	r.Method(e.contract.Method, strings.TrimPrefix(e.contract.Path, apiPrefix), handler)
 }
 
 func (e Endpoint[Request, Response]) RouteContract() APIRouteContract {
@@ -205,13 +235,54 @@ func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	response, err := e.handle(r.Context(), request)
+	var tenantID utilities.ID
+	if e.contract.Permission != nil {
+		if tenantID, err = tenantIDRequest(r); err != nil {
+			e.writeFailure(w, r, err)
+			return
+		}
+	}
+	response, err := e.guarded(r.Context(), tenantID, request)
 	if err != nil {
 		e.writeFailure(w, r, err)
 		return
 	}
 
 	e.writeResponse(w, r, response)
+}
+
+// guarded runs the handler once guard passes. The MCP tools call it too,
+// because they use the same endpoints.
+func (e Endpoint[Request, Response]) guarded(ctx context.Context, tenantID utilities.ID, request Request) (Response, error) {
+	if err := e.guard(ctx, tenantID); err != nil {
+		var none Response
+		return none, err
+	}
+	return e.handle(ctx, request)
+}
+
+// guard rejects a call whose services are missing or whose caller lacks the
+// declared permission on tenantID.
+func (e Endpoint[Request, Response]) guard(ctx context.Context, tenantID utilities.ID) error {
+	for _, service := range e.needs {
+		if missingService(service) {
+			return apiErrorServiceUnavailable
+		}
+	}
+	if e.contract.Permission == nil {
+		return nil
+	}
+	return authorizeTenant(ctx, e.authorizer, tenantID, *e.contract.Permission)
+}
+
+// missingService reports a nil service, including a nil function value, which
+// an interface comparison does not see.
+func missingService(service any) bool {
+	if service == nil {
+		return true
+	}
+	value := reflect.ValueOf(service)
+	return value.Kind() == reflect.Func && value.IsNil()
 }
 
 func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http.Request, err error) {
@@ -230,15 +301,7 @@ func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http
 }
 
 func (e Endpoint[Request, Response]) apiError(err error) APIError {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr
-	}
-	if e.mapError != nil {
-		if apiErr, ok := e.mapError(err); ok {
-			return apiErr
-		}
-	}
-	return apiErrorInternal
+	return e.rules.apiError(err)
 }
 
 func (e Endpoint[Request, Response]) successStatus() int {
@@ -292,4 +355,33 @@ func appendAPIError(errors []APIError, apiError APIError) []APIError {
 		}
 	}
 	return append(errors, apiError)
+}
+
+// errorRule says which API error a domain error becomes.
+type errorRule struct {
+	kind   APIError
+	causes []error
+}
+
+func ruleFor(kind APIError, causes ...error) errorRule {
+	return errorRule{kind: kind, causes: causes}
+}
+
+// errorRules is an ordered table: the first rule with a matching cause wins.
+type errorRules []errorRule
+
+// apiError returns an APIError found in err as is, then the first matching
+// rule, then the authorization error or internal error for anything else.
+func (rules errorRules) apiError(err error) APIError {
+	if apiErr, ok := errorAsAPIError(err); ok {
+		return apiErr
+	}
+	for _, rule := range rules {
+		for _, cause := range rule.causes {
+			if errors.Is(err, cause) {
+				return rule.kind
+			}
+		}
+	}
+	return authorizationAPIError(err)
 }

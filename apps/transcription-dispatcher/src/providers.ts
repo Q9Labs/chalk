@@ -1,10 +1,8 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
+import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
 import { nativeDeepInfraBody, observedDeepInfraCost, observedDeepInfraIdentity, observedDeepInfraVersion } from "./deepinfra-response.js";
-
-const DEEPINFRA_MODEL = "openai/whisper-large-v3-turbo" as const;
-const CLOUDFLARE_MODEL = "@cf/openai/whisper-large-v3-turbo" as const;
 
 interface DeepInfraOptions {
   fetch: typeof fetch;
@@ -44,7 +42,6 @@ async function parseError(response: Response, policy: ProviderPolicy, provider: 
 }
 
 export class DeepInfraWhisperProvider implements TranscriptionProvider {
-  // fallow-ignore-next-line unused-class-member
   readonly name = "deepinfra" as const;
   private readonly options: DeepInfraOptions;
 
@@ -106,7 +103,6 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
 }
 
 export class CloudflareWhisperProvider implements TranscriptionProvider {
-  // fallow-ignore-next-line unused-class-member
   readonly name = "cloudflare" as const;
   private readonly options: CloudflareOptions;
 
@@ -157,5 +153,3 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
     });
   }
 }
-
-export type ProviderFactory = () => TranscriptionProvider;

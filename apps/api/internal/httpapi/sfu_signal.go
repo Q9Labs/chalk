@@ -94,7 +94,6 @@ type sfuSignalEndpointRequest struct {
 func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuSignalEndpointRequest, any] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal",
 		"signalCloudflareSFU",
 		decodeSFUSignalRequest,
 		func(ctx context.Context, request sfuSignalEndpointRequest) (any, error) {
@@ -107,7 +106,7 @@ func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants
 		RequestBody("CloudflareSFUSignalRequest", sfuSignalRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUSignalAPIResponse", sfuSignalResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 // sfuSignalRateLimit charges the quota each per-operation route charges: the

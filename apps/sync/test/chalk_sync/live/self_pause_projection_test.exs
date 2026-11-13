@@ -1,36 +1,19 @@
 defmodule ChalkSync.Live.SelfPauseProjectionTest do
-  use ExUnit.Case, async: false
+  use ChalkSync.PostgresCase, async: false
 
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
-  alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Memory
+  alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
-  test "a stopped screen does not reclaim the share lease after a new observation" do
-    episode = %EpisodeKey{
-      tenant_id: UUID.generate(),
-      space_id: UUID.generate(),
-      episode_id: UUID.generate()
-    }
-
-    participant_id = UUID.generate()
+  test "a stopped screen does not reclaim the share lease after a new observation", %{
+    connection: connection
+  } do
+    {episode, identity} = seed(connection)
+    participant_id = identity.participant_id
     publication_id = "stopped-screen-track"
-    Memory.reset()
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: participant_id, generation: 1, display_name: "Stopped sharer", role: "owner"}
-      ])
-
-    identity = %Identity{
-      episode: episode,
-      participant_id: participant_id,
-      participant_generation: 1
-    }
-
-    :ok = Memory.set_media_pause(identity, :screen, publication_id)
+    :ok = Postgres.set_media_pause(identity, :screen, publication_id)
 
     {:ok, adapter} =
       MediaPlaneTestAdapter.start_link(
@@ -64,27 +47,12 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
     assert reconciled.screen_leases == %{}
   end
 
-  test "self-disable preserves the legacy wire invariant without revoking the provider track" do
-    episode = %EpisodeKey{
-      tenant_id: "11111111-1111-4111-8111-111111111111",
-      space_id: "22222222-2222-4222-8222-222222222222",
-      episode_id: "33333333-3333-4333-8333-333333333333"
-    }
-
-    participant_id = "44444444-4444-4444-8444-444444444444"
+  test "self-disable preserves the legacy wire invariant without revoking the provider track", %{
+    connection: connection
+  } do
+    {episode, identity} = seed(connection)
+    participant_id = identity.participant_id
     publication_id = "cloudflare-camera-track"
-    Memory.reset()
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: participant_id, generation: 1, display_name: "Participant", role: "owner"}
-      ])
-
-    identity = %Identity{
-      episode: episode,
-      participant_id: participant_id,
-      participant_generation: 1
-    }
 
     {:ok, adapter} =
       MediaPlaneTestAdapter.start_link(
@@ -144,7 +112,7 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
                end)
            end)
 
-    :ok = Memory.set_media_pause(identity, :camera, nil)
+    :ok = Postgres.set_media_pause(identity, :camera, nil)
     assert {:ok, resumed, _frames} = LiveEpisode.reconcile(persisted)
     assert [%{"enabled" => true, "publication_id" => ^publication_id}] = resumed.media_items
 
@@ -153,20 +121,11 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
            end)
   end
 
-  test "tab audio stays outside v1 projections and preserves the microphone on reconstruction" do
-    episode = %EpisodeKey{
-      tenant_id: "11111111-1111-4111-8111-111111111111",
-      space_id: "22222222-2222-4222-8222-222222222222",
-      episode_id: "33333333-3333-4333-8333-333333333333"
-    }
-
-    participant_id = "44444444-4444-4444-8444-444444444444"
-    Memory.reset()
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: participant_id, generation: 1, display_name: "Participant", role: "owner"}
-      ])
+  test "tab audio stays outside v1 projections and preserves the microphone on reconstruction", %{
+    connection: connection
+  } do
+    {episode, identity} = seed(connection)
+    participant_id = identity.participant_id
 
     publications =
       Enum.map([:microphone, :screen_audio], fn source ->
@@ -201,5 +160,11 @@ defmodule ChalkSync.Live.SelfPauseProjectionTest do
     assert persisted.media_items == live.media_items
     assert {:ok, rebuilt, _} = LiveEpisode.reconcile(LiveEpisode.new(episode))
     assert rebuilt.media_items == live.media_items
+  end
+
+  defp seed(connection) do
+    fixture = SyncPostgres.seed_episode(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {fixture.episode, hd(fixture.identities)}
   end
 end

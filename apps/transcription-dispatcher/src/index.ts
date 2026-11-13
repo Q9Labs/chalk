@@ -1,28 +1,11 @@
 import { MaiTranscribeProvider } from "./mai-provider.js";
-import { loadReleaseConfig } from "./config.js";
+import { loadReleaseConfig, required, secretParameterNames } from "./config.js";
 import { RecorderControlApiClient } from "./control-api.js";
 import { createLambdaHandler } from "./dispatcher.js";
 import { CloudflareWhisperProvider, DeepInfraWhisperProvider } from "./providers.js";
 import { loadDispatcherSecrets, type DispatcherSecrets, type SsmParameterClient } from "./secrets.js";
 import { HmacWorkloadSigner } from "./workload-auth.js";
-import type { DispatcherEvent, ReleaseConfig } from "./types.js";
-
-export * from "./canary.js";
-export * from "./cleanup.js";
-export * from "./config.js";
-export * from "./control-api.js";
-export * from "./dispatcher.js";
-export * from "./errors.js";
-export * from "./finalizer.js";
-export * from "./normalize.js";
-export * from "./providers.js";
-export * from "./provider-utils.js";
-export * from "./retry.js";
-export * from "./storage.js";
-export * from "./secrets.js";
-export * from "./types.js";
-export * from "./urls.js";
-export * from "./workload-auth.js";
+import type { DispatcherEvent } from "./types.js";
 
 let cachedHandler: ReturnType<typeof createLambdaHandler> | undefined;
 
@@ -67,23 +50,8 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
 }
 
 export async function buildHandlerFromSsm(env: NodeJS.ProcessEnv, client: SsmParameterClient): Promise<ReturnType<typeof createLambdaHandler>> {
-  const deepInfraEnabled = env.DEEPINFRA_ENABLED === "true";
-  const secrets = await loadDispatcherSecrets(client, {
-    ...(env.CODESWITCH_PROVIDER === "mai" ? { openRouterToken: requiredEnv(env, "OPENROUTER_TOKEN_PARAMETER_ARN") } : {}),
-    ...(deepInfraEnabled ? { deepInfraToken: requiredEnv(env, "DEEPINFRA_TOKEN_PARAMETER_ARN") } : {}),
-    ...(env.CLOUDFLARE_AI_ENABLED === "true" ? { cloudflareAiToken: requiredEnv(env, "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") } : {}),
-    workloadAuth: requiredEnv(env, "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN"),
-  });
+  const secrets = await loadDispatcherSecrets(client, secretParameterNames(env));
   return buildHandler(env, secrets);
-}
-
-function required(value: string | undefined, key: string): string {
-  if (!value) throw new Error(`missing required configuration: ${key}`);
-  return value;
-}
-
-function requiredEnv(env: NodeJS.ProcessEnv, key: string): string {
-  return required(env[key], key);
 }
 
 export const handler = async (event: DispatcherEvent, context: { getRemainingTimeInMillis(): number }) => {

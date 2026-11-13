@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-	mcpapi "github.com/q9labs/chalk/features/mcp/api"
+	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 )
 
-func bindMCPTenantTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.GetConnection, func(ctx context.Context, _ mcpapi.ReadInput) (json.RawMessage, error) {
+func bindMCPTenantTools(registry *mcptools.Registry, o Options) {
+	mcptools.Bind(registry, mcptools.GetConnection, func(ctx context.Context, _ mcptools.ReadInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		raw, err := mcpInvoke(b, getTenantEndpoint(o.Tenants, o.TenantAuthz), getTenantRequest{TenantID: b.tenant})
 		if err != nil {
@@ -19,12 +18,12 @@ func bindMCPTenantTools(server *mcp.Server, o Options) {
 		if err := json.Unmarshal(raw, &tenant); err != nil {
 			return nil, mcpError(apiErrorInternal)
 		}
-		return json.Marshal(mcpapi.Profile{ID: mcpapi.Connection(ctx).ProfileID, Name: tenant.Name})
+		return json.Marshal(mcptools.Profile{ID: mcptools.ConnectionFrom(ctx).ProfileID, Name: tenant.Name})
 	})
-	bindMCPEndpoint(server, mcpapi.UpdateTenant, updateTenantEndpoint(o.Tenants, o.TenantAuthz), func(b *mcpRequest, i mcpapi.BodyInput[updateTenantRequest]) updateTenantEndpointRequest {
+	bindMCPEndpoint(registry, mcptools.UpdateTenant, updateTenantEndpoint(o.Tenants, o.TenantAuthz), func(b *mcpRequest, i mcptools.BodyInput[updateTenantRequest]) updateTenantEndpointRequest {
 		return updateTenantEndpointRequest{TenantID: b.tenant, Body: i.Body}
 	})
-	mcpapi.Bind(server, mcpapi.InspectTenant, func(ctx context.Context, i mcpapi.TenantViewInput) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.InspectTenant, func(ctx context.Context, i mcptools.TenantViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "memberships":
@@ -35,7 +34,7 @@ func bindMCPTenantTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, getTenantEndpoint(o.Tenants, o.TenantAuthz), getTenantRequest{TenantID: b.tenant})
 		}
 	})
-	mcpapi.Bind(server, mcpapi.SetMembership, func(ctx context.Context, i mcpapi.MembershipInput[createMembershipRequest, updateMembershipRequest]) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.SetMembership, func(ctx context.Context, i mcptools.MembershipInput[createMembershipRequest, updateMembershipRequest]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.Action {
 		case "create":
@@ -46,7 +45,7 @@ func bindMCPTenantTools(server *mcp.Server, o Options) {
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
 	})
-	mcpapi.Bind(server, mcpapi.IssueAPIKey, func(ctx context.Context, i mcpapi.KeyInput[createAPIKeyBody, rotateAPIKeyBody]) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.IssueAPIKey, func(ctx context.Context, i mcptools.KeyInput[createAPIKeyBody, rotateAPIKeyBody]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.Action {
 		case "create":
@@ -57,7 +56,7 @@ func bindMCPTenantTools(server *mcp.Server, o Options) {
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
 	})
-	bindMCPEndpoint(server, mcpapi.RevokeAPIKey, revokeAPIKeyEndpoint(o.APIKeys, o.TenantAuthz), func(b *mcpRequest, i mcpapi.KeyIDInput) apiKeyIDsRequest {
+	bindMCPEndpoint(registry, mcptools.RevokeAPIKey, revokeAPIKeyEndpoint(o.APIKeys, o.TenantAuthz), func(b *mcpRequest, i mcptools.KeyIDInput) apiKeyIDsRequest {
 		return apiKeyIDsRequest{TenantID: b.tenant, APIKeyID: b.id(i.APIKeyID)}
 	})
 }

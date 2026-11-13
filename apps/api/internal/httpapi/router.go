@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -267,7 +268,7 @@ func hasTenantAPIKeyCredential(r *http.Request) bool {
 		return true
 	}
 	credential, ok := bearerToken(r.Header.Get("Authorization"))
-	return ok && strings.HasPrefix(credential, "chalk_sk_")
+	return ok && apikeys.LooksLikeRawKey(credential)
 }
 
 func tenantScopedAPIPath(path string) bool {
