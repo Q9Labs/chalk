@@ -41,7 +41,7 @@ type SpaceArchiveService interface {
 }
 
 type SpaceFilterService interface {
-	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error)
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options spaces.ListOptions) (spaces.SpaceList, error)
 }
 
 type spaceRoleResponse struct {
@@ -119,7 +119,7 @@ type createSpaceEndpointRequest struct {
 type listSpacesRequest struct {
 	TenantID utilities.ID
 	Page     pagination.PageRequest
-	Archived *bool
+	Options  spaces.ListOptions
 }
 
 type getSpaceRequest struct {
@@ -171,12 +171,8 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 
 		var list spaces.SpaceList
 		var err error
-		if request.Archived != nil {
-			if filtered, ok := service.(SpaceFilterService); ok {
-				list, err = filtered.ListSpacesFiltered(ctx, request.TenantID, request.Page, request.Archived)
-			} else {
-				list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
-			}
+		if filtered, ok := service.(SpaceFilterService); ok && request.Options != (spaces.ListOptions{}) {
+			list, err = filtered.ListSpacesFiltered(ctx, request.TenantID, request.Page, request.Options)
 		} else {
 			list, err = service.ListSpaces(ctx, request.TenantID, request.Page)
 		}
@@ -187,8 +183,8 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
-		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
+		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}, {Name: "order", In: "query", Type: "string", Required: false, Enum: []string{string(spaces.ListOrderCreated), string(spaces.ListOrderActive)}}}, paginationParameters()...)...).
+		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter, apiErrorInvalidSpaceOrder)...).
 		ErrorRules(spaceRules)
 }
 
@@ -297,7 +293,23 @@ func decodeListSpacesRequest(r *http.Request) (listSpacesRequest, error) {
 	if err != nil {
 		return listSpacesRequest{}, err
 	}
-	return listSpacesRequest{TenantID: tenantID, Page: page, Archived: archived}, nil
+	order, err := spaceOrderQuery(r)
+	if err != nil {
+		return listSpacesRequest{}, err
+	}
+	return listSpacesRequest{TenantID: tenantID, Page: page, Options: spaces.ListOptions{Archived: archived, Order: order}}, nil
+}
+
+// spaceOrderQuery reads `order`. Leaving it out or asking for `created` keeps the newest-first order older callers rely on.
+func spaceOrderQuery(r *http.Request) (spaces.ListOrder, error) {
+	switch raw := strings.TrimSpace(r.URL.Query().Get("order")); spaces.ListOrder(raw) {
+	case "", spaces.ListOrderCreated:
+		return "", nil
+	case spaces.ListOrderActive:
+		return spaces.ListOrderActive, nil
+	default:
+		return "", apiErrorInvalidSpaceOrder
+	}
 }
 
 func optionalArchivedQuery(r *http.Request) (*bool, error) {
