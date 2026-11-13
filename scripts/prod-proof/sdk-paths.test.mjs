@@ -6,7 +6,7 @@ import test from "node:test";
 const here = import.meta.dirname;
 const root = resolve(here, "../..");
 // A proof bundles SDK source by path at run time, so a moved file fails only when a real-call proof reaches it.
-const sdkFile = /(\.\.\/\.\.\/|\.\/)(sdks\/[\w./-]+\.(?:ts|tsx|mjs|json))/g;
+const sdkFile = /(\.\.\/\.\.\/|\.\/|\$\{root\}\/)(sdks\/[\w./-]+\.(?:ts|tsx|mjs|json))/g;
 
 test("every SDK source file a proof script bundles still exists", () => {
   const scripts = readdirSync(here).filter((name) => name.endsWith(".mjs") && !name.endsWith(".test.mjs"));

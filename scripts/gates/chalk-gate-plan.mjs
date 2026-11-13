@@ -539,7 +539,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
-    task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs"]),
+    task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs", "scripts/prod-proof/sdk-paths.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
       "publint",
