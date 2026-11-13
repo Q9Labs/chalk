@@ -8,8 +8,6 @@ export interface ConnectionStatusProps {
   readonly phase: "reconnecting" | "offline" | "reconnected" | "failed";
   /** When the drop began, by this page's clock. The count on the card starts here, not when the card appears. */
   readonly since: number | null;
-  /** How long the person was away; the "Back in the call" confirmation says it. */
-  readonly awayMs?: number;
   /** Queued chat, named for people ("3 messages"), which will send once the call is back. */
   readonly pending?: string | null;
   readonly onRejoin?: () => void;
@@ -29,17 +27,17 @@ export function reconnectingCopy(phase: "reconnecting" | "offline", seconds: num
   return { title: "Reconnecting…", detail: `${queued}You’ll be back in the call on your own.` };
 }
 
-/**
- * Everything the call says about a lost link. The stage keeps its last picture, blurred and grey under a veil, and the
- * dock stays usable, so this is one calm card, one confirmation, or (after a failure) one card with a way back.
- * The veil lifts over 300ms when the call comes back, so the picture sharpens instead of snapping.
- */
 /** The return confirmation joins the bottom notices, so it never drops in over a face at the top of the call. */
 export function reconnectedToast(awayMs: number): Toast {
   return { id: "connection-back", type: "success", duration: Infinity, message: `Back in the call · Away ${Math.max(1, Math.round(awayMs / 1000))} s` };
 }
 
-export function ConnectionStatus({ phase, since, awayMs = 0, pending, onRejoin, onLeave, onReportProblem }: ConnectionStatusProps) {
+/**
+ * Everything the call says about a lost link. The stage keeps its last picture, blurred and grey under a veil, and the
+ * dock stays usable, so this is one calm card, one confirmation, or (after a failure) one card with a way back.
+ * The veil lifts over 300ms when the call comes back, so the picture sharpens instead of snapping.
+ */
+export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onReportProblem }: ConnectionStatusProps) {
   const waiting = phase === "reconnecting" || phase === "offline";
   const cardDue = useTrueFor(waiting, RECONNECT_NOTICE_MS);
   const seconds = useElapsedSeconds(waiting ? since : null);
