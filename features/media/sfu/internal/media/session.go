@@ -45,6 +45,7 @@ type Session struct {
 
 	mu         sync.Mutex
 	closed     bool
+	hasVideo   bool                     // the peer has published video on this BUNDLE
 	published  map[string]*publication  // by MID
 	subscribed map[string]*subscription // by MID
 	retired    map[string]bool          // MIDs of closed publications, never published again
@@ -289,6 +290,7 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		}
 		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
 	}
+	s.retireInactiveFreeSections(sections)
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
 	}
@@ -342,6 +344,30 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	}
 	response.SessionDescription = description
 	return response, nil
+}
+
+// retireInactiveFreeSections stops parked senders before Pion applies an offer that no longer
+// receives on their MIDs. Pion irreversibly stops those transceivers while applying the offer;
+// leaving their senders in the reuse pool would offer a stopped sender on a later pull.
+func (s *Session) retireInactiveFreeSections(sections map[string]offerSection) {
+	s.mu.Lock()
+	retired := make([]*section, 0)
+	kept := s.free[:0]
+	for _, sec := range s.free {
+		known, negotiated := sections[sec.transceiver.Mid()]
+		if negotiated && !known.receiving {
+			retired = append(retired, sec)
+			continue
+		}
+		kept = append(kept, sec)
+	}
+	s.free = kept
+	s.mu.Unlock()
+	for _, sec := range retired {
+		if err := sec.transceiver.Stop(); err != nil && !s.isClosed() {
+			s.node.log.Warn("stop inactive parked section", "connectionId", s.id, "mid", sec.transceiver.Mid(), "error", err)
+		}
+	}
 }
 
 // checkOffer bounds the offer before Pion sees it: its size, and the sections it adds. Every
@@ -434,6 +460,9 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 		}
 	}
 	s.published[track.Mid] = pub
+	if transceiver.Kind() == webrtc.RTPCodecTypeVideo {
+		s.hasVideo = true
+	}
 	return transceiver, "", ""
 }
 
@@ -633,10 +662,9 @@ func (s *Session) attach(egress *egressTrack, parked *section) (*section, error)
 	return parked, nil
 }
 
-// freeSection returns the parked section a pull of kind takes, or nil: the oldest closed
-// subscription's section of that kind, which is the lowest mid. A section the client rejected
-// (port 0 in its latest description) is stopped there for good, and a browser
-// that stopped a transceiver gives a new one for a section that comes back, so it is not reused.
+// freeSection returns a parked section the peer has not rejected, or nil. Free sections made
+// inactive in a client offer are removed before Pion applies that offer; an inactive answer to a
+// server offer can still be revived by the SDK when it pulls the section again.
 func (s *Session) freeSection(kind webrtc.RTPCodecType) *section {
 	s.mu.Lock()
 	free := slices.Clone(s.free)
@@ -660,10 +688,12 @@ func (s *Session) freeSection(kind webrtc.RTPCodecType) *section {
 	return nil
 }
 
-// park ends a subscription's use of its section and keeps the section for the owner's next pull.
-// Taking the track off the sender unbinds it, so the subscription sends nothing more, and turns the
-// section inactive. The sender stays: it holds the section's SSRCs and RTCP reports. A section
-// whose track was never bound has not been answered, so its sender has not started and is not kept.
+// park ends a subscription's use of its section. Audio sections stay available for the owner's next
+// pull. If this peer has published video, video sections are stopped: Chromium's later inactive
+// offer drops the RID extension from bundled video answers, making the next local simulcast offer
+// invalid. Otherwise a bound section is reusable. Taking its track off the sender unbinds it, so the
+// subscription sends nothing more, and turns the section inactive. A section whose track was never
+// bound has not been answered, so it is not kept.
 func (s *Session) park(sub *subscription) {
 	sec := sub.section
 	sec.current.CompareAndSwap(sub, nil)
@@ -671,7 +701,10 @@ func (s *Session) park(sub *subscription) {
 	// A capture session never reuses a section. The recorder keeps one receiver per mid and follows
 	// the node's new track through the browser-side track event, which a reused SSRC does not fire,
 	// so its replacement subscription would never find its track. It gets a fresh section, as before.
-	if binding == nil || s.kind == kindCapture {
+	s.mu.Lock()
+	hasVideo := s.hasVideo
+	s.mu.Unlock()
+	if binding == nil || s.kind == kindCapture || (hasVideo && sec.transceiver.Kind() == webrtc.RTPCodecTypeVideo) {
 		_ = sec.transceiver.Stop()
 		return
 	}
@@ -801,6 +834,7 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 	for index, track := range request.Tracks {
 		closed[index] = s.closeMid(track.Mid, true)
 	}
+	s.retireInactiveFreeSections(sections)
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
 		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
 	}

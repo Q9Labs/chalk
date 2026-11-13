@@ -101,7 +101,7 @@ func forceClose(t *testing.T, s *Session, mid string) {
 	}
 }
 
-func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
+func TestAudioSectionsFollowLiveTracksNotPulls(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
@@ -112,14 +112,13 @@ func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
 	firstSize := 0
 	seen := map[string]bool{}
 	for pull := range pulls {
-		name := []string{"mic", "cam", "mic", "mic", "cam", "cam"}[pull%6]
-		mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, name)
+		mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
 		seen[mid] = true
-		if got := len(subscriber.pc.GetTransceivers()); got > 2 {
-			t.Fatalf("pull %d: the node holds %d sections for at most one live track of each kind, want at most 2", pull, got)
+		if got := len(subscriber.pc.GetTransceivers()); got > 1 {
+			t.Fatalf("pull %d: the node holds %d audio sections for one live track, want at most 1", pull, got)
 		}
-		if got := len(viewer.pc.GetTransceivers()); got > 2 {
-			t.Fatalf("pull %d: the client holds %d sections, want at most 2", pull, got)
+		if got := len(viewer.pc.GetTransceivers()); got > 1 {
+			t.Fatalf("pull %d: the client holds %d audio sections, want at most 1", pull, got)
 		}
 		if section := sections[mid]; section.direction != "sendonly" || section.port == 0 || len(section.ssrcs) == 0 {
 			t.Fatalf("pull %d: the section %s of the response is %+v, want an active sendonly section with a source", pull, mid, section)
@@ -140,8 +139,8 @@ func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
 		}
 		forceClose(t, subscriber, mid)
 	}
-	if len(seen) > 2 {
-		t.Fatalf("%d pulls used %d mids, want 2 (one audio, one video)", pulls, len(seen))
+	if len(seen) != 1 {
+		t.Fatalf("%d audio pulls used %d mids, want 1", pulls, len(seen))
 	}
 	t.Logf("%d pulls of two kinds used mids %v; the client offer stayed near %d bytes", pulls, fmt.Sprint(seen), firstSize)
 }
@@ -154,13 +153,15 @@ func pullBoth(t *testing.T, subscriber, publisher *Session, viewer *testPeer) (m
 	return mic, cam
 }
 
-// The SDK revives a parked section only when it is inactive on the client, active in the offer
-// and named by the response of the request that produced the offer. These tests check that the
-// node's offers and responses give it exactly that, and nothing else it would revive.
+// The SDK revives a parked audio section only when it is inactive on the client, active in the
+// offer and named by the response of the request that produced the offer. Video sections are
+// stopped on close when the same peer has published video, because keeping them
+// parked drops RID extension negotiation on later offers.
 func TestReusedMidIsAnnouncedAsTheSDKRevives(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, subscriber)
 	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
 
@@ -195,15 +196,15 @@ func TestReusedMidIsAnnouncedAsTheSDKRevives(t *testing.T) {
 		t.Fatalf("the live camera section changed with the mic pull: %+v, was %v", got, firstSources[cam])
 	}
 
-	// Both tracks closed: the camera pull reuses the camera mid, and the mic mid stays inactive and unnamed.
+	// A closed video section is stopped, so the next camera pull gets a fresh MID.
 	forceClose(t, subscriber, mic)
 	forceClose(t, subscriber, cam)
 	mid, sections = pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-	if mid != cam {
-		t.Fatalf("camera pull got mid %s, want %s", mid, cam)
+	if mid == cam {
+		t.Fatalf("camera pull reused stopped mid %s", mid)
 	}
-	if got := sections[cam]; got.direction != "sendonly" {
-		t.Fatalf("reused camera section is %s, want sendonly", got.direction)
+	if got := sections[cam]; got.direction != "inactive" || len(got.ssrcs) != 0 {
+		t.Fatalf("stopped camera section is %+v, want inactive with no source", got)
 	}
 	if got := sections[mic]; got.direction != "inactive" || len(got.ssrcs) != 0 {
 		t.Fatalf("the unnamed free mic section is %+v, want inactive with no source", got)
@@ -220,10 +221,12 @@ func TestANegotiatedCloseFreesTheMidAndARejectedSectionIsNeverReused(t *testing.
 
 	closeNegotiated := func(mid string, reject bool) {
 		t.Helper()
-		for _, transceiver := range viewer.pc.GetTransceivers() {
-			if transceiver.Mid() == mid {
-				if err := transceiver.Stop(); err != nil {
-					t.Fatal(err)
+		if reject {
+			for _, transceiver := range viewer.pc.GetTransceivers() {
+				if transceiver.Mid() == mid {
+					if err := transceiver.Stop(); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 		}
@@ -257,6 +260,45 @@ func TestANegotiatedCloseFreesTheMidAndARejectedSectionIsNeverReused(t *testing.
 	}
 }
 
+// An inactive receiver offer makes Pion stop the matching transceiver. A parked section must
+// not be picked after that offer, even though its m-line is not rejected (port zero).
+func TestInactiveRemoteSectionIsNotReused(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+
+	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
+	forceClose(t, subscriber, mid)
+	if parked := subscriber.freeSection(webrtc.RTPCodecTypeAudio); parked == nil || parked.transceiver.Mid() != mid {
+		t.Fatalf("closed section %s was not parked", mid)
+	}
+	offer, err := viewer.pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inactiveOffer := inactivateSection(t, offer.SDP, mid)
+	sections, err := parseOffer(inactiveOffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscriber.retireInactiveFreeSections(sections)
+	if err := subscriber.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: inactiveOffer}); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := subscriber.pc.CreateAnswer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := subscriber.pc.SetLocalDescription(answer); err != nil {
+		t.Fatal(err)
+	}
+	if reused := subscriber.freeSection(webrtc.RTPCodecTypeAudio); reused != nil {
+		t.Fatalf("inactive section %s was reused after Pion stopped its transceiver", reused.transceiver.Mid())
+	}
+}
+
 // boundPayloadType is the payload type a subscription's sender writes, from its egress binding.
 func boundPayloadType(t *testing.T, s *Session, mid string) uint8 {
 	t.Helper()
@@ -273,9 +315,9 @@ func boundPayloadType(t *testing.T, s *Session, mid string) uint8 {
 	return binding.payloadType
 }
 
-// A client that offers VP8 on its own payload type fixes what the node sends to it. A reused
-// section must send on that payload type and not on the node's default.
-func TestReusedSectionSendsTheNegotiatedPayloadType(t *testing.T) {
+// A client that offers VP8 on its own payload type fixes what the node sends to it, including
+// after a closed video section is replaced with a fresh MID.
+func TestVideoSectionSendsTheNegotiatedPayloadType(t *testing.T) {
 	const clientPayloadType = 120
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
@@ -298,12 +340,12 @@ func TestReusedSectionSendsTheNegotiatedPayloadType(t *testing.T) {
 		t.Fatalf("first pull sends on payload type %d, want the negotiated %d", got, clientPayloadType)
 	}
 	forceClose(t, subscriber, mid)
-	reused, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-	if reused != mid {
-		t.Fatalf("the second pull got mid %s, want the reused %s", reused, mid)
+	replaced, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if replaced == mid {
+		t.Fatalf("the second pull reused stopped mid %s", mid)
 	}
-	if got := boundPayloadType(t, subscriber, reused); got != clientPayloadType {
-		t.Fatalf("the reused section sends on payload type %d, want the negotiated %d", got, clientPayloadType)
+	if got := boundPayloadType(t, subscriber, replaced); got != clientPayloadType {
+		t.Fatalf("the replacement section sends on payload type %d, want the negotiated %d", got, clientPayloadType)
 	}
 }
 
@@ -318,6 +360,40 @@ func rejectSection(t *testing.T, raw, mid string) string {
 		if got, _ := media.Attribute(sdp.AttrKeyMID); got == mid {
 			media.MediaName.Port.Value = 0
 		}
+	}
+	out, err := description.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+func inactivateSection(t *testing.T, raw, mid string) string {
+	t.Helper()
+	var description sdp.SessionDescription
+	if err := description.Unmarshal([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, media := range description.MediaDescriptions {
+		got, _ := media.Attribute(sdp.AttrKeyMID)
+		if got != mid {
+			continue
+		}
+		found = true
+		attributes := media.Attributes[:0]
+		for _, attribute := range media.Attributes {
+			switch attribute.Key {
+			case sdp.AttrKeySendRecv, sdp.AttrKeySendOnly, sdp.AttrKeyRecvOnly, sdp.AttrKeyInactive:
+				continue
+			default:
+				attributes = append(attributes, attribute)
+			}
+		}
+		media.Attributes = append(attributes, sdp.Attribute{Key: sdp.AttrKeyInactive})
+	}
+	if !found {
+		t.Fatalf("offer has no section with mid %s", mid)
 	}
 	out, err := description.Marshal()
 	if err != nil {
@@ -347,58 +423,24 @@ func TestAnUnansweredOfferClosesTheSessionWhenItsTimerFiresAtOnce(t *testing.T) 
 	}
 }
 
-// A section numbers its RTX stream from one counter that every subscription's binding on it shares.
-// A writer of a closed subscription that is still running, such as a bandwidth probe, takes a number
-// from the same counter as the subscription that reused the section, so no number is used twice on
-// the reused SSRC: the transport derives the SRTP index of an SSRC from the packets it sends, and a
-// repeated number is dropped by the receiver as a replay.
-func TestReuseCyclesNeverRepeatARepairSequenceNumber(t *testing.T) {
+// A video subscription MID is stopped on close to preserve RID extension negotiation on Chrome's
+// next local offer. Re-pulling therefore uses a new server transceiver and a new MID.
+func TestVideoSubscriptionGetsFreshMIDAfterClose(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, subscriber)
 	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
 
-	bindingOf := func(mid string) *egressBinding {
-		subscriber.mu.Lock()
-		defer subscriber.mu.Unlock()
-		return subscriber.subscribed[mid].track.binding.Load()
-	}
 	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-	old := bindingOf(mid)
-	if old == nil || old.rtxSSRC == 0 {
-		t.Fatalf("the camera binding %+v has no RTX stream", old)
+	forceClose(t, subscriber, mid)
+	again, sections := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if again == mid {
+		t.Fatalf("camera pull reused stopped mid %s", mid)
 	}
-
-	seen := map[uint16]int{}
-	var last uint16
-	record := func(cycle int, who string, binding *egressBinding) {
-		seq := binding.nextRTXSeq()
-		if previous, ok := seen[seq]; ok {
-			t.Fatalf("cycle %d: %s took RTX sequence number %d, already taken in cycle %d", cycle, who, seq, previous)
-		}
-		if len(seen) > 0 && seq != last+1 {
-			t.Fatalf("cycle %d: %s took %d after %d, the section's sequence must move by one per allocation", cycle, who, seq, last)
-		}
-		seen[seq], last = cycle, seq
-	}
-
-	const cycles = 20
-	for cycle := range cycles {
-		record(cycle, "the subscription", old)
-		forceClose(t, subscriber, mid)
-		again, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-		if again != mid {
-			t.Fatalf("cycle %d: the camera got mid %s, want %s", cycle, again, mid)
-		}
-		current := bindingOf(mid)
-		if current == old {
-			t.Fatalf("cycle %d: the reused section kept the closed subscription's binding", cycle)
-		}
-		// The closed subscription's probe loop was inside a write when the section was reused.
-		record(cycle, "a probe of the closed subscription", old)
-		record(cycle, "the new subscription", current)
-		old = current
+	if got := sections[mid]; got.direction != "inactive" || len(got.ssrcs) != 0 {
+		t.Fatalf("closed video section is %+v, want inactive with no source", got)
 	}
 }
 

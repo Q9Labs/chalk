@@ -20,10 +20,11 @@ const sectionHeadroom = 4
 
 // offerSection is what the node needs to know about one media section of a client offer.
 type offerSection struct {
-	media    string          // "audio" or "video"
-	sending  bool            // the client sends in this section
-	rejected bool            // port 0: the section is stopped
-	codecs   map[string]bool // lower-case encoding names from a=rtpmap
+	media     string          // "audio" or "video"
+	sending   bool            // the client sends in this section
+	receiving bool            // the client can receive in this section
+	rejected  bool            // port 0: the section is stopped
+	codecs    map[string]bool // lower-case encoding names from a=rtpmap
 }
 
 // supports reports whether the section offers the codec the node forwards for its media.
@@ -61,7 +62,7 @@ func parseOffer(raw string) (map[string]offerSection, error) {
 		if _, repeated := sections[mid]; repeated {
 			return nil, fmt.Errorf("%w: the offer repeats mid %q", ErrInvalidRequest, mid)
 		}
-		sections[mid] = offerSection{media: kind, sending: sendsMedia(media), rejected: media.MediaName.Port.Value == 0, codecs: encodingNames(media)}
+		sections[mid] = offerSection{media: kind, sending: sendsMedia(media), receiving: receivesMedia(media), rejected: media.MediaName.Port.Value == 0, codecs: encodingNames(media)}
 	}
 	return sections, nil
 }
@@ -77,6 +78,25 @@ func sendsMedia(media *sdp.MediaDescription) bool {
 			return false
 		}
 	}
+	return true
+}
+
+// receivesMedia reports whether the remote peer can receive media on this section. Pion stops a
+// local transceiver when the remote offer marks it inactive; attaching a new sender to that
+// stopped transceiver does not revive it, even though its m-line is not rejected.
+func receivesMedia(media *sdp.MediaDescription) bool {
+	if media.MediaName.Port.Value == 0 {
+		return false
+	}
+	for _, attribute := range media.Attributes {
+		switch attribute.Key {
+		case sdp.AttrKeySendOnly, sdp.AttrKeyInactive:
+			return false
+		case sdp.AttrKeyRecvOnly, sdp.AttrKeySendRecv:
+			return true
+		}
+	}
+	// No media-level direction means sendrecv.
 	return true
 }
 
