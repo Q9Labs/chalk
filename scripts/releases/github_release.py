@@ -221,28 +221,34 @@ class GitHub:
             runs = [run for run in runs if run['event'] != 'merge_group']
         return max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
 
-    def newest_green_push_gate(self):
+    def newest_green_push_gate(self, at_or_before=None):
         # Merge queue groups and, before the queue, pushes to master supersede each other, so the newest commit may never
         # get a Gate. The newest commit that did is the nightly candidate; waiting for the tip's Gate would hold the plan
         # behind the queue. Each stream of successful runs is read newest first, a page at a time, until one run is a
         # Gate that landed on master, so unlanded groups and long stretches of ungated commits cannot hide it.
-        found = [run for run in (self.newest_landed_gate('branch=master&event=push'), self.newest_landed_gate('event=merge_group')) if run]
+        # at_or_before limits the search to that commit and its ancestors: a run cuts the revision it started on.
+        found = [run for run in (self.newest_landed_gate('branch=master&event=push', at_or_before),
+                                 self.newest_landed_gate('event=merge_group', at_or_before)) if run]
         return max(found, key=lambda run: run.get('created_at', ''))['head_sha'] if found else None
 
-    def newest_landed_gate(self, filters):
+    def newest_landed_gate(self, filters, at_or_before=None):
         page = 1
         while True:
             runs = self.request(f'actions/workflows/gate.yml/runs?status=success&per_page=100&{filters}&page={page}')['workflow_runs']
             for run in runs:
                 # A push run of history that master later dropped stays in the run list, so a push run needs the check too.
-                if self.is_on_master(run['head_sha']) and self.has_green_gate(run['head_sha'], push_only=True):
+                if (not at_or_before or self.is_ancestor(run['head_sha'], at_or_before)) and self.is_on_master(run['head_sha']) \
+                        and self.has_green_gate(run['head_sha'], push_only=True):
                     return run
             if len(runs) < 100:
                 return None
             page += 1
 
+    def is_ancestor(self, sha, descendant):
+        return self.request(f'compare/{sha}...{descendant}')['status'] in ('ahead', 'identical')
+
     def is_on_master(self, sha):
-        return self.request(f'compare/master...{sha}')['status'] in ('behind', 'identical')
+        return self.is_ancestor(sha, 'master')
 
     def has_green_gate(self, sha, *, push_only=False):
         latest = self.latest_gate(sha, push_only=push_only)
