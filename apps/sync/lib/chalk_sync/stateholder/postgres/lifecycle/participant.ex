@@ -11,10 +11,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
   def lock_lifecycle_participant(_connection, _episode, %{name: "episode_ended"}), do: nil
 
   def lock_lifecycle_participant(
-         connection,
-         episode,
-         %{name: "admission_requested", payload: payload}
-       ) do
+        connection,
+        episode,
+        %{name: "admission_requested", payload: payload}
+      ) do
     with {:ok, admission_request_id} <- UUID.dump(payload["admission_request_id"]),
          {:ok, participant_id} <- UUID.dump(payload["participant_id"]) do
       admission_params = Scope.episode(episode) ++ [admission_request_id]
@@ -83,12 +83,11 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
     end
   end
 
-
   def validate_lifecycle_product_state(
-         %{name: "participant_joined"} = intent,
-         "active",
-         participant
-       ) do
+        %{name: "participant_joined"} = intent,
+        "active",
+        participant
+      ) do
     cond do
       participant.generation != intent.participant_generation ->
         {:error, :stale_participant_generation}
@@ -102,10 +101,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
   end
 
   def validate_lifecycle_product_state(
-         %{name: "admission_requested", payload: payload},
-         "active",
-         %{admission: admission, participant: participant}
-       ) do
+        %{name: "admission_requested", payload: payload},
+        "active",
+        %{admission: admission, participant: participant}
+      ) do
     expected_payload = %{
       "admission_request_id" => admission.id,
       "participant_id" => admission.participant_id,
@@ -125,10 +124,10 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
   end
 
   def validate_lifecycle_product_state(
-         %{name: "participant_left"} = intent,
-         "active",
-         participant
-       ) do
+        %{name: "participant_left"} = intent,
+        "active",
+        participant
+      ) do
     cond do
       participant.generation != intent.participant_generation ->
         {:error, :stale_participant_generation}
@@ -144,18 +143,16 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
   def validate_lifecycle_product_state(%{name: "episode_ended"}, "ending", nil), do: :ok
 
   def validate_lifecycle_product_state(%{name: name}, status, _participant)
-       when name in ["participant_joined", "participant_left"] and status in ["ending", "ended"],
-       do: {:error, :episode_ending}
+      when name in ["participant_joined", "participant_left"] and status in ["ending", "ended"],
+      do: {:error, :episode_ending}
 
   def validate_lifecycle_product_state(_intent, _status, _participant),
     do: {:error, :invalid_lifecycle_transition}
-
 
   def lifecycle_name("admission_requested"), do: :admission_requested
   def lifecycle_name("participant_joined"), do: :participant_joined
   def lifecycle_name("participant_left"), do: :participant_left
   def lifecycle_name("episode_ended"), do: :episode_ended
-
 
   def lifecycle_payload(%{name: "participant_joined", payload: payload}, participant, state) do
     payload
@@ -164,7 +161,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.Participant do
   end
 
   def lifecycle_payload(intent, _participant, _state), do: intent.payload
-
 
   def normalize_lifecycle_error(:revision_gap), do: :invalid_state
   def normalize_lifecycle_error(:invalid_payload), do: :invalid_lifecycle_intent

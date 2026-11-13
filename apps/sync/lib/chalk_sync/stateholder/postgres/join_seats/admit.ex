@@ -57,9 +57,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
     end
   end
 
-
   defp stage(name, fun), do: Telemetry.timed([:entry, :stage], name, fun)
-
 
   defp remember_device(connection, identity) do
     Postgrex.query!(
@@ -75,7 +73,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
     )
   end
 
-
   defp socket_request(identity, {:socket, requested}, enforced) do
     mode = if enforced, do: :enforced, else: :compatibility
     {%{identity | entry_ownership: mode}, requested}
@@ -83,7 +80,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
 
   defp socket_request(identity, requested, _enforced),
     do: {%{identity | entry_ownership: nil}, requested}
-
 
   defp allocate_requested_entry(
          _connection,
@@ -95,10 +91,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
   defp allocate_requested_entry(connection, identity, generation),
     do: allocate_entry(connection, identity, normalize(generation))
 
-
   defp normalize(:legacy), do: :new
   defp normalize(generation), do: generation
-
 
   # The old writer can have applied this join without updating its pending seat.
   # Participant and applied intent are authoritative, including after lease expiry.
@@ -129,7 +123,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
     :ok
   end
 
-
   defp ensure_seat(connection, identity, status) do
     Postgrex.query!(
       connection,
@@ -144,7 +137,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
     )
   end
 
-
   defp allocate_entry(connection, identity, requested) do
     validate_entry_dispatch(connection, identity, requested)
     params = Scope.participant(identity) ++ [identity.participant_generation]
@@ -157,7 +149,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
         existing_entry(connection, identity, params, requested)
     end
   end
-
 
   # A new entry bumps the seat in one statement, which also takes the row lock.
   defp issue_new_generation(connection, params, :new) do
@@ -179,7 +170,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
 
   defp issue_new_generation(_connection, _params, _requested), do: nil
 
-
   defp existing_entry(connection, identity, params, requested) do
     case Postgrex.query!(
            connection,
@@ -197,7 +187,6 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats.Admit do
         Postgrex.rollback(connection, {:error, :invalid_admission_intent})
     end
   end
-
 
   defp validate_entry_dispatch(connection, identity, :new) do
     case Postgrex.query!(

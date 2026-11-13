@@ -47,7 +47,6 @@ defmodule ChalkSync.Chat.Negotiation do
     end
   end
 
-
   defp negotiation(%{extension: extension} = cursor)
        when extension in [@extension, @reactions_extension] do
     {extension, Map.delete(cursor, :extension)}
@@ -57,23 +56,19 @@ defmodule ChalkSync.Chat.Negotiation do
     {@extension, cursor}
   end
 
-
   defp negotiated_receipts(repository, identity, extension)
        when extension in [@extension, @reactions_extension] do
     repository.read_receipts(identity.episode)
   end
-
 
   defp maybe_put_receipts(extension, name, receipts)
        when name in [@extension, @reactions_extension] do
     Map.put(extension, "read_receipts", Enum.map(receipts, &receipt_body/1))
   end
 
-
   def receipt_frame(receipt) do
     Map.put(receipt_body(receipt), "type", "chat_read_receipt")
   end
-
 
   defp receipt_body(receipt) do
     Map.take(receipt, [:participant_id, :participant_generation, :sequence, :read_at])

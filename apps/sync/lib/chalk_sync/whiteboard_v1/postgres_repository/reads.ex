@@ -3,8 +3,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Reads do
   Replay, snapshot, draw-grant and Episode access reads.
   """
 
-  alias ChalkSync.Database
   alias ChalkSync.Contract.GeneratedWhiteboardV1
+  alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.PostgresRepository.Store

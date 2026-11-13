@@ -43,11 +43,7 @@ defmodule ChalkSync.Live.MediaOffReasonCase do
         Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
 
         on_exit(fn ->
-          for {key, value} <- previous do
-            if value,
-              do: Application.put_env(:chalk_sync, key, value),
-              else: Application.delete_env(:chalk_sync, key)
-          end
+          Enum.each(previous, &restore_env/1)
 
           for pid <- connections, do: ChalkSync.TestProcess.stop(pid)
         end)
@@ -185,4 +181,7 @@ defmodule ChalkSync.Live.MediaOffReasonCase do
       "expires_at" => 4_102_444_800
     })
   end
+
+  def restore_env({key, nil}), do: Application.delete_env(:chalk_sync, key)
+  def restore_env({key, value}), do: Application.put_env(:chalk_sync, key, value)
 end

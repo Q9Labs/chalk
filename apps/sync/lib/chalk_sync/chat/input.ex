@@ -4,20 +4,20 @@ defmodule ChalkSync.Chat.Input do
   """
 
   def error_code(reason)
-       when reason in [
-              :capability_denied,
-              :invalid_payload,
-              :rate_limited,
-              :overloaded,
-              :episode_ended,
-              :participant_stale,
-              :client_message_id_conflict,
-              :attachment_not_found,
-              :attachment_not_ready,
-              :attachment_already_claimed,
-              :attachment_quota_exceeded,
-              :dependency_unavailable
-            ] do
+      when reason in [
+             :capability_denied,
+             :invalid_payload,
+             :rate_limited,
+             :overloaded,
+             :episode_ended,
+             :participant_stale,
+             :client_message_id_conflict,
+             :attachment_not_found,
+             :attachment_not_ready,
+             :attachment_already_claimed,
+             :attachment_quota_exceeded,
+             :dependency_unavailable
+           ] do
     Atom.to_string(reason)
   end
 
@@ -25,9 +25,8 @@ defmodule ChalkSync.Chat.Input do
     "dependency_unavailable"
   end
 
-
   def valid_chat_cursor(%{after_sequence: after_sequence, retained_floor_sequence: floor})
-       when is_nil(after_sequence) or is_binary(after_sequence) do
+      when is_nil(after_sequence) or is_binary(after_sequence) do
     if is_nil(floor) or is_binary(floor) do
       :ok
     else
@@ -39,7 +38,6 @@ defmodule ChalkSync.Chat.Input do
     {:error, :invalid_payload}
   end
 
-
   def validate_operation_id(value) do
     if byte_size(value) in 16..64 do
       :ok
@@ -47,7 +45,6 @@ defmodule ChalkSync.Chat.Input do
       {:error, :invalid_payload}
     end
   end
-
 
   def normalize_direction("older") do
     :older

@@ -1,8 +1,8 @@
 defmodule ChalkSync.WhiteboardV1.SocketViewsTest do
   use ChalkSync.WhiteboardV1.SocketCase, async: false
 
-  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Fanout
 

@@ -1,8 +1,8 @@
 defmodule ChalkSync.Stateholder.Postgres.ScreenShareLeasePostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID

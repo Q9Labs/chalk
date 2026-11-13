@@ -29,7 +29,6 @@ defmodule ChalkSync.Episodes.Coordinator.SocketRecovery.Pop do
     end
   end
 
-
   defp popped_recovery_entry(
          state,
          socket,
@@ -60,7 +59,6 @@ defmodule ChalkSync.Episodes.Coordinator.SocketRecovery.Pop do
      %{state | sockets: Map.put(state.sockets, socket, subscriber)}}
   end
 
-
   defp mark_recovery_frame_in_flight(%{recovery: %{expected_ack: nil}} = subscriber) do
     subscriber
   end
@@ -69,7 +67,6 @@ defmodule ChalkSync.Episodes.Coordinator.SocketRecovery.Pop do
     expected = %{subscriber.recovery.expected_ack | transport_in_flight?: true}
     %{subscriber | recovery: %{subscriber.recovery | expected_ack: expected}}
   end
-
 
   defp finish_socket_recovery(
          state,
