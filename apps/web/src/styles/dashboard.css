@@ -1186,6 +1186,21 @@
 .site .dash .main {
   padding: var(--space-8) var(--space-14) var(--space-22);
   min-width: 0;
+  transition: opacity 160ms ease-out;
+}
+
+/* The tab moves at once, so while the next page loads the one under it steps back instead of passing for the new
+   tab's page. The delay keeps a quick change from flickering. */
+.site .dash .main[data-pending] {
+  opacity: 0.4;
+  pointer-events: none;
+  transition-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site .dash .main {
+    transition: none;
+  }
 }
 
 .site .dash .pgh {
