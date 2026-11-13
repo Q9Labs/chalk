@@ -66,6 +66,7 @@ describe("V1SyncClient", () => {
     client.subscribe(observed);
     await client.start();
     expect(observed.mock.lastCall?.[0].connection).toMatchObject({ phase: "connecting", connectAttempt: { stage: "upgrade", opened: false, durationMs: 0 } });
+    client.stop();
   });
   it("publishes a fresh upgrade attempt when an opened socket is retried", async () => {
     const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
@@ -80,6 +81,7 @@ describe("V1SyncClient", () => {
     clock.advance(1);
     expect(sockets).toHaveLength(2);
     expect(observed.mock.lastCall?.[0].connection).toMatchObject({ phase: "connecting", connectAttempt: { stage: "upgrade", opened: false, durationMs: 0 } });
+    client.stop();
   });
   it("closes and recovers a live socket that emits only a transport error", async () => {
     const clock = new TestClock();
@@ -91,6 +93,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("connecting");
     clock.advance(1);
     expect(client.getSnapshot().connection.connectAttempt).toMatchObject({ stage: "upgrade", opened: false });
+    client.stop();
   });
   it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
     const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
@@ -292,6 +295,7 @@ describe("V1SyncClient", () => {
     await settle();
     expect(sockets[2]!.frames()[0]).toMatchObject({ streams: { control: { cursor: head } } });
     await recoverSocket(client, sockets[2]!, state, snapshot, "up_to_date");
+    client.stop();
   });
   it("keeps local media paused after a terminal Off protocol result", async () => {
     const { client: sync, socket } = await liveClient();
@@ -392,12 +396,14 @@ describe("V1SyncClient", () => {
     expect(socket.frames().find((frame) => frame.type === "hello")).not.toHaveProperty("entry_confirmation");
     await client.confirmEntered();
     expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    client.stop();
   });
   it("never asks for entry confirmation unless its caller opts in", async () => {
     const { client, socket, urls } = await liveClient({}, baseState(), ownerId, false);
     expect(new URL(urls[0]!).searchParams.has("entry_confirmation")).toBe(false);
     await client.confirmEntered();
     expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
+    client.stop();
   });
   it("enters a previous Sync through the older Sync hello and never sends entered", async () => {
     const { client, socket } = await liveClient({ entryConfirmation: true }, baseState(), ownerId, false);
@@ -411,6 +417,7 @@ describe("V1SyncClient", () => {
     await client.confirmEntered();
     expect(socket.frames().map((frame) => frame.type)).not.toContain("entered");
     expect(client.getSnapshot().connection.phase).toBe("live");
+    client.stop();
   });
   it.each(["", "invalid token", "policy violation"])("treats policy rejection %j as rejected access instead of reconnecting with the stale credential", async (reason) => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
@@ -421,18 +428,21 @@ describe("V1SyncClient", () => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
     socket.close(1008, "entry timeout");
     await vi.waitFor(() => expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "entry_timeout" }));
+    client.stop();
   });
   it("reconnects after a hello timeout without rejecting valid access", async () => {
     const { client, socket } = await liveClient({ reconnectDelayMs: 1 });
     socket.close(1008, "hello timeout");
     await vi.waitFor(() => expect(client.getSnapshot().connection.phase).toBe("connecting"));
     expect(client.getSnapshot().connection).not.toMatchObject({ terminalReason: "access_rejected" });
+    client.stop();
   });
   it("does not turn fully entered readiness into failed startup when the entry acknowledgement is lost", async () => {
     const { client, socket } = await liveClient();
     await expect(client.confirmEntered()).resolves.toBeUndefined();
     expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "entered" }));
     expect(client.getSnapshot().connection.phase).toBe("live");
+    client.stop();
   });
   it("does not resend entry to a previous Sync after a rollback reconnect", async () => {
     const clock = new TestClock();
@@ -447,6 +457,7 @@ describe("V1SyncClient", () => {
     await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", false);
     expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
     expect(client.getSnapshot().connection.phase).toBe("live");
+    client.stop();
   });
   it.each([true, false])("keeps its server entry generation when refreshed recovery has acknowledged entry=%s", async (acknowledged) => {
     const clock = new TestClock();
@@ -485,6 +496,7 @@ describe("V1SyncClient", () => {
       await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", entryConfirmation, entryConfirmation ? 7 : undefined);
     }
     expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(1);
+    client.stop();
   });
   // Sync says per connection whether its media items carry `off_reason`; a rolling deploy can put the next connection on an older Sync.
   it("reports media_off_reason for the connection whose welcome carried it and resets on the next", async () => {
@@ -502,6 +514,7 @@ describe("V1SyncClient", () => {
       await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, undefined, advertised);
       expect(client.offReasonNegotiated()).toBe(advertised);
     }
+    client.stop();
   });
   it("listens to the page while started and stops listening on stop", async () => {
     const { page, listeners, registered } = pageDouble();
@@ -765,6 +778,7 @@ describe("V1SyncClient", () => {
     expect(socket.frames().filter((frame) => frame.type === "entered")).toHaveLength(2);
     socket.receive({ type: "entered_ack" });
     await settle();
+    client.stop();
   });
   it("round-trips approved frames and rejects aliases or unknown fields", () => {
     const command = {
@@ -968,6 +982,7 @@ describe("V1SyncClient", () => {
       await settle();
     }
     expect(client.getSnapshot().connection).toMatchObject({ health: "healthy" });
+    client.stop();
   });
   it("requires sustained silence to recover and stable pongs to return healthy", async () => {
     const clock = new TestClock();
@@ -1271,6 +1286,7 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "projection_event", stream: "presence", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, state: "connected", speaking: false, active_speaker: false, connection_quality: "poor" } });
     await applied;
     expect(client.getSnapshot().presence?.items[0]).toMatchObject({ participantId: ownerId, connectionQuality: "poor" });
+    client.stop();
   });
   it("asks Sync for media off reasons and reads them from the media projection", async () => {
     const { client, socket, urls } = await liveClient();
@@ -1347,6 +1363,7 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 6, item: { ...remoteItem, enabled: false, publication_id: null } });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 6);
     expect(withdrawn).toHaveBeenCalledExactlyOnceWith("P");
+    client.stop();
   });
   it.each(["open", "knock"] as const)("keeps remote media notifications when the self row is absent (%s admission)", async (admissionPolicy) => {
     const initial = { ...baseState(), admissionPolicy, participants: [] };
@@ -1371,6 +1388,7 @@ describe("V1SyncClient", () => {
     await snapshotWhen(client, (snapshot) => snapshot.connection.phase === "terminal");
     expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "participant_removed" });
     expect(socket.sent.some((raw) => JSON.parse(raw).type === "delivery_ack")).toBe(true);
+    client.stop();
   });
   it("announces new and removed remote publications once per projection event", async () => {
     const { client, socket, mediaPlane } = await liveClient();
@@ -1425,6 +1443,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("connecting");
     clock.advance(5000);
     expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: "episode_ended" });
+    client.stop();
   });
   it("recovers the maximum-duration reason when a rejected command precedes the end event", async () => {
     const clock = new TestClock();
@@ -1457,6 +1476,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.phase).toBe("recovering");
     expect(client.getSnapshot().control?.status).toBe("ended");
     expect(client.getSnapshot().control?.endReason).toBe("maximum_duration");
+    client.stop();
   });
   it("clears publication identities at Episode end without polling ended media", async () => {
     const { client, socket, state, mediaPlane } = await liveClient();
@@ -1470,6 +1490,7 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: peerId, source: "camera", enabled: false, publication_id: null } });
     await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
     expect(mediaPlane.changed).toBe(before);
+    client.stop();
   });
   it("settles Episode end from its committed ACK without waiting for a control event the departing client may not receive", async () => {
     const { client, socket } = await liveClient();
@@ -1572,6 +1593,7 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason: "participant_inactive" });
     await expect(leaving).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: 1 });
     expect(client.getSnapshot().pendingCommandCount).toBe(0);
+    client.stop();
   });
   it.each([
     { name: "a Leave rejected for another reason", reason: "invalid_state" as const, send: (client: V1SyncClient) => client.leave({ commandId: commandIds[0] }) },
@@ -2111,6 +2133,7 @@ describe("V1SyncClient collaboration_v1", () => {
     await recover();
     expect(client.getSnapshot().connection.phase).toBe("live");
     expect(socket.frames().filter((frame) => frame.type === "reaction_send")).toHaveLength(1);
+    client.stop();
   });
   it("negotiates the extension and maps reactions, attachments, reads, and pages", async () => {
     const { client, socket } = await liveCollaborationClient();
@@ -2440,6 +2463,7 @@ describe("hello baggage against an older Sync", () => {
     sockets[2]!.open();
     await settle();
     expect(sockets[2]!.frames()[0]).not.toHaveProperty("baggage");
+    client.stop();
   });
 
   it("does not loop when the baggage-free hello is rejected too", async () => {
@@ -2456,6 +2480,7 @@ describe("hello baggage against an older Sync", () => {
     expect(sockets).toHaveLength(2);
     clock.advance(1);
     expect(sockets).toHaveLength(3);
+    client.stop();
   });
 
   it("keeps sending baggage to a Sync that accepts it, also after a reconnect", async () => {
@@ -2474,14 +2499,8 @@ describe("hello baggage against an older Sync", () => {
   });
 });
 type ClientOptions = Partial<ConstructorParameters<typeof V1SyncClient>[0]>;
-const clients: V1SyncClient[] = [];
-afterEach(() => {
-  for (const client of clients.splice(0)) client.stop();
-});
 function syncClient(options: ClientOptions = {}): V1SyncClient {
-  const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: { connect: () => new TestSocket() }, ...options });
-  clients.push(client);
-  return client;
+  return new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: { connect: () => new TestSocket() }, ...options });
 }
 function recordingClient(options: ClientOptions = {}) {
   const clock = new TestClock();
