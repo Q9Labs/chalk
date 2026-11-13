@@ -68,15 +68,15 @@ function paintUnavailableScreen(kit: PaintKit, tile: Extract<SceneTile, { kind: 
 }
 
 function paintPersonTileDetails(kit: PaintKit, tile: PersonTile): void {
-  if (tile.kind === "screen_share") {
-    paintNameTag(kit, tile.rect, `${tile.participant.displayName}’s screen`, ComputerScreenShareIcon, "#FFFFFF");
-    return;
-  }
-  const { participant } = tile;
-  const muted = participant.microphoneMuted;
-  paintNameTag(kit, tile.rect, participant.displayName, muted ? MicOff01Icon : undefined, muted ? DANGER : "#FFFFFF");
-  if (participant.handRaised) paintHand(kit, tile.rect);
-  if (participant.speaking) strokeTile(kit, tile.rect, SPEAKING, kit.px(2.5));
+  if (tile.kind === "screen_share") paintNameTag(kit, tile.rect, `${tile.participant.displayName}’s screen`, ComputerScreenShareIcon, "#FFFFFF");
+  else paintParticipantDetails(kit, tile.rect, tile.participant);
+}
+
+function paintParticipantDetails(kit: PaintKit, rect: Rect, participant: SceneParticipant): void {
+  const tag = participant.microphoneMuted ? { icon: MicOff01Icon, color: DANGER } : { icon: undefined, color: "#FFFFFF" };
+  paintNameTag(kit, rect, participant.displayName, tag.icon, tag.color);
+  if (participant.handRaised) paintHand(kit, rect);
+  if (participant.speaking) strokeTile(kit, rect, SPEAKING, kit.px(2.5));
 }
 
 async function paintAvatar(kit: PaintKit, participant: SceneParticipant, rect: Rect): Promise<void> {

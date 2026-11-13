@@ -126,14 +126,16 @@ export function drawIcon(kit: PaintKit, icon: IconNode, x: number, y: number, si
   context.lineCap = "round";
   context.lineJoin = "round";
   for (const [tag, attributes] of icon) {
-    const d = attributes.d;
-    if (tag !== "path" || typeof d !== "string") continue;
-    const path = new Path2D(d);
-    if (attributes.fill === "currentColor") context.fill(path);
-    if (attributes.stroke === "currentColor") {
-      context.lineWidth = Number(attributes.strokeWidth ?? 1.5) * 1.2;
-      context.stroke(path);
-    }
+    if (tag === "path" && typeof attributes.d === "string") paintIconPath(context, attributes.d, attributes);
   }
   context.restore();
+}
+
+function paintIconPath(context: SKRSContext2D, d: string, attributes: IconNode[number][1]): void {
+  const path = new Path2D(d);
+  if (attributes.fill === "currentColor") context.fill(path);
+  if (attributes.stroke === "currentColor") {
+    context.lineWidth = Number(attributes.strokeWidth ?? 1.5) * 1.2;
+    context.stroke(path);
+  }
 }
