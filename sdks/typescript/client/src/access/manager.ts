@@ -22,6 +22,7 @@ export type ConnectionAccessEffectService = {
   readonly subscribeAutomaticMediaReplacement: (listener: AutomaticMediaReplacementListener) => Effect.Effect<() => void>;
   readonly requiresRefresh: Effect.Effect<boolean>;
   readonly millisecondsUntilRefresh: Effect.Effect<number | null>;
+  readonly millisecondsUntilExpiry: Effect.Effect<number | null>;
   readonly holdMediaBinding: (binding: string) => Effect.Effect<Effect.Effect<void>>;
   readonly clear: Effect.Effect<void>;
 };
@@ -85,6 +86,11 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
         if (!access.access) return null;
         return millisecondsUntil(access.access, yield* Clock.currentTimeMillis, refreshWindowMs);
       });
+      const millisecondsUntilExpiry = Effect.gen(function* () {
+        const access = yield* SynchronizedRef.get(state);
+        if (!access.access) return null;
+        return millisecondsUntil(access.access, yield* Clock.currentTimeMillis, 0);
+      });
       const ensureFresh = (reason: ConnectionAccessReason = "scheduled_refresh") => fetch(reason, false, false);
       return {
         current: SynchronizedRef.get(state).pipe(Effect.map((value) => value.access)),
@@ -102,6 +108,7 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
           }),
         requiresRefresh: millisecondsUntilRefresh.pipe(Effect.map((milliseconds) => milliseconds === null || milliseconds === 0)),
         millisecondsUntilRefresh,
+        millisecondsUntilExpiry,
         holdMediaBinding,
         clear: Effect.gen(function* () {
           yield* SynchronizedRef.set(state, { access: null });
