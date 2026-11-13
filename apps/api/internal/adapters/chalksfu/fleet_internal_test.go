@@ -212,6 +212,23 @@ func TestNewFleetNeedsAPrimary(t *testing.T) {
 	}
 }
 
+// A call waits for this window before recovery starts, and the failover target of 10 s leaves
+// detection at most three seconds. A node that answered 2.5 s ago is still present; one that
+// answered 3.5 s ago is lost. The previous 2 s interval made the window six seconds.
+func TestASilentNodeIsLostWithinThreeSeconds(t *testing.T) {
+	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{primary("p")}, map[string]*answer{"p": ready(testPrimaryBudget, 0)})
+	allocation := mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}
+	for _, c := range []struct {
+		age  time.Duration
+		lost bool
+	}{{2500 * time.Millisecond, false}, {3500 * time.Millisecond, true}} {
+		fleet.seen["p"] = sighting{at: time.Now().Add(-c.age), incarnation: "boot-p"}
+		if got, lost := fleet.Lost(allocation); lost != c.lost {
+			t.Errorf("last answer %v ago: lost %v (%q), want %v", c.age, lost, got, c.lost)
+		}
+	}
+}
+
 func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 	nodes := []runtimeconfig.ChalkSFUNode{primary("p"), primary("quiet"), standby("s")}
 	answers := map[string]*answer{"p": ready(testPrimaryBudget, 0), "quiet": {budget: testPrimaryBudget, stale: true}, "s": {budget: testStandbyBudget, draining: true}}
