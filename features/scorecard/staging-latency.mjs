@@ -123,9 +123,12 @@ async function measure() {
       // Keep timeout and the kit in the lease's process group so lease loss stops both.
       const measurementEnv = { ...process.env, CHALK_PROOF_RUN_ID: runId };
       delete measurementEnv.CHALK_AXIOM_METRICS_QUERY_TOKEN;
+      // A cycle takes about 45 s, so the cap allows 55 s a cycle. The kit runs as timeout's direct child: --foreground signals
+      // only that child, and a pnpm wrapper would leave the kit cycling after the cap, with its Episodes landing in the retry.
+      const samples = process.env.CHALK_LATENCY_SAMPLES || "60";
       status = await workload(
         "timeout",
-        ["--foreground", "--signal=TERM", "--kill-after=10s", "40m", "pnpm", "prod:latency", "--samples", process.env.CHALK_LATENCY_SAMPLES || "60", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"],
+        ["--foreground", "--signal=TERM", "--kill-after=10s", `${Number(samples) * 55}s`, "node", "scripts/prod-proof/latency.mjs", "--samples", samples, "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"],
         {
           env: measurementEnv,
         },
