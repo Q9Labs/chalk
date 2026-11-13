@@ -13,7 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
            "participant_id" => external.target_participant_id,
            "reason" => reason
          }) do
-      {:change, event, _next_state} ->
+      {:change, %{name: "participant_left"} = event, _next_state} ->
         {:ok, :participant_left, event.payload}
 
       {:error, reason} ->
@@ -36,7 +36,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
            "participant_id" => external.target_participant_id,
            "reason" => reason
          }) do
-      {:change, event, next_state} ->
+      {:change, %{name: "participant_left"} = event, next_state} ->
         if name == :participant_left and payload == event.payload,
           do: {:ok, event, next_state},
           else: {:error, :invalid_operation_outcome}

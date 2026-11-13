@@ -9,14 +9,21 @@ defmodule ChalkSync.Retention.CleanupWorker do
   """
 
   alias ChalkSync.Database.TransactionSettings
-  alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Retention.CleanupWorker.Deletion
+  alias ChalkSync.Retention.CleanupWorker.History
   alias ChalkSync.Retention.SQL
-  alias ChalkSync.UUID
 
   @retention_seconds 7 * 24 * 60 * 60
   @default_batch_size 4
   @maximum_batch_size 16
-  @event_page_size 256
+  @measured [
+    :external_operations,
+    :admission_requests,
+    :recordings,
+    :screen_share_leases,
+    :publication_fences,
+    :grant_reservations
+  ]
 
   defmodule Result do
     @moduledoc "Cleanup counters for one committed worker batch."
@@ -92,298 +99,57 @@ defmodule ChalkSync.Retention.CleanupWorker do
   end
 
   defp cleanup_candidate(transaction, candidate, now, result) do
-    case verify_history(transaction, candidate) do
+    case History.verify_history(transaction, candidate) do
       {:ok, event_count, event_bytes} ->
-        external_operations =
-          measurement(transaction, SQL.measure_terminal_external_operations(), candidate)
+        deleted = Deletion.delete_episode(transaction, candidate, event_count)
 
-        receipt_rows = delete_count(transaction, SQL.delete_receipts(), candidate)
-
-        lifecycle_intent_rows =
-          delete_count(transaction, SQL.delete_terminal_lifecycle_intents(), candidate)
-
-        clear_terminal_operation_event_links(transaction, candidate)
-        event_rows = delete_count(transaction, SQL.delete_events(), candidate)
-
-        admission_requests =
-          delete_measurement(transaction, SQL.delete_admission_requests(), candidate)
-
-        recordings = delete_measurement(transaction, SQL.delete_recordings(), candidate)
-
-        publication_fences =
-          delete_measurement(transaction, SQL.delete_publication_fences(), candidate)
-
-        grant_reservations =
-          delete_measurement(transaction, SQL.delete_publication_grant_reservations(), candidate)
-
-        _media_pauses = delete_measurement(transaction, SQL.delete_media_pauses(), candidate)
-        _media_stops = delete_measurement(transaction, SQL.delete_media_stops(), candidate)
-
-        screen_share_leases =
-          delete_measurement(transaction, SQL.delete_screen_share_leases(), candidate)
-
-        external_operation_rows =
-          delete_count(transaction, SQL.delete_terminal_external_operations(), candidate)
-
-        delete_collaboration_data(transaction, candidate)
-
-        if receipt_rows != candidate.receipt_count or
-             lifecycle_intent_rows != candidate.lifecycle_intent_count or
-             event_rows != event_count or
-             external_operation_rows != elem(external_operations, 0) do
-          Postgrex.rollback(transaction, {:invalid_history, :cleanup_counter_mismatch})
-        end
-
-        measurements = %{
-          external_operations: external_operations,
-          admission_requests: admission_requests,
-          recordings: recordings,
-          screen_share_leases: screen_share_leases,
-          publication_fences: publication_fences,
-          grant_reservations: grant_reservations
-        }
-
-        write_checkpoint(
+        Deletion.write_checkpoint(
           transaction,
           candidate,
           now,
           event_count,
           event_bytes,
-          measurements
+          Map.take(deleted, @measured)
         )
 
-        %Result{
-          episodes: result.episodes + 1,
-          event_rows: result.event_rows + event_rows,
-          event_bytes: result.event_bytes + event_bytes,
-          receipt_rows: result.receipt_rows + receipt_rows,
-          receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
-          lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
-          lifecycle_intent_bytes:
-            result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
-          external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
-          external_operation_bytes:
-            result.external_operation_bytes + elem(external_operations, 1),
-          admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
-          admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
-          recording_rows: result.recording_rows + elem(recordings, 0),
-          recording_bytes: result.recording_bytes + elem(recordings, 1),
-          screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
-          screen_share_lease_bytes:
-            result.screen_share_lease_bytes + elem(screen_share_leases, 1),
-          publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
-          publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
-          publication_grant_reservation_rows:
-            result.publication_grant_reservation_rows + elem(grant_reservations, 0),
-          publication_grant_reservation_bytes:
-            result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
-        }
+        tally(result, candidate, event_bytes, deleted)
 
       {:error, reason} ->
         Postgrex.rollback(transaction, {:invalid_history, reason})
     end
   end
 
-  defp verify_history(transaction, candidate) do
-    with {:ok, initial_policy} <- initial_policy(transaction, candidate),
-         state <- Reducer.new(UUID.load!(candidate.episode_id), initial_policy),
-         {:ok, state, event_count, event_bytes} <-
-           fold_event_pages(transaction, candidate, state, 0, 0),
-         true <- state.status == "ended",
-         true <- state.revision == candidate.control_revision,
-         true <- event_count == candidate.control_revision,
-         true <-
-           event_count == candidate.participant_event_count + candidate.lifecycle_event_count,
-         true <-
-           event_bytes == candidate.participant_event_bytes + candidate.lifecycle_event_bytes,
-         true <- candidate.state_schema_version == Reducer.state_schema_version(),
-         true <- Reducer.snapshot(state) == candidate.folded_state,
-         true <- Reducer.digest(state) == candidate.state_digest do
-      {:ok, event_count, event_bytes}
-    else
-      {:error, reason} -> {:error, reason}
-      false -> {:error, :terminal_checkpoint_mismatch}
-    end
+  defp tally(result, candidate, event_bytes, deleted) do
+    %Result{
+      episodes: result.episodes + 1,
+      event_rows: result.event_rows + deleted.event_rows,
+      event_bytes: result.event_bytes + event_bytes,
+      receipt_rows: result.receipt_rows + deleted.receipt_rows,
+      receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
+      lifecycle_intent_rows: result.lifecycle_intent_rows + deleted.lifecycle_intent_rows,
+      lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
+      external_operation_rows:
+        result.external_operation_rows + elem(deleted.external_operations, 0),
+      external_operation_bytes:
+        result.external_operation_bytes + elem(deleted.external_operations, 1),
+      admission_request_rows: result.admission_request_rows + elem(deleted.admission_requests, 0),
+      admission_request_bytes:
+        result.admission_request_bytes + elem(deleted.admission_requests, 1),
+      recording_rows: result.recording_rows + elem(deleted.recordings, 0),
+      recording_bytes: result.recording_bytes + elem(deleted.recordings, 1),
+      screen_share_lease_rows:
+        result.screen_share_lease_rows + elem(deleted.screen_share_leases, 0),
+      screen_share_lease_bytes:
+        result.screen_share_lease_bytes + elem(deleted.screen_share_leases, 1),
+      publication_fence_rows: result.publication_fence_rows + elem(deleted.publication_fences, 0),
+      publication_fence_bytes:
+        result.publication_fence_bytes + elem(deleted.publication_fences, 1),
+      publication_grant_reservation_rows:
+        result.publication_grant_reservation_rows + elem(deleted.grant_reservations, 0),
+      publication_grant_reservation_bytes:
+        result.publication_grant_reservation_bytes + elem(deleted.grant_reservations, 1)
+    }
   end
-
-  defp initial_policy(transaction, candidate) do
-    config_policy = %{config_snapshot: candidate.config_snapshot}
-
-    with {:ok, deadline_policy} <- persisted_deadline_policy(candidate),
-         true <- terminal_deadline_matches?(candidate, deadline_policy),
-         false <- has_deadline_transition?(transaction, candidate) do
-      {:ok, Map.merge(config_policy, deadline_policy)}
-    else
-      :not_usable -> {:ok, config_policy}
-      false -> {:ok, config_policy}
-    end
-  end
-
-  defp persisted_deadline_policy(candidate) do
-    with %DateTime{} = deadline_at <- candidate.deadline_at,
-         deadline_at_ms <- DateTime.to_unix(deadline_at, :millisecond),
-         true <- deadline_at_ms >= 1,
-         generation when is_integer(generation) and generation >= 1 <-
-           candidate.deadline_generation do
-      {:ok, %{deadline_at_ms: deadline_at_ms, deadline_generation: generation}}
-    else
-      _ -> :not_usable
-    end
-  end
-
-  defp terminal_deadline_matches?(candidate, %{
-         deadline_at_ms: deadline_at_ms,
-         deadline_generation: generation
-       }) do
-    candidate.folded_state["deadline_at_ms"] == deadline_at_ms and
-      candidate.folded_state["deadline_generation"] == generation
-  end
-
-  defp has_deadline_transition?(transaction, candidate) do
-    case Postgrex.query!(transaction, SQL.has_deadline_transition?(), [
-           candidate.tenant_id,
-           candidate.episode_id
-         ]).rows do
-      [[value]] -> value
-    end
-  end
-
-  defp fold_event_pages(transaction, candidate, state, event_count, event_bytes) do
-    rows =
-      Postgrex.query!(transaction, SQL.read_event_page(), [
-        candidate.tenant_id,
-        candidate.episode_id,
-        state.revision,
-        @event_page_size
-      ]).rows
-
-    with {:ok, next_state, next_count, next_bytes} <-
-           fold_event_page(rows, state, event_count, event_bytes) do
-      if length(rows) == @event_page_size do
-        fold_event_pages(
-          transaction,
-          candidate,
-          next_state,
-          next_count,
-          next_bytes
-        )
-      else
-        {:ok, next_state, next_count, next_bytes}
-      end
-    end
-  end
-
-  defp fold_event_page(rows, state, event_count, event_bytes) do
-    Enum.reduce_while(rows, {:ok, state, event_count, event_bytes}, fn
-      [base_revision, revision, name, payload, schema_version, digest, encoded_bytes],
-      {:ok, current, count, bytes} ->
-        event = %{
-          base_revision: base_revision,
-          revision: revision,
-          name: name,
-          payload: payload
-        }
-
-        with true <- schema_version == Reducer.state_schema_version(),
-             {:ok, next} <- Reducer.replay_event(current, event, digest) do
-          {:cont, {:ok, next, count + 1, bytes + encoded_bytes}}
-        else
-          {:error, reason} -> {:halt, {:error, reason}}
-          false -> {:halt, {:error, :event_digest_mismatch}}
-        end
-    end)
-  end
-
-  defp write_checkpoint(transaction, candidate, now, event_count, event_bytes, measurements) do
-    params = [
-      candidate.tenant_id,
-      candidate.episode_id,
-      candidate.control_revision,
-      candidate.state_digest,
-      event_count,
-      now,
-      event_bytes,
-      candidate.receipt_count,
-      candidate.receipt_bytes,
-      candidate.lifecycle_intent_count,
-      candidate.lifecycle_intent_bytes,
-      elem(measurements.external_operations, 0),
-      elem(measurements.external_operations, 1),
-      elem(measurements.admission_requests, 0),
-      elem(measurements.admission_requests, 1),
-      elem(measurements.recordings, 0),
-      elem(measurements.recordings, 1),
-      elem(measurements.screen_share_leases, 0),
-      elem(measurements.screen_share_leases, 1),
-      elem(measurements.publication_fences, 0),
-      elem(measurements.publication_fences, 1),
-      elem(measurements.grant_reservations, 0),
-      elem(measurements.grant_reservations, 1)
-    ]
-
-    case Postgrex.query!(transaction, SQL.write_checkpoint(), params).rows do
-      [[_episode_id]] -> :ok
-      [] -> Postgrex.rollback(transaction, {:invalid_history, :checkpoint_race})
-    end
-  end
-
-  defp delete_count(transaction, query, candidate) do
-    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.episode_id]).rows do
-      [[count]] -> count
-    end
-  end
-
-  defp delete_measurement(transaction, query, candidate) do
-    measurement(transaction, query, candidate)
-  end
-
-  defp measurement(transaction, query, candidate) do
-    case Postgrex.query!(transaction, query, [candidate.tenant_id, candidate.episode_id]).rows do
-      [[rows, bytes]] -> {rows, bytes}
-    end
-  end
-
-  defp clear_terminal_operation_event_links(transaction, candidate) do
-    Postgrex.query!(transaction, SQL.clear_terminal_operation_event_links(), [
-      candidate.tenant_id,
-      candidate.episode_id
-    ])
-  end
-
-  defp delete_collaboration_data(transaction, candidate) do
-    Postgrex.query!(transaction, SQL.lock_chat_stream(), space_scope(candidate))
-
-    _measurement =
-      delete_measurement(transaction, SQL.delete_chat_read_receipts(), candidate)
-
-    _measurement = delete_measurement(transaction, SQL.delete_chat_messages(), candidate)
-
-    Postgrex.query!(transaction, SQL.reconcile_chat_stream(), space_scope(candidate))
-
-    _measurement =
-      delete_space_measurement(transaction, SQL.delete_chat_streams(), candidate)
-
-    collaboration_deletions = [
-      SQL.delete_whiteboard_operation_receipts(),
-      SQL.delete_whiteboard_permissions(),
-      SQL.delete_whiteboard_draw_policies(),
-      SQL.delete_whiteboard_draw_policy_receipts(),
-      SQL.delete_whiteboard_elements(),
-      SQL.delete_whiteboard_scenes()
-    ]
-
-    Enum.each(collaboration_deletions, fn query ->
-      _measurement = delete_measurement(transaction, query, candidate)
-    end)
-  end
-
-  defp delete_space_measurement(transaction, query, candidate) do
-    case Postgrex.query!(transaction, query, space_scope(candidate)).rows do
-      [[rows, bytes]] -> {rows, bytes}
-    end
-  end
-
-  defp space_scope(candidate), do: [candidate.tenant_id, candidate.space_id]
 
   defp candidate([
          tenant_id,

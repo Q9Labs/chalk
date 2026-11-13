@@ -69,7 +69,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def admit_entry(%Identity{} = identity, requested) do
-    case Transaction.run(identity.episode, &JoinSeats.admit_entry(&1, identity, requested)) do
+    case Transaction.run(identity.episode, &JoinSeats.Admit.admit_entry(&1, identity, requested)) do
       {:ok, admitted} -> {:ok, admitted}
       {:error, {:error, reason}} -> {:error, reason}
       {:error, {:retryable, reason}} -> {:retryable, reason}
