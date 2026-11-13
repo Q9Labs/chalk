@@ -373,14 +373,14 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 // record takes a node's answered probe at the time it was read. It holds f.mu.
 func (f *Fleet) record(ctx context.Context, node string, ready wireReady, now time.Time) {
 	before, known := f.loads[node]
-	wasReady := known && f.readyFor(node, before, now) && f.seen[node].incarnation == ready.NodeIncarnation
+	load := f.loadOf(node, ready, now)
+	wasReady := known && f.readyFor(node, before, now) && f.seen[node].incarnation == load.incarnation
 	switch {
 	case ready.Draining && !(known && before.Draining):
 		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
 	case !ready.Draining && known && before.Draining:
 		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node)
 	}
-	load := f.loadOf(node, ready, now)
 	seen := verdictOf(ready.Protocol)
 	if seen == verdictTooOld && f.verdicts[node] != verdictTooOld {
 		f.logTransition(ctx, slog.LevelWarn, "chalk sfu node is out of placement", node, "reason", NodeProtocolTooOld, "protocol", ready.Protocol, "minProtocol", minNodeProtocol, "revision", boundedRevision(ready.Revision))
