@@ -26,6 +26,18 @@ export interface ChatPanelProps {
   readonly generatedAvatars?: boolean;
 }
 
+function isSupportedUpload(file: ChatUploadFile): boolean {
+  const { fileName, mimeType, byteLength } = describeChatUploadFile(file);
+  const fileNameBytes = new TextEncoder().encode(fileName).byteLength;
+  return !!fileName && Number.isSafeInteger(byteLength) && byteLength >= 1 && byteLength <= CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength && fileNameBytes <= CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes && ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType);
+}
+
+function withoutItem<T>(set: ReadonlySet<T>, item: T): ReadonlySet<T> {
+  const next = new Set(set);
+  next.delete(item);
+  return next;
+}
+
 export const ChatPanelPresentation = React.memo((props: ChatPanelSurfaceProps): React.JSX.Element => {
   return <ChatPanelSurface {...props} />;
 });
@@ -143,11 +155,7 @@ export const ChatPanelSurface = React.memo(
     }, [draft]);
     const startUpload = (file: ChatUploadFile) => {
       if (!onUploadAttachment) return undefined;
-      setFailedUploads((current) => {
-        const next = new Set(current);
-        next.delete(file);
-        return next;
-      });
+      setFailedUploads((current) => withoutItem(current, file));
       setUploading((current) => new Set(current).add(file));
       const task: Promise<{ readonly attachment: ChatAttachment } | { readonly error: string }> = Promise.resolve()
         .then(() => onUploadAttachment(file))
@@ -157,11 +165,7 @@ export const ChatPanelSurface = React.memo(
         )
         .then((result) => {
           if (uploads.current.get(file) !== task) return result;
-          setUploading((current) => {
-            const next = new Set(current);
-            next.delete(file);
-            return next;
-          });
+          setUploading((current) => withoutItem(current, file));
           if ("error" in result) {
             uploads.current.delete(file);
             setFailedUploads((current) => new Set(current).add(file));
@@ -174,16 +178,8 @@ export const ChatPanelSurface = React.memo(
     };
     const removeFile = (file: ChatUploadFile) => {
       uploads.current.delete(file);
-      setUploading((current) => {
-        const next = new Set(current);
-        next.delete(file);
-        return next;
-      });
-      setFailedUploads((current) => {
-        const next = new Set(current);
-        next.delete(file);
-        return next;
-      });
+      setUploading((current) => withoutItem(current, file));
+      setFailedUploads((current) => withoutItem(current, file));
       setStagedFiles((current) => current.filter((candidate) => candidate !== file));
     };
     const send = async () => {
@@ -218,11 +214,7 @@ export const ChatPanelSurface = React.memo(
         if (fileInputRef.current) fileInputRef.current.value = "";
         return;
       }
-      const invalid = selected.find((file) => {
-        const { fileName, mimeType, byteLength } = describeChatUploadFile(file);
-        const fileNameBytes = new TextEncoder().encode(fileName).byteLength;
-        return !fileName || !Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > CHALK_CHAT_ATTACHMENT_LIMITS.maximumByteLength || fileNameBytes > CHALK_CHAT_ATTACHMENT_LIMITS.maximumFileNameBytes || !ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType);
-      });
+      const invalid = selected.find((file) => !isSupportedUpload(file));
       if (invalid) {
         setComposerError(`${describeChatUploadFile(invalid).fileName} is not a supported chat attachment.`);
         if (fileInputRef.current) fileInputRef.current.value = "";

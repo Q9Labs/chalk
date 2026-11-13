@@ -244,22 +244,8 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
       return updateLocalMedia(snapshot, "microphone", command.enabled);
     case "setCameraEnabled":
       return updateLocalMedia(snapshot, "camera", command.enabled);
-    case "reactToMessage": {
-      const participantId = snapshot.self.participantId;
-      if (!participantId) return snapshot;
-      const messages = snapshot.chat.messages.map((message) => {
-        if (message.messageId !== command.input.messageId) return message;
-        const reactions = message.reactions ?? [];
-        const existing = reactions.find((reaction) => reaction.emoji === command.input.emoji);
-        const ids = existing?.participantIds ?? [];
-        if (ids.includes(participantId) === command.input.on) return message;
-        const participantIds = command.input.on ? [...ids, participantId] : ids.filter((id) => id !== participantId);
-        const next = reactions.filter((reaction) => reaction.emoji !== command.input.emoji);
-        if (participantIds.length) next.push({ emoji: command.input.emoji, count: participantIds.length, participantIds });
-        return { ...message, reactions: next, reactionRevision: String(BigInt(message.reactionRevision ?? "0") + 1n) };
-      });
-      return { ...snapshot, chat: { ...snapshot.chat, messages } };
-    }
+    case "reactToMessage":
+      return reactToPreviewMessage(snapshot, command.input);
     case "setScreenShareEnabled":
       return updateScreenShare(snapshot, command.enabled);
     case "startRecording":
@@ -310,6 +296,23 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
     case "markChatRead":
       return { ...snapshot, chat: { ...snapshot.chat, unreadCount: 0 } };
   }
+}
+
+function reactToPreviewMessage(snapshot: SpaceSnapshot, input: Extract<PreviewClientCommand, { type: "reactToMessage" }>["input"]): SpaceSnapshot {
+  const participantId = snapshot.self.participantId;
+  if (!participantId) return snapshot;
+  const messages = snapshot.chat.messages.map((message) => {
+    if (message.messageId !== input.messageId) return message;
+    const reactions = message.reactions ?? [];
+    const existing = reactions.find((reaction) => reaction.emoji === input.emoji);
+    const ids = existing?.participantIds ?? [];
+    if (ids.includes(participantId) === input.on) return message;
+    const participantIds = input.on ? [...ids, participantId] : ids.filter((id) => id !== participantId);
+    const next = reactions.filter((reaction) => reaction.emoji !== input.emoji);
+    if (participantIds.length) next.push({ emoji: input.emoji, count: participantIds.length, participantIds });
+    return { ...message, reactions: next, reactionRevision: String(BigInt(message.reactionRevision ?? "0") + 1n) };
+  });
+  return { ...snapshot, chat: { ...snapshot.chat, messages } };
 }
 
 function updateLocalMedia(snapshot: SpaceSnapshot, source: "microphone" | "camera", enabled: boolean): SpaceSnapshot {

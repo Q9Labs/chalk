@@ -37,6 +37,25 @@ export interface MessageBubbleProps {
   className?: string;
 }
 
+/** Fetches `url` and hands the bytes to the browser as a download. */
+async function saveUrlAsFile(url: string, fileName: string, signal: AbortSignal): Promise<void> {
+  // The preview image may have cached this URL without CORS headers, which would fail this fetch.
+  const response = await fetch(url, { cache: "no-store", signal });
+  if (!response.ok) throw new Error(`Attachment download failed (${response.status})`);
+  const blobUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    // Give the browser time to consume the URL before releasing its bytes.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
+  }
+}
+
 export const MessageBubble = React.memo<MessageBubbleProps>(
   ({
     content,
@@ -99,21 +118,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
       const controller = new AbortController();
       downloadController.current = controller;
       try {
-        // The preview image may have cached this URL without CORS headers, which would fail this fetch.
-        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
-        if (!response.ok) throw new Error(`Attachment download failed (${response.status})`);
-        const blobUrl = URL.createObjectURL(await response.blob());
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = photo.fileName;
-        document.body.appendChild(link);
-        try {
-          link.click();
-        } finally {
-          link.remove();
-          // Give the browser time to consume the URL before releasing its bytes.
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000);
-        }
+        await saveUrlAsFile(url, photo.fileName, controller.signal);
       } catch {
         if (!controller.signal.aborted) setDownloadError(`Could not download ${photo.fileName}. Try again.`);
       } finally {
