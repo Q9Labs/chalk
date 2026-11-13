@@ -12,6 +12,7 @@ import { createCallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
+import { offerNeedsFreshConnection } from "./offer-size";
 import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
   CloudflareSFUBootstrap,
@@ -886,18 +887,25 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (await this.#retireWithoutRenegotiation(publication, phase, handle)) return;
       this.#markBundledTransportRetiring(publication);
       let closed = connection.connectionState === "closed";
+      // A close offer that the node would refuse is skipped: a forced close needs no SDP, and the next publish rebuilds the connection.
+      const oversized = !closed && (await this.#offerOutgrowsNode(connection));
       if (!phase.detached && !closed) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
         closed = connection.connectionState === "closed";
-        if (!closed) transceiver.stop();
+        if (!closed && !oversized) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const forced = closed || oversized;
+      if (oversized && connection === this.#connection) {
+        this.#retiredLocalConnection = connection;
+        this.#retiredLocalCause = phase.cause;
+      }
+      const sessionDescription = forced ? undefined : await this.#createLocalOffer(connection, "close");
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: forced }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
+      if (!forced) await this.#applyProviderDescriptionIfOpen(response, connection, { generation: this.#generation, connectionId });
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
@@ -1153,6 +1161,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #prepareConnectionForPublication(states: readonly LocalTrackState[], generation: number): Promise<readonly LocalTrackState[]> {
     if (this.#retiredLocalConnection !== this.#connection || !this.#replaceMediaConnection) {
       await this.#replaceDormantConnectionBeforeNegotiation(generation);
+      if (await this.#replaceConnectionBeforeOfferOutgrowsNode(generation)) return this.#tracksToPublish(states);
+
       return states;
     }
     // Retiring the bundled sender can expire the Cloudflare SFU connection.
@@ -1162,6 +1172,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementAttemptedGeneration = null;
     await this.#replaceMediaConnectionForRecovery(generation, this.#retiredLocalCause);
     return [...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended");
+  }
+  // The node refuses a client offer over 64 KiB (see offer-size.ts). Before a publish the connection is rebuilt, which starts the next
+  // offer clean and joins the media again like a first join. No replacement cause is sent: the connection report's event list is closed.
+  async #replaceConnectionBeforeOfferOutgrowsNode(generation: number): Promise<boolean> {
+    if (!(await this.#offerOutgrowsNode(this.#connection))) return false;
+    this.#replacementAttemptedGeneration = null;
+    await this.#replaceMediaConnectionForRecovery(generation, undefined);
+    return true;
+  }
+  // A probe offer, never applied. Without a way to replace the connection there is nothing to do about a large offer.
+  async #offerOutgrowsNode(connection: RTCPeerConnection): Promise<boolean> {
+    if (!this.#replaceMediaConnection || connection.signalingState !== "stable") return false;
+    const probe = await connection.createOffer();
+    return probe.sdp !== undefined && offerNeedsFreshConnection(probe.sdp);
   }
   #pauseUnavailableOtherSources(publications: readonly CloudflareSFUPublication[], states: readonly LocalTrackState[]): void {
     for (const state of this.#localTracks.values()) {
@@ -2250,7 +2274,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementCause = undefined;
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }
-  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
+  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause | undefined): Promise<void> {
     this.#requireGeneration(generation);
     if (this.#replacement?.generation === generation) return this.#replacement.promise;
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {

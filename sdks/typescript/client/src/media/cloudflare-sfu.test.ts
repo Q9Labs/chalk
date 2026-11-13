@@ -2330,6 +2330,95 @@ it.each(["microphone", "camera"] as const)("ownership: production replacement fe
   }
 });
 
+describe("a long call's offer", () => {
+  // The Chalk SFU numbers every pull after its highest MID, and a browser keeps every closed m-section in every later offer, so
+  // each time another Participant toggles a microphone this guest's offer grows by one section, for the whole call. The node refuses
+  // an offer over 64 KiB. A Chromium audio section is about 1.1 KB (measured with two local peer connections).
+  const NODE_OFFER_LIMIT = 64 << 10;
+  const SECTION_BYTES = 1100;
+
+  async function joinWith(speakers: number) {
+    let connections = 1;
+    const replaceMediaConnection = vi.fn(async () => {
+      // Binding a new connection makes the publications of the prior one inactive.
+      harness.transport.localPublications.clear();
+      return bootstrap(`connection-${++connections}`);
+    });
+    const harness = createHarness({ replaceMediaConnection, offerBytesPerSection: SECTION_BYTES, maxOfferBytes: NODE_OFFER_LIMIT });
+    harness.transport.uniqueRemoteMids = true;
+    let sequence = 1;
+    let toggles = 0;
+    const speaking = (): Parameters<typeof harness.client.remotePublicationsChanged>[0] =>
+      Array.from({ length: speakers }, (_, index) => ({ participantId: `participant-${index + 2}`, source: "microphone" as const, publicationId: versionedPublicationID(`long-call-${toggles}-${index}`, "0", "microphone"), enabled: true }));
+    const publish = async (publications: readonly ReturnType<typeof speaking>[number][]) => {
+      harness.transport.snapshot = { incarnation: 1, sequence: ++sequence, publications };
+      harness.client.remotePublicationsChanged(publications);
+      await harness.client.refreshRemotePublications();
+    };
+    harness.transport.snapshot = { incarnation: 1, sequence, publications: speaking() };
+    const stream = fakeStream(new FakeTrack("microphone", "audio"), new FakeTrack("camera", "video"));
+    await harness.client.start(stream, async () => {
+      await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks).toHaveLength(speakers));
+      return stream;
+    });
+    // Every speaker mutes and unmutes: the guest closes the receivers and pulls fresh ones.
+    const everyoneToggles = async () => {
+      await publish([]);
+      toggles++;
+      await publish(speaking());
+    };
+    // The guest's own unmute is the offer the node measures.
+    let operations = 0;
+    // The microphone stays on and owns the BUNDLE tag; a camera toggle is the next offer, as a moderator's pause and resume would be.
+    const setCamera = (enabled: boolean) => harness.client.setLocalPublicationTarget({ operationId: `own-${++operations}`, participantId: "participant-1", source: "camera", enabled });
+    const ownToggle = async () => {
+      await setCamera(false);
+      expect(await setCamera(true)).toEqual({ outcome: "confirmed", errorCode: null });
+    };
+    const offerSizes = () => harness.transport.addInputs.flatMap((input) => (input.sessionDescription?.type === "offer" ? [input.sessionDescription.sdp.length] : []));
+    return { harness, replaceMediaConnection, everyoneToggles, ownToggle, offerSizes };
+  }
+
+  it("stays under the node's limit through any number of microphone toggles", async () => {
+    const call = await joinWith(3);
+    try {
+      for (let round = 0; round < 40; round++) {
+        await call.everyoneToggles();
+        await call.ownToggle();
+      }
+      expect(Math.max(...call.offerSizes())).toBeLessThanOrEqual(NODE_OFFER_LIMIT);
+      // 80 toggles add 80 sections to one connection, about 200 KB of offers. The call rebuilds it a few times instead.
+      expect(call.replaceMediaConnection.mock.calls.length).toBeGreaterThan(0);
+      expect(call.replaceMediaConnection.mock.calls.length).toBeLessThanOrEqual(4);
+      await call.harness.client.refreshRemotePublications();
+      expect(call.harness.client.getSnapshot().localTracks).toEqual(expect.arrayContaining([expect.objectContaining({ source: "microphone", enabled: true }), expect.objectContaining({ source: "camera", enabled: true })]));
+      expect(call.harness.client.getSnapshot().remoteTracks).toHaveLength(3);
+      expect(call.harness.client.getSnapshot().failure).toBeNull();
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  it("closes a forced-paused camera on a connection that has grown close to the limit", async () => {
+    const call = await joinWith(3);
+    try {
+      for (let round = 0; round < 20; round++) await call.everyoneToggles();
+      await call.harness.client.closeForcedLocalPublication("camera");
+      expect(call.offerSizes().every((size) => size <= NODE_OFFER_LIMIT)).toBe(true);
+      expect(call.harness.transport.closeInputs.filter((input) => input.sessionDescription).map((input) => input.sessionDescription!.sdp.length).every((size) => size <= NODE_OFFER_LIMIT)).toBe(true);
+      expect(call.harness.client.getSnapshot().localTracks).toEqual(expect.arrayContaining([expect.objectContaining({ source: "camera", enabled: false })]));
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+      // The resume is the next offer: it rebuilds the connection instead of sending one the node would refuse.
+      await call.harness.client.setLocalSourceIntent("camera", true);
+      expect(await call.harness.client.setLocalPublicationTarget({ operationId: "resume", participantId: "participant-1", source: "camera", enabled: true })).toEqual({ outcome: "confirmed", errorCode: null });
+      expect(call.replaceMediaConnection).toHaveBeenCalledTimes(1);
+      expect(call.offerSizes().every((size) => size <= NODE_OFFER_LIMIT)).toBe(true);
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+});
+
 describe("a withdrawn receiver that owns the BUNDLE transport", () => {
   // A guest that joins second pulls the others' media before its own publish, so the first receiver is m-section 0, the
   // BUNDLE tag. Stopping a receiver moves no SDP, so the guest's NEXT offer (its own mute) is the one that rejects that
@@ -4997,12 +5086,17 @@ function createHarness(
     readonly unreportedVideoTileWaitMs?: number;
     readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
     readonly bootstrap?: CloudflareSFUBootstrap;
+    /** Pads each offer by this many bytes per m-section, as a browser's SDP grows, and makes the SFU refuse an offer over maxOfferBytes. */
+    readonly offerBytesPerSection?: number;
+    readonly maxOfferBytes?: number;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
+  transport.maxOfferBytes = options.maxOfferBytes ?? null;
   const peerConnectionFactory = vi.fn(() => {
     const peer = new FakePeerConnection(options.connectsPeer?.(peers.length) ?? options.autoConnect ?? true);
+    peer.offerBytesPerSection = options.offerBytesPerSection ?? 0;
     peers.push(peer);
     return peer as unknown as RTCPeerConnection;
   });
@@ -5063,6 +5157,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   listPublicationCalls = 0;
   readonly publicationListSnapshots: CloudflareSFUPublicationSnapshot[] = [];
   maxLocalMids: number | null = null;
+  /** The node answers 400 to an offer larger than this. */
+  maxOfferBytes: number | null = null;
   snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
   readonly #blockedConnections = new Map<string, () => void>();
   readonly #localMids = new Set<string>();
@@ -5073,6 +5169,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   async addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
     this.addInputs.push(input);
+    if (this.maxOfferBytes !== null && input.sessionDescription?.type === "offer" && input.sessionDescription.sdp.length > this.maxOfferBytes) {
+      throw new CloudflareSFUError("the offer is larger than the node accepts", "signaling_failed", { status: 400 });
+    }
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     if (input.tracks.some((track) => track.location === "remote")) {
@@ -5135,6 +5234,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
+    if (this.maxOfferBytes !== null && input.sessionDescription?.type === "offer" && input.sessionDescription.sdp.length > this.maxOfferBytes) {
+      throw new CloudflareSFUError("the offer is larger than the node accepts", "signaling_failed", { status: 400 });
+    }
     if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
       throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
     }
@@ -5225,6 +5327,8 @@ class FakePeerConnection extends EventTarget {
   readonly transceiverInits: RTCRtpTransceiverInit[] = [];
   refuseSimulcast = false;
   refuseSimulcastOffer = false;
+  /** Every m-section, live, parked or stopped, adds this many bytes to an offer: a browser never drops one. */
+  offerBytesPerSection = 0;
   /** Chrome drops the whole transport when an offer rejects the m-section that owns the BUNDLE group (the first one). */
   dropsTransportWhenTagRejected = false;
   transportDropped = false;
@@ -5291,7 +5395,18 @@ class FakePeerConnection extends EventTarget {
   async createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit> {
     this.offerOptions.push(options);
     if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
+    if (this.offerBytesPerSection > 0) return { type: "offer", sdp: this.#sizedOffer() };
     return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
+  }
+  /** One m-section per transceiver, padded to offerBytesPerSection. A stopped section stays in the offer as a rejected one, as in a browser. */
+  #sizedOffer(): string {
+    const sections = this.getTransceivers().map((transceiver) => {
+      const stopped = (transceiver.direction as string) === "stopped";
+      const direction = stopped ? "inactive" : transceiver.direction;
+      const head = `m=audio ${stopped ? 0 : 9} UDP/TLS/RTP/SAVPF 111\r\na=mid:${transceiver.mid}\r\na=${direction}\r\n`;
+      return head + `a=padding:${"x".repeat(Math.max(0, this.offerBytesPerSection - head.length - 12))}\r\n`;
+    });
+    return `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n${sections.join("")}`;
   }
   async createAnswer(): Promise<RTCSessionDescriptionInit> {
     for (const section of this.#lastOffer.split(/\r?\n(?=m=)/)) {
