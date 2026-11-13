@@ -74,11 +74,14 @@ async function pool(items, size, work) {
   );
 }
 
-/** A state whose id ends in -light or -dark paints its own scheme, so only that scheme is walked. */
-const schemesFor = (state) => {
-  const id = state.split("&")[0];
-  return id.endsWith("-light") ? ["light"] : id.endsWith("-dark") ? ["dark"] : SCHEMES;
+/** A state whose id ends in -light or -dark paints its own scheme, so only that scheme is walked. A journey can also name its schemes. */
+const schemesFor = (journey) => {
+  const id = journey.state.split("&")[0];
+  return journey.schemes ?? (id.endsWith("-light") ? ["light"] : id.endsWith("-dark") ? ["dark"] : SCHEMES);
 };
+
+/** The pre-join fixtures and a journey marked `twin` take their theme from the state id, not from the cookie: each state has a "-light" twin. */
+const stateFor = (journey, scheme) => ((journey.page === "pre-join-states.html" || journey.twin) && scheme === "light" ? `${journey.state}-light` : journey.state);
 
 export function planRuns(only) {
   const runs = [];
@@ -87,7 +90,7 @@ export function planRuns(only) {
     for (const size of SIZES) {
       if (journey.sizes && !journey.sizes.includes(size.id)) continue;
       // The tablet is walked in one theme: it shares its layout rules with the phone and the desktop, which run in both.
-      const schemes = schemesFor(journey.state).filter((scheme) => size.id !== "tablet" || scheme === "dark" || schemesFor(journey.state).length === 1);
+      const schemes = schemesFor(journey).filter((scheme) => size.id !== "tablet" || scheme === "dark" || schemesFor(journey).length === 1);
       for (const scheme of schemes) runs.push({ journey, size, scheme });
     }
   }
@@ -136,7 +139,7 @@ async function stableFindings(page) {
   return first.filter((finding) => again.has(`${finding.check}|${finding.key}`));
 }
 
-function contextFor(browser, contexts, size, scheme) {
+function contextFor(browser, contexts, origin, size, scheme) {
   const key = `${size.id}-${scheme}`;
   if (!contexts.has(key)) {
     contexts.set(
@@ -154,6 +157,8 @@ function contextFor(browser, contexts, size, scheme) {
         })
         .then(async (context) => {
           await context.addInitScript(FROZEN);
+          // The harness reads its theme from this cookie (dark when absent), not from the browser's color scheme.
+          await context.addCookies([{ name: "chalk_theme", value: scheme, url: origin }]);
           return context;
         }),
     );
@@ -173,7 +178,7 @@ async function runOne({ context, origin, out, run }) {
   });
   const frames = [];
   try {
-    await page.goto(`${origin}/${journey.page ?? "call-states.html"}?state=${journey.state}`, { waitUntil: "load" });
+    await page.goto(`${origin}/${journey.page ?? "call-states.html"}?state=${stateFor(journey, scheme)}`, { waitUntil: "load" });
     await page.addStyleTag({ content: STILL });
     await page.evaluate(() => document.fonts.ready);
     // A call page is ready once its dock shows; heavy layouts such as 30 tiles can take seconds to get there under load.
@@ -242,7 +247,7 @@ export async function capture({ origin, out, only, concurrency }) {
   const frames = [];
   try {
     await pool(planRuns(only), concurrency, async (run) => {
-      const context = await contextFor(browser, contexts, run.size, run.scheme);
+      const context = await contextFor(browser, contexts, origin, run.size, run.scheme);
       frames.push(...(await runOne({ context, origin, out, run })));
     });
   } finally {
