@@ -32,8 +32,9 @@ const button = (label: string) => host.querySelector<HTMLButtonElement>(`button[
 const tray = () => host.querySelector('[role="toolbar"][aria-label="Reactions"]');
 const click = (element: HTMLElement | null | undefined) => act(async () => element?.click());
 
-async function mount(client = createPreviewClient(snapshot())) {
-  await act(async () => createRoot(host).render(<PreviewSpaceView client={client} spaceName="Q9 team" />));
+// Alone at call start the call menu opens with the invite; the dock tests start with it closed so only their own sheet shows.
+async function mount(client = createPreviewClient(snapshot()), callLink: "closed" | "auto" = "closed") {
+  await act(async () => createRoot(host).render(<PreviewSpaceView client={client} spaceName="Q9 team" callLinkOpen={callLink === "closed" ? false : undefined} />));
   return client;
 }
 
@@ -53,13 +54,27 @@ it("closes the tray when the hand goes up and turns the reactions button into a 
   expect(button("Reactions, hand raised")?.hasAttribute("data-hand-raised")).toBe(true);
 });
 
-it("does not reopen the tray by itself after a reconnect", async () => {
+it("keeps the tray through a reconnect, with emoji paused and the hand still working", async () => {
   const client = await mount();
   await click(button("Reactions"));
-  expect(tray()).not.toBeNull();
   await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "reconnecting" } })));
+  expect(tray()).not.toBeNull();
+  expect(tray()?.querySelector<HTMLButtonElement>(".chalk-shell-emoji")?.disabled).toBe(true);
+  expect(host.querySelector<HTMLButtonElement>(".chalk-shell-raise")?.disabled).toBe(false);
   await act(async () => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "live" } })));
-  expect(tray()).toBeNull();
+  expect(tray()?.querySelector<HTMLButtonElement>(".chalk-shell-emoji")?.disabled).toBe(false);
+});
+
+it("opens the call menu with the QR code for a person alone at call start", async () => {
+  await mount(undefined, "auto");
+  await settle();
+  const menu = await vi.waitFor(() => {
+    // The desktop call menu is a popover portalled to the body.
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (!dialog?.textContent?.includes("QR code")) throw new Error("No call menu yet.");
+    return dialog;
+  });
+  expect(menu.querySelector('[aria-controls="chalk-details-qr"]')?.getAttribute("aria-expanded")).toBe("true");
 });
 
 const phoneWidth = () => vi.stubGlobal("matchMedia", (media: string) => ({ matches: media === "(max-width: 640px)", media, addEventListener() {}, removeEventListener() {} }));
@@ -82,7 +97,8 @@ it("opens the microphone sheet after a 400 ms hold and leaves the mute state alo
     await act(async () => vi.advanceTimersByTime(1));
     await settle();
     expect(sheet()?.textContent).toContain("Audio");
-    expect(sheet()?.textContent).toContain("Noise suppression");
+    // The fixture passes no noise-suppression handler, so the switch is not offered.
+    expect(sheet()?.textContent).not.toContain("Noise suppression");
     await press(mic, "pointerup");
     await click(mic);
     expect(mic.getAttribute("aria-pressed")).toBe(muted);
@@ -123,7 +139,7 @@ it("lists the device rows in the More sheet, which opens the same pickers, and l
   const audio = [...(sheet()?.querySelectorAll<HTMLButtonElement>("button.chalk-sheet-row") ?? [])].find((row) => row.textContent?.startsWith("Microphone and speaker"));
   await click(audio);
   await settle();
-  expect(sheet()?.textContent).toContain("Noise suppression");
+  expect(sheet()?.textContent).toContain("Audio");
   expect(sheet()?.textContent).not.toContain("Flip camera");
 });
 

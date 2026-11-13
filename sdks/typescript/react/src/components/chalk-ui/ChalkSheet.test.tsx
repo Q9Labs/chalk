@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkSheet, type ChalkSheetProps } from "./ChalkSheet";
+import { CallLimboContext } from "../../internal/call-limbo-context";
 
 let host: HTMLElement;
 let root: Root;
@@ -155,4 +156,23 @@ it("keeps the reactions sheet open when a tap lands on a call notice", async () 
 it("focuses the details sheet itself when it opens, not its close button", async () => {
   const { sheet } = await open();
   await vi.waitFor(() => expect(document.activeElement).toBe(sheet));
+});
+
+it("closes under the limbo card and comes back where it was when the call returns", async () => {
+  const render = (limbo: boolean) =>
+    act(async () =>
+      root.render(
+        <CallLimboContext.Provider value={limbo}>
+          <ChalkSheet title="More options" open onOpenChange={() => undefined}>
+            <button type="button">Row</button>
+          </ChalkSheet>
+        </CallLimboContext.Provider>,
+      ),
+    );
+  await render(false);
+  expect(host.querySelector('[data-part="sheet"]')).not.toBeNull();
+  await render(true);
+  await act(async () => vi.waitFor(() => expect(host.querySelector('[data-part="sheet"]')).toBeNull()));
+  await render(false);
+  expect(host.querySelector('[data-part="sheet"]')).not.toBeNull();
 });

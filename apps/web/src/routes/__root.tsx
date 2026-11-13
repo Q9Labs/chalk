@@ -3,7 +3,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
 import { DASHBOARD_BOOT_SCRIPT } from "../lib/dashboard-boot";
-import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
+import { CALL_BOOT_CSS, THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
 import appCss from "../styles.css?url";
 installChunkLoadAutoReload();
@@ -46,6 +46,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <style dangerouslySetInnerHTML={{ __html: CALL_BOOT_CSS }} />
       </head>
       <body>
         {/* Draws the dashboard's opening frame before the app loads; does nothing on other pages. */}

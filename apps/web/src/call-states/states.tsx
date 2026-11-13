@@ -15,6 +15,7 @@ import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
+import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -73,7 +74,21 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Foundation toast announcement",
     render: () => (
       <main data-chalk className="h-dvh">
-        <ToastStack toasts={[{ id: "join", message: "Nora joined" }]} onDismiss={() => undefined} />
+        <ToastStack
+          toasts={[
+            {
+              id: "join",
+              icon: <Avatar name="Nora Patel" size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
+              message: (
+                <>
+                  <b style={{ fontWeight: 600 }}>Nora Patel</b> joined
+                </>
+              ),
+              duration: 60_000,
+            },
+          ]}
+          onDismiss={() => undefined}
+        />
       </main>
     ),
   },
@@ -84,7 +99,7 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Host declined the request",
     render: () => (
       <main className="h-dvh">
-        <CallLimbo spaceName={SPACE_NAME} message="The host declined your request to join." action={{ label: "Ask again", onClick: () => undefined }} />
+        <CallLimbo spaceName={SPACE_NAME} message="The host didn’t let you in" glyph="declined" action={{ label: "Go to Chalk", onClick: () => undefined }} secondaryAction={{ label: "Ask again", onClick: () => undefined }} />
       </main>
     ),
   },
@@ -125,7 +140,15 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "group-spotlight", title: "Ten people, spotlight", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} /> },
   { id: "group-grid", title: "Ten people, grid", render: () => <Live snapshot={liveSnapshot({ others: crowd(9) })} layout="grid" /> },
   { id: "crowd-grid", title: "Thirty people, grid with pages", render: () => <Live snapshot={liveSnapshot({ others: crowd(29) })} layout="grid" /> },
-  { id: "recording", title: "Recording on", render: () => <Live snapshot={liveSnapshot({ others: [nora], recording: true, capabilities: HOST })} /> },
+  {
+    id: "recording",
+    title: "Recording on",
+    render: () => {
+      const snapshot = liveSnapshot({ others: [nora], recording: true, capabilities: HOST });
+      const starting = { ...snapshot, recording: { ...snapshot.recording, current: { recordingId: "rec-1", status: "starting" as const, failureCode: null } } };
+      return <Live snapshot={starting} then={(client) => client.updateSnapshot(() => snapshot)} />;
+    },
+  },
 
   { id: "board", title: "Board open", render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
   { id: "board-grid", title: "Board open, grid picked", actions: [openLayout, { click: "Grid", role: "menuitemradio" }], render: () => <Live snapshot={liveSnapshot({ others: [nora], board: true })} /> },
@@ -170,8 +193,7 @@ export const CALL_STATES: readonly CallState[] = [
     {
       id: `board-follow-${scheme}`,
       title: `Board following Nora, ${scheme}`,
-      actions: [{ click: `More options for ${nora.name}` }, { click: "Follow", role: "menuitem" }] satisfies readonly Action[],
-      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, presenter: nora.id, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
     {
       id: `board-edges-${scheme}`,
@@ -193,7 +215,7 @@ export const CALL_STATES: readonly CallState[] = [
   {
     id: "participants",
     title: "Participants panel",
-    actions: [{ click: "Participants" }],
+    actions: [{ click: "People" }],
     render: () => (
       <Live
         snapshot={liveSnapshot({

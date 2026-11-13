@@ -1,11 +1,20 @@
 import { useState, type ReactNode } from "react";
 import { ChalkIconButton, ChalkSegmentedControl, ChalkSheet } from "../chalk-ui";
 
-export function DockLayout({ layout, onLayoutChange, devices, children }: { readonly children?: ReactNode; readonly devices?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
+export function DockLayout({ layout, onLayoutChange, devices, onOpen, children }: { readonly children?: ReactNode; readonly devices?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void; readonly onOpen?: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <ChalkIconButton size="lg" aria-label="More options" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+      <ChalkIconButton
+        size="lg"
+        aria-label="More options"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          onOpen?.();
+          setOpen(true);
+        }}
+      >
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path data-part="dock-more-glyph" d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="3" />
         </svg>

@@ -6,9 +6,10 @@ import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
 import type { V1ControlState, V1Participant, V1Presence, V1Projection } from "../sync/v1-types";
 import { V1_CAPABILITIES } from "../sync/v1-types";
-import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
+import type { AdmissionPolicyTarget, Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
 export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
-const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
+const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]), admissionPolicy: null });
+const ADMISSION_TARGETS = new Set<string>(["open", "knock"]);
 type SeatDevice = Pick<Participant, "identityId" | "deviceType"> & { readonly admissionRevision: number };
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ParticipantsControllerEffects = {
@@ -26,6 +27,7 @@ export type ParticipantsControllerEffects = {
   readonly remove: (participantId: string) => ClientEffect<void>;
   readonly admit: (requestId: string) => ClientEffect<void>;
   readonly deny: (requestId: string) => ClientEffect<void>;
+  readonly setAdmissionPolicy: (policy: AdmissionPolicyTarget) => ClientEffect<void>;
   readonly raiseHand: () => ClientEffect<void>;
   readonly lowerHand: () => ClientEffect<void>;
   readonly renameSelf: (displayName: string) => ClientEffect<void>;
@@ -105,6 +107,11 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#command(() => {
       assertIdentifier(requestId, "admission request ID");
       return ({ sync }) => foreign(() => sync.deny(requestId));
+    });
+  setAdmissionPolicy = (policy: AdmissionPolicyTarget): ClientEffect<void> =>
+    this.#command(() => {
+      if (!ADMISSION_TARGETS.has(policy)) throw invalid('Who can join must be "open" or "knock"');
+      return ({ sync }) => foreign(() => sync.setAdmissionPolicy(policy));
     });
   raiseHand = (): ClientEffect<void> => this.#setHandRaised(true);
   lowerHand = (): ClientEffect<void> => this.#setHandRaised(false);
@@ -237,7 +244,7 @@ function directed(result: { readonly request_id: string; readonly result: "deliv
 function participantsFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, devices: ReadonlyMap<string, SeatDevice>): ParticipantsSlice {
   const control = controlFor(snapshot);
   if (!control || control.status === "ended") return EMPTY_PARTICIPANTS;
-  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot), presenceFor(snapshot), devices), admissionQueue: admissionQueueFor(control.admissionRequests) });
+  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot), presenceFor(snapshot), devices), admissionQueue: admissionQueueFor(control.admissionRequests), admissionPolicy: control.admissionPolicy });
 }
 function controlFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["control"]> | null {
   if (!snapshot) return null;
@@ -327,6 +334,7 @@ function participantPresence(participantId: string, presence: ReturnType<Connect
 }
 function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): boolean {
   return (
+    left.admissionPolicy === right.admissionPolicy &&
     sameArray(left.roster, right.roster, sameParticipant) &&
     sameArray(
       left.admissionQueue,

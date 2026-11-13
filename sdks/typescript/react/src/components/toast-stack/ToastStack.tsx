@@ -143,3 +143,4 @@ function useShortCall(stack: RefObject<HTMLElement | null>, enabled: boolean): b
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
+

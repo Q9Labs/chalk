@@ -36,6 +36,10 @@ export interface SpaceHeaderProps {
   duration?: number;
   timeLeft?: number | null;
   isRecording?: boolean;
+  /** Seconds since recording started, known only to someone who saw it start; null for someone who joined mid-recording. */
+  recordingSeconds?: number | null;
+  /** Stops the recording from the call menu's Recording row. Only people who manage recording get it. */
+  onStopRecording?: () => void;
   isTranscribing?: boolean;
   layout?: "grid" | "focus";
   onLayoutChange?: (layout: "grid" | "focus") => void;

@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import { useJoinCall, usePendingJoin } from "./join-call";
 import { useEffect, useRef, useState } from "react";
 
 import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
@@ -119,7 +120,7 @@ export function HomePage() {
   const [starting, setStarting] = useState(false);
   const [limit, setLimit] = useState(SHOWN_ROWS);
   const toast = useToast();
-  const navigate = useNavigate();
+  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? listed(state.data)[0]?.id : undefined);
   const startKey = useRef(newCallIntent());
 
   async function startCall() {
@@ -228,13 +229,7 @@ export function HomePage() {
         </>
       )}
       {dialog?.kind === "ready" ? (
-        <CallReadyDialog
-          call={dialog.call}
-          link={dialog.link}
-          onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))}
-          onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })}
-          onClose={() => setDialog(null)}
-        />
+        <CallReadyDialog call={dialog.call} link={dialog.link} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
@@ -243,8 +238,9 @@ export function HomePage() {
 
 function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
-  const navigate = useNavigate();
-  const join = () => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } });
+  const joinCall = useJoinCall();
+  const joining = usePendingJoin() === call.id;
+  const join = () => joinCall(call);
   const status = live ? (
     <span className="live">
       <span className="dot" />
@@ -270,7 +266,8 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
-          <button type="button" className="btn sec sm" onClick={join}>
+          <button type="button" className="btn sec sm" aria-busy={joining || undefined} onClick={join}>
+            {joining ? <span className="spin" aria-hidden="true" /> : null}
             Join
           </button>
         ) : null}
@@ -338,6 +335,7 @@ function CopyMenuItem({ call, onDone }: { readonly call: HomeCallDTO; readonly o
 
 function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
   const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());
+  const joining = usePendingJoin() === call.id;
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
@@ -363,8 +361,8 @@ function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly
       description="Share this link with the people you want in the call. It keeps working after the call ends."
       onClose={onClose}
       actions={
-        <button type="button" className="btn pri" onClick={onJoin}>
-          <Icon name="cam" />
+        <button type="button" className="btn pri" aria-busy={joining || undefined} onClick={onJoin}>
+          {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
           Join call
         </button>
       }

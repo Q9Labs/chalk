@@ -5,9 +5,8 @@ import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon, VolumeHighIcon } from "../../utils/icons";
-import { DevicePopover } from "../device-popover/DevicePopover";
-import { CommandErrorAlert } from "../composite/CommandErrorAlert";
-import { CallLinkIcon } from "./CallLinkIcon";
+import { DevicePopover, preloadDeviceSheet } from "../device-popover/DevicePopover";
+import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
@@ -46,8 +45,6 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
     </ChalkTooltip>
   );
   const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <ShellIcon name="chat" />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
-  const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
-  const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
   const reactions =
     has("reactions") && (props.onOpenReactions || props.displayOnly) ? (
       <ChalkTooltip
@@ -71,7 +68,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       </ChalkTooltip>
     ) : null;
   return (
-    <div data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
+    <div data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls" onPointerDown={(event) => event.currentTarget.setAttribute("data-input", "pointer")} onKeyDown={(event) => event.currentTarget.setAttribute("data-input", "keyboard")}>
       <ShellStyles />
       {has("mic") ? (
         <DevicePopover
@@ -123,13 +120,19 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
         <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
       ) : null}
       {reactions}
-      {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
+      {!reactions && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
+      {has("record") && (props.onToggleRecording || props.displayOnly) ? (
+        <span className="chalk-shell-record chalk-shell-desktop" data-pending={props.isRecordingPending || undefined}>
+          {iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}
+        </span>
+      ) : null}
 
       <span className="chalk-shell-phone">
         <DockLayout
           layout={props.layout ?? "focus"}
           onLayoutChange={props.onLayoutChange ?? (() => {})}
+          onOpen={preloadDeviceSheet}
           devices={
             <>
               {has("mic") ? (
@@ -201,38 +204,31 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onLeave={props.onLeft}
           onEndForEveryone={props.onEndForEveryone}
           renderButton={(buttonProps) => (
-            <ChalkIconButton {...buttonProps} size="lg" tone="danger" aria-label="Leave call">
+            <ChalkIconButton {...buttonProps} size="lg" tone="danger" className="chalk-shell-leave" aria-label="Leave call">
               <ShellIcon name="hang" />
             </ChalkIconButton>
           )}
         />
-      ) : null}
-      <span className="chalk-shell-corner chalk-shell-people">
-        <ChalkTooltip
-          trigger={
-            <ChalkIconButton size="lg" data-call-link-trigger aria-label={linkLabel} aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
-              <CallLinkIcon />
-            </ChalkIconButton>
-          }
-        >
-          {linkLabel}
-        </ChalkTooltip>
-      </span>
-      {has("record") && (props.onToggleRecording || props.displayOnly) ? (
-        <span className="chalk-shell-corner chalk-shell-record chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span>
       ) : null}
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>
   );
 });
 ControlBarSurface.displayName = "ControlBarSurface";
+/** A standalone dock has no call toast stack, so its media notice or command failure gets one of its own, dismissible until the message changes. Inside a call (`onCommandError` set) the call's own stack shows both, above the dock. */
+function ControlBarNotice({ message }: { readonly message: string | undefined }): React.JSX.Element | null {
+  const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+  if (!message || message === dismissed) return null;
+  const toasts: Toast[] = [{ id: "control-bar-notice", type: "error", duration: Infinity, message }];
+  return <ToastStack toasts={toasts} onDismiss={() => setDismissed(message)} />;
+}
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
   const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice, cardUnavailable } = useConnectedControlBarBehavior(props);
   const failure = !props.onCommandError && commandError && (cardUnavailable || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? failure} />
+      {props.onCommandError ? null : <ControlBarNotice message={mediaNotice ?? failure} />}
       {requestingDevice ? (
         <Suspense fallback={null}>
           <LazyDeviceAccessWaiting device={requestingDevice} />
