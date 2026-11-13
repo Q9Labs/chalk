@@ -107,7 +107,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
-  readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
+  readonly #replaceMediaConnection: ((observedConnectionId: string) => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
   readonly #failureOwners = new WeakMap<Error, { readonly generation: number; readonly connectionId: string }>();
@@ -2311,7 +2311,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementAttemptedGeneration = generation;
     const replaceMediaConnection = this.#replaceMediaConnection;
     const promise = Promise.resolve().then(async () => {
-      const bootstrap = await replaceMediaConnection();
+      // A restart that ran while this was queued already adopted a binding; asking again would replace that one.
+      this.#requireGeneration(generation);
+      const bootstrap = await replaceMediaConnection(this.#bootstrap.connectionId);
       this.#requireGeneration(generation);
       validateBootstrap(bootstrap);
       if (bootstrap.connectionId === this.#bootstrap.connectionId) {

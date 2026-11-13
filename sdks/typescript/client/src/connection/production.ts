@@ -106,7 +106,7 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
   const client = new CloudflareSFUClient({
     bootstrap,
     participantId: subject.participantId,
-    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
