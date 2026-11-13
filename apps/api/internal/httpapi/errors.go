@@ -48,6 +48,7 @@ var (
 	apiErrorSpaceSlugAlreadyUsed          = APIError{Status: http.StatusConflict, Code: "space.slug_conflict", Message: "Space slug already used"}
 	apiErrorSpaceNotFound                 = APIError{Status: http.StatusNotFound, Code: "space.not_found", Message: "Space not found"}
 	apiErrorInvalidSpaceArchiveFilter     = APIError{Status: http.StatusBadRequest, Code: "space.invalid_archive_filter", Message: "Invalid archived filter"}
+	apiErrorInvalidSpaceOrder             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_order", Message: "order must be created or active"}
 	apiErrorEpisodeNotFound               = APIError{Status: http.StatusNotFound, Code: "episode.not_found", Message: "Episode not found"}
 	apiErrorInvalidParticipantID          = APIError{Status: http.StatusBadRequest, Code: "participant.invalid_id", Message: "Invalid Participant id"}
 	apiErrorInvalidRequestKey             = APIError{Status: http.StatusBadRequest, Code: "request.invalid_idempotency_key", Message: "Idempotency-Key must contain 16 to 128 ASCII letters, digits, underscores, or hyphens"}
