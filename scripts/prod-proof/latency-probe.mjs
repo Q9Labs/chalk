@@ -18,8 +18,9 @@ export function installLatencyProbe() {
     return rows;
   }
   const remote = (participantId, source) => (snapshot()?.media.remote ?? []).filter((entry) => entry.participantId === participantId && entry.source === source && entry.track.readyState === "live");
-  // A track that no packet reached for this long carries no audio.
-  const quietMs = 200;
+  // Opus DTX sends a packet at least every 400 ms while the sender is silent, so a shorter gap proves nothing.
+  const quietMs = 600;
+  let actionAt = 0;
   const member = (participantId) => snapshot()?.participants.roster.find((entry) => entry.participantId === participantId);
 
   const conditions = {
@@ -31,25 +32,28 @@ export function installLatencyProbe() {
     },
     gone: ({ participantId, source }) => remote(participantId, source).length === 0,
     // A muted microphone stays published and its remote track stays live, so "no live track" means: the track
-    // ended, or every live one is disabled or muted and no packet reached it for quietMs. Returns the time the
-    // silence began: the last packet, or the first sample that saw the track silenced.
+    // ended, or every live one is disabled and no packet reached it for quietMs. Every live track must have
+    // inbound counters, so missing stats never count as silence. Returns when the silence began (the last
+    // packet, or the first sample that saw it), never before the action.
     async silenced({ participantId, source }, _baseline, memory) {
       const live = remote(participantId, source);
       if (!live.length) return now();
-      if (live.some((entry) => entry.track.enabled && !entry.track.muted)) {
+      if (live.some((entry) => entry.track.enabled)) {
         memory.since = null;
         return false;
       }
-      const tracks = new Set(live.map((entry) => entry.track.id));
-      const counts = (await inbound())
-        .filter((row) => tracks.has(row.track))
+      const rows = await inbound();
+      const counted = live.map((entry) => rows.filter((row) => row.track === entry.track.id));
+      if (counted.some((own) => own.length === 0)) return false;
+      const counts = counted
+        .flat()
         .map((row) => `${row.key}=${row.count}`)
         .sort()
         .join();
       const at = now();
       if (memory.since == null || counts !== memory.counts) memory.since = at;
       memory.counts = counts;
-      return at - memory.since >= quietMs ? memory.since : false;
+      return at - memory.since >= quietMs ? Math.max(memory.since, actionAt) : false;
     },
     silent: ({ participantId }) => !(snapshot()?.media.remote ?? []).some((entry) => entry.participantId === participantId && entry.track.readyState === "live"),
     roster: ({ participantId, field, value }) => member(participantId)?.media[field] === value,
@@ -96,6 +100,7 @@ export function installLatencyProbe() {
     },
     async act(action, value) {
       const at = now();
+      actionAt = at;
       await actions[action](value);
       return { at, settledAt: now(), leaveAckAt: window.proofLeave?.ackAt ?? null };
     },
