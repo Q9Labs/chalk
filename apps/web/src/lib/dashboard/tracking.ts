@@ -153,14 +153,22 @@ function readable(read: Read, now: number): boolean {
   return read.failure?.kind !== "terminal" && now >= read.retryAt;
 }
 
+function recordingDue({ recording, read, offset }: Attempt, now: number): boolean {
+  const open = openWindow(recording) && (lapsed(recording, now + offset) || now - read.at >= REVALIDATE_MS);
+  return readable(read, now) && (workingRecording(recording) || open || read.stale || read.failure !== null);
+}
+
+function transcriptsDue({ recording, listRead }: Attempt, now: number): boolean {
+  const listing = recording.transcripts === undefined || recording.transcripts.some(pendingTranscript);
+  return readable(listRead, now) && (listing || listRead.stale || listRead.failure !== null);
+}
+
 function dueForAttempt(item: Attempt, shown: Attempt | undefined, now: number): Due[] {
   const { recording, read, listRead } = item;
   const id = recording.id;
-  const open = openWindow(recording) && (lapsed(recording, now + item.offset) || now - read.at >= REVALIDATE_MS);
-  const listing = recording.transcripts === undefined || recording.transcripts.some(pendingTranscript);
   const due: Due[] = [];
-  if (readable(read, now) && (workingRecording(recording) || open || read.stale || read.failure !== null)) due.push({ kind: "recording", id, at: read.at });
-  if (readable(listRead, now) && (listing || listRead.stale || listRead.failure !== null)) due.push({ kind: "transcripts", id, at: listRead.at });
+  if (recordingDue(item, now)) due.push({ kind: "recording", id, at: read.at });
+  if (transcriptsDue(item, now)) due.push({ kind: "transcripts", id, at: listRead.at });
   const done = item === shown ? recording.transcripts?.find(completedTranscript) : undefined;
   const lines = item.lines?.transcriptId === done?.id ? item.lines : null;
   // A transcript whose lines were never read is due at once, ahead of items read before.
