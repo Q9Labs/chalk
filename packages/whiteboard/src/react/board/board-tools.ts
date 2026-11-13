@@ -23,7 +23,7 @@ export const TOOL_GROUPS: readonly (readonly ToolEntry[])[] = [
   ],
 ];
 
-export const SHAPE_ENTRIES: readonly ToolEntry[] = SHAPES.map((shape) => ({ tool: shape.id, label: shape.label, key: shape.key, glyph: shape.id }));
+const SHAPE_ENTRIES: readonly ToolEntry[] = SHAPES.map((shape) => ({ tool: shape.id, label: shape.label, key: shape.key, glyph: shape.id }));
 
 const byTool = new Map<BoardTool, ToolEntry>([...TOOL_GROUPS.flat(), ...SHAPE_ENTRIES].map((entry) => [entry.tool, entry]));
 

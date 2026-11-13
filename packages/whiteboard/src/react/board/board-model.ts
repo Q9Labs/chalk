@@ -74,7 +74,7 @@ function surfaceKey(surface: BoardSurface, theme: CallTheme): string {
   return surface === "dots" ? `dots-${theme}` : surface;
 }
 
-export function isDarkSurface(surface: BoardSurface, theme: CallTheme): boolean {
+function isDarkSurface(surface: BoardSurface, theme: CallTheme): boolean {
   return DARK_SURFACES.has(surfaceKey(surface, theme));
 }
 
@@ -146,8 +146,8 @@ export function strokePreview(tool: BoardTool, color: PenColor, width: PenWidth,
   return { stroke: penHex(color, surface, theme), width: widthUnits(width), opacity: 1 };
 }
 
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 4;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 4;
 
 export function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));

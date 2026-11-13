@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { WhiteboardCanvasClassNames } from "./WhiteboardCanvas";
 
-export interface MathEditorIcons {
+interface MathEditorIcons {
   close?: ReactNode;
   submit?: ReactNode;
   submitting?: ReactNode;

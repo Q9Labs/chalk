@@ -2,7 +2,7 @@ import type { OrderedExcalidrawElement } from "./types";
 
 // Sync stores one element, envelope included, in at most 16,384 bytes of its own JSON (whiteboard-v1).
 // The engine keeps a margin for differences between that encoder and JSON.stringify that it does not count.
-export const ELEMENT_ENCODED_BYTES_LIMIT = 16_384 - 64;
+const ELEMENT_ENCODED_BYTES_LIMIT = 16_384 - 64;
 const encoder = new TextEncoder();
 
 export type WhiteboardJsonValue = null | boolean | number | string | readonly WhiteboardJsonValue[] | { readonly [key: string]: WhiteboardJsonValue };
@@ -115,6 +115,7 @@ export function fromWireElement(element: WhiteboardWireElement): OrderedExcalidr
     throw new Error("invalid whiteboard-v1 element");
   }
 
+  // The payload is untyped JSON and Excalidraw brands the element fields, so the cast is the only way to the element type.
   return {
     ...element.payload,
     id: element.id,

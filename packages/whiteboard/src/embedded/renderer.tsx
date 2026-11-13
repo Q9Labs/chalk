@@ -169,7 +169,7 @@ function EmbeddedWhiteboardRenderer(): React.JSX.Element {
   );
 }
 
-export function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboardRendererBridge) {
+function createCollaborationBridge(rendererBridge: ChalkEmbeddedWhiteboardRendererBridge) {
   const listeners = new Set<(event: WhiteboardCollaborationEvent) => void>();
   rendererBridge.subscribe((message) => {
     const event = collaborationEvent(message);

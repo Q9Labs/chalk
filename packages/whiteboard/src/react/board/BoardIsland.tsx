@@ -5,7 +5,7 @@ import { BoardIcon, GripIcon } from "./BoardIcon";
 import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, checkInk, strokeChip, strokePreview, strokeTarget, surfaceFill, surfaceInk, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
 import { TOOL_GROUPS, TRAY_COLUMNS, TRAY_TOOLS, toolEntry, type ToolEntry } from "./board-tools";
 
-export type IslandProps = {
+type IslandProps = {
   readonly tool: BoardTool;
   readonly shape: ShapeTool;
   readonly onTool: (tool: BoardTool) => void;

@@ -6,7 +6,7 @@ import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandP
 
 const MOBILE_ISLAND_PLACES = [...ISLAND_PLACES].reverse();
 
-export type BoardMenuProps = {
+type BoardMenuProps = {
   readonly presentation?: "web" | "mobile";
   readonly surface: BoardSurface;
   readonly onSurface: (surface: BoardSurface) => void;

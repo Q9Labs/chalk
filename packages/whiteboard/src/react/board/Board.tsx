@@ -1,6 +1,6 @@
 import type { WhiteboardView as ChalkWhiteboardView } from "../../collab/view";
 import { useEngineHistory } from "./board-history";
-import { ViewVersions } from "./board-view-versions";
+import { ChalkWhiteboardViewVersions } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "../WhiteboardCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useMediaQuery, usePrefersReducedMotion } from "./useMediaQuery";
@@ -357,7 +357,7 @@ export function Board({
   const viewSender = useRef(sendView);
   viewSender.current = sendView;
   const selectedFollow = useRef<string | null>(following);
-  const appliedVersions = useRef(new ViewVersions());
+  const appliedVersions = useRef(new ChalkWhiteboardViewVersions());
   const previousRoster = useRef(new Set(participantIds ?? people.map((person) => person.id)));
   useEffect(() => {
     const next = new Set(participantIds ?? people.map((person) => person.id));

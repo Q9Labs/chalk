@@ -22,7 +22,7 @@ const permittedMimeTypes = new Set(["application/octet-stream", "image/gif", "im
 const permittedRendererMetrics = new Set(["whiteboard.bridge.backlog", "whiteboard.file.failure", "whiteboard.frame.delay_ms", "whiteboard.input.delay_ms", "whiteboard.recovery.count", "whiteboard.renderer.memory_bytes", "whiteboard.renderer.termination"]);
 const permittedRendererErrorCodes = new Set(["export_failed", "invalid_file_result", "invalid_host_message", "invalid_operation_result", "renderer_load_failed", "submission_failed"]);
 
-export type ChalkEmbeddedWhiteboardTransportElement = {
+type ChalkEmbeddedWhiteboardTransportElement = {
   readonly id: string;
   readonly type: string;
   readonly version: number;

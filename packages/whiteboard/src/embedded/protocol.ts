@@ -1,6 +1,6 @@
 import type { WhoCanDraw } from "../react/board/board-draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
-import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
+import type { WhiteboardWireElement } from "../collab/wire";
 
 export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
 export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = "0.18.1" as const;
@@ -332,4 +332,3 @@ function encodedBytes(value: unknown): number {
   return new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
 }
 
-export type ChalkEmbeddedWhiteboardCommit = WhiteboardCommit;

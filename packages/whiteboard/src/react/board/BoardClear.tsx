@@ -5,7 +5,7 @@ import { BoardIcon } from "./BoardIcon";
 import type { BoardToast } from "./board-toasts";
 
 /** Whoever the board belongs to loses it when it is cleared, so the dialog says how many people that is. */
-export function clearConfirmBody(people: number, canUndo: boolean): string {
+function clearConfirmBody(people: number, canUndo: boolean): string {
   const goes = people > 1 ? `Everything on it goes for the ${people} people here.` : "Everything on it goes.";
   return canUndo ? `${goes} You can undo right after.` : goes;
 }

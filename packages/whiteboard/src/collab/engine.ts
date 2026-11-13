@@ -19,6 +19,7 @@ const CURSOR_THROTTLE_MS = 16;
 const CURSOR_STALE_MS = 10_000;
 
 const asArray = (value: unknown) => (Array.isArray(value) ? value : []);
+// Excalidraw types remote elements as branded RemoteExcalidrawElement; ours are validated wire elements.
 const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]): Parameters<typeof reconcileElements>[1] => elements as unknown as Parameters<typeof reconcileElements>[1];
 
 const isNewerVersion = (element: Pick<OrderedExcalidrawElement, "version" | "versionNonce">, previous: Pick<OrderedExcalidrawElement, "version" | "versionNonce">): boolean => element.version > previous.version || (element.version === previous.version && element.versionNonce < previous.versionNonce);

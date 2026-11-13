@@ -1,8 +1,8 @@
 import type { Camera, Viewport } from "./board-model";
 
-export type ScreenPoint = { readonly x: number; readonly y: number };
+type ScreenPoint = { readonly x: number; readonly y: number };
 export type Edge = "left" | "right" | "top" | "bottom";
-export type EdgePointer = { readonly edge: Edge; readonly x: number; readonly y: number; /** Degrees clockwise from pointing right, towards the cursor. */ readonly angle: number };
+type EdgePointer = { readonly edge: Edge; readonly x: number; readonly y: number; /** Degrees clockwise from pointing right, towards the cursor. */ readonly angle: number };
 type Insets = { readonly top: number; readonly right: number; readonly bottom: number; readonly left: number };
 
 /** The tag sits 12px right of the arrow and 18px below it, as in the stylesheet. */
