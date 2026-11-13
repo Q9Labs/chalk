@@ -96,7 +96,7 @@ function toggles(participantId) {
   return [
     { action: "camera", value: false, group: "camera_off", command: "live_target:set_camera_enabled:false", specs: [signal("action.camera_toggle.off_ms", "camera", "inactive"), { name: "action.unpublish.removed_ms", kind: "gone", participantId, source: "camera" }] },
     { action: "camera", value: true, group: "camera_on", command: "live_target:set_camera_enabled:true", specs: [signal("action.camera_toggle.on_ms", "camera", "active"), { name: "action.publish.first_frame_ms", kind: "frame", participantId, source: "camera" }] },
-    { action: "microphone", value: false, group: "mic_off", command: "live_target:set_microphone_enabled:false", specs: [signal("action.mic_toggle.off_ms", "microphone", "inactive"), { name: "action.unpublish.audio_removed_ms", kind: "gone", participantId, source: "microphone" }] },
+    { action: "microphone", value: false, group: "mic_off", command: "live_target:set_microphone_enabled:false", specs: [signal("action.mic_toggle.off_ms", "microphone", "inactive"), { name: "action.unpublish.audio_removed_ms", kind: "silenced", participantId, source: "microphone" }] },
     { action: "microphone", value: true, group: "mic_on", command: "live_target:set_microphone_enabled:true", specs: [signal("action.mic_toggle.on_ms", "microphone", "active"), { name: "action.publish.first_audio_ms", kind: "frame", participantId, source: "microphone" }] },
   ];
 }
