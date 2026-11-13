@@ -23,7 +23,7 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
 export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
-export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs", "scripts/gates/gate-runner-label.test.mjs"];
+export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs", "scripts/gates/gate-runner-label.test.mjs", "scripts/gates/stale-merge-group.test.mjs"];
 // scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
