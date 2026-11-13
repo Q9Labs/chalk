@@ -1383,7 +1383,7 @@ function createCoordinatedCall(source: "microphone" | "camera", trackId: string)
       },
     },
   );
-  return { harness, platform, track, coordinator, client };
+  return { harness, platform, track, coordinator, command, client };
 }
 function createSpaceClientMicrophoneHarness(harness: Harness, microphone: FakeTrack) {
   const basePlatform = createCoreTestPlatform();
@@ -2850,7 +2850,7 @@ it.each(["microphone", "camera"] as const)("retires only its own timed-out %s pu
 });
 
 it.each([false, true])("retires a committed microphone after interrupted enable (Sync reconnect: %s)", async (reconnect) => {
-  const { harness, platform, track: microphone, coordinator, client } = createCoordinatedCall("microphone", "rejected-enable");
+  const { harness, platform, track: microphone, coordinator, command, client } = createCoordinatedCall("microphone", "rejected-enable");
   let committedPublication: string | undefined;
   const unsubscribe = harness.client.observeLocalPublications((publications) => {
     const publication = publications.find((item) => item.source === "microphone" && item.enabled);

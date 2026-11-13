@@ -77,33 +77,20 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     this.addInputs.push(input);
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
-    if (input.tracks.some((track) => track.location === "remote")) {
-      if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
-      if (this.failRemotePullCount > 0) {
-        this.failRemotePullCount--;
-        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
-      }
-      if (this.failNextRemotePull) {
-        this.failNextRemotePull = false;
-        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
-      }
-      const tracks = input.tracks
-        .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`))
-        .map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
-      const trackErrors = input.tracks.flatMap((track) => {
-        const code = this.failedRemoteTrackNames.get(track.trackName) ?? (this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`) ? "publication_unavailable" : undefined);
-        return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
-      });
-      if (this.reverseRemoteTracks) tracks.reverse();
-      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${this.uniqueRemoteMids ? track.mid : index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
-      const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
-      return {
-        tracks,
-        trackErrors,
-        requiresImmediateRenegotiation,
-        sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: this.remoteOfferSDP ?? "remote-offer" } : undefined,
-      };
+    return input.tracks.some((track) => track.location === "remote") ? this.#pullRemote(input) : this.#publishLocal(input);
+  }
+  #throwQueuedRemotePullFailure(): void {
+    if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
+    if (this.failRemotePullCount > 0) {
+      this.failRemotePullCount--;
+      throw new CloudflareSFUError("remote pull failed", "signaling_failed");
     }
+    if (this.failNextRemotePull) {
+      this.failNextRemotePull = false;
+      throw new CloudflareSFUError("remote pull failed", "signaling_failed");
+    }
+  }
+  #throwQueuedLocalPublishFailure(): void {
     if (this.failNextLocalPublish) {
       this.failNextLocalPublish = false;
       throw new CloudflareSFUError("local publish failed", "signaling_failed");
@@ -118,17 +105,39 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
       this.failNextStaleLocalPublish = false;
       throw new CloudflareSFUError("stale local publish failed", "signaling_failed", { status: 410, retryableConnection: true });
     }
+  }
+  #pullRemote(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): CloudflareSFUTracksResponse {
+    this.#throwQueuedRemotePullFailure();
+    const withdrawn = (track: { readonly sessionId?: string; readonly trackName: string }) => this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`);
+    const tracks = input.tracks
+      .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !withdrawn(track))
+      .map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
+    const trackErrors = input.tracks.flatMap((track) => {
+      const code = this.failedRemoteTrackNames.get(track.trackName) ?? (withdrawn(track) ? "publication_unavailable" : undefined);
+      return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
+    });
+    if (this.reverseRemoteTracks) tracks.reverse();
+    tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${this.uniqueRemoteMids ? track.mid : index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
+    const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
+    return {
+      tracks,
+      trackErrors,
+      requiresImmediateRenegotiation,
+      sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: this.remoteOfferSDP ?? "remote-offer" } : undefined,
+    };
+  }
+  #publishLocal(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): CloudflareSFUTracksResponse {
+    this.#throwQueuedLocalPublishFailure();
     const localMids = input.tracks.flatMap((track) => (track.location === "local" && track.mid !== undefined ? [track.mid] : []));
     const nextLocalMids = new Set([...this.#localMids, ...localMids]);
     if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new CloudflareSFUError("local media-section budget exceeded", "signaling_failed");
     for (const mid of localMids) this.#localMids.add(mid);
     const tracks = input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) }));
     for (const track of tracks) {
-      if (track.source) {
-        this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
-        this.#withdrawnLocalPublications.delete(track.publicationId);
-        this.#localPublicationRevision++;
-      }
+      if (!track.source) continue;
+      this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
+      this.#withdrawnLocalPublications.delete(track.publicationId);
+      this.#localPublicationRevision++;
     }
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
