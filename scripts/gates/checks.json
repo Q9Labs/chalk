@@ -1261,6 +1261,28 @@
       "minutes": null,
       "record": "never-failed",
       "sample": "14 nightly values between 0.3 and 0.5 s."
+    },
+    {
+      "id": "workflow:formal-client-recovery.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the SDK connection and recovery lifecycle (join, Sync and media recovery, access refresh, terminal frames, Leave), or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
+    },
+    {
+      "id": "workflow:formal-media-control.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the media-control model, or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
     }
   ]
 }
