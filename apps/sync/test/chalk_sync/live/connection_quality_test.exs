@@ -1,28 +1,17 @@
 defmodule ChalkSync.Live.ConnectionQualityTest do
-  use ExUnit.Case, async: false
+  use ChalkSync.PostgresCase, async: false
 
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Live.Projection
-  alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Memory
-  alias ChalkSync.UUID
+  alias ChalkSync.SyncPostgres
 
-  setup do
-    episode = %EpisodeKey{
-      tenant_id: UUID.generate(),
-      space_id: UUID.generate(),
-      episode_id: UUID.generate()
-    }
-
-    participant_id = UUID.generate()
-    Memory.reset()
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: participant_id, generation: 1, display_name: "Ada", role: "owner"}
-      ])
+  setup %{connection: connection} do
+    fixture = SyncPostgres.seed_episode(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    episode = fixture.episode
+    [identity] = fixture.identities
+    participant_id = identity.participant_id
 
     {:ok, adapter} =
       MediaPlaneTestAdapter.start_link(outcomes: %{observe_episode_publications: {:ok, []}})
@@ -35,12 +24,6 @@ defmodule ChalkSync.Live.ConnectionQualityTest do
         do: Application.put_env(:chalk_sync, :media_plane, previous),
         else: Application.delete_env(:chalk_sync, :media_plane)
     end)
-
-    identity = %Identity{
-      episode: episode,
-      participant_id: participant_id,
-      participant_generation: 1
-    }
 
     socket = spawn(fn -> Process.sleep(:infinity) end)
     on_exit(fn -> Process.exit(socket, :kill) end)

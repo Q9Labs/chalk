@@ -1,15 +1,6 @@
 defmodule ChalkSync.Chat.Repository.SQL do
   @moduledoc false
 
-  def transaction_settings do
-    """
-    select
-      set_config('lock_timeout', '750ms', true),
-      set_config('statement_timeout', '2s', true),
-      set_config('synchronous_commit', 'on', true)
-    """
-  end
-
   def lock_authority do
     """
     select

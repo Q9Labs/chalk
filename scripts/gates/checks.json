@@ -475,6 +475,17 @@
       "sample": "Split from the Sync job (PR 1210); no failure history of its own yet."
     },
     {
+      "id": "workflow:gate.yml#proof",
+      "owner": "Gate",
+      "catches": "A merge queue run that repeats groups its pull request already passed: this job saves what the pull request run proved so the queue can skip it.",
+      "runs": ["pull_request"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New with the queue proof sharing; no history yet.",
+      "reason": "It only saves what the pull request already proved. If it fails, the queue runs every group again, which is the safe direction."
+    },
+    {
       "id": "workflow:host-change-check.yml#check",
       "owner": "Monitoring",
       "catches": "A change to the node that no release made, read from CloudTrail every five minutes and sent to Oncall.",

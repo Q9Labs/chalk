@@ -165,7 +165,7 @@ func loadWebhookClaim(ctx context.Context, tx pgx.Tx, delivery sqlc.WebhookDeliv
 			return webhooks.Claim{}, err
 		}
 	}
-	return webhooks.Claim{TenantID: id(delivery.TenantID), EndpointID: id(delivery.EndpointID), EndpointRevisionID: id(delivery.EndpointRevisionID), DeliveryID: id(delivery.ID), EventID: id(delivery.EventID), AttemptNumber: int(delivery.AttemptCount), EventName: eventName, APIVersion: int(apiVersion), OccurredAt: timestamp(occurredAt), Body: body, URLCiphertext: urlCiphertext, CurrentSecretCiphertext: currentSecret, PreviousSecretCiphertext: previousSecret, PreviousSecretExpiresAt: nullableTimestamp(previousExpires), LeaseToken: token, JourneyID: id(journeyID), QueuedJourneyEventID: id(delivery.QueuedJourneyEventID), AttemptParentJourneyEventID: parentID, ProducingTraceID: traceID.String, ProducingSpanID: spanID.String}, nil
+	return webhooks.Claim{TenantID: id(delivery.TenantID), EndpointID: id(delivery.EndpointID), EndpointRevisionID: id(delivery.EndpointRevisionID), DeliveryID: id(delivery.ID), EventID: id(delivery.EventID), AttemptNumber: int(delivery.AttemptCount), EventName: webhooks.EventName(eventName), APIVersion: int(apiVersion), OccurredAt: timestamp(occurredAt), Body: body, URLCiphertext: urlCiphertext, CurrentSecretCiphertext: currentSecret, PreviousSecretCiphertext: previousSecret, PreviousSecretExpiresAt: nullableTimestamp(previousExpires), LeaseToken: token, JourneyID: id(journeyID), QueuedJourneyEventID: id(delivery.QueuedJourneyEventID), AttemptParentJourneyEventID: parentID, ProducingTraceID: traceID.String, ProducingSpanID: spanID.String}, nil
 }
 
 func (r WebhookDispatchRepository) RecordAttemptTrace(ctx context.Context, claim webhooks.Claim, traceID, spanID string) error {

@@ -12,6 +12,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   require Logger
 
   alias ChalkSync.Database
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -40,7 +41,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Recovery
   alias ChalkSync.UUID
 
-  @transaction_timeout_ms 3_000
+  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
 
   @impl ChalkSync.Stateholder
   def decide_command(%Identity{} = identity, %Command{} = command) do
@@ -95,35 +96,37 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def renew_presence(%Identity{} = identity) do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &Presence.transaction(&1, identity),
-           timeout: @transaction_timeout_ms
-         ) do
-      {:ok, :ok} -> :ok
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(identity.episode),
+               &Presence.transaction(&1, identity),
+               timeout: @transaction_timeout_ms
+             ) do
+          {:ok, :ok} -> :ok
+          {:error, {:error, reason}} -> {:error, reason}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @impl ChalkSync.Stateholder
   def prepare_entry_leave(episode, operation_id) do
-    case Postgrex.transaction(
-           Database.connection(episode),
-           &JoinSeats.prepare_leave(&1, episode, operation_id),
-           timeout: @transaction_timeout_ms
-         ) do
-      {:ok, disposition} -> disposition
-      {:error, _reason} -> :pending
-    end
-  rescue
-    _exception -> :pending
-  catch
-    :exit, _reason -> :pending
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(episode),
+               &JoinSeats.prepare_leave(&1, episode, operation_id),
+               timeout: @transaction_timeout_ms
+             ) do
+          {:ok, disposition} -> disposition
+          {:error, _reason} -> :pending
+        end
+      end,
+      :pending
+    )
   end
 
   defp apply_lifecycle(episode, lifecycle_intent_id, identity)
@@ -241,23 +244,17 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: claim_operation_rows(&ExternalOperationClaims.claim_provider_operations(&1, limit))
 
   defp claim_operation_rows(claim) do
-    episode = %EpisodeKey{
-      tenant_id: "background",
-      space_id: "background",
-      episode_id: "background"
-    }
+    Database.guard(fn -> run_claim(claim) end, {:retryable, :dependency_unavailable})
+  end
 
-    case Postgrex.transaction(Database.connection(episode), fn connection ->
+  defp run_claim(claim) do
+    case Postgrex.transaction(Database.connection_for(:background), fn connection ->
            Transaction.configure(connection)
            claim.(connection)
          end) do
       {:ok, rows} -> {:ok, rows}
       {:error, _reason} -> {:retryable, :dependency_unavailable}
     end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
   @impl ChalkSync.Stateholder
@@ -278,76 +275,80 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def media_pauses(%EpisodeKey{} = episode) do
-    case Postgrex.query(
-           Database.connection(episode),
-           MediaPausesSQL.list(),
-           Scope.episode(episode),
-           timeout: 1_000
-         ) do
-      {:ok, %{rows: rows}} -> MediaPauses.decode_rows(rows)
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.connection(episode),
+               MediaPausesSQL.list(),
+               Scope.episode(episode),
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: rows}} -> MediaPauses.decode_rows(rows)
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @impl ChalkSync.Stateholder
   def media_stops(%EpisodeKey{} = episode) do
-    case Postgrex.query(
-           Database.connection(episode),
-           MediaPausesSQL.list_stops(),
-           Scope.episode(episode),
-           timeout: 1_000
-         ) do
-      {:ok, %{rows: rows}} -> MediaPauses.decode_stop_rows(rows)
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.connection(episode),
+               MediaPausesSQL.list_stops(),
+               Scope.episode(episode),
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: rows}} -> MediaPauses.decode_stop_rows(rows)
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @impl ChalkSync.Stateholder
   def set_media_pause(%Identity{} = identity, source, publication_id)
       when source in [:microphone, :camera, :screen] do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &MediaPauses.set_transaction(&1, identity, source, publication_id),
-           timeout: @transaction_timeout_ms,
-           commit_comment: "chalk sync media pause"
-         ) do
-      {:ok, :ok} -> :ok
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, {:retryable, reason}} -> {:retryable, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(identity.episode),
+               &MediaPauses.set_transaction(&1, identity, source, publication_id),
+               timeout: @transaction_timeout_ms,
+               commit_comment: "chalk sync media pause"
+             ) do
+          {:ok, :ok} -> :ok
+          {:error, {:error, reason}} -> {:error, reason}
+          {:error, {:retryable, reason}} -> {:retryable, reason}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @impl ChalkSync.Stateholder
   def reserve_publication_grant(%Identity{} = identity, operation_id, source)
       when is_binary(operation_id) and source in [:microphone, :camera, :screen] do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &PublicationGrants.reserve_transaction(&1, identity, operation_id, source),
-           timeout: @transaction_timeout_ms,
-           commit_comment: "chalk sync publication grant reservation"
-         ) do
-      {:ok, reservation} -> {:ok, reservation}
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, {:retryable, reason}} -> {:retryable, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(identity.episode),
+               &PublicationGrants.reserve_transaction(&1, identity, operation_id, source),
+               timeout: @transaction_timeout_ms,
+               commit_comment: "chalk sync publication grant reservation"
+             ) do
+          {:ok, reservation} -> {:ok, reservation}
+          {:error, {:error, reason}} -> {:error, reason}
+          {:error, {:retryable, reason}} -> {:retryable, reason}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   def reserve_publication_grant(_identity, _operation_id, _source),
@@ -356,14 +357,15 @@ defmodule ChalkSync.Stateholder.Postgres do
   @impl ChalkSync.Stateholder
   def complete_publication_grant(%EpisodeKey{} = episode, reservation_id, outcome)
       when is_binary(reservation_id) do
-    case UUID.dump(reservation_id) do
-      {:ok, _id} -> complete_publication_grant(episode, reservation_id, outcome, :valid)
-      :error -> {:error, :reservation_not_found}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case UUID.dump(reservation_id) do
+          {:ok, _id} -> complete_publication_grant(episode, reservation_id, outcome, :valid)
+          :error -> {:error, :reservation_not_found}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   defp complete_publication_grant(episode, reservation_id, outcome, :valid) do
@@ -383,20 +385,21 @@ defmodule ChalkSync.Stateholder.Postgres do
   @impl ChalkSync.Stateholder
   def begin_role_transition(%Identity{} = identity, %Command{} = command, publications)
       when command.name in [:assign_roles] and is_list(publications) do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &RoleTransitionPlanner.transaction(&1, identity, command, publications),
-           timeout: @transaction_timeout_ms,
-           commit_comment: "chalk sync role transition"
-         ) do
-      {:ok, decision} -> {:ok, decision}
-      {:error, {:retryable, reason}} -> {:retryable, reason}
-      {:error, _reason} -> CommandDecision.resolve_uncertain(identity, command)
-    end
-  rescue
-    _exception -> CommandDecision.resolve_uncertain(identity, command)
-  catch
-    :exit, _reason -> CommandDecision.resolve_uncertain(identity, command)
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(identity.episode),
+               &RoleTransitionPlanner.transaction(&1, identity, command, publications),
+               timeout: @transaction_timeout_ms,
+               commit_comment: "chalk sync role transition"
+             ) do
+          {:ok, decision} -> {:ok, decision}
+          {:error, {:retryable, reason}} -> {:retryable, reason}
+          {:error, _reason} -> CommandDecision.resolve_uncertain(identity, command)
+        end
+      end,
+      CommandDecision.resolve_uncertain(identity, command)
+    )
   end
 
   def begin_role_transition(%Identity{} = identity, %Command{} = command, _publications),
@@ -441,38 +444,40 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def recover(%Identity{} = identity, cursor) do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &RecoveryReader.transaction(&1, identity, cursor),
-           timeout: @transaction_timeout_ms
-         ) do
-      {:ok, %Recovery{} = recovery} -> {:ok, recovery}
-      {:ok, {:error, reason}} -> {:error, reason}
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(identity.episode),
+               &RecoveryReader.transaction(&1, identity, cursor),
+               timeout: @transaction_timeout_ms
+             ) do
+          {:ok, %Recovery{} = recovery} -> {:ok, recovery}
+          {:ok, {:error, reason}} -> {:error, reason}
+          {:error, {:error, reason}} -> {:error, reason}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @doc false
   def recover(%EpisodeKey{} = episode, cursor) do
-    case Postgrex.transaction(
-           Database.connection(episode),
-           &RecoveryReader.transaction(&1, episode, cursor),
-           timeout: @transaction_timeout_ms
-         ) do
-      {:ok, %Recovery{} = recovery} -> {:ok, recovery}
-      {:ok, {:error, reason}} -> {:error, reason}
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.transaction(
+               Database.connection(episode),
+               &RecoveryReader.transaction(&1, episode, cursor),
+               timeout: @transaction_timeout_ms
+             ) do
+          {:ok, %Recovery{} = recovery} -> {:ok, recovery}
+          {:ok, {:error, reason}} -> {:error, reason}
+          {:error, {:error, reason}} -> {:error, reason}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   @impl ChalkSync.Stateholder

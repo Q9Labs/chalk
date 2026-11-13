@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.18.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -18,7 +18,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "env": {
         "CHALK_APP_VARIANT": "production"
       }

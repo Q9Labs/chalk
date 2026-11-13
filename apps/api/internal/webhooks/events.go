@@ -15,7 +15,7 @@ import (
 type EventMetadata struct {
 	ID                   utilities.ID
 	TenantID             utilities.ID
-	Name                 string
+	Name                 EventName
 	OccurredAt           time.Time
 	JourneyID            utilities.ID
 	ParentJourneyEventID utilities.ID
@@ -60,12 +60,12 @@ type TranscriptSnapshot struct {
 }
 
 type eventEnvelope[T any] struct {
-	ID         string `json:"id"`
-	Event      string `json:"event"`
-	APIVersion int    `json:"api_version"`
-	OccurredAt string `json:"occurred_at"`
-	TenantID   string `json:"tenant_id"`
-	Data       T      `json:"data"`
+	ID         string    `json:"id"`
+	Event      EventName `json:"event"`
+	APIVersion int       `json:"api_version"`
+	OccurredAt string    `json:"occurred_at"`
+	TenantID   string    `json:"tenant_id"`
+	Data       T         `json:"data"`
 }
 type spaceData struct {
 	Object        spaceObject `json:"object"`
@@ -144,19 +144,19 @@ type transcriptObject struct {
 }
 
 func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFields []string) ([]byte, [32]byte, error) {
-	if metadata.Name != "space.created" && metadata.Name != "space.updated" && metadata.Name != "space.archived" && metadata.Name != "space.restored" {
+	if !metadata.Name.isOneOf(EventSpaceCreated, EventSpaceUpdated, EventSpaceArchived, EventSpaceRestored) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
-	if metadata.Name == "space.updated" && len(changedFields) == 0 {
+	if metadata.Name == EventSpaceUpdated && len(changedFields) == 0 {
 		return nil, [32]byte{}, errors.New("space.updated requires changed_fields")
 	}
-	if metadata.Name != "space.updated" && len(changedFields) != 0 {
+	if metadata.Name != EventSpaceUpdated && len(changedFields) != 0 {
 		return nil, [32]byte{}, errors.New("changed_fields only applies to space.updated")
 	}
-	if metadata.Name == "space.archived" && snapshot.ArchivedAt == nil {
+	if metadata.Name == EventSpaceArchived && snapshot.ArchivedAt == nil {
 		return nil, [32]byte{}, errors.New("space.archived requires archived_at")
 	}
-	if metadata.Name == "space.restored" && snapshot.ArchivedAt != nil {
+	if metadata.Name == EventSpaceRestored && snapshot.ArchivedAt != nil {
 		return nil, [32]byte{}, errors.New("space.restored requires a live space")
 	}
 	if !validUUIDv4(snapshot.ID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero() {
@@ -176,23 +176,23 @@ func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFie
 	sortedChanges := append([]string(nil), changedFields...)
 	sort.Strings(sortedChanges)
 	data := spaceData{Object: spaceObject{ID: snapshot.ID, Name: snapshot.Name, Slug: snapshot.Slug, MediaPlane: snapshot.MediaPlane, ArchivedAt: optionalTimestamp(snapshot.ArchivedAt), CreatedAt: timestamp(snapshot.CreatedAt), UpdatedAt: timestamp(snapshot.UpdatedAt)}}
-	if metadata.Name == "space.updated" {
+	if metadata.Name == EventSpaceUpdated {
 		data.ChangedFields = sortedChanges
 	}
 	return encodeEvent(metadata, data)
 }
 
 func EncodeEpisodeEvent(metadata EventMetadata, snapshot EpisodeSnapshot) ([]byte, [32]byte, error) {
-	if metadata.Name != "episode.started" && metadata.Name != "episode.ended" {
+	if !metadata.Name.isOneOf(EventEpisodeStarted, EventEpisodeEnded) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validUUIDv4(snapshot.ID) || !validUUIDv4(snapshot.SpaceID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid episode identity")
 	}
-	if metadata.Name == "episode.started" && (snapshot.Status != "active" || zeroTime(snapshot.StartedAt) || snapshot.EndedAt != nil) {
+	if metadata.Name == EventEpisodeStarted && (snapshot.Status != "active" || zeroTime(snapshot.StartedAt) || snapshot.EndedAt != nil) {
 		return nil, [32]byte{}, errors.New("invalid episode.started snapshot")
 	}
-	if metadata.Name == "episode.ended" && (snapshot.Status != "ended" || zeroTime(snapshot.StartedAt) || zeroTime(snapshot.EndedAt)) {
+	if metadata.Name == EventEpisodeEnded && (snapshot.Status != "ended" || zeroTime(snapshot.StartedAt) || zeroTime(snapshot.EndedAt)) {
 		return nil, [32]byte{}, errors.New("invalid episode.ended snapshot")
 	}
 	data := episodeData{Object: episodeObject{snapshot.ID, snapshot.SpaceID, snapshot.Status, optionalTimestamp(snapshot.StartedAt), optionalTimestamp(snapshot.EndedAt), timestamp(snapshot.CreatedAt), timestamp(snapshot.UpdatedAt)}}
@@ -200,16 +200,16 @@ func EncodeEpisodeEvent(metadata EventMetadata, snapshot EpisodeSnapshot) ([]byt
 }
 
 func EncodeParticipantEvent(metadata EventMetadata, snapshot ParticipantSnapshot) ([]byte, [32]byte, error) {
-	if metadata.Name != "participant.joined" && metadata.Name != "participant.left" {
+	if !metadata.Name.isOneOf(EventParticipantJoined, EventParticipantLeft) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validUUIDv4(snapshot.ID) || !validUUIDv4(snapshot.SpaceID) || !validUUIDv4(snapshot.EpisodeID) || snapshot.JoinedAt.IsZero() || (snapshot.IdentityID != nil && !validUUIDv4(*snapshot.IdentityID)) {
 		return nil, [32]byte{}, errors.New("invalid participant identity")
 	}
-	if metadata.Name == "participant.joined" && (snapshot.Status != "active" || snapshot.LeftAt != nil) {
+	if metadata.Name == EventParticipantJoined && (snapshot.Status != "active" || snapshot.LeftAt != nil) {
 		return nil, [32]byte{}, errors.New("invalid participant.joined snapshot")
 	}
-	if metadata.Name == "participant.left" && (snapshot.Status != "left" || zeroTime(snapshot.LeftAt)) {
+	if metadata.Name == EventParticipantLeft && (snapshot.Status != "left" || zeroTime(snapshot.LeftAt)) {
 		return nil, [32]byte{}, errors.New("invalid participant.left snapshot")
 	}
 	data := participantData{Object: participantObject{snapshot.ID, snapshot.IdentityID, snapshot.SpaceID, snapshot.EpisodeID, snapshot.Name, snapshot.Status, timestamp(snapshot.JoinedAt), optionalTimestamp(snapshot.LeftAt)}}
@@ -220,14 +220,14 @@ func EncodeTestEvent(metadata EventMetadata, endpointID utilities.ID) ([]byte, [
 	if endpointID.IsZero() || !validUUIDv4(endpointID.String()) {
 		return nil, [32]byte{}, errors.New("invalid webhook endpoint id")
 	}
-	metadata.Name = "endpoint.test"
+	metadata.Name = EventEndpointTest
 	data := testData{}
 	data.Object.EndpointID = endpointID.String()
 	return encodeEvent(metadata, data)
 }
 
 func EncodeRecordingEvent(metadata EventMetadata, s RecordingSnapshot) ([]byte, [32]byte, error) {
-	if metadata.Name != "recording.started" && metadata.Name != "recording.completed" && metadata.Name != "recording.failed" {
+	if !metadata.Name.isOneOf(EventRecordingStarted, EventRecordingCompleted, EventRecordingFailed) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validRecordingID(s.ID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
@@ -239,7 +239,7 @@ func EncodeRecordingEvent(metadata EventMetadata, s RecordingSnapshot) ([]byte, 
 	return encodeEvent(metadata, recordingData{Object: recordingObject{s.ID, s.SpaceID, s.EpisodeID, s.Status, optionalTimestamp(s.StartedAt), optionalTimestamp(s.CompletedAt), optionalTimestamp(s.FailedAt), s.Failure, timestamp(s.CreatedAt), timestamp(s.UpdatedAt)}})
 }
 func EncodeTranscriptEvent(metadata EventMetadata, s TranscriptSnapshot) ([]byte, [32]byte, error) {
-	if metadata.Name != "transcript.started" && metadata.Name != "transcript.completed" && metadata.Name != "transcript.failed" {
+	if !metadata.Name.isOneOf(EventTranscriptStarted, EventTranscriptCompleted, EventTranscriptFailed) {
 		return nil, [32]byte{}, ErrInvalidEventType
 	}
 	if !validUUIDv4(s.ID) || !validRecordingID(s.RecordingID) || !validUUIDv4(s.SpaceID) || !validUUIDv4(s.EpisodeID) || s.CreatedAt.IsZero() || s.UpdatedAt.IsZero() {
@@ -280,8 +280,8 @@ func encodeEvent[T any](metadata EventMetadata, data T) ([]byte, [32]byte, error
 	return body, sha256.Sum256(body), nil
 }
 
-func validateArtifactTransition(eventName, status string, startedAt, completedAt, failedAt *time.Time, failure *ArtifactFailure) error {
-	if !strings.HasSuffix(eventName, "."+status) || zeroTime(startedAt) || nonNilZeroTime(completedAt) || nonNilZeroTime(failedAt) {
+func validateArtifactTransition(eventName EventName, status string, startedAt, completedAt, failedAt *time.Time, failure *ArtifactFailure) error {
+	if !strings.HasSuffix(string(eventName), "."+status) || zeroTime(startedAt) || nonNilZeroTime(completedAt) || nonNilZeroTime(failedAt) {
 		return errors.New("artifact event status does not match transition")
 	}
 	switch status {

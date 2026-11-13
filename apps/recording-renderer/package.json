@@ -6,8 +6,8 @@
   "scripts": {
     "build": "pnpm run build:node",
     "build:node": "vite build --config vite.node.config.ts",
-    "fixture": "node ./dist/node/compose-fixture.js",
-    "check-types": "tsc-rs -p tsconfig.node.json --noEmit && tsc-rs -p tsconfig.compose.json",
+    "fixture": "vite build --config vite.node.config.ts --mode fixture && node ./dist/fixture/compose-fixture.js",
+    "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
   },
   "dependencies": {
@@ -15,6 +15,7 @@
     "@hugeicons/core-free-icons": "^4.2.3",
     "@napi-rs/canvas": "1.0.9",
     "@q9labsai/chalk-react": "workspace:^",
+    "@q9labsai/chalk-whiteboard": "workspace:^",
     "@q9labsai/recording-presentation": "workspace:^",
     "happy-dom": "^21.0.4",
     "react": "19.2.7",

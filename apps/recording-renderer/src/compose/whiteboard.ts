@@ -1,8 +1,8 @@
-import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { createCanvas, Image, Path2D, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { createRecordingWhiteboardCursor, loadRecordingWhiteboardFiles, recordingWhiteboardSceneAppState, type RecordingWhiteboardCursor } from "@q9labsai/chalk-react/headless";
-import { expandFontFamilies, registerSubsetFamily } from "./fonts.js";
+import { EXCALIDRAW_FONTS } from "./excalidraw-fonts.js";
+import type { FontRegistry } from "./fonts.js";
 import type { Rect } from "./scene.js";
 
 export interface WhiteboardAsset {
@@ -13,22 +13,11 @@ export interface WhiteboardAsset {
 export interface WhiteboardRendererOptions {
   /** Directory holding Excalidraw's font folders (Excalifont, Virgil, ...). */
   readonly fontsDirectory: string;
+  readonly fonts: FontRegistry;
   readonly loadAsset: (assetId: string) => Promise<WhiteboardAsset>;
 }
 
 export type WhiteboardRenderer = (stateAssetId: string, colorScheme: "light" | "dark", rect: Rect, revision?: number) => Promise<Canvas>;
-
-// Folder name → the CSS family Excalidraw asks for. Xiaolai (CJK) is left out: it is large and Latin text never needs it.
-const EXCALIDRAW_FONTS: readonly (readonly [string, string])[] = [
-  ["Excalifont", "Excalifont"],
-  ["Virgil", "Virgil"],
-  ["Cascadia", "Cascadia"],
-  ["Nunito", "Nunito"],
-  ["Lilita", "Lilita One"],
-  ["ComicShanns", "Comic Shanns"],
-  ["Liberation", "Liberation Sans"],
-  ["Assistant", "Assistant"],
-];
 
 type Excalidraw = typeof import("@excalidraw/excalidraw");
 type ChalkWhiteboard = typeof import("@q9labsai/chalk-whiteboard");
@@ -44,11 +33,8 @@ export function createWhiteboardRenderer(options: WhiteboardRendererOptions): Wh
   let rendered: { readonly key: string; readonly canvas: Promise<Canvas> } | undefined;
 
   async function load(): Promise<{ readonly excalidraw: Excalidraw; readonly whiteboard: ChalkWhiteboard }> {
-    await installDom();
-    for (const [folder, family] of EXCALIDRAW_FONTS) {
-      const directory = join(options.fontsDirectory, folder);
-      if (await exists(directory)) await registerSubsetFamily(family, directory);
-    }
+    await installDom(options.fonts);
+    for (const [folder, family] of EXCALIDRAW_FONTS) await options.fonts.registerSubsetFamily(family, join(options.fontsDirectory, folder));
     const [excalidraw, whiteboard] = await Promise.all([import("@excalidraw/excalidraw"), import("@q9labsai/chalk-whiteboard")]);
     return { excalidraw, whiteboard };
   }
@@ -88,18 +74,9 @@ function isSkiaCanvas(value: unknown): value is Canvas {
   return value instanceof Object && "encode" in value && "getContext" in value;
 }
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 let domInstalled: Promise<void> | undefined;
 
-function installDom(): Promise<void> {
+function installDom(fonts: FontRegistry): Promise<void> {
   domInstalled ??= (async () => {
     const { Window } = await import("happy-dom");
     const window = new Window({ url: "http://localhost/" });
@@ -107,13 +84,12 @@ function installDom(): Promise<void> {
     const createElement = document.createElement.bind(document);
     Object.defineProperty(document, "createElement", {
       configurable: true,
-      value: (tagName: string, elementOptions?: ElementCreationOptions) => (tagName.toLowerCase() === "canvas" ? skiaCanvasElement() : createElement(tagName, elementOptions)),
+      value: (tagName: string, elementOptions?: ElementCreationOptions) => (tagName.toLowerCase() === "canvas" ? skiaCanvasElement(fonts) : createElement(tagName, elementOptions)),
     });
     Object.defineProperty(document, "fonts", { configurable: true, value: { add() {}, delete() {}, has: () => true, check: () => true, load: async () => [], ready: Promise.resolve(), forEach() {}, [Symbol.iterator]: function* () {} } });
     const globals: readonly (readonly [string, unknown])[] = Object.entries({
       window,
       document,
-      navigator: window.navigator,
       location: window.location,
       HTMLElement: window.HTMLElement,
       Element: window.Element,
@@ -130,8 +106,8 @@ function installDom(): Promise<void> {
       Image,
       Path2D,
     });
+    // Node's own `navigator` stays.
     for (const [key, value] of globals) {
-      if (key in globalThis && key !== "Image" && key !== "Path2D") continue;
       Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
     }
     Object.defineProperty(window, "FontFace", { configurable: true, value: StubFontFace });
@@ -154,7 +130,7 @@ class StubFontFace {
 }
 
 /** A Skia canvas that answers the DOM calls Excalidraw makes on the canvases it creates. */
-function skiaCanvasElement(): Canvas {
+function skiaCanvasElement(fonts: FontRegistry): Canvas {
   const canvas = createCanvas(300, 150);
   const getContext = canvas.getContext.bind(canvas);
   let context: SKRSContext2D | undefined;
@@ -174,7 +150,7 @@ function skiaCanvasElement(): Canvas {
       const descriptor = Object.getOwnPropertyDescriptor(prototype, "font");
       if (descriptor?.set !== undefined && descriptor.get !== undefined) {
         const { get, set } = descriptor;
-        Object.defineProperty(created, "font", { configurable: true, get: () => get.call(created), set: (value: string) => set.call(created, expandFontFamilies(value)) });
+        Object.defineProperty(created, "font", { configurable: true, get: () => get.call(created), set: (value: string) => set.call(created, fonts.expandFontFamilies(value)) });
       }
       context = created;
       return created;

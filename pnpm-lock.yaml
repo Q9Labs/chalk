@@ -425,6 +425,9 @@ importers:
       '@q9labsai/chalk-react':
         specifier: workspace:^
         version: link:../../sdks/typescript/react
+      '@q9labsai/chalk-whiteboard':
+        specifier: workspace:^
+        version: link:../../packages/whiteboard
       '@q9labsai/recording-presentation':
         specifier: workspace:^
         version: link:../../packages/recording-presentation

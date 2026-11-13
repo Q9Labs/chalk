@@ -7,6 +7,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Authority.Poller
+  alias ChalkSync.WhiteboardV1.Authority.Reads
 
   @participant_id "20000000-0000-4000-8000-000000000002"
 
@@ -81,7 +82,10 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     )
 
     Authority.watch(identity.episode)
-    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    wait_until(fn ->
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
 
     # Connect checked the database just now and found the new Participant active.
     connected_at = System.monotonic_time(:millisecond)
@@ -106,7 +110,11 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       identity = identity()
       access(episode_status, participant_status)
       Authority.watch(identity.episode)
-      wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+      wait_until(fn ->
+        :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+      end)
+
       assert Authority.check(identity) == :ok
     end
 
@@ -123,7 +131,10 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
     identity = identity()
     Authority.watch(identity.episode)
-    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    wait_until(fn ->
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
 
     Application.put_env(
       :chalk_sync,
@@ -144,7 +155,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
     identity = identity()
     now = System.monotonic_time(:millisecond)
-    Authority.store(identity.episode, nil, now - 10_000, "timeout")
+    Reads.store(identity.episode, nil, now - 10_000, "timeout")
 
     # The connect check just read the database and found the Participant.
     connected_at = System.monotonic_time(:millisecond)
@@ -180,7 +191,10 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       end
 
     for _socket <- sockets, do: assert_receive({:watching, :ok})
-    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    wait_until(fn ->
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
 
     [{poller, _value}] = pollers(identity.episode)
 
@@ -188,7 +202,11 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     Enum.each(sockets, &send(&1, :close))
 
     assert_receive {:DOWN, ^monitor, :process, ^poller, :normal}
-    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+
+    wait_until(fn ->
+      not :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
+
     drain_reads(identity.episode)
     # Pollers of earlier tests can still report reads of their own Episodes here.
     episode = identity.episode
@@ -211,8 +229,15 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
 
     assert_receive :watching
     assert_receive :watching
-    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
-    wait_until(fn -> :ets.member(Authority, EpisodeKey.authority_key(other.episode)) end)
+
+    wait_until(fn ->
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
+
+    wait_until(fn ->
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(other.episode))
+    end)
+
     [{poller, _value}] = pollers(identity.episode)
     monitor = Process.monitor(poller)
 
@@ -221,10 +246,13 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     assert_receive {:DOWN, ^monitor, :process, ^poller, :killed}
     send(socket, :close)
 
-    wait_until(fn -> not :ets.member(Authority, EpisodeKey.authority_key(identity.episode)) end)
+    wait_until(fn ->
+      not :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(identity.episode))
+    end)
+
     # The Registry drops the killed poller's name on its own schedule.
     wait_until(fn -> pollers(identity.episode) == [] end)
-    assert :ets.member(Authority, EpisodeKey.authority_key(other.episode))
+    assert :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(other.episode))
     send(other_socket, :close)
   end
 
@@ -271,7 +299,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       final_at = System.monotonic_time(:millisecond)
 
       assert until_not_ok(identity) == {:error, {:permission_denied, denial}}
-      assert System.monotonic_time(:millisecond) - final_at <= Authority.poll_ms() + 100
+      assert System.monotonic_time(:millisecond) - final_at <= Reads.poll_ms() + 100
     end
   end
 
@@ -417,7 +445,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     assert pollers(upper.episode) == [{poller, nil}]
     drain_reads(identity.episode)
     drain_reads(upper.episode)
-    Process.sleep(Authority.poll_ms() * 3)
+    Process.sleep(Reads.poll_ms() * 3)
     assert (drain_reads(identity.episode) + drain_reads(upper.episode)) in 2..4
   end
 
@@ -448,7 +476,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       )
 
   defp stored_by(episode) do
-    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
+    case :ets.lookup(:whiteboard_authority_reads, EpisodeKey.authority_key(episode)) do
       [{_episode, poller, _access, _read_at, _failure}] -> poller
       [] -> nil
     end

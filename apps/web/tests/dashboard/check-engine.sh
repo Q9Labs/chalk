@@ -6,7 +6,14 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../.."
 proof="${1:-}"
 pnpm exec turbo run build --filter=@q9labsai/chalk-client...
-(cd apps/sync && MIX_ENV=dev mix deps.get && MIX_ENV=dev mix compile)
+# A Hex download can fail for a moment, so a failed fetch is retried a bounded number of times.
+for delay in 10 30 0; do
+  (cd apps/sync && MIX_ENV=dev mix deps.get) && break
+  ((delay)) || exit 1
+  echo "mix deps.get failed; retrying in ${delay}s" >&2
+  sleep "$delay"
+done
+(cd apps/sync && MIX_ENV=dev mix compile)
 case "$proof" in
   http) bash apps/web/tests/dashboard/real-engine.sh ;;
   refresh)

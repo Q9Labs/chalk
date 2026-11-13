@@ -38,7 +38,9 @@ export function allows(header, wanted) {
   return listed.includes("*") || wanted.every((name) => listed.includes(name));
 }
 
-// The any-origin CORS rule is safe only while the bucket is private: a request with no signature must be refused.
+// The any-origin CORS rule is safe only while the bucket is private. This check reads the object from the bucket's authenticated
+// storage endpoint with no signature, so it proves that endpoint refuses it. It cannot see a public r2.dev URL or a custom domain on
+// the bucket, which serve objects without the signature; those are Cloudflare settings the proof has no credentials to read.
 export function unsigned(url) {
   const bare = new URL(url);
   bare.search = "";
@@ -104,7 +106,7 @@ export async function chatUploadProof(run) {
     measured(read.ok && allowsOrigin(read), corsRefusal("download", read, "the signed GET was refused"));
     measured(Buffer.from(await read.arrayBuffer()).equals(Buffer.from(body)), "Chat upload download returned different bytes than the upload");
     const anonymous = await fetch(unsigned(upload.uploadUrl), { signal: timeout() });
-    measured(refusedWithoutSignature(anonymous.status), `The uploaded chat object can be read without a signature (HTTP ${anonymous.status}). The any-origin CORS rule is only safe on a private bucket: turn off public access and remove custom domains before anything else.`);
+    measured(refusedWithoutSignature(anonymous.status), `The uploaded chat object can be read from the storage endpoint without a signature (HTTP ${anonymous.status}). The any-origin CORS rule is only safe on a private bucket: turn off public access and remove custom domains before anything else.`);
     const result = { preflight: preflight.status, put: put.status, download: read.status, unsigned: anonymous.status, origin: unlistedOrigin };
     await save(`${run.directory}/chat-upload.json`, result);
     return result;

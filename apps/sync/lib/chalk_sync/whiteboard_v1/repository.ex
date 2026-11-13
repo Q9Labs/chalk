@@ -50,11 +50,5 @@ defmodule ChalkSync.WhiteboardV1.Repository do
   def read_after(identity, scene_id, revision),
     do: impl().read_after(identity, scene_id, revision)
 
-  defp impl,
-    do:
-      Application.get_env(
-        :chalk_sync,
-        :whiteboard_v1_repository,
-        ChalkSync.WhiteboardV1.PostgresRepository
-      )
+  defp impl, do: Application.fetch_env!(:chalk_sync, :whiteboard_v1_repository)
 end

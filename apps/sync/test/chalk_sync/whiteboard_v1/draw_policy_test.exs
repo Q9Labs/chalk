@@ -14,15 +14,18 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
-
   setup_all do
     if @database_url do
       previous_connections = Application.get_env(:chalk_sync, :database_connections)
       previous_repository = Application.get_env(:chalk_sync, :whiteboard_v1_repository)
       connections = SyncPostgres.start_connections(@database_url)
       Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
-      Application.delete_env(:chalk_sync, :whiteboard_v1_repository)
+
+      Application.put_env(
+        :chalk_sync,
+        :whiteboard_v1_repository,
+        ChalkSync.WhiteboardV1.PostgresRepository
+      )
 
       on_exit(fn ->
         restore_env(:database_connections, previous_connections)

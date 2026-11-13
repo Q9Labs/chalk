@@ -259,12 +259,6 @@ defmodule ChalkSync.Observability do
     end
   end
 
-  @doc "Returns whether the dependencies that make sync state authoritative are running."
-  @spec ready?() :: boolean()
-  def ready? do
-    stateholder_ready?()
-  end
-
   @impl true
   def init(_opts) do
     send(self(), :emit_runtime_health)
@@ -501,13 +495,6 @@ defmodule ChalkSync.Observability do
     do: Map.put(fields, "tracestate", tracestate)
 
   defp maybe_put_tracestate(fields, _tracestate), do: fields
-
-  defp stateholder_ready? do
-    case ChalkSync.Stateholder.impl() do
-      ChalkSync.Stateholder.Memory -> is_pid(Process.whereis(ChalkSync.Stateholder.Memory))
-      _adapter -> true
-    end
-  end
 
   defp config do
     :chalk_sync
