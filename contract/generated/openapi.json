@@ -14263,6 +14263,11 @@
                   "minimum": 0,
                   "type": ["integer", "null"]
                 },
+                "recv_hidden_videos": {
+                  "maximum": 64,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
                 "recv_jitter_ms": {
                   "maximum": 60000,
                   "minimum": 0,

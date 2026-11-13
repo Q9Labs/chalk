@@ -1160,6 +1160,37 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+# A job re-run repeats a deploy this host already promoted: it passes on health alone and changes nothing.
+retry_state="${fixture_root}/retry-state"
+mkdir -p "$retry_state"
+make_request retry "${fixture_root}/retry-request.json"
+make_manifest retry >"${fixture_root}/retry-manifest.json"
+run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >/dev/null
+retry_pulls="$(grep -c '^podman pull ' "${fixture_root}/commands.log")"
+run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry.log"
+grep -Fq 'RESULT {"schema_version":1,"status":"deployed","release_id":"retry","health":"passed","rolled_back":false' "${fixture_root}/retry.log" || fail "a repeated deploy of the active release did not pass"
+[[ "$(grep -c '^podman pull ' "${fixture_root}/commands.log")" == "$retry_pulls" ]] || fail "a repeated deploy of the active release pulled images again"
+jq -e -s 'length == 1' "${retry_state}/ledger.jsonl" >/dev/null || fail "a repeated deploy of the active release wrote a second ledger record"
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" fail >"${fixture_root}/retry-unhealthy.log" 2>&1; then
+  fail "a repeated deploy of an unhealthy active release passed"
+fi
+make_manifest retry | jq '.generated_at = "2026-08-19T00:00:00Z"' >"${fixture_root}/retry-changed-manifest.json"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-changed-manifest.json" ok >"${fixture_root}/retry-changed.log" 2>&1; then
+  fail "a repeated release id with a different manifest passed"
+fi
+grep -Fq 'is already active with a different manifest' "${fixture_root}/retry-changed.log" || fail "a changed manifest for the active release was not named"
+make_request retry "${fixture_root}/retry-excluded-request.json" '["api-env"]'
+if run_controller "$retry_state" "${fixture_root}/retry-excluded-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-excluded.log" 2>&1; then
+  fail "a repeated deploy with other exclusions passed"
+fi
+grep -Fq 'already active with different deployment settings' "${fixture_root}/retry-excluded.log" || fail "changed deployment settings for the active release were not named"
+# A promotion cut short after another release started leaves the pointer on this one: health alone must not pass it.
+cp "${fixture_root}/retry-changed-manifest.json" "${fixture_root}/run/release/release-manifest.json"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-interrupted.log" 2>&1; then
+  fail "a repeated deploy passed while another release was running"
+fi
+grep -Fq 'the running release differs' "${fixture_root}/retry-interrupted.log" || fail "a running release that differs from the active pointer was not named"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
@@ -1210,6 +1241,8 @@ stable_controller_sha="$(sha256sum "${fixture_root}/install/chalk-deployment-con
 stable_policy_sha="$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')"
 stable_health_sha="$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')"
 stable_restore_unit_sha="$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')"
+stable_grace_sha="$(sha256sum "${fixture_root}/systemd/user@.service.d/timeout.conf" | awk '{print $1}')"
+printf '\n# candidate grace\n' >>"${fixture_root}/source/infrastructure/managed-episode/systemd/chalk-user-manager-grace.conf"
 printf '\n# candidate controller\n' >>"${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller"
 printf '\n' >>"${fixture_root}/source/infrastructure/managed-episode/contracts/environments.json"
 printf '\n# candidate health\n' >>"${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
@@ -1220,6 +1253,7 @@ assert_stable_installed_runtime() {
   [[ "$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')" == "$stable_policy_sha" ]] || fail "stable environment policy was not restored"
   [[ "$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')" == "$stable_health_sha" ]] || fail "stable health script was not restored"
   [[ "$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')" == "$stable_restore_unit_sha" ]] || fail "stable restore unit was not restored"
+  [[ "$(sha256sum "${fixture_root}/systemd/user@.service.d/timeout.conf" | awk '{print $1}')" == "$stable_grace_sha" ]] || fail "stable user manager stop grace was not restored"
   [[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "stable restore unit enablement was not restored"
 }
 
@@ -1395,6 +1429,37 @@ fi
 
 if group_enabled ssm-contract; then
 jq -e '.schemaVersion == "2.2" and .mainSteps[0].name == "deployRelease" and .parameters.ManifestBase64.maxChars == 48000 and .parameters.ControllerVersion.default == "2" and (.parameters | has("ExcludedSecrets") and has("AdoptExistingRelease")) and (.parameters | to_entries | all(.value.interpolationType == "ENV_VAR")) and (.mainSteps[0].inputs.runCommand[0] == "#!/bin/bash") and (.mainSteps[0].inputs.runCommand | all(contains("{{") | not) and all(contains("rm -rf") | not) and any(. == "controller_relative=\"controller/chalk-deployment-controller\"") and any(contains("find \"$work_root\" -depth -delete")) and any(contains("controller digest does not match release manifest"))) and (.parameters | has("Command") | not)' "${managed_root}/ssm/chalk-managed-episode-deploy.json" >/dev/null || fail "SSM document contract is unsafe"
+fi
+
+if group_enabled restore; then
+  # A promoted runtime gives the user manager the container grace, not Ubuntu's 5 seconds.
+  grep -Fxq 'TimeoutStopSec=130' "${fixture_root}/systemd/user@.service.d/timeout.conf" || fail "user manager stop grace was not installed"
+  # The API unit reads boot.env without an optional prefix, so a deploy must leave the file in place before the API starts.
+  [[ -s "${fixture_root}/run/boot.env" ]] || fail "deploy did not create boot.env for the API unit"
+
+  # boot-end names how the previous boot ended: clean, killed or unknown.
+  cat >"${fixture_root}/bin/journalctl" <<'JOURNAL'
+#!/usr/bin/env bash
+case "$*" in
+  *"-o short-unix"*) printf '2000.5 host chalk-api[1]: api.starting\n' ;;
+  *"-t chalk-api"*) printf '%s' "${FAKE_API_LAST:-}" ;;
+  *"Killing process"*) [[ -n "${FAKE_KILL_BEFORE_START:-}" && "$*" == *"--since @2000"* ]] || printf '%s' "${FAKE_KILLED:-}" ;;
+esac
+JOURNAL
+  chmod 0755 "${fixture_root}/bin/journalctl"
+  printf 'boot-1234\n' >"${fixture_root}/boot-id"
+  boot_end() {
+    CHALK_CONTROLLER_STATE_ROOT="${fixture_root}/boot-end-state" CHALK_ACTIVE_RELEASE_POINTER="${fixture_root}/boot-end-state/p.json" \
+      CHALK_JOURNALCTL_BIN="${fixture_root}/bin/journalctl" CHALK_BOOT_ID_FILE="${fixture_root}/boot-id" CHALK_CONTROLLER_RUN_ROOT="${fixture_root}/boot-end-run" \
+      "${managed_root}/controller/chalk-deployment-controller" boot-end >/dev/null
+    grep -Fx "CHALK_PREVIOUS_BOOT_END=$1" "${fixture_root}/boot-end-run/boot.env" >/dev/null || fail "boot-end did not record $1"
+  }
+  FAKE_API_LAST='' boot_end unknown
+  FAKE_API_LAST='{"event":"api.shutdown_complete"}' boot_end clean
+  FAKE_API_LAST='{"event":"api.starting"}' boot_end killed
+  FAKE_API_LAST='{"event":"api.shutdown_complete"}' FAKE_KILLED='user@1001.service: Killing process 7 (chalk-api) with signal SIGKILL.' boot_end killed
+  FAKE_API_LAST='{"event":"api.shutdown_complete"}' FAKE_KILLED='user@1001.service: Killing process 7 (chalk-api) with signal SIGKILL.' FAKE_KILL_BEFORE_START=1 boot_end clean
+  grep -Fx 'CHALK_HOST_BOOT_ID=boot-1234' "${fixture_root}/boot-end-run/boot.env" >/dev/null || fail "boot-end did not record the boot id"
 fi
 
 echo "PASS managed-episode deployment controller tests (group=${test_group})"

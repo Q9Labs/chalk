@@ -381,6 +381,20 @@ export function CopyAction({ text, label = "Copy link", pill, small, toastMessag
 export function Seg<T extends string>({ label, labelledBy, options, value, onChange, small }: { readonly label?: string; readonly labelledBy?: string; readonly options: readonly (readonly [T, string])[]; readonly value: T; readonly onChange: (value: T) => void; readonly small?: boolean }) {
   return (
     <div className={small ? "seg2 sm" : "seg2"} role="group" aria-label={label} aria-labelledby={labelledBy}>
+      {/* Segments share one width, so the thumb slides by whole segments on transform alone. */}
+      <span
+        className="seg-thumb"
+        aria-hidden="true"
+        style={{
+          width: `calc((100% - 2 * var(--space-1)) / ${options.length})`,
+          transform: `translateX(${
+            Math.max(
+              0,
+              options.findIndex(([option]) => option === value),
+            ) * 100
+          }%)`,
+        }}
+      />
       {options.map(([option, text]) => (
         <button key={option} type="button" aria-pressed={value === option} onClick={() => onChange(option)}>
           {text}

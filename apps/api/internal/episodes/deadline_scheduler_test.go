@@ -57,6 +57,10 @@ func (r *scriptedRepository) EnqueueDueEpisodeDeadlines(context.Context, int32) 
 	if r.calls >= len(r.passes) {
 		r.done()
 	}
+	// The scheduler can start one more pass before it sees the cancel; that pass is empty.
+	if r.calls > len(r.passes) {
+		return DeadlineCycle{}, nil
+	}
 	return r.passes[r.calls-1], nil
 }
 

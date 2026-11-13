@@ -66,7 +66,7 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 type RemoteTrackEntry = readonly [string, CloudflareSFURemoteTrack];
-const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false });
+const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false, keepsIdleSession: false });
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
@@ -136,6 +136,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #delivery = new SubscriptionDelivery();
   // Off-screen videos this client paused in place. They keep their receiver, MID and track.
   readonly #viewerPaused = new Set<string>();
+  // Advertised videos the tile policy leaves out of the last poll: hidden, off screen or in a hidden page.
+  #hiddenVideos = 0;
   // Dropped remote tracks whose receive m-line is not closed yet, with the failed closes so far.
   readonly #unretiredReceivers = new Map<CloudflareSFURemoteTrack, number>();
   // A stopped transceiver keeps its mid until the next negotiation, so a later retirement would find it and close it a second time.
@@ -1329,6 +1331,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#receiveHealth.roster(advertised.values());
     this.#pruneRemotePullState(advertised);
     const desired = this.#visibleRemotePublications(advertised);
+    // Only the authoritative roster counts: the early-pull pass sees the Sync projection, which is empty while Sync is down.
+    this.#hiddenVideos = advertised.size - desired.size;
     this.#pollFailedPull = true;
     const epoch = this.#connectionEpoch;
     const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
@@ -1436,7 +1440,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const track = this.#remoteTracks.get(key);
       return track?.publicationId === publicationId && floating.has(track.track);
     };
-    return new Map([...advertised].filter(([key, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId) || isFloating(key, publication.publicationId)));
+    const visible = new Map([...advertised].filter(([key, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId) || isFloating(key, publication.publicationId)));
+    return visible;
   }
   /** The SFU can stop an off-screen video without renegotiating, so scrolling back costs one update instead of a pull. */
   #pausesInPlace(): boolean {
@@ -2147,7 +2152,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
-        this.#callStats.observe(report, this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : undefined);
+        this.#callStats.observe(report, { hiddenVideos: this.#hiddenVideos, ...(this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : {}) });
         this.#publishCallStats();
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
@@ -2286,6 +2291,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
     if (!this.#started || this.#negotiatedGeneration === generation || this.#replacementAttemptedGeneration === generation || !this.#replaceMediaConnection) return;
+    // The own SFU keeps an unused connection until it reports it gone, and the publish recovers from that report.
+    if (this.#capabilities().keepsIdleSession) return;
     await this.#replaceMediaConnectionForRecovery(generation, "dormant_connection");
   }
   #addTracks(input: Omit<Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0], "replacementCause">): Promise<CloudflareSFUTracksResponse> {
