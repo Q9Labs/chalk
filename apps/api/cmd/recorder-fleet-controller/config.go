@@ -76,7 +76,20 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	if getenv == nil {
 		return commandConfig{}, recorderfleet.ErrInvalidConfig
 	}
-	raw := rawCommandConfig{
+	raw := rawConfigFromEnvironment(getenv)
+
+	flags := flag.NewFlagSet("recorder-fleet-controller", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	bindFlags(flags, &raw)
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		return commandConfig{}, fmt.Errorf("%w: parse command arguments", recorderfleet.ErrInvalidConfig)
+	}
+	return raw.build()
+}
+
+// rawConfigFromEnvironment reads every setting the environment can give; flags override these values.
+func rawConfigFromEnvironment(getenv func(string) string) rawCommandConfig {
+	return rawCommandConfig{
 		environment:       getenv("CHALK_RECORDER_FLEET_ENVIRONMENT"),
 		role:              getenv("CHALK_RECORDER_FLEET_ROLE"),
 		controlPlaneURL:   getenv("CHALK_RECORDER_FLEET_CONTROL_PLANE_URL"),
@@ -120,9 +133,10 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		gpu:               getenv("CHALK_RECORDER_FLEET_GPU"),
 		sshKeyIDs:         getenv("CHALK_RECORDER_FLEET_SSH_KEY_IDS"),
 	}
+}
 
-	flags := flag.NewFlagSet("recorder-fleet-controller", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
+// bindFlags registers one flag per setting, with the environment value as its default.
+func bindFlags(flags *flag.FlagSet, raw *rawCommandConfig) {
 	flags.StringVar(&raw.environment, "environment", raw.environment, "deployment environment")
 	flags.StringVar(&raw.role, "role", raw.role, "recorder pool role: capture or render")
 	flags.StringVar(&raw.controlPlaneURL, "control-plane-url", raw.controlPlaneURL, "private Chalk control-plane HTTPS origin")
@@ -160,8 +174,4 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 	flags.StringVar(&raw.bootstrapEndpoint, "bootstrap-endpoint", raw.bootstrapEndpoint, "node bootstrap HTTPS endpoint")
 	flags.StringVar(&raw.gpu, "gpu", raw.gpu, "whether the pool uses DigitalOcean GPU nodes (true or false)")
 	flags.StringVar(&raw.sshKeyIDs, "ssh-key-ids", raw.sshKeyIDs, "optional comma-separated DigitalOcean SSH key IDs for qualification")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		return commandConfig{}, fmt.Errorf("%w: parse command arguments", recorderfleet.ErrInvalidConfig)
-	}
-	return raw.build()
 }
