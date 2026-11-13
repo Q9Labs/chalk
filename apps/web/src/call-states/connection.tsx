@@ -26,7 +26,7 @@ const both = ({ id, title, options, actions, transition, offline }: Spec): CallS
     title: scheme === "dark" ? title : `${title}, Light`,
     ...(actions ? { actions } : {}),
     render: () => {
-      const call = <Live snapshot={liveSnapshot(options)} initialColorScheme={scheme} transition={then} />;
+      const call = <Live snapshot={liveSnapshot(options)} initialColorScheme={scheme} transition={transition} />;
       return offline ? <OfflineDevice>{call}</OfflineDevice> : call;
     },
   }));
