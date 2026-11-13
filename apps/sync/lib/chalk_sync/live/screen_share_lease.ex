@@ -4,7 +4,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
-  @default_renewal_ms 10_000
+  @default_renewal_ms 20_000
   @default_hard_lifetime_ms 30_000
   @max_renewal_ms 30_000
   @max_hard_lifetime_ms 120_000
@@ -29,6 +29,7 @@ defmodule ChalkSync.Live.ScreenShareLease do
     now = Keyword.get(options, :now, DateTime.utc_now())
     renewal_ms = Keyword.get(options, :renewal_ms, @default_renewal_ms)
     hard_lifetime_ms = Keyword.get(options, :hard_lifetime_ms, @default_hard_lifetime_ms)
+    replace? = Keyword.get(options, :replace_own, false)
 
     with :ok <- valid_bounds(renewal_ms, hard_lifetime_ms) do
       lease_id = Keyword.get(options, :lease_id, UUID.generate())
@@ -44,7 +45,8 @@ defmodule ChalkSync.Live.ScreenShareLease do
         owner_generation,
         now,
         renewed_until,
-        hard_expires_at
+        hard_expires_at,
+        replace?
       ]
 
       case Postgrex.query(connection, acquire_query(), params, timeout: 1_000) do
@@ -163,26 +165,32 @@ defmodule ChalkSync.Live.ScreenShareLease do
     ) values ($1, $2, $3, $4, $5, $6, 1, 'active', $7, $8, $9)
     on conflict (tenant_id, episode_id) do update
     set space_id = excluded.space_id,
-        lease_id = case when #{same_active_owner()} then sync_screen_share_leases.lease_id else excluded.lease_id end,
-        owner_participant_id = case when #{same_active_owner()} then sync_screen_share_leases.owner_participant_id else excluded.owner_participant_id end,
-        owner_generation = case when #{same_active_owner()} then sync_screen_share_leases.owner_generation else excluded.owner_generation end,
-        lease_generation = case when #{same_active_owner()} then sync_screen_share_leases.lease_generation else sync_screen_share_leases.lease_generation + 1 end,
+        lease_id = case when #{keeps_lease()} then sync_screen_share_leases.lease_id else excluded.lease_id end,
+        owner_participant_id = case when #{keeps_lease()} then sync_screen_share_leases.owner_participant_id else excluded.owner_participant_id end,
+        owner_generation = case when #{keeps_lease()} then sync_screen_share_leases.owner_generation else excluded.owner_generation end,
+        lease_generation = case when #{keeps_lease()} then sync_screen_share_leases.lease_generation else sync_screen_share_leases.lease_generation + 1 end,
         status = 'active',
-        acquired_at = case when #{same_active_owner()} then sync_screen_share_leases.acquired_at else excluded.acquired_at end,
-        renewed_until = case when #{same_active_owner()} then greatest(sync_screen_share_leases.renewed_until, least(sync_screen_share_leases.hard_expires_at, excluded.renewed_until)) else excluded.renewed_until end,
-        hard_expires_at = case when #{same_active_owner()} then sync_screen_share_leases.hard_expires_at else excluded.hard_expires_at end
+        acquired_at = case when #{keeps_lease()} then sync_screen_share_leases.acquired_at else excluded.acquired_at end,
+        renewed_until = case when #{keeps_lease()} then greatest(sync_screen_share_leases.renewed_until, least(sync_screen_share_leases.hard_expires_at, excluded.renewed_until)) else excluded.renewed_until end,
+        hard_expires_at = case when #{keeps_lease()} then sync_screen_share_leases.hard_expires_at else excluded.hard_expires_at end
     where least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at)
-          <= excluded.acquired_at or #{same_active_owner()}
+          <= excluded.acquired_at or #{own_live_lease()}
     returning #{returning()}
     """
   end
 
-  defp same_active_owner do
+  # The caller's own lease, still live.
+  defp own_live_lease do
     """
-    sync_screen_share_leases.owner_participant_id = excluded.owner_participant_id
+    (sync_screen_share_leases.owner_participant_id = excluded.owner_participant_id
     and sync_screen_share_leases.owner_generation = excluded.owner_generation
-    and least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at) > excluded.acquired_at
+    and least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at) > excluded.acquired_at)
     """
+  end
+
+  # A new share ($10) replaces the owner's old row instead of inheriting its id and hard cap.
+  defp keeps_lease do
+    "(#{own_live_lease()} and not $10::boolean)"
   end
 
   defp renew_query do
