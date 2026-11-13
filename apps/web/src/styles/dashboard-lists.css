@@ -336,7 +336,9 @@
 .site .dash .dev .snote .pnote {
   aspect-ratio: auto;
   display: block;
-  /* The note runs the card's width and starts at the page's left edge, never centred in a wide empty box. */
+  /* The note runs the card's width and starts at the page's left edge, never centred in a wide empty box. Block
+     layout honours `place-items` too, so the base note's centring is reset here, not only its display. */
+  place-items: normal;
   justify-self: stretch;
   width: 100%;
   padding: var(--space-5);
