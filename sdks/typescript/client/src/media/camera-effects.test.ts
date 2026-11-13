@@ -139,6 +139,24 @@ describe("camera effects ownership", () => {
     expect(ended).toHaveBeenCalledTimes(1);
     await expect(session.prepare("none")).rejects.toThrow("stopped");
   });
+  it("applies a background whose load overlaps a slow-frame fallback", async () => {
+    const { source, output } = browser();
+    let complete = (_: { close: () => void }) => {};
+    model.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
+    const preparing = session.prepare("blur");
+    await vi.waitFor(() => expect(model.create).toHaveBeenCalled());
+    session.usePlainCamera();
+    complete({ close: model.close });
+    (await preparing)();
+    expect(output.getSettings().frameRate).toBe(24);
+    session.stop();
+  });
   it("closes a model that finishes loading after capture has stopped", async () => {
     const { source } = browser();
     let complete = (_: { close: () => void }) => {};
