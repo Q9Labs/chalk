@@ -3,8 +3,6 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
   Screen-share leases an Episode holds: acquire, renew, rotate and release against the media observation.
   """
 
-  alias ChalkSync.Database
-  alias ChalkSync.Live.ScreenShareLease
   alias ChalkSync.Stateholder
   alias ChalkSync.UUID
 
@@ -70,57 +68,43 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
   end
 
   defp renew_screen_lease(state, participant_id, lease, options) do
-    with {:ok, connection} <- database_connection(state),
-         {:ok, renewed} <- ScreenShareLease.renew(connection, state.episode, lease, options) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, renewed)}}
-    else
-      {:error, :lease_expired} ->
-        rotate_screen_lease(state, participant_id, lease, options)
-
-      {:error, reason} ->
-        {:error, reason}
+    case Stateholder.renew_screen_lease(state.episode, lease, options) do
+      {:ok, renewed} -> {:ok, put_lease(state, participant_id, renewed)}
+      {:error, :lease_expired} -> rotate_screen_lease(state, participant_id, lease, options)
+      {:error, reason} -> {:error, reason}
     end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   defp rotate_screen_lease(state, participant_id, lease, options) do
-    with {:ok, connection} <- database_connection(state),
-         {:ok, rotated} <-
-           ScreenShareLease.acquire(
-             connection,
-             state.episode,
-             participant_id,
-             lease.owner_generation,
-             options
-           ) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, rotated)}}
-    else
+    case Stateholder.acquire_screen_lease(
+           state.episode,
+           participant_id,
+           lease.owner_generation,
+           options
+         ) do
+      {:ok, rotated} -> {:ok, put_lease(state, participant_id, rotated)}
       {:error, reason} -> {:error, reason}
     end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   defp acquire_observed_screen_lease(state, participant_id, options) do
     with {:ok, authority} <- Stateholder.participant_authority(state.episode, participant_id, nil),
-         {:ok, connection} <- database_connection(state),
          {:ok, lease} <-
-           ScreenShareLease.acquire(
-             connection,
+           Stateholder.acquire_screen_lease(
              state.episode,
              participant_id,
              authority.generation,
              options
            ) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, lease)}}
+      {:ok, put_lease(state, participant_id, lease)}
     else
       {:retryable, reason} -> {:error, reason}
       {:error, reason} -> {:error, reason}
     end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
+
+  defp put_lease(state, participant_id, lease),
+    do: %{state | screen_leases: Map.put(state.screen_leases, participant_id, lease)}
 
   defp release_and_forget_screen_lease(state, participant_id, lease) do
     _ = release_screen_lease(state, lease)
@@ -142,17 +126,12 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
   end
 
   def acquire_screen_lease(state, authority, operation_id) do
-    with {:ok, connection} <- database_connection(state) do
-      ScreenShareLease.acquire(
-        connection,
-        state.episode,
-        authority.participant_id,
-        authority.generation,
-        screen_lease_options(operation_id)
-      )
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
+    Stateholder.acquire_screen_lease(
+      state.episode,
+      authority.participant_id,
+      authority.generation,
+      screen_lease_options(operation_id)
+    )
   end
 
   defp screen_lease_options(operation_id) do
@@ -168,19 +147,6 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
     end
   end
 
-  def release_screen_lease(state, lease) do
-    with {:ok, connection} <- database_connection(state) do
-      ScreenShareLease.release(connection, state.episode, lease)
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp database_connection(state) do
-    configured = Application.get_env(:chalk_sync, :database_connections)
-
-    if configured || Process.whereis(ChalkSync.Database.Registry),
-      do: {:ok, Database.connection(state.episode)},
-      else: {:error, :dependency_unavailable}
-  end
+  def release_screen_lease(state, lease),
+    do: Stateholder.release_screen_lease(state.episode, lease)
 end

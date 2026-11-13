@@ -205,6 +205,8 @@ defmodule ChalkSync.WhiteboardV1.ViewOwner do
     end
   end
 
+  # TRIPWIRE(owner=sync, by=2027-02-13): legacy tabs send no origin epoch. Delete accept_legacy and legacy_views once no
+  # connected client lacks view_v1 owner support.
   defp accept_legacy(state, frame, input) do
     person = frame["participant_id"]
 

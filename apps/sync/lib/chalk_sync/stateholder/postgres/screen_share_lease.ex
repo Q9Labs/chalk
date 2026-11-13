@@ -1,4 +1,4 @@
-defmodule ChalkSync.Live.ScreenShareLease do
+defmodule ChalkSync.Stateholder.Postgres.ScreenShareLease do
   @moduledoc "Postgres-backed single-screen-share lease coordination."
 
   alias ChalkSync.Stateholder.EpisodeKey
@@ -8,7 +8,6 @@ defmodule ChalkSync.Live.ScreenShareLease do
   @default_hard_lifetime_ms 30_000
   @max_renewal_ms 30_000
   @max_hard_lifetime_ms 120_000
-  @expiry_batch_limit 500
 
   @type lease :: %{
           lease_id: String.t(),
@@ -102,19 +101,6 @@ defmodule ChalkSync.Live.ScreenShareLease do
       {:error, _error} -> {:error, :dependency_unavailable}
     end
   end
-
-  @spec expire(Postgrex.conn(), DateTime.t(), pos_integer()) ::
-          {:ok, non_neg_integer()} | {:error, :invalid_limit | :dependency_unavailable}
-  def expire(connection, now, limit \\ @expiry_batch_limit)
-
-  def expire(connection, now, limit) when limit in 1..@expiry_batch_limit do
-    case Postgrex.query(connection, expire_query(), [now, limit], timeout: 1_000) do
-      {:ok, %{num_rows: count}} -> {:ok, count}
-      {:error, _error} -> {:error, :dependency_unavailable}
-    end
-  end
-
-  def expire(_connection, _now, _limit), do: {:error, :invalid_limit}
 
   defp valid_bounds(renewal_ms, hard_lifetime_ms) do
     if renewal_ms in 1..@max_renewal_ms and hard_lifetime_ms in renewal_ms..@max_hard_lifetime_ms,
@@ -210,20 +196,6 @@ defmodule ChalkSync.Live.ScreenShareLease do
       and lease_generation = $4
       and owner_participant_id = $5
       and owner_generation = $6
-    """
-  end
-
-  defp expire_query do
-    """
-    delete from sync_screen_share_leases
-    where ctid in (
-      select ctid
-      from sync_screen_share_leases
-      where least(renewed_until, hard_expires_at) <= $1
-      order by least(renewed_until, hard_expires_at), lease_id
-      for update skip locked
-      limit $2
-    )
     """
   end
 end

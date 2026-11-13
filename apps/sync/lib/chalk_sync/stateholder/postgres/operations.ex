@@ -162,6 +162,8 @@ defmodule ChalkSync.Stateholder.Postgres.Operations do
         episode,
         external_operation_id,
         outcome
-      ), commit_comment: "chalk sync external operation finalization")
+      ),
+      commit_comment: "chalk sync external operation finalization"
+    )
   end
 end

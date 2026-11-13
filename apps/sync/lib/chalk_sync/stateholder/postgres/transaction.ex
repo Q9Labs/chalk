@@ -14,6 +14,9 @@ defmodule ChalkSync.Stateholder.Postgres.Transaction do
     )
   end
 
+  # TRIPWIRE(owner=sync, by=2027-02-13): the rollout row is an expand-and-contract gate. Once every environment
+  # shows enforced=true, delete the second query, the :compatibility entry ownership mode (JoinSeats.Admit,
+  # Identity) and the sync_entry_rollout table with an API migration that keeps the previous release runnable.
   # Two round trips. The settings query returns the synchronous_commit value Postgres
   # now applies to this transaction, and the rollout row is read under its share lock.
   # Returns whether Sync entry ownership is enforced.

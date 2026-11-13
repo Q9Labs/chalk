@@ -1,7 +1,7 @@
-defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
+defmodule ChalkSync.Stateholder.Postgres.ScreenShareLeasePostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Live.ScreenShareLease
+  alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -75,7 +75,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
     assert :ok = ScreenShareLease.release(second, fixture.episode, takeover)
   end
 
-  test "renews within the hard lifetime and expires in a bounded batch", %{
+  test "renews within the hard lifetime and refuses a renewal after it", %{
     connections: [connection | _],
     fixture: fixture
   } do
@@ -99,17 +99,11 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
              )
 
     assert renewed.renewed_until == renewed.hard_expires_at
-    assert {:ok, 0} = ScreenShareLease.expire(connection, DateTime.add(@now, 9_999, :millisecond))
-
-    assert {:ok, 1} =
-             ScreenShareLease.expire(connection, DateTime.add(@now, 10_000, :millisecond))
 
     assert {:error, :lease_expired} =
              ScreenShareLease.renew(connection, fixture.episode, renewed,
                now: DateTime.add(@now, 10_001, :millisecond)
              )
-
-    assert {:error, :invalid_limit} = ScreenShareLease.expire(connection, @now, 501)
   end
 
   defp seed_fixture(connection) do

@@ -198,6 +198,8 @@ defmodule ChalkSync.Episodes.Reducer do
   @spec replay_event(t(), event() | map(), binary()) :: {:ok, t()} | {:error, atom()}
   def replay_event(%__MODULE__{} = state, event, recorded_digest) do
     with {:ok, next} <- apply_event(state, event) do
+      # TRIPWIRE(owner=sync, by=2027-02-13): journals written before admission order was kept unsorted digest the sorted
+      # form. Delete this fallback once no stored digest needs it (replay with it disabled passes on a snapshot copy).
       legacy = %{next | admission_request_order: Enum.sort(next.admission_request_order)}
 
       cond do

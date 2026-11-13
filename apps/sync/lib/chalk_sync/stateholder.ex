@@ -80,6 +80,11 @@ defmodule ChalkSync.Stateholder do
               {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
   @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
               :ok | {:error, atom()} | {:retryable, atom()}
+  @callback acquire_screen_lease(EpisodeKey.t(), String.t(), pos_integer(), keyword()) ::
+              {:ok, map()} | {:error, atom()}
+  @callback renew_screen_lease(EpisodeKey.t(), map(), keyword()) ::
+              {:ok, map()} | {:error, atom()}
+  @callback release_screen_lease(EpisodeKey.t(), map()) :: :ok | {:error, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
               {:ok, Decision.t()} | {:retryable, atom()}
 
@@ -116,6 +121,15 @@ defmodule ChalkSync.Stateholder do
   end
 
   def participant_devices(%EpisodeKey{} = episode), do: impl().participant_devices(episode)
+
+  def acquire_screen_lease(%EpisodeKey{} = episode, participant_id, generation, options),
+    do: impl().acquire_screen_lease(episode, participant_id, generation, options)
+
+  def renew_screen_lease(%EpisodeKey{} = episode, lease, options),
+    do: impl().renew_screen_lease(episode, lease, options)
+
+  def release_screen_lease(%EpisodeKey{} = episode, lease),
+    do: impl().release_screen_lease(episode, lease)
 
   def media_pauses(%EpisodeKey{} = episode), do: impl().media_pauses(episode)
 

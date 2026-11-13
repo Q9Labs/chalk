@@ -25,6 +25,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner
+  alias ChalkSync.Stateholder.Postgres.ScreenLeases
   alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.Stateholder.Recovery
@@ -228,6 +229,15 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   defdelegate media_stops(a), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate acquire_screen_lease(a, b, c, d), to: ScreenLeases
+
+  @impl ChalkSync.Stateholder
+  defdelegate renew_screen_lease(a, b, c), to: ScreenLeases
+
+  @impl ChalkSync.Stateholder
+  defdelegate release_screen_lease(a, b), to: ScreenLeases
 
   @impl ChalkSync.Stateholder
   defdelegate set_media_pause(a, b, c), to: Media
