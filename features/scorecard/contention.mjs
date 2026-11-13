@@ -12,7 +12,10 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
   const nodeReadouts = [...nodeBefore, ...nodeAfter];
   const readings = [...nodeReadouts, ...nodeWindow];
   const coverage = nodeBefore.length > 0 && nodeAfter.length > 0 && nodeWindow.length > 0;
-  const changes = Math.max(0, new Set(readings.map((row) => row.nodeIncarnation)).size - 1);
+  // Staging holds a primary and a standby. A change is a node that is missing from one readout or new in another.
+  const incarnations = [nodeBefore, nodeWindow, nodeAfter].map((rows) => new Set(rows.map((row) => row.nodeIncarnation))).filter((set) => set.size > 0);
+  const steady = incarnations.reduce((common, set) => new Set([...common].filter((id) => set.has(id))), incarnations[0] ?? new Set());
+  const changes = Math.max(0, ...incarnations.map((set) => set.size - [...set].filter((id) => steady.has(id)).length));
   const steals = readings.map((row) => row.host?.stealPercent);
   const stealKnown = coverage && steals.every(Number.isFinite);
   const drainKnown = coverage && readings.every((row) => typeof row.draining === "boolean");
