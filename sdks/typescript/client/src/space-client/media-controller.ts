@@ -12,12 +12,13 @@ import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
+import { structurallyEqual } from "./structural-equal";
 import { makeScopedFork, type ScopedFork } from "./scoped-fork";
 import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
@@ -1361,7 +1362,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.sync(() => {
           const current = this.#store.getSnapshot().media;
           const next = Object.freeze({ microphones: mediaDevicesOfKind(devices, "audioinput"), cameras: mediaDevicesOfKind(devices, "videoinput"), speakers: mediaDevicesOfKind(devices, "audiooutput") });
-          if (!sameDevices(current.devices, next)) this.#store.update("media", Object.freeze({ ...current, devices: next }));
+          this.#store.update("media", Object.freeze({ ...current, devices: next }));
         }),
       ),
       Effect.asVoid,
@@ -1760,9 +1761,9 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
   return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
-  if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
+  if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
+  return sameScreenShare(left.screenShare, right.screenShare) && structurallyEqual(left.remote, right.remote) && structurallyEqual(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
 }
 function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean {
   return left?.tier === right?.tier && left?.reason === right?.reason;
@@ -1773,28 +1774,8 @@ function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["scr
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;
 }
-function sameRemoteMedia(left: MediaSlice["remote"], right: MediaSlice["remote"]): boolean {
-  return left.length === right.length && left.every((track, index) => sameRemoteTrack(track, right[index]));
-}
-function sameRemoteTrack(left: RemoteMedia, right: RemoteMedia | undefined): boolean {
-  if (!right) return false;
-  return left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track && left.pausedForNetwork === right.pausedForNetwork;
-}
-function sameRequests(left: MediaSlice["incomingRequests"], right: MediaSlice["incomingRequests"]): boolean {
-  return left.length === right.length && left.every((request, index) => sameRequest(request, right[index]));
-}
-function sameRequest(left: IncomingMediaRequest, right: IncomingMediaRequest | undefined): boolean {
-  if (!right) return false;
-  return left.requestId === right.requestId && left.kind === right.kind && left.actorParticipantId === right.actorParticipantId && left.actorDisplayName === right.actorDisplayName && left.expiresAt === right.expiresAt;
-}
 function mediaDevicesOfKind(devices: readonly MediaDeviceInfo[], kind: MediaDeviceKind): MediaSlice["devices"]["microphones"] {
   return Object.freeze(devices.filter((device) => device.kind === kind).map((device) => Object.freeze({ deviceId: device.deviceId, label: device.label })));
-}
-function sameDevices(left: MediaSlice["devices"], right: MediaSlice["devices"]): boolean {
-  return sameDeviceList(left.microphones, right.microphones) && sameDeviceList(left.cameras, right.cameras) && sameDeviceList(left.speakers, right.speakers);
-}
-function sameDeviceList(left: MediaSlice["devices"]["microphones"], right: MediaSlice["devices"]["microphones"]): boolean {
-  return left.length === right.length && left.every((device, index) => device.deviceId === right[index]?.deviceId && device.label === right[index]?.label);
 }
 function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare", permissionMessage: string): ConnectionError {
   if (cause instanceof ConnectionError) return cause;
