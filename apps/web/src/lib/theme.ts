@@ -20,18 +20,18 @@ export function applyThemeMode(root: HTMLElement, mode: ThemeMode): void {
   root.style.colorScheme = mode;
 }
 const CALL_JOIN_PATH_PATTERN = /^\/dashboard\/call\/[^/]+\/join\/?$/;
-/** Runs in head before first paint; keep aligned with resolveThemeMode. Call routes also get data-boot="call" for CALL_BOOT_CSS. */
-export const THEME_BOOTSTRAP_SCRIPT = `(function(){var m=document.cookie.match(${THEME_COOKIE_PATTERN});var p=m&&m[1]==="light"?"light":"dark";var path=location.pathname;var space=path==="/space"||path.indexOf("/space/")===0||${INVITE_CODE_PATH_PATTERN}.test(path);var mode=space?p:"light";var root=document.documentElement;root.classList.toggle("dark",mode==="dark");root.setAttribute("data-chalk-theme",mode);root.style.colorScheme=mode;if(space||${CALL_JOIN_PATH_PATTERN}.test(path))root.setAttribute("data-boot","call");})();`;
+/** Runs in head before first paint; keep aligned with resolveThemeMode. Call routes also get data-call-boot, set to the call's theme (the cookie's, even on the dashboard join route), for CALL_BOOT_CSS. */
+export const THEME_BOOTSTRAP_SCRIPT = `(function(){var m=document.cookie.match(${THEME_COOKIE_PATTERN});var p=m&&m[1]==="light"?"light":"dark";var path=location.pathname;var space=path==="/space"||path.indexOf("/space/")===0||${INVITE_CODE_PATH_PATTERN}.test(path);var mode=space?p:"light";var root=document.documentElement;root.classList.toggle("dark",mode==="dark");root.setAttribute("data-chalk-theme",mode);root.style.colorScheme=mode;if(space||${CALL_JOIN_PATH_PATTERN}.test(path))root.setAttribute("data-call-boot",p);})();`;
 /**
  * The HTML shell of a call route has an empty body until the app loads. This paints the call canvas and the centred
  * joining card (a spinner, since the call's name is not known yet) from the first frame, and steps aside as soon as the
  * app mounts anything of the call. Values mirror the call tokens in packages/ui.
  */
-export const CALL_BOOT_CSS = `html[data-boot="call"],html[data-boot="call"] body{background:#000;}
-html[data-boot="call"][data-chalk-theme="light"],html[data-boot="call"][data-chalk-theme="light"] body{background:#f3f3f5;}
-html[data-boot="call"] body:not(:has([data-chalk]))::before{content:"";position:fixed;left:50%;top:50%;width:76px;height:68px;transform:translate(-50%,-50%);border-radius:16px;background:#060606;box-shadow:inset 0 0 0 1px rgba(255,255,255,.045);}
-html[data-boot="call"][data-chalk-theme="light"] body:not(:has([data-chalk]))::before{background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.09);}
-html[data-boot="call"] body:not(:has([data-chalk]))::after{content:"";position:fixed;left:50%;top:50%;width:20px;height:20px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:#ececee;animation:chalk-boot-spin .8s linear infinite;}
-html[data-boot="call"][data-chalk-theme="light"] body:not(:has([data-chalk]))::after{border-color:rgba(0,0,0,.14);border-top-color:#18181b;}
+export const CALL_BOOT_CSS = `html[data-call-boot],html[data-call-boot] body{background:#000;}
+html[data-call-boot="light"],html[data-call-boot="light"] body{background:#f3f3f5;}
+html[data-call-boot] body:not(:has([data-chalk]))::before{content:"";position:fixed;left:50%;top:50%;width:76px;height:68px;transform:translate(-50%,-50%);border-radius:16px;background:#060606;box-shadow:inset 0 0 0 1px rgba(255,255,255,.045);}
+html[data-call-boot="light"] body:not(:has([data-chalk]))::before{background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.09);}
+html[data-call-boot] body:not(:has([data-chalk]))::after{content:"";position:fixed;left:50%;top:50%;width:20px;height:20px;margin:-12px 0 0 -12px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:#ececee;animation:chalk-boot-spin .8s linear infinite;}
+html[data-call-boot="light"] body:not(:has([data-chalk]))::after{border-color:rgba(0,0,0,.14);border-top-color:#18181b;}
 @keyframes chalk-boot-spin{to{transform:rotate(360deg);}}
-@media (prefers-reduced-motion: reduce){html[data-boot="call"] body::after{animation-duration:2.4s;}}`;
+@media (prefers-reduced-motion: reduce){html[data-call-boot] body::after{animation-duration:2.4s;}}`;
