@@ -69,20 +69,25 @@ func (c purgeCatalog) followParents(selected map[string]string) {
 			if _, exists := selected[table.Name]; exists {
 				continue
 			}
-			var paths []string
-			for _, fk := range c.FKs {
-				parent, ok := selected[fk.Parent]
-				if fk.Child != table.Name || !ok || fk.Parent == table.Name {
-					continue
-				}
-				paths = append(paths, `exists(select 1 from (select * from `+purgeName(fk.Parent)+` where `+parent+`) p where `+fk.join(table.Name, "p")+`)`)
-			}
-			if len(paths) > 0 {
+			if paths := c.parentPaths(table, selected); len(paths) > 0 {
 				selected[table.Name] = strings.Join(paths, " or ")
 				changed = true
 			}
 		}
 	}
+}
+
+// parentPaths lists, per FK to an already selected parent, the condition that a table row hangs off it.
+func (c purgeCatalog) parentPaths(table purgeTable, selected map[string]string) []string {
+	var paths []string
+	for _, fk := range c.FKs {
+		parent, ok := selected[fk.Parent]
+		if fk.Child != table.Name || !ok || fk.Parent == table.Name {
+			continue
+		}
+		paths = append(paths, `exists(select 1 from (select * from `+purgeName(fk.Parent)+` where `+parent+`) p where `+fk.join(table.Name, "p")+`)`)
+	}
+	return paths
 }
 
 // addJourneyEvents selects the journey events that selected rows point at, and the problem reports

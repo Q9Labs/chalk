@@ -31,24 +31,9 @@ func (r EpisodeLifecycleRepository) ListSpaceLiveEpisodes(ctx context.Context, t
 	}
 	result := make([]episodes.SpaceLiveEpisode, 0, len(rows))
 	for _, row := range rows {
-		item := episodes.SpaceLiveEpisode{SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes)}
-		if row.EpisodeID.Valid {
-			live := episodes.LiveEpisode{EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), Participants: []episodes.PresentParticipant{}}
-			var participants []struct {
-				ParticipantID string `json:"participant_id"`
-				DisplayName   string `json:"display_name"`
-			}
-			if err := json.Unmarshal(row.Participants, &participants); err != nil {
-				return nil, fmt.Errorf("decode live Episode participants: %w", err)
-			}
-			for _, participant := range participants {
-				id, err := utilities.ParseID(participant.ParticipantID)
-				if err != nil {
-					return nil, fmt.Errorf("decode live Participant ID: %w", err)
-				}
-				live.Participants = append(live.Participants, episodes.PresentParticipant{ParticipantID: id, DisplayName: participant.DisplayName})
-			}
-			item.Episode = &live
+		item, err := mapSpaceLiveEpisode(row)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, item)
 	}
@@ -56,4 +41,28 @@ func (r EpisodeLifecycleRepository) ListSpaceLiveEpisodes(ctx context.Context, t
 		return nil, fmt.Errorf("commit live Episode read: %w", err)
 	}
 	return result, nil
+}
+
+func mapSpaceLiveEpisode(row sqlc.ListSpaceLiveEpisodesRow) (episodes.SpaceLiveEpisode, error) {
+	item := episodes.SpaceLiveEpisode{SpaceID: utilities.IDFromBytes(row.SpaceID.Bytes)}
+	if !row.EpisodeID.Valid {
+		return item, nil
+	}
+	live := episodes.LiveEpisode{EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes), Participants: []episodes.PresentParticipant{}}
+	var participants []struct {
+		ParticipantID string `json:"participant_id"`
+		DisplayName   string `json:"display_name"`
+	}
+	if err := json.Unmarshal(row.Participants, &participants); err != nil {
+		return item, fmt.Errorf("decode live Episode participants: %w", err)
+	}
+	for _, participant := range participants {
+		id, err := utilities.ParseID(participant.ParticipantID)
+		if err != nil {
+			return item, fmt.Errorf("decode live Participant ID: %w", err)
+		}
+		live.Participants = append(live.Participants, episodes.PresentParticipant{ParticipantID: id, DisplayName: participant.DisplayName})
+	}
+	item.Episode = &live
+	return item, nil
 }

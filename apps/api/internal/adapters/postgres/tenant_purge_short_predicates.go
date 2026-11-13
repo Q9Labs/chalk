@@ -118,32 +118,38 @@ func shortBoundaryQueries(catalog purgeCatalog) []string {
 	var checks []string
 	for _, fk := range catalog.FKs {
 		child, _ := catalog.table(fk.Child)
-		outside := "true"
-		if len(child.Primary) > 0 {
-			outside = "not exists(select 1 from " + shortTemp(child.Name) + " s where " + purgePKJoin(child, "c", "s") + ")"
-		}
-		checks = append(checks, `select exists(select 1 from `+purgeName(fk.Child)+` c join `+shortTemp(fk.Parent)+` p on `+fk.join("c", "p")+` where `+outside+`)`)
+		checks = append(checks, `select exists(select 1 from `+purgeName(fk.Child)+` c join `+shortTemp(fk.Parent)+` p on `+fk.join("c", "p")+` where `+outsideShortSet(child)+`)`)
 	}
-	if _, ok := catalog.table("observability_journey_events"); ok {
-		for _, table := range catalog.Tables {
-			for _, column := range table.Columns {
-				parent := ""
-				if slices.Contains([]string{"journey_id", "root_journey_id", "submission_journey_id"}, column.Name) {
-					parent = "journey_id"
-				}
-				if strings.HasSuffix(column.Name, "journey_event_id") || column.Name == "parent_event_id" {
-					parent = "event_id"
-				}
-				if parent == "" {
-					continue
-				}
-				outside := "true"
-				if len(table.Primary) > 0 {
-					outside = "not exists(select 1 from " + shortTemp(table.Name) + " s where " + purgePKJoin(table, "c", "s") + ")"
-				}
-				checks = append(checks, `select exists(select 1 from `+purgeName(table.Name)+` c where `+outside+` and c.`+purgeQuote(column.Name)+`::text in(select `+purgeQuote(parent)+`::text from `+shortTemp("observability_journey_events")+`))`)
+	if _, ok := catalog.table("observability_journey_events"); !ok {
+		return checks
+	}
+	for _, table := range catalog.Tables {
+		for _, column := range table.Columns {
+			parent := journeyParentColumn(column.Name)
+			if parent == "" {
+				continue
 			}
+			checks = append(checks, `select exists(select 1 from `+purgeName(table.Name)+` c where `+outsideShortSet(table)+` and c.`+purgeQuote(column.Name)+`::text in(select `+purgeQuote(parent)+`::text from `+shortTemp("observability_journey_events")+`))`)
 		}
 	}
 	return checks
+}
+
+// outsideShortSet is the condition for a row of the table that the short erase did not select.
+func outsideShortSet(table purgeTable) string {
+	if len(table.Primary) == 0 {
+		return "true"
+	}
+	return "not exists(select 1 from " + shortTemp(table.Name) + " s where " + purgePKJoin(table, "c", "s") + ")"
+}
+
+// journeyParentColumn names the journey_events column a column refers to, or "" when it refers to none.
+func journeyParentColumn(column string) string {
+	if strings.HasSuffix(column, "journey_event_id") || column == "parent_event_id" {
+		return "event_id"
+	}
+	if slices.Contains([]string{"journey_id", "root_journey_id", "submission_journey_id"}, column) {
+		return "journey_id"
+	}
+	return ""
 }
