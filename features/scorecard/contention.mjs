@@ -19,11 +19,13 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
   const steals = readings.map((row) => row.host?.stealPercent);
   const stealKnown = coverage && steals.every(Number.isFinite);
   const drainKnown = coverage && readings.every((row) => typeof row.draining === "boolean");
-  const nodeForeign = nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
+  // With two nodes a missing sessions gauge on one would otherwise read as zero sessions.
+  const sessionsKnown = coverage && readings.every((row) => Number.isSafeInteger(row.sessions));
+  const nodeForeign =nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
   const nodeSessions = Math.max(0, ...nodeReadouts.map((row) => row.sessions));
   const zeroEvents = window ? window.length === 0 : UNAVAILABLE;
   const observedContention = !lease?.acquired || !!lease?.lost || episodes > 0 || nodeForeign || changes > 0 || readings.some((row) => row.draining);
-  const missingEvidence = !before || !after || episodes === UNAVAILABLE || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown;
+  const missingEvidence = !before || !after || episodes === UNAVAILABLE || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown || !sessionsKnown;
   const result = {
     contended: observedContention || (!unobservable && missingEvidence),
     source: "axiom_api_logs_and_metrics_and_github_lease",

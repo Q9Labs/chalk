@@ -75,6 +75,17 @@ test("a primary and a standby that report in every readout are not an incarnatio
   assert.equal(result.incarnation_changes.value, 0);
 });
 
+test("a node with no sessions reading cannot be taken for an idle one", () => {
+  const reading = { ...idle, nodeIncarnation: "boot-standby" };
+  const blind = { ...reading, sessions: undefined };
+  for (const field of ["nodeBefore", "nodeWindow", "nodeAfter"]) {
+    const result = contention({ ...input(), nodeBefore: [idle, reading], nodeWindow: [idle, reading], nodeAfter: [idle, reading], [field]: [idle, blind] });
+    assert.equal(result.contended, true, field);
+  }
+  const single = contention({ ...input(), nodeAfter: [{ ...idle, sessions: undefined }] });
+  assert.equal(single.contended, true);
+});
+
 test("a standby that appears or vanishes between readouts taints the card", () => {
   const standby = { ...idle, nodeIncarnation: "boot-standby" };
   const appears = contention({ ...input(), nodeBefore: [idle], nodeWindow: [idle, standby], nodeAfter: [idle, standby] });
