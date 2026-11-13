@@ -8,10 +8,8 @@ import type { Identity } from "./identity";
 
 afterEach(() => vi.restoreAllMocks());
 
-it.each([false, true])("refreshes this tab's seat after a sibling join, recovering supersession once (recovery also superseded: %s)", async (recoveryFails) => {
-  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T14:00:00Z"));
-  vi.spyOn(console, "warn").mockImplementation(() => undefined);
-  const env = configuration({
+function testEnv() {
+  return configuration({
     CHALK_ENVIRONMENT: "test",
     CHALK_API_ORIGIN: "https://engine.example.test",
     DASHBOARD_ORIGIN: "https://dashboard.example.test",
@@ -25,18 +23,19 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
     DASHBOARD_SERVICE_TOKEN: "service",
     DASHBOARD_IDENTITY_PROVIDER: "fixture",
   });
-  const tenantId = Schema.decodeUnknownSync(TenantIdSchema)("11111111-1111-4111-8111-111111111111");
-  const spaceId = "22222222-2222-4222-8222-222222222222";
-  const episodeId = "33333333-3333-4333-8333-333333333333";
-  const participantId = "44444444-4444-4444-8444-444444444444";
-  const identity: Identity = { provider: "google", userId: "owner", sessionId: "session", name: "Owner", email: "owner@example.test", avatarUrl: null, expiresAt: Date.now() + 60000 };
+}
+
+type SeatIds = { readonly spaceId: string; readonly episodeId: string; readonly participantId: string; readonly siblingId: string };
+
+/** A request carrying this tab's seat (generation 1) and a newer sibling tab's seat (generation 2), as the cookies hold them after a sibling join. */
+async function requestWithSeats(env: ReturnType<typeof testEnv>, identity: Identity, { spaceId, episodeId, participantId, siblingId }: SeatIds) {
+  const seat = (id: string, generation: number) => seal({ userId: identity.userId, sessionId: identity.sessionId, spaceId, episodeId, participantId: id, generation, expiresAt: identity.expiresAt }, env.SESSION_SECRET, "owner-seat");
   const cookie = new Response();
-  writeCookie(cookie, env, `seat_${spaceId}_${participantId}`, await seal({ userId: identity.userId, sessionId: identity.sessionId, spaceId, episodeId, participantId, generation: 1, expiresAt: identity.expiresAt }, env.SESSION_SECRET, "owner-seat"));
-  const siblingId = "55555555-5555-4555-8555-555555555555";
-  const sibling = await seal({ userId: identity.userId, sessionId: identity.sessionId, spaceId, episodeId, participantId: siblingId, generation: 2, expiresAt: identity.expiresAt }, env.SESSION_SECRET, "owner-seat");
+  writeCookie(cookie, env, `seat_${spaceId}_${participantId}`, await seat(participantId, 1));
+  const sibling = await seat(siblingId, 2);
   writeCookie(cookie, env, `seat_${spaceId}_${siblingId}`, sibling);
   writeCookie(cookie, env, `seat_${spaceId}`, sibling);
-  const request = new Request(env.DASHBOARD_ORIGIN, {
+  return new Request(env.DASHBOARD_ORIGIN, {
     headers: {
       Cookie: cookie.headers
         .getSetCookie()
@@ -44,6 +43,18 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
         .join("; "),
     },
   });
+}
+
+it.each([false, true])("refreshes this tab's seat after a sibling join, recovering supersession once (recovery also superseded: %s)", async (recoveryFails) => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T14:00:00Z"));
+  vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const env = testEnv();
+  const tenantId = Schema.decodeUnknownSync(TenantIdSchema)("11111111-1111-4111-8111-111111111111");
+  const spaceId = "22222222-2222-4222-8222-222222222222";
+  const episodeId = "33333333-3333-4333-8333-333333333333";
+  const participantId = "44444444-4444-4444-8444-444444444444";
+  const identity: Identity = { provider: "google", userId: "owner", sessionId: "session", name: "Owner", email: "owner@example.test", avatarUrl: null, expiresAt: Date.now() + 60000 };
+  const request = await requestWithSeats(env, identity, { spaceId, episodeId, participantId, siblingId: "55555555-5555-4555-8555-555555555555" });
   const access = {
     subject: { tenant_id: tenantId, space_id: spaceId, episode_id: episodeId, participant_id: participantId, participant_generation: 1 },
     sync: { token: "sync", expires_at: "2026-10-22T15:00:00Z" },

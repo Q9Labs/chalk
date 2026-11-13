@@ -125,7 +125,7 @@ async function engineFor(fixture: Fixture) {
           return page(only ? fixture.recordings.filter((item) => (item as { space_id: string }).space_id === only) : fixture.recordings, url, "recordings");
         }
         if (path === "/transcripts") return page(fixture.transcripts, url, "transcripts");
-        if (/\/attendance$/.test(path))
+        if (path.endsWith("/attendance"))
           return Response.json({
             episode_id: uuid(EPISODE, 1),
             participants: Array.from({ length: fixture.attendance ?? 3 }, (_, index) => ({ participant_id: uuid(0xe, index), display_name: `P${index}`, external_id: null, identity_kind: "user", first_joined_at: hours(5), last_left_at: null, left_reason: null })),
