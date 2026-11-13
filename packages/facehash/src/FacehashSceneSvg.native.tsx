@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Svg, { Defs, G, Path, RadialGradient, Rect, Stop, Text as SvgText } from "react-native-svg";
 import type { FacehashScene, Variant } from "./core/index";
 import { useBlinkTransform } from "./native-blink";
+import { faceBoxTransform, gradientCenter } from "./scene-svg";
 
 type FacehashSceneSvgNativeProps = {
   backgroundColor: string;
@@ -32,7 +33,7 @@ export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, f
   return (
     <Svg fill="none" height={size} viewBox="0 0 100 100" width={size}>
       <Defs>
-        <RadialGradient cx={`${scene.gradientCenter.x}%`} cy={`${scene.gradientCenter.y}%`} id={gradientId} r="70%">
+        <RadialGradient {...gradientCenter(scene)} id={gradientId} r="70%">
           <Stop offset="0%" stopColor="#ffffff" stopOpacity={0.15} />
           <Stop offset="60%" stopColor="#ffffff" stopOpacity={0} />
         </RadialGradient>
@@ -42,7 +43,7 @@ export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, f
       {variant === "gradient" ? <Rect fill={`url(#${gradientId})`} height="100" width="100" x="0" y="0" /> : null}
 
       <G transform={scene.projection.svgTransform}>
-        <G transform={`translate(${scene.faceBox.x} ${scene.faceBox.y}) scale(${scene.faceBox.width / scene.faceGeometry.viewBox.width} ${scene.faceBox.height / scene.faceGeometry.viewBox.height})`}>
+        <G transform={faceBoxTransform(scene)}>
           {renderEye(scene.faceGeometry.leftEyePaths, leftBlinkTransform, foregroundColor)}
           {renderEye(scene.faceGeometry.rightEyePaths, rightBlinkTransform, foregroundColor)}
         </G>
