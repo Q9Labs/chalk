@@ -54,13 +54,14 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	}
 	projection := canonicalJSON(mustJSON(durableProjection))
 
-	digestInput := make([]byte, 0, len(controlStateDigestPrefix)+4+len(projection))
-	digestInput = append(digestInput, controlStateDigestPrefix...)
 	version := make([]byte, 4)
 	binary.BigEndian.PutUint32(version, uint32(controlStateSchemaV1))
-	digestInput = append(digestInput, version...)
-	digestInput = append(digestInput, projection...)
-	digest := sha256.Sum256(digestInput)
+	hash := sha256.New()
+	hash.Write([]byte(controlStateDigestPrefix))
+	hash.Write(version)
+	hash.Write(projection)
+	var digest [sha256.Size]byte
+	copy(digest[:], hash.Sum(nil))
 
 	durableProjection["state_digest"] = hex.EncodeToString(digest[:])
 	wireSnapshot := canonicalJSON(mustJSON(durableProjection))
