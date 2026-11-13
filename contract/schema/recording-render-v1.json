@@ -1,0 +1,28 @@
+{
+  "$comment": "Facts the Go recorder worker and the Node recording renderer both enforce. The renderer's constants are generated from this file by scripts/codegen/recording-render-contract.mjs, and apps/api/internal/recorderworker/render_contract_test.go fails when the Go side stops matching it.",
+  "composeRequest": {
+    "version": "recording-frame-render-request.v1",
+    "maxWidth": 3840,
+    "maxHeight": 2160,
+    "maxFps": 60,
+    "maxDurationMs": 14400000
+  },
+  "composeResult": {
+    "version": "recording-compose-result.v1"
+  },
+  "videoEncoders": ["libx264", "h264_videotoolbox", "h264_nvenc"],
+  "decodedMedia": {
+    "version": "decoded_media.v1",
+    "audioSampleRateHz": 48000,
+    "microphoneChannels": 1,
+    "mixChannels": 2,
+    "discontinuityReasons": ["packet_loss", "source_gap", "attempt_recovery", "decode_failure"]
+  },
+  "frameCounts": [
+    { "durationMs": 1, "fps": 30, "frames": 1 },
+    { "durationMs": 1000, "fps": 30, "frames": 30 },
+    { "durationMs": 1001, "fps": 30, "frames": 31 },
+    { "durationMs": 33, "fps": 60, "frames": 2 },
+    { "durationMs": 14400000, "fps": 60, "frames": 864000 }
+  ]
+}

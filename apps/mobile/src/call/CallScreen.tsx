@@ -1,7 +1,7 @@
 import { Chalk } from "@q9labsai/chalk-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RecentCall } from "../home/recent-calls";
-import type { ArrivedCall } from "../join/JoiningScreen";
+import type { ArrivedCall } from "../lib/arrived-call";
 import { cleanupSpaceArrival, createGuestAccessGetter, retireSpaceArrival } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { createMobileSpaceClient } from "../space/mobile-space-client";

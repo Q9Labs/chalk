@@ -129,6 +129,25 @@ describe("public chat attachment failures", () => {
       client.dispose();
     }
   });
+
+  it("keeps the failure kind and HTTP status when the API refuses to start or finish an upload", async () => {
+    const descriptor = () => Response.json({ attachmentId: "attachment-1", uploadId: "upload-1", method: "PUT", uploadUrl: "https://storage.example/upload", headers: { "content-type": "text/plain" }, expiresAt: "2099-01-01T00:00:00Z" }, { status: 201 });
+    const stored = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 200 }));
+    for (const { responses, uploadFailure } of [
+      { responses: [new Response(null, { status: 403 })], uploadFailure: { kind: "initiate_failed", httpStatus: 403 } },
+      { responses: [descriptor(), new Response(null, { status: 409 })], uploadFailure: { kind: "finalize_failed", httpStatus: 409 } },
+    ]) {
+      const apiFetch = vi.fn<typeof globalThis.fetch>();
+      for (const response of responses) apiFetch.mockResolvedValueOnce(response);
+      const client = attachmentClient(({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch: apiFetch }), stored);
+      try {
+        await client.join({ microphone: false, camera: false });
+        await expect(client.chat.files.upload(file)).rejects.toMatchObject({ code: "command.rejected", recoverable: false, uploadFailure });
+      } finally {
+        client.dispose();
+      }
+    }
+  });
 });
 
 function attachmentClient(createChatFileTransport: (input: { readonly token: () => Promise<string> }) => ChalkChatFileTransport, fetch = vi.fn<typeof globalThis.fetch>()) {
@@ -142,6 +161,15 @@ describe("reporting a failed chat upload", () => {
     const cause = new ChalkChatFileError({ operation: "store_upload", code: "file_transfer_failed", recoverable: false, message: "Attachment upload failed with HTTP 403 for https://storage.example/secret", httpStatus: 403 });
     reportUploadFailure({ recordTransportDiagnostic }, cause);
     expect(recordTransportDiagnostic).toHaveBeenCalledExactlyOnceWith({ event: "chat_upload_failed", upload_failure: "storage_rejected", http_status: 403 });
+  });
+
+  it.each([
+    { operation: "initiate_upload", httpStatus: 403, upload_failure: "initiate_failed" },
+    { operation: "finalize_upload", httpStatus: 409, upload_failure: "finalize_failed" },
+  ] as const)("reports a failed $operation with its HTTP status", ({ operation, httpStatus, upload_failure }) => {
+    const sent: unknown[] = [];
+    reportUploadFailure({ recordTransportDiagnostic: (diagnostic) => void sent.push(diagnostic) }, new ChalkChatFileError({ operation, code: "permission_denied", recoverable: false, message: "Chat attachment request failed.", httpStatus }));
+    expect(sent).toEqual([{ event: "chat_upload_failed", upload_failure, http_status: httpStatus }]);
   });
 
   it("reports nothing for an error that is not an upload failure", () => {

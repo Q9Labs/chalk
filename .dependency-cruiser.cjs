@@ -89,9 +89,17 @@ const clientServerEntryCannotReachSpaceClient = {
   to: { path: "(?:^|/)sdks/typescript/client/src/space-client/" },
 };
 
+const smallAppsHaveNoCycles = {
+  name: "dispatcher-renderer-mobile-no-cycles",
+  comment: "These apps are acyclic today; a new import cycle (type-only imports included) means a shared piece belongs in a lower module.",
+  severity: "error",
+  from: { path: "(?:^|/)apps/(?:transcription-dispatcher|recording-renderer|mobile)/(?:src|App\\.tsx)" },
+  to: { circular: true },
+};
+
 module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
-  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource, clientAccessCannotReachConnection, clientServerEntryCannotReachSpaceClient],
+  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource, clientAccessCannotReachConnection, clientServerEntryCannotReachSpaceClient, smallAppsHaveNoCycles],
   options: {
     ...canonicalConfiguration.options,
     includeOnly: { path: "^(?:apps|packages|sdks/typescript)(?:/|$)" },
