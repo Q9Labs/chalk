@@ -1,14 +1,7 @@
 defmodule ChalkSync.WhiteboardV1.SQL do
   @moduledoc false
 
-  def transaction_settings do
-    """
-    select
-      set_config('lock_timeout', '750ms', true),
-      set_config('statement_timeout', '2s', true),
-      set_config('synchronous_commit', 'on', true)
-    """
-  end
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
 
   # The one effective drawing rule. A host is a participant whose role has
   # manageWhiteboard. A per-person row is the host's choice for that person:
@@ -315,6 +308,12 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
-  def notify_head, do: "select pg_notify('chalk_whiteboard_v1_heads', $1)"
-  def notify_access, do: "select pg_notify('chalk_whiteboard_v1_access', $1)"
+  @head_channel GeneratedWhiteboardV1.metadata()["notifications"]["durableHeadChannel"]
+  @access_channel "chalk_whiteboard_v1_access"
+
+  def head_channel, do: @head_channel
+  def access_channel, do: @access_channel
+
+  def notify_head, do: "select pg_notify('#{@head_channel}', $1)"
+  def notify_access, do: "select pg_notify('#{@access_channel}', $1)"
 end

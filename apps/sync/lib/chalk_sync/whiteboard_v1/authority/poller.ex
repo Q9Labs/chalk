@@ -5,7 +5,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   use GenServer, restart: :temporary
 
   alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Reads
   alias ChalkSync.WhiteboardV1.Repository
 
   # Authority calls these, so it is the only way to a poller.
@@ -24,7 +24,10 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
 
   # The poller supervisor restarts just after Authority, so a start in that gap finds it missing.
   defp start(episode) do
-    case DynamicSupervisor.start_child(Authority.Pollers, {__MODULE__, episode}) do
+    case DynamicSupervisor.start_child(
+           ChalkSync.WhiteboardV1.Authority.Pollers,
+           {__MODULE__, episode}
+         ) do
       {:ok, poller} -> {:started, poller}
       {:error, {:already_started, poller}} -> {:found, poller}
       {:error, _reason} -> {:error, :authority_unavailable}
@@ -75,7 +78,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   # slow read does not push the next one out.
   defp read(state) do
     started_at = now_ms()
-    Process.send_after(self(), :read, started_at + Authority.poll_ms(), abs: true)
+    Process.send_after(self(), :read, started_at + Reads.poll_ms(), abs: true)
 
     case read_access(state.episode) do
       {:ok, access} -> store(%{state | access: access, read_at: started_at}, nil)
@@ -93,7 +96,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
         Repository.episode_access(episode)
       end)
 
-    case Task.yield(task, Authority.read_ms()) || Task.shutdown(task, :brutal_kill) do
+    case Task.yield(task, Reads.read_ms()) || Task.shutdown(task, :brutal_kill) do
       {:ok, result} -> result
       {:exit, _reason} -> {:retryable, {:storage_unavailable, "exit"}}
       nil -> {:retryable, {:storage_unavailable, "deadline"}}
@@ -101,7 +104,7 @@ defmodule ChalkSync.WhiteboardV1.Authority.Poller do
   end
 
   defp store(state, failure) do
-    Authority.store(state.episode, state.access, state.read_at, failure)
+    Reads.store(state.episode, state.access, state.read_at, failure)
     state
   end
 

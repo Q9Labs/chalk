@@ -9,6 +9,10 @@ defmodule ChalkSync.Transport.Router do
   alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.SocketContext
 
+  # Longer than the 80 to 100 second heartbeat tolerance, so the idle timer never races a throttled
+  # background tab (see README, Lifecycle).
+  @idle_timeout_ms 120_000
+
   get("/healthz") do
     conn
     |> put_resp_content_type("application/json")
@@ -54,7 +58,7 @@ defmodule ChalkSync.Transport.Router do
           observability: observability,
           connection_attributes: SocketContext.request(conn)
         },
-        timeout: 120_000
+        timeout: @idle_timeout_ms
       )
       |> halt()
     else
@@ -96,7 +100,7 @@ defmodule ChalkSync.Transport.Router do
             connection_attributes: with_ingress(connection_attributes, direct),
             direct: direct
           },
-          [timeout: 120_000] ++ direct_upgrade_options(direct)
+          [timeout: @idle_timeout_ms] ++ direct_upgrade_options(direct)
         )
         |> halt()
 

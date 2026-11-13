@@ -115,7 +115,7 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			occurredAt = timestamp(episode.StartedAt)
 		}
 		commitMetric, err = fanoutWebhookEvent(ctx, tx, webhookProduction{
-			TenantID: input.TenantID, EventName: "episode.started", SemanticKey: "episode:" + input.ID.String() + ":started",
+			TenantID: input.TenantID, EventName: webhooks.EventEpisodeStarted, SemanticKey: "episode:" + input.ID.String() + ":started",
 			ResourceType: "episode", ResourceID: input.ID, OccurredAt: occurredAt,
 			Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 				return webhooks.EncodeEpisodeEvent(metadata, snapshot)
