@@ -1,5 +1,6 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { CallLimboContext } from "../../internal/call-limbo-context";
 import { useSheetDrag } from "./useSheetDrag";
 export interface ChalkSheetProps {
   /** `reactions` has no scrim, so what floats over the call stays bright. */
@@ -15,7 +16,8 @@ export interface ChalkSheetProps {
  * A drag that starts on the grabber or the heading closes the sheet, past 30% of its height or on a flick.
  * The details sheet can open on its own at call start, so it focuses itself, not its close button: no ring shows, and Tab reaches the first control.
  */
-export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
+export function ChalkSheet({ open: requested, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
+  const open = requested && !useContext(CallLimboContext);
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const popup = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);

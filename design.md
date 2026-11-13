@@ -393,8 +393,9 @@ Waiting states look like the call itself, blurred. A stand-in call (the header w
 | Knocking      | "Asking to join Q9 team", "The host will let you in.", and Cancel                                                       |
 | Knock refused | "The host didn't let you in", with "Ask again" and Home beside it                                                       |
 | Reconnecting  | The real call under a `10px` blur and desaturation, with a spinner and "Reconnecting…"                                  |
+| Offline       | The same treatment, with "You're offline" and "You'll rejoin when your connection is back."                             |
 
-While reconnecting with a queued chat message, the card adds "1 message will send when you're back". Queued actions send on their own, with no dialog.
+Reconnecting, offline and connection lost share one treatment. The header and the stage take the blur, a `60%` veil in the canvas color sits over them, and the card is centered on the call, never on a tile. The dock stays sharp above the veil, so Leave and the microphone still work. Open sheets close under the card and come back as they were when the call returns. While reconnecting with a queued chat message, the card adds "1 message will send when you're back". Queued actions send on their own, with no dialog.
 
 Every new web entry shows the device step, prefilled with the name and the last microphone and camera choice in this browser (both on the first time, so the preview shows you). A reload resumes the seat it held, muted and with the camera off. A host starting their own call goes straight in. When the blur ends, the filter is removed at once and a veil in the canvas color fades from `60%` to nothing over `300ms`, so the blur radius itself never animates. With reduced motion, the veil starts at full opacity and fades.
 

@@ -33,9 +33,9 @@ export function reconnectedToast(awayMs: number): Toast {
 }
 
 /**
- * Everything the call says about a lost link. The stage keeps its last picture, blurred and grey under a veil, and the
- * dock stays usable, so this is one calm card, one confirmation, or (after a failure) one card with a way back.
- * The veil lifts over 300ms when the call comes back, so the picture sharpens instead of snapping.
+ * Everything the call says about a lost link. The header and the stage keep their last picture under one static blur and
+ * desaturation with a veil, the card sits at the centre of the call rather than on a tile, and the dock stays sharp and
+ * usable above it. When the call comes back the blur drops at once and the veil fades over 300ms.
  */
 export function ConnectionStatus({ phase, since, pending, onRejoin, onLeave, onReportProblem }: ConnectionStatusProps) {
   const waiting = phase === "reconnecting" || phase === "offline";
@@ -108,10 +108,12 @@ function FailedCard({ onRejoin, onLeave, onReportProblem }: Pick<ConnectionStatu
   );
 }
 
-const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:40;pointer-events:none;background:color-mix(in srgb, var(--chalk-canvas) 40%, transparent);-webkit-backdrop-filter:blur(10px) saturate(0);backdrop-filter:blur(10px) saturate(0);animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
+const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:70;pointer-events:none;background:color-mix(in srgb, var(--chalk-canvas) 60%, transparent);animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
+.chalk-frame:has(.chalk-connection-dim:not([data-lifting])) > :is(.chalk-frame-header, .chalk-frame-stage) {filter:blur(10px) saturate(0);}
+.chalk-frame:has(.chalk-connection-dim) > .chalk-frame-dock {z-index:72;}
 .chalk-connection-dim[data-lifting] {animation:chalk-connection-veil .3s ease-out reverse forwards;}
 @keyframes chalk-connection-veil {from {opacity:0;}}
-.chalk-connection-card {position:absolute;z-index:41;left:50%;top:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);display:grid;justify-items:center;gap:var(--space-1-5);padding:var(--space-5) var(--space-6);border-radius:var(--corner-2xl);background:var(--chalk-surface);border:1px solid var(--chalk-line);box-shadow:var(--chalk-shadow);color:var(--chalk-text);text-align:center;pointer-events:none;animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
+.chalk-connection-card {position:absolute;z-index:71;left:50%;top:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);display:grid;justify-items:center;gap:var(--space-1-5);padding:var(--space-5) var(--space-6);border-radius:var(--corner-2xl);background:var(--chalk-surface);border:1px solid var(--chalk-line);box-shadow:var(--chalk-shadow);color:var(--chalk-text);text-align:center;pointer-events:none;animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
 .chalk-connection-card h3 {display:flex;gap:var(--space-2-5);align-items:center;font-size:var(--type-lead);font-weight:600;line-height:1.3;}
 .chalk-connection-card h3 .chalk-connection-ring {width:20px;height:20px;}
 .chalk-connection-time {color:var(--chalk-muted-text);font-weight:400;font-size:var(--type-body);font-variant-numeric:tabular-nums;}
