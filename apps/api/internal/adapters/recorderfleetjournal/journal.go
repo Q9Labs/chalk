@@ -81,55 +81,71 @@ func (s *Store) loadUnlocked(key recorderfleet.PoolKey) (recorderfleet.Journal, 
 	if err := key.Validate(); err != nil {
 		return recorderfleet.Journal{}, err
 	}
+	envelope, err := s.readEnvelope()
+	if err != nil {
+		return recorderfleet.Journal{}, err
+	}
+	if envelope.Key != key {
+		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+	}
+	if envelope.Journal.SchemaVersion == recorderfleet.LegacyJournalSchemaVersion {
+		if err := s.migrateLegacy(&envelope, key); err != nil {
+			return recorderfleet.Journal{}, err
+		}
+	} else if envelope.Journal.Validate(key) != nil {
+		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+	}
+	return cloneJournal(envelope.Journal)
+}
+
+func (s *Store) readEnvelope() (fileEnvelope, error) {
 	info, err := os.Lstat(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return recorderfleet.Journal{}, recorderfleet.ErrJournalNotFound
+		return fileEnvelope{}, recorderfleet.ErrJournalNotFound
 	}
 	if err != nil {
-		return recorderfleet.Journal{}, fmt.Errorf("stat recorder fleet journal: %w", err)
+		return fileEnvelope{}, fmt.Errorf("stat recorder fleet journal: %w", err)
 	}
 	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() <= 0 || info.Size() > maximumJournalBytes {
-		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+		return fileEnvelope{}, recorderfleet.ErrInvalidJournal
 	}
 	file, err := os.Open(s.path)
 	if err != nil {
-		return recorderfleet.Journal{}, fmt.Errorf("open recorder fleet journal: %w", err)
+		return fileEnvelope{}, fmt.Errorf("open recorder fleet journal: %w", err)
 	}
 	defer file.Close()
 	decoder := json.NewDecoder(io.LimitReader(file, maximumJournalBytes+1))
 	decoder.DisallowUnknownFields()
 	var envelope fileEnvelope
 	if err := decoder.Decode(&envelope); err != nil {
-		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+		return fileEnvelope{}, recorderfleet.ErrInvalidJournal
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+		return fileEnvelope{}, recorderfleet.ErrInvalidJournal
 	}
-	if envelope.Key != key {
-		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+	return envelope, nil
+}
+
+// migrateLegacy upgrades a v1 journal in place, on disk and in the envelope.
+func (s *Store) migrateLegacy(envelope *fileEnvelope, key recorderfleet.PoolKey) error {
+	for _, node := range envelope.Journal.Nodes {
+		if node.Identity == nil || node.Phase == recorderfleet.PhaseAwaitingBootstrap {
+			return recorderfleet.ErrInvalidJournal
+		}
 	}
-	if envelope.Journal.SchemaVersion == recorderfleet.LegacyJournalSchemaVersion {
-		for _, node := range envelope.Journal.Nodes {
-			if node.Identity == nil || node.Phase == recorderfleet.PhaseAwaitingBootstrap {
-				return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
-			}
-		}
-		envelope.Journal.SchemaVersion = recorderfleet.JournalSchemaVersion
-		if envelope.Journal.Validate(key) != nil {
-			return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
-		}
-		encoded, err := json.Marshal(envelope)
-		if err != nil || len(encoded) > maximumJournalBytes {
-			return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
-		}
-		if err := writeAtomic(s.path, encoded); err != nil {
-			return recorderfleet.Journal{}, fmt.Errorf("migrate recorder fleet journal: %w", err)
-		}
-	} else if envelope.Journal.Validate(key) != nil {
-		return recorderfleet.Journal{}, recorderfleet.ErrInvalidJournal
+	envelope.Journal.SchemaVersion = recorderfleet.JournalSchemaVersion
+	if envelope.Journal.Validate(key) != nil {
+		return recorderfleet.ErrInvalidJournal
 	}
-	return cloneJournal(envelope.Journal)
+	encoded, err := json.Marshal(*envelope)
+	if err != nil || len(encoded) > maximumJournalBytes {
+		return recorderfleet.ErrInvalidJournal
+	}
+	if err := writeAtomic(s.path, encoded); err != nil {
+		return fmt.Errorf("migrate recorder fleet journal: %w", err)
+	}
+	return nil
 }
 
 func writeAtomic(path string, content []byte) error {
