@@ -1,6 +1,6 @@
 import type { SyncClock } from "./types";
 
-/** One pending timer per ID. A timer forgets itself when it fires. */
+/** One pending timer per ID: scheduling an ID again replaces its timer, and a timer forgets itself when it fires. */
 export class V1TimerMap {
   readonly #clock: () => SyncClock;
   readonly #timers = new Map<string, unknown>();
@@ -14,6 +14,7 @@ export class V1TimerMap {
   }
 
   schedule(id: string, callback: () => void, delayMs: number): void {
+    this.cancel(id);
     this.#timers.set(
       id,
       this.#clock().setTimeout(() => {
