@@ -12,15 +12,15 @@
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
 // public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
 // of samples makes the exit code non-zero.
-import { appendFile, mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { ProofError, check, command, save } from "./runtime.mjs";
+import { disposeResource } from "./cleanup.mjs";
+import { runStandalone } from "./standalone.mjs";
 import { launchGuests } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
@@ -129,12 +129,11 @@ async function shareSteps(pages, participantId, sample, stages) {
 
 async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) {
   const space = await createSpace(run, plane);
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const createdAt = clock();
-  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
+  const { episode, path } = await postEpisode(run, space);
   const createMs = clock() - createdAt;
   await trackEpisode(run, space, episode);
-  ending.path = `${path}/${episode.id}`;
+  ending.path = path;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
   const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true, lobby: lobbyDwellMs > 0, path: icePath, pathGuest: 1 });
@@ -317,24 +316,8 @@ function table(report) {
 
 async function main() {
   const settings = options();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
   const report = { startedAt: new Date().toISOString(), settings, cycles: [] };
-  let run;
-  try {
-    const config = await loadConfig({ readiness: false });
-    await sweepStaleRuns(config);
-    run = await createRun(config, directory, undefined, runId);
-    const receiver = await prepareIntegration(run, false);
-    await measureAll(run, receiver.origin, settings, report);
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("latency", error);
-  } finally {
-    if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
-  }
+  const { runId, directory } = await runStandalone("latency", report, (run, receiver) => measureAll(run, receiver.origin, settings, report), { readiness: false });
   await conclude(report, settings);
   report.result = !report.error && !report.cleanupError && Object.values(report.planes).every((plane) => !plane.failures.length) ? "passed" : "failed";
   await save(`${directory}/latency.json`, report);

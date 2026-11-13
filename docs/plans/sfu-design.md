@@ -37,7 +37,7 @@ The API proxies SDK signalling to the SFU over mutual TLS on public TCP 8443. Th
 
 ## Reconnect and authority
 
-Postgres owns durable admission, permissions, media-control revisions and operation intents. The SFU owns only actual allocations and packet liveness. Losing a Sync socket is presence loss, not a durable Leave. The rules come from the media-control model in `tools/formal/media-control` and its results.
+Postgres owns durable admission, permissions, media-control revisions and operation intents. The SFU owns only actual allocations and packet liveness. Losing a Sync socket is presence loss, not a durable Leave.
 
 1. Off stops local capture at once and cannot fail as a user intent. The owed off survives timeouts and reconnects until Sync accepts it, and never stops a different device's publication.
 2. On is authorized by Sync. A pending permission or publication is not visible-on, and recovering a stale on snapshot never restarts a locally muted source.

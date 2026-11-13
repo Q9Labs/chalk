@@ -150,8 +150,6 @@ export function aggregateRtcStats(stats) {
   return summary;
 }
 
-export const summarizeRtcStatsByKind = aggregateRtcStats;
-
 export function deltaRtcStats(before, after) {
   return Object.fromEntries(
     DIRECTIONS.map((direction) => [

@@ -20,46 +20,25 @@ function parseArguments(argv) {
     expectVideoCodec: "",
     expectWidth: null,
     input: "",
-    maxAVEndDriftMs: 250,
-    maxAVStartDriftMs: 100,
+    maxAvEndDriftMs: 250,
+    maxAvStartDriftMs: 100,
     maxBlackMs: null,
     maxFreezeMs: null,
     maxSilenceMs: null,
     requireFaststart: false,
     scanAnomalies: false,
   };
-  const numeric = new Set(["duration-tolerance-ms", "expect-duration-ms", "expect-fps", "expect-height", "expect-width", "max-av-end-drift-ms", "max-av-start-drift-ms", "max-black-ms", "max-freeze-ms", "max-silence-ms"]);
-  const strings = new Set(["expect-audio-codec", "expect-video-codec", "input"]);
-  const booleans = new Set(["allow-no-audio", "require-faststart", "scan-anomalies"]);
-  const names = {
-    "allow-no-audio": "allowNoAudio",
-    "duration-tolerance-ms": "durationToleranceMs",
-    "expect-audio-codec": "expectAudioCodec",
-    "expect-duration-ms": "expectDurationMs",
-    "expect-fps": "expectFps",
-    "expect-height": "expectHeight",
-    "expect-video-codec": "expectVideoCodec",
-    "expect-width": "expectWidth",
-    input: "input",
-    "max-av-end-drift-ms": "maxAVEndDriftMs",
-    "max-av-start-drift-ms": "maxAVStartDriftMs",
-    "max-black-ms": "maxBlackMs",
-    "max-freeze-ms": "maxFreezeMs",
-    "max-silence-ms": "maxSilenceMs",
-    "require-faststart": "requireFaststart",
-    "scan-anomalies": "scanAnomalies",
-  };
-
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (!argument.startsWith("--")) throw new Error(`unexpected argument: ${argument}`);
     const name = argument.slice(2);
-    if (booleans.has(name)) {
-      options[names[name]] = true;
+    const key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    if (name !== name.toLowerCase() || !Object.hasOwn(options, key)) throw new Error(`unknown option: --${name}`);
+    if (typeof options[key] === "boolean") {
+      options[key] = true;
       continue;
     }
-    if (!numeric.has(name) && !strings.has(name)) throw new Error(`unknown option: --${name}`);
-    options[names[name]] = parseOptionValue(argv, index, name, numeric.has(name));
+    options[key] = parseOptionValue(argv, index, name, typeof options[key] !== "string");
     index += 1;
   }
   if (options.input.trim() === "") throw new Error("--input is required");
@@ -242,11 +221,11 @@ async function inspect(options) {
   }
   if (videoBoundary !== null && audioBoundary !== null && videoBoundary.startMs !== null && audioBoundary.startMs !== null) {
     const drift = Math.abs(videoBoundary.startMs - audioBoundary.startMs);
-    addAssertion(assertions, "av_start_drift", drift <= options.maxAVStartDriftMs, drift, `<= ${options.maxAVStartDriftMs}ms`);
+    addAssertion(assertions, "av_start_drift", drift <= options.maxAvStartDriftMs, drift, `<= ${options.maxAvStartDriftMs}ms`);
   }
   if (videoBoundary !== null && audioBoundary !== null && videoBoundary.endMs !== null && audioBoundary.endMs !== null) {
     const drift = Math.abs(videoBoundary.endMs - audioBoundary.endMs);
-    addAssertion(assertions, "av_end_drift", drift <= options.maxAVEndDriftMs, drift, `<= ${options.maxAVEndDriftMs}ms`);
+    addAssertion(assertions, "av_end_drift", drift <= options.maxAvEndDriftMs, drift, `<= ${options.maxAvEndDriftMs}ms`);
   }
 
   const boxes = await topLevelMP4Boxes(input, inputStat.size);

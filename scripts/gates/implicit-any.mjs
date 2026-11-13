@@ -6,10 +6,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
-export function implicitAnyIsForbidden(options) {
-  return options.noImplicitAny ?? options.strict ?? false;
-}
-
 if (import.meta.main) {
   const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { encoding: "utf8" })
     .split("\0")
@@ -21,7 +17,7 @@ if (import.meta.main) {
     const config = ts.getParsedCommandLineOfConfigFile(file, {}, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
     if (!config) failures.push(`${file}: could not read TypeScript configuration`);
     else {
-      if (!implicitAnyIsForbidden(config.options)) failures.push(`${file}: strict/noImplicitAny does not forbid implicit any`);
+      if (!(config.options.noImplicitAny ?? config.options.strict)) failures.push(`${file}: strict/noImplicitAny does not forbid implicit any`);
       diagnostics.push(...config.errors);
     }
     for (const diagnostic of diagnostics) failures.push(`${file}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`);

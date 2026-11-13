@@ -15,14 +15,14 @@ const checks = [
   { name: "Docs search index", command: ["node", "apps/web/scripts/docs-search-index.mjs"] },
 ];
 
-function run({ name, command, fix }) {
+function run({ name, command }) {
   return new Promise((resolve) => {
     const child = spawn(command[0], command.slice(1), { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));
-    child.on("error", (error) => resolve({ name, fix, ok: false, output: `${error.message}\n` }));
-    child.on("close", (code) => resolve({ name, fix, ok: code === 0, output }));
+    child.on("error", (error) => resolve({ name, ok: false, output: `${error.message}\n` }));
+    child.on("close", (code) => resolve({ name, ok: code === 0, output }));
   });
 }
 
@@ -35,8 +35,7 @@ for (const failure of failures) {
 }
 const seconds = ((Date.now() - started) / 1000).toFixed(1);
 if (failures.length > 0) {
-  const fixes = new Set(failures.map((failure) => failure.fix ?? "pnpm run regen"));
-  console.error(`\ncheck:generated failed (${failures.map((failure) => failure.name).join(", ")}). Fix: ${[...fixes].join("; ")}`);
+  console.error(`\ncheck:generated failed (${failures.map((failure) => failure.name).join(", ")}). Fix: pnpm run regen`);
   process.exitCode = 1;
 } else {
   console.log(`check:generated passed: ${results.length} checks in ${seconds}s`);

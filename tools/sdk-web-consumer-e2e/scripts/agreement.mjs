@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { setTimeout as wait } from "node:timers/promises";
 import { assertAgreement, installAgreementProbe, sampleAgreement, truthIssues } from "../../../scripts/web-proof/agreement.mjs";
 import { recoveryBudgets } from "../../../scripts/web-proof/recovery-budgets.mjs";
+import { showCallControls } from "./call-controls.mjs";
 
 const recoveryTimeoutMs = recoveryBudgets().timeoutMs;
 const mediaControls = [
@@ -25,10 +26,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     assert.deepEqual(truthIssues(await Promise.all(pages.map((page) => page.evaluate(sampleAgreement)))), []);
   }
   async function clickControl(page, name) {
-    const { width, height } = page.viewportSize();
-    await page.mouse.move(width / 2, height / 2);
-    await page.mouse.move(width / 2 + 10, height / 2 + 10);
-    await page.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+    await showCallControls(page);
     await page.getByRole("button", { name, exact: true }).click();
   }
   async function replaceParticipant(pages, open) {

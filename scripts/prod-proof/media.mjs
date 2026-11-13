@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { setTimeout as sleep } from "node:timers/promises";
 import { installFixture } from "./fixture.mjs";
 import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mjs";
 import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } from "./runtime.mjs";
@@ -8,6 +9,8 @@ import { installLeaveObservation } from "./leave-observation.mjs";
 import { installLatencyTrace } from "./latency-trace.mjs";
 import { chromiumArgsFor, installIcePath } from "./latency-path.mjs";
 import { buildSdkBundle } from "./sdk-bundle.mjs";
+import { watchSignaling } from "./signaling-watch.mjs";
+import { grew, rendering } from "./sfu-canary-criteria.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -60,28 +63,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     let queue = Promise.resolve();
     const open = async (replacing = false) => {
       let replaceOnNextAccess = replacing;
-      const server = await chromium.launchServer({
-        headless: !options.headed,
-        ...(options.executablePaths?.[guest] ? { executablePath: options.executablePaths[guest] } : {}),
-        handleSIGINT: false,
-        handleSIGTERM: false,
-        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing", ...(guest === options.pathGuest ? chromiumArgsFor(options.path) : [])],
-      });
-      close[guest] = async () => {
-        if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);
-        await server.close();
-      };
-      run.resources.push({
-        kind: "headless-browser",
-        dispose: close[guest],
-        force: () => {
-          try {
-            process.kill(-server.process().pid, "SIGKILL");
-          } catch (error) {
-            if (error.code !== "ESRCH") throw error;
-          }
-        },
-      });
+      const { server, closeBrowser } = await startBrowser(run, guest, options, networks);
+      close[guest] = closeBrowser;
       const browser = await chromium.connect(server.wsEndpoint());
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
       await context.addInitScript(installAgreementProbe);
@@ -96,37 +79,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const network = [];
       networks[guest] = network;
       const record = (event) => network.push({ at: new Date().toISOString(), ...event });
-      const requests = new WeakMap();
-      page.on("request", (request) => {
-        const operation = signalingOperation(request.url());
-        if (!operation) return;
-        requests.set(request, performance.now());
-        const body = signalingBody(request.postData(), request.url());
-        signalBytes[guest] = Math.max(signalBytes[guest], body.bytes);
-        if (body.replacementCause === "section_budget") budgetReplacements[guest].push(Date.now());
-        record({ type: "signaling-request", operation, method: request.method(), ...(body.op ? { op: body.op } : {}), bytes: body.bytes, ...sdpOf(request) });
-      });
-      page.on("response", (response) => {
-        const operation = signalingOperation(response.url());
-        if (!operation) return;
-        const started = requests.get(response.request());
-        record({ type: "signaling-response", operation, status: response.status(), ...(started === undefined ? {} : { durationMs: performance.now() - started }) });
-      });
-      page.on("requestfailed", (request) => {
-        const operation = signalingOperation(request.url());
-        if (operation) record({ type: "request-failed", operation, error: signalingFailure(request) });
-      });
-      page.on("websocket", (socket) => {
-        socket.on("socketerror", () => record({ type: "websocket-error" }));
-        socket.on("framereceived", ({ payload }) => {
-          try {
-            const frame = JSON.parse(String(payload));
-            record({ type: "websocket-frame", frameType: frame.type, event: frame.event, code: frame.code, status: frame.status });
-          } catch {
-            record({ type: "websocket-frame", bytes: payload.length });
-          }
-        });
-      });
+      watchSignaling(page, guest, record, { signalBytes, budgetReplacements });
       const issueRefresh = async (request) => {
         const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
         grant = await issueCredentialRefresh(run, refreshes, refresh, { reason: request.reason, replaceMediaConnection }, () => chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection }));
@@ -161,18 +114,12 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     participants.push(admission.participant.id);
     reopen.push(open);
   }
-  const ready = () =>
-    waitFor(`${guestCount} live camera and voice publishers`, async () => {
-      for (const page of pages) {
-        const live = await page.evaluate((count) => {
-          const snapshot = window.proofClient.getSnapshot();
-          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === count, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
-          return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
-        }, guestCount);
-        if (!live) return false;
-      }
-      return true;
-    });
+  const ready = () => waitForPublishers(pages, guestCount);
+  const sameParticipant = async (guest) => {
+    const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
+    check(participant === participants[guest], "Rejoin changed participant identity");
+    return participant;
+  };
   if (guestCount > 1 && !options.deferJoin) await ready();
   return {
     pages,
@@ -197,10 +144,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await run.wait(2000);
       for (let guest = 0; guest < reopen.length; guest++) pages[guest] = await reopen[guest](true);
       await ready();
-      for (let guest = 0; guest < pages.length; guest++) {
-        const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
-        check(participant === participants[guest], "Rejoin changed participant identity");
-      }
+      for (let guest = 0; guest < pages.length; guest++) await sameParticipant(guest);
     },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
@@ -208,46 +152,49 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await run.wait(2000);
       pages[guest] = await reopen[guest](true);
       await ready();
-      const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
-      check(participant === participants[guest], "Rejoin changed participant identity");
-      return participant;
+      return sameParticipant(guest);
     },
   };
 }
-function signalingFailure(request) {
-  const error = request.failure()?.errorText;
-  return /^net::ERR_[A-Z_]+$/.test(error) ? error : "request_failed";
+/** Launches one guest's Chromium server and registers it with the run. `closeBrowser` saves the guest's signaling records, then closes the server. */
+async function startBrowser(run, guest, options, networks) {
+  const server = await chromium.launchServer({
+    headless: !options.headed,
+    ...(options.executablePaths?.[guest] ? { executablePath: options.executablePaths[guest] } : {}),
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing", ...(guest === options.pathGuest ? chromiumArgsFor(options.path) : [])],
+  });
+  const closeBrowser = async () => {
+    if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);
+    await server.close();
+  };
+  run.resources.push({
+    kind: "headless-browser",
+    dispose: closeBrowser,
+    force: () => {
+      try {
+        process.kill(-server.process().pid, "SIGKILL");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
+    },
+  });
+  return { server, closeBrowser };
 }
 
-/** The size of a signaling request body, the operation a unified-route body names, and the replacement cause the request reports: in the JSON body on the unified route and in the query string on the per-operation routes. */
-export function signalingBody(postData, url = "") {
-  let op = null;
-  let replacementCause = url ? new URL(url).searchParams.get("replacement_cause") : null;
-  if (!postData) return { op, replacementCause, bytes: 0 };
-  try {
-    const parsed = JSON.parse(postData);
-    if (typeof parsed?.op === "string") op = parsed.op;
-    if (typeof parsed?.replacement_cause === "string") replacementCause = parsed.replacement_cause;
-  } catch {
-    // A body that is not JSON still has a size.
-  }
-  return { op, replacementCause, bytes: Buffer.byteLength(postData) };
-}
-
-/** The kind and size of the SDP a signalling request carries; a request without one adds nothing. The body is the guest's own, so the SDP itself stays out of the record. */
-function sdpOf(request) {
-  try {
-    const description = JSON.parse(request.postData() ?? "{}").session_description;
-    return description?.sdp ? { sdpType: description.type, sdpBytes: description.sdp.length } : {};
-  } catch {
-    return {};
-  }
-}
-
-export function signalingOperation(url) {
-  const path = new URL(url).pathname;
-  const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
-  return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
+function waitForPublishers(pages, guestCount) {
+  return waitFor(`${guestCount} live camera and voice publishers`, async () => {
+    for (const page of pages) {
+      const live = await page.evaluate((count) => {
+        const snapshot = window.proofClient.getSnapshot();
+        const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === count, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
+        return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
+      }, guestCount);
+      if (!live) return false;
+    }
+    return true;
+  });
 }
 
 function installTransportDiagnostics() {
@@ -404,12 +351,18 @@ export async function proveLayers(run, { before, after, limited = false, receive
   return moving;
 }
 
-function receivedStreamMoved(rows, current) {
-  const previous = rows.find((row) => row.id === current.id && row.connection === current.connection);
-  if (!previous) return false;
-  if (!(current.bytesReceived > previous.bytesReceived)) return false;
-  return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
+/** Samples every page's stats each intervalMs until rendered(current, previous) holds. Returns the ms since startedAt, which the caller chose so slow joins count against limitMs. */
+export async function pollRendering(pages, startedAt, limitMs, failure, rendered, intervalMs) {
+  let previous = await stats(pages);
+  for (;;) {
+    await sleep(intervalMs);
+    const current = await stats(pages);
+    if (rendered(current, previous)) return Math.round(performance.now() - startedAt);
+    previous = current;
+    check(performance.now() - startedAt < limitMs, failure);
+  }
 }
+
 export async function waitForMediaProgress(pages) {
   let before = await stats(pages);
   let evidence;
@@ -417,7 +370,7 @@ export async function waitForMediaProgress(pages) {
     "initial bidirectional audio and video progress",
     async () => {
       const after = await stats(pages);
-      const ready = after.length === 2 && after.every((rows, guest) => ["audio", "video"].every((kind) => rows.some((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === { audio: "microphone", video: "camera" }[kind] && receivedStreamMoved(before[guest], row))));
+      const ready = rendering(after, before);
       if (ready) evidence = { before, after };
       before = after;
       return ready;
@@ -430,13 +383,8 @@ export async function waitForMediaProgress(pages) {
 export function checkMediaProgress(before, after) {
   check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
   for (let guest = 0; guest < after.length; guest++) {
-    for (const kind of ["audio", "video"]) {
-      const source = { audio: "microphone", video: "camera" }[kind];
-      const receivers = after[guest].filter((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source);
-      check(
-        receivers.some((current) => receivedStreamMoved(before[guest], current)),
-        `Client ${guest + 1} stopped receiving ${kind} after credential refresh`,
-      );
+    for (const [kind, source] of [["audio", "microphone"], ["video", "camera"]]) {
+      check(grew(after[guest], before[guest], kind, source), `Client ${guest + 1} stopped receiving ${kind} after credential refresh`);
     }
   }
 }

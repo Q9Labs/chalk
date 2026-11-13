@@ -1,8 +1,8 @@
+import { literal, queryAxiom } from "../axiom.mjs";
 import { postToOncall } from "../oncall-alert.mjs";
 
 export const EPISODE_THRESHOLD = 1;
 const WINDOW_MS = 10 * 60 * 1000;
-const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
 // api_unpulled exists only on Cloudflare SFU and goes away with it. The client report is provider-neutral and
 // carries the provider from the participant's media credential; the query tags it onto the signal name.
 export const PROVIDERS = ["cloudflare_sfu", "chalk_sfu"];
@@ -14,7 +14,6 @@ export const SIGNALS = [
   { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck", minParticipants: 2 },
 ];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.trigger ? ` and ['attributes.trigger'] == ${literal(signal.trigger)}` : ""})`;
 
 export function query(dataset) {
@@ -92,24 +91,7 @@ export function evaluate(rows, { startTime, endTime }) {
 }
 
 export async function readSignals({ fetchImpl = fetch, token, dataset, startTime, endTime }) {
-  let response;
-  try {
-    response = await fetchImpl(AXIOM_URL, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ apl: query(dataset), startTime, endTime }),
-    });
-  } catch {
-    throw new Error("Axiom query request failed");
-  }
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}`);
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    throw new Error("Axiom returned invalid JSON");
-  }
-  return parseTabular(body);
+  return parseTabular(await queryAxiom({ fetchImpl, token, apl: query(dataset), startTime, endTime }));
 }
 
 export async function run({ env, fetchImpl = fetch, now = new Date(), log = console.log }) {

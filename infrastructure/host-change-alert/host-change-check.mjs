@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { literal, queryAxiom } from "../axiom.mjs";
+import { postToOncall } from "../oncall-alert.mjs";
 
 const run = promisify(execFile);
-const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
 const HOST_CALLS = new Set(["StopInstances", "StartInstances", "RebootInstances"]);
 const CLOUDTRAIL_WINDOW_MS = 30 * 60 * 1000;
 const START_WINDOW_MS = 10 * 60 * 1000;
@@ -10,7 +11,6 @@ const START_WINDOW_MS = 10 * 60 * 1000;
 // A record that never completed (a failed attempt) has no end time and explains starts for this long.
 const DEPLOY_LEAD_MS = 30 * 60 * 1000;
 const DEPLOY_SLACK_MS = 120_000;
-const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 
 export function startsQuery(dataset) {
   return `[${literal(dataset)}]
@@ -49,20 +49,8 @@ export function unexplainedStarts(starts, deployments) {
     }));
 }
 
-export function oncallPayload(incidents, { drill }) {
-  return { source: "oncall-poller", ...(drill ? { drill: true } : {}), incidents: incidents.map((incident) => ({ app: "chalk", kind: "new", ...incident })) };
-}
-
 async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
-  const response = await fetchImpl(AXIOM_URL, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ apl: startsQuery(dataset), startTime, endTime }),
-  }).catch(() => {
-    throw new Error("Axiom query request failed");
-  });
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}`);
-  return parseStarts(await response.json());
+  return parseStarts(await queryAxiom({ fetchImpl, token, apl: startsQuery(dataset), startTime, endTime }));
 }
 
 async function githubJson({ fetchImpl, token, path }) {
@@ -117,10 +105,7 @@ export async function check({ env, fetchImpl = fetch, awsImpl = aws, now = new D
     log(`${incidents.length} incidents, ${starts.length} API starts, ${deployments.length} deploy records`);
   }
   if (!incidents.length) return 0;
-  const response = await fetchImpl(env.ONCALL_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(oncallPayload(incidents, { drill })) }).catch(() => {
-    throw new Error("Oncall webhook request failed");
-  });
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  await postToOncall({ fetchImpl, url: env.ONCALL_WEBHOOK_URL, incidents, drill });
   // A fired alert fails the run so GitHub also emails the failure.
   return drill ? 0 : 1;
 }

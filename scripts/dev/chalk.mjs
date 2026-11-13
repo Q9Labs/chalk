@@ -6,46 +6,43 @@ import { createSecretResolver } from "./secrets.mjs";
 import { identityEnvironment } from "./identity.mjs";
 import { waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
-import { createResourceManager, runChecked } from "./chalk-resources.mjs";
+import { createResourceManager, databaseURL, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
 import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
 
-export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
+export function createChalkSupervisor(inputConfig) {
+  const output = console.log;
   const config = {
     ...inputConfig,
     webJoinPath: inputConfig.webJoinPath || discoverWebJoinPath(inputConfig.root),
   };
-  const selectedServiceSpecs = serviceSpecs || defaultServiceSpecs(config);
-  const resources = adapters.resources || createResourceManager(config, adapters);
+  const selectedServiceSpecs = defaultServiceSpecs(config);
+  const resources = createResourceManager(config);
   let provider;
   let bindings;
   let systemToken;
   let invite;
   const dashboardToken = randomBytes(32).toString("base64url");
   const dashboardSessionSecret = randomBytes(32).toString("base64url");
-  const resolver = config.secretResolver || adapters.resolveSecrets || createSecretResolver({ op: adapters.op || "op" });
+  const resolver = createSecretResolver();
 
-  const mergedHooks = {
-    ...hooks,
-    revision:
-      hooks.revision ||
-      (async () => {
-        try {
-          return (await runChecked("git", ["rev-parse", "HEAD"], { cwd: config.root })).stdout.trim() || "unknown";
-        } catch {
-          return "unknown";
-        }
-      }),
-    preflightOptions: { ...hooks.preflightOptions, which: adapters.which },
+  const hooks = {
+    revision: async () => {
+      try {
+        return (await runChecked("git", ["rev-parse", "HEAD"], { cwd: config.root })).stdout.trim() || "unknown";
+      } catch {
+        return "unknown";
+      }
+    },
     resources: async () => [
       { kind: "container", name: config.postgres.container, reusable: true },
       { kind: "database", name: config.databaseName || "chalk_dev", container: config.postgres.container, reusable: true },
       { kind: "container", name: config.redis.container, reusable: true },
       { kind: "generated", path: config.runtimeRoot },
     ],
-    resolveSecrets: async (context) => {
+    resolveSecrets: async () => {
       provider = await resolver();
       if (provider?.source) await writeJsonAtomic(`${config.runtimeRoot}/sfu-source.json`, provider.source, { redacted: false });
       return provider;
@@ -72,31 +69,29 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     },
     logRedactions: async () => [provider?.appId, provider?.appSecret, dashboardToken, dashboardSessionSecret].filter(Boolean),
     childEnv: async (spec) => childEnvironment(spec.id),
-    waitReady: async (spec, process, context) => {
+    waitReady: async (spec, runtime) => {
       if (spec.readiness?.filePath) await waitForFileReady(spec, { timeoutMs: config.timeouts.readinessMs });
-      else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs, fetchImpl: adapters.fetchImpl });
+      else if (spec.readiness?.url) await waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs });
       if (spec.id === "api") {
-        const runtimeId = context.runtime.runtimeId || "local";
+        const runtimeId = runtime.runtimeId || "local";
         const stableMarker = stableFixtureMarker(config.root);
-        if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
+        if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker });
         const fixtureMarker = stableMarker;
-        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
-        invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
+        bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fresh: config.fresh });
+        invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId });
         await seedDashboard({ config, serviceToken: dashboardToken });
         // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
         await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
       }
       // Ready means the seeded guest is admitted through the web origin, not that a port answers.
-      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, fetchImpl: adapters.fetchImpl });
+      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite });
     },
     onReady: async ({ runtime }) => {
       output(runtime.state === RuntimeState.DEGRADED ? formatDegradedSummary(config, runtime.status()) : formatReadySummary(config, bindings));
     },
   };
-  const runtime = createSupervisor(config, { serviceSpecs: selectedServiceSpecs, hooks: mergedHooks, preflightFn: resources.preflight, acquireLease: adapters.acquireLease });
-  runtime.commandHooks = {
-    resetResources: async () => resources.reset?.(),
-  };
+  const runtime = createSupervisor(config, { serviceSpecs: selectedServiceSpecs, hooks, preflightFn: resources.preflight });
+  runtime.resetResources = () => resources.reset?.();
   return runtime;
 
   function childEnvironment(serviceId) {
@@ -223,10 +218,6 @@ function formatReadySummary(config, bindings) {
 function formatDegradedSummary(config, status) {
   const failures = Object.entries(status.optionalFailures || {}).map(([id, details]) => `${id}: ${details.message}${details.logPath ? ` (log: ${details.logPath})` : ""}`);
   return ["Chalk dev degraded", "Core services are not all ready.", ...failures, `Logs      ${config.aggregateLog}`].join("\n");
-}
-
-function databaseURL(config) {
-  return `postgres://postgres:postgres@127.0.0.1:${config.ports.postgres}/${config.databaseName || "chalk_dev"}?sslmode=disable`;
 }
 
 function stableFixtureMarker(root) {

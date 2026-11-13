@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
-export const languages = ["actions", "go", "javascript-typescript", "python"];
+const languages = ["actions", "go", "javascript-typescript", "python"];
 
 const configFiles = new Set([".github/workflows/codeql.yml", "scripts/gates/codeql-languages.mjs"]);
 const goFiles = new Set(["go.mod", "go.sum", "go.work", "go.work.sum"]);
@@ -23,7 +23,7 @@ const languagesOf = (file) => {
   return found;
 };
 
-export function codeqlLanguages(files) {
+function codeqlLanguages(files) {
   if (files.some((file) => configFiles.has(file) || file.startsWith(".github/codeql/"))) return languages;
   const changed = new Set(files.flatMap(languagesOf));
   return languages.filter((language) => changed.has(language));

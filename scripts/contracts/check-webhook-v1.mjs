@@ -22,21 +22,11 @@ const fail = (message) => {
   throw new Error(`webhook v1 contract: ${message}`);
 };
 
-const objectEntries = (value) => (value !== null && typeof value === "object" ? Object.entries(value) : []);
-
-const eventConstant = (value) => (Array.isArray(value) ? undefined : value?.event?.const);
-
 const collectEventConstants = (value, constants = new Set()) => {
-  const event = eventConstant(value);
-  if (typeof event === "string") constants.add(event);
-  for (const [, child] of objectEntries(value)) collectEventConstants(child, constants);
+  if (value === null || typeof value !== "object") return constants;
+  if (!Array.isArray(value) && typeof value.event?.const === "string") constants.add(value.event.const);
+  for (const child of Object.values(value)) collectEventConstants(child, constants);
   return constants;
-};
-
-const isIdentifierKey = (key) => key === "id" || key.endsWith("_id");
-const isCanonicalIdentifier = (value, path, recordingIDPath) => {
-  const pattern = path === recordingIDPath ? recordingIDPattern : uuidV4Pattern;
-  return typeof value === "string" && pattern.test(value);
 };
 
 const recordingIdentityPath = (eventName) => {
@@ -45,24 +35,17 @@ const recordingIdentityPath = (eventName) => {
   return "";
 };
 
-const validateIdentifier = (key, value, path, recordingIDPath) => {
-  if (!isIdentifierKey(key) || value === null) return;
-  if (!isCanonicalIdentifier(value, path, recordingIDPath)) fail(`${path} must match its lowercase canonical UUID pattern`);
-};
-
-const isTimestamp = (value) => typeof value === "string" && isCanonicalTimestamp(value);
-
-const validateTimestamp = (key, value, path) => {
-  if (!key.endsWith("_at")) return;
-  if (value === null) return;
-  if (!isTimestamp(value)) fail(`${path} must be UTC RFC 3339 with millisecond precision`);
-};
-
 const validateIdentifiersAndTimestamps = (value, recordingIDPath, path = "event") => {
-  for (const [key, child] of objectEntries(value)) {
+  if (value === null || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
     const childPath = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`;
-    validateIdentifier(key, child, childPath, recordingIDPath);
-    validateTimestamp(key, child, childPath);
+    if ((key === "id" || key.endsWith("_id")) && child !== null) {
+      const pattern = childPath === recordingIDPath ? recordingIDPattern : uuidV4Pattern;
+      if (typeof child !== "string" || !pattern.test(child)) fail(`${childPath} must match its lowercase canonical UUID pattern`);
+    }
+    if (key.endsWith("_at") && child !== null && !(typeof child === "string" && isCanonicalTimestamp(child))) {
+      fail(`${childPath} must be UTC RFC 3339 with millisecond precision`);
+    }
     validateIdentifiersAndTimestamps(child, recordingIDPath, childPath);
   }
 };

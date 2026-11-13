@@ -78,7 +78,7 @@ addSourceRule(
   "TypeScript and lint suppressions need a same-line justification.",
   { kind: "comment", regex: "^//\\s*(?:@ts-ignore|eslint-disable(?:-next-line|-line)?)\\s*$" },
   {
-    ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**", "**/openapi-generated/**"],
+    ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**"],
   },
 );
 
@@ -88,17 +88,17 @@ addSourceRule(
   {
     all: [{ kind: "comment" }, { regex: "^\\s*(?://|/\\*)\\s*(?:ast-grep-ignore|(?:eslint|oxlint)-disable(?:-next-line|-line)?)(?:\\s|:|\\*/|$)" }, { not: { regex: "--\\s*[^\\s*]" } }],
   },
-  { ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**", "**/openapi-generated/**"] },
+  { ignores: [...tests, "**/__tests__/**", "**/routeTree.gen.ts", "**/generated/**"] },
 );
 
 addSourceRule("forbid-console-in-app-code", "Route application logging through the repo logger or an approved diagnostics module.", anyPattern("console.log($$$ARGS)", "console.error($$$ARGS)"), {
   files: appSources,
-  ignores: [...tests, "**/debug/**", "**/diagnostics/**", "sdks/typescript/client/src/wide-events/**", "sdks/typescript/react/src/utils/debug*.ts", "sdks/typescript/react/src/components/composite/DiagnosticErrorSheet.tsx"],
+  ignores: [...tests, "**/debug/**", "**/diagnostics/**"],
 });
 
 addSourceRule("forbid-direct-process-env", "Read environment through approved config modules, app config, or scripts.", pattern("process.env.$NAME"), {
   files: [...appSources, "infrastructure/**/src/**"],
-  ignores: [...tests, "apps/mobile/src/lib/chalk.ts", "apps/mobile/src/lib/dev-diagnostics.ts"],
+  ignores: tests,
 });
 
 addSourceRule(
@@ -106,7 +106,7 @@ addSourceRule(
   "Do not persist auth/session/token material through raw browser storage.",
   anyPattern("localStorage.setItem($KEY, $$$ARGS)", "sessionStorage.setItem($KEY, $$$ARGS)", "window.localStorage.setItem($KEY, $$$ARGS)", "window.sessionStorage.setItem($KEY, $$$ARGS)"),
   {
-    ignores: [...tests, "sdks/typescript/client/src/token-provider.ts"],
+    ignores: tests,
     constraints: { KEY: { regex: "token|auth|session|secret|key" } },
   },
 );
@@ -160,23 +160,18 @@ rules.push(
   },
 );
 
-// The old generic rule also applies to generated TypeScript, not only OpenAPI YAML.
-for (const [suffix, language] of [["yaml", "Yaml"], ...sourceLanguages]) {
-  rules.push({
-    id: `chalk.forbid-generated-openapi-stubs-${suffix}`,
-    language,
-    severity: "error",
-    message: "Generated OpenAPI stubs and TODO operations must be enriched before commit.",
-    files: ["apps/api/openapi.yaml", "sdks/typescript/client/src/generated/**", "sdks/typescript/client/openapi-generated/**"],
-    rule: {
-      any: [
-        { kind: "comment", regex: "TODO: document" },
-        { kind: language === "Yaml" ? "string_scalar" : "string", regex: "TODO: document" },
-        { kind: language === "Yaml" ? "block_mapping_pair" : "pair", regex: "x-generated-stub:\\s*true" },
-      ],
-    },
-  });
-}
+addSourceRule(
+  "forbid-generated-openapi-stubs",
+  "Generated OpenAPI stubs and TODO operations must be enriched before commit.",
+  {
+    any: [
+      { kind: "comment", regex: "TODO: document" },
+      { kind: "string", regex: "TODO: document" },
+      { kind: "pair", regex: "x-generated-stub:\\s*true" },
+    ],
+  },
+  { files: ["sdks/typescript/client/src/generated/**"] },
+);
 
 const binary = process.env.AST_GREP_BIN ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../node_modules/.bin/ast-grep");
 const result = spawnSync(binary, ["scan", "--inline-rules", rules.map((rule) => JSON.stringify(rule)).join("\n---\n"), ...process.argv.slice(2)], { stdio: "inherit" });

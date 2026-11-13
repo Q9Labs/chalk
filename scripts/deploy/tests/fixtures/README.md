@@ -1,1 +1,0 @@
-`ssm-comment-validation.json` is the AWS `ValidationException` (100-character comment limit) from a failed nightly Release `SendCommand`, with only public run and release identities. Tests replay it through the public deploy entry point.

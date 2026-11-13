@@ -4,16 +4,16 @@ import { resolve } from "node:path";
 import { baselineEntry } from "./leave-baseline.mjs";
 import { evaluateLeaves, evaluateOwnLeaves } from "./leave-criteria.mjs";
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
 async function createEpisode(run) {
   const space = await createSpace(run);
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  const { episode, path } = await postEpisode(run, space);
   // A reused (pinned) Space takes one live Episode at a time, so each sample ends its own.
   if (mediaPlane === "cf_sfu") return { space, episode };
   await trackEpisode(run, space, episode);
-  return { space, episode, ending: episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`) };
+  return { space, episode, ending: episodeEnd(run, path) };
 }
 
 // The SDK lists publications with GET publications, or with POST signal {op: "publications"} when the API advertises the unified route.

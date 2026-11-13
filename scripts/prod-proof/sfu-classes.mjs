@@ -11,15 +11,13 @@
 // class-N folder. The report goes to .private/prod-proof/<run>/sfu-classes-<provider>.json; the exit code is
 // non-zero when any class fails. Run it on Instabox: eighteen browsers are too many for a laptop.
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { setTimeout as sleep } from "node:timers/promises";
-import { check, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
-import { launchGuests, stats } from "./media.mjs";
+import { check, mediaPlane, save } from "./runtime.mjs";
+import { runStandalone } from "./standalone.mjs";
+import { launchGuests, pollRendering } from "./media.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode } from "./proofs.mjs";
 import { growing } from "./sfu-canary-criteria.mjs";
 
 const options = parseArgs({
@@ -38,17 +36,8 @@ const joinLimitMs = Number(options["join-limit-ms"]);
 // Every guest receives advancing camera video and microphone audio from every other guest in its class.
 const allRendering = (after, before, guests) => after.length === guests && after.every((rows, guest) => growing(rows, before[guest], "video", "camera") >= guests - 1 && growing(rows, before[guest], "audio", "microphone") >= guests - 1);
 
-// The clock starts at a point the caller chose, so slow joins count against the limit.
-async function rendersWithin(pages, startedAt, limitMs, label) {
-  let previous = await stats(pages);
-  for (;;) {
-    await sleep(1000);
-    const current = await stats(pages);
-    if (allRendering(current, previous, pages.length)) return Math.round(performance.now() - startedAt);
-    previous = current;
-    check(performance.now() - startedAt < limitMs, `${label}: not every guest received advancing video and audio from every other guest within ${limitMs} ms`);
-  }
-}
+const rendersWithin = (pages, startedAt, limitMs, label) =>
+  pollRendering(pages, startedAt, limitMs, `${label}: not every guest received advancing video and audio from every other guest within ${limitMs} ms`, (current, previous) => allRendering(current, previous, pages.length), 1000);
 
 // All classes create their Space and Episode first, then launch their guests together. A class that fails early
 // still arrives, so the others never wait for it.
@@ -71,9 +60,8 @@ async function runClass(run, receiver, index, arrive) {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const classRun = { ...run, directory };
     const space = await createSpace(classRun);
-    const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
-    const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId, class: index } });
-    owned.ending = episodeEnd(run, `${episodePath}/${episode.id}`);
+    const { episode, path } = await postEpisode(run, space, { class: index });
+    owned.ending = episodeEnd(run, path);
     await arrive(index);
     let joinStartedAt = performance.now();
     // The class's join is timed from its last guest's SDK join call; the earlier guests are ready by then.
@@ -92,28 +80,17 @@ async function runClass(run, receiver, index, arrive) {
   }
 }
 
+function validate() {
+  check(Number.isInteger(classes) && classes >= 1 && Number.isInteger(guestCount) && guestCount >= 2, "--classes must be at least 1 and --guests at least 2", "configuration");
+  check(Number.isFinite(holdMs) && holdMs >= 0 && Number.isFinite(joinLimitMs) && joinLimitMs > 0, "--hold-seconds must be a number from 0 and --join-limit-ms a number above 0", "configuration");
+}
+
 async function main() {
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), flags: { classes, guests: guestCount, holdSeconds: holdMs / 1000, joinLimitMs }, classes: [] };
-  let run;
-  try {
-    check(Number.isInteger(classes) && classes >= 1 && Number.isInteger(guestCount) && guestCount >= 2, "--classes must be at least 1 and --guests at least 2", "configuration");
-    check(Number.isFinite(holdMs) && holdMs >= 0 && Number.isFinite(joinLimitMs) && joinLimitMs > 0, "--hold-seconds must be a number from 0 and --join-limit-ms a number above 0", "configuration");
-    const config = await loadConfig();
-    await sweepStaleRuns(config);
-    run = await createRun(config, directory, undefined, runId);
-    const receiver = await prepareIntegration(run, false);
+  const { directory } = await runStandalone("sfu-classes", report, async (run, receiver) => {
     const arrive = createBarrier(classes);
     report.classes = await Promise.all([...Array(classes).keys()].map((index) => runClass(run, receiver, index + 1, arrive)));
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("sfu-classes", error);
-  } finally {
-    if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
-  }
+  }, { validate });
   const failed = report.classes.filter((entry) => entry.result !== "passed").length;
   report.result = !report.error && !report.cleanupError && report.classes.length === classes && failed === 0 ? "passed" : "failed";
   await save(`${directory}/sfu-classes-${mediaPlane}.json`, report);

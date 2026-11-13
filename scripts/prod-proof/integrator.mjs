@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { cleanupRun, runLabel } from "./cleanup.mjs";
 import { createIntegratorSession } from "./integrator-session.mjs";
 import { installFixture } from "./fixture.mjs";
+import { postEpisode } from "./proofs.mjs";
 import { check, createRun, errorEvidence, loadConfig, request, save, saveOwnership } from "./runtime.mjs";
 import { spacePayload } from "./space-fixture.mjs";
 
@@ -111,7 +112,7 @@ async function createIntegratorFixture(run) {
 export function createIntegratorAccessSession(run, space, chalk, getAccessRefreshState) {
   return createIntegratorSession({
     createEpisode: async () => {
-      const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+      const { episode } = await postEpisode(run, space);
       await save(`${run.directory}/integrator-fixture.json`, { run_id: run.runId, space_id: space.id, episode_id: episode.id, episode_created_at: new Date().toISOString() });
       return episode;
     },

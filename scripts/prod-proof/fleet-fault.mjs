@@ -9,7 +9,6 @@ export class FaultPulse {
   #parked = new Set();
   #waiters = [];
   #pending = false;
-  #phase = "idle";
   #restoredAt = 0;
   #stallChecked = 0;
   #listeners = [];
@@ -75,7 +74,6 @@ export class FaultPulse {
     try {
       await this.#until(() => this.#parked.size === this.#running.size);
       const calls = this.#running.size;
-      this.#phase = "down";
       await this.down();
       this.#stallChecked = 0;
       this.#wake();
@@ -86,7 +84,6 @@ export class FaultPulse {
       try {
         await this.up();
       } finally {
-        this.#phase = "idle";
         this.#pending = false;
         this.#wake();
         this.#changed();

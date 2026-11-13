@@ -1,13 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { errorMessage } from "../lib/errors.mjs";
-import { parseJson } from "./managed-release-support.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
+import { parseJson } from "./managed-release-contracts.mjs";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = resolve(scriptDirectory, "../..");
 const documentVersionPattern = /^[1-9][0-9]*$/;
 const invocationCompletion = new Map([
   ["Success", true],

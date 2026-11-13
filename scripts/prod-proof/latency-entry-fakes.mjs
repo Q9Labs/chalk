@@ -57,6 +57,7 @@ export const createSpace = async () => ({ id: "space", slug: "space" });
 export const trackEpisode = async (run, space, episode) => {
   await appendFile(`${run.directory}/tracked.jsonl`, `${JSON.stringify({ space_id: space.id, id: episode.id })}\n`);
 };
+export const postEpisode = async () => ({ episode: { id: "episode" }, path: "/v1/tenants/t/spaces/space/episodes/episode" });
 export const episodeEnd = () => ({ useSDK: () => undefined, end: async () => undefined });
 export const launchGuests = async () => ({
   pages: [page, page],

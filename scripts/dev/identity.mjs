@@ -58,12 +58,3 @@ export async function generateSigningIdentity({ paths, kid = "local-dev", keyPai
   await writeJsonAtomic(paths.signingPublicKeyring, { [kid]: rawPublic }, { redacted: false });
   return { kid, privateKeyPath: paths.signingPrivateKey, privateKeyRawPath: paths.signingPrivateKeyRaw, publicKeyringPath: paths.signingPublicKeyring, rawPrivateKey: rawPrivate, rawPublicKey: rawPublic, publicKeyring: { [kid]: rawPublic } };
 }
-
-async function generateLocalCertificates({ paths, runOpenSSL } = {}) {
-  if (!runOpenSSL) throw failure(FailureKind.CONFIG, "local certificate generator is not configured", { stage: "identity" });
-  await mkdir(paths.root, { recursive: true, mode: 0o700 });
-  await runOpenSSL({ role: "ca", output: paths.caCertificate });
-  await runOpenSSL({ role: "api-server", output: paths.apiCertificate, key: paths.apiKey, ca: paths.caCertificate, san: "URI:spiffe://chalk.local/api" });
-  await runOpenSSL({ role: "sync-client", output: paths.syncCertificate, key: paths.syncKey, ca: paths.caCertificate, san: "URI:spiffe://chalk.local/sync" });
-  return paths;
-}

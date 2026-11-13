@@ -11,7 +11,7 @@ const fakes = pathToFileURL(join(here, "latency-entry-fakes.mjs")).href;
 // Only the imports that reach a browser, the API or the cloud resolve to the fakes. Everything else latency.mjs imports stays real.
 const preload = `import { registerHooks } from "node:module";
 const faked = new Set(["./runtime.mjs", "./cleanup.mjs", "./media.mjs", "./proofs.mjs", "./latency-probe.mjs"]);
-registerHooks({ resolve: (specifier, context, next) => (context.parentURL?.endsWith("/prod-proof/latency.mjs") && faked.has(specifier) ? { url: ${JSON.stringify(fakes)}, shortCircuit: true } : next(specifier, context)) });`;
+registerHooks({ resolve: (specifier, context, next) => (/\\/prod-proof\\/(latency|standalone)\\.mjs$/.test(context.parentURL ?? "") && faked.has(specifier) ? { url: ${JSON.stringify(fakes)}, shortCircuit: true } : next(specifier, context)) });`;
 
 // The unit tests import single functions, so a name latency.mjs uses and no longer imports only fails when the entry point runs.
 // This runs the real entry through one cycle on a fake page, fake API and fake cloud, and expects it to write the card and the sidecar.

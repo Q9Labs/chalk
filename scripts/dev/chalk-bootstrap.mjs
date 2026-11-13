@@ -1,13 +1,13 @@
 import { FailureKind, failure } from "./model.mjs";
 
-export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fetchImpl = fetch, fresh = false } = {}) {
+export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, fixtureMarker, fresh = false } = {}) {
   if (!apiOrigin || !systemToken || !runtimeId) throw failure(FailureKind.CONFIG, "API bootstrap requires origin, system token, and runtime id", { stage: "bootstrap" });
   const marker = fixtureMarker || runtimeMarker(runtimeId);
   const tenantName = `Chalk local dev ${marker}`;
-  const tenantList = await request(fetchImpl, apiOrigin, "/v1/tenants?page_size=100", { systemToken });
+  const tenantList = await request(apiOrigin, "/v1/tenants?page_size=100", { systemToken });
   let tenant = tenantList.tenants?.find((entry) => entry.name === tenantName);
   if (!tenant) {
-    tenant = await request(fetchImpl, apiOrigin, "/v1/tenants", {
+    tenant = await request(apiOrigin, "/v1/tenants", {
       systemToken,
       method: "POST",
       body: {
@@ -18,10 +18,10 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
     });
   }
   const spaceSlug = `chalk-local-${marker}`;
-  const spacesResponse = await request(fetchImpl, apiOrigin, spacesPath(tenant.id, "?page_size=100"), { systemToken });
+  const spacesResponse = await request(apiOrigin, spacesPath(tenant.id, "?page_size=100"), { systemToken });
   let space = listSpaces(spacesResponse).find((entry) => entry.slug === spaceSlug);
   if (!space) {
-    space = await request(fetchImpl, apiOrigin, spacesPath(tenant.id), {
+    space = await request(apiOrigin, spacesPath(tenant.id), {
       systemToken,
       method: "POST",
       headers: { "Idempotency-Key": `chalk-local-space-${marker}` },
@@ -36,29 +36,29 @@ export async function bootstrapLocalSpace({ apiOrigin, systemToken, runtimeId, f
   };
 }
 
-export async function retireLocalFixture({ apiOrigin, systemToken, marker, runtimeId, fetchImpl = fetch } = {}) {
+export async function retireLocalFixture({ apiOrigin, systemToken, marker, runtimeId } = {}) {
   if (!apiOrigin || !systemToken || !marker || !runtimeId) throw failure(FailureKind.CONFIG, "local fixture retirement requires origin, token, marker, and runtime id", { stage: "bootstrap" });
   const tenantName = `Chalk local dev ${marker}`;
-  const tenantList = await request(fetchImpl, apiOrigin, "/v1/tenants?page_size=100", { systemToken });
+  const tenantList = await request(apiOrigin, "/v1/tenants?page_size=100", { systemToken });
   const tenant = tenantList.tenants?.find((entry) => entry.name === tenantName);
   if (!tenant) return { retired: false, marker };
   const spaceSlug = `chalk-local-${marker}`;
-  const spacesResponse = await request(fetchImpl, apiOrigin, spacesPath(tenant.id, "?page_size=100"), { systemToken });
+  const spacesResponse = await request(apiOrigin, spacesPath(tenant.id, "?page_size=100"), { systemToken });
   const space = listSpaces(spacesResponse).find((entry) => entry.slug === spaceSlug);
   if (space) {
-    await request(fetchImpl, apiOrigin, spacePath(tenant.id, space.id), {
+    await request(apiOrigin, spacePath(tenant.id, space.id), {
       systemToken,
       method: "PATCH",
       body: { slug: `${spaceSlug}-retired-${runtimeId.slice(0, 8)}` },
     });
   }
-  const deletedTenant = await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}`, {
+  const deletedTenant = await request(apiOrigin, `/v1/tenants/${tenant.id}`, {
     systemToken,
     method: "DELETE",
     ignoreStatuses: [404, 405],
   });
   if (deletedTenant === undefined)
-    await request(fetchImpl, apiOrigin, `/v1/tenants/${tenant.id}`, {
+    await request(apiOrigin, `/v1/tenants/${tenant.id}`, {
       systemToken,
       method: "PATCH",
       body: { name: `${tenantName} retired ${runtimeId.slice(0, 8)}` },
@@ -85,8 +85,8 @@ function listSpaces(response) {
   return response.spaces || [];
 }
 
-async function request(fetchImpl, origin, path, { systemToken, method = "GET", headers = {}, body, ignoreStatuses = [] } = {}) {
-  const response = await fetchImpl(new URL(path, origin), {
+async function request(origin, path, { systemToken, method = "GET", headers = {}, body, ignoreStatuses = [] } = {}) {
+  const response = await fetch(new URL(path, origin), {
     method,
     headers: { Authorization: `Bearer ${systemToken}`, ...(body ? { "content-type": "application/json" } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,

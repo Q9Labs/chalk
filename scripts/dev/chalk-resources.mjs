@@ -8,7 +8,7 @@ import { generateSigningIdentity } from "./identity.mjs";
 
 const execFileAsync = promisify(execFile);
 
-export function createResourceManager(config, { runner = runChecked, docker = dockerInspect, identityGenerator = generateSigningIdentity } = {}) {
+export function createResourceManager(config) {
   const state = { postgres: {}, redis: {}, identity: undefined };
   const databaseName = config.databaseName || "chalk_dev";
   const postgres = config.postgres || { container: "chalk-postgres", volume: "chalk-postgres" };
@@ -21,7 +21,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
 
   return {
     state,
-    async preflight(options = {}) {
+    async preflight() {
       const allowBusyPorts = new Set(config.allowBusyPorts);
       const portOwners = [
         ["postgres", postgres.container],
@@ -31,7 +31,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       for (const [name, containerName] of portOwners) {
         const port = config.ports[name];
         if (!port) continue;
-        if (!containers.has(containerName)) containers.set(containerName, await docker(containerName));
+        if (!containers.has(containerName)) containers.set(containerName, await dockerInspect(containerName));
         const container = containers.get(containerName);
         if (container?.running && Array.isArray(container.hostPorts) && !container.hostPorts.includes(port)) {
           throw failure(FailureKind.CONFIG, `${containerName} is already running without configured ${name} port ${port}; use its published host port or stop the container`, { stage: "preflight" });
@@ -40,11 +40,11 @@ export function createResourceManager(config, { runner = runChecked, docker = do
         if (result.available) continue;
         if (adoptable(name, container)) allowBusyPorts.add(name);
       }
-      return preflight(config, { ...options, allowBusyPorts });
+      return preflight(config, allowBusyPorts);
     },
     async start({ lease } = {}) {
-      state.postgres.before = await docker(postgres.container);
-      state.redis.before = await docker(config.redis.container);
+      state.postgres.before = await dockerInspect(postgres.container);
+      state.redis.before = await dockerInspect(config.redis.container);
       const databaseEnv = {
         CHALK_POSTGRES_CONTAINER: postgres.container,
         CHALK_POSTGRES_VOLUME: postgres.volume,
@@ -53,7 +53,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       try {
         await runResource("bash", [scripts.postgres, "start"], { cwd: config.root, env: databaseEnv }, "postgres");
       } finally {
-        state.postgres.after = await docker(postgres.container);
+        state.postgres.after = await dockerInspect(postgres.container);
         state.postgres.started = !state.postgres.before?.running && Boolean(state.postgres.after?.running);
       }
       await ensureDatabase();
@@ -72,11 +72,11 @@ export function createResourceManager(config, { runner = runChecked, docker = do
           "redis",
         );
       } finally {
-        state.redis.after = await docker(config.redis.container);
+        state.redis.after = await dockerInspect(config.redis.container);
         state.redis.started = !state.redis.before?.running && Boolean(state.redis.after?.running);
       }
       await runResource("bash", [scripts.migrate, "--allow-missing", "up"], { cwd: join(config.root, "apps/api"), env: { CHALK_DATABASE_URL: databaseURL(config) } }, "migrations");
-      const identity = await prepareIdentity(config, identityGenerator, lease?.runtimeId || "00000000-0000-4000-8000-000000000000");
+      const identity = await prepareIdentity(config, lease?.runtimeId || "00000000-0000-4000-8000-000000000000");
       state.identity = { ...identity, generatedAt: new Date().toISOString() };
     },
     async stop() {
@@ -105,7 +105,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
   }
 
   async function resetDatabase() {
-    const before = await docker(postgres.container);
+    const before = await dockerInspect(postgres.container);
     const env = {
       CHALK_POSTGRES_CONTAINER: postgres.container,
       CHALK_POSTGRES_VOLUME: postgres.volume,
@@ -126,7 +126,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
 
   async function runResource(command, args, options, service) {
     try {
-      const result = await runner(command, args, options);
+      const result = await runChecked(command, args, options);
       await writeResourceLog(service, result?.stdout);
       await writeResourceLog(service, result?.stderr);
       return result;
@@ -160,8 +160,8 @@ function adoptable(name, container) {
   return true;
 }
 
-async function prepareIdentity(config, identityGenerator = generateSigningIdentity, runtimeId) {
-  const signing = await identityGenerator({ paths: config.identity, kid: config.auth.keyId });
+async function prepareIdentity(config, runtimeId) {
+  const signing = await generateSigningIdentity({ paths: config.identity, kid: config.auth.keyId });
   const extRoot = config.identity.root;
   await mkdir(extRoot, { recursive: true, mode: 0o700 });
   const serial = join(extRoot, "local-ca.srl");
@@ -208,7 +208,7 @@ async function makeLeaf(keyPath, certPath, subject, extensionPath, caPath, caKey
   }
 }
 
-function databaseURL(config) {
+export function databaseURL(config) {
   return `postgres://postgres:postgres@127.0.0.1:${config.ports.postgres}/${config.databaseName || "chalk_dev"}?sslmode=disable`;
 }
 

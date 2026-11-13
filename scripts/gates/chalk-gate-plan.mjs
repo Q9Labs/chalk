@@ -89,8 +89,8 @@ function isTestFile(file) {
   return /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file) || /_test\.(?:go|exs?)$/u.test(file) || /(?:^|\/)apps\/sync\/test\//u.test(file);
 }
 
-function isExistingFile(file, root = repositoryRoot) {
-  return existsSync(path.join(root, file));
+function isExistingFile(file) {
+  return existsSync(path.join(repositoryRoot, file));
 }
 
 function startsWithAny(file, prefixes) {
@@ -121,28 +121,20 @@ function isKnownPath(file, workspaces, narrow) {
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
   if (startsWithAny(file, ["apps/api", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
-  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "features.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
-  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
+  if (["CHANGELOG.md", "LICENSE", "README.md", "features.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
+  return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
-function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
-  let manifests;
-  if (snapshot.mode === "ref") {
-    manifests = gitLines(["ls-tree", "-r", "--name-only", snapshot.ref], { cwd: root, env: environment });
-  } else {
-    manifests = gitLines(snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"], { cwd: root, env: environment });
-  }
-  return manifests.filter((manifest) => {
-    const directory = path.posix.dirname(manifest);
-    return manifest.endsWith("/package.json") && workspaceRoots.some((workspaceRoot) => startsWithAny(directory, [workspaceRoot]));
-  });
+function workspaceManifestPaths(snapshot) {
+  const manifests = gitLines(snapshot.mode === "ref" ? ["ls-tree", "-r", "--name-only", snapshot.ref] : snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"]);
+  return manifests.filter((manifest) => manifest.endsWith("/package.json") && workspaceRoots.some((workspaceRoot) => startsWithAny(path.posix.dirname(manifest), [workspaceRoot])));
 }
 
-function readWorkspaceManifest(root, manifest, snapshot, environment = process.env) {
+function readWorkspaceManifest(manifest, snapshot) {
   try {
-    if (snapshot.mode === "ref") return execFileSync("git", ["show", `${snapshot.ref}:${manifest}`], { cwd: root, encoding: "utf8", env: environment });
-    if (snapshot.mode === "index") return execFileSync("git", ["show", `:${manifest}`], { cwd: root, encoding: "utf8", env: environment });
-    return readFileSync(path.join(root, manifest), "utf8");
+    if (snapshot.mode === "ref") return execFileSync("git", ["show", `${snapshot.ref}:${manifest}`], { cwd: repositoryRoot, encoding: "utf8" });
+    if (snapshot.mode === "index") return execFileSync("git", ["show", `:${manifest}`], { cwd: repositoryRoot, encoding: "utf8" });
+    return readFileSync(path.join(repositoryRoot, manifest), "utf8");
   } catch (error) {
     throw new GatePlanningError("workspace-metadata", `Unable to read workspace manifest ${manifest}`, {
       details: [error instanceof Error ? error.message : String(error)],
@@ -159,47 +151,22 @@ function parseWorkspaceManifest(manifest, contents) {
       details: [error instanceof Error ? error.message : String(error)],
     });
   }
-  if (packageJson === null || typeof packageJson !== "object" || Array.isArray(packageJson)) {
-    throw new GatePlanningError("workspace-metadata", `Malformed workspace manifest: ${manifest}`);
-  }
-  if (typeof packageJson.name !== "string" || !packageJson.name) {
+  if (typeof packageJson?.name !== "string" || !packageJson.name) {
     throw new GatePlanningError("workspace-metadata", `Workspace manifest ${manifest} has no package name`);
   }
-  const scripts = packageJson.scripts ?? {};
-  if (scripts === null || typeof scripts !== "object" || Array.isArray(scripts) || Object.values(scripts).some((value) => typeof value !== "string")) {
-    throw new GatePlanningError("workspace-metadata", `Workspace manifest ${manifest} has malformed scripts`);
-  }
-  const dependencies = [];
-  const dependencySpecs = [];
-  for (const field of dependencyFields) {
-    const values = packageJson[field];
-    if (values === undefined) continue;
-    if (values === null || typeof values !== "object" || Array.isArray(values)) {
-      throw new GatePlanningError("workspace-metadata", `Workspace manifest ${manifest} has malformed ${field}`);
-    }
-    for (const [name, spec] of Object.entries(values)) {
-      if (typeof spec !== "string") {
-        throw new GatePlanningError("workspace-metadata", `Workspace manifest ${manifest} has malformed ${field}.${name}`);
-      }
-      dependencies.push(name);
-      dependencySpecs.push({ name, spec });
-    }
-  }
+  const dependencySpecs = dependencyFields.flatMap((field) => Object.entries(packageJson[field] ?? {}).map(([name, spec]) => ({ name, spec })));
   return {
     name: packageJson.name,
     directory: path.posix.dirname(manifest),
-    scripts,
-    dependencies: [...new Set(dependencies)],
+    scripts: packageJson.scripts ?? {},
+    dependencies: [...new Set(dependencySpecs.map(({ name }) => name))],
     dependencySpecs,
     isPublic: packageJson.private !== true,
   };
 }
 
-export function discoverWorkspaces(root = repositoryRoot, options = {}) {
-  const snapshot = options.snapshot ?? (options.mode ? options : { mode: "worktree" });
-  const environment = options.environment ?? process.env;
-  const manifests = workspaceManifestPaths(root, snapshot, environment);
-  const workspaces = manifests.map((manifest) => parseWorkspaceManifest(manifest, readWorkspaceManifest(root, manifest, snapshot, environment)));
+function discoverWorkspaces(snapshot) {
+  const workspaces = workspaceManifestPaths(snapshot).map((manifest) => parseWorkspaceManifest(manifest, readWorkspaceManifest(manifest, snapshot)));
   const names = new Set();
   for (const workspace of workspaces) {
     if (names.has(workspace.name)) {
@@ -224,7 +191,7 @@ function affectedWorkspaces(files, workspaces, selectAll) {
   while (changed) {
     changed = false;
     for (const workspace of workspaces) {
-      if (selected.has(workspace.name) || !(workspace.dependencies ?? []).some((dependency) => selected.has(dependency))) continue;
+      if (selected.has(workspace.name) || !workspace.dependencies.some((dependency) => selected.has(dependency))) continue;
       selected.add(workspace.name);
       changed = true;
     }
@@ -232,31 +199,8 @@ function affectedWorkspaces(files, workspaces, selectAll) {
   return workspaces.filter((workspace) => selected.has(workspace.name));
 }
 
-function validateWorkspaceCollection(workspaces) {
-  if (!Array.isArray(workspaces)) {
-    throw new GatePlanningError("workspace-metadata", "Workspace metadata must be a list");
-  }
-  const names = new Set();
-  for (const workspace of workspaces) {
-    if (workspace === null || typeof workspace !== "object" || Array.isArray(workspace) || typeof workspace.name !== "string" || !workspace.name || typeof workspace.directory !== "string" || !workspace.directory) {
-      throw new GatePlanningError("workspace-metadata", "Malformed workspace metadata");
-    }
-    if (names.has(workspace.name)) {
-      throw new GatePlanningError("workspace-metadata", `Duplicate workspace name: ${workspace.name}`);
-    }
-    names.add(workspace.name);
-    if (workspace.scripts === null || (workspace.scripts !== undefined && (typeof workspace.scripts !== "object" || Array.isArray(workspace.scripts) || Object.values(workspace.scripts).some((value) => typeof value !== "string")))) {
-      throw new GatePlanningError("workspace-metadata", `Workspace ${workspace.name} has malformed scripts`);
-    }
-    if (workspace.dependencies !== undefined && (!Array.isArray(workspace.dependencies) || workspace.dependencies.some((dependency) => typeof dependency !== "string"))) {
-      throw new GatePlanningError("workspace-metadata", `Workspace ${workspace.name} has malformed dependencies`);
-    }
-  }
-  return names;
-}
-
 function deriveTargetUniverse(target, workspaces) {
-  const names = validateWorkspaceCollection(workspaces);
+  const names = new Set(workspaces.map((workspace) => workspace.name));
   const roots = targetRoots[target];
   const missing = roots.filter((root) => !names.has(root));
   if (missing.length > 0) {
@@ -272,7 +216,7 @@ function deriveTargetUniverse(target, workspaces) {
   while (pending.length > 0) {
     const name = pending.pop();
     const workspace = byName.get(name);
-    for (const dependency of workspace.dependencies ?? []) {
+    for (const dependency of workspace.dependencies) {
       if (!names.has(dependency) || universe.has(dependency)) continue;
       universe.add(dependency);
       pending.push(dependency);
@@ -294,13 +238,13 @@ function normalizeTarget(target) {
 }
 
 function filteredPnpmCommand(workspaces, script, trailingArguments = [], pnpmArguments = []) {
-  const runnable = workspaces.filter((workspace) => workspace.scripts?.[script]);
+  const runnable = workspaces.filter((workspace) => workspace.scripts[script]);
   if (runnable.length === 0) return null;
   return ["pnpm", ...pnpmArguments, ...runnable.flatMap((workspace) => ["--filter", workspace.name]), "run", script, ...trailingArguments];
 }
 
 function workspaceBuildCommand(workspaces) {
-  const runnable = workspaces.filter((workspace) => workspace.scripts?.build);
+  const runnable = workspaces.filter((workspace) => workspace.scripts.build);
   if (runnable.length === 0) return null;
   return ["pnpm", "exec", "turbo", "run", "build", "--force", ...runnable.map((workspace) => `--filter=${workspace.name}...`)];
 }
@@ -313,8 +257,7 @@ function task(id, label, selected, reason, command, env = {}) {
 export function createGatePlan(files, options = {}) {
   const normalizedFiles = normalizeFiles(files);
   const snapshot = options.snapshot ?? { mode: "worktree" };
-  const workspaces = options.workspaces ?? discoverWorkspaces(options.repositoryRoot ?? repositoryRoot, { snapshot });
-  validateWorkspaceCollection(workspaces);
+  const workspaces = discoverWorkspaces(snapshot);
   const explicitFull = options.full === true;
   const target = normalizeTarget(options.target);
   // Selection is narrower on a pull request than in the merge queue. For any change beyond documentation the queue also runs the
@@ -421,8 +364,8 @@ export function createGatePlan(files, options = {}) {
   const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/prod-proof", "sdks/typescript/client/src"]));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
-  const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
-  const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
+  const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file));
+  const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file));
   const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript"]));
   // CI runs the API and Sync gates as their own jobs and passes services: "external".
   const servicesExternal = options.services === "external";
@@ -433,7 +376,7 @@ export function createGatePlan(files, options = {}) {
   const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
   const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
-  const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
+  const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
@@ -525,7 +468,7 @@ export function createGatePlan(files, options = {}) {
       "Affected package TypeScript resolution",
       publishableWorkspaces.length > 0,
       publishableWorkspaces.map((workspace) => workspace.name).join(", ") || "no affected public package",
-      publishableWorkspaces.length > 0 ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--config-path", path.join(options.repositoryRoot ?? repositoryRoot, ".attw.json")] : null,
+      publishableWorkspaces.length > 0 ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--config-path", path.join(repositoryRoot, ".attw.json")] : null,
     ),
   ];
 
@@ -547,7 +490,7 @@ export function createGatePlan(files, options = {}) {
   };
 }
 
-export function resolveGateTarget(environmentTarget, flagTarget) {
+function resolveGateTarget(environmentTarget, flagTarget) {
   if (environmentTarget && flagTarget && environmentTarget !== flagTarget) throw new Error("GATE_TARGET and --target must match");
   return environmentTarget ?? flagTarget;
 }

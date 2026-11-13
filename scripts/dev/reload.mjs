@@ -65,7 +65,7 @@ async function scanFiles(roots, { fs = { readdir, stat } } = {}) {
   return files;
 }
 
-export function createSourcePoller({ rootsByService, intervalMs = 250, debounceMs = 350, onChange, scanner = scanFiles } = {}) {
+export function createSourcePoller({ rootsByService, intervalMs = 250, debounceMs = 350, onChange } = {}) {
   if (typeof onChange !== "function") throw failure(FailureKind.CONFIG, "source poller requires onChange", { stage: "reload" });
   const serviceRoots = Object.entries(rootsByService || {});
   let snapshots = new Map();
@@ -79,7 +79,7 @@ export function createSourcePoller({ rootsByService, intervalMs = 250, debounceM
     if (closed) return;
     const changes = [];
     for (const [serviceId, roots] of serviceRoots) {
-      const next = await scanner(roots);
+      const next = await scanFiles(roots);
       if (!initialized.has(serviceId)) {
         snapshots.set(serviceId, next);
         initialized.add(serviceId);
@@ -116,30 +116,4 @@ export function createSourcePoller({ rootsByService, intervalMs = 250, debounceM
       await poll();
     },
   };
-}
-
-export function createReloadCoordinator({ serviceSpecs, restart, onState = () => {} } = {}) {
-  const ordered = dependencyOrder(serviceSpecs || []);
-  let queue = Promise.resolve();
-  const request = (changes) => {
-    const ids = [...new Set((changes || []).map((change) => change.serviceId || change))];
-    queue = queue.then(async () => {
-      if (ids.length === 0) return;
-      const affected = new Set(ids);
-      for (const id of ids) for (const dependant of dependantIds(ordered, id)) affected.add(dependant);
-      const stopping = [...ordered].reverse().filter((spec) => affected.has(spec.id));
-      const starting = ordered.filter((spec) => affected.has(spec.id));
-      onState({ state: "reloading", services: [...affected] });
-      try {
-        for (const spec of stopping) await restart(spec.id, "stop");
-        for (const spec of starting) await restart(spec.id, "start");
-        onState({ state: "ready", services: [...affected] });
-      } catch (error) {
-        onState({ state: "reload-failed", services: [...affected], error });
-        throw error;
-      }
-    });
-    return queue;
-  };
-  return { request };
 }

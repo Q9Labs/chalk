@@ -6,28 +6,23 @@ const migrationsDirectory = path.join(repositoryRoot, "apps/api/db/migrations");
 const embedPath = path.join(migrationsDirectory, "embed.go");
 const latestVersionPattern = /^(const LatestVersion int64 = )(\d+)$/m;
 
-export async function latestMigrationVersion(directory = migrationsDirectory) {
-  const versions = (await readdir(directory))
+async function latestMigrationVersion() {
+  const versions = (await readdir(migrationsDirectory))
     .filter((name) => name.endsWith(".sql"))
     .map((name) => {
       const prefix = name.split("_")[0];
       if (!/^\d+$/.test(prefix)) throw new Error(`Migration ${name} has no numeric version prefix`);
       return prefix;
     });
-  if (versions.length === 0) throw new Error(`No migrations found in ${directory}`);
+  if (versions.length === 0) throw new Error(`No migrations found in ${migrationsDirectory}`);
   return versions.reduce((latest, version) => (BigInt(version) > BigInt(latest) ? version : latest));
-}
-
-export async function declaredLatestVersion(source) {
-  const match = latestVersionPattern.exec(source);
-  if (!match) throw new Error("apps/api/db/migrations/embed.go has no `const LatestVersion int64 = <version>` line");
-  return match[2];
 }
 
 async function main() {
   const write = process.argv.includes("--write");
   const source = await readFile(embedPath, "utf8");
-  const declared = await declaredLatestVersion(source);
+  const declared = latestVersionPattern.exec(source)?.[2];
+  if (!declared) throw new Error("apps/api/db/migrations/embed.go has no `const LatestVersion int64 = <version>` line");
   const latest = await latestMigrationVersion();
   if (declared === latest) return;
   if (!write) {

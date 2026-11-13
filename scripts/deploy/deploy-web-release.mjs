@@ -1,14 +1,11 @@
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { errorMessage } from "../lib/errors.mjs";
-import { fileURLToPath } from "node:url";
-import { pnpmVersion } from "../lib/repository.mjs";
+import { pnpmVersion, repositoryRoot } from "../lib/repository.mjs";
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-export const repositoryRoot = resolve(scriptDirectory, "../..");
-export const webDirectory = join(repositoryRoot, "apps/web");
+const webDirectory = join(repositoryRoot, "apps/web");
 const vendorPreparerPath = join(webDirectory, "scripts/prepare-vendor-store.ts");
 export const verifierPath = join(repositoryRoot, "scripts/deploy/verify-web-deploy.mjs");
 
@@ -158,8 +155,6 @@ export async function runWebRelease({ arguments_ = process.argv.slice(2), enviro
 
   return { sha: expectedSHA, stagingURL, productionURL, dryRun: false, plan: releasePlan };
 }
-
-export const deployWebRelease = runWebRelease;
 
 function resolveProductionURL(environment) {
   return environment.CHALK_WEB_PRODUCTION_URL?.trim() || DEFAULT_PRODUCTION_URL;
