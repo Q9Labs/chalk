@@ -163,7 +163,7 @@ try {
     await tab.waitForURL(`**${CALL}/session/**`);
     await tab.waitForLoadState("networkidle");
     await tab.waitForTimeout(600);
-    check("Session row opens the past session", (await tab.getByRole("heading", { name: "Q9 team", level: 1 }).count()) === 1 && (await tab.locator(".crumb a").count()) === 1);
+    check("Session row opens the past session", (await tab.getByRole("heading", { level: 1 }).count()) === 1 && (await tab.locator(".crumb a").innerText()).trim() === "Q9 team");
     await tab.locator(".crumb a").click();
     await tab.waitForURL(`**${CALL}`);
     await tab.getByRole("link", { name: "Developer" }).click();
@@ -253,11 +253,13 @@ try {
     const { tab, context } = await open("/dashboard", { set: "expire=1" });
     const log = await fixture("log");
     const refreshes = log.filter((entry) => entry.path === "/auth/refresh").length;
+    // Home reads alongside the session check, once for each check, so a retry would read more often than the session is checked.
     const reads = log.filter((entry) => entry.path === "/dashboard-api/home").length;
+    const sessions = log.filter((entry) => entry.path === "/auth/session").length;
     check(
       "expired session returns to sign-in without refresh or retry",
-      refreshes === 0 && reads <= 1 && new URL(tab.url()).pathname === "/dashboard/sign-in" && (await tab.getByRole("button", { name: "Continue with Google" }).count()) === 1,
-      `refreshes=${refreshes} reads=${reads} path=${new URL(tab.url()).pathname}`,
+      refreshes === 0 && reads <= sessions && new URL(tab.url()).pathname === "/dashboard/sign-in" && (await tab.getByRole("button", { name: "Continue with Google" }).count()) === 1,
+      `refreshes=${refreshes} reads=${reads} sessions=${sessions} path=${new URL(tab.url()).pathname}`,
     );
     await context.close();
   }
@@ -328,7 +330,7 @@ try {
     await tab.waitForTimeout(800);
     const [create] = await posted("create-transcript");
     check("transcript action inherits the configured language", offered === 1 && !("languages" in (create?.body ?? {})) && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
-    check("transcript action leaves the panel processing", (await tab.getByText("The transcript is being prepared.").count()) === 1);
+    check("transcript action leaves the panel processing", (await tab.getByText("Making the transcript", { exact: true }).count()) === 1);
     await context.close();
   }
   {
@@ -347,7 +349,7 @@ try {
     await tab.waitForTimeout(900);
     const [create] = await posted("create-call");
     check("Start a call sends no name", Boolean(create) && !("name" in create.body), JSON.stringify(create?.body ?? null));
-    check("the new call's link shows in the ready dialog", /chalkmeet\.com\/[a-z]+(?:-[a-z]+){2,3}/.test((await tab.getByRole("dialog").locator(".linkbox").textContent()) ?? ""));
+    check("the new call's link shows in the ready dialog", /chalkmeet\.com\/[a-z]+(?:-[a-z]+){2,3}/.test((await tab.getByRole("dialog").locator(".lf-text").textContent()) ?? ""));
     const roboto = await tab.evaluate(() => [...document.querySelectorAll("link[rel=stylesheet]")].some((link) => link.href.includes("Roboto")));
     check("Roboto is not loaded off the sign-in page", !roboto);
     await context.close();

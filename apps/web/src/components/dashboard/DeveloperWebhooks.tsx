@@ -44,7 +44,6 @@ export function WebhooksPanel({ webhooks, nextCursor, opened, onToggle, onAdd, o
   return (
     <section className="panel card" id="webhooks" aria-labelledby="webhooks-title">
       <div className="ph">
-        <Icon name="hook" size={18} />
         <h2 id="webhooks-title">Webhook endpoints</h2>
         {webhooks.length ? <span className="pill">{webhooks.length}</span> : null}
         {webhooks.length ? (

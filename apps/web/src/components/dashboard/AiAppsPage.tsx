@@ -2,12 +2,12 @@ import { useState } from "react";
 
 import type { ConnectionDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
-import { ago, fullDate } from "../../lib/dashboard/format";
+import { ago, fullDate, isInternalLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { DisconnectPrompt } from "./DisconnectPrompt";
-import { CopyAction, ErrorPanel, MoreButton, Sk, SkeletonRows, useToast } from "./kit";
+import { ErrorPanel, LinkField, MoreButton, Sk, SkeletonRows, useToast } from "./kit";
 import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
@@ -19,18 +19,14 @@ export function AiAppsPage() {
   const toast = useToast();
 
   return (
-    <div className="wrap wide">
+    <div className="wrap">
       <div className="pgh">
         <h1>AI apps</h1>
       </div>
-      <p className="intro">Connect Claude, ChatGPT and other AI apps to Chalk, and they can work with your Spaces for you. You choose what each app is allowed to do.</p>
+      <p className="intro">Let Claude, ChatGPT and other AI apps work with your Spaces. You choose what each one can do.</p>
       {state.kind === "ready" ? (
         <>
-          <div className="murl">
-            <span className="lbl">Chalk URL</span>
-            <code>{state.data.mcpUrl}</code>
-            <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
-          </div>
+          <McpAddress url={state.data.mcpUrl} />
           <McpClients mcpUrl={state.data.mcpUrl} registeredNames={[...(state.data.nextCursor ? state.data.connectedNames : []), ...state.data.connections.map((connection) => connection.clientName)]} />
         </>
       ) : null}
@@ -40,12 +36,12 @@ export function AiAppsPage() {
           <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       ) : null}
-      {state.kind === "ready" ? (
+      {state.kind === "ready" && !previewOnly(state.data) ? (
         <div className="secth" style={{ marginTop: "var(--space-12)" }}>
           <h2>Connected apps</h2>
         </div>
       ) : null}
-      {state.kind === "ready" && state.data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Adding an app above still works." onRetry={reload} /> : null}
+      {state.kind === "ready" && state.data.listError && !previewOnly(state.data) ? <ErrorPanel title="Couldn’t load your connected apps" detail="Your connections are still in place. Try again in a moment." onRetry={reload} /> : null}
       {state.kind === "ready" && !state.data.listError && state.data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
@@ -130,18 +126,43 @@ export function AiAppsPage() {
   );
 }
 
+/**
+ * A preview on a private address can't hold connections, and its address notice already says so, so the page doesn't
+ * add a list error under it.
+ */
+const previewOnly = (data: { readonly mcpUrl: string; readonly listError: boolean }) => data.listError && isInternalLink(data.mcpUrl);
+
+/**
+ * The address AI apps add. A test server that only knows its loopback address can't be reached by an AI app, so the
+ * page says so instead of showing an address that would not work.
+ */
+function McpAddress({ url }: { readonly url: string }) {
+  if (isInternalLink(url))
+    return (
+      <div className="murl">
+        <span className="lbl">Chalk URL</span>
+        <p className="help">AI apps can’t connect to this preview, because it runs on a private address. Connect them from your live Chalk account.</p>
+      </div>
+    );
+  return (
+    <div className="murl">
+      <span className="lbl">Chalk URL</span>
+      <LinkField link={url} shown={url} label="Copy URL" />
+    </div>
+  );
+}
+
 /** The loaded page's parts in place: the URL row, the search, app tiles and the connected list's heading. */
 function AiAppsSkeleton() {
   return (
     <div aria-busy="true">
       <div className="murl">
         <span className="lbl">Chalk URL</span>
-        <Sk width="min(320px, 50%)" height={14} />
-        <Sk width="96px" height={32} radius="999px" />
+        <div className="linkfield">
+          <Sk width="min(320px, 60%)" height={14} />
+        </div>
       </div>
-      <div className="cfind">
-        <Sk width="100%" height={44} radius="999px" />
-      </div>
+      <h2 className="cgroup">Chat apps</h2>
       <ul className="cgrid" aria-hidden="true">
         {[0, 1, 2, 3, 4, 5].map((index) => (
           <li key={index}>

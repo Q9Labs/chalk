@@ -2,20 +2,20 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
 import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
-import { displayLink, lastActive } from "../../lib/dashboard/format";
+import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
+import { displayLink, lastActive, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
-import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
+import { CopyAction, Dialog, LinkField, LinkText, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
-import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
+import { createCallAction, newCallIntent, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
   const link = call.inviteUrl ?? (await readPage("call-invite", { spaceId: call.id })).inviteUrl;
   if (!link) throw new Error("This call has no link yet");
-  return link;
+  return shareableLink(link);
 }
 
 /** A Home row: the call with its live Episode, which every status check answers along with whether it is archived. */
@@ -29,7 +29,16 @@ const merge = (row: Row, call: CallDTO): Row => ({ ...row, ...call });
  */
 type Home = { rows: Row[]; nextCursor: string | null };
 const capped = (rows: Row[]): Row[] => rows.slice(0, HOME_STATUS_ROWS);
-const shown = (home: Home): Row[] => home.rows.filter((row) => !row.archived);
+/** When a call was last used: its last session, else when it was made. */
+const usedAt = (row: Row): string => row.lastActiveAt ?? row.createdAt;
+/**
+ * What Home lists: unarchived calls, the one in use now first, then by last use, newest first. Home holds its rows by
+ * creation time, 25 to a page, and shows the first five of this order: it sorts everything it holds, then cuts, so a
+ * call used yesterday is never hidden behind calls made today.
+ */
+const listed = (home: Home): Row[] => home.rows.filter((row) => !row.archived).sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || Date.parse(usedAt(b)) - Date.parse(usedAt(a)));
+/** How many rows Home shows at first, and how many more each Show more calls adds. */
+const SHOWN_ROWS = 5;
 const rowsOf = (page: HomeDTO): Row[] => page.calls.map((call) => ({ ...call, live: page.live.find((item) => item.spaceId === call.id)?.episode ?? null }));
 
 /** One status answer applied by Space ID: whether each call is archived, its activity, and its live Episode. */
@@ -89,7 +98,7 @@ export function HomePage() {
         const first = status.first;
         if (!first) return { ...home, rows };
         // Calls made elsewhere are the newest, so they sit above every call Home holds: put the first page's calls above
-        // the first one Home knows on top. With no known call on the page (five or more new calls), or an unknown call
+        // the first one Home knows on top. With no known call on the page (a whole page of new calls), or an unknown call
         // below a known one (a call archived before Home loaded, then restored), reload from this page into the rows
         // this answer just updated.
         const known = new Set(rows.map((row) => row.id));
@@ -106,9 +115,10 @@ export function HomePage() {
   }, [state]);
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
+  const [limit, setLimit] = useState(SHOWN_ROWS);
   const toast = useToast();
   const navigate = useNavigate();
-  const startKey = useRef(intentKey());
+  const startKey = useRef(newCallIntent());
 
   async function startCall() {
     if (starting) return;
@@ -116,14 +126,15 @@ export function HomePage() {
     try {
       // No name: the server names it, and the person can rename it from the row.
       const { call } = await act("home", createCallAction(startKey.current, readNewCallLanguage()));
-      startKey.current = intentKey();
+      startKey.current = newCallIntent();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
       setDialog({ kind: "ready", call, link });
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
+    } catch {
+      // The reason belongs to the engine; the person needs the outcome and a way to retry.
+      toast("Couldn’t start a call", { icon: "alert", action: { label: "Try again", onClick: () => void startCall() } });
     } finally {
       setStarting(false);
     }
@@ -134,17 +145,19 @@ export function HomePage() {
       await act("home", { action: "archive-call", spaceId: call.id });
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, archived: true } : item)) }));
       toast(`Archived ${call.name}`, {
-        icon: "trash",
-        undo: () => {
-          act("home", { action: "restore-call", spaceId: call.id }).then(
-            ({ call: restored }) =>
-              update((home) => {
-                // New calls may have pushed the archived row out of the 300, so put it back in its place.
-                const row = home.rows.find((item) => item.id === call.id) ?? call;
-                return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
-              }),
-            (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-          );
+        action: {
+          label: "Undo",
+          onClick: () => {
+            act("home", { action: "restore-call", spaceId: call.id }).then(
+              ({ call: restored }) =>
+                update((home) => {
+                  // New calls may have pushed the archived row out of the 300, so put it back in its place.
+                  const row = home.rows.find((item) => item.id === call.id) ?? call;
+                  return { ...home, rows: capped([...home.rows.filter((item) => item.id !== call.id), merge(row, restored)].sort(newestFirst)) };
+                }),
+              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+            );
+          },
         },
       });
     } catch (error) {
@@ -167,25 +180,30 @@ export function HomePage() {
       {state.kind === "loading" ? (
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
-        <HomeLoadFailed detail={errorMessage(state.error)} onRetry={reload} />
-      ) : shown(state.data).length === 0 ? (
+        <HomeLoadFailed error={state.error} onRetry={reload} />
+      ) : listed(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
-            <span className="empty-icon" aria-hidden="true">
-              <Icon name="cam" />
-            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
           </div>
         </div>
       ) : (
         <>
-          <div className="list">
-            {shown(state.data).map((call) => (
-              <CallRow key={call.id} call={call} live={call.live} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
-            ))}
+          <div className="list calls">
+            {listed(state.data)
+              .slice(0, limit)
+              .map((call) => (
+                <CallRow key={call.id} call={call} live={call.live} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
+              ))}
           </div>
-          {state.data.rows.length >= HOME_STATUS_ROWS ? (
+          {listed(state.data).length > limit ? (
+            <div className="more-row">
+              <button type="button" className="btn sec sm" onClick={() => setLimit((value) => value + SHOWN_ROWS)}>
+                Show more calls
+              </button>
+            </div>
+          ) : state.data.rows.length >= HOME_STATUS_ROWS ? (
             <p className="help">Home shows your 300 most recent calls.</p>
           ) : state.data.nextCursor ? (
             <MoreButton
@@ -201,6 +219,7 @@ export function HomePage() {
                   },
                   { refresh: false },
                 );
+                setLimit((value) => value + SHOWN_ROWS);
               }}
             />
           ) : null}
@@ -234,18 +253,18 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
   );
   const label = live ? `${call.name}, live now with ${live.count} people` : `${call.name}, last active ${lastActive(call.lastActiveAt ?? call.createdAt)}`;
   const faces = live ? live.participants.map((person) => person.name) : call.recentPeople.map((person) => person.name);
+  // The faces column holds three circles; when people overflow it, the count takes the last one.
+  const shown = faces.length > 3 ? 2 : 3;
   return (
     <div className="row">
       <Link className="ra" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} aria-label={label} />
+      {/* The people come first and sit right against the name, so a row reads as who and what together. */}
+      {/* A call nobody has joined keeps one quiet empty face, so its name starts where every other name does. */}
+      <span className="fcol np">{faces.length ? <Faces names={faces} size={28} max={shown} /> : <span className="noface" />}</span>
       <span className="rt np">
         <b>{call.name}</b>
-        {phone ? <span>{status}</span> : call.inviteUrl ? <span className="mono">{displayLink(call.inviteUrl)}</span> : null}
+        {phone ? <span>{status}</span> : call.inviteUrl ? <LinkText link={shareableLink(call.inviteUrl)} className="mono" /> : null}
       </span>
-      {faces.length ? (
-        <span className="fcol np">
-          <Faces names={faces} size={28} max={phone ? 2 : 3} />
-        </span>
-      ) : null}
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
@@ -266,7 +285,7 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
               >
                 Join call
               </MenuItem>
-              <CopyMenuItem call={call} onDone={close} />
+              {phone ? <CopyMenuItem call={call} onDone={close} /> : null}
               <MenuItem
                 icon="edit"
                 onSelect={() => {
@@ -348,26 +367,28 @@ function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly
         </button>
       }
     >
-      <div className="linkrow" style={{ marginTop: "var(--space-4)" }}>
-        <div className="linkbox">
-          <span>{displayLink(link)}</span>
+      {/* The link, who can join and the language share one width, each a full-width control under its label. */}
+      <div className="cready">
+        <LinkField link={link} />
+        <div className="field">
+          <span className="lbl">Who can join</span>
+          <Link className="setrow" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access" aria-describedby="ready-access-help">
+            <span>{call.admission === "anyone" ? "Anyone with the link" : "Ask to join"}</span>
+            <Icon name="right" size={16} />
+          </Link>
+          <p className="help" id="ready-access-help">
+            {call.admission === "anyone" ? "Anyone with the link joins at once." : "People ask to join, and you let them in."}
+          </p>
         </div>
-        <CopyAction text={link} pill />
-      </div>
-      <p className="help" style={{ marginTop: "var(--space-3)" }}>
-        People ask to join, and you let them in.{" "}
-        <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
-          Change who can join
-        </Link>
-      </p>
-      <div className="field" style={{ marginTop: "var(--space-5)" }}>
-        <span className="lbl" id="ready-language-label">
-          Transcript language
-        </span>
-        <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
-        <p className="help" id="ready-language-help">
-          Your next calls start with this choice too.
-        </p>
+        <div className="field">
+          <span className="lbl" id="ready-language-label">
+            Transcript language
+          </span>
+          <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
+          <p className="help" id="ready-language-help">
+            Your next calls start with this choice too.
+          </p>
+        </div>
       </div>
     </Dialog>
   );
@@ -504,25 +525,19 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
   );
 }
 
-/** The Home list could not load: a card that shows a call tile cut off from the network, with one way to retry. */
-function HomeLoadFailed({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
+/** What a failed Home read means for the person: their calls are safe, and what to do next. */
+function homeFailure(error: unknown): string {
+  if (!(error instanceof DashboardRequestError)) return "Your calls are still saved. Check your connection, then try again.";
+  if (error.status >= 500) return "Chalk couldn’t reach your calls just now. They’re still saved, so try again in a moment.";
+  return errorMessage(error);
+}
+
+/** The Home list could not load: what failed, what it means, and one way to retry. */
+function HomeLoadFailed({ error, onRetry }: { readonly error: unknown; readonly onRetry: () => void }) {
   return (
     <div className="hfail" role="alert">
-      <svg className="hfail-art" viewBox="0 0 160 96" fill="none" aria-hidden="true">
-        <rect x="14" y="10" width="132" height="24" rx="8" className="hfail-tile" />
-        <circle cx="30" cy="22" r="6" className="hfail-dot" />
-        <rect x="44" y="17" width="46" height="4" rx="2" className="hfail-bar" />
-        <rect x="44" y="24" width="28" height="3" rx="1.5" className="hfail-bar" />
-        <rect x="14" y="40" width="132" height="24" rx="8" className="hfail-tile" />
-        <circle cx="30" cy="52" r="6" className="hfail-dot" />
-        <rect x="44" y="47" width="38" height="4" rx="2" className="hfail-bar" />
-        <rect x="44" y="54" width="22" height="3" rx="1.5" className="hfail-bar" />
-        <path d="M14 82h50M96 82h50" className="hfail-line" />
-        <circle cx="80" cy="82" r="7" className="hfail-badge" />
-        <path d="M80 78.5v4M80 85.5v.01" className="hfail-mark" />
-      </svg>
       <b>Couldn’t load your calls</b>
-      <p>{detail}</p>
+      <p>{homeFailure(error)}</p>
       <button type="button" className="btn sec" onClick={onRetry}>
         <Icon name="retry" />
         Try again

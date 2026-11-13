@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
 import { errorMessage, readPage } from "../../lib/dashboard/client";
-import { ago, expiresSoon, hasExpired } from "../../lib/dashboard/format";
+import { expiresSoon, hasExpired } from "../../lib/dashboard/format";
 import { Icon, type IconName } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
@@ -16,7 +16,7 @@ import { SitesPanel } from "./DeveloperSites";
 import { isFailing, WebhooksPanel } from "./DeveloperWebhooks";
 import { ErrorPanel, Sk, useToast } from "./kit";
 import { useJumpTarget } from "./jump";
-import { Page, Stat } from "./Page";
+import { Page } from "./Page";
 
 type Open =
   | null
@@ -83,7 +83,6 @@ export function DeveloperPage() {
 
   return (
     <Shell nav={<SectionNav soon={soon.length > 0} failing={failing.length > 0} />}>
-      <Summary keys={keys} used={listed} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
       {keys.length === 0 && data.nextKeyCursor ? <LiveKeySearch cursor={data.nextKeyCursor} onPage={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
       <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
       <KeysPanel
@@ -189,18 +188,7 @@ export function DeveloperPage() {
 /** The page frame: the section nav beside the heading and the panels. */
 function Shell({ nav, children }: { readonly nav?: ReactNode; readonly children: ReactNode }) {
   return (
-    <Page
-      icon="code"
-      title="Developer"
-      intro="API keys, allowed websites, webhooks and call settings for your app. A call is a Space; one session is an Episode, as in the API."
-      nav={nav}
-      end={
-        <a className="btn out end" href="/docs">
-          <Icon name="book" size={16} />
-          Read the docs
-        </a>
-      }
-    >
+    <Page title="Developer" intro="API keys, allowed websites, webhooks and call settings for your app." nav={nav}>
       {children}
     </Page>
   );
@@ -254,13 +242,6 @@ function DeveloperSkeleton() {
   return (
     <Shell nav={<SectionNav soon={false} failing={false} />}>
       <div aria-busy="true" aria-label="Loading" className="dstack">
-        <div className="card stats">
-          {STAT_LABELS.map(([icon, label]) => (
-            <Stat key={label} icon={icon} label={label} value={<Sk width="48px" height={24} />}>
-              <Sk width="96px" height={12} />
-            </Stat>
-          ))}
-        </div>
         {PANELS.map((panel) => (
           <section key={panel.title} className="panel card">
             <div className="ph">
@@ -285,75 +266,10 @@ function DeveloperSkeleton() {
   );
 }
 
-const STAT_LABELS: readonly (readonly [IconName, string])[] = [
-  ["key", "Active API keys"],
-  ["clock", "Last key use"],
-  ["globe", "Allowed websites"],
-  ["hook", "Webhook endpoints"],
-];
-
 const PANELS: readonly { readonly icon: IconName; readonly title: string; readonly sub: string; readonly rows: number }[] = [
   { icon: "link", title: "Connect your app", sub: "Two values and a server. Browsers never get a key; they get an AccessGrant.", rows: 3 },
   { icon: "key", title: "API keys", sub: "", rows: 3 },
 ];
-
-/** Four numbers the page really has: it never invents usage the API doesn't return. */
-function Summary({
-  keys,
-  used,
-  moreKeys,
-  soon,
-  websites,
-  webhooks,
-  moreWebhooks,
-  failing,
-}: {
-  readonly keys: readonly KeyDTO[];
-  readonly used: readonly KeyDTO[];
-  readonly moreKeys: boolean;
-  readonly soon: readonly KeyDTO[];
-  readonly websites: number;
-  readonly webhooks: readonly WebhookDTO[];
-  readonly moreWebhooks: boolean;
-  readonly failing: number;
-}) {
-  const lastUsed = used.reduce<KeyDTO | null>((latest, key) => (key.lastUsedAt && (!latest?.lastUsedAt || key.lastUsedAt > latest.lastUsedAt) ? key : latest), null);
-  const soonest = soon[0];
-  return (
-    <div className="card stats" role="group" aria-label="Summary">
-      <Stat icon="key" label="Active API keys" value={`${keys.length}${moreKeys ? "+" : ""}`}>
-        {!keys.length ? (
-          "Create one to start"
-        ) : soonest ? (
-          <span className="pill warn">
-            <Icon name="clock" size={12} />
-            {soon.length === 1 ? `1 expires ${expiresSoon(soonest.expiresAt)}` : `${soon.length} expire this week`}
-          </span>
-        ) : (
-          "None expiring soon"
-        )}
-      </Stat>
-      <Stat icon="clock" label="Last key use" value={lastUsed?.lastUsedAt ? ago(lastUsed.lastUsedAt) : "–"}>
-        {lastUsed ? <span className="ell">{lastUsed.name}</span> : "No calls yet"}
-      </Stat>
-      <Stat icon="globe" label="Allowed websites" value={String(websites)}>
-        1 always allowed
-      </Stat>
-      <Stat icon="hook" label="Webhook endpoints" value={`${webhooks.length}${moreWebhooks ? "+" : ""}`}>
-        {failing ? (
-          <span className="pill bad">
-            <span className="d" />
-            {failing} failing
-          </span>
-        ) : webhooks.length ? (
-          "No failures"
-        ) : (
-          "None yet"
-        )}
-      </Stat>
-    </div>
-  );
-}
 
 /** The first pages of keys can all be expired while a live key sits on a later page, so the Connect card keeps loading pages until it has one. */
 function LiveKeySearch({ cursor, onPage }: { readonly cursor: string; readonly onPage: (page: DeveloperDTO) => void }) {

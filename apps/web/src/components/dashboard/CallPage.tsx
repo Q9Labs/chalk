@@ -5,17 +5,17 @@ import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO, Tra
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
 import type { RowModel } from "../../lib/dashboard/lists";
 import { keptRecording, videoState, workingRecording } from "../../lib/dashboard/recording";
-import { clock, displayLink } from "../../lib/dashboard/format";
+import { clock, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { AdmissionKnocks } from "./AdmissionKnocks";
-import { SessionRow, SessionsHead } from "./ListParts";
+import { RecordingSettingsLink, SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { LanguagePicker } from "./LanguagePicker";
 import { rememberLanguage, type NewCallLanguage } from "./transcript-languages";
-import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
+import { ErrorPanel, LinkField, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
 
@@ -179,7 +179,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       </div>
     );
 
-  const { call, inviteUrl, episodes, live, nextCursor, knocks } = state.data;
+  const { call, episodes, live, nextCursor, knocks } = state.data;
+  const inviteUrl = shareableLink(state.data.inviteUrl);
   const current = episodes.find((episode) => episode.status === "active");
   const past = episodes.filter((episode) => episode !== current);
 
@@ -295,12 +296,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       <div className="cset">
         <div>
           <h2>Call link</h2>
-          <div className="linkrow">
-            <div className="linkbox">
-              <span>{displayLink(inviteUrl)}</span>
-            </div>
-            <CopyAction text={inviteUrl} pill />
-          </div>
+          <LinkField link={inviteUrl} />
           <p className="help">This link never changes. Share it once and use it every time.</p>
         </div>
         <div id="access">
@@ -320,6 +316,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       </div>
       <div className="secth">
         <h2>Past sessions</h2>
+        <RecordingSettingsLink />
       </div>
       {past.length === 0 ? (
         <div className="list">

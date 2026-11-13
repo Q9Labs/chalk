@@ -8,7 +8,7 @@ import { Icon } from "../site/Icon";
 
 /* ---------- rows ---------- */
 
-export function BadgeView({ badge }: { readonly badge: Badge }) {
+function BadgeView({ badge }: { readonly badge: Badge }) {
   return (
     <span className={`bdg ${badge.tone === "plain" ? "" : badge.tone}`.trim()}>
       {badge.icon === "check" ? <Icon name="check" size={12} /> : badge.icon === "spin" ? <span className="spin" aria-hidden="true" /> : badge.icon === "dot" ? <span className="d" /> : null}
@@ -16,6 +16,19 @@ export function BadgeView({ badge }: { readonly badge: Badge }) {
     </span>
   );
 }
+
+/** The way to the account-wide recording setting (not this call's), which marks itself when the Developer page opens on it. */
+export function RecordingSettingsLink() {
+  return (
+    <Link className="btn gh sm" to="/dashboard/developer" hash="recording-videos" preload="intent">
+      <Icon name="sliders" size={14} />
+      Account recording settings
+    </Link>
+  );
+}
+
+/** Under its column's header a ready badge says only "Ready", so a cell never repeats the header above it. */
+const inColumn = (badge: Badge): Badge => (badge.icon === "check" ? { ...badge, label: "Ready" } : badge);
 
 const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
 
@@ -53,10 +66,10 @@ export function SessionRow({ row }: { readonly row: RowModel }) {
         {row.people}
       </div>
       <div className="dsk">
-        <BadgeView badge={recording} />
+        <BadgeView badge={inColumn(recording)} />
       </div>
       <div className="dsk">
-        <BadgeView badge={transcript} />
+        <BadgeView badge={inColumn(transcript)} />
       </div>
       <div className="mob mt num">
         {day}, {clock(row.startedAt)} · {length || "Ending"} · {people(row.people)}

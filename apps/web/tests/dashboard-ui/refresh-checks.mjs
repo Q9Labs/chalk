@@ -50,10 +50,10 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=pending", clock: true });
     try {
       const full = await reads("call");
-      check("completed recording waits for pending automatic transcription", (await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).count()) === 0);
+      check("completed recording waits for pending automatic transcription", (await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Ready" }).count()) === 0);
       await fixture("set?metadataDiscovery=ready");
       await metadataTick(tab);
-      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).first().waitFor();
+      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Ready" }).first().waitFor();
       const status = await reads("call-status");
       await tab.clock.runFor(15000);
       check("Call discovers a new automatic transcript and stops polling without a full reload", (await reads("call")) === full && (await reads("call-status")) === status);
@@ -69,7 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
       await fixture("set?metadataComplete=complete");
       await metadataTick(tab);
       await processing(tab).waitFor({ state: "hidden" });
-      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).first().waitFor();
+      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Ready" }).first().waitFor();
       check("retryable transcripts keep polling until automatic recovery completes", (await reads("call")) === full);
     } finally {
       await context.close();
@@ -138,7 +138,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await fixture("set?end=1");
     const ended = await visible(tab, '.lr:not(.head) a[aria-label*=", 7 min,"]', 40000);
     await screenshot(tab, "ended");
-    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.knock").count()) === 0 && (await tab.locator(".lr:not(.head) .dsk .bdg", { hasText: "Recording" }).count()) === 1);
+    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.knock").count()) === 0 && (await tab.locator(".lr:not(.head) > .dsk:nth-child(5) .bdg", { hasText: "Ready" }).count()) === 1);
     await context.close();
   }
   {

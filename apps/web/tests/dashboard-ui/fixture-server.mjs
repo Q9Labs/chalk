@@ -189,8 +189,8 @@ function listRows(data) {
       episode: episodeDTO(episode),
       participantCount: episode.people.length,
       recording: episode.kept === "none" ? null : { id: uuid(0x1800 + index), video: episode.kept === "processing" ? "capturing" : (data.videos?.get(episode.id) ?? "play"), failureMessage: null },
-      transcript: episode.kept === "none" || data.deleted?.has(episode.id) ? "none" : episode.kept === "processing" ? "processing" : "ready",
-      transcriptIds: episode.kept === "done" && !data.deleted?.has(episode.id) ? [uuid(0x1900 + index)] : [],
+      transcript: episode.kept === "none" || data.deleted?.get(episode.id)?.size ? "none" : episode.kept === "processing" ? "processing" : "ready",
+      transcriptIds: episode.kept === "done" && !data.deleted?.get(episode.id)?.size ? [uuid(0x1900 + index)] : [],
     }));
   const more = EXTRA_SESSIONS.map(([call, daysAgo, hh, length, count, video, failureMessage], index) => {
     const startedAt = at(daysAgo, hh, 0);
@@ -231,6 +231,8 @@ const inviteCode = (call) => {
 };
 const inviteURL = (call) => `https://chalkmeet.com/${inviteCode(call)}`;
 const transcriptsFor = (createdAt) => (state.transcript === "none" ? [] : [{ id: uuid(0x900), status: state.transcript, languages: ["en"], createdAt }]);
+// A deleted transcript stays listed with its status, as the API keeps the row. Deletes are kept per transcript, so a delete of another ID changes nothing.
+const sessionTranscripts = (data, episodeId, createdAt) => transcriptsFor(createdAt).map((transcript) => (data.deleted?.get(episodeId)?.has(transcript.id) ? { ...transcript, status: "deleted" } : transcript));
 function recordingScenario() {
   if (!state.recordingScenario) return {};
   // A deadline set with expireIn closes the source window by this server's clock, as the API does.
@@ -434,7 +436,7 @@ async function dashboard(request, response, page, url, entry) {
         lastLeftAt: i === 3 ? plus(episode.startedAt, length - 7) : null,
       }));
       // Like the server, a past session lists each recording's transcripts.
-      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt) }));
+      const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: sessionTranscripts(data, episode.id, episode.endedAt) }));
       return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
     if (page === "connect") {
@@ -510,7 +512,7 @@ async function dashboard(request, response, page, url, entry) {
     case "recording-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/video.mp4`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
     case "delete-transcript":
-      (data.deleted ??= new Set()).add(action.episodeId);
+      (data.deleted ??= new Map()).set(action.episodeId, (data.deleted.get(action.episodeId) ?? new Set()).add(action.transcriptId));
       return send(response, 200, { ok: true });
     case "export-recording": {
       const extra = listRows(data).find((row) => row.recording?.id === action.recordingId);
@@ -523,7 +525,7 @@ async function dashboard(request, response, page, url, entry) {
     }
     case "transcripts":
       if (state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
-      return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()) });
+      return send(response, 200, { transcripts: sessionTranscripts(data, action.episodeId, new Date().toISOString()) });
     case "create-transcript":
       if (state.transcript !== "none") return fail(response, 409, "transcript_already_exists");
       state.transcript = "processing";

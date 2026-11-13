@@ -71,8 +71,8 @@ export async function connectChecks({ open, check }) {
     const { tab, context } = await connect(handle("expired", "read"));
     try {
       await tab.getByRole("heading", { name: "This connection request expired" }).waitFor();
-      check("an expired request uses the same standalone layout", (await tab.locator(".topb").count()) === 0 && (await tab.locator(".sibox .apair").count()) === 1);
-      check("an expired request shows only the Chalk mark and no account line", (await tab.locator(".sibox .apair .alogo").count()) === 1 && (await tab.locator(".cwho").count()) === 0);
+      check("an expired request uses the same standalone layout", (await tab.locator(".topb").count()) === 0 && (await tab.locator(".sihead").count()) === 1);
+      check("an expired request shows only the Chalk lockup and no account line", (await tab.locator(".sibox .apair").count()) === 0 && (await tab.locator(".cwho").count()) === 0);
     } finally {
       await context.close();
     }
@@ -81,7 +81,7 @@ export async function connectChecks({ open, check }) {
     const { tab, context } = await connect("");
     try {
       await tab.getByRole("heading", { name: "Start from the app" }).waitFor();
-      check("a missing request uses the same standalone layout", (await tab.locator(".topb").count()) === 0 && (await tab.locator(".sibox .apair").count()) === 1);
+      check("a missing request uses the same standalone layout", (await tab.locator(".topb").count()) === 0 && (await tab.locator(".sihead").count()) === 1 && (await tab.locator(".sibox .apair").count()) === 0);
     } finally {
       await context.close();
     }
@@ -149,10 +149,13 @@ export async function connectChecks({ open, check }) {
         "the AI apps page has its own tab and heading",
         (await tab.getByRole("heading", { level: 1, name: "AI apps" }).isVisible()) && (await tab.getByRole("link", { name: "AI apps", exact: true }).getAttribute("aria-current")) === "page" && (await tab.getByRole("link", { name: "Home", exact: true }).getAttribute("aria-current")) === null,
       );
-      check("the page shows the Chalk URL to copy", (await tab.locator(".murl code").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".murl").getByRole("button", { name: "Copy URL" }).isVisible()));
+      check("the page shows the Chalk URL to copy", (await tab.locator(".murl .lf-text").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".murl").getByRole("button", { name: "Copy URL" }).isVisible()));
       const columns = async (width) => {
         await tab.setViewportSize({ width, height: 900 });
-        return tab.locator(".cgrid").evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(" ").length);
+        return tab
+          .locator(".cgrid")
+          .last()
+          .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(" ").length);
       };
       check("the grid has 4 columns on a wide screen, 2 on a tablet and 1 on a phone", (await columns(1280)) === 4 && (await columns(820)) === 2 && (await columns(390)) === 1);
       await tab.setViewportSize({ width: 1280, height: 860 });
@@ -180,22 +183,13 @@ export async function connectChecks({ open, check }) {
       const tileNames = await tiles.locator(".nm").allInnerTexts();
       const rowNames = (await tab.locator("table.capps tbody .nm").allInnerTexts()).filter((name) => tileNames.includes(name));
       check("the tiles that say Connected are the connected apps in the table", connectedTiles.sort().join() === rowNames.sort().join(), `${connectedTiles} vs ${rowNames}`);
-      const search = tab.getByRole("searchbox", { name: "Search AI apps" });
       await tiles.filter({ hasText: "Codex" }).focus();
       await tab.keyboard.press("Enter");
       check("a tile opens from the keyboard", await tab.getByRole("dialog").isVisible());
       await tab.keyboard.press("Escape");
       check("closing the sheet returns focus to its tile", await tiles.filter({ hasText: "Codex" }).evaluate((node) => node === document.activeElement));
-      await search.fill("co");
-      check("search matches app names only, so a description doesn't pull in other apps", (await tiles.count()) === 2 && (await tiles.filter({ hasText: "Codex" }).count()) === 1 && (await tiles.filter({ hasText: "Claude Code" }).count()) === 1);
-      await search.fill("codex");
-      check("search narrows the catalog", (await tiles.count()) === 1);
-      await search.fill("zzz");
-      check("search with no match says so", await tab.getByText("No app matches “zzz”.").isVisible());
-      await search.fill("");
-      await tab.getByRole("button", { name: "Coding agents" }).click();
-      check("the kind filter shows only coding agents", (await tiles.count()) === 4);
-      await tab.getByRole("button", { name: "All" }).click();
+      const group = (name) => tab.locator("section", { has: tab.getByRole("heading", { level: 2, name, exact: true }) }).locator(".ctile");
+      check("the catalog is grouped into chat apps and coding agents", (await group("Chat apps").count()) === 3 && (await group("Coding agents").count()) === 4 && (await group("Coding agents").filter({ hasText: "Codex" }).count()) === 1);
       await tiles.filter({ hasText: "Claude Code" }).click();
       const sheet = tab.getByRole("dialog");
       check("a client sheet gives the command with this server's address", (await sheet.locator("code").innerText()) === "claude mcp add --transport http chalk https://api.chalk.test/mcp");
@@ -248,7 +242,7 @@ export async function connectChecks({ open, check }) {
     const { tab, context } = await open("/dashboard/apps", { set: "fail=connections-list" });
     try {
       await tab.getByRole("alert").filter({ hasText: "Couldn’t load your connected apps" }).waitFor();
-      check("when the connected apps can't load, the address and every app still show", (await tab.locator(".murl code").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".ctile").count()) === 7);
+      check("when the connected apps can't load, the address and every app still show", (await tab.locator(".murl .lf-text").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".ctile").count()) === 7);
       check("a failed list reads as an error, not as no connected apps", (await tab.getByText("No connected apps").count()) === 0);
       await tab.locator(".ctile", { hasText: "Codex" }).click();
       check("an app's setup opens while the list is down", await tab.getByRole("dialog").isVisible());

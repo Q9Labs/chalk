@@ -32,13 +32,13 @@ export type VideoAction = "play" | "prepare" | "retry" | null;
 /** What the page says about a recording's video, and the one action the API accepts for it. */
 export const VIDEO: Record<VideoState, { readonly title: string; readonly detail: string; readonly action: VideoAction }> = {
   play: { title: "", detail: "", action: "play" },
-  capture_failed: { title: "The recording couldn’t be made", detail: "The recording capture did not complete.", action: null },
-  expired: { title: "The recording is no longer available", detail: "The recording source is no longer available.", action: null },
+  capture_failed: { title: "The recording couldn’t be made", detail: "Who joined and when is still kept below.", action: null },
+  expired: { title: "The recording is no longer available", detail: "Who joined and when is still kept below.", action: null },
   capturing: { title: "Processing the recording", detail: "You can leave this page and return when the video is ready.", action: null },
   preparing: { title: "Preparing the recording", detail: "You can leave this page and return when the video is ready.", action: null },
   preparable: { title: "The recording is ready to prepare", detail: "Prepare this session’s video to watch or download it.", action: "prepare" },
   retryable: { title: "The recording couldn’t be prepared", detail: "The recording export could not be completed.", action: "retry" },
-  export_failed: { title: "The recording couldn’t be prepared", detail: "The recording export could not be completed.", action: null },
+  export_failed: { title: "The recording couldn’t be prepared", detail: "Contact support and we’ll look into it.", action: null },
 };
 
 export function videoState(recording: RecordingDTO): VideoState {

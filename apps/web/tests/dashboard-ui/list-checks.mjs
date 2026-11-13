@@ -1,5 +1,5 @@
 // The old Sessions and Recordings URLs redirect, the call page lists its past sessions with the shared row, a row opens its session,
-// and none of these pages scrolls sideways on a phone.
+// a session's transcript can be deleted, and none of these pages scrolls sideways on a phone.
 const uuid = (n) => `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const CALL = uuid(0x100);
 
@@ -33,10 +33,29 @@ export async function listChecks({ open, check }) {
     await tab.waitForURL(`**/dashboard/call/${CALL}`);
     await context.close();
   }
+  // A session's transcript is deleted from its page: the confirm says what stays, Cancel keeps it, and the page then says it was deleted.
+  {
+    const { tab, context } = await open(`/dashboard/call/${CALL}/session/${uuid(0x200)}`);
+    const trash = tab.locator("section[aria-labelledby=transcript-title]").getByRole("button", { name: "Delete transcript" });
+    await trash.click();
+    const dialog = tab.getByRole("alertdialog");
+    await dialog.waitFor();
+    check("deleting a transcript asks first and says the recording stays", (await dialog.innerText()).includes("The recording and the session stay."));
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    check("Cancel keeps the transcript", (await tab.getByRole("alertdialog").count()) === 0 && (await trash.count()) === 1);
+    await trash.click();
+    await tab.getByRole("alertdialog").getByRole("button", { name: "Delete transcript" }).click();
+    await tab.getByText("Transcript deleted.").waitFor();
+    await tab.getByText("This transcript was deleted").waitFor();
+    check("a deleted transcript leaves the session saying so, with no Delete left", (await trash.count()) === 0);
+    await context.close();
+  }
   {
     const { tab, context } = await open(`/dashboard/call/${CALL}/session/${uuid(0x202)}`);
-    await tab.getByText("No recording", { exact: true }).waitFor();
+    await tab.getByText("Recording was off for this session", { exact: true }).waitFor();
     check("a session without a recording says so and still shows who came", (await tab.getByRole("heading", { name: "Who joined" }).count()) === 1);
+    const settings = tab.getByRole("link", { name: "Account recording settings" });
+    check("a session without a recording links to the recording setting", (await settings.getAttribute("href"))?.endsWith("/dashboard/developer#recording-videos") === true, await settings.getAttribute("href"));
     await context.close();
   }
 

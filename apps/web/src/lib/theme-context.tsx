@@ -2,7 +2,8 @@ import { useRouterState } from "@tanstack/react-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import type React from "react";
 
-import { applyThemeMode, persistThemePreference, readThemePreference, resolveThemeMode, type ThemeMode, type ThemePreference } from "./theme";
+import { dismissDashboardBoot, removeDashboardBoot } from "./dashboard-boot";
+import { applyThemeMode, DASHBOARD_CANVAS_STYLE_ID, isDashboardPath, persistThemePreference, readThemePreference, resolveThemeMode, type ThemeMode, type ThemePreference } from "./theme";
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
@@ -19,6 +20,14 @@ export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const mode = resolveThemeMode({ preference, pathname });
 
   useEffect(() => applyThemeMode(document.documentElement, mode), [mode]);
+  // The first-paint dashboard canvas and opening frame only bridge the wait for the dashboard to mount; other pages keep their own.
+  // Effects run children first, so by now the page has drawn its own frame and placeholders for the opening frame to
+  // fade over, on every dashboard route.
+  useEffect(() => {
+    if (isDashboardPath(pathname)) return dismissDashboardBoot();
+    document.getElementById(DASHBOARD_CANVAS_STYLE_ID)?.remove();
+    removeDashboardBoot();
+  }, [pathname]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     storePreference(next);

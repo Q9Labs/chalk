@@ -1,5 +1,8 @@
 import { whisperLanguageCodes, type TranscriptLanguage, type WhisperLanguage } from "@chalk/transcript-language";
 
+import { intentKey } from "../../lib/dashboard/client";
+import { newCallName } from "../../lib/dashboard/format";
+
 /** The country whose flag stands for each language: the one with the most speakers, or the one that holds it as its own. Tibetan and Yiddish have none, so they show their code. */
 const flagCountry: Record<WhisperLanguage, string | null> = {
   af: "ZA",
@@ -223,8 +226,12 @@ export function readNewCallLanguage(): NewCallLanguage {
 }
 
 /** The request that starts a call: the account default when no language is chosen, else the chosen one. */
-export function createCallAction(idempotencyKey: string, language: NewCallLanguage) {
-  return { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey } as const;
+/** One press of Start a call: a retry sends the same key and the same name, so it can't make a second call. */
+export type CallIntent = { readonly key: string; readonly name: string };
+export const newCallIntent = (): CallIntent => ({ key: intentKey(), name: newCallName() });
+
+export function createCallAction(intent: CallIntent, language: NewCallLanguage) {
+  return { action: "create-call", name: intent.name, admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey: intent.key } as const;
 }
 
 export function saveNewCallLanguage(value: NewCallLanguage) {

@@ -1,8 +1,8 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { Icon } from "../site/Icon";
 import { AppLogo, AppPair } from "./AppLogo";
-import { CopyAction, Dialog, Seg } from "./kit";
+import { CopyAction, Dialog } from "./kit";
 
 type Category = "chat" | "agent";
 
@@ -106,61 +106,49 @@ const CLIENTS: readonly Client[] = [
   },
 ];
 
-const FILTERS = [
-  ["all", "All"],
+/** The catalogue in its two kinds; seven apps read faster under two headings than behind a search and a filter. */
+const GROUPS = [
   ["chat", "Chat apps"],
   ["agent", "Coding agents"],
 ] as const;
-type Filter = (typeof FILTERS)[number][0];
 
 /** "Connect an AI app": every client with the fastest real way to add Chalk to it. */
 export function McpClients({ mcpUrl, registeredNames }: { readonly mcpUrl: string; readonly registeredNames: readonly string[] }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<Client | null>(null);
-  const searchId = useId();
-
-  const needle = query.trim().toLowerCase();
-  const shown = CLIENTS.filter((client) => (filter === "all" || client.category === filter) && (!needle || client.name.toLowerCase().includes(needle)));
 
   return (
     <>
-      <div className="cfind">
-        <label className="cquery" htmlFor={searchId}>
-          <Icon name="search" size={18} />
-          <span className="sr">Search AI apps</span>
-          <input id={searchId} className="inp" type="search" value={query} placeholder="Search AI apps" autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
-        </label>
-        <Seg label="Kind of app" options={FILTERS} value={filter} onChange={setFilter} small />
-      </div>
-      {shown.length === 0 ? (
-        <p className="ohelp">No app matches “{query.trim()}”.</p>
-      ) : (
-        <ul className="cgrid">
-          {shown.map((client) => {
-            const connected = registeredNames.some((name) => client.registered.test(name));
-            return (
-              <li key={client.name}>
-                <button type="button" className="ctile" onClick={() => setOpen(client)}>
-                  <AppLogo name={client.name} size="md" />
-                  <span className="ctext">
-                    <span className="nm">{client.name}</span>
-                    <span className="ln">{client.line}</span>
-                  </span>
-                  {connected ? (
-                    <span className="cbadge ok">
-                      <Icon name="check" size={12} />
-                      Connected
+      {GROUPS.map(([category, heading]) => (
+        <section key={category} aria-labelledby={`apps-${category}`}>
+          <h2 className="cgroup" id={`apps-${category}`}>
+            {heading}
+          </h2>
+          <ul className="cgrid">
+            {CLIENTS.filter((client) => client.category === category).map((client) => {
+              const connected = registeredNames.some((name) => client.registered.test(name));
+              return (
+                <li key={client.name}>
+                  <button type="button" className="ctile" onClick={() => setOpen(client)}>
+                    <AppLogo name={client.name} size="md" />
+                    <span className="ctext">
+                      <span className="nm">{client.name}</span>
+                      <span className="ln">{client.line}</span>
                     </span>
-                  ) : client.way.kind === "soon" ? (
-                    <span className="cbadge">Soon</span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                    {connected ? (
+                      <span className="cbadge ok">
+                        <Icon name="check" size={12} />
+                        Connected
+                      </span>
+                    ) : client.way.kind === "soon" ? (
+                      <span className="cbadge">Soon</span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
       {open ? <ClientSheet client={open} mcpUrl={mcpUrl} onClose={() => setOpen(null)} /> : null}
     </>
   );
@@ -194,7 +182,7 @@ function ClientSheet({ client, mcpUrl, onClose }: { readonly client: Client; rea
             <span className="lbl">{way.copyLabel}</span>
             <div className="cbox2">
               <code>{way.copy(mcpUrl)}</code>
-              <CopyAction pill text={way.copy(mcpUrl)} label="Copy" toastMessage={`${way.copyLabel} copied`} />
+              <CopyAction text={way.copy(mcpUrl)} label={way.copyLabel === "Command" ? "Copy command" : `Copy ${way.copyLabel}`} />
             </div>
           </div>
           <ol className="csteps">

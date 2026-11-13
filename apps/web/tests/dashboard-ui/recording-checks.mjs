@@ -13,19 +13,20 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         const waiting = await tab.locator(".pnote .spin").count();
         const prepare = await tab.getByRole("button", { name: "Prepare recording", exact: true }).count();
         const retry = await tab.getByRole("button", { name: "Try again", exact: true }).count();
-        if (scenario === "failed") check(`${width}: terminal capture explains the failure without a spinner`, waiting === 0 && (await tab.getByText("The recording capture did not complete.", { exact: true }).count()) === 1);
+        if (scenario === "failed") check(`${width}: terminal capture explains the failure without a spinner`, waiting === 0 && (await tab.getByText("The recording couldn’t be made", { exact: true }).count()) === 1);
         if (scenario === "expired") check(`${width}: expired source stops waiting and offers no unusable action`, waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording is no longer available", { exact: true }).count()) === 1);
         if (scenario === "export_expired")
           check(
-            `${width}: an expired render names its deadline and still offers transcription`,
-            waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording could not be rendered before its deadline.", { exact: true }).count()) === 1 && (await tab.getByRole("button", { name: "Make a transcript", exact: true }).count()) === 1,
+            `${width}: an expired render says the video is gone and still offers transcription`,
+            waiting === 0 && prepare === 0 && retry === 0 && (await tab.getByText("The recording is no longer available", { exact: true }).count()) === 1 && (await tab.getByRole("button", { name: "Make a transcript", exact: true }).count()) === 1,
           );
         if (scenario === "available") {
           check(`${width}: captured source offers preparation before MP4 exists`, waiting === 0 && prepare === 1);
           check(`${width}: canonical complete transcript displays independently of MP4`, (await tab.getByLabel("Search transcript").count()) === 1 && (await tab.locator(".tline").count()) > 0);
         }
         if (scenario === "export_failed") check(`${width}: retryable export offers a retry and keeps its transcript`, retry === 1 && waiting === 0 && (await tab.locator(".tline").count()) > 0);
-        if (scenario === "export_exhausted") check(`${width}: exhausted export stops waiting without a retry`, retry === 0 && waiting === 0 && (await tab.getByText("The recording export could not be completed.", { exact: true }).count()) === 1);
+        if (scenario === "export_exhausted")
+          check(`${width}: exhausted export stops waiting without a retry`, retry === 0 && waiting === 0 && (await tab.getByText("The recording couldn’t be prepared", { exact: true }).count()) === 1 && (await tab.getByRole("link", { name: "Contact support" }).count()) === 1);
         if (scenario === "transcript_failed") check(`${width}: terminal transcript does not spin forever`, (await tab.getByText("The transcript couldn’t be made", { exact: true }).count()) === 1);
         if (evidence) {
           await tab.screenshot({ path: resolve(evidence, `${scenario}-${width}.png`), fullPage: true });
@@ -104,7 +105,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
       await request;
       // A refused read is final for that recording, which shows the server's error; the rest of the session stays.
       await tab.getByText("Couldn’t load this recording", { exact: true }).waitFor();
-      check("a deleted recording leaves session attendance visible", (await tab.getByText("Who joined", { exact: true }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
+      check("a deleted recording leaves session attendance visible", (await tab.getByRole("heading", { name: /^Who joined/ }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
       await tab.getByText("Couldn’t load the transcript", { exact: true }).waitFor();
       check("a deleted recording keeps its transcript unavailable", (await tab.getByText("The transcript couldn’t be made", { exact: true }).count()) === 0);
       await tab.clock.runFor(30000);
@@ -125,7 +126,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
       await request;
       await tab.waitForLoadState("networkidle");
       const stopped = await reads();
-      check("capture failure replaces processing without a reload", (await tab.getByText("The recording capture did not complete.", { exact: true }).count()) === 1);
+      check("capture failure replaces processing without a reload", (await tab.getByText("The recording couldn’t be made", { exact: true }).count()) === 1);
       await tab.clock.runFor(15000);
       check("terminal capture stops metadata polling", (await reads()) === stopped);
     } finally {

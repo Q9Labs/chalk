@@ -4,7 +4,7 @@ import type { KeyDTO } from "../../lib/dashboard/contracts";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
 import { Icon, type IconName } from "../site/Icon";
 import { publicPrefix, REDACTED_TAIL, SNIPPET_TABS, snippetLines, snippetNote, snippetText, type SnippetLine, type SnippetTab, type Token } from "./developer-snippets";
-import { CopyAction, useCopy } from "./kit";
+import { CopyAction, useCloseOnOutsidePress } from "./kit";
 
 export type FreshSecret = { readonly secret: string; readonly keyId: string | null };
 
@@ -24,7 +24,6 @@ export function ConnectPanel({ tenantId, keys, fresh, onCreateKey }: { readonly 
   return (
     <section className="panel card" id="connect" aria-labelledby="connect-title">
       <div className="ph">
-        <Icon name="link" size={18} />
         <div>
           <h2 id="connect-title">Connect your app</h2>
           <div className="sub">Two values and a server. Browsers never get a key; they get an AccessGrant.</div>
@@ -45,7 +44,7 @@ export function ConnectPanel({ tenantId, keys, fresh, onCreateKey }: { readonly 
             </div>
             <div className="fld">
               <span className="mono">{tenantId}</span>
-              <CopyAction text={tenantId} label="Copy tenant ID" toastMessage="Tenant ID copied" />
+              <CopyAction text={tenantId} label="Copy tenant ID" />
             </div>
           </div>
           <KeyPicker keys={keys} selected={key} onPick={setPicked} onCreateKey={onCreateKey} />
@@ -66,14 +65,9 @@ function KeyPicker({ keys, selected, onPick, onCreateKey }: { readonly keys: rea
   const labelId = `${id}-label`;
   const count = keys.length + 1;
 
+  useCloseOnOutsidePress(open, wrap, setOpen);
   useEffect(() => {
-    if (!open) return;
-    list.current?.focus();
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !wrap.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    if (open) list.current?.focus();
   }, [open]);
 
   function close() {
@@ -193,7 +187,6 @@ function renderToken(token: Token, apiKey: KeyDTO | null, index: number) {
 
 function Snippet({ tenantId, apiKey, secret }: { readonly tenantId: string; readonly apiKey: KeyDTO | null; readonly secret: string | null }) {
   const [chosen, setTab] = useState<SnippetTab>("env");
-  const { copied, copy } = useCopy("Snippet copied");
   const id = useId();
   const tabs = apiKey ? SNIPPET_TABS : SNIPPET_TABS.slice(0, 1);
   const tab = tabs.some((item) => item.id === chosen) ? chosen : "env";
@@ -223,10 +216,7 @@ function Snippet({ tenantId, apiKey, secret }: { readonly tenantId: string; read
         })}
         {apiKey ? (
           <span className="end">
-            <button type="button" className={copied ? "btn sm copied" : "btn sm out"} onClick={() => void copy(snippetText(lines, { prefix: apiKey.prefix, secret }))}>
-              <Icon name={copied ? "check" : "copy"} size={16} />
-              <span>{copied ? "Copied" : "Copy"}</span>
-            </button>
+            <CopyAction text={snippetText(lines, { prefix: apiKey.prefix, secret })} label="Copy snippet" />
           </span>
         ) : null}
       </div>

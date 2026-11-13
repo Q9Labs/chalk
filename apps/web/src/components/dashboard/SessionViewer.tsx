@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 
 import type { PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, failureKind, readPageTimed } from "../../lib/dashboard/client";
-import { TRANSCRIPT, VIDEO, videoState } from "../../lib/dashboard/recording";
+import { completedTranscript, TRANSCRIPT, VIDEO, videoState } from "../../lib/dashboard/recording";
 import { attempt, dueReads, failed, nextDue, nextRead, reread, selection, succeeded, transcriptView, type Attempt, type Due, type TranscriptView } from "../../lib/dashboard/tracking";
 import { clock, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
@@ -105,6 +105,8 @@ export type Parts = {
   readonly recording: RecordingDTO | undefined;
   readonly playable: boolean;
   readonly downloadableTranscript: TranscriptDTO | null;
+  /** The finished transcript the panel stands for, even when its lines can't be read, so it can still be deleted. */
+  readonly shownTranscript: TranscriptDTO | null;
   readonly transcript: TranscriptView["kind"];
   readonly media: ReactNode;
   readonly panel: ReactNode;
@@ -129,7 +131,8 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
   const downloadableTranscript = transcript.kind === "ready" ? transcript.transcript : null;
-  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null });
+  const shownTranscript = transcribed?.recording.transcripts?.find(completedTranscript) ?? null;
+  if (!recording) return render({ recording, playable, downloadableTranscript, shownTranscript, transcript: transcript.kind, media: null, panel: null });
 
   async function prepareRecording(target: RecordingDTO) {
     if (exporting) return;
@@ -181,17 +184,17 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   ) : (
     <div className="pnote" role={video === "capture_failed" || video === "retryable" || video === "export_failed" ? "alert" : "status"}>
       <div>
-        {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
+        {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : video === "capture_failed" || video === "export_failed" ? <Icon name="alert" className="bad" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
         <b>{note.title}</b>
-        <p>{recording.failureMessage || note.detail}</p>
+        <p>{note.detail}</p>
         {note.action === "prepare" || note.action === "retry" ? (
           <button type="button" className="btn pri lg" aria-busy={exporting || undefined} disabled={exporting} onClick={() => void prepareRecording(recording)}>
             {actionIcon(note.action)}
             {actionLabel(note.action)}
           </button>
         ) : video === "capture_failed" || video === "export_failed" ? (
-          <a className="btn sec lg" href={supportHref(note.title)}>
-            <Icon name="send" />
+          <a className="btn sec" href={supportHref(note.title)}>
+            <Icon name="chat" />
             Contact support
           </a>
         ) : null}
@@ -225,7 +228,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
     ) : (
       <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
-  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel });
+  return render({ recording, playable, downloadableTranscript, shownTranscript, transcript: transcript.kind, media, panel });
 }
 
 export function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly video: boolean; readonly transcript: TranscriptDTO | null }) {
@@ -246,9 +249,9 @@ export function DownloadMenu({ ids, recording, video, transcript }: { readonly i
     <Menu
       label="Download"
       trigger={({ open, toggle }) => (
-        <button type="button" className="btn sec" aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+        <button type="button" className="btn sec dlb" aria-label="Download" aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
           <Icon name="dl" />
-          Download
+          <span className="dlb-label">Download</span>
           <Icon name="down" />
         </button>
       )}
@@ -438,7 +441,7 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
           </button>
         ) : transcript.kind === "failed" ? (
           <a className="btn sec sm" href={supportHref(state.title)}>
-            <Icon name="send" />
+            <Icon name="chat" />
             Contact support
           </a>
         ) : null}
@@ -476,6 +479,8 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
       );
     });
 
+  // With no lines to read there is nothing to search, so the state shows on its own, in the card around it.
+  if (transcript.kind !== "ready") return <div className="tbody">{body}</div>;
   return (
     <section className="tpanel" aria-labelledby="transcript-heading">
       <div className="thead">

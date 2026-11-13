@@ -4,7 +4,7 @@ import { formatClockTime } from "@q9labsai/chalk-react/utils";
 const DAY = 86400000;
 const weekdayShort = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
 const weekdayLong = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
-const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
+const weekdayYear = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
 const dayMonthYear = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -28,13 +28,26 @@ export function sessionDay(iso: string, now = Date.now()): string {
   return weekdayShort.format(new Date(iso)).replace(",", "").replace("Sept", "Sep");
 }
 
-/** When a call was last used: "Today, 10:02 AM", "Yesterday, 4:30 PM", "Thursday" within a week, then "12 Oct". */
+/**
+ * When a call was last used: "Today, 10:02 AM" and "Yesterday, 4:30 PM", then always a day and a date, "Thu 5 Nov", with
+ * the year only once it isn't this year, "Wed 2 Sep 2025". A bare weekday hid which week it meant.
+ */
 export function lastActive(iso: string, now = Date.now()): string {
   const days = daysBefore(iso, now);
   if (days === 0) return `Today, ${clock(iso)}`;
   if (days === 1) return `Yesterday, ${clock(iso)}`;
-  if (days > 1 && days < 7) return weekday.format(new Date(iso));
-  return shortDate(iso, now);
+  const date = new Date(iso);
+  const format = date.getFullYear() === new Date(now).getFullYear() ? weekdayShort : weekdayYear;
+  return format.format(date).replace(",", "").replace("Sept", "Sep");
+}
+
+/**
+ * A new call's name until someone renames it, "Call on Fri 13 Nov, 2:05 PM", so calls started the same day still read
+ * apart on Home.
+ */
+export function newCallName(now = Date.now()): string {
+  const iso = new Date(now).toISOString();
+  return `Call on ${weekdayShort.format(new Date(now)).replace(",", "").replace("Sept", "Sep")}, ${clock(iso)}`;
 }
 
 /** How long ago, roughly: "Just now", "2 minutes ago", "Yesterday", "3 weeks ago", then the date. */
@@ -60,11 +73,6 @@ export function longDay(iso: string): string {
 function shortDate(iso: string, now = Date.now()): string {
   const date = new Date(iso);
   return (date.getFullYear() === new Date(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date)).replace("Sept", "Sep");
-}
-
-/** "3 Nov", for a range of days. */
-export function rangeDay(date: Date): string {
-  return dayMonth.format(date).replace("Sept", "Sep");
 }
 
 /** "2 Sep 2027" */
@@ -103,12 +111,41 @@ export function playbackTime(seconds: number): string {
   return hours ? `${hours}:${rest}` : rest;
 }
 
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
+const isLoopback = (url: URL) => LOOPBACK.has(url.hostname) || url.hostname.endsWith(".localhost");
+
+/** True when a link names this machine (localhost, 127.0.0.1) while the page itself is served from a real address. */
+export function isInternalLink(url: string, page: string = window.location.href): boolean {
+  try {
+    return isLoopback(new URL(url)) && !isLoopback(new URL(page));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A call link people can open. A test server that only knows its own loopback address hands out 127.0.0.1 links; the
+ * dashboard serves the call page too, so the same path on the page's own origin is the link people can use.
+ */
+export function shareableLink(url: string, page: string = window.location.href): string {
+  if (!isInternalLink(url, page)) return url;
+  const link = new URL(url);
+  const origin = new URL(page).origin;
+  return `${origin}${link.pathname}${link.search}${link.hash}`;
+}
+
 /** The link as people read it: no scheme, no invite secret. */
 export function displayLink(url: string): string {
+  const { host, path } = linkParts(url);
+  return host + path;
+}
+
+/** The link's host and the path that names what it opens, as people read them. */
+export function linkParts(url: string): { readonly host: string; readonly path: string } {
   try {
     const parsed = new URL(url);
-    return `${parsed.host}${parsed.pathname}`.replace(/\/$/, "");
+    return { host: parsed.host, path: parsed.pathname.replace(/\/$/, "") };
   } catch {
-    return url;
+    return { host: url, path: "" };
   }
 }

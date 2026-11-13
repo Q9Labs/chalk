@@ -23,7 +23,6 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
   return (
     <section className="panel card" id="keys" aria-labelledby="keys-title">
       <div className="ph">
-        <Icon name="key" size={18} />
         <h2 id="keys-title">API keys</h2>
         {keys.length ? (
           <span className="end">
@@ -36,13 +35,10 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
       </div>
       {fresh && freshKey ? (
         <div className="reveal" role="status">
-          <span className="tile">
-            <Icon name="check" size={18} />
-          </span>
           <div className="t">
             <b>{freshKey.name} is ready</b>
             <p>Copy the secret now. Chalk shows the full key once, and never again.</p>
-            <SecretField key={fresh.secret} secret={fresh.secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" copiedMessage="Secret copied" />
+            <SecretField key={fresh.secret} secret={fresh.secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" />
           </div>
         </div>
       ) : null}
@@ -86,9 +82,6 @@ function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO
   return (
     <div className={fresh ? "row new" : "row"} role="row">
       <div className="nm" role="cell">
-        <span className="kt">
-          <Icon name="key" size={16} />
-        </span>
         <span className="t ell">{apiKey.name}</span>
         {fresh ? <span className="pill ok">New</span> : null}
       </div>

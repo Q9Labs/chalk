@@ -32,11 +32,11 @@ export async function developerChecks({ open, check, origin }) {
       check("the new key's row redacts the secret too", (await reveal.getByTestId("secret-text").textContent()) === redacted && !(await bodyText(tab)).includes(MINTED_MIDDLE));
       const snippet = tab.getByRole("tabpanel");
       check("the snippet draws the new key redacted", (await snippet.innerText()).includes("chalk_sk_Rw8f•") && !(await snippet.innerText()).includes(MINTED_MIDDLE));
-      await tab.getByRole("button", { name: "Copy", exact: true }).click();
+      await tab.getByRole("button", { name: "Copy snippet", exact: true }).click();
       const copied = await clipboard(tab);
       check("the snippet's Copy puts the full new key in the text", copied.includes(`CHALK_API_KEY=${MINTED}`) && copied.includes(`CHALK_TENANT_ID=${TENANT}`), copied);
       await tab.reload({ waitUntil: "networkidle" });
-      await tab.getByRole("button", { name: "Copy", exact: true }).click();
+      await tab.getByRole("button", { name: "Copy snippet", exact: true }).click();
       check("after a reload nothing holds the secret, and Copy says so with dots", !(await clipboard(tab)).includes(MINTED_MIDDLE) && !(await bodyText(tab)).includes(MINTED_MIDDLE));
     } finally {
       await context.close();

@@ -1,7 +1,12 @@
 /* The few `.dash` rules the owner call's own states need (loading, error, rejected). Loaded by every route that renders `.dash`, so the call route never downloads the rest of the dashboard's styles. */
 
+/* One column for every dashboard page: Home, a call, a session, AI apps and Developer share its edges. */
+.site .dash {
+  --dash-column: 1120px;
+}
+
 .site .dash .wrap {
-  max-width: 920px;
+  max-width: var(--dash-column);
   margin: 0 auto;
 }
 
@@ -17,8 +22,24 @@
   font-size: var(--type-body);
 }
 
-.site .dash .errp svg.site-icon {
+/* Only the panel's own alert icon is red; the icon inside its button takes the button's colour. */
+.site .dash .errp > svg.site-icon {
   color: var(--chalk-danger-text);
+}
+
+.site .dash .errp-acts {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* A second way out beside Try again: outlined, so it reads as a real button and not as disabled text. */
+.site .dash .errp-acts .btn.ol {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
+}
+
+.site .dash .errp-acts .btn.ol:hover {
+  background: var(--chalk-raised);
 }
 
 .site .dash .errp b {
@@ -44,7 +65,11 @@
     grid-template-columns: 20px 1fr;
   }
 
-  .site .dash .errp .btn {
+  .site .dash .errp-acts {
     grid-column: 1/-1;
+  }
+
+  .site .dash .errp-acts {
+    padding-left: calc(20px + var(--space-3));
   }
 }

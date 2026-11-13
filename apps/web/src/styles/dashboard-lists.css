@@ -10,7 +10,8 @@
 
 /* ---------- Badges ---------- */
 
-.site .dash .bdg {
+.site .dash .bdg,
+.site .dash .dev .pill {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1-5);
@@ -147,9 +148,33 @@
   display: none;
 }
 
-/* The call's own list has no call column. */
+/* The call's own list has no call column: a fixed Started column, then the facts spread evenly. Its rules stay
+   inside the page column and its words start on the heading's edge. */
+.site .dash .list:has(> .slist.ses.one) {
+  margin: 0;
+}
+
 .site .dash .slist.ses.one .lr {
-  grid-template-columns: minmax(0, 1fr) 64px 64px 118px 118px 20px;
+  grid-template-columns: 200px repeat(4, minmax(0, 1fr)) 20px;
+  padding-inline: 0;
+}
+
+/* In a session list every state reads the same way: muted words, with a check when the thing is there. */
+.site .dash .slist .bdg {
+  height: auto;
+  padding: 0;
+  background: none;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .slist .bdg:has(svg),
+.site .dash .slist .bdg.ok,
+.site .dash .slist .bdg.acc {
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .slist .bdg.bad {
+  color: var(--chalk-danger-text);
 }
 
 .site .dash .slist.ses.one .lr.head > :first-child {
@@ -230,22 +255,6 @@
   padding: var(--space-14) var(--space-4);
 }
 
-.site .dash .dlg.titled .warnbox {
-  display: flex;
-  gap: var(--space-2-5);
-  padding: var(--space-2-5) var(--space-3);
-  border-radius: var(--corner-lg);
-  background: var(--tint-warning);
-  color: var(--chalk-soft-text);
-  font-size: var(--type-caption);
-}
-
-.site .dash .dlg.titled .warnbox svg.site-icon {
-  color: var(--chalk-warning);
-  margin-top: 1px;
-  flex: none;
-}
-
 .site .dash .btn.dz {
   background: var(--chalk-danger);
   /* token-ratchet-ignore: white text on the danger fill; the kit has no on-danger token */
@@ -264,7 +273,8 @@
   gap: var(--space-1-5);
   color: var(--chalk-muted-text);
   font-weight: 500;
-  margin-bottom: calc(var(--space-2) * -1);
+  /* The back link sits 8px over the title, as on the call page, so going from a call to its session holds the head. */
+  margin-bottom: calc((var(--space-5) - var(--space-2)) * -1);
 }
 
 .site .dash .dev .crumb a {
@@ -283,15 +293,32 @@
   gap: var(--space-2);
 }
 
-/* On a phone a session's actions take their own line under the title, so the date keeps the full width. */
-@media (max-width: 720px) {
-  .site .dash .dev .pagehead:has(> .end) {
-    flex-wrap: wrap;
+/* A session's actions are two quiet icons at the end of the title row, on phones too. */
+.site .dash .dev .pagehead:has(> .end) {
+  align-items: flex-start;
+}
+
+.site .dash .dev .pagehead:has(> .end) > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.site .dash .dev .pagehead > .end {
+  flex: none;
+  gap: var(--space-1);
+}
+
+/* On a phone Download is one icon beside Copy, so the date keeps its one line. */
+@media (max-width: 640px) {
+  .site .dash .dev .pagehead .dlb {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
   }
 
-  .site .dash .dev .pagehead > .end {
-    flex-basis: 100%;
-    margin-left: 0;
+  .site .dash .dev .pagehead .dlb .dlb-label,
+  .site .dash .dev .pagehead .dlb .site-icon:last-child {
+    display: none;
   }
 }
 
@@ -299,6 +326,110 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: var(--space-5);
+}
+
+.site .dash .dev .dsplit > * {
+  min-width: 0;
+}
+
+/* With no video to watch, the reason is one short notice, not a 16:9 frame around three lines. */
+.site .dash .dev .snote .pnote {
+  aspect-ratio: auto;
+  display: block;
+  /* The note runs the card's width and starts at the page's left edge, never centred in a wide empty box. */
+  justify-self: stretch;
+  width: 100%;
+  padding: var(--space-5);
+  text-align: left;
+  background: none;
+  border-radius: inherit;
+}
+
+.site .dash .dev .snote .pnote > div {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--space-3);
+  max-width: none;
+}
+
+.site .dash .dev .snote .pnote > div > :is(svg.site-icon, .spin) {
+  grid-row: 1 / span 2;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.site .dash .dev .snote .pnote b {
+  font-size: var(--type-body);
+}
+
+.site .dash .dev .snote .pnote p {
+  grid-column: 2;
+  margin-top: var(--space-1);
+  font-size: var(--type-body-sm);
+}
+
+.site .dash .dev .snote .pnote :is(.btn, .pnote-more) {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin: 0;
+}
+
+/* A recording that failed is a fault, not a setting, so its icon is the alert in danger, not the struck camera. */
+.site .dash .dev .snote .pnote svg.site-icon.bad {
+  color: var(--chalk-danger-text);
+}
+
+/* A note with an action and a link keeps the action at the end and puts the link under the words. */
+.site .dash .dev .snote .pnote .btn ~ .pnote-more {
+  grid-column: 2 / -1;
+  grid-row: auto;
+  margin-top: var(--space-2);
+}
+
+/* A card head's one quiet action sits at its end. */
+.site .dash .dev .ph > .btn:last-child {
+  margin-left: auto;
+}
+
+.site .dash .dev .trcard.solo {
+  min-height: 0;
+}
+
+.site .dash .dev .trcard.solo .fill > * {
+  position: static;
+}
+
+/* A transcript state with no lines: the message sits in the card's own body. */
+.site .dash .dev .trcard .tbody {
+  display: flex;
+}
+
+.site .dash .dev .trcard .tbody > .tempty {
+  min-height: 160px;
+  padding: var(--space-6);
+}
+
+/* Inside its card the list and search drop their own frame, so there is one edge. */
+.site .dash .dev .trcard .tpanel {
+  border: 0;
+  border-radius: 0 0 var(--corner-xl) var(--corner-xl);
+  background: none;
+  box-shadow: none;
+}
+
+.site .dash .dev .ph h2 .cnt {
+  color: var(--chalk-muted-text);
+  font-weight: 500;
+}
+
+.site .dash .dev .wjr .tag {
+  flex: none;
+  color: var(--chalk-muted-text);
+  font-size: var(--type-caption);
+  font-weight: 500;
 }
 
 .site .dash .dev .dsplit .rc .body {
@@ -400,8 +531,19 @@
 
 @media (max-width: 720px) {
   .site .dash .dev .dsplit {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-4);
+  }
+
+  .site .dash .dev .snote .pnote > div {
+    grid-template-columns: 20px minmax(0, 1fr);
+    row-gap: var(--space-3);
+  }
+
+  .site .dash .dev .snote .pnote :is(.btn, .pnote-more) {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: start;
   }
 
   .site .dash .dev .dsplit .rc .body {
@@ -413,7 +555,7 @@
   }
 
   .site .dash .dev .crumb {
-    margin-bottom: 0;
+    margin-bottom: calc((var(--space-4) - var(--space-2)) * -1);
   }
 
   .site .dash .dev .wjr {
