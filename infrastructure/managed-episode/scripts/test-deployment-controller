@@ -105,7 +105,7 @@ target="${FAKE_MIGRATION_TARGET:-}"
 if [[ -z "$target" ]]; then
   target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
 fi
-extra="${FAKE_MIGRATION_EXTRA:---allow-missing-version 20260819120000}"
+extra="${FAKE_MIGRATION_EXTRA:-}"
 printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
 printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s%s\n' "$image" "$target" "${extra:+ ${extra}}" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
