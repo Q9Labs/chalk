@@ -52,6 +52,19 @@ func (p *peer) complete(t *testing.T, description webrtc.SessionDescription) pro
 	return protocol.SessionDescription{SDP: local.SDP, Type: local.Type.String()}
 }
 
+// answerOffer sets the SFU's offer on the peer and sends its answer to the session's renegotiate.
+func (p *peer) answerOffer(t *testing.T, svc *service, conn string, scope protocol.Scope, offer string) {
+	t.Helper()
+	if err := p.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offer}); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := p.pc.CreateAnswer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.mustCall(t, "/v1/sessions/"+conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: p.complete(t, answer)}, nil)
+}
+
 func (p *peer) mid(t *testing.T, track *webrtc.TrackLocalStaticRTP) string {
 	t.Helper()
 	for _, transceiver := range p.pc.GetTransceivers() {
@@ -214,15 +227,7 @@ func subscribeKnownMedia(t *testing.T, svc *service, conn string, scope protocol
 		}
 		mids[track.Mid] = true
 	}
-	if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := bob.pc.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	answerSDP := bob.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: answerSDP}, nil)
+	bob.answerOffer(t, svc, conn, scope, pulled.SessionDescription.SDP)
 	return bob, received
 }
 

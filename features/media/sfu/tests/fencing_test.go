@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/webrtc/v4"
-
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
@@ -217,12 +215,7 @@ func hostStopDuringPendingCapture(t *testing.T, svc *service) {
 	}
 	if len(pulled.TrackErrors) == 0 {
 		// The push won the race, so the revoke left a muted publication or closed it after the pull.
-		if err := bob.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-			t.Fatal(err)
-		}
-		answer, _ := bob.peer.pc.CreateAnswer(nil)
-		description := bob.peer.complete(t, answer)
-		svc.mustCall(t, "/v1/sessions/"+bob.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: bob.scope, SessionDescription: description}, nil)
+		bob.peer.answerOffer(t, svc, bob.conn, bob.scope, pulled.SessionDescription.SDP)
 	}
 	bob.silent(t, "a capture the host stopped while it was pending")
 }

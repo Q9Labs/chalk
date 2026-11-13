@@ -83,14 +83,7 @@ func newParkedMic(t *testing.T) *parkedMic {
 		if pulled.SessionDescription == nil || len(pulled.TrackErrors) != 0 {
 			t.Fatalf("pull response: %+v", pulled)
 		}
-		if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-			t.Fatal(err)
-		}
-		answer, err := bob.pc.CreateAnswer(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scopeB, SessionDescription: bob.complete(t, answer)}, nil)
+		bob.answerOffer(t, svc, connB, scopeB, pulled.SessionDescription.SDP)
 	}
 	m.update = func(mid string, paused bool) protocol.TracksResponse {
 		t.Helper()

@@ -44,9 +44,7 @@ func pushCamera(t *testing.T, node *Node, name string, session *Session, peer *t
 	if _, err := peer.pc.AddTrack(camera); err != nil {
 		t.Fatal(err)
 	}
-	pushed, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-		OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
-	})
+	pushed, err := pushAll(t, session, peer, "cam", "camera")
 	if err != nil || len(pushed.Tracks) != 1 {
 		t.Fatalf("push: %+v %v", pushed, err)
 	}

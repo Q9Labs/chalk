@@ -96,15 +96,7 @@ func (l *listener) pull(t *testing.T, svc *service, m *microphone) {
 	if len(pulled.TrackErrors) != 0 || pulled.SessionDescription == nil {
 		t.Fatalf("pull: %+v", pulled)
 	}
-	if err := l.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := l.peer.pc.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	description := l.peer.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+l.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: l.scope, SessionDescription: description}, nil)
+	l.peer.answerOffer(t, svc, l.conn, l.scope, pulled.SessionDescription.SDP)
 	eventually(t, "the listener to connect", 10*time.Second, func() bool {
 		return l.peer.pc.ConnectionState() == webrtc.PeerConnectionStateConnected
 	})

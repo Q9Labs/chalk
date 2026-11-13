@@ -122,9 +122,7 @@ func TestUnsupportedCodecIsATrackError(t *testing.T) {
 	}
 	peer := newTestPeer(t, h264)
 	peer.sendOnly(t, webrtc.RTPCodecTypeVideo, 1)
-	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
-		Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
-	})
+	response, err := pushAll(t, session, peer, "cam", "camera")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -187,15 +187,7 @@ func (s *service) createSession(t *testing.T, operation string, scope protocol.S
 
 func (s *service) sessions(t *testing.T) int {
 	t.Helper()
-	response, err := s.client.Get(s.baseURL + "/readyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer response.Body.Close()
-	var ready protocol.ReadyResponse
-	if err := json.NewDecoder(response.Body).Decode(&ready); err != nil {
-		t.Fatal(err)
-	}
+	_, ready := s.ready(t)
 	return ready.Sessions
 }
 

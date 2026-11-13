@@ -93,19 +93,17 @@ test("call-artifacts runs beside the proofs that share a Space on its own proof 
   assert.deepEqual(run.origins, { "call-artifacts": "http://127.0.0.1:4568", "camera-share": "http://127.0.0.1:4567", "long-call": "http://127.0.0.1:4567" });
 });
 
-test("without a second proof origin every proof runs alone on the one origin", () => {
-  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin: "" });
-  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
-  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
-  assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);
-});
-
-test("a second origin on the same port runs every proof alone on the one origin", () => {
-  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin: "http://localhost:4567/" });
-  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
-  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
-  assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);
-});
+for (const [name, ownOrigin] of [
+  ["without a second proof origin", ""],
+  ["a second origin on the same port", "http://localhost:4567/"],
+]) {
+  test(`${name}, every proof runs alone on the one origin`, () => {
+    const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin });
+    assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
+    assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
+    assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);
+  });
+}
 
 test("a proof API key reaches the log only in an unlabelled ::add-mask:: line", () => {
   const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });

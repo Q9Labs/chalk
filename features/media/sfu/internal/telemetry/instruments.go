@@ -71,9 +71,7 @@ func newInstruments(meter metric.Meter) *instruments {
 	in.pausedCameras = in.gauge("chalk.sfu.cameras.paused", "{camera}", "Cameras an Episode ceiling pauses.")
 	in.rss = in.gauge("process.memory.usage", "By", "Resident memory of the SFU process.")
 	cpu, err := meter.Float64ObservableCounter("process.cpu.time", metric.WithUnit("s"), metric.WithDescription("CPU time the SFU process used."))
-	in.cpu = cpu
-	in.errs = append(in.errs, err)
-	in.all = append(in.all, cpu)
+	in.cpu = track(in, cpu, err)
 
 	in.packets = in.counter("chalk.sfu.packets", "{packet}", "Media packets since start.")
 	in.bytes = in.counter("chalk.sfu.bytes", "By", "Media bytes since start.")
@@ -92,25 +90,26 @@ func newInstruments(meter metric.Meter) *instruments {
 	return in
 }
 
-func (in *instruments) gauge(name, unit, description string) metric.Int64ObservableGauge {
-	instrument, err := in.meter.Int64ObservableGauge(name, metric.WithUnit(unit), metric.WithDescription(description))
+// track keeps an instrument and the error from creating it, which finish reports together.
+func track[T metric.Observable](in *instruments, instrument T, err error) T {
 	in.errs = append(in.errs, err)
 	in.all = append(in.all, instrument)
 	return instrument
+}
+
+func (in *instruments) gauge(name, unit, description string) metric.Int64ObservableGauge {
+	instrument, err := in.meter.Int64ObservableGauge(name, metric.WithUnit(unit), metric.WithDescription(description))
+	return track(in, instrument, err)
 }
 
 func (in *instruments) ratio(name, unit, description string) metric.Float64ObservableGauge {
 	instrument, err := in.meter.Float64ObservableGauge(name, metric.WithUnit(unit), metric.WithDescription(description))
-	in.errs = append(in.errs, err)
-	in.all = append(in.all, instrument)
-	return instrument
+	return track(in, instrument, err)
 }
 
 func (in *instruments) counter(name, unit, description string) metric.Int64ObservableCounter {
 	instrument, err := in.meter.Int64ObservableCounter(name, metric.WithUnit(unit), metric.WithDescription(description))
-	in.errs = append(in.errs, err)
-	in.all = append(in.all, instrument)
-	return instrument
+	return track(in, instrument, err)
 }
 
 // observe reports one reading of the node to o.

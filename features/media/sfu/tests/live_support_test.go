@@ -43,6 +43,16 @@ type participant struct {
 	screen *simulcastPublisher
 }
 
+// newParticipant creates a participant's session behind its own link. A client without
+// transportWide offers no transport-wide feedback.
+func newParticipant(t *testing.T, svc *service, name string, scope protocol.Scope, transportWide bool) *participant {
+	t.Helper()
+	p := &participant{name: name, scope: scope, link: newLink(t)}
+	p.peer = newPeerThrough(t, p.link, true, transportWide)
+	p.conn = svc.createSession(t, "create-"+name, scope)
+	return p
+}
+
 // publishing is what one participant sends.
 type publishing struct {
 	cameras int // simulcast cameras, named cam, cam2, cam3…
@@ -215,15 +225,7 @@ func (p *participant) pull(t *testing.T, svc *service, tracks []protocol.Track) 
 	if pulled.SessionDescription == nil || len(pulled.TrackErrors) != 0 {
 		t.Fatalf("%s pull response: %+v", p.name, pulled)
 	}
-	if err := p.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := p.peer.pc.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	answerSDP := p.peer.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+p.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: p.scope, SessionDescription: answerSDP}, nil)
+	p.peer.answerOffer(t, svc, p.conn, p.scope, pulled.SessionDescription.SDP)
 }
 
 func remote(publisher *participant, name string) protocol.Track {

@@ -154,16 +154,7 @@ func joinViewer(t *testing.T, node *Node, publisher *Session, name string) *pull
 			v.mu.Unlock()
 		}
 	})
-	pull := pullRequest(v.session, publisher, "cam-0")
-	pull.OperationID = op()
-	pulled, err := v.session.AddTracks(context.Background(), pull)
-	if err != nil || len(pulled.Tracks) != 1 {
-		t.Fatalf("pull: %+v %v", pulled, err)
-	}
-	v.mid = pulled.Tracks[0].Mid
-	if err := v.session.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), SessionDescription: v.peer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
+	v.mid = pullAndAnswer(t, v.session, publisher, v.peer, "cam-0").Tracks[0].Mid
 	return v
 }
 

@@ -57,9 +57,7 @@ func TestOnlyOneScreenShareRunsInAnEpisode(t *testing.T) {
 		t.Helper()
 		peer := newTestPeer(t)
 		peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
-		response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-			OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks(name, peer.mids(), "screen"),
-		})
+		response, err := pushAll(t, session, peer, name, "screen")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -148,15 +146,7 @@ func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publish(t, publisher, "mic", 1)
 	viewer := newTestPeer(t)
-	request := pullRequest(subscriber, publisher, "mic-0")
-	request.OperationID = op()
-	pulled, err := subscriber.AddTracks(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
+	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
 	low := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Simulcast: &protocol.Simulcast{PreferredRID: "l"}}
 	if _, err := subscriber.UpdateTracks(context.Background(), protocol.UpdateTracksRequest{OperationID: op(), Scope: subscriber.scope, Tracks: []protocol.Track{low}}); err != nil {
 		t.Fatal(err)
@@ -182,17 +172,7 @@ func TestUpdateTracksRecordsTheCeilingWithoutSDP(t *testing.T) {
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publish(t, publisher, "mic", 1)
 	viewer := newTestPeer(t)
-	pulled, err := subscriber.AddTracks(context.Background(), func() protocol.TracksRequest {
-		request := pullRequest(subscriber, publisher, "mic-0")
-		request.OperationID = op()
-		return request
-	}())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
+	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
 
 	known := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Simulcast: &protocol.Simulcast{PreferredRID: "l", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}}
 	unknown := known
@@ -224,15 +204,7 @@ func TestNegotiatedCloseStopsTheSubscriptionAndAnswersTheOffer(t *testing.T) {
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publish(t, publisher, "mic", 1)
 	viewer := newTestPeer(t)
-	request := pullRequest(subscriber, publisher, "mic-0")
-	request.OperationID = op()
-	pulled, err := subscriber.AddTracks(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
+	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
 
 	for _, transceiver := range viewer.pc.GetTransceivers() {
 		if err := transceiver.Stop(); err != nil {

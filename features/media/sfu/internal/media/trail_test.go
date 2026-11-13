@@ -64,13 +64,7 @@ func TestTrailExplainsOneParticipantsCall(t *testing.T) {
 	bob.Note(Trace{TraceID: "0af7651916cd43dd8448eb211c80319c", JourneyID: "4d0d1c2e-6f2a-4a6b-9b6e-5c1f0f7d9a11"})
 	publish(t, alice, "mic", 1)
 	viewer := newTestPeer(t)
-	pulled, err := bob.AddTracks(context.Background(), pullRequest(bob, alice, "mic-0"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := bob.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: bob.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
+	pullAndAnswer(t, bob, alice, viewer, "mic-0")
 	bob.CloseFor(CloseRemoved)
 
 	published := trail.events("sfu.publication.started")

@@ -1,7 +1,6 @@
 package media
 
 import (
-	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -47,9 +46,7 @@ func TestACameraBeyondTheReservedCamerasIsRefused(t *testing.T) {
 	session := node.newTestSession(t, episodeScope("a", "alice"))
 	peer := newTestPeer(t)
 	peer.sendOnly(t, webrtc.RTPCodecTypeVideo, 3)
-	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-		OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
-	})
+	response, err := pushAll(t, session, peer, "cam", "camera")
 	if err != nil {
 		t.Fatal(err)
 	}

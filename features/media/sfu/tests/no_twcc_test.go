@@ -24,14 +24,10 @@ func startNoTWCCCall(t *testing.T) *noTWCCCall {
 	svc := startService(t, newAuthority(t, "chalk test CA"))
 	svc.grantSources(t, scopeA, scopeB)
 
-	alice := &participant{name: "alice", scope: scopeA, link: newLink(t)}
-	alice.peer = newMediaPeer(t, alice.link, true)
-	alice.conn = svc.createSession(t, "create-alice", scopeA)
+	alice := newParticipant(t, svc, "alice", scopeA, true)
 	alice.publish(t, svc, publishing{cameras: 1, chunks: [2]int{1100, 1100}, frameBytes: [3]int{frameBytes(1500), frameBytes(300)}})
 
-	bob := &participant{name: "bob", scope: scopeB, link: newLink(t)}
-	bob.peer = newPeerThrough(t, bob.link, true, false)
-	bob.conn = svc.createSession(t, "create-bob", scopeB)
+	bob := newParticipant(t, svc, "bob", scopeB, false)
 	received := collect(bob.peer)
 	bob.pull(t, svc, []protocol.Track{remote(alice, micName), remote(alice, cameraName)})
 	if sdp := bob.peer.pc.CurrentLocalDescription().SDP; strings.Contains(sdp, "transport-cc") || strings.Contains(sdp, "transport-wide-cc") {

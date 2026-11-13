@@ -84,15 +84,11 @@ func startConstrainedCall(t *testing.T) *constrainedCall {
 	svc := startService(t, newAuthority(t, "chalk test CA"))
 	svc.grantSources(t, scopeA, scopeB)
 
-	alice := &participant{name: "alice", scope: scopeA, link: newLink(t)}
-	alice.peer = newMediaPeer(t, alice.link, true)
-	alice.conn = svc.createSession(t, "create-alice", scopeA)
+	alice := newParticipant(t, svc, "alice", scopeA, true)
 	// Frames padded to the browser SDK's layer caps: about 1.5 Mbit/s for the high layer and 300 kbit/s for the low one.
 	alice.publish(t, svc, publishing{cameras: 1, chunks: [2]int{1100, 1100}, frameBytes: [3]int{frameBytes(1500), frameBytes(300)}})
 
-	bob := &participant{name: "bob", scope: scopeB, link: newLink(t)}
-	bob.peer = newMediaPeer(t, bob.link, true)
-	bob.conn = svc.createSession(t, "create-bob", scopeB)
+	bob := newParticipant(t, svc, "bob", scopeB, true)
 	arrivals := timeArrivals(bob.peer)
 	bob.pull(t, svc, []protocol.Track{remote(alice, micName), remote(alice, cameraName)})
 	call := &constrainedCall{svc: svc, viewer: bob, arrivals: arrivals, samples: watchDelivery(t, svc, bob)}

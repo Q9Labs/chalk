@@ -104,13 +104,7 @@ func newTestPeer(t *testing.T, codecs ...webrtc.RTPCodecParameters) *testPeer {
 			t.Fatal(err)
 		}
 	}
-	settings := webrtc.SettingEngine{}
-	settings.SetIncludeLoopbackCandidate(true)
-	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
-	pc, err := webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithSettingEngine(settings)).NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	pc := newLoopbackPeerConnection(t, engine)
 	t.Cleanup(func() { _ = pc.Close() })
 	return &testPeer{pc: pc}
 }
@@ -201,6 +195,41 @@ func pullRequest(s *Session, publisher *Session, names ...string) protocol.Track
 		request.Tracks = append(request.Tracks, protocol.Track{Location: protocol.LocationRemote, SessionID: publisher.id, TrackName: name})
 	}
 	return request
+}
+
+// newLoopbackPeerConnection makes a UDP4 peer connection that offers loopback candidates.
+func newLoopbackPeerConnection(t *testing.T, engine *webrtc.MediaEngine) *webrtc.PeerConnection {
+	t.Helper()
+	settings := webrtc.SettingEngine{}
+	settings.SetIncludeLoopbackCandidate(true)
+	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+	pc, err := webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithSettingEngine(settings)).NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pc
+}
+
+// pushAll offers every section of the peer as a track of one source, named prefix plus its index.
+func pushAll(t *testing.T, s *Session, peer *testPeer, prefix, source string) (protocol.TracksResponse, error) {
+	t.Helper()
+	return s.AddTracks(context.Background(), protocol.TracksRequest{
+		OperationID: op(), Scope: s.scope, SessionDescription: peer.offer(t), Tracks: localTracks(prefix, peer.mids(), source),
+	})
+}
+
+// pullAndAnswer has the subscriber pull the publisher's tracks and answer the SFU's offer with
+// the viewer peer, and returns the pull response.
+func pullAndAnswer(t *testing.T, subscriber, publisher *Session, viewer *testPeer, names ...string) protocol.TracksResponse {
+	t.Helper()
+	pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, names...))
+	if err != nil || len(pulled.Tracks) != len(names) {
+		t.Fatalf("pull %v: %+v %v", names, pulled, err)
+	}
+	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
+		t.Fatal(err)
+	}
+	return pulled
 }
 
 func eventually(t *testing.T, what string, timeout time.Duration, condition func() bool) {
