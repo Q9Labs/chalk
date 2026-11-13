@@ -19,7 +19,6 @@ var (
 	ErrCaptureUnsupported           = errors.New("recording capture is not supported for this media plane")
 	ErrCapacityExceeded             = errors.New("recording capacity exceeded")
 	ErrRecordingCapacityUnavailable = ErrCapacityExceeded
-	ErrReservationExpired           = errors.New("recording reservation expired before capture")
 	ErrInvalidIdempotencyKey        = errors.New("invalid recording idempotency key")
 	ErrInvalidOwner                 = errors.New("invalid recording lease owner")
 	ErrCaptureStopPublication       = errors.New("capture stopped publication failed")
