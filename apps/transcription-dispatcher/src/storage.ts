@@ -36,7 +36,7 @@ export async function fetchVerified(options: FetchVerifiedOptions): Promise<Veri
   return { bytes, contentType, sha256 };
 }
 
-export async function conditionalPutJson(options: { fetch: typeof fetch; url: string; body: Uint8Array; checksumSha256: string; signal?: AbortSignal }): Promise<"created" | "already_exists"> {
+async function conditionalPutJson(options: { fetch: typeof fetch; url: string; body: Uint8Array; checksumSha256: string; signal?: AbortSignal }): Promise<"created" | "already_exists"> {
   if (!/^[a-f0-9]{64}$/i.test(options.checksumSha256)) throw new AssignmentError("result checksum is invalid");
   const response = await options.fetch(options.url, {
     method: "PUT",

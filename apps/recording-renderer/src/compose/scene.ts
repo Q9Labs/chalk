@@ -79,7 +79,7 @@ export function frameCountFor(durationMs: number, fps: number): number {
   return Math.ceil((durationMs * fps) / 1_000);
 }
 
-export function frameTimeMs(frame: number, fps: number): number {
+function frameTimeMs(frame: number, fps: number): number {
   return Math.floor((frame * 1_000) / fps);
 }
 
@@ -166,7 +166,7 @@ function videoAvailable(source: DecodedVisualSourceV1 | undefined, elapsedMs: nu
 }
 
 /** Mirrors RecordingSpaceView's stage items and the live Stage's geometry, without the chat sidebar. */
-export function sceneFor(snapshot: RecordingPresentationSnapshotV1, available: (sourceId: string) => boolean, layout: SceneLayout): Scene {
+function sceneFor(snapshot: RecordingPresentationSnapshotV1, available: (sourceId: string) => boolean, layout: SceneLayout): Scene {
   const joined = snapshot.participants.filter((participant) => participant.joined).sort((left, right) => left.joinOrdinal - right.joinOrdinal || left.id.localeCompare(right.id));
   const byId = new Map(joined.map((participant) => [participant.id, participant]));
   const visibleMedia = snapshot.media.filter((source) => source.visible && byId.has(source.participantId));

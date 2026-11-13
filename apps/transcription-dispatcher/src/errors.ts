@@ -96,7 +96,7 @@ export function isTerminalFailure(error: unknown): boolean {
 }
 
 /** The caller's deadline or cancel signal fired. */
-export function isAbort(error: unknown): boolean {
+function isAbort(error: unknown): boolean {
   return error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
