@@ -299,6 +299,7 @@
       "paths": [
         "apps/api/internal/httpapi/memberships.go",
         "apps/api/internal/httpapi/public_invite_leave_retry_test.go",
+        "apps/api/internal/httpapi/public_invite_media_error_test.go",
         "apps/api/internal/httpapi/spaces.go",
         "apps/mobile/src/home",
         "apps/mobile/src/lib/spaces.ts",
