@@ -160,10 +160,6 @@ type Usage struct {
 	Metadata           map[string]string
 }
 
-func NewService(plane Plane) Service {
-	return Service{plane: plane}
-}
-
 func NewServiceForProvider(provider Provider, plane Plane) Service {
 	return Service{plane: plane, provider: provider}
 }

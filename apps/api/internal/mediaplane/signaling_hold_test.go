@@ -22,10 +22,10 @@ func TestLocalUpdateNeedsAPlaneThatHoldsPublications(t *testing.T) {
 	request := func() UpdateTracksRequest {
 		return UpdateTracksRequest{ConnectionID: "conn", Tracks: []Track{local}}
 	}
-	if _, err := NewService(updatingPlane{}).UpdateTracks(context.Background(), request()); !errors.Is(err, ErrUnsupportedOperation) {
+	if _, err := Service{plane: updatingPlane{}}.UpdateTracks(context.Background(), request()); !errors.Is(err, ErrUnsupportedOperation) {
 		t.Fatalf("a plane that cannot hold publications: %v", err)
 	}
-	if _, err := NewService(holdingPlane{}).UpdateTracks(context.Background(), request()); err != nil {
+	if _, err := Service{plane: holdingPlane{}}.UpdateTracks(context.Background(), request()); err != nil {
 		t.Fatalf("a plane that holds publications: %v", err)
 	}
 }
@@ -45,7 +45,7 @@ func TestLocalUpdateIsValidated(t *testing.T) {
 	} {
 		track := valid
 		change(&track)
-		if _, err := NewService(holdingPlane{}).UpdateTracks(context.Background(), UpdateTracksRequest{ConnectionID: "conn", Tracks: []Track{track}}); !errors.Is(err, ErrInvalidSignalRequest) {
+		if _, err := Service{plane: holdingPlane{}}.UpdateTracks(context.Background(), UpdateTracksRequest{ConnectionID: "conn", Tracks: []Track{track}}); !errors.Is(err, ErrInvalidSignalRequest) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
