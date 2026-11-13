@@ -9,8 +9,9 @@ def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def keystorePropertiesPath = System.getenv("CHALK_ANDROID_KEYSTORE_PROPERTIES") ?: "app/keystore.properties"
 def keystorePropertiesFile = rootProject.file(keystorePropertiesPath)
 def keystoreProperties = new Properties()
-def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: '66').toString())
-def appVersionName = (findProperty('chalk.versionName') ?: '3.0.6').toString()
+def releaseManifest = new groovy.json.JsonSlurper().parse(rootProject.file('../../../release/manifest.json'))
+def appVersionCode = Integer.parseInt((findProperty('chalk.versionCode') ?: releaseManifest.android.version_code).toString())
+def appVersionName = releaseManifest.version_name
 
 def configuredBuildDirectory = findProperty('chalk.androidBuildDirectory')
 if (configuredBuildDirectory) {
@@ -106,7 +107,7 @@ android {
 
     namespace 'ai.q9labs.chalk.mobile'
     defaultConfig {
-        applicationId 'ai.q9labs.chalk.mobile'
+        applicationId releaseManifest.android.package_name
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode

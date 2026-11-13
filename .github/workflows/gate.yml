@@ -8,20 +8,19 @@ name: Gate
 # Manual runs and the weekly run run every job and lane in full. A push to master runs Cache warm-up, which saves the
 # caches that pull requests and queue groups start from. Daily vulnerability scans run in Daily vulnerability scan.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
+# A draft pull request runs no job: a draft cannot merge, so the required checks have nothing to report on it. Marking it
+# ready starts the Gate (ready_for_review), and so does every later push. Select gate jobs is the only job that decides
+# this; every job below stands down when it was skipped.
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   schedule:
     # Drift between lanes and master surfaces here weekly. New advisories against packages nobody changed fail the
     # daily vulnerability scan, not unrelated pull requests.
     - cron: "17 1 * * 1"
   workflow_dispatch:
-    inputs:
-      join_startup_proof:
-        description: Run 30 joins with stalled and dropped WebSocket upgrades
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -34,10 +33,14 @@ concurrency:
 
 env:
   CI: "true"
+  # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
+  PNPM_CONFIG_FETCH_RETRIES: "5"
+  PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
 
 jobs:
   changes:
     name: Select gate jobs
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:
@@ -70,49 +73,12 @@ jobs:
           fi
           cat "${GITHUB_OUTPUT}"
 
-  join-startup-proof:
-    name: Join startup proof
-    if: github.event_name == 'workflow_dispatch' && inputs.join_startup_proof
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 0
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Install browser runtime
-        uses: ./.github/actions/setup-playwright
-        with:
-          browsers: chromium
-      - name: Prove join startup under loss and stalls
-        run: node scripts/web-proof/join-startup.mjs '${{ runner.temp }}/join-startup-proof'
-      - name: Save join startup proof
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: join-startup-proof
-          path: |
-            ${{ runner.temp }}/join-startup-proof/*.png
-            ${{ runner.temp }}/join-startup-proof/*.json
-          if-no-files-found: error
-
   # Jobs narrow a pull request only when Select gate jobs succeeded and reported full=false. A failed job can still
   # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded.
   root-lanes:
     name: Root ${{ matrix.group }}
     needs: changes
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-24.04
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
@@ -179,6 +145,8 @@ jobs:
             apps/sync/deps
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+          # A changed mix.lock still starts from the last saved dependencies, so only the changed packages come from Hex.
+          restore-keys: sync-mix-${{ runner.os }}-
 
       - name: Install the dashboard database client
         if: startsWith(matrix.group, 'dashboard-')
@@ -288,7 +256,7 @@ jobs:
   root:
     name: Root gate
     needs: [changes, root-lanes]
-    if: always()
+    if: ${{ always() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
@@ -336,7 +304,7 @@ jobs:
   api:
     name: API gate
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -396,7 +364,7 @@ jobs:
   sync-parts:
     name: Sync ${{ matrix.part }}
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -455,6 +423,8 @@ jobs:
             apps/sync/deps
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+          # A changed mix.lock still starts from the last saved dependencies, so only the changed packages come from Hex.
+          restore-keys: sync-mix-${{ runner.os }}-
 
       - name: Install Chromium for the browser reconnection proof
         if: matrix.part == 'clients'
@@ -469,8 +439,8 @@ jobs:
   # The required context. A part the planner did not select is skipped, which counts as passed.
   sync:
     name: Sync gate
-    needs: sync-parts
-    if: always()
+    needs: [changes, sync-parts]
+    if: ${{ always() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:

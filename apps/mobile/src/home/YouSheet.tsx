@@ -2,6 +2,7 @@ import { BottomSheet, ChalkText, PillButton, SegmentedControl, SheetGroup, Sheet
 import { useEffect, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
+import { DISPLAY_NAME_MAX_LENGTH } from "../screens/display-name-store";
 import { TextField } from "./TextField";
 import { space } from "@q9labsai/chalk-react-native";
 
@@ -41,7 +42,7 @@ export function YouSheet({ open, onClose, name, onSaveName, preferences, returnF
             accessibilityLabel="Your name"
             autoComplete="name"
             enterKeyHint="done"
-            maxLength={40}
+            maxLength={DISPLAY_NAME_MAX_LENGTH}
             onChangeText={setDraft}
             onSubmitEditing={save}
             placeholder="For example, Sam"

@@ -1,7 +1,5 @@
-import { parseTranscriptLanguage } from "@chalk/transcript-language";
 import { ControlApiError } from "./errors.js";
-import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
-import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./urls.js";
+import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./assignment.js";
 import type { ClaimResponse, CleanupAssignment, CompletionInput, ControlApi, FinalizeAssignment, FinalizeCompletionInput, FinalizeClaimResponse, JourneyContext, RetryInput, TranscriptionAssignment } from "./types.js";
 import type { WorkloadSigner } from "./workload-auth.js";
 
@@ -9,8 +7,6 @@ interface ControlApiOptions {
   baseUrl: string;
   signer: WorkloadSigner;
   fetch: typeof fetch;
-  maxAssignmentUrlTtlMs?: number;
-  maxFinalizeChunks?: number;
 }
 
 function contextHeaders(context: JourneyContext): Record<string, string> {
@@ -42,27 +38,11 @@ export class RecorderControlApiClient implements ControlApi {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid claim response", 502);
     const assignments = (value as Record<string, unknown>).assignments;
     if (!Array.isArray(assignments)) throw new ControlApiError("invalid claim assignments", 502);
-    const validated = assignments.map((assignment) => validateAssignment(canonicalAssignment(assignment), this.options.maxAssignmentUrlTtlMs));
+    const validated = assignments.map((assignment) => validateAssignment(assignment));
     return { assignments: validated };
   }
 
-  // fallow-ignore-next-line unused-class-member
-  async heartbeat(input: { assignment: TranscriptionAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/jobs/heartbeat",
-      "POST",
-      {
-        job_id: input.assignment.jobId,
-        attempt: input.assignment.attempt,
-        lease_token: input.assignment.leaseToken,
-      },
-      input.context,
-      input.signal,
-    );
-  }
-
-  // fallow-ignore-next-line unused-class-member
-  async heartbeatFinalize(input: { assignment: FinalizeAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
+  async heartbeat(input: { assignment: Pick<TranscriptionAssignment, "jobId" | "attempt" | "leaseToken">; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/jobs/heartbeat",
       "POST",
@@ -93,7 +73,6 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async complete(input: CompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/jobs/complete",
@@ -126,7 +105,7 @@ export class RecorderControlApiClient implements ControlApi {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid finalize claim response", 502);
     const assignments = (value as Record<string, unknown>).assignments;
     if (!Array.isArray(assignments)) throw new ControlApiError("invalid finalize assignments", 502);
-    const validated = assignments.map((assignment) => validateFinalizeAssignment(canonicalFinalizeAssignment(assignment), this.options.maxAssignmentUrlTtlMs, this.options.maxFinalizeChunks ?? MAX_FINALIZER_CHUNKS));
+    const validated = assignments.map((assignment) => validateFinalizeAssignment(assignment));
     return { assignments: validated };
   }
 
@@ -171,16 +150,14 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async claimCleanup(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }> {
     const value = await this.call("/internal/v1/transcription/cleanup/claim", "POST", { batch_size: input.limit }, input.context, input.signal);
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid cleanup claim response", 502);
     const assignments = (value as Record<string, unknown>).assignments;
     if (!Array.isArray(assignments)) throw new ControlApiError("invalid cleanup assignments", 502);
-    return { assignments: assignments.map((assignment) => validateCleanupAssignment(assignment, this.options.maxAssignmentUrlTtlMs)) };
+    return { assignments: assignments.map((assignment) => validateCleanupAssignment(assignment)) };
   }
 
-  // fallow-ignore-next-line unused-class-member
   async completeCleanup(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/cleanup/complete",
@@ -195,7 +172,6 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/cleanup/retry",
@@ -237,85 +213,4 @@ function networkCauseCode(error: TypeError): string {
   const cause: unknown = error.cause;
   if (cause instanceof Error && "code" in cause && typeof cause.code === "string") return cause.code;
   return "unknown";
-}
-
-function canonicalAssignment(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const assignment = value as Record<string, unknown>;
-  const chunkValue = assignment.chunk ?? assignment.audio_chunk;
-  const chunk = chunkValue && typeof chunkValue === "object" && !Array.isArray(chunkValue) ? (chunkValue as Record<string, unknown>) : chunkValue;
-  if (!chunk || typeof chunk !== "object" || Array.isArray(chunk)) return value;
-  const source = chunk as Record<string, unknown>;
-  return {
-    ...assignment,
-    transcriptLanguage: parseTranscriptLanguage(assignment.transcript_language === undefined ? "auto" : assignment.transcript_language),
-    jobId: assignment.jobId ?? assignment.job_id,
-    tenantId: assignment.tenantId ?? assignment.tenant_id,
-    episodeId: assignment.episodeId ?? assignment.episode_id,
-    recordingId: assignment.recordingId ?? assignment.recording_id,
-    presentationSha256: assignment.presentationSha256 ?? assignment.presentation_sha256,
-    sourceExpiresAt: assignment.sourceExpiresAt ?? assignment.source_expires_at,
-    leaseToken: assignment.leaseToken ?? assignment.lease_token,
-    leaseExpiresAt: assignment.leaseExpiresAt ?? assignment.lease_expires_at,
-    outputPutUrl: assignment.outputPutUrl ?? assignment.output_put_url ?? assignment.result_put_url,
-    outputPutUrlExpiresAt: assignment.outputPutUrlExpiresAt ?? assignment.output_put_url_expires_at ?? assignment.result_put_url_expires_at,
-    outputContentType: assignment.outputContentType ?? assignment.output_content_type,
-    manifest: assignment.manifest ?? assignment.speaker_turn_manifest ?? assignment.manifest_authority,
-    chunk: {
-      ...source,
-      chunkId: source.chunkId ?? source.chunk_id,
-      inputObjectKey: source.inputObjectKey ?? source.input_object_key,
-      inputUrl: source.inputUrl ?? source.input_url,
-      inputUrlExpiresAt: source.inputUrlExpiresAt ?? source.input_url_expires_at,
-      inputContentType: source.inputContentType ?? source.input_content_type,
-      inputSizeBytes: source.inputSizeBytes ?? source.input_size_bytes,
-      inputSha256: source.inputSha256 ?? source.input_sha256,
-      episodeStartMs: source.episodeStartMs ?? source.episode_start_ms,
-      episodeEndMs: source.episodeEndMs ?? source.episode_end_ms,
-      sourceStartMs: source.sourceStartMs ?? source.source_start_ms,
-      sourceEndMs: source.sourceEndMs ?? source.source_end_ms,
-      chunkIndex: source.chunkIndex ?? source.chunk_index,
-      generation: source.generation,
-      allocationId: source.allocationId ?? source.allocation_id,
-      objectVersion: source.objectVersion ?? source.object_version,
-      objectEtag: source.objectEtag ?? source.object_etag,
-      sourceIdentity: source.sourceIdentity ?? source.source_identity,
-      sourceTrackClass: source.sourceTrackClass ?? source.source_track_class,
-      displayNameSnapshot: source.displayNameSnapshot ?? source.display_name_snapshot,
-      overlap: source.overlap,
-    },
-  };
-}
-
-function canonicalFinalizeAssignment(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const assignment = value as Record<string, unknown>;
-  const chunks = assignment.chunks ?? assignment.chunk_results ?? assignment.results;
-  if (!Array.isArray(chunks)) return value;
-  return {
-    ...assignment,
-    jobId: assignment.jobId ?? assignment.job_id,
-    transcriptId: assignment.transcriptId ?? assignment.transcript_id,
-    episodeId: assignment.episodeId ?? assignment.episode_id,
-    leaseToken: assignment.leaseToken ?? assignment.lease_token,
-    leaseExpiresAt: assignment.leaseExpiresAt ?? assignment.lease_expires_at,
-    outputPutUrl: assignment.outputPutUrl ?? assignment.output_put_url ?? assignment.finalPutUrl ?? assignment.final_put_url,
-    outputPutUrlExpiresAt: assignment.outputPutUrlExpiresAt ?? assignment.output_put_url_expires_at ?? assignment.finalPutUrlExpiresAt ?? assignment.final_put_url_expires_at,
-    outputContentType: assignment.outputContentType ?? assignment.output_content_type,
-    chunks: chunks.map((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-      const chunk = value as Record<string, unknown>;
-      return {
-        ...chunk,
-        chunkId: chunk.chunkId ?? chunk.chunk_id,
-        inputUrl: chunk.inputUrl ?? chunk.input_url ?? chunk.resultUrl ?? chunk.result_url ?? chunk.resultGetUrl ?? chunk.result_get_url,
-        inputUrlExpiresAt: chunk.inputUrlExpiresAt ?? chunk.input_url_expires_at,
-        inputContentType: chunk.inputContentType ?? chunk.input_content_type,
-        inputSizeBytes: chunk.inputSizeBytes ?? chunk.input_size_bytes ?? chunk.resultSizeBytes ?? chunk.result_size_bytes,
-        inputSha256: chunk.inputSha256 ?? chunk.input_sha256 ?? chunk.resultSha256 ?? chunk.result_sha256,
-        episodeStartMs: chunk.episodeStartMs ?? chunk.episode_start_ms,
-        episodeEndMs: chunk.episodeEndMs ?? chunk.episode_end_ms,
-      };
-    }),
-  };
 }

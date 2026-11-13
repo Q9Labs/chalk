@@ -369,3 +369,33 @@ func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpac
 		t.Fatalf("a Space's own choice is stored as is, got %q", got)
 	}
 }
+
+func TestPublicWriteNamingTheOwnSFUDefaultFollowsTheDefaultBackToCloudflare(t *testing.T) {
+	cf, own := MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU
+	ownDefault := PlanePolicy{Platform: own, Allowed: allowAll(t)}
+	reverted := PlanePolicy{Platform: cf, Allowed: allowAll(t)}
+	service := NewServiceWithDefaultProvider(nil, own).WithPlanePolicy(ownDefault)
+
+	created, err := create(t, service, func(input *CreateSpaceInput) { input.MediaPlane, input.MediaPlaneSet = "chalk_sfu", true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &updatingRepository{}
+	service.repository = repository
+	tenantID, spaceID := ids(t)
+	if _, err := service.UpdateSpace(context.Background(), tenantID, spaceID, UpdateSpaceInput{MediaPlane: utilities.OptionalString{Set: true, Value: stringPtr("chalk_sfu")}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, space := range map[string]Space{
+		"create": {MediaPlaneSetting: created.MediaPlaneSetting, MediaPlane: created.MediaPlane},
+		"update": {MediaPlaneSetting: repository.updated.MediaPlaneSetting.Value, MediaPlane: *repository.updated.MediaPlane.Value},
+	} {
+		if got, err := ownDefault.Effective(tenants.Tenant{}, space); err != nil || got != own {
+			t.Fatalf("%s: under the own SFU default the next Episode resolves to %q, %v; want chalk_sfu", name, got, err)
+		}
+		if got, err := reverted.Effective(tenants.Tenant{}, space); err != nil || got != cf {
+			t.Errorf("%s: after the default moved back the next Episode resolves to %q, %v; want cf_sfu", name, got, err)
+		}
+	}
+}

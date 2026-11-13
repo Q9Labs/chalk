@@ -105,6 +105,14 @@ const whiteboardCoreIsFrameworkNeutral = {
   to: { path: "^packages/whiteboard/src/react/" },
 };
 
+const smallAppsHaveNoCycles = {
+  name: "dispatcher-renderer-mobile-no-cycles",
+  comment: "These apps are acyclic today; a new import cycle (type-only imports included) means a shared piece belongs in a lower module.",
+  severity: "error",
+  from: { path: "(?:^|/)apps/(?:transcription-dispatcher|recording-renderer|mobile)/(?:src|App\\.tsx)" },
+  to: { circular: true },
+};
+
 module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
   forbidden: [
@@ -118,6 +126,7 @@ module.exports = {
     sdkSourceCannotReachOtherSdkSource,
     appSourceCannotReachWorkspaceSource,
     workspaceSourceCannotReachAppSource,
+    smallAppsHaveNoCycles,
   ],
   options: {
     ...canonicalConfiguration.options,

@@ -5,6 +5,7 @@ name: Release contracts
 # checks, the OpenTofu validation and the Podman cleanup contract. It runs when their inputs change.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/ci.yml
       - .github/workflows/nightly.yml
@@ -38,6 +39,7 @@ concurrency:
 jobs:
   podman-image-cleanup:
     name: Podman 4.9 image cleanup contract
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -48,6 +50,8 @@ jobs:
           version="$(apt-cache madison podman | awk '$3 ~ /^4[.]9[.]/{print $3; exit}')"
           test -n "$version"
           sudo apt-get install -y --allow-downgrades "podman=$version"
+      - name: Run the rendered Quadlet units through Podman's generator
+        run: bash infrastructure/managed-episode/scripts/test-quadlet-generator
       - name: Capture real storage behavior without cloud access
         shell: bash
         run: |
@@ -63,6 +67,7 @@ jobs:
           if-no-files-found: error
   contracts:
     name: Pre-deploy release contracts
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

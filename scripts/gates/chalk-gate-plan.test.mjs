@@ -45,6 +45,25 @@ test("a path no lane reads is classified on a pull request and fails closed else
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
 });
 
+test("the feature map is read only by the always-on feature-map lane, so editing it selects no more than that on every event", () => {
+  for (const event of ["pull_request", "merge_group"]) {
+    const plan = createGatePlan(["features.json"], { scope: "merge base to HEAD", services: "external", event });
+    assert.equal(plan.full, false);
+    assert.ok(
+      plan.tasks
+        .filter((task) => task.selected)
+        .map((task) => task.id)
+        .includes("feature-map"),
+    );
+  }
+});
+
+test("a host-change-alert edit is classified on a pull request and fails closed elsewhere", () => {
+  const file = "infrastructure/host-change-alert/host-change-check.mjs";
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+});
+
 test("a test-only change skips the dashboard engine and the call lanes on a pull request, and the queue still runs them", () => {
   const files = ["sdks/typescript/client/src/media/client.test.ts"];
   assert.deepEqual(
@@ -96,6 +115,15 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(selected(["features/scorecard/budgets.mjs"], "pull_request").includes("workflow-graph"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "workflow-graph").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
+});
+
+test("the register check runs when a check input changes, and the formal Sync check runs when its model inputs change", () => {
+  assert.ok(selected([".github/workflows/nightly.yml"], "pull_request").includes("register"));
+  assert.ok(selected(["perf/budgets.json"], "pull_request").includes("register"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("register"));
+  assert.ok(selected(["tools/formal/sync-entry-leave/run.sh"], "pull_request").includes("formal-sync"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("formal-sync"));
+  assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "formal-sync").selected);
 });
 
 test("the SFU lane runs in its own group, so an SFU change does not lengthen the checks group", () => {

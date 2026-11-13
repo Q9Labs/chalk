@@ -75,7 +75,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
           or (
-            operation_name in ('end_episode', 'tenant_end_episode', 'maximum_duration_expired')
+            operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
             and not exists (
               select 1
               from sync_publication_grant_reservations reservation
@@ -89,7 +89,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             source is null
             and operation_name not in (
               'remove_participant',
-              'end_episode', 'tenant_end_episode', 'maximum_duration_expired'
+              'end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired'
             )
           )
         )

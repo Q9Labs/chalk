@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { RecorderControlApiClient } from "../src/control-api.js";
-import { runFinalizeDispatcher } from "../src/finalizer.js";
+import { runDispatcher } from "../src/dispatcher.js";
 import { HmacWorkloadSigner } from "../src/workload-auth.js";
-import type { DispatcherDependencies } from "../src/dispatcher.js";
-import type { ReleaseConfig } from "../src/types.js";
+import type { DispatcherDependencies, ReleaseConfig } from "../src/types.js";
 
 const config: ReleaseConfig = {
   environment: "test",
@@ -85,8 +84,8 @@ describe("transcription finalizer failures", () => {
         throw new Error(`unexpected control request ${path}`);
       },
     });
-    const result = await runFinalizeDispatcher(
-      {},
+    const result = await runDispatcher(
+      { source: "finalize" },
       { getRemainingTimeInMillis: () => 30_000 },
       {
         config,
@@ -143,11 +142,13 @@ describe("transcription finalizer failures", () => {
         retry: async () => undefined,
         complete: async () => undefined,
         claimFinalize: async () => ({ assignments: [assignment] }),
-        heartbeatFinalize: async () => undefined,
         completeFinalize: async () => undefined,
         retryFinalize: async () => {
           throw new Error("retry unavailable");
         },
+        claimCleanup: async () => ({ assignments: [] }),
+        completeCleanup: async () => undefined,
+        retryCleanup: async () => undefined,
       },
       fetch: async () => {
         throw new TypeError("request failed");
@@ -160,7 +161,7 @@ describe("transcription finalizer failures", () => {
       },
     };
 
-    const result = await runFinalizeDispatcher({}, { getRemainingTimeInMillis: () => 30_000 }, dependencies);
+    const result = await runDispatcher({ source: "finalize" }, { getRemainingTimeInMillis: () => 30_000 }, dependencies);
 
     expect(result).toEqual({ claimed: 1, completed: 0, failed: 1 });
     expect(warnings).toContainEqual({ event: "finalize_failed", fields: { error: "network_failure", attempt: 2, terminal: false } });

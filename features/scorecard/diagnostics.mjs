@@ -18,6 +18,7 @@ export const PATH_RECEIVE_KEYS = ["audio_loss_pct", "video_loss_pct", "audio_jit
 const PAIR_KEYS = ["unknown", ...ICE_CANDIDATE_TYPES.flatMap((local) => ICE_CANDIDATE_TYPES.map((remote) => `${local}/${remote}`))];
 const ICE_TYPE_FIELDS = ["local_type", "remote_type"];
 const ICE_RELAY_FIELD = "relay_protocol";
+const ICE_TRANSPORT_FIELD = "protocol";
 const ICE_COUNT_FIELDS = ["requests_sent", "responses_received"];
 const ICE_TIME_FIELD = "read_after_ms";
 
@@ -54,9 +55,10 @@ const isCount = (value) => Number.isSafeInteger(value) && value >= 0;
 
 function iceProblem(ice, where) {
   if (!isObject(ice)) return `${where} must be an object`;
-  const unknown = unknownField(ice, [...ICE_TYPE_FIELDS, ICE_RELAY_FIELD, ...ICE_COUNT_FIELDS, ICE_TIME_FIELD], where);
+  const unknown = unknownField(ice, [...ICE_TYPE_FIELDS, ICE_TRANSPORT_FIELD, ICE_RELAY_FIELD, ...ICE_COUNT_FIELDS, ICE_TIME_FIELD], where);
   if (unknown) return unknown;
   for (const field of ICE_TYPE_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !ICE_CANDIDATE_TYPES.includes(ice[field])) return `${where}.${field} must be a candidate type or null`;
+  if (ice[ICE_TRANSPORT_FIELD] !== undefined && ice[ICE_TRANSPORT_FIELD] !== null && !["udp", "tcp"].includes(ice[ICE_TRANSPORT_FIELD])) return `${where}.${ICE_TRANSPORT_FIELD} must be udp, tcp or null`;
   if (ice[ICE_RELAY_FIELD] !== undefined && ice[ICE_RELAY_FIELD] !== null && !ICE_RELAY_PROTOCOLS.includes(ice[ICE_RELAY_FIELD])) return `${where}.${ICE_RELAY_FIELD} must be a relay protocol or null`;
   for (const field of ICE_COUNT_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !isCount(ice[field])) return `${where}.${field} must be a count or null`;
   if (ice[ICE_TIME_FIELD] !== undefined && !isMilliseconds(ice[ICE_TIME_FIELD])) return `${where}.${ICE_TIME_FIELD} must be non-negative milliseconds or null`;
