@@ -15,14 +15,9 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 )
 
-// Admission reasons the guard reports while it refuses new Episodes.
 const (
-	reasonCPUSteal         = "cpu_steal"
-	reasonCPUBusy          = "cpu_busy"
-	reasonSchedulerLatency = "scheduler_latency"
-	reasonPacerDrops       = "pacer_drops"
-	reasonUDPBufferErrors  = "udp_buffer_errors"
-	minGuardPacerDrops     = 100 // drops in a window below which the drop share is noise
+	// minGuardPacerDrops is the drops in a window below which the drop share is noise.
+	minGuardPacerDrops = 100
 	// latencyWindow is how far back the guard reads scheduler latency, whatever
 	// the guard window is. It is short so admission reopens within seconds of a
 	// host stall ending. The p99 pools every wakeup in it, so a stall closes
@@ -286,15 +281,15 @@ func (g *guard) tick() {
 	fullWindow := len(g.steal) > slots
 	switch {
 	case health.StealKnown && fullWindow && health.StealPercent > g.cfg.MaxStealPercent:
-		health.AdmissionReason = reasonCPUSteal
+		health.AdmissionReason = RefusedCPUSteal
 	case health.StealKnown && fullWindow && health.BusyPercent > g.cfg.MaxBusyPercent:
-		health.AdmissionReason = reasonCPUBusy
+		health.AdmissionReason = RefusedCPUBusy
 	case len(g.sched) > latencySlots && health.SchedulerLatencyP99 > g.cfg.MaxSchedulerLatency:
-		health.AdmissionReason = reasonSchedulerLatency
+		health.AdmissionReason = RefusedSchedulerLatency
 	case health.PacerDrops >= minGuardPacerDrops && health.PacerDropPercent > g.cfg.MaxPacerDropPercent:
-		health.AdmissionReason = reasonPacerDrops
+		health.AdmissionReason = RefusedPacerDrops
 	case max(health.UDPReceiveErrorsPerSecond, health.UDPSendErrorsPerSecond) > float64(g.cfg.MaxUDPErrorsPerSecond):
-		health.AdmissionReason = reasonUDPBufferErrors
+		health.AdmissionReason = RefusedUDPErrors
 	}
 	previous := g.health.AdmissionReason
 	g.health = health

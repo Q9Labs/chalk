@@ -4,7 +4,7 @@ import type { RecentCall } from "../home/recent-calls";
 import type { ArrivedCall } from "../lib/arrived-call";
 import { cleanupSpaceArrival, createGuestAccessGetter, retireSpaceArrival } from "../lib/spaces";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
-import { createMobileSpaceClient, ownMobileSpaceClient } from "../space/mobile-space-client";
+import { createMobileSpaceClient } from "../space/mobile-space-client";
 import { ReadySheet } from "./ReadySheet";
 
 type CallScreenProps = {
@@ -28,8 +28,7 @@ export function CallScreen({ apiBaseURL, call, preferences, onRemember, onClose,
   }, [apiBaseURL, arrival, route.space]);
 
   useEffect(() => {
-    const owner = ownMobileSpaceClient(client);
-    return () => void owner.release();
+    return () => void client.close();
   }, [client]);
 
   // Others seen in the call, in the order they were first seen; the newest three become the row's faces.

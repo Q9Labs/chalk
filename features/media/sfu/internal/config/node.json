@@ -1,0 +1,10 @@
+{
+  "ports": { "control": 8443, "media": 50000 },
+  "udpBufferBytes": 8388608,
+  "defaultSize": "s-1vcpu-1gb",
+  "sizes": {
+    "s-1vcpu-1gb": { "vcpus": 1, "packetBudget": 22000, "goMemLimit": "384MiB", "containerMemory": "700m", "capture": { "memory": "192m", "goMemLimit": "160MiB", "cpus": "0.25" } },
+    "s-2vcpu-2gb": { "vcpus": 2, "packetBudget": 36000, "goMemLimit": "768MiB", "containerMemory": "1400m", "capture": { "memory": "384m", "goMemLimit": "320MiB", "cpus": "0.5" } }
+  },
+  "stealPercent": { "production": 40, "other": 25 }
+}

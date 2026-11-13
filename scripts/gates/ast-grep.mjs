@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const ts = createRequire(import.meta.url)("typescript");
 
 // ast-grep parses JavaScript, TypeScript, and TSX separately. Keep each rule's
 // intent here once, then give each grammar its own ID for precise suppressions.
@@ -62,14 +66,17 @@ addSourceRule("forbid-focused-or-skipped-tests", "Do not commit focused or skipp
 });
 
 // A test may not replace a module of this repository: it would assert on wiring the author just wrote. Fake the real boundary (network, time, storage, a provider SDK, browser APIs) and run our own code.
-const repoModuleSpecifier = "^['\"](?:\\.{1,2}(?:/|['\"])|@/|@chalk/|@q9labsai/)";
+// Match the call by its last name, not by the object it hangs on: `vi`, an aliased `vi`, `vitest.vi`, node:test's `mock` or `t.mock`, and `jest` all reach it. The specifier test keeps this to relative and repository-scoped paths.
+const repoModuleSpecifier = "^['\"`](?:\\.{1,2}(?:/|['\"`])|@/|@chalk/|@q9labsai/)";
+const mockCallees = ["$OBJ.mock", "$OBJ.doMock", "$OBJ.setMock", "$OBJ.unstable_mockModule", "$OBJ.module", "mock", "doMock", "setMock"];
+// The import form comes first: ast-grep checks constraints against the first alternative that matches, and `$SPEC` alone would also bind `import("./own")` as a whole.
+const mockSpecifiers = ["import($SPEC)", "$SPEC"];
 addSourceRule(
   "forbid-own-module-mocks",
   "Do not mock a module of this repository. Run the real module and fake only the real boundary (network, time, storage, provider SDK, browser APIs); see CODING_STANDARDS.md.",
-  anyPattern(...["vi.mock", "vi.doMock", "vi.setMock", "jest.mock", "jest.doMock", "jest.setMock", "mock.module", "t.mock.module"].flatMap((callee) => [`${callee}($SPEC)`, `${callee}($SPEC, $$$REST)`])),
+  anyPattern(...mockSpecifiers.flatMap((specifier) => mockCallees.flatMap((callee) => [`${callee}(${specifier})`, `${callee}(${specifier}, $$$REST)`]))),
   {
-    files: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**"],
-    constraints: { SPEC: { kind: "string", regex: repoModuleSpecifier } },
+    constraints: { SPEC: { any: [{ kind: "string" }, { kind: "template_string" }], regex: repoModuleSpecifier } },
   },
 );
 
@@ -191,7 +198,43 @@ for (const [suffix, language] of [["yaml", "Yaml"], ...sourceLanguages]) {
   });
 }
 
+// ast-grep honors `// ast-grep-ignore` on or above a line, and a trailing one hides the comment itself too, so a rule cannot
+// guard against it. Check the comments as text instead: a suppression must name its rule, and may not name the own-module mock ban.
+// A block comment can carry the rule list over several lines, and a string such as "https://x" must not pass for a comment,
+// so the comments are the ones the TypeScript parser finds, read whole.
+const sourceFile = /\.[cm]?[jt]sx?$/u;
+function commentRanges(file, text) {
+  const jsx = /x$/u.test(file);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, jsx ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const found = new Map();
+  const visit = (node) => {
+    for (const range of [...(ts.getLeadingCommentRanges(text, node.pos) ?? []), ...(ts.getTrailingCommentRanges(text, node.end) ?? [])]) found.set(range.pos, range);
+    node.getChildren(source).forEach(visit);
+  };
+  visit(source);
+  return [...found.values()];
+}
+const forbiddenSuppression = /ast-grep-ignore(?!\s*:)|ast-grep-ignore\s*:[\s\S]*forbid-own-module-mocks/u;
+function forbiddenSuppressions(paths) {
+  const listed = spawnSync("git", ["grep", "--no-index", "--exclude-standard", "-l", "-E", "ast-grep-ignore", "--", ...(paths.length > 0 ? paths : ["."]), ":!scripts/gates/ast-grep*"], { encoding: "utf8", maxBuffer: 1 << 26 });
+  if (listed.status !== 0 && listed.status !== 1) throw new Error(`git grep failed: ${listed.stderr}`);
+  return listed.stdout
+    .split("\n")
+    .filter((file) => sourceFile.test(file))
+    .flatMap((file) => {
+      const text = readFileSync(file, "utf8");
+      return commentRanges(file, text)
+        .map((range) => ({ range, body: text.slice(range.pos, range.end) }))
+        .filter(({ body }) => forbiddenSuppression.test(body))
+        .map(({ range, body }) => `${file}:${text.slice(0, range.pos).split("\n").length}: ${body.split("\n", 1)[0]}`);
+    });
+}
+
+const args = process.argv.slice(2);
+const suppressions = forbiddenSuppressions(args.filter((arg) => !arg.startsWith("-")));
+for (const line of suppressions) console.error(`${line}\n  Name the rule you suppress (ast-grep-ignore: <rule> -- reason); a blanket ignore, or one naming forbid-own-module-mocks, would hide a mock of a module of this repository.`);
+
 const binary = process.env.AST_GREP_BIN ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../node_modules/.bin/ast-grep");
-const result = spawnSync(binary, ["scan", "--inline-rules", rules.map((rule) => JSON.stringify(rule)).join("\n---\n"), ...process.argv.slice(2)], { stdio: "inherit" });
+const result = spawnSync(binary, ["scan", "--inline-rules", rules.map((rule) => JSON.stringify(rule)).join("\n---\n"), ...args], { stdio: "inherit" });
 if (result.error) console.error(`Could not run ast-grep: ${result.error.message}`);
-process.exitCode = result.status ?? 1;
+process.exitCode = suppressions.length > 0 ? 1 : (result.status ?? 1);

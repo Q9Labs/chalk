@@ -20,13 +20,12 @@ region=sgp1
 tag=chalk-sfu-bench
 generator_size=${CAPACITY_GENERATOR_SIZE:-s-4vcpu-8gb}
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-sfu_root="$(cd "${here}/../.." && pwd)"
-export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
-export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
+# shellcheck source=../../../../../infrastructure/sfu/lib.sh
+source "${here}/../../../../../infrastructure/sfu/lib.sh"
 bench_dir="${CHALK_SFU_PRIVATE_DIR}/bench"
 state="${CAPACITY_STATE:-${CHALK_SFU_PRIVATE_DIR}/capacity}"
 out="${CAPACITY_OUT:-${state}/runs}"
-ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${state}/known_hosts" -i "$SFU_SSH_KEY")
+sfu_ssh_options "${state}/known_hosts"
 
 die() {
   echo "capacity: $*" >&2
@@ -57,7 +56,7 @@ up() {
   for role in primary standby; do
     control+="${control:+,}$(address_of "${state}/generator-${role}.json")"
   done
-  BENCH_CONTROL_ADDRESSES="$control" BENCH_PRIMARY_BUDGET=36000 BENCH_STANDBY_BUDGET=22000 "${here}/bench" up
+  BENCH_CONTROL_ADDRESSES="$control" "${here}/bench" up
   for role in primary standby; do
     role_address="$(address_of "${state}/generator-${role}.json")"
     for _ in $(seq 40); do
@@ -96,7 +95,7 @@ run() {
   # The test runs detached on the generator and leaves a done file, so a dropped SSH link from this
   # machine does not end the run; the poll below reconnects.
   ssh "${ssh_options[@]}" "root@${generator}" "cd /opt/load/tests && rm -f /opt/load/runs/${name}.* &&
-    nohup sh -c \"env SFU_LIVE_URL=https://${node}:8443 SFU_LIVE_CA=/opt/load/certs/ca.crt SFU_LIVE_CERT=/opt/load/certs/operator.crt \
+    nohup sh -c \"env SFU_LIVE_URL=https://${node}:${control_port} SFU_LIVE_CA=/opt/load/certs/ca.crt SFU_LIVE_CERT=/opt/load/certs/operator.crt \
       SFU_LIVE_KEY=/opt/load/certs/operator.key SFU_LIVE_SAMPLES=/opt/load/runs/${name}.jsonl \
       SFU_LIVE_DIAGNOSTICS=/opt/load/runs/${name}.diag.jsonl SFU_LIVE_SAMPLE=10s ${settings[*]} \
       ./sfu-live.test -test.run '^TestLiveSmokeClasses\\\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1; echo \\\$? >/opt/load/runs/${name}.done\" >/dev/null 2>&1 </dev/null &"

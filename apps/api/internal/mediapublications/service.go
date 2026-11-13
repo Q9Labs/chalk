@@ -75,6 +75,8 @@ type CloseInput struct {
 	MID                   string
 	Source                string
 	PublicationID         string
+	// OnlyWhileEnabled makes the close a no-op when the publication was muted in place after the caller chose it.
+	OnlyWhileEnabled bool
 }
 
 type AvailabilityInput struct {
@@ -94,6 +96,19 @@ type Snapshot struct {
 	Incarnation  int64
 	Sequence     int64
 	Publications []provideroperations.Publication
+}
+
+// Listed holds the publications a listener may subscribe to: the enabled ones, and a microphone its owner muted in place,
+// which a listener keeps subscribed so that the unmute reaches it with no signalling. A quiet video would read as a stall to
+// a listener, so a muted camera is not listed.
+func (s Snapshot) Listed() []provideroperations.Publication {
+	listed := make([]provideroperations.Publication, 0, len(s.Publications))
+	for _, publication := range s.Publications {
+		if publication.PublicationID != "" && (publication.Enabled || publication.Held) {
+			listed = append(listed, publication)
+		}
+	}
+	return listed
 }
 
 type Registry interface {
@@ -134,6 +149,7 @@ func (s Service) RecordPublicationAvailability(ctx context.Context, input Availa
 				return nil
 			}
 			publication.Enabled = input.Enabled
+			publication.Held = !input.Enabled && input.Source == "microphone"
 			found = true
 			break
 		}
@@ -197,18 +213,24 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 		changed := false
 		for index := range publications {
 			publication := &publications[index]
-			if publication.PublicationID == "" || !publication.Enabled {
+			if publication.PublicationID == "" {
 				continue
 			}
 			reference, err := ParseReference(publication.PublicationID)
-			if err != nil {
+			if err != nil && publication.Enabled {
 				return Snapshot{}, err
 			}
 			participant, active := current[publication.ParticipantID]
-			if active && (!reference.HasParticipantGeneration || reference.ParticipantGeneration == participant.Generation) &&
-				(participant.ConnectionID == "" || reference.ConnectionID == participant.ConnectionID) {
+			owned := err == nil && active && (!reference.HasParticipantGeneration || reference.ParticipantGeneration == participant.Generation) &&
+				(participant.ConnectionID == "" || reference.ConnectionID == participant.ConnectionID)
+			if owned {
 				continue
 			}
+			if !publication.Enabled && !publication.Held {
+				continue
+			}
+			// A retired publication is no longer held; a held one stays listed only while its owner is still there.
+			publication.Held = false
 			publication.Enabled = false
 			changed = true
 		}
@@ -359,6 +381,7 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 				reference, err := ParseReference(publication.PublicationID)
 				if err != nil || reference.ConnectionID != input.ConnectionID || (reference.HasParticipantGeneration && reference.ParticipantGeneration != input.ParticipantGeneration) {
 					publication.Enabled = false
+					publication.Held = false
 				}
 			}
 			publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
@@ -399,6 +422,9 @@ func publicationCloseState(latest *provideroperations.Observation, input CloseIn
 		if publication.PublicationID != input.PublicationID {
 			return closeStateStale
 		}
+		if input.OnlyWhileEnabled && !publication.Enabled {
+			return closeStateSatisfied
+		}
 		return closeStateRequired
 	}
 	return closeStateSatisfied
@@ -416,6 +442,7 @@ func disable(latest *provideroperations.Observation, input CloseInput) (provider
 	key := publicationKey(input.ParticipantID, input.Source)
 	publication := publications[key]
 	publication.Enabled = false
+	publication.Held = false
 	publication.PublicationID = ""
 	publications[key] = publication
 	return provideroperations.ObservationInput{

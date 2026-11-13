@@ -105,6 +105,22 @@ const whiteboardCoreIsFrameworkNeutral = {
   to: { path: "^packages/whiteboard/src/react/" },
 };
 
+const clientAccessCannotReachConnection = {
+  name: "client-access-does-not-import-connection",
+  comment: "Access types and refresh logic sit below the connection lifecycle; shared shapes live in access/context.ts.",
+  severity: "error",
+  from: { path: "(?:^|/)sdks/typescript/client/src/access/" },
+  to: { path: "(?:^|/)sdks/typescript/client/src/connection/" },
+};
+
+const clientServerEntryCannotReachSpaceClient = {
+  name: "client-server-entry-does-not-import-space-client",
+  comment: "The server entry stays free of the browser SpaceClient; shared types live with their owning module.",
+  severity: "error",
+  from: { path: "(?:^|/)sdks/typescript/client/src/server/" },
+  to: { path: "(?:^|/)sdks/typescript/client/src/space-client/" },
+};
+
 const smallAppsHaveNoCycles = {
   name: "dispatcher-renderer-mobile-no-cycles",
   comment: "These apps are acyclic today; a new import cycle (type-only imports included) means a shared piece belongs in a lower module.",
@@ -126,6 +142,8 @@ module.exports = {
     sdkSourceCannotReachOtherSdkSource,
     appSourceCannotReachWorkspaceSource,
     workspaceSourceCannotReachAppSource,
+    clientAccessCannotReachConnection,
+    clientServerEntryCannotReachSpaceClient,
     smallAppsHaveNoCycles,
   ],
   options: {

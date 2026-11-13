@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ProfileDTO } from "../../lib/dashboard/contracts";
 import { DashboardRequestError, failureKind, loadSession, needsSignIn } from "../../lib/dashboard/client";
+import { backoffMs } from "../../lib/backoff";
 
 function useSignInRedirect(): () => void {
   const router = useRouter();
@@ -91,7 +92,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string, polling?: { inte
           }
           failures = Math.min(failures + 1, 10);
           const interval = ready.current === undefined ? 5000 : (latest.current.polling?.interval(ready.current) ?? 5000);
-          const delay = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(interval * 2 ** failures, 30000);
+          const delay = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : backoffMs(failures + 1, interval, 30000);
           retryAt = Date.now() + delay;
           // A failed background read keeps ready data on screen. Any other failure replaces it, so a later update can't
           // bring the old data back over the error.

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
-import { createChalkEffectClient, TenantIdSchema, type Recording } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER, TenantIdSchema, type Recording } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
 import { SITE_ORIGIN } from "../src/lib/site-origin";
 import type { DashboardEnvironment } from "./config";
@@ -16,7 +16,7 @@ function client(env: DashboardEnvironment) {
       baseUrl: env.CHALK_API_ORIGIN,
       auth: { type: "bearer", token: env.DASHBOARD_SERVICE_TOKEN },
       // The dashboard ships the current browser SDK, which runs both media providers.
-      headers: { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu" },
+      headers: { [MEDIA_PROVIDERS_HEADER]: MEDIA_PROVIDERS },
       fetch: async (input, init) => {
         const traceId = crypto.randomUUID().replaceAll("-", "");
         const headers = new Headers(init?.headers);
