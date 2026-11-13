@@ -148,46 +148,52 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			next.ServeHTTP(recorder, r)
 			duration := time.Since(startedAt)
 
-			route := ""
-			if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
-				route = routeContext.RoutePattern()
-			}
-			if route == "" {
-				route = "unmatched"
-			}
-
+			route := matchedRoute(r)
 			tagRequestSpans(r.Context(), route)
 
-			if !shouldLogRequest(config, recorder.status, duration) {
-				return
-			}
-
-			attrs := []any{
-				"event", "http.request",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"route", route,
-				"status", recorder.status,
-				"bytes", recorder.bytes,
-				"duration_ms", milliseconds(duration),
-				"outcome", requestOutcome(recorder.status),
-			}
-			if tenantID := requestTenantID(r.Context()); tenantID != "" {
-				attrs = append(attrs, "tenant_id", tenantID)
-			}
-			if recorder.errorCode != "" {
-				attrs = append(attrs, "error_code", recorder.errorCode)
-			}
-			attrs = append(attrs, recorder.upstream...)
-			switch {
-			case recorder.status >= http.StatusInternalServerError:
-				logger.ErrorContext(r.Context(), "http request", attrs...)
-			case recorder.status >= http.StatusBadRequest:
-				logger.WarnContext(r.Context(), "http request", attrs...)
-			default:
-				logger.InfoContext(r.Context(), "http request", attrs...)
+			if shouldLogRequest(config, recorder.status, duration) {
+				logRequest(logger, r, recorder, route, duration)
 			}
 		})
+	}
+}
+
+// matchedRoute is the chi route pattern the request matched, or "unmatched".
+func matchedRoute(r *http.Request) string {
+	if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
+		if route := routeContext.RoutePattern(); route != "" {
+			return route
+		}
+	}
+	return "unmatched"
+}
+
+// logRequest writes the one structured line per request, at a level that follows the status.
+func logRequest(logger *slog.Logger, r *http.Request, recorder *responseRecorder, route string, duration time.Duration) {
+	attrs := []any{
+		"event", "http.request",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"route", route,
+		"status", recorder.status,
+		"bytes", recorder.bytes,
+		"duration_ms", milliseconds(duration),
+		"outcome", requestOutcome(recorder.status),
+	}
+	if tenantID := requestTenantID(r.Context()); tenantID != "" {
+		attrs = append(attrs, "tenant_id", tenantID)
+	}
+	if recorder.errorCode != "" {
+		attrs = append(attrs, "error_code", recorder.errorCode)
+	}
+	attrs = append(attrs, recorder.upstream...)
+	switch {
+	case recorder.status >= http.StatusInternalServerError:
+		logger.ErrorContext(r.Context(), "http request", attrs...)
+	case recorder.status >= http.StatusBadRequest:
+		logger.WarnContext(r.Context(), "http request", attrs...)
+	default:
+		logger.InfoContext(r.Context(), "http request", attrs...)
 	}
 }
 

@@ -110,33 +110,39 @@ func runLoop(ctx context.Context, interval time.Duration, reconciler reconcileRu
 			return nil
 		case <-timer.C:
 			result, err := reconciler.Reconcile(ctx)
-			if diagnostic := result.BootstrapDiagnostic; diagnostic != nil {
-				logger.WarnContext(ctx, "recorder node bootstrap diagnostic",
-					"provider_node_id", result.ProviderNodeID,
-					"bootstrap_step", diagnostic.Step,
-					"bootstrap_attempt_count", diagnostic.AttemptCount,
-					"bootstrap_reason_code", diagnostic.LastReasonCode,
-					"bootstrap_http_status", diagnostic.LastHTTPStatus,
-				)
-			}
-			if errors.Is(err, recorderfleet.ErrInventoryNotReady) || errors.Is(err, recorderfleet.ErrBootstrapPending) {
-				logger.InfoContext(ctx, "recorder fleet bootstrap pending", "error", err)
-			} else if err != nil {
-				logger.Error("recorder fleet reconciliation failed", "error", err)
-			} else {
-				logger.Info("recorder fleet reconciled",
-					"action", result.Action,
-					"provider_node_id", result.ProviderNodeID,
-					"admission_open", result.Projection.AdmissionOpen,
-					"ready_capacity", result.Projection.ReadyCapacity,
-					"reason", result.Projection.Reason,
-					"quarantined_nodes", len(result.Quarantined),
-				)
-			}
+			logReconcile(ctx, logger, result, err)
 			if ctx.Err() != nil {
 				return nil
 			}
 			timer.Reset(cadence.nextDelay(interval, result.Action, err))
 		}
+	}
+}
+
+// logReconcile reports one reconciliation: a bootstrap diagnostic when the node
+// has one, then pending, failed or done.
+func logReconcile(ctx context.Context, logger *slog.Logger, result recorderfleet.Result, err error) {
+	if diagnostic := result.BootstrapDiagnostic; diagnostic != nil {
+		logger.WarnContext(ctx, "recorder node bootstrap diagnostic",
+			"provider_node_id", result.ProviderNodeID,
+			"bootstrap_step", diagnostic.Step,
+			"bootstrap_attempt_count", diagnostic.AttemptCount,
+			"bootstrap_reason_code", diagnostic.LastReasonCode,
+			"bootstrap_http_status", diagnostic.LastHTTPStatus,
+		)
+	}
+	if errors.Is(err, recorderfleet.ErrInventoryNotReady) || errors.Is(err, recorderfleet.ErrBootstrapPending) {
+		logger.InfoContext(ctx, "recorder fleet bootstrap pending", "error", err)
+	} else if err != nil {
+		logger.Error("recorder fleet reconciliation failed", "error", err)
+	} else {
+		logger.Info("recorder fleet reconciled",
+			"action", result.Action,
+			"provider_node_id", result.ProviderNodeID,
+			"admission_open", result.Projection.AdmissionOpen,
+			"ready_capacity", result.Projection.ReadyCapacity,
+			"reason", result.Projection.Reason,
+			"quarantined_nodes", len(result.Quarantined),
+		)
 	}
 }

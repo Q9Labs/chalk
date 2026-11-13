@@ -41,10 +41,7 @@ func Start(ctx context.Context, config Config) (Runtime, error) {
 	propagator := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
 	endpoint := strings.TrimSpace(config.OTLPEndpoint)
 	if endpoint == "" {
-		otel.SetTracerProvider(tracenoop.NewTracerProvider())
-		otel.SetMeterProvider(metricnoop.NewMeterProvider())
-		logglobal.SetLoggerProvider(lognoop.NewLoggerProvider())
-		otel.SetTextMapPropagator(propagator)
+		useNoopProviders(propagator)
 		return Runtime{}, nil
 	}
 
@@ -87,21 +84,7 @@ func Start(ctx context.Context, config Config) (Runtime, error) {
 	otel.SetTextMapPropagator(propagator)
 	runtimeMetricsOnce.Do(func() { runtime.Start(runtime.WithMeterProvider(meterProvider)) })
 
-	return Runtime{shutdown: func(shutdownCtx context.Context) error {
-		traceErr := traceProvider.Shutdown(shutdownCtx)
-		metricErr := meterProvider.Shutdown(shutdownCtx)
-		logErr := logProvider.Shutdown(shutdownCtx)
-		if traceErr != nil {
-			return fmt.Errorf("shutdown trace provider: %w", traceErr)
-		}
-		if metricErr != nil {
-			return fmt.Errorf("shutdown metric provider: %w", metricErr)
-		}
-		if logErr != nil {
-			return fmt.Errorf("shutdown log provider: %w", logErr)
-		}
-		return nil
-	}}, nil
+	return Runtime{shutdown: shutdownProviders(traceProvider, meterProvider, logProvider)}, nil
 }
 
 func otlpLogHTTPOptions(endpoint string, insecure bool) []otlploghttp.Option {
@@ -156,4 +139,31 @@ func TelemetryShutdownContext() (context.Context, context.CancelFunc) {
 
 func journeyAttribute(journeyID string) attribute.KeyValue {
 	return attribute.String("chalk.journey.id", journeyID)
+}
+
+// useNoopProviders installs providers that drop everything, for a run with no OTLP endpoint.
+func useNoopProviders(propagator propagation.TextMapPropagator) {
+	otel.SetTracerProvider(tracenoop.NewTracerProvider())
+	otel.SetMeterProvider(metricnoop.NewMeterProvider())
+	logglobal.SetLoggerProvider(lognoop.NewLoggerProvider())
+	otel.SetTextMapPropagator(propagator)
+}
+
+// shutdownProviders flushes all three providers and reports the first failure in trace, metric, log order.
+func shutdownProviders(traceProvider *trace.TracerProvider, meterProvider *sdkmetric.MeterProvider, logProvider *sdklog.LoggerProvider) func(context.Context) error {
+	return func(ctx context.Context) error {
+		traceErr := traceProvider.Shutdown(ctx)
+		metricErr := meterProvider.Shutdown(ctx)
+		logErr := logProvider.Shutdown(ctx)
+		if traceErr != nil {
+			return fmt.Errorf("shutdown trace provider: %w", traceErr)
+		}
+		if metricErr != nil {
+			return fmt.Errorf("shutdown metric provider: %w", metricErr)
+		}
+		if logErr != nil {
+			return fmt.Errorf("shutdown log provider: %w", logErr)
+		}
+		return nil
+	}
 }
