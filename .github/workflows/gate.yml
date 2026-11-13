@@ -76,6 +76,7 @@ jobs:
           status=0
           advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
           # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
           [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
@@ -178,6 +179,7 @@ jobs:
           status=0
           advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
           # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
           [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
@@ -430,6 +432,7 @@ jobs:
           status=0
           advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
           # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
           [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
@@ -522,6 +525,7 @@ jobs:
           status=0
           advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
           # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
           [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
