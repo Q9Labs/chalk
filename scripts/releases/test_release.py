@@ -667,7 +667,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
     def test_warn_only_nightly_saves_history_and_never_touches_the_issue(self):
         with tempfile.TemporaryDirectory() as directory:
             result, remote, calls = self.run_nightly(Path(directory), warn_only=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            # Warn-only still turns the calling job red while a gated metric is over its budget (nightly.sh, #1201).
+            self.assertEqual(result.returncode, 1, result.stderr)
             saved = subprocess.check_output(['git', '--git-dir', str(remote), 'show',
                                              'scorecard-history:history.jsonl'], text=True)
             self.assertEqual(json.loads(saved)['run']['commit'], SHA)
@@ -685,6 +686,72 @@ class OwnSfuPromotionTests(unittest.TestCase):
             result, _, _ = self.run_nightly(Path(directory), warn_only=False, reject_push=True)
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertIn('Could not push the scorecard history.', result.stderr)
+
+
+class PlanTests(unittest.TestCase):
+    """`plan` cuts the revision the run started on, whatever master has become since."""
+    OLD, REVISION, NEWER = 'a' * 40, 'c' * 40, 'd' * 40
+
+    def plan(self, *, manual, github):
+        with tempfile.TemporaryDirectory() as directory:
+            output, summary = Path(directory, 'output'), Path(directory, 'summary')
+            environment = {'GITHUB_SHA': self.REVISION, 'GITHUB_OUTPUT': str(output), 'GITHUB_STEP_SUMMARY': str(summary)}
+            with patch.dict(os.environ, environment), \
+                    patch.object(release, 'previous_production', return_value=dict(recorder_control=False)), \
+                    patch.object(release, 'manifest_bytes', side_effect=ValueError('no baseline')):
+                release.plan(github, SimpleNamespace(manual=manual))
+            written = dict(line.split('=', 1) for line in output.read_text().splitlines())
+            return written, summary.read_text() if summary.exists() else ''
+
+    def github(self, *, records=(), newest_green=None, on_master=True):
+        github = Mock()
+        github.is_on_master.return_value = on_master
+        github.newest_green_push_gate.return_value = newest_green
+        github.has_green_gate.return_value = True
+        github.cuts_on.return_value = []
+        github.deployments.side_effect = lambda environment, task='nightly-cut': list(records) if task == 'nightly-cut' else []
+        github.is_ancestor.side_effect = lambda sha, descendant: (sha, descendant) in {(self.OLD, self.REVISION), (self.OLD, self.NEWER), (self.REVISION, self.NEWER)}
+        return github
+
+    def test_a_manual_cut_ships_the_dispatched_revision_after_master_moved(self):
+        github = self.github()
+        written, _ = self.plan(manual=True, github=github)
+        self.assertEqual((written['should_cut'], written['target_sha']), ('true', self.REVISION))
+        github.reserve_cut.assert_called_once_with(self.REVISION)
+        github.dispatch_nightly.assert_not_called()
+        self.assertNotIn('git/ref/heads/master', [call.args[0] for call in github.request.call_args_list])
+
+    def test_the_schedule_ships_the_newest_green_commit_at_or_before_the_revision(self):
+        github = self.github(newest_green=self.OLD)
+        written, _ = self.plan(manual=False, github=github)
+        github.newest_green_push_gate.assert_called_once_with(self.REVISION)
+        self.assertEqual((written['should_cut'], written['target_sha']), ('true', self.OLD))
+
+    def test_a_revision_older_than_the_newest_record_defers_without_a_requeue(self):
+        newer = dict(id=1, sha=self.NEWER, created_at='2026-11-12T10:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', target_sha=self.NEWER))
+        github = self.github(records=[newer])
+        written, summary = self.plan(manual=True, github=github)
+        self.assertEqual(written['should_cut'], 'false')
+        self.assertIn(f'nightly already has the newer commit {self.NEWER}', summary)
+        github.dispatch_nightly.assert_not_called()
+        github.reserve_cut.assert_not_called()
+
+    def test_a_revision_that_left_master_requeues_once_and_says_so(self):
+        github = self.github(on_master=False)
+        written, summary = self.plan(manual=True, github=github)
+        self.assertEqual(written['should_cut'], 'false')
+        github.dispatch_nightly.assert_called_once_with()
+        self.assertIn('requeued on master as a new run', summary)
+
+    def test_the_green_commit_search_skips_commits_newer_than_the_revision(self):
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        runs = [dict(head_sha=self.NEWER), dict(head_sha=self.OLD)]
+        github.request = Mock(return_value=dict(workflow_runs=runs))
+        github.is_ancestor = Mock(side_effect=lambda sha, descendant: sha == self.OLD)
+        github.is_on_master = Mock(return_value=True)
+        github.has_green_gate = Mock(return_value=True)
+        self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
 
 
 class TranscribeOncePerDayTests(unittest.TestCase):
