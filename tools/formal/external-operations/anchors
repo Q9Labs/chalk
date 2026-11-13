@@ -18,12 +18,12 @@ RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_pla
 Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	@lease_seconds 60
 Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	source is not null and not exists (
 Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	operation_name in ('remove_participant') and not exists (
-Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	operation_name in ('end_episode', 'tenant_end_episode', 'maximum_duration_expired') and not exists (
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	operation_name in (#{stored_names_list(OperationTable.episode_end_names())}) and not exists (
 Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	and reservation.status in ('pending', 'ambiguous') and reservation.expires_at > now()
 Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	attempt_count = least(operation.attempt_count + 1, 100),
-NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when ExternalOperation.is_local_name(name),
-NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	:remove_participant, :role_transition_source_stop ]
-NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when name in @end_episode_operations do
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_local_name(name),
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_media_name(name) do
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_episode_end_name(name) do
 NodeHears	apps/sync/lib/chalk_sync/external_operation_consumer.ex	@max_attempts 100
 NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	if operation.attempt_count >= @max_attempts, do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize), else: :pending
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	external.status != :pending -> ExternalOperationDecision.build(external, :duplicate)
