@@ -26,9 +26,7 @@ const (
 
 var (
 	ErrInvalidCaptureAttempt = errors.New("invalid recorder capture attempt")
-	ErrCaptureEventQueueFull = errors.New("recorder capture event queue is full")
 	ErrCapturePeerTerminal   = errors.New("recorder capture peer reached a terminal state")
-	ErrCaptureStorage        = errors.New("recorder capture storage is unavailable")
 )
 
 // PionCaptureAttemptFactory creates a single peer and coordinator for each
