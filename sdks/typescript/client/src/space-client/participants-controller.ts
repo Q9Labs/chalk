@@ -1,16 +1,15 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
 import type { OfflineActionsHold } from "./offline-actions";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ChalkParticipantMediaState } from "../collaboration/types";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { SpaceStore } from "./store";
 import type { V1ControlState, V1Participant, V1Presence, V1Projection } from "../sync/v1-types";
 import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
-export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
+const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
 type SeatDevice = Pick<Participant, "identityId" | "deviceType"> & { readonly admissionRevision: number };
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ParticipantsControllerEffects = {
   readonly assignRole: (participantId: string, roleName: string) => ClientEffect<void>;
   readonly mute: (participantId: string) => ClientEffect<void>;
@@ -31,14 +30,12 @@ export type ParticipantsControllerEffects = {
   readonly renameSelf: (displayName: string) => ClientEffect<void>;
   readonly dispose: () => void;
 };
-export class ParticipantsControllerService extends Context.Service<ParticipantsControllerService, ParticipantsControllerEffects>()("@chalk/client/ParticipantsController") {}
 /** Scoped owner of participant subscriptions and native port commands. */
 export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.acquireRelease(
     Effect.sync(() => new ParticipantsControllerRuntime(connection, store, offline)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
-export const makeParticipantsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(ParticipantsControllerService, makeParticipantsController(connection, store));
 class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
@@ -218,9 +215,6 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     if (!sameParticipants(current.participants, participants)) this.#store.updateParticipants(participants);
     if (!sameSelf(current.self, self)) this.#store.updateSelf(self);
   }
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function assertIdentifier(value: string, label: string): void {
   if (typeof value !== "string" || value.trim().length === 0) throw invalid(`A non-empty ${label} is required`);
