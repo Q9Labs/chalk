@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { CookieTable, LegalEntries, LegalSections } from "./legal-parts";
 import { PRIVACY_ARCHIVE_TITLE, PRIVACY_PREVIOUS_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
 
 // Policy body archived verbatim from master at 2de92e3c178cf3c86f92b1c33146f66495816c8a.
@@ -39,6 +39,8 @@ const PRIVACY_SECTIONS = [
     content: "Q9 Labs — privacy@chalkmeet.com",
   },
 ];
+
+const ARCHIVED_COOKIES = [{ cookie: <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>, purpose: "Keeps your public Space arrival available in this browser (HttpOnly, Secure)", lifetime: "Until you leave or close your browser" }];
 
 const ARCHIVED_DATA_TYPES = [
   {
@@ -105,32 +107,11 @@ export function PreviousPrivacyPolicy() {
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
-      {ARCHIVED_DATA_TYPES.map(({ label, text }) => (
-        <p key={label}>
-          <strong>{label}</strong> {text}
-        </p>
-      ))}
+      <LegalEntries entries={ARCHIVED_DATA_TYPES} />
 
       <h2>Cookies</h2>
       <p>Chalk uses only functional cookies. We do not use advertising or cross-site tracking cookies.</p>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Cookie</th>
-            <th scope="col">Purpose</th>
-            <th scope="col">Lifetime</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
-            </td>
-            <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
-            <td>Until you leave or close your browser</td>
-          </tr>
-        </tbody>
-      </table>
+      <CookieTable rows={ARCHIVED_COOKIES} />
 
       <h2>Who processes your data</h2>
       <p>We use a small set of infrastructure providers, each bound by a data processing agreement:</p>
@@ -143,12 +124,7 @@ export function PreviousPrivacyPolicy() {
       </ul>
       <p>We do not sell personal data, and we do not share it with anyone else except when the law requires it.</p>
 
-      {PRIVACY_SECTIONS.map(({ heading, content }) => (
-        <Fragment key={heading}>
-          <h2>{heading}</h2>
-          <p>{content}</p>
-        </Fragment>
-      ))}
+      <LegalSections sections={PRIVACY_SECTIONS} />
     </>
   );
 }
