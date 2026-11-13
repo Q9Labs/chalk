@@ -10,7 +10,6 @@ import (
 
 var (
 	ErrInvalidControllerIdentity = spiffe.ErrInvalidIdentity
-	ErrUnverifiedControllerPeer  = spiffe.ErrUnverifiedPeer
 )
 
 type ControllerIdentity struct {

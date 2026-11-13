@@ -7,6 +7,5 @@ type ProviderRateLimitError struct {
 	RetryAt time.Time
 }
 
-func (err *ProviderRateLimitError) Error() string            { return "recorder fleet provider rate limited" }
-func (err *ProviderRateLimitError) Unwrap() error            { return ErrProviderUnavailable }
-func (err *ProviderRateLimitError) RetryDeadline() time.Time { return err.RetryAt }
+func (err *ProviderRateLimitError) Error() string { return "recorder fleet provider rate limited" }
+func (err *ProviderRateLimitError) Unwrap() error { return ErrProviderUnavailable }
