@@ -1,5 +1,5 @@
 import { otherDeviceHasMicrophone } from "./same-identity";
-import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
+import { Clock, Deferred, Effect, Exit, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
@@ -12,7 +12,8 @@ import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
-import { normalizeMediaError, SpaceClientError } from "./errors";
+import { makeScopedFork, type ScopedFork } from "./scoped-fork";
+import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
@@ -23,8 +24,6 @@ const MEDIA_READY_TIMEOUT_MS = 10000;
 const IDLE_RELEASE_MS = 30_000;
 const OFF_RETRY_INITIAL_MS = 1000;
 const OFF_RETRY_MAX_MS = 30000;
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
-type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
 type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly controlRevision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
 type SourceResult = { readonly revision: number; readonly status: "confirmed" } | { readonly revision: number; readonly status: "failed"; readonly cause: unknown; cleanup: boolean };
 type OffDebt = "none" | "owed" | "sent";
@@ -128,17 +127,12 @@ export type MediaControllerEffects = {
   readonly declineRequest: (requestId: string) => ClientEffect<void>;
   readonly dispose: () => void;
 };
-export class MediaControllerService extends Context.Service<MediaControllerService, MediaControllerEffects>()("@chalk/client/MediaController") {}
 /** Scoped media controller: all source work is serialized with Effect semaphores. */
 export const makeMediaController = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection): Effect.Effect<MediaControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
     const [microphone, camera, screen] = yield* Effect.all([Semaphore.make(1), Semaphore.make(1), Semaphore.make(1)]);
     const clock = yield* Clock.Clock;
-    const scope = yield* Effect.scope;
-    const context = yield* Effect.context<Clock.Clock>();
-    const fork: Fork = (effect) => {
-      void Effect.runForkWith(context)(Effect.forkIn(effect, scope).pipe(Effect.asVoid) as Effect.Effect<void, never, Clock.Clock>);
-    };
+    const fork = yield* makeScopedFork<Clock.Clock>();
     const controller = new MediaControllerRuntime(
       connection,
       store,
@@ -160,14 +154,13 @@ export const makeMediaController = (connection: ConnectionLifecycleCapability, s
     controller.refreshDevicesInBackground();
     return controller;
   });
-export const makeMediaControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection) => Layer.effect(MediaControllerService, makeMediaController(connection, store, selection));
 class MediaControllerRuntime implements MediaControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #selection: MediaDeviceSelection;
   readonly #store: SpaceStore;
   readonly #gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>;
   readonly #now: () => number;
-  readonly #fork: Fork;
+  readonly #fork: ScopedFork<Clock.Clock>;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #idleReleases = new Map<"microphone" | "camera", unknown>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
@@ -198,7 +191,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #projection: MediaProjectionMonitor;
   #microphoneMutedByOtherDevice = false;
   #ownMicrophoneOff = false;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: ScopedFork<Clock.Clock>) {
     this.#connection = connection;
     this.#store = store;
     this.#selection = selection;
@@ -1733,9 +1726,6 @@ function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boole
 function refusedBySync(cause: unknown): boolean {
   return cause instanceof V1SyncError && cause.code === "terminal_failure";
 }
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
-}
 function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>, devices: Pick<ConnectionMediaDevices, "releaseTrack">): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
   const selected = new Map<"microphone" | "camera", MediaStreamTrack>();
@@ -1812,21 +1802,4 @@ function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | 
 }
 function isPermissionDenied(cause: unknown): boolean {
   return describeMediaCaptureError(cause).code === "permission_denied";
-}
-function isAccessInvalid(cause: unknown): boolean {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "code" in cause &&
-    ((
-      cause as {
-        readonly code?: unknown;
-      }
-    ).code === "access.invalid" ||
-      (
-        cause as {
-          readonly code?: unknown;
-        }
-      ).code === "invalid_access")
-  );
 }

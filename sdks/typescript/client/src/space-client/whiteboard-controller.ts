@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionWhiteboardFactoryInput } from "../connection/dependencies";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
@@ -8,7 +8,6 @@ import type { WhiteboardSlice } from "./types";
 const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, drawPolicy: null, drawPermissions: Object.freeze([]), presenting: false, error: null });
 
 export type WhiteboardControllerEffects = { readonly transport: () => ChalkWhiteboardV1Transport | null; readonly dispose: () => void };
-export class WhiteboardControllerService extends Context.Service<WhiteboardControllerService, WhiteboardControllerEffects>()("@chalk/client/WhiteboardController") {}
 
 /** The whiteboard transport is a foreign port; lifecycle and cleanup stay scoped. */
 export const makeWhiteboardController = (connection: ConnectionLifecycleCapability, store: SpaceStore, create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null): Effect.Effect<WhiteboardControllerEffects, never, import("effect").Scope.Scope> =>
@@ -28,7 +27,6 @@ export const makeWhiteboardController = (connection: ConnectionLifecycleCapabili
     return controller;
   });
 
-export const makeWhiteboardControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null) => Layer.effect(WhiteboardControllerService, makeWhiteboardController(connection, store, create));
 
 class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   readonly #store: SpaceStore;
