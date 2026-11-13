@@ -81,7 +81,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
         fetch: platform.fetch,
       });
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, selection, store, controllers)),
+        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers)),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
@@ -98,7 +98,7 @@ export class SpaceClientCore {
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, _selection: MediaDeviceSelection, store: SpaceStore, controllers: ControllerEffects) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects) {
     this.#connection = connection;
     this.#store = store;
     this.controllers = controllers;
