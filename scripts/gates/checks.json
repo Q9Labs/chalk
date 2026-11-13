@@ -616,6 +616,16 @@
       "sample": "0 of 11 pull request runs and 0 of 14 scheduled runs failed."
     },
     {
+      "id": "workflow:auto-promote.yml#promote",
+      "owner": "Release",
+      "catches": "A healthy nightly that is ready for production but not promoted, and a promoted release that was rolled back.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New and off by default (CHALK_AUTO_PROMOTE); no history yet."
+    },
+    {
       "id": "workflow:cache-warm.yml#go",
       "owner": "Gate",
       "catches": "Queue groups downloading the go toolchain from a flaky host because master saved no cache.",

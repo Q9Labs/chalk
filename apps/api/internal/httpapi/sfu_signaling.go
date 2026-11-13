@@ -185,14 +185,14 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 }
 
 // expandPullPublishedAudio turns a pull-published-audio request into the remote tracks the SDK's first poll would
-// pull: every enabled microphone and screen audio publication of another Participant. Video waits for the UI's
+// pull: every listed microphone and screen audio publication of another Participant, a muted microphone included. Video waits for the UI's
 // tile reports, so it is never part of this request.
 func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointRequest, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.PublicationList, error) {
 	body := request.Body
 	if service.Provider() != mediaplane.ProviderChalkSFU || len(body.Tracks) > 0 || body.SessionDescription != nil {
 		return mediaplane.PublicationList{}, mediaplane.ErrInvalidSignalRequest
 	}
-	list, err := listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
+	list, err := listPublications(ctx, publications, request.TenantID, request.EpisodeID)
 	if err != nil {
 		return mediaplane.PublicationList{}, err
 	}
@@ -214,7 +214,7 @@ func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointReq
 	return list, nil
 }
 
-func listEnabledPublications(ctx context.Context, publications mediapublications.Registry, tenantID, episodeID utilities.ID) (mediaplane.PublicationList, error) {
+func listPublications(ctx context.Context, publications mediapublications.Registry, tenantID, episodeID utilities.ID) (mediaplane.PublicationList, error) {
 	if publications == nil {
 		return mediaplane.PublicationList{}, mediapublications.ErrUnavailable
 	}
@@ -223,10 +223,8 @@ func listEnabledPublications(ctx context.Context, publications mediapublications
 		return mediaplane.PublicationList{}, err
 	}
 	list := mediaplane.PublicationList{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]mediaplane.ListedPublication, 0, len(snapshot.Publications))}
-	for _, publication := range snapshot.Publications {
-		if publication.Enabled && publication.PublicationID != "" {
-			list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
-		}
+	for _, publication := range snapshot.Listed() {
+		list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID, Paused: !publication.Enabled})
 	}
 	return list, nil
 }
@@ -873,7 +871,7 @@ func listSFUPublications(ctx context.Context, request sfuPublicationsEndpointReq
 	if _, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID); err != nil {
 		return sfuPublicationsResponse{}, err
 	}
-	return listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
+	return listPublications(ctx, publications, request.TenantID, request.EpisodeID)
 }
 
 func listSFUSubscriptions(ctx context.Context, request sfuPublicationsEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) (sfuSubscriptionsResponse, error) {

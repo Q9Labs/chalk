@@ -53,7 +53,7 @@ The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow
 
 ## Test policy checks
 
-The `ast-grep` lane rejects a test that mocks a module of this repository. The `mock-calls` lane counts assertions on mock calls per package against `mock-call-baseline.json` and fails when a count rises; `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
+The `ast-grep` lane rejects a test that mocks a module of this repository, whatever name the mock call hangs on (`vi`, an alias of it, node:test's `mock`) and whether the path is a string, a template or `import(...)`, in any file. An `ast-grep-ignore` comment without a rule name, or one naming that rule, fails the lane, because ast-grep would honor it and hide the mock. The `mock-calls` lane counts assertions on mock calls (matchers, reads of `fn.mock.calls`, and node:test's `fn.mock.callCount()`) per package in every JavaScript and TypeScript test file and fails when a count differs from `mock-call-baseline.json`: a rise is a new assertion, and a fall means the baseline is stale. `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop and refuses to raise it. The lane also reads the baseline on the merge base with `GATE_BASE_REF` (default `origin/master`) and fails when the committed one is higher, or when that base cannot be read. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
 
 ## Heavy runs on Instabox
 

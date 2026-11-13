@@ -329,7 +329,7 @@ def summarize_override(audit):
                           + json.dumps(audit, indent=2) + '\n```\n')
 
 
-def select(github, args):
+def choose(github):
     records = github.deployments('nightly')
     held = held_candidates(records)
     require(held, 'no held nightly')
@@ -349,10 +349,31 @@ def select(github, args):
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
     if audit:
         result['scorecard_override'] = audit
+    return result
+
+
+def select(github, args):
+    result = choose(github)
     outputs({'selection': result})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write('## Exact promotion choice and rollback source\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
-    summarize_override(audit)
+    summarize_override(result.get('scorecard_override'))
+
+
+def auto_promote(github, args):
+    """Name the SHA Promote takes now, or nothing. Not ready is an answer, not a failure: the next latency verdict asks again."""
+    os.environ.pop('EXPECTED_RELEASE_SHA', None)
+    os.environ.pop('SCORECARD_OVERRIDE', None)  # Only a person accepts a failed gate.
+    try:
+        result = choose(github)
+        sha = result['selection']['target_sha']
+        require(result['previous']['target_sha'] != sha, f'production already runs {sha}')
+        reason = f'promoting {sha}'
+    except ValueError as error:
+        sha, reason = '', str(error)
+    outputs({'sha': sha})
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f'## Automatic promotion\n\n{"Promoting" if sha else "Not promoting"}: {reason}\n')
 
 
 def deployed_cut(github):
@@ -571,7 +592,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')
