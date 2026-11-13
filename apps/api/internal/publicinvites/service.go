@@ -894,9 +894,9 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	var grant PublicAccessGrant
 	switch arrival.State {
 	case ArrivalAdmitted:
-		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
+		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Role: PublicRoleOwner, Arrival: arrival, MediaClients: input.MediaClients})
 	case ArrivalPending:
-		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
+		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Role: PublicRoleOwner, Arrival: arrival, MediaClients: input.MediaClients})
 		if err == nil {
 			arrival, err = r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
 				TenantID:              arrival.TenantID,

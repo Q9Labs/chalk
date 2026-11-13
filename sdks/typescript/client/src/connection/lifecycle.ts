@@ -115,6 +115,7 @@ type Model = {
   episodeEndConfirmed: boolean;
   episodeEndReason: EpisodeControl["endReason"];
   removedByHost: boolean;
+  timedOut: boolean;
   activeScope: Scope.Closeable | null;
   syncBindingCleanup: (() => void) | null;
   mediaBindingCleanup: (() => void) | null;
@@ -220,6 +221,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         episodeEndConfirmed: false,
         episodeEndReason: undefined,
         removedByHost: false,
+        timedOut: false,
         activeScope: null,
         syncBindingCleanup: null,
         mediaBindingCleanup: null,
@@ -496,6 +498,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.episodeEndConfirmed = false;
           model.episodeEndReason = undefined;
           model.removedByHost = false;
+          model.timedOut = false;
           yield* transition("joining");
           const span = diagnostics.startSpan({ step: "join", state: model.state, epoch: model.epoch });
           const scope = yield* Scope.make("sequential");
@@ -984,12 +987,15 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.gen(function* () {
           const ended = episodeEnded(snapshot);
           const removed = snapshot.connection.terminalReason === "participant_removed";
+          // A seat the server let go while this client was still in the call: nobody pressed Leave.
+          const timedOut = snapshot.connection.terminalReason === "participant_inactive" && active(model);
           if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
             if (ended) {
               model.episodeEndConfirmed = true;
               model.episodeEndReason = snapshot.control?.endReason;
             }
             if (removed) model.removedByHost = true;
+            if (timedOut) model.timedOut = true;
             yield* finishTerminalSnapshot();
             return true;
           }
@@ -1353,6 +1359,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     episodeEnded: model.episodeEndConfirmed,
     episodeEndReason: model.episodeEndReason,
     removedByHost: model.removedByHost,
+    timedOut: model.timedOut,
   });
 }
 function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {

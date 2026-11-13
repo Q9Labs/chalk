@@ -8,10 +8,12 @@ Make the files again with the `/statechart` skill from this folder, then render 
 /statechart StartClass.tla --config StartClass.cfg --view StartClass.view.mjs --out OUT
 ```
 
-## Rules that break
+## Rules that hold
 
-- **The person who starts a call can end it for everyone.** Path: Start call, the call is created, the video connects, "In the call, no host powers". The public path joins the starter as `collaborator` (`apps/api/internal/publicinviteapp/access.go:149`). That role has no `endEpisode` (`apps/api/db/queries/spaces.sql:95-101`, only `owner` has it at lines 83-93), and the call screen shows End call for everyone only when `useCan("endEpisode")` is true (`sdks/typescript/react/src/components/chalk/Chalk.tsx:280`). So a Start call call ends only by its time limit. Traced against the code, not run.
-- **One press of Start call, retried after a failure, still means one call.** Path: Start call, the call is created but the answer never arrives, Start call again, the call is created. The web builds a new request key on every press (`apps/web/src/lib/chalk-access.ts:50,127`) and the API creates a Space for each key (`apps/api/internal/publicinvites/service.go:819`). The first Space stays empty until its lease and linger run out. Traced against the code, not run.
+`StartClass.broken.cfg` runs the old code, and TLC reports both rules broken there.
+
+- **The person who starts a call can end it for everyone.** The public path joins the starter as `owner` (`PublicRoleOwner` in `apps/api/internal/publicinvites/service.go`, `CreatePublicSpace`). Only `owner` has `endEpisode` (`apps/api/db/queries/spaces.sql`), so End call shows for the starter. Before the fix the starter joined as `collaborator` and a Start call call ended only by its time limit.
+- **One press of Start call, retried after a failure or pressed twice, still means one call.** The web keeps one request key per Start call until the call is created (`createPublicSpace` in `apps/web/src/lib/chalk-access.ts`), and the API makes one Space for one key. Before the fix every press made a new key and so a new Space. The model covers the retry after a lost answer. A double press while the first request runs sends the same key too, and `apps/web/src/lib/start-call-idempotency.test.ts` checks that.
 
 ## What the chart hides and leaves out
 

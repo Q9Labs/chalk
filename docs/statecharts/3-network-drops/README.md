@@ -8,9 +8,9 @@ Make the files again with the `/statechart` skill from this folder, then render 
 /statechart NetworkDrops.tla --config NetworkDrops.cfg --view NetworkDrops.view.mjs --out OUT
 ```
 
-## Rule that breaks
+## Rules that hold
 
-- **The "You left" screen shows only to a student who pressed Leave.** Path: the device goes to sleep, 2 minutes pass and the server gives up the seat, the device wakes up, "You left (you did not press Leave)". When a seat lease runs out, `expireEpisodePresence` queues the same `participant_leave` operation as a pressed Leave (`apps/api/internal/adapters/postgres/participant_presence.go:65-110`), and the event reason defaults to `left` (`apps/sync/lib/chalk_sync/episodes/reducer.ex:421`). On wake the client reads its own `participant_left` and turns it into `participant_inactive` (`sdks/typescript/client/src/sync/v1-client.ts:577-580`). `settleTerminalSnapshot` then goes to `left` (`sdks/typescript/client/src/connection/lifecycle.ts:967-975`), and `apps/web/src/components/space/SpaceCall.tsx:134` shows "You left <call>" (`sdks/typescript/react/src/components/chalk/StatusSurface.tsx:30`). Traced against the code, not run.
+- **The "You left" screen shows only to a student who pressed Leave.** When a seat lease runs out, the server queues the same `participant_leave` operation as a pressed Leave, so the client cannot tell the two apart from the event. It tells them apart by its own state: `settleTerminalSnapshot` (`sdks/typescript/client/src/connection/lifecycle.ts`) sets `timedOut` when the student's own `participant_left` arrives while the student is still in the call. A pressed Leave moves the client to `leaving` first, so it never sets `timedOut`. The web then shows "You were disconnected from <call>" with a Rejoin button (`timed-out` in `sdks/typescript/react/src/components/chalk/StatusSurface.tsx`). `NetworkDrops.broken.cfg` runs the old code, where the same path ended on "You left", and TLC reports `LeftOnlyWhenYouLeave` broken there.
 
 The mute rule holds in the model: a microphone the student turned off stays an owed "off" until Sync shows it off (`sdks/typescript/client/src/space-client/media-controller.ts:49-62`). The model repeats those rules, so it cannot find a bug in the rules themselves.
 
