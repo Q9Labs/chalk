@@ -118,6 +118,23 @@ function whiteboardState(board: boolean, capabilities: readonly Capability[]): S
   };
 }
 
+type SelfMedia = { camera?: boolean; microphone?: boolean; sharing?: boolean };
+
+function liveMedia(base: SpaceSnapshot["media"], options: LiveOptions, self: SelfMedia, now: number): SpaceSnapshot["media"] {
+  return {
+    ...base,
+    local: {
+      microphone: { source: "microphone", state: self.microphone ? "enabled" : "disabled", track: null },
+      camera: { source: "camera", state: self.camera ? "enabled" : "disabled", track: self.camera ? cameraTrack(SELF_NAME, "#5d6b78") : null },
+      screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
+    },
+    remote: remoteMedia(options.others ?? []),
+    ...(options.network ? { callStats: networkSamples(options.network) } : {}),
+    ...(options.link ? { link: options.link } : {}),
+    incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
+  };
+}
+
 export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const capabilities = options.capabilities ?? GUEST;
   const base = createSnapshot(capabilities);
@@ -133,18 +150,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
       roster,
       admissionQueue: admissionQueue(options.admission, now),
     },
-    media: {
-      ...base.media,
-      local: {
-        microphone: { source: "microphone", state: self.microphone ? "enabled" : "disabled", track: null },
-        camera: { source: "camera", state: self.camera ? "enabled" : "disabled", track: self.camera ? cameraTrack(SELF_NAME, "#5d6b78") : null },
-        screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
-      },
-      remote: remoteMedia(others),
-      ...(options.network ? { callStats: networkSamples(options.network) } : {}),
-      ...(options.link ? { link: options.link } : {}),
-      incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
-    },
+    media: liveMedia(base.media, options, self, now),
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },
     reactions: options.reactions ? { active: [{ eventId: "r1", participantId: "nora", displayName: "Nora Patel", reaction: "🎉", occurredAt: new Date(now).toISOString(), expiresAt: new Date(now + 60_000).toISOString() }] } : base.reactions,
     recording: { current: options.recording ? { recordingId: "rec-1", status: "recording", failureCode: null } : null },

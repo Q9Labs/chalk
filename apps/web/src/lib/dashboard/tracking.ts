@@ -153,6 +153,21 @@ function readable(read: Read, now: number): boolean {
   return read.failure?.kind !== "terminal" && now >= read.retryAt;
 }
 
+function dueForAttempt(item: Attempt, shown: Attempt | undefined, now: number): Due[] {
+  const { recording, read, listRead } = item;
+  const id = recording.id;
+  const open = openWindow(recording) && (lapsed(recording, now + item.offset) || now - read.at >= REVALIDATE_MS);
+  const listing = recording.transcripts === undefined || recording.transcripts.some(pendingTranscript);
+  const due: Due[] = [];
+  if (readable(read, now) && (workingRecording(recording) || open || read.stale || read.failure !== null)) due.push({ kind: "recording", id, at: read.at });
+  if (readable(listRead, now) && (listing || listRead.stale || listRead.failure !== null)) due.push({ kind: "transcripts", id, at: listRead.at });
+  const done = item === shown ? recording.transcripts?.find(completedTranscript) : undefined;
+  const lines = item.lines?.transcriptId === done?.id ? item.lines : null;
+  // A transcript whose lines were never read is due at once, ahead of items read before.
+  if (done && !lines?.cues && (!lines || readable(lines.read, now))) due.push({ kind: "cues", id, transcriptId: done.id, at: lines?.read.at ?? 0 });
+  return due;
+}
+
 /**
  * Every read due now. A recording is due while the server reports work on it, once a deadline has passed by the
  * server's clock and the server still reports the window open, and every `REVALIDATE_MS` while a window is open. Its
@@ -162,20 +177,7 @@ function readable(read: Read, now: number): boolean {
  */
 export function dueReads(attempts: readonly Attempt[], now: number): Due[] {
   const shown = selection(attempts).transcript;
-  return attempts.flatMap((item): Due[] => {
-    const { recording, read, listRead } = item;
-    const id = recording.id;
-    const open = openWindow(recording) && (lapsed(recording, now + item.offset) || now - read.at >= REVALIDATE_MS);
-    const listing = recording.transcripts === undefined || recording.transcripts.some(pendingTranscript);
-    const due: Due[] = [];
-    if (readable(read, now) && (workingRecording(recording) || open || read.stale || read.failure !== null)) due.push({ kind: "recording", id, at: read.at });
-    if (readable(listRead, now) && (listing || listRead.stale || listRead.failure !== null)) due.push({ kind: "transcripts", id, at: listRead.at });
-    const done = item === shown ? recording.transcripts?.find(completedTranscript) : undefined;
-    const lines = item.lines?.transcriptId === done?.id ? item.lines : null;
-    // A transcript whose lines were never read is due at once, ahead of items read before.
-    if (done && !lines?.cues && (!lines || readable(lines.read, now))) due.push({ kind: "cues", id, transcriptId: done.id, at: lines?.read.at ?? 0 });
-    return due;
-  });
+  return attempts.flatMap((item) => dueForAttempt(item, shown, now));
 }
 
 /** The read for this tick: the due item read longest ago, so every due item takes its turn. */

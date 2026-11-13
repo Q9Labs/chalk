@@ -13,6 +13,24 @@ export function leakShard(value) {
   return { index, total, journeys: LEAK_JOURNEYS.filter((_, offset) => offset % total === index - 1), selfTest: index === 1 };
 }
 
+const SELF_TEST_INJECTIONS = ["resource-lifecycle", "listener", "detached", "none"];
+const sortedJson = (values) => JSON.stringify(values.toSorted());
+
+function checkShardCoverage(report, shard, index) {
+  const repeats = report.leakRepeats;
+  if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Missing leak repeat count");
+  const expected = shard.journeys.flatMap((journey) => Array.from({ length: repeats }, (_, repeat) => `${journey}/${repeat}`));
+  if (shard.selfTest) expected.push(`panels/${repeats}`);
+  const actual = report.leaks.results.map(({ journey, repeat }) => `${journey}/${repeat}`);
+  if (sortedJson(actual) !== sortedJson(expected)) throw new Error(`Leak shard ${index} journey coverage mismatch`);
+}
+
+function checkShardSelfTest(report, shard, index) {
+  const tests = report.leaks.selfTest;
+  const injections = shard.selfTest ? SELF_TEST_INJECTIONS : [];
+  if (JSON.stringify(tests.map(({ injection }) => injection)) !== JSON.stringify(injections) || tests.some(({ detected }) => !detected)) throw new Error(`Leak shard ${index} self-test mismatch`);
+}
+
 export function checkLeakShardReports(reports, total = 3) {
   if (reports.length !== total) throw new Error(`Expected ${total} leak shard reports, got ${reports.length}`);
   const seen = new Set();
@@ -22,15 +40,8 @@ export function checkLeakShardReports(reports, total = 3) {
     const shard = leakShard(`${index}/${total}`);
     seen.add(index);
     if (report.errors?.length !== 0 || report.failures?.length !== 0 || report.leaks?.failures?.length !== 0) throw new Error(`Leak shard ${index} did not pass`);
-    const repeats = report.leakRepeats;
-    if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Missing leak repeat count");
-    const expected = shard.journeys.flatMap((journey) => Array.from({ length: repeats }, (_, repeat) => `${journey}/${repeat}`));
-    if (shard.selfTest) expected.push(`panels/${repeats}`);
-    const actual = report.leaks.results.map(({ journey, repeat }) => `${journey}/${repeat}`);
-    if (JSON.stringify(actual.toSorted()) !== JSON.stringify(expected.toSorted())) throw new Error(`Leak shard ${index} journey coverage mismatch`);
-    const tests = report.leaks.selfTest;
-    const injections = shard.selfTest ? ["resource-lifecycle", "listener", "detached", "none"] : [];
-    if (JSON.stringify(tests.map(({ injection }) => injection)) !== JSON.stringify(injections) || tests.some(({ detected }) => !detected)) throw new Error(`Leak shard ${index} self-test mismatch`);
+    checkShardCoverage(report, shard, index);
+    checkShardSelfTest(report, shard, index);
   }
 }
 
@@ -40,12 +51,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   console.log(`Leak shard coverage: all ${LEAK_JOURNEYS.length} journeys and self-tests passed`);
 }
 
+const LEAK_METRICS = ["heapMiB", "domNodes", "listeners", "documents", "videos", "audios", "liveTracks", "audioContexts", "intervals", "animationFrames", "rosterCacheKeys"];
+const nonNegative = (value) => Number.isFinite(value) && value >= 0;
+
+function validLeakBudget(limit) {
+  return Boolean(limit) && nonNegative(limit.perCycle) && nonNegative(limit.allowance) && (limit.tailPerCycle === undefined || nonNegative(limit.tailPerCycle));
+}
+
 function validateLeakRun({ journeys, budgets }) {
   if (!journeys.length || journeys.some((journey) => !LEAK_JOURNEYS.includes(journey))) throw new Error("Unknown leak journey");
   if (!Number.isInteger(budgets.cycles) || budgets.cycles < 20 || !Number.isFinite(budgets.settleMs) || budgets.settleMs < 500) throw new Error("Leak check requires 20 cycles and at least 500 ms settling");
-  for (const metric of ["heapMiB", "domNodes", "listeners", "documents", "videos", "audios", "liveTracks", "audioContexts", "intervals", "animationFrames", "rosterCacheKeys"]) {
-    const limit = budgets.metrics[metric];
-    if (!limit || !Number.isFinite(limit.perCycle) || !Number.isFinite(limit.allowance) || limit.perCycle < 0 || limit.allowance < 0 || (limit.tailPerCycle !== undefined && (!Number.isFinite(limit.tailPerCycle) || limit.tailPerCycle < 0))) throw new Error(`Missing/invalid leak budget ${metric}`);
+  for (const metric of LEAK_METRICS) {
+    if (!validLeakBudget(budgets.metrics[metric])) throw new Error(`Missing/invalid leak budget ${metric}`);
   }
 }
 

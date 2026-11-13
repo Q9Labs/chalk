@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { ConnectionDTO } from "../../lib/dashboard/contracts";
+import type { ConnectionDTO, ConnectionsDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, fullDate } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
@@ -12,41 +12,100 @@ import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
-/** How to connect an AI app to Chalk, and the apps that signed in to this account through OAuth. */
-export function AiAppsPage() {
-  const { state, reload, update } = useLoad(() => readPage("connections", {}), "connections");
-  const [revoking, setRevoking] = useState<ConnectionDTO | null>(null);
-  const toast = useToast();
-
+function ConnectionsTable({ connections, onDisconnect }: { connections: readonly ConnectionDTO[]; onDisconnect: (connection: ConnectionDTO) => void }) {
   return (
-    <div className="wrap wide">
-      <div className="pgh">
-        <h1>AI apps</h1>
+    <div className="list">
+      <table className="tbl capps">
+        <thead>
+          <tr>
+            <th scope="col">App</th>
+            <th scope="col" className="wide">
+              Access
+            </th>
+            <th scope="col" className="wide">
+              Connected
+            </th>
+            <th scope="col" className="wide">
+              Last used
+            </th>
+            <th scope="col">
+              <span className="sr">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {connections.map((connection) => {
+            const lastUsed = connection.lastUsedAt ? ago(connection.lastUsedAt) : "Not used yet";
+            return (
+              <tr key={connection.id}>
+                <td>
+                  <span className="capp">
+                    <AppLogo name={connection.clientName} size="sm" />
+                    <span>
+                      <span className="nm">{connection.clientName}</span>
+                      <span className="csub">
+                        {ACCESS_LABEL[connection.scope]} · Connected {fullDate(connection.createdAt)} · {lastUsed}
+                      </span>
+                    </span>
+                  </span>
+                </td>
+                <td className="wide">{ACCESS_LABEL[connection.scope]}</td>
+                <td className="wide">{fullDate(connection.createdAt)}</td>
+                <td className="wide">{lastUsed}</td>
+                <td className="r act">
+                  <button type="button" className="ib cdis" data-tip aria-label={`Disconnect ${connection.clientName}`} onClick={() => onDisconnect(connection)}>
+                    <Icon name="trash" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function RevokeConnection({ connection, onCancel, onRevoked }: { connection: ConnectionDTO; onCancel: () => void; onRevoked: () => void }) {
+  const toast = useToast();
+  return (
+    <DisconnectPrompt
+      app={connection.clientName}
+      onCancel={onCancel}
+      onConfirm={() =>
+        act("connections", { action: "revoke-connection", connectionId: connection.id }).then(
+          () => {
+            onRevoked();
+            toast(`Disconnected ${connection.clientName}`, { icon: "trash" });
+          },
+          (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+        )
+      }
+    />
+  );
+}
+
+type LoadedAiAppsProps = {
+  data: ConnectionsDTO;
+  reload: () => void;
+  update: (change: (data: ConnectionsDTO) => ConnectionsDTO) => void;
+  onDisconnect: (connection: ConnectionDTO) => void;
+};
+
+function LoadedAiApps({ data, reload, update, onDisconnect }: LoadedAiAppsProps) {
+  return (
+    <>
+      <div className="murl">
+        <span className="lbl">Chalk URL</span>
+        <code>{data.mcpUrl}</code>
+        <CopyAction pill small text={data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
       </div>
-      <p className="intro">Connect Claude, ChatGPT and other AI apps to Chalk, and they can work with your Spaces for you. You choose what each app is allowed to do.</p>
-      {state.kind === "ready" ? (
-        <>
-          <div className="murl">
-            <span className="lbl">Chalk URL</span>
-            <code>{state.data.mcpUrl}</code>
-            <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
-          </div>
-          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={[...(state.data.nextCursor ? state.data.connectedNames : []), ...state.data.connections.map((connection) => connection.clientName)]} />
-        </>
-      ) : null}
-      {state.kind === "loading" ? <AiAppsSkeleton /> : null}
-      {state.kind === "error" ? (
-        <div style={{ marginTop: "var(--space-8)" }}>
-          <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
-        </div>
-      ) : null}
-      {state.kind === "ready" ? (
-        <div className="secth" style={{ marginTop: "var(--space-12)" }}>
-          <h2>Connected apps</h2>
-        </div>
-      ) : null}
-      {state.kind === "ready" && state.data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Adding an app above still works." onRetry={reload} /> : null}
-      {state.kind === "ready" && !state.data.listError && state.data.connections.length === 0 ? (
+      <McpClients mcpUrl={data.mcpUrl} registeredNames={[...(data.nextCursor ? data.connectedNames : []), ...data.connections.map((connection) => connection.clientName)]} />
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
+        <h2>Connected apps</h2>
+      </div>
+      {data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Adding an app above still works." onRetry={reload} /> : null}
+      {!data.listError && data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
             <b>No connected apps</b>
@@ -54,76 +113,40 @@ export function AiAppsPage() {
           </div>
         </div>
       ) : null}
-      {state.kind === "ready" && state.data.connections.length > 0 ? (
-        <div className="list">
-          <table className="tbl capps">
-            <thead>
-              <tr>
-                <th scope="col">App</th>
-                <th scope="col" className="wide">
-                  Access
-                </th>
-                <th scope="col" className="wide">
-                  Connected
-                </th>
-                <th scope="col" className="wide">
-                  Last used
-                </th>
-                <th scope="col">
-                  <span className="sr">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.data.connections.map((connection) => {
-                const lastUsed = connection.lastUsedAt ? ago(connection.lastUsedAt) : "Not used yet";
-                return (
-                  <tr key={connection.id}>
-                    <td>
-                      <span className="capp">
-                        <AppLogo name={connection.clientName} size="sm" />
-                        <span>
-                          <span className="nm">{connection.clientName}</span>
-                          <span className="csub">
-                            {ACCESS_LABEL[connection.scope]} · Connected {fullDate(connection.createdAt)} · {lastUsed}
-                          </span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="wide">{ACCESS_LABEL[connection.scope]}</td>
-                    <td className="wide">{fullDate(connection.createdAt)}</td>
-                    <td className="wide">{lastUsed}</td>
-                    <td className="r act">
-                      <button type="button" className="ib cdis" data-tip aria-label={`Disconnect ${connection.clientName}`} onClick={() => setRevoking(connection)}>
-                        <Icon name="trash" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {data.connections.length > 0 ? <ConnectionsTable connections={data.connections} onDisconnect={onDisconnect} /> : null}
+      {data.nextCursor ? <MoreButton label="Show more apps" cursor={data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ ...value, connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} /> : null}
+    </>
+  );
+}
+
+/** How to connect an AI app to Chalk, and the apps that signed in to this account through OAuth. */
+export function AiAppsPage() {
+  const { state, reload, update } = useLoad(() => readPage("connections", {}), "connections");
+  const [revoking, setRevoking] = useState<ConnectionDTO | null>(null);
+
+  return (
+    <div className="wrap wide">
+      <div className="pgh">
+        <h1>AI apps</h1>
+      </div>
+      <p className="intro">Connect Claude, ChatGPT and other AI apps to Chalk, and they can work with your Spaces for you. You choose what each app is allowed to do.</p>
+      {state.kind === "ready" ? <LoadedAiApps data={state.data} reload={reload} update={update} onDisconnect={setRevoking} /> : null}
+      {state.kind === "loading" ? <AiAppsSkeleton /> : null}
+      {state.kind === "error" ? (
+        <div style={{ marginTop: "var(--space-8)" }}>
+          <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       ) : null}
-      {state.kind === "ready" && state.data.nextCursor ? (
-        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ ...value, connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
-      ) : null}
       {revoking ? (
-        <DisconnectPrompt
-          app={revoking.clientName}
+        <RevokeConnection
+          connection={revoking}
           onCancel={() => setRevoking(null)}
-          onConfirm={() =>
-            act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
-              () => {
-                update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
-                // With more pages, the catalog's names came from every page, so read them again.
-                if (state.kind === "ready" && state.data.nextCursor) reload();
-                setRevoking(null);
-                toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
-              },
-              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-            )
-          }
+          onRevoked={() => {
+            update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
+            // With more pages, the catalog's names came from every page, so read them again.
+            if (state.kind === "ready" && state.data.nextCursor) reload();
+            setRevoking(null);
+          }}
         />
       ) : null}
     </div>

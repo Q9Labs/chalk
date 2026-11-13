@@ -14,12 +14,9 @@ function validDevice(device) {
 }
 
 function validateScenarioLimits(scenarios) {
-  for (const device of Object.values(scenarios ?? {})) {
-    for (const limits of Object.values(device)) {
-      for (const [metric, value] of Object.entries(limits)) {
-        if (!METRICS.includes(metric) || !Number.isFinite(value) || value < 0) throw new Error(`Invalid scenario budget: ${metric}`);
-      }
-    }
+  const limits = Object.values(scenarios ?? {}).flatMap((device) => Object.values(device));
+  for (const [metric, value] of limits.flatMap((entry) => Object.entries(entry))) {
+    if (!METRICS.includes(metric) || !Number.isFinite(value) || value < 0) throw new Error(`Invalid scenario budget: ${metric}`);
   }
 }
 
@@ -34,23 +31,24 @@ export function validateBudgets(budgets) {
   validateScenarioLimits(budgets.scenarios);
 }
 
-export function validateScenarioBudgets(budgets, scenarios) {
+function validateDeviceScenarios(device, deviceBudgets, scenarios) {
   const ids = new Set(scenarios.map((scenario) => scenario.id));
-  if (ids.size !== scenarios.length) throw new Error("Duplicate performance scenario ID");
+  for (const id of Object.keys(deviceBudgets)) {
+    if (!ids.has(id)) throw new Error(`Scenario budget has no runner: ${device}/${id}`);
+  }
+  for (const { id } of scenarios) {
+    for (const metric of METRICS.filter((metric) => metric !== "firstCallMs" || id === "first-load")) {
+      if (!Number.isFinite(deviceBudgets[id]?.[metric])) throw new Error(`Missing explicit scenario budget: ${device}/${id}/${metric}`);
+    }
+  }
+}
+
+export function validateScenarioBudgets(budgets, scenarios) {
+  if (new Set(scenarios.map((scenario) => scenario.id)).size !== scenarios.length) throw new Error("Duplicate performance scenario ID");
   for (const device of Object.keys(budgets.scenarios ?? {})) {
     if (!Object.hasOwn(budgets.devices, device)) throw new Error(`Scenario budgets for unknown device: ${device}`);
   }
-  for (const device of Object.keys(budgets.devices)) {
-    const deviceBudgets = budgets.scenarios?.[device] ?? {};
-    for (const id of Object.keys(deviceBudgets)) {
-      if (!ids.has(id)) throw new Error(`Scenario budget has no runner: ${device}/${id}`);
-    }
-    for (const { id } of scenarios) {
-      for (const metric of METRICS.filter((metric) => metric !== "firstCallMs" || id === "first-load")) {
-        if (!Number.isFinite(deviceBudgets[id]?.[metric])) throw new Error(`Missing explicit scenario budget: ${device}/${id}/${metric}`);
-      }
-    }
-  }
+  for (const device of Object.keys(budgets.devices)) validateDeviceScenarios(device, budgets.scenarios?.[device] ?? {}, scenarios);
 }
 
 /** measuredPercentile is the nearest-rank percentile of a measurement, which must exist and be finite. */

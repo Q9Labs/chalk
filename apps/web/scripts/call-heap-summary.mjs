@@ -64,18 +64,21 @@ function dominators({ count, incoming }, order) {
     }
     return a;
   };
+  const parentOf = (node) => {
+    let parent = -1;
+    for (const predecessor of incoming[node]) {
+      if (dominator[predecessor] !== -1) parent = parent === -1 ? predecessor : intersect(parent, predecessor);
+    }
+    return parent;
+  };
   let changed = true;
   while (changed) {
     changed = false;
     for (const node of order.slice(1)) {
-      let parent = -1;
-      for (const predecessor of incoming[node]) {
-        if (dominator[predecessor] !== -1) parent = parent === -1 ? predecessor : intersect(parent, predecessor);
-      }
-      if (parent !== dominator[node]) {
-        dominator[node] = parent;
-        changed = true;
-      }
+      const parent = parentOf(node);
+      if (parent === dominator[node]) continue;
+      dominator[node] = parent;
+      changed = true;
     }
   }
   return dominator;

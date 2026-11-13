@@ -187,6 +187,11 @@ async function saveFailure(page, root) {
   await writeFile(resolve(root, "artifacts/performance-failure.html"), await page.content());
 }
 
+async function saveShot(page, directory, name) {
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({ path: resolve(directory, `${name}.png`) });
+}
+
 /** `session` is `{ browser, origin, root, values }`: the shared browser, the served build, the repo root and the parsed command line. */
 export async function measure(session, device, scenario, { inject = false, pauseVideo = false, capture = null } = {}) {
   const { browser, origin, root, values } = session;
@@ -212,11 +217,7 @@ export async function measure(session, device, scenario, { inject = false, pause
     const dom = await cdp.send("Memory.getDOMCounters");
     const sizes = await loadedSizes(resources, origin);
     if (errors.length) throw new Error(`${scenario.id}: ${errors.join("; ")}`);
-    if (capture && values.shots) {
-      const directory = resolve(root, values.shots);
-      await mkdir(directory, { recursive: true });
-      await page.screenshot({ path: resolve(directory, `${capture}.png`) });
-    }
+    if (capture && values.shots) await saveShot(page, resolve(root, values.shots), capture);
     return {
       layoutShift: data.layoutShift,
       layoutShifts: data.layoutShifts,

@@ -27,20 +27,28 @@ export interface FaviconDeps {
 }
 
 /** The host as the network will see it, or null when it is not a public DNS name: IP addresses, single-label names, `localhost`, private suffixes, ports, paths. */
-export function publicHostname(input: string): string | null {
-  let url: URL;
+function bareHostUrl(input: string): URL | null {
   try {
-    url = new URL(`https://${input}`);
+    const url = new URL(`https://${input}`);
+    const bare = !(url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash);
+    return bare ? url : null;
   } catch {
     return null;
   }
-  if (url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) return null;
-  const host = url.hostname.replace(/\.$/, "");
-  if (host.length > 253 || host.startsWith("[") || !host.includes(".")) return null;
+}
+
+function publicLabels(host: string): boolean {
+  if (host.length > 253 || host.startsWith("[") || !host.includes(".")) return false;
   const labels = host.split(".");
-  if (labels.some((label) => label === "")) return null;
   const tld = labels[labels.length - 1] ?? "";
-  if (!/^[a-z][a-z0-9-]*$/.test(tld)) return null;
+  return !labels.includes("") && /^[a-z][a-z0-9-]*$/.test(tld);
+}
+
+export function publicHostname(input: string): string | null {
+  const url = bareHostUrl(input);
+  if (!url) return null;
+  const host = url.hostname.replace(/\.$/, "");
+  if (!publicLabels(host)) return null;
   if (host === "localhost" || INTERNAL_SUFFIXES.some((suffix) => host.endsWith(suffix))) return null;
   return host;
 }

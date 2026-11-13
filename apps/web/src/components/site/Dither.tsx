@@ -92,10 +92,10 @@ function paintStars(image: ImageData, w: number, h: number, W: number, H: number
       size = random() < 0.25 ? 2 : 1;
     const color = random() < 0.7 ? [234, 241, 255] : [156, 194, 255],
       alpha = Math.round(255 * (0.45 + random() * 0.5));
-    for (let yy = 0; yy < size; yy++) {
-      for (let xx = 0; xx < size; xx++) {
-        if (x + xx < w && y + yy < h) image.data.set([...color, alpha], ((y + yy) * w + x + xx) * 4);
-      }
+    for (let offset = 0; offset < size * size; offset++) {
+      const px = x + (offset % size),
+        py = y + Math.floor(offset / size);
+      if (px < w && py < h) image.data.set([...color, alpha], (py * w + px) * 4);
     }
   }
 }

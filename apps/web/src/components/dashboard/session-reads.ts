@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, failureKind, readPageTimed } from "../../lib/dashboard/client";
 import { attempt, dueReads, failed, nextDue, nextRead, reread, succeeded, type Attempt, type Due } from "../../lib/dashboard/tracking";
-import { Change, useLoad } from "./use-dashboard";
+import { Change } from "./load-machine";
+import { useLoad } from "./use-dashboard";
 
 export type Ids = { readonly spaceId: string; readonly episodeId: string };
 export type Page = { readonly session: Omit<PastSessionDTO, "recordings" | "callName">; readonly callName: string; readonly attempts: readonly Attempt[] };

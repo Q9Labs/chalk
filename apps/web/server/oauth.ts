@@ -126,6 +126,12 @@ async function signingKey(url: string, kid: string) {
   if (!key) throw new DashboardError(401, "id_token_rejected");
   return key;
 }
+function claimsAccepted(claims: z.infer<typeof claimsSchema>, expected: { clientId: string; nonce: string; issuers: string[] }): boolean {
+  const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
+  const now = Date.now() / 1000;
+  const authorizedParty = claims.azp === undefined ? audiences.length === 1 : claims.azp === expected.clientId;
+  return expected.issuers.includes(claims.iss) && audiences.includes(expected.clientId) && authorizedParty && claims.exp > now && claims.iat <= now + 60 && claims.iat <= claims.exp && claims.nonce === expected.nonce;
+}
 async function verifyIdToken(input: { token: string; clientId: string; nonce: string; issuers: string[]; jwks: string }): Promise<z.infer<typeof claimsSchema>> {
   const [headerPart, payload, signature, extra] = input.token.split(".");
   if (!headerPart || !payload || !signature || extra || input.token.length > 16384) throw new DashboardError(401, "id_token_rejected");
@@ -134,18 +140,7 @@ async function verifyIdToken(input: { token: string; clientId: string; nonce: st
   const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
   if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, decode(signature), encoder.encode(`${headerPart}.${payload}`)))) throw new DashboardError(401, "id_token_rejected");
   const claims = claimsSchema.parse(JSON.parse(new TextDecoder().decode(decode(payload))));
-  const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
-  if (
-    !input.issuers.includes(claims.iss) ||
-    !audiences.includes(input.clientId) ||
-    (audiences.length > 1 && claims.azp !== input.clientId) ||
-    (claims.azp !== undefined && claims.azp !== input.clientId) ||
-    claims.exp <= Date.now() / 1000 ||
-    claims.iat > Date.now() / 1000 + 60 ||
-    claims.iat > claims.exp ||
-    claims.nonce !== input.nonce
-  )
-    throw new DashboardError(401, "id_token_rejected");
+  if (!claimsAccepted(claims, input)) throw new DashboardError(401, "id_token_rejected");
   return claims;
 }
 async function appleClientSecret(env: Pick<DashboardEnvironment, "APPLE_TEAM_ID" | "APPLE_SERVICES_ID" | "APPLE_KEY_ID" | "APPLE_PRIVATE_KEY">): Promise<string> {

@@ -29,6 +29,16 @@ function LeftNotice({ rejoin, onRejoin }: { readonly rejoin: Ref<HTMLButtonEleme
   );
 }
 
+function JoinToast({ name }: { readonly name: string }) {
+  if (!name) return null;
+  return (
+    <div className="xtoast show" role="status">
+      <Avatar name={name} size={28} />
+      {name} joined
+    </div>
+  );
+}
+
 export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still = false }: { readonly label: string; readonly name?: string; readonly people?: readonly CallPerson[]; readonly still?: boolean }) {
   const [on, setOn] = useState(INITIAL);
   const [left, setLeft] = useState(false);
@@ -67,12 +77,7 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
                 clearToast();
               }}
             />
-            {toast ? (
-              <div className="xtoast show" role="status">
-                <Avatar name={toast} size={28} />
-                {toast} joined
-              </div>
-            ) : null}
+            <JoinToast name={toast} />
           </>
         ) : null}
         {left ? (
