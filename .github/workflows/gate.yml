@@ -201,6 +201,13 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      # The Sync model check (formal-sync) needs Java. The hosted image has it; the Instabox snapshot does not.
+      - name: Install Java for the Sync model check
+        if: matrix.group == 'checks' && runner.environment == 'self-hosted'
+        uses: ./.github/actions/apt-install
+        with:
+          packages: default-jre-headless
+
       # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
       - name: Set up OpenTofu
         if: matrix.group == 'checks'

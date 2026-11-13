@@ -5,8 +5,7 @@ import test from "node:test";
 const workflow = readFileSync(new URL("../../.github/workflows/gate.yml", import.meta.url), "utf8");
 
 const hostedLabels = ["ubuntu-24.04", "ubuntu-slim"];
-const runnerExpression = (fallback) =>
-  `\${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || '${fallback}' }}`;
+const runnerExpression = (fallback) => `\${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || '${fallback}' }}`;
 
 const runsOn = [...workflow.matchAll(/^ {4}runs-on: (.+)$/gmu)].map((match) => match[1]);
 
