@@ -67,10 +67,6 @@ export function transition(from, to) {
   return to;
 }
 
-function isTerminalState(state) {
-  return state === RuntimeState.STOPPED || state === RuntimeState.FAILED;
-}
-
 export function isReadyState(state) {
   return state === RuntimeState.READY || state === RuntimeState.DEGRADED;
 }

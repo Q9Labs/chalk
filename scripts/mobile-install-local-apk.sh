@@ -2,7 +2,6 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-connect_helper="${repo_root}/.agents/skills/chalk-mobile-wireless-debug/scripts/connect-wireless-adb.sh"
 package_name="${CHALK_MOBILE_PACKAGE:-}"
 variant="debug"
 connect_target=""
@@ -102,7 +101,7 @@ if [[ -n "$pair_target" ]]; then
 fi
 
 if [[ -n "$connect_target" ]]; then
-  bash "$connect_helper" "$connect_target" >/dev/null
+  adb connect "$connect_target" >/dev/null
 fi
 
 serial="${ADB_SERIAL:-}"
@@ -111,7 +110,7 @@ if [[ -z "$serial" ]]; then
 fi
 
 if [[ -z "$serial" ]]; then
-  echo "No connected adb device found. Use --connect or pnpm run mobile:connect first." >&2
+  echo "No connected adb device found. Use --connect or run adb connect first." >&2
   exit 1
 fi
 
@@ -143,7 +142,6 @@ if [[ ! -f "$apk_path" ]]; then
 fi
 
 remote_path="${remote_dir%/}/${remote_basename}"
-install_output=""
 
 push_and_open() {
   adb -s "$serial" push "$apk_path" "$remote_path" >/dev/null

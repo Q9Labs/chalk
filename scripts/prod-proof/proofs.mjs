@@ -110,12 +110,11 @@ export function episodeEnd(run, path) {
     },
   };
 }
-// One Space with one Episode for a proof that needs no media, and the handle that ends it.
-export async function openEpisode(run) {
-  const space = await createSpace(run);
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`;
-  return { path, ending: episodeEnd(run, path) };
+// The one Create Episode request of a proof. The metadata names the run so cleanup finds the Episode; `path` is the Episode's own endpoint.
+export async function postEpisode(run, space, metadata) {
+  const collection = `${run.tenantPath}/spaces/${space.id}/episodes`;
+  const episode = await run.apiRequest("POST", collection, { metadata: { proof_run_id: run.runId, ...metadata } });
+  return { episode, path: `${collection}/${episode.id}` };
 }
 // A reused Space is not the run's own, so cleanup learns of an Episode created in it from the
 // ownership file, which this writes before the Episode is used.
@@ -141,7 +140,7 @@ const spaceBusyPollMs = 3_000;
 async function createEpisodeWhenSpaceClears(run, space) {
   for (let poll = 0; ; poll++) {
     try {
-      return await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+      return (await postEpisode(run, space)).episode;
     } catch (error) {
       if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
       if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);

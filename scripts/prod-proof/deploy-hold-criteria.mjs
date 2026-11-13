@@ -30,7 +30,6 @@ export function longestGaps(ticks, guest) {
 /** A call survived when every guest stayed in it for the whole hold (status live and reachable in every sample, no error) and every other guest's audio was still arriving in the last five seconds. The messages name guests by position, never by participant ID, because they are printed to workflow logs. */
 export function judgeCall(ticks, guestCount) {
   const failures = [];
-  const lastSamples = ticks.at(-1).guests;
   const lastWindow = ticks.filter((tick) => tick.t >= ticks.at(-1).t - 5000);
   for (let guest = 0; guest < guestCount; guest++) {
     const label = `guest ${guest + 1}`;

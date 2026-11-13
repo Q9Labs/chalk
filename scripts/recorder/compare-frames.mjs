@@ -20,22 +20,12 @@ function parseArguments(argv) {
     maxChangedPixels: 0,
     maxMeanAbsoluteError: 0,
   };
-  const names = {
-    actual: "actual",
-    "difference-explanation": "differenceExplanation",
-    "diff-output": "diffOutput",
-    "expect-height": "expectHeight",
-    "expect-width": "expectWidth",
-    expected: "expected",
-    "max-changed-pixels": "maxChangedPixels",
-    "max-mean-absolute-error": "maxMeanAbsoluteError",
-  };
-  const numeric = new Set(["expect-height", "expect-width", "max-changed-pixels", "max-mean-absolute-error"]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!argument.startsWith("--") || !(argument.slice(2) in names)) throw new Error(`unknown argument: ${argument}`);
     const name = argument.slice(2);
-    options[names[name]] = parseOptionValue(argv, index, name, numeric.has(name));
+    const key = name.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    if (!argument.startsWith("--") || name !== name.toLowerCase() || !Object.hasOwn(options, key)) throw new Error(`unknown argument: ${argument}`);
+    options[key] = parseOptionValue(argv, index, name, typeof options[key] !== "string");
     index += 1;
   }
   if (options.expected === "" || options.actual === "") throw new Error("--expected and --actual are required");

@@ -60,12 +60,9 @@ def database(root):
     return db
 
 
-def wake(root, isolated=False):
+def wake(root):
     with (root / 'daemon.log').open('ab') as log:
-        command = [sys.executable, str(Path(__file__).resolve()), '--root', str(root)]
-        if isolated:
-            command.append('--isolated')
-        subprocess.Popen([*command, 'daemon'], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--root', str(root), 'daemon'], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                          env={key: value for key, value in os.environ.items()
                               if key not in ('CHALK_REMOTE_JOB_TOKEN', 'CHALK_REMOTE_RESOURCE_DIR', 'CHALK_REMOTE_SLOT')},
                          start_new_session=True, close_fds=True)
@@ -102,7 +99,7 @@ def submit(root, db, args):
                     db.execute('INSERT INTO jobs(id,priority,submitted,wait_seconds,state,exclusive) VALUES(?,?,?,?,?,?)',
                                (args.id, args.priority, time.time(), args.wait_seconds, 'queued', int(args.exclusive or exclusive_request(request))))
                     row = db.execute('SELECT * FROM jobs WHERE id=?', (args.id,)).fetchone()
-        wake(root, args.isolated)
+        wake(root)
         print(json.dumps(dict(row)), flush=True)
     finally:
         if incoming.exists():
@@ -397,13 +394,12 @@ def finish(root, db, row, result, reason):
                    (result, time.time(), row['id']))
 
 
-def complete(root, db, row, result, reason, isolated):
+def complete(root, db, row, result, reason):
     job = root / 'jobs' / row['id']
     try:
-        stop_job(job, row['pid'], row['started'], None if isolated else row['slot'])
+        stop_job(job, row['pid'], row['started'], row['slot'])
         cleanup_resources(job, row['slot'])
-        if not isolated:
-            check_slot_ports(job, row['slot'])
+        check_slot_ports(job, row['slot'])
         finish(root, db, row, result, reason)
     except Exception as error:
         message = bounded_text(f'cleanup quarantined slot {row["slot"]}: {type(error).__name__}: {error}')
@@ -526,9 +522,7 @@ def legacy_waiters():
     return waiters
 
 
-def admission(isolated, owner):
-    if isolated:
-        return True
+def admission(owner):
     lock = Path('/tmp/chalk-remote-admission.lock')
     try:
         if lock.read_text().strip() == str(owner):
@@ -595,15 +589,15 @@ def expire_waiters(root, db):
         finish(root, db, row, 76, 'queue wait limit expired' + (f'; {waiting}' if waiting else ''))
 
 
-def daemon(root, db, isolated):
+def daemon(root, db):
     # Wakes never wait behind an active dispatcher. It re-checks the queue after releasing
     # its lock, so a ticket registered before a refused wake still runs.
-    while dispatch(root, db, isolated):
+    while dispatch(root, db):
         if db.execute("SELECT 1 FROM jobs WHERE state!='done' LIMIT 1").fetchone() is None:
             return
 
 
-def dispatch(root, db, isolated):
+def dispatch(root, db):
     slots = db.execute('SELECT slots FROM queue').fetchone()[0]
     # Only this process writes admissions.
     with (root / 'dispatcher.lock').open('a') as lock:
@@ -616,8 +610,7 @@ def dispatch(root, db, isolated):
         legacy_handoff_until = None
         for row in db.execute("SELECT * FROM jobs WHERE state='running'").fetchall():
             running[row['ticket']] = (row, None, row['started'])
-        if not isolated:
-            reap_legacy()
+        reap_legacy()
         reap_due = time.monotonic()
         while True:
             if time.monotonic() >= reap_due:
@@ -637,10 +630,10 @@ def dispatch(root, db, isolated):
                 if result is not None:
                     if row['exclusive']:
                         legacy_handoff_until = None
-                    complete(root, db, row, result, 'job finished; checkout cleaned', isolated)
+                    complete(root, db, row, result, 'job finished; checkout cleaned')
                     del running[ticket]
             for row in db.execute("SELECT * FROM jobs WHERE state='quarantined' AND cleanup_after<=?", (time.time(),)).fetchall():
-                complete(root, db, row, row['result'], 'quarantined cleanup recovered; checkout cleaned', isolated)
+                complete(root, db, row, row['result'], 'quarantined cleanup recovered; checkout cleaned')
             expire_waiters(root, db)
             busy = db.execute("SELECT * FROM jobs WHERE state IN ('running','quarantined')").fetchall()
             row = db.execute("SELECT * FROM jobs WHERE state='queued' ORDER BY priority DESC,ticket LIMIT 1").fetchone()
@@ -661,7 +654,7 @@ def dispatch(root, db, isolated):
             exclusive = bool(row['exclusive'] or exclusive_request(request))
             # Ordinary jobs never acquire the legacy lock. A live legacy job occupies
             # one slot; existing slot jobs keep their isolated ports and continue running.
-            occupied = int(not isolated and legacy_occupied())
+            occupied = int(legacy_occupied())
             if occupied:
                 legacy_handoff_until = None
             waiting_for_slots = len(busy) + occupied >= slots or (exclusive and busy)
@@ -670,7 +663,7 @@ def dispatch(root, db, isolated):
             if waiting_for_slots or blocker:
                 time.sleep(0.2)
                 continue
-            if exclusive and not isolated and not occupied:
+            if exclusive and not occupied:
                 if legacy_waiters():
                     if legacy_handoff_until is None:
                         legacy_handoff_until = time.monotonic() + 35
@@ -695,7 +688,7 @@ def dispatch(root, db, isolated):
                     started = process_start(child.pid)
                     # The blocked supervisor owns the reservation for the workload's lifetime.
                     # Dispatcher death cannot invalidate a surviving exclusive worker's lock.
-                    if exclusive and not admission(isolated, child.pid):
+                    if exclusive and not admission(child.pid):
                         child.stdin.close()
                         child.wait()
                         time.sleep(.2)
@@ -707,7 +700,7 @@ def dispatch(root, db, isolated):
                     # Reserve before inspecting orphaned legacy work. Bare legacy waiters
                     # cannot run while we own shlock and must not extend this guard.
                     deadline = time.monotonic() + 30
-                    while exclusive and not isolated and legacy_active():
+                    while exclusive and legacy_active():
                         if time.monotonic() >= deadline:
                             raise RuntimeError('legacy checkout still active after 30-second admission guard')
                         time.sleep(.2)
@@ -722,13 +715,12 @@ def dispatch(root, db, isolated):
             except Exception as error:
                 if child:
                     child.stdin.close()
-                complete(root, db, row, 70, f'queue failed: {error}', isolated)
+                complete(root, db, row, 70, f'queue failed: {error}')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=DEFAULT_ROOT)
-    parser.add_argument('--isolated', action='store_true', help='fake workloads only; bypass shared M4 admission')
     sub = parser.add_subparsers(dest='action', required=True)
     for action in ('simulator-reserve', 'simulator-release'):
         command = sub.add_parser(action)
@@ -763,13 +755,13 @@ def main():
     if args.action == 'submit':
         submit(root, db, args)
     elif args.action == 'daemon':
-        daemon(root, db, args.isolated)
+        daemon(root, db)
     else:
         row = db.execute('SELECT * FROM jobs WHERE id=?', (args.id,)).fetchone()
         if row is None:
             sys.exit(4)
         if args.action == 'attach' and row['state'] != 'done':
-            wake(root, args.isolated)
+            wake(root)
         if args.action == 'read' and row['state'] != 'done':
             # Release the probe before waking: a woken dispatcher never waits for this lock.
             with (root / 'dispatcher.lock').open('a') as lock:
@@ -779,7 +771,7 @@ def main():
                 except BlockingIOError:
                     idle = False
             if idle:
-                wake(root, args.isolated)
+                wake(root)
         if args.action != 'read':
             print(json.dumps(describe(db, row)))
         else:

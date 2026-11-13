@@ -373,12 +373,6 @@ reset_staged_inputs() {
   done
 }
 
-inventory_value() {
-  local field="$1"
-  local id="$2"
-  jq -er --arg id "$id" ".inputs[] | select(.id == \$id) | .${field}" "$source_root/infrastructure/managed-episode/contracts/runtime-inputs.json"
-}
-
 record_input() {
   local id="$1"
   local suffix="$2"

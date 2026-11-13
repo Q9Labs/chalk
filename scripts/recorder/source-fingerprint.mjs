@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { lstat, readlink } from "node:fs/promises";
 import path from "node:path";
 
-import { sha256File } from "../lib/hash.mjs";
+import { sha256, sha256File } from "../lib/hash.mjs";
 import { runBoundedCommand } from "./run-bounded-command.mjs";
 
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
@@ -65,7 +65,7 @@ async function fingerprint(root, files, status) {
     } else if (facts.isSymbolicLink()) {
       kind = "symlink";
       const target = await readlink(absolute);
-      digest = createHash("sha256").update(target).digest("hex");
+      digest = sha256(target);
       bytes = Buffer.byteLength(target);
     } else {
       continue;
@@ -110,7 +110,7 @@ try {
       count: scopes.length,
       sha256: scopeHash.digest("hex"),
     },
-    status_sha256: createHash("sha256").update(status).digest("hex"),
+    status_sha256: sha256(status),
     source,
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

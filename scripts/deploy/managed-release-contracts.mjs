@@ -1,13 +1,19 @@
+import { errorMessage } from "../lib/errors.mjs";
 import { sha256 } from "../lib/hash.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 import { lstat, readFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseJson } from "./managed-release-support.mjs";
+import { extname, join, resolve } from "node:path";
 
 export const CONTROLLER_VERSION = 2;
 
-const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = resolve(scriptDirectory, "../..");
+export function parseJson(value, context) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new Error(`${context}: ${errorMessage(error)}`);
+  }
+}
+
 export const runtimeInputsPath = join(repositoryRoot, "infrastructure/managed-episode/contracts/runtime-inputs.json");
 const managedDocumentPath = join(repositoryRoot, "infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json");
 

@@ -4,9 +4,9 @@ function fail(step, detail) {
   throw new Error(`MCP check failed at ${step}: ${detail}`);
 }
 
-async function request(fetchImpl, step, url, init = {}) {
+async function request(step, url, init = {}) {
   try {
-    return await fetchImpl(url, { ...init, signal: AbortSignal.timeout(30_000) });
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
   } catch (error) {
     return fail(step, `${init.method ?? "GET"} ${url} did not answer: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -21,7 +21,7 @@ async function json(response, step) {
   }
 }
 
-function rpc(fetchImpl, mcpUrl, apiKey, id, method, params, extraHeaders = {}) {
+function rpc(mcpUrl, apiKey, id, method, params, extraHeaders = {}) {
   const headers = {
     "content-type": "application/json",
     accept: "application/json, text/event-stream",
@@ -29,7 +29,7 @@ function rpc(fetchImpl, mcpUrl, apiKey, id, method, params, extraHeaders = {}) {
     ...extraHeaders,
   };
   if (apiKey) headers.authorization = `Bearer ${apiKey}`;
-  return request(fetchImpl, method, mcpUrl, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) });
+  return request(method, mcpUrl, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) });
 }
 
 const clientInfo = { name: "chalk-mcp-check", version: "1" };
@@ -41,12 +41,12 @@ function resourceMetadataUrl(anonymous) {
   return url;
 }
 
-async function fetchAuthorizationServer(fetchImpl, mcpUrl, metadataUrl) {
-  const resource = await json(await request(fetchImpl, "protected resource metadata", metadataUrl), "protected resource metadata");
+async function fetchAuthorizationServer(mcpUrl, metadataUrl) {
+  const resource = await json(await request("protected resource metadata", metadataUrl), "protected resource metadata");
   if (resource.resource !== mcpUrl) fail("protected resource metadata", `resource is ${resource.resource}, expected ${mcpUrl}`);
   const issuer = resource.authorization_servers?.[0];
   if (!issuer) fail("protected resource metadata", "no authorization_servers");
-  return json(await request(fetchImpl, "authorization server metadata", `${issuer.replace(/\/+$/, "")}/.well-known/oauth-authorization-server`), "authorization server metadata");
+  return json(await request("authorization server metadata", `${issuer.replace(/\/+$/, "")}/.well-known/oauth-authorization-server`), "authorization server metadata");
 }
 
 function checkAuthorizationServer(server) {
@@ -55,13 +55,13 @@ function checkAuthorizationServer(server) {
   if (!server.code_challenge_methods_supported?.includes("S256")) fail("authorization server metadata", "PKCE S256 is not advertised");
 }
 
-async function checkOAuthDiscovery(fetchImpl, mcpUrl, anonymous) {
-  checkAuthorizationServer(await fetchAuthorizationServer(fetchImpl, mcpUrl, resourceMetadataUrl(anonymous)));
+async function checkOAuthDiscovery(mcpUrl, anonymous) {
+  checkAuthorizationServer(await fetchAuthorizationServer(mcpUrl, resourceMetadataUrl(anonymous)));
 }
 
 /** Returns the headers every later request must carry, such as the session id. */
-async function checkInitialize(fetchImpl, mcpUrl, apiKey) {
-  const response = await rpc(fetchImpl, mcpUrl, apiKey, 2, "initialize", { protocolVersion, capabilities: {}, clientInfo });
+async function checkInitialize(mcpUrl, apiKey) {
+  const response = await rpc(mcpUrl, apiKey, 2, "initialize", { protocolVersion, capabilities: {}, clientInfo });
   const body = await json(response, "initialize");
   if (response.status !== 200 || !body.result?.serverInfo) fail("initialize", `HTTP ${response.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return sessionHeaders(response);
@@ -72,8 +72,8 @@ function sessionHeaders(response) {
   return session ? { "mcp-session-id": session } : {};
 }
 
-async function checkToolList(fetchImpl, mcpUrl, apiKey, sessionHeaders) {
-  const listed = await json(await rpc(fetchImpl, mcpUrl, apiKey, 3, "tools/list", {}, sessionHeaders), "tools/list");
+async function checkToolList(mcpUrl, apiKey, sessionHeaders) {
+  const listed = await json(await rpc(mcpUrl, apiKey, 3, "tools/list", {}, sessionHeaders), "tools/list");
   const names = (listed.result?.tools ?? []).map((tool) => tool.name);
   if (!names.includes("chalk_inspect_spaces")) fail("tools/list", `expected chalk_inspect_spaces among ${names.length} tools`);
   return names.length;
@@ -83,30 +83,30 @@ function toolSucceeded(status, result) {
   return status === 200 && !result.error && result.result && !result.result.isError;
 }
 
-async function checkToolCall(fetchImpl, mcpUrl, apiKey, headers) {
-  const called = await rpc(fetchImpl, mcpUrl, apiKey, 4, "tools/call", { name: "chalk_inspect_spaces", arguments: {} }, headers);
+async function checkToolCall(mcpUrl, apiKey, headers) {
+  const called = await rpc(mcpUrl, apiKey, 4, "tools/call", { name: "chalk_inspect_spaces", arguments: {} }, headers);
   const result = await json(called, "tools/call chalk_inspect_spaces");
   if (!toolSucceeded(called.status, result)) fail("tools/call chalk_inspect_spaces", `HTTP ${called.status}: ${JSON.stringify(result).slice(0, 300)}`);
 }
 
 /** Runs the checks a person connecting an MCP client would hit, in order. Returns the step names that passed. */
-export async function checkMcp({ apiUrl, apiKey, expectOAuth, fetchImpl = fetch }) {
+async function checkMcp({ apiUrl, apiKey, expectOAuth }) {
   const mcpUrl = `${apiUrl.replace(/\/+$/, "")}/mcp`;
   const passed = [];
 
-  const anonymous = await rpc(fetchImpl, mcpUrl, undefined, 1, "initialize", { protocolVersion, capabilities: {}, clientInfo });
+  const anonymous = await rpc(mcpUrl, undefined, 1, "initialize", { protocolVersion, capabilities: {}, clientInfo });
   if (anonymous.status !== 401) fail("anonymous initialize", `expected HTTP 401 from ${mcpUrl}, got ${anonymous.status}`);
   passed.push("anonymous request is refused with 401");
 
   if (expectOAuth) {
-    await checkOAuthDiscovery(fetchImpl, mcpUrl, anonymous);
+    await checkOAuthDiscovery(mcpUrl, anonymous);
     passed.push("OAuth discovery publishes resource, authorization server and S256");
   }
 
-  const sessionHeaders = await checkInitialize(fetchImpl, mcpUrl, apiKey);
+  const sessionHeaders = await checkInitialize(mcpUrl, apiKey);
   passed.push("initialize with the API key");
-  passed.push(`tools/list returns ${await checkToolList(fetchImpl, mcpUrl, apiKey, sessionHeaders)} tools`);
-  await checkToolCall(fetchImpl, mcpUrl, apiKey, sessionHeaders);
+  passed.push(`tools/list returns ${await checkToolList(mcpUrl, apiKey, sessionHeaders)} tools`);
+  await checkToolCall(mcpUrl, apiKey, sessionHeaders);
   passed.push("authenticated tool call lists the proof tenant's Spaces");
   return passed;
 }

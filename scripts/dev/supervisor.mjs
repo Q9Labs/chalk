@@ -1,7 +1,7 @@
 import { createSourcePoller, dependencyOrder, dependantIds } from "./reload.mjs";
 import { acquireMachineLease, manifestRecord, ownerRecord, removeOwner, writeManifest, writeOwner } from "./ownership.mjs";
 import { preflight } from "./config.mjs";
-import { failureFromChild, spawnService, stopProcessGroup, waitForHTTPReady } from "./process.mjs";
+import { failureFromChild, spawnService, stopProcessGroup } from "./process.mjs";
 import { DevFailure, FailureKind, RuntimeState, failure, isReadyState, transition } from "./model.mjs";
 
 function asFailure(error, stage = "startup", service) {
@@ -9,7 +9,7 @@ function asFailure(error, stage = "startup", service) {
   return failure(FailureKind.STARTUP, error.message || String(error), { stage, service, cause: error });
 }
 
-export function createSupervisor(config, { serviceSpecs = [], hooks = {}, preflightFn = preflight, acquireLease = acquireMachineLease, now = () => new Date().toISOString() } = {}) {
+export function createSupervisor(config, { serviceSpecs = [], hooks = {}, preflightFn = preflight } = {}) {
   const ordered = dependencyOrder(serviceSpecs);
   const running = new Map();
   const readyServices = new Set();
@@ -47,13 +47,12 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
       });
       state = transition(state, RuntimeState.PREFLIGHT);
       try {
-        lease = await acquireLease(config, hooks.leaseOptions);
-        await preflightFn(config, hooks.preflightOptions);
+        lease = await acquireMachineLease(config);
+        await preflightFn(config);
         state = transition(state, RuntimeState.STARTING);
         owner = ownerRecord({ lease, config, state, revision: await hooks.revision?.(), resources: (await hooks.resources?.()) || [] });
         await persist();
-        const resolveSecrets = hooks.resolveSecrets || config.secretResolver;
-        secrets = resolveSecrets ? await resolveSecrets({ config }) : undefined;
+        secrets = await hooks.resolveSecrets();
         await hooks.startResources?.({ config, lease, runtime });
         for (const spec of ordered) {
           try {
@@ -87,8 +86,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
         const process = running.get(spec.id);
         if (!process) continue;
         try {
-          if (hooks.stopService) await hooks.stopService(spec, process, { config, runtime });
-          else await stopProcessGroup(process, { graceMs: config.timeouts.stopGraceMs });
+          await stopProcessGroup(process, { graceMs: config.timeouts.stopGraceMs });
         } catch (error) {
           errors.push(asFailure(error, "cleanup", spec.id));
         }
@@ -206,8 +204,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
     const childEnv = hooks.childEnv ? await hooks.childEnv(spec, { config, lease, runtime, secrets }) : undefined;
     await hooks.beforeStartService?.(spec, { config, lease, runtime, secrets, childEnv });
     const redactions = (await hooks.logRedactions?.(spec, { config, lease, runtime, secrets, childEnv })) || [];
-    const process = hooks.startService ? await hooks.startService(spec, { config, lease, runtime, secrets, childEnv, redactions }) : spawnService(spec, { config, runtimeId: lease?.runtimeId, extraEnv: childEnv, redactions });
-    if (!process) throw failure(FailureKind.STARTUP, `${spec.id} start hook returned no process`, { stage: "startup", service: spec.id });
+    const process = spawnService(spec, { config, runtimeId: lease?.runtimeId, extraEnv: childEnv, redactions });
     running.set(spec.id, process);
     process.child?.once("exit", () => {
       if (running.get(spec.id) !== process) return;
@@ -224,7 +221,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
         }
       }
     });
-    await (hooks.waitReady ? hooks.waitReady(spec, process, { config, runtime }) : waitForHTTPReady(spec, { timeoutMs: config.timeouts.readinessMs }));
+    await hooks.waitReady(spec, runtime);
     if (process.exited) throw failureFromChild(process);
     readyServices.add(spec.id);
   }
@@ -232,8 +229,7 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
   async function stopOne(spec) {
     const process = running.get(spec.id);
     if (!process) return;
-    if (hooks.stopService) await hooks.stopService(spec, process, { config, lease, runtime });
-    else await stopProcessGroup(process, { graceMs: config.timeouts.stopGraceMs });
+    await stopProcessGroup(process, { graceMs: config.timeouts.stopGraceMs });
     running.delete(spec.id);
     readyServices.delete(spec.id);
   }
@@ -246,17 +242,16 @@ export function createSupervisor(config, { serviceSpecs = [], hooks = {}, prefli
   async function persist() {
     if (!lease) return;
     owner ||= ownerRecord({ lease, config, state, resources: (await hooks.resources?.()) || [] });
-    owner = { ...owner, state, services: runtime.status().services, updatedAt: now() };
+    owner = { ...owner, state, services: runtime.status().services, updatedAt: new Date().toISOString() };
     await writeOwner(config, owner);
     await writeManifest(config, manifestRecord({ lease, config, state, services: Object.entries(runtime.status().services), resources: owner.resources, failure: rootFailure }));
   }
 
   function startPolling() {
-    if (hooks.watch === false) return;
     const defaults = { api: config.sourceRoots?.[0], sync: config.sourceRoots?.[1] };
     const rootsByService = Object.fromEntries(ordered.map((spec) => [spec.id, spec.watchRoots?.length ? spec.watchRoots : defaults[spec.id] ? [defaults[spec.id]] : undefined]).filter(([, roots]) => roots?.length));
     if (Object.keys(rootsByService).length === 0) return;
-    poller = createSourcePoller({ rootsByService, intervalMs: config.timeouts.pollMs, debounceMs: config.timeouts.reloadDebounceMs, onChange: (changes) => runtime.reload(changes).catch((error) => hooks.onReloadFailure?.(error)) });
+    poller = createSourcePoller({ rootsByService, intervalMs: config.timeouts.pollMs, debounceMs: config.timeouts.reloadDebounceMs, onChange: (changes) => runtime.reload(changes).catch(() => {}) });
   }
 
   return runtime;

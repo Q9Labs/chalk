@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 
 // Each finding is keyed by advisory and exact package version.
-export function osvFindings(report) {
+function osvFindings(report) {
   const findings = new Set();
   for (const result of report.results ?? []) {
     for (const entry of result.packages ?? []) {
@@ -18,7 +18,7 @@ export function osvFindings(report) {
 }
 
 // govulncheck writes a stream of JSON objects. Like its text mode, count only findings in called functions.
-export function govulncheckFindings(stream) {
+function govulncheckFindings(stream) {
   const findings = new Set();
   for (const chunk of stream.split(/\n(?=\{)/u)) {
     if (chunk.trim() === "") continue;
@@ -34,7 +34,7 @@ const readers = {
   govulncheck: (file) => govulncheckFindings(readFileSync(file, "utf8")),
 };
 
-export function newFindings(head, base) {
+function newFindings(head, base) {
   return [...head].filter((finding) => !base.has(finding)).sort();
 }
 

@@ -143,6 +143,3 @@ apps/web/public/camera-effects/tasks-vision-*/
 
 # Verification evidence written by the verify-chalk skill
 .verify/
-
-# TLC output of tools/formal/media-control/run.sh
-/tools/formal/media-control/results/

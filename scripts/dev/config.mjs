@@ -130,7 +130,7 @@ function userStateRoot({ env, platform, home }) {
   return join(env.XDG_STATE_HOME || join(home, ".local", "state"), "chalk");
 }
 
-export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
+export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, allowBusyPorts = [] } = {}) {
   if (profile !== "core" && profile !== "mobile") throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
   const stateRoot = env.CHALK_DEV_STATE_ROOT || userStateRoot({ env, platform, home });
@@ -170,7 +170,6 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       trustDomain: env.CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN || "chalk.local",
       environment: env.CHALK_API_ENV || "local",
     },
-    secretResolver,
     databaseName: "chalk_dev",
     postgres: {
       container: env.CHALK_POSTGRES_CONTAINER || "chalk-postgres",
@@ -193,7 +192,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || (hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile]),
+    requiredTools: hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile],
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),
@@ -213,17 +212,17 @@ export function probePort(port, host = "127.0.0.1") {
   });
 }
 
-export async function preflight(config, { which = async (tool) => commandExists(tool), probe = probePort, requiredTools = config.requiredTools, allowBusyPorts = config.allowBusyPorts } = {}) {
+export async function preflight(config, allowBusyPorts = config.allowBusyPorts) {
   const missing = [];
-  for (const tool of requiredTools) {
-    if (!(await which(tool))) missing.push(tool);
+  for (const tool of config.requiredTools) {
+    if (!(await commandExists(tool))) missing.push(tool);
   }
   if (missing.length > 0) throw failure(FailureKind.MISSING_TOOL, `missing required tools: ${missing.join(", ")}`, { stage: "preflight" });
 
   const busy = [];
   for (const [name, port] of Object.entries(config.ports)) {
     if (allowBusyPorts.has(name) || allowBusyPorts.has(port)) continue;
-    const result = await probe(port);
+    const result = await probePort(port);
     if (!result.available) busy.push(`${name}:${port}`);
   }
   if (busy.length > 0) throw failure(FailureKind.BUSY_PORT, `ports already in use: ${busy.join(", ")}`, { stage: "preflight" });

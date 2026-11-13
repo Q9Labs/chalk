@@ -2,7 +2,6 @@
 """Package a runner-built recorder bundle with its installed-file manifest."""
 import argparse
 import gzip
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -10,13 +9,11 @@ import shutil
 import tarfile
 import tempfile
 
+from release_core import digest
+
 ROOT = Path(__file__).resolve().parents[2]
 RECORDER = Path('/opt/chalk-recorder')
 UNITS = ROOT / 'infrastructure/recorder/images/cpu/systemd'
-
-
-def sha256(data):
-    return hashlib.sha256(data).hexdigest()
 
 
 def encoded(value):
@@ -76,15 +73,15 @@ def package(role, bundle, output, node_root):
                 kind, content = 'file', path.read_bytes()
             else:
                 continue
-            files.append(dict(path=str(installed / path.relative_to(release)), type=kind, sha256=sha256(content)))
+            files.append(dict(path=str(installed / path.relative_to(release)), type=kind, sha256=digest(content)))
         links['/opt/chalk-recorder/current'] = 'releases/' + release_id
-        files.extend(dict(path=path, type='symlink', sha256=sha256(target.encode())) for path, target in links.items())
+        files.extend(dict(path=path, type='symlink', sha256=digest(target.encode())) for path, target in links.items())
         manifest = dict(schema_version='chalk_recorder_cpu_image.v2', release_id=release_id,
                         source_commit=info['source_commit'], source_tree_sha256=info['source_tree_sha256'],
                         profile='capture-minimal-v1' if role == 'capture' else 'cpu-libx264-frame2',
                         files=sorted(files, key=lambda item: item['path']))
         data = encoded(manifest)
-        manifest_digest = 'sha256:' + sha256(data)
+        manifest_digest = 'sha256:' + digest(data)
         (release / 'image-manifest.json').write_bytes(data)
         (release / 'install-links.json').write_bytes(encoded(links))
         (release / 'config/image.env').write_text(
@@ -110,7 +107,7 @@ def package(role, bundle, output, node_root):
                     else:
                         archive.addfile(member)
         return dict(release_id=release_id, image_digest=manifest_digest,
-                    archive_sha256=sha256(output.read_bytes()), source_revision=info['source_commit'])
+                    archive_sha256=digest(output.read_bytes()), source_revision=info['source_commit'])
 
 
 if __name__ == '__main__':

@@ -25,7 +25,7 @@ down stops the runtime and removes what start created (database, Redis volume, r
 Set PUBLIC_ORIGIN to the address browsers use. Set CHALK_CLOUDFLARE_REALTIME_APP_ID and
 CHALK_CLOUDFLARE_REALTIME_APP_SECRET to skip 1Password.`;
 
-export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
+export async function runCommand(command, config, { supervisor, service, yes = false, resetResources, output = console.log } = {}) {
   switch (command) {
     case DevCommand.START:
       if (!supervisor) throw failure(FailureKind.CONFIG, "start requires a supervisor", { stage: "command" });
@@ -35,14 +35,14 @@ export async function runCommand(command, config, { supervisor, service, yes = f
     case DevCommand.LOGS:
       return logsCommand(config, { service, output });
     case DevCommand.STOP:
-      return stopCommand(config, { supervisor, hooks, output });
+      return stopCommand(config, { supervisor, output });
     case DevCommand.RESET:
-      return resetCommand(config, { yes, confirm, hooks, output });
+      return resetCommand(config, { yes, resetResources, output });
     case DevCommand.DOCTOR:
-      return doctorCommand(config, { output, hooks });
+      return doctorCommand(config, { output });
     case DevCommand.DOWN:
-      await stopCommand(config, { hooks, output });
-      return resetCommand(config, { yes: true, hooks, output });
+      await stopCommand(config, { output });
+      return resetCommand(config, { yes: true, resetResources, output });
     case DevCommand.HELP:
       output(helpText);
       return { ok: true, help: helpText };
@@ -89,9 +89,7 @@ async function logsCommand(config, { service, lines = 200, output } = {}) {
 }
 
 /** Read-only except for one seeded guest who arrives and leaves. */
-async function doctorCommand(config, { output, hooks = {} } = {}) {
-  const validatePid = hooks.validatePid || validateOwnedPid;
-  const fetchImpl = hooks.fetchImpl || fetch;
+async function doctorCommand(config, { output } = {}) {
   const checks = [];
   const check = async (name, run) => {
     try {
@@ -105,11 +103,11 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
     if (!owner) throw new Error("no runtime owns this machine; run pnpm dev");
     if (owner.checkout !== config.root) throw new Error(`runtime belongs to another checkout (${owner.checkout})`);
     if (owner.state !== RuntimeState.READY) throw new Error(`runtime state is ${owner.state}, not ready`);
-    if (!(await validatePid(owner.supervisorPid, { expectedCommand: owner.supervisorExpectedCommand }))) throw new Error(`supervisor ${owner.supervisorPid} is not running`);
+    if (!(await validateOwnedPid(owner.supervisorPid, { expectedCommand: owner.supervisorExpectedCommand }))) throw new Error(`supervisor ${owner.supervisorPid} is not running`);
     return `supervisor ${owner.supervisorPid}`;
   });
   await check("build", async () => {
-    const head = hooks.headRevision ? await hooks.headRevision() : (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: config.root })).stdout.trim();
+    const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: config.root })).stdout.trim();
     if (owner?.revision !== head) throw new Error(`runtime started at ${owner?.revision ?? "no revision"}, checkout is at ${head}; restart it`);
     return head;
   });
@@ -118,7 +116,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
     if (!manifest) throw new Error("no runtime manifest");
     const entries = serviceEntries(manifest.services);
     const dead = [];
-    for (const [id, service] of entries) if (service.exited || !(await validatePid(service.pid, { expectedCommand: service.expectedCommand }))) dead.push(id);
+    for (const [id, service] of entries) if (service.exited || !(await validateOwnedPid(service.pid, { expectedCommand: service.expectedCommand }))) dead.push(id);
     if (dead.length > 0) throw new Error(`not running: ${dead.join(", ")}`);
     return `${entries.length} running`;
   });
@@ -128,14 +126,14 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
     ["web", `${config.urls.web}/`],
   ]) {
     await check(name, async () => {
-      const response = await fetchImpl(url);
+      const response = await fetch(url);
       if (!response.ok) throw new Error(`${url} answered HTTP ${response.status}`);
       return `${url} answered`;
     });
   }
   await check("sign-in", async () => {
     const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
-    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, fetchImpl });
+    const proof = await proveSeededSignIn({ origin: config.urls.web, invite: seed.invite });
     return `seeded guest arrival ${proof.state}`;
   });
   const result = { ok: checks.every((entry) => entry.ok), checks };
@@ -143,7 +141,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
   return result;
 }
 
-export async function stopCommand(config, { supervisor, hooks = {}, output } = {}) {
+async function stopCommand(config, { supervisor, output } = {}) {
   if (supervisor) {
     const result = await supervisor.stop();
     output?.(JSON.stringify(result, null, 2));
@@ -151,8 +149,7 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
   }
   const owner = await readOwner(config);
   if (!owner) return { state: RuntimeState.STOPPED, stopped: false };
-  const validatePid = hooks.validatePid || validateOwnedPid;
-  const supervisorAlive = await validatePid(owner.supervisorPid);
+  const supervisorAlive = await validateOwnedPid(owner.supervisorPid);
   const supervisorExpectedCommand = owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand;
   if (supervisorAlive) {
     if (owner.checkout && owner.checkout !== config.root) {
@@ -161,26 +158,26 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
     if (!supervisorExpectedCommand) {
       throw failure(FailureKind.OWNERSHIP_CONFLICT, `cannot verify supervisor ${owner.supervisorPid}; its recorded command is missing`, { stage: "ownership" });
     }
-    if (!(await validatePid(owner.supervisorPid, { expectedCommand: supervisorExpectedCommand }))) {
+    if (!(await validateOwnedPid(owner.supervisorPid, { expectedCommand: supervisorExpectedCommand }))) {
       throw failure(FailureKind.OWNERSHIP_CONFLICT, `recorded supervisor ${owner.supervisorPid} no longer matches its expected command`, { stage: "ownership" });
     }
     if (owner.supervisorPid === process.pid) throw failure(FailureKind.CLEANUP, "refusing to stop the current supervisor process", { stage: "cleanup" });
-    (hooks.kill || process.kill.bind(process))(owner.supervisorPid, "SIGTERM");
-    await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, { expectedCommand: supervisorExpectedCommand, validate: validatePid });
+    process.kill(owner.supervisorPid, "SIGTERM");
+    await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, supervisorExpectedCommand);
   } else {
     output?.(`Chalk dev supervisor ${owner.supervisorPid} is no longer running; releasing its stale ownership`);
-    await stopManifestProcesses(owner.manifestPath, { hooks, config });
-    await releaseStaleOwnership(config, { isAlive: (pid) => validatePid(pid) });
+    await stopManifestProcesses(owner.manifestPath, config);
+    await releaseStaleOwnership(config, { isAlive: (pid) => validateOwnedPid(pid) });
   }
   const result = { state: RuntimeState.STOPPED, stopped: true, runtimeId: owner.runtimeId };
   output?.(JSON.stringify(result, null, 2));
   return result;
 }
 
-async function resetCommand(config, { yes = false, confirm = confirmReset, hooks = {}, output } = {}) {
+async function resetCommand(config, { yes = false, resetResources, output } = {}) {
   const owner = await readOwner(config);
   const manifest = owner?.manifestPath ? await readManifest(owner.manifestPath) : owner ? undefined : await readManifest(config);
-  const live = await liveOwnedProcesses(owner, manifest, { validate: hooks.validatePid || validateOwnedPid });
+  const live = await liveOwnedProcesses(owner, manifest);
   const crossCheckout = owner?.checkout && owner.checkout !== config.root;
   if (crossCheckout) {
     const detail = live[0] ? `; live owned process ${live[0].label} (pid ${live[0].pid})` : "";
@@ -189,8 +186,8 @@ async function resetCommand(config, { yes = false, confirm = confirmReset, hooks
   if (live.length > 0) throw failure(FailureKind.RESET, `runtime still has live owned process ${live[0].label} (pid ${live[0].pid}); stop it with dev:stop first`, { stage: "reset" });
   const targets = resetTargets(config);
   output?.(JSON.stringify({ resetTargets: targets }, null, 2));
-  if (!yes && !(await confirm(`Remove the listed local Chalk runtime targets?`))) return { reset: false, cancelled: true, targets };
-  await hooks.resetResources?.({ config, owner, manifest, targets });
+  if (!yes && !(await confirmReset(`Remove the listed local Chalk runtime targets?`))) return { reset: false, cancelled: true, targets };
+  await resetResources?.();
   await removeRuntimeFiles(config);
   const result = { reset: true, path: config.runtimeRoot, targets };
   output?.(JSON.stringify(result, null, 2));
@@ -208,25 +205,24 @@ function resetTargets(config) {
   };
 }
 
-async function liveOwnedProcesses(owner, manifest, { validate = validateOwnedPid } = {}) {
+async function liveOwnedProcesses(owner, manifest) {
   const records = [];
   if (owner?.supervisorPid) records.push({ label: "supervisor", pid: owner.supervisorPid, expectedCommand: owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand });
   const services = Array.isArray(manifest?.services) ? manifest.services.map((entry) => (Array.isArray(entry) ? entry[1] : entry)) : Object.values(manifest?.services || {});
   for (const service of services) if (service?.pid) records.push({ ...service, label: service.id || service.name || "service" });
   const live = [];
   for (const record of records) {
-    if (await validate(record.pid, { expectedCommand: record.expectedCommand, expectedProcessGroup: record.label !== "supervisor" && process.platform !== "win32" })) live.push(record);
+    if (await validateOwnedPid(record.pid, { expectedCommand: record.expectedCommand, expectedProcessGroup: record.label !== "supervisor" && process.platform !== "win32" })) live.push(record);
   }
   return live;
 }
 
-async function stopManifestProcesses(manifestPath, { hooks, config }) {
+async function stopManifestProcesses(manifestPath, config) {
   const manifest = manifestPath ? await readManifest(manifestPath) : undefined;
   const entries = serviceEntries(manifest?.services).reverse();
   for (const [id, descriptor] of entries) {
     if (!descriptor?.pid) continue;
-    if (hooks.stopServiceByPid) await hooks.stopServiceByPid(id, descriptor.pid, { config });
-    else await stopProcessGroup({ id, pid: descriptor.pid, logPath: descriptor.logPath, expectedCommand: descriptor.expectedCommand }, { graceMs: config.timeouts.stopGraceMs });
+    await stopProcessGroup({ id, pid: descriptor.pid, logPath: descriptor.logPath, expectedCommand: descriptor.expectedCommand }, { graceMs: config.timeouts.stopGraceMs });
   }
 }
 
@@ -235,17 +231,17 @@ function serviceEntries(services) {
   return Object.entries(services || {});
 }
 
-async function waitForPidExit(pid, timeoutMs, { expectedCommand, validate = validateOwnedPid } = {}) {
+async function waitForPidExit(pid, timeoutMs, expectedCommand) {
   const deadline = Date.now() + timeoutMs;
-  while (await validate(pid, { expectedCommand })) {
+  while (await validateOwnedPid(pid, { expectedCommand })) {
     if (Date.now() >= deadline) throw failure(FailureKind.CLEANUP, `supervisor ${pid} did not stop`, { stage: "cleanup" });
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
   }
 }
 
-async function confirmReset(prompt, { input = processStdin, output = processStdout } = {}) {
-  if (!input || typeof input.on !== "function" || input.isTTY === false || (input === processStdin && input.isTTY !== true)) throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
-  const readline = createInterface({ input, output });
+async function confirmReset(prompt) {
+  if (processStdin.isTTY !== true) throw failure(FailureKind.CONFIG, "dev:reset requires --yes when interactive stdin is unavailable", { stage: "reset" });
+  const readline = createInterface({ input: processStdin, output: processStdout });
   try {
     const answer = await readline.question(`${prompt} [y/N] `);
     return /^(?:y|yes)$/i.test(answer.trim());

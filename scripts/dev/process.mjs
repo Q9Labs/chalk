@@ -18,7 +18,7 @@ function createRedactor({ values = [], env = {} } = {}) {
   return (text) => needles.reduce((result, needle) => result.split(needle).join("[redacted]"), String(text));
 }
 
-export function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
+function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
   const redact = createRedactor({ values: redactions, env });
   const servicePath = join(logRoot, `${service}.log`);
   let ready = false;
@@ -78,13 +78,7 @@ export function spawnService(spec, { config, runtimeId, extraEnv = {}, redaction
   return running;
 }
 
-async function waitForChildExit(running, timeoutMs = 5000) {
-  if (running.exited) return running;
-  await waitUntil(() => running.exited, timeoutMs, 25);
-  return running;
-}
-
-export async function waitForHTTPReady(service, { timeoutMs = 30000, intervalMs = 200, fetchImpl = fetch, signal } = {}) {
+export async function waitForHTTPReady(service, { timeoutMs = 30000, intervalMs = 200, signal } = {}) {
   const readiness = service.readiness;
   if (!readiness?.url) return { ok: true, skipped: true };
   const deadline = Date.now() + timeoutMs;
@@ -92,7 +86,7 @@ export async function waitForHTTPReady(service, { timeoutMs = 30000, intervalMs 
   while (Date.now() < deadline) {
     if (signal?.aborted) throw failure(FailureKind.READINESS_TIMEOUT, `${service.id} readiness cancelled`, { stage: "readiness", service: service.id });
     try {
-      const response = await fetchImpl(readiness.url, { signal: requestSignal(signal, Math.min(intervalMs * 2, 1000)) });
+      const response = await fetch(readiness.url, { signal: requestSignal(signal, Math.min(intervalMs * 2, 1000)) });
       const statusOK = response.status === (readiness.expectedStatus || 200);
       let body;
       if (readiness.parse) body = await readiness.parse(response);
@@ -108,7 +102,7 @@ export async function waitForHTTPReady(service, { timeoutMs = 30000, intervalMs 
   throw failure(FailureKind.READINESS_TIMEOUT, `${service.id} did not become ready within ${timeoutMs}ms${detail}`, { stage: "readiness", service: service.id });
 }
 
-export async function waitForFileReady(service, { timeoutMs = 30000, intervalMs = 200, statImpl = stat, signal } = {}) {
+export async function waitForFileReady(service, { timeoutMs = 30000, intervalMs = 200, signal } = {}) {
   const filePath = service.readiness?.filePath;
   if (!filePath) return { ok: true, skipped: true };
   const deadline = Date.now() + timeoutMs;
@@ -116,7 +110,7 @@ export async function waitForFileReady(service, { timeoutMs = 30000, intervalMs 
   while (Date.now() < deadline) {
     if (signal?.aborted) throw failure(FailureKind.READINESS_TIMEOUT, `${service.id} readiness cancelled`, { stage: "readiness", service: service.id });
     try {
-      const metadata = await statImpl(filePath);
+      const metadata = await stat(filePath);
       if (metadata.isFile()) return { ok: true, path: filePath };
       lastError = new Error(`${filePath} is not a regular file`);
     } catch (error) {
@@ -136,10 +130,10 @@ function requestSignal(parent, timeoutMs) {
   return controller.signal;
 }
 
-export async function stopProcessGroup(running, { graceMs = 3000, killGraceMs = 1000, validate = validateOwnedPid } = {}) {
+export async function stopProcessGroup(running, { graceMs = 3000, killGraceMs = 1000 } = {}) {
   const pid = Number(running?.pid);
   if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return { stopped: false, reason: "invalid-pid" };
-  if (!(await validate(pid, { expectedCommand: running.expectedCommand, expectedProcessGroup: process.platform !== "win32" }))) return { stopped: false, reason: "ownership-unverified" };
+  if (!(await validateOwnedPid(pid, { expectedCommand: running.expectedCommand, expectedProcessGroup: process.platform !== "win32" }))) return { stopped: false, reason: "ownership-unverified" };
   sendGroupSignal(pid, "SIGTERM", running.child);
   if (await waitUntil(() => !isAlive(pid), graceMs, 25)) return { stopped: true, signal: "SIGTERM" };
   sendGroupSignal(pid, "SIGKILL", running.child);

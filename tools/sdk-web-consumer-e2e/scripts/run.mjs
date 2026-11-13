@@ -2,6 +2,7 @@ import { checkDocExamples } from "./docs-examples.mjs";
 import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { proveAgreementMatrix } from "./agreement.mjs";
+import { showCallControls } from "./call-controls.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -155,15 +156,6 @@ async function verifyDirectedRequests(alice, bob) {
   if (camera.status !== "delivered") throw new TypeError("Packed SDK camera request was not delivered");
   await waitFor(bob, (snapshot, expected) => snapshot.incomingMediaRequests.some((request) => request.requestId === expected.requestId && request.kind === "start_camera"), camera);
   await invoke(bob, "declineMediaRequest", camera.requestId);
-}
-
-// Resting call controls fade and ignore the pointer until it moves, so move it
-// the way a person would before reaching for the dock.
-async function showCallControls(page) {
-  const { width, height } = page.viewportSize();
-  await page.mouse.move(width / 2, height / 2);
-  await page.mouse.move(width / 2 + 10, height / 2 + 10);
-  await page.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
 }
 
 async function verifyCollaborations(alice, bob) {
@@ -468,17 +460,5 @@ function run(command, arguments__, cwd) {
     const child = spawn(command, arguments__, { cwd, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => (code === 0 ? resolveRun() : reject(new TypeError(`${command} ${arguments__.join(" ")} exited with code ${code}`))));
-  });
-}
-
-function readArchiveManifest(archivePath) {
-  return new Promise((resolveManifest, rejectManifest) => {
-    const child = spawn("tar", ["-xOf", archivePath, "package/package.json"], { stdio: ["ignore", "pipe", "inherit"] });
-    let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += String(chunk);
-    });
-    child.once("error", rejectManifest);
-    child.once("exit", (code) => (code === 0 ? resolveManifest(output) : rejectManifest(new TypeError(`tar ${archivePath} exited with code ${code}`))));
   });
 }

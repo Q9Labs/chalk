@@ -13,7 +13,7 @@ const baselinePath = resolve(scriptDir, "explicit-any-baseline.json");
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
-export function findExplicitAny(file, source) {
+function findExplicitAny(file, source) {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const lines = source.split("\n");
   const findings = [];
@@ -29,7 +29,7 @@ export function findExplicitAny(file, source) {
   return findings;
 }
 
-export function compareBaseline(findings, baseline) {
+function compareBaseline(findings, baseline) {
   const remaining = Object.fromEntries(baseline.map(({ fingerprint, count }) => [fingerprint, count]));
   const added = [];
   for (const finding of findings) {

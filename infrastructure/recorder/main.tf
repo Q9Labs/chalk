@@ -12,7 +12,6 @@ module "capture" {
   region             = var.capture_region
   image_id           = var.capture_image_id
   image_digest       = local.capture_image_digest
-  release_id         = var.release_id
   bootstrap_endpoint = local.capture_bootstrap_endpoint
   control_addresses  = var.control_addresses
   enable_apply       = var.enable_apply
@@ -32,7 +31,6 @@ module "render" {
   gpu                = var.render_gpu
   image_id           = var.render_image_id
   image_digest       = local.render_image_digest
-  release_id         = var.release_id
   bootstrap_endpoint = local.render_bootstrap_endpoint
   control_addresses  = var.control_addresses
   enable_apply       = var.enable_apply

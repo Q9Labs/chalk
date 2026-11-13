@@ -6,8 +6,8 @@ import { FailureKind, failure } from "./model.mjs";
 // so "the seeded user can sign in" means that arrival is admitted through the web origin, the same way the browser does it:
 // the API answers with a guest cookie, and leaving presents that cookie.
 
-export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, spaceId, fetchImpl = fetch } = {}) {
-  const response = await fetchImpl(new URL(`/v1/tenants/${tenantId}/spaces/${spaceId}/public-invite`, apiOrigin), {
+export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, spaceId } = {}) {
+  const response = await fetch(new URL(`/v1/tenants/${tenantId}/spaces/${spaceId}/public-invite`, apiOrigin), {
     method: "PATCH",
     headers: { Authorization: `Bearer ${systemToken}`, "content-type": "application/json" },
     body: JSON.stringify({ enabled: true }),
@@ -21,15 +21,15 @@ export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, space
 }
 
 /** Loads the invite page, arrives as the seeded guest through `origin`, checks the guest is admitted, then leaves. */
-export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, attempts = 3, retryDelayMs = 3000 } = {}) {
-  const page = await fetchImpl(new URL(invite.path, origin), { headers: { accept: "text/html" } });
+export async function proveSeededSignIn({ origin, invite, attempts = 3, retryDelayMs = 3000 } = {}) {
+  const page = await fetch(new URL(invite.path, origin), { headers: { accept: "text/html" } });
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
   }
   // The arrival opens a real media connection, so a provider timeout can fail one attempt; a 4xx never retries.
   let arrival;
   for (let attempt = 1; ; attempt += 1) {
-    arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
+    arrival = await fetch(new URL("/v1/public/space-invite-arrivals", origin), {
       method: "POST",
       headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin },
       body: JSON.stringify({ display_name: "Seeded guest", space_invite_token: invite.code }),
@@ -40,7 +40,7 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
   }
   if (arrival.status !== 201) throw failure(FailureKind.STARTUP, `seeded guest arrival through ${origin} failed with HTTP ${arrival.status}: ${(await arrival.text()).slice(0, 200)}`, { stage: "signin" });
   const body = await arrival.json();
-  const leave = await fetchImpl(new URL("/v1/public/space-invite-arrival", origin), {
+  const leave = await fetch(new URL("/v1/public/space-invite-arrival", origin), {
     method: "DELETE",
     headers: {
       Cookie: arrival.headers

@@ -3,7 +3,7 @@ import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-export function ensurePlaywrightBrowsers(runtime, browsers, runProcess = spawnSync) {
+function ensurePlaywrightBrowsers(runtime, browsers) {
   if (!["sdk", "engine"].includes(runtime) || !browsers.length || browsers.some((browser) => !["chromium", "firefox", "webkit"].includes(browser))) {
     throw new Error("Usage: ensure-playwright-browsers.mjs sdk|engine chromium|firefox|webkit [...]");
   }
@@ -28,7 +28,7 @@ export function ensurePlaywrightBrowsers(runtime, browsers, runProcess = spawnSy
       const source = `require(${JSON.stringify(core)})[${JSON.stringify(browser)}]
       .launch({ executablePath: process.argv[1], headless: true })
       .then(browser => browser.close()).catch(error => { console.error(error.message); process.exitCode = 1; });`;
-      const result = runProcess(process.execPath, ["-e", source, path], { encoding: "utf8", timeout: 60000 });
+      const result = spawnSync(process.execPath, ["-e", source, path], { encoding: "utf8", timeout: 60000 });
       if (result.status !== 0) console.error(result.error?.message ?? result.stderr);
       return result.status !== 0;
     });
@@ -38,7 +38,7 @@ export function ensurePlaywrightBrowsers(runtime, browsers, runProcess = spawnSy
     console.log(`Repairing ${runtime} Playwright cache: unusable executable ${path}`);
     rmSync(directory, { recursive: true, force: true });
   }
-  const result = runProcess(process.execPath, [join(core, "cli.js"), "install", ...new Set(incomplete.map(({ browser }) => browser))], {
+  const result = spawnSync(process.execPath, [join(core, "cli.js"), "install", ...new Set(incomplete.map(({ browser }) => browser))], {
     stdio: "inherit",
     env: { ...process.env, PLAYWRIGHT_SKIP_BROWSER_GC: "1" },
   });

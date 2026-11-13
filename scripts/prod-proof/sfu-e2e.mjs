@@ -14,36 +14,21 @@
 //   node-restart      CHALK_E2E_RESTART runs mid-call; clients recover, by themselves or by an explicit rejoin
 // Screen share, join and leave on two clients are covered by `pnpm prod:proof camera-share`.
 // The report goes to .private/prod-proof/<run>/sfu-e2e-<provider>.json and the exit code is non-zero on any failure.
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save, waitFor } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { check, command, mediaPlane, save, waitFor } from "./runtime.mjs";
+import { runStandalone } from "./standalone.mjs";
 import { launchGuests, stats } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode } from "./proofs.mjs";
+import { growing } from "./sfu-canary-criteria.mjs";
 import { hearAfterUnmute, proveAudioDecoded, proveSilenceFrom, unheardAfterUnmute } from "./audio-decode.mjs";
 
 const shell = (script) => command("sh", ["-c", script]);
-
-const sameStream = (row) => (candidate) => candidate.id === row.id && candidate.connection === row.connection;
-
-function advanced(row, was, kind) {
-  if (!was || !(row.bytesReceived > was.bytesReceived)) return false;
-  return kind !== "video" || row.framesDecoded > was.framesDecoded;
-}
-
-// Streams of one kind and source whose counters grew between two samples of one guest.
-function moving(rows, before, kind, source) {
-  const isStream = (row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source;
-  return rows.filter((row) => isStream(row) && advanced(row, before.find(sameStream(row)), kind)).length;
-}
 
 async function movement(pages, windowMs) {
   const before = await stats(pages);
   await sleep(windowMs);
   const after = await stats(pages);
-  return after.map((rows, guest) => ({ cameras: moving(rows, before[guest], "video", "camera"), microphones: moving(rows, before[guest], "audio", "microphone") }));
+  return after.map((rows, guest) => ({ cameras: growing(rows, before[guest], "video", "camera"), microphones: growing(rows, before[guest], "audio", "microphone") }));
 }
 
 // waitForMovement resolves with the time it took until every guest in `guests` receives at least `others` of each stream.
@@ -58,10 +43,9 @@ async function waitForMovement(pages, guests, others, limitMs, label) {
 
 async function openCall(run, receiver, guestCount) {
   const space = await createSpace(run);
-  const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId } });
+  const { episode, path } = await postEpisode(run, space);
   await save(`${run.directory}/episode.json`, episode);
-  const ending = episodeEnd(run, `${episodePath}/${episode.id}`);
+  const ending = episodeEnd(run, path);
   const guests = await launchGuests(run, space, episode, null, receiver.origin, true, guestCount);
   ending.useSDK(guests.pages[0]);
   return { ...ending, guests };
@@ -227,17 +211,6 @@ async function runScenario(run, receiver, name) {
   return teardown.length ? { ...outcome, result: "failed", teardown } : outcome;
 }
 
-async function runScenarios(state, names, report) {
-  const config = await loadConfig();
-  await sweepStaleRuns(config);
-  state.run = await createRun(config, state.directory, undefined, state.runId);
-  const receiver = await prepareIntegration(state.run, false);
-  for (const name of names) {
-    report.scenarios[name] = await runScenario(state.run, receiver, name);
-    console.log(`${name}: ${report.scenarios[name].result}`);
-  }
-}
-
 const allPassed = (report) => !report.error && !report.cleanupError && Object.values(report.scenarios).every((scenario) => scenario.result === "passed");
 
 async function finish(directory, report) {
@@ -250,20 +223,14 @@ async function finish(directory, report) {
 
 async function main() {
   const names = scenarioNames();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const state = { runId, directory: resolve(".private", "prod-proof", runId) };
-  await mkdir(state.directory, { recursive: true, mode: 0o700 });
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), scenarios: {} };
-  try {
-    await runScenarios(state, names, report);
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("sfu-e2e", error);
-  } finally {
-    if (state.run) await cleanupRun(state.run).catch((error) => (report.cleanupError = errorEvidence(error)));
-  }
-  await finish(state.directory, report);
+  const { directory } = await runStandalone("sfu-e2e", report, async (run, receiver) => {
+    for (const name of names) {
+      report.scenarios[name] = await runScenario(run, receiver, name);
+      console.log(`${name}: ${report.scenarios[name].result}`);
+    }
+  });
+  await finish(directory, report);
 }
 
 await main();

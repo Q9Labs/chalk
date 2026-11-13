@@ -67,30 +67,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
   if (known.keyId) await attempt("api-key", known.keyId, () => revokeKey(call, `${base}/api-keys/${known.keyId}`));
   await attempt("spaces", runId, async () => {
     const spaces = (await list(call, `${base}/spaces`, "spaces")).filter((space) => space.name === label && space.metadata?.proof_run_id === runId);
-    for (const space of spaces) {
-      const before = failures.length;
-      await attempt("episodes", space.id, async () => {
-        const path = `${base}/spaces/${space.id}/episodes`;
-        const episodes = await list(call, path, "episodes");
-        for (const episode of episodes.filter((episode) => episode.metadata?.proof_run_id === runId)) {
-          await attempt("episode", episode.id, async () => {
-            await endEpisode(call, path, episode);
-          });
-        }
-      });
-      await attempt("transcripts", space.id, async () => {
-        const transcripts = await list(call, `${base}/transcripts`, "transcripts");
-        for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
-          await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
-        }
-      });
-      if (failures.length === before) {
-        await attempt("space", space.id, async () => {
-          if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
-          check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Space not archived");
-        });
-      }
-    }
+    for (const space of spaces) await cleanupSpace(call, base, runId, space, attempt, failures);
   });
   // Episodes the run created in a reused Space, whatever the Space's name or metadata.
   for (const tracked of known.episodes ?? []) {
@@ -99,17 +76,36 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       await endEpisode(call, path, await call("GET", `${path}/${tracked.id}`));
     });
     // Only this run's Episodes: a reused Space may hold Transcripts of other runs.
-    await attempt("tracked-transcripts", tracked.id, async () => {
-      const transcripts = await list(call, `${base}/transcripts`, "transcripts");
-      for (const transcript of transcripts.filter((entry) => entry.episode_id === tracked.id && entry.status !== "deleted")) {
-        await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
-      }
-    });
+    await attempt("tracked-transcripts", tracked.id, () => deleteTranscripts(call, base, attempt, (entry) => entry.episode_id === tracked.id));
   }
   await cleanupWebhook(call, config, known, base, attempt);
   await save(`${directory}/remote-cleanup.json`, results);
   if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
   return results;
+}
+// Ends the run's Episodes in the Space, deletes its Transcripts, and archives it only when none of that failed.
+async function cleanupSpace(call, base, runId, space, attempt, failures) {
+  const before = failures.length;
+  await attempt("episodes", space.id, async () => {
+    const path = `${base}/spaces/${space.id}/episodes`;
+    const episodes = await list(call, path, "episodes");
+    for (const episode of episodes.filter((entry) => entry.metadata?.proof_run_id === runId)) {
+      await attempt("episode", episode.id, () => endEpisode(call, path, episode));
+    }
+  });
+  await attempt("transcripts", space.id, () => deleteTranscripts(call, base, attempt, (entry) => entry.space_id === space.id));
+  if (failures.length === before) {
+    await attempt("space", space.id, async () => {
+      if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
+      check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Space not archived");
+    });
+  }
+}
+async function deleteTranscripts(call, base, attempt, belongs) {
+  const transcripts = await list(call, `${base}/transcripts`, "transcripts");
+  for (const transcript of transcripts.filter((entry) => belongs(entry) && entry.status !== "deleted")) {
+    await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
+  }
 }
 async function revokeKey(call, path) {
   try {

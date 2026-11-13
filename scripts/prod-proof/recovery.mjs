@@ -12,16 +12,14 @@
 // Result in .private/prod-proof/<run>/recovery.json, per direction: "down" is what guest 2 receives from guest 1 and "up" what guest 1
 // receives from guest 2. Run client-side faults against guest 2 only by giving --guest2-chromium a launcher that starts Chromium in
 // its own network namespace (recovery-rig). Take the staging lease (scripts/staging-sfu/staging-lock) around every run.
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { exec } from "node:child_process";
 import { parseArgs, promisify } from "node:util";
-import { check, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { check, save } from "./runtime.mjs";
+import { runStandalone } from "./standalone.mjs";
 import { launchGuests } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { recoveryOf } from "./recovery-analysis.mjs";
 import { installRecoverySampler } from "./recovery-sampler.mjs";
@@ -77,10 +75,9 @@ async function waitReady(page) {
 
 async function callUnderFault(run, origin, settings) {
   const space = await createSpace(run, "chalk_sfu");
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
+  const { episode, path } = await postEpisode(run, space);
   await trackEpisode(run, space, episode);
-  const ending = episodeEnd(run, `${path}/${episode.id}`);
+  const ending = episodeEnd(run, path);
   const executablePaths = settings.guest2Chromium ? { 1: settings.guest2Chromium } : undefined;
   try {
     const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane: "chalk_sfu", observeLeave: true, executablePaths });
@@ -119,24 +116,10 @@ async function callUnderFault(run, origin, settings) {
 
 async function main() {
   const settings = options();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
   const report = { startedAt: new Date().toISOString(), scenario: settings.scenario, environment: settings.environment };
-  let run;
-  try {
-    const config = await loadConfig({ readiness: false });
-    await sweepStaleRuns(config);
-    run = await createRun(config, directory, undefined, runId);
-    const receiver = await prepareIntegration(run, false);
+  const { directory } = await runStandalone("recovery", report, async (run, receiver) => {
     Object.assign(report, await callUnderFault(run, receiver.origin, settings));
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("recovery", error);
-  } finally {
-    if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
-  }
+  }, { readiness: false });
   await save(`${directory}/recovery.json`, report);
   console.log(JSON.stringify({ scenario: report.scenario, fault: report.fault, down: report.down, up: report.up }, null, 1));
   console.log(`Private evidence: ${directory}`);

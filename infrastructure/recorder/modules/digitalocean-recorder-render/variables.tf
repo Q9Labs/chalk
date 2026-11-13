@@ -46,10 +46,6 @@ variable "image_digest" {
   }
 }
 
-variable "release_id" {
-  type = string
-}
-
 variable "bootstrap_endpoint" {
   type = string
 }

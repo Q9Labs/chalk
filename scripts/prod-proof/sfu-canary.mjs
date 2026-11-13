@@ -22,17 +22,14 @@
 // --faults 0 runs joins only, with no fault commands: a post-deploy smoke of a media node.
 // CHALK_CANARY_SPACE_ID reuses one existing Space, as an allowlisted production Space
 // needs, instead of creating a Space for each trial.
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
-import { launchGuests, stats } from "./media.mjs";
+import { check, command, mediaPlane, save } from "./runtime.mjs";
+import { runStandalone } from "./standalone.mjs";
+import { launchGuests, pollRendering, stats } from "./media.mjs";
 import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { createSpace, episodeEnd, postEpisode } from "./proofs.mjs";
 import { grew, rendering, stalled, stallEvidence, summarize } from "./sfu-canary-criteria.mjs";
 import { installRenderProbe, renderEventMs } from "./render-probe.mjs";
 
@@ -57,16 +54,11 @@ const faultUp = process.env.CHALK_CANARY_FAULT_UP;
 const faultStatus = process.env.CHALK_CANARY_FAULT_STATUS;
 const shell = (script) => command("sh", ["-c", script]);
 
-async function rendersWithin(pages, startedAt, limitMs, label) {
-  let previous = await stats(pages);
-  for (;;) {
-    await sleep(pollMs);
-    const current = await stats(pages);
-    if (rendering(current, previous)) return Math.round(performance.now() - startedAt);
-    previous = current;
-    check(performance.now() - startedAt < limitMs + 15_000, `${label}: no rendered audio and video within ${limitMs + 15_000} ms`);
-  }
-}
+// The muted client sends no audio, so the other client's audio must reach it and video must reach both.
+const mutedRendering = (current, previous) => current.every((rows, guest) => grew(rows, previous[guest], "video", "camera")) && grew(current[0], previous[0], "audio", "microphone");
+
+const rendersWithin = (pages, startedAt, limitMs, label, rendered = rendering) =>
+  pollRendering(pages, startedAt, limitMs + 15_000, `${label}: no rendered audio and video within ${limitMs + 15_000} ms`, rendered, pollMs);
 
 async function microphoneState(page) {
   return page.evaluate(() => window.proofClient.getSnapshot().media.local.microphone.state);
@@ -77,9 +69,8 @@ async function openCall(run, receiver, owned) {
   const space = process.env.CHALK_CANARY_SPACE_ID ? await run.apiRequest("GET", `${run.tenantPath}/spaces/${process.env.CHALK_CANARY_SPACE_ID}`) : await createSpace(run);
   check((space.effective_media_plane ?? space.media_plane) === mediaPlane, `Space uses ${space.effective_media_plane ?? space.media_plane}, not ${mediaPlane}`);
   await save(`${run.directory}/space.json`, space);
-  const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId } });
-  owned.path = `${episodePath}/${episode.id}`;
+  const { episode, path } = await postEpisode(run, space);
+  owned.path = path;
   owned.ending = episodeEnd(run, owned.path);
   await save(`${run.directory}/episode.json`, episode);
   let startedAt = performance.now();
@@ -118,7 +109,7 @@ async function faultRound(pages, muted) {
     faultInstalled = false;
   }
   if (!muted) return rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
-  const recovered = await mutedRendersWithin(pages, restoredAt, recoveryLimitMs);
+  const recovered = await rendersWithin(pages, restoredAt, recoveryLimitMs, "muted recovery", mutedRendering);
   check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");
   return recovered;
 }
@@ -171,19 +162,6 @@ async function trial(run, receiver, fault) {
   return teardownError === undefined ? result : { error: result.error ?? `The trial's Episode did not end: ${teardownError}` };
 }
 
-// The muted client sends no audio, so the other client's audio must reach it and video must reach both.
-async function mutedRendersWithin(pages, startedAt, limitMs) {
-  let previous = await stats(pages);
-  for (;;) {
-    await sleep(pollMs);
-    const current = await stats(pages);
-    const video = current.every((rows, guest) => grew(rows, previous[guest], "video", "camera"));
-    if (video && grew(current[0], previous[0], "audio", "microphone")) return Math.round(performance.now() - startedAt);
-    previous = current;
-    check(performance.now() - startedAt < limitMs + 15_000, "muted recovery: no rendered video and audio");
-  }
-}
-
 function checkConfiguration() {
   check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 0, "--joins must be at least 1 and --faults at least 0", "configuration");
   if (faults === 0) return;
@@ -204,26 +182,11 @@ function conclude(report) {
 async function main() {
   process.once("SIGINT", restoreOnInterrupt);
   process.once("SIGTERM", restoreOnInterrupt);
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), flags: { joins, faults, faultSeconds: faultMs / 1000, joinLimitMs, recoveryLimitMs }, joins: [], faults: [] };
-  let run;
-  try {
-    checkConfiguration();
-    const config = await loadConfig();
-    await sweepStaleRuns(config);
-    run = await createRun(config, directory, undefined, runId);
-    const receiver = await prepareIntegration(run, false);
+  const { directory } = await runStandalone("sfu-canary", report, async (run, receiver) => {
     for (let index = 0; index < joins; index++) report.joins.push(await trial(run, receiver, false));
     for (let index = 0; index < faults; index++) report.faults.push(await trial(run, receiver, true));
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("sfu-canary", error);
-  } finally {
-    if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
-  }
+  }, { validate: checkConfiguration });
   conclude(report);
   await save(`${directory}/sfu-canary-${mediaPlane}.json`, report);
   console.log(JSON.stringify({ provider: mediaPlane, result: report.result, meetsM7Minimum: report.meetsM7Minimum, ...report.summary }, null, 2));

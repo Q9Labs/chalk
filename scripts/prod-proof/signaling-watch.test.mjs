@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { signalingBody, signalingOperation } from "./media.mjs";
+import { signalingBody, signalingOperation } from "./signaling-watch.mjs";
 
 test("the unified signal route is a signaling operation and its body names the op and its size", () => {
   assert.equal(signalingOperation("https://api.example.test/v1/spaces/s/episodes/e/media/sfu/signal"), "signal");

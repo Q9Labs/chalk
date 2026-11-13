@@ -12,7 +12,7 @@ function aliasTargetVersion(version) {
 }
 
 // Lists the root importer's direct dependencies as { name, version } from pnpm-lock.yaml (lockfile v9).
-export function rootLockedVersions(lockfileText) {
+function rootLockedVersions(lockfileText) {
   const locked = [];
   // pnpm 12 puts package-manager/config dependencies in a separate YAML document.
   for (const document of lockfileText.split(/^---\s*$/m)) {
@@ -37,7 +37,7 @@ export function rootLockedVersions(lockfileText) {
   return locked;
 }
 
-export function installMismatches(locked, readInstalledVersion) {
+function installMismatches(locked, readInstalledVersion) {
   const problems = [];
   for (const { name, version } of locked) {
     if (version.startsWith("link:")) continue;

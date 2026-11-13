@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, rm, rmdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, rmdir, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { dirname, join, relative } from "node:path";
+import { join, relative } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
 import { writeJsonAtomic } from "./json-file.mjs";
 

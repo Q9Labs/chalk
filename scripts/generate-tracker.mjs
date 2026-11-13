@@ -3,32 +3,16 @@ import path from "node:path";
 import { readTracker, repoRoot } from "./tracker-data.mjs";
 import { renderMarkdown } from "./tracker-render.mjs";
 
-const checkOutput = async (root, [file, expected]) => {
-  const actual = await readFile(path.join(root, file), "utf8");
-  if (actual !== expected) throw new Error(`${file} is stale; run pnpm generate:tracker`);
-};
+const [flag, ...rest] = process.argv.slice(2);
+if ((flag !== undefined && flag !== "--check") || rest.length) throw new Error(`Unknown or incomplete argument: ${rest[0] ?? flag}`);
+const check = flag === "--check";
 
-const writeOutput = async (root, [file, contents]) => {
-  await writeFile(path.join(root, file), contents);
-};
-
-export const generateTracker = async ({ root = repoRoot, check = false } = {}) => {
-  const tracker = await readTracker(root);
-  const outputs = [["tracker-human.md", renderMarkdown(tracker)]];
-  const operation = check ? checkOutput : writeOutput;
-  await Promise.all(outputs.map((output) => operation(root, output)));
-  return tracker;
-};
-
-if (import.meta.main) {
-  const args = process.argv.slice(2);
-  let root = repoRoot;
-  let check = false;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--check") check = true;
-    else if (args[i] === "--root" && args[i + 1] && !args[i + 1].startsWith("--")) root = path.resolve(args[++i]);
-    else throw new Error(`Unknown or incomplete argument: ${args[i]}`);
-  }
-  const tracker = await generateTracker({ root, check });
-  console.log(`${check ? "Current" : "Generated"} tracker view: ${tracker.outcomes.length} outcomes.`);
+const tracker = await readTracker();
+const output = path.join(repoRoot, "tracker-human.md");
+const contents = renderMarkdown(tracker);
+if (check) {
+  if ((await readFile(output, "utf8")) !== contents) throw new Error("tracker-human.md is stale; run pnpm generate:tracker");
+} else {
+  await writeFile(output, contents);
 }
+console.log(`${check ? "Current" : "Generated"} tracker view: ${tracker.outcomes.length} outcomes.`);
