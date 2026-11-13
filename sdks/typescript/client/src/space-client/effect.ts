@@ -6,7 +6,6 @@ import { SpaceClientCore, SpaceClientCoreService, makeSpaceClientCoreLayer, type
 import type { ClientEffect } from "./errors";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 
-
 export type EffectMediaController = ControllerEffects["media"];
 export type EffectChatController = {
   readonly files: {
