@@ -113,7 +113,9 @@ jobs:
     name: Root ${{ matrix.group }}
     needs: changes
     if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
-    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
+    # The sfu lane stays on the hosted runner for now: TestViewerWithoutTWCCStepsDownOnALossyLink (features/media/sfu/tests/no_twcc_test.go)
+    # failed 3 of 6 runs on Instabox 4x8 and passes on the hosted image. The test runs unchanged; the lane goes back to the shared runner once it passes there.
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && matrix.group != 'sfu' && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
       contents: read
