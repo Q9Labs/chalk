@@ -166,7 +166,7 @@ export const makeConnectionLifecycleLayer = (options: ConnectionOptions) => {
   return lifecycle as Layer.Layer<ConnectionLifecycleService, never>;
 };
 export const makeFakeConnectionLifecycleLayer = makeConnectionLifecycleLayer;
-export const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOptions, "access" | "dependencies">) =>
+const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOptions, "access" | "dependencies">) =>
   Layer.effect(
     ConnectionLifecycleService,
     Effect.gen(function* () {
@@ -258,27 +258,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 ].every(Boolean)
               ) {
                 emittedPorts = ports;
-                for (const listener of portListeners) {
-                  try {
-                    listener(ports);
-                  } catch {
-                    /* Feature observers cannot affect lifecycle ownership. */
-                  }
-                }
+                notifyObservers(portListeners, ports);
               }
             }),
           ),
           Effect.asVoid,
           Effect.tap(() =>
-            Effect.sync(() => {
-              for (const listener of listeners) {
-                try {
-                  listener();
-                } catch {
-                  // Observer failures cannot affect lifecycle ownership.
-                }
-              }
-            }),
+            Effect.sync(() => notifyObservers(listeners)),
           ),
         );
       const transition = (state: ConnectionState): Effect.Effect<void> =>
@@ -365,9 +351,22 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* access.clear;
           yield* publish();
         });
+      /** Replaces the previous binding in `slot`; `attach` subscribes and returns the release. The release runs once, on scope close or replacement. */
+      const bindResource = (scope: Scope.Closeable, slot: "syncBindingCleanup" | "mediaBindingCleanup", attach: () => () => void): Effect.Effect<void> => {
+        model[slot]?.();
+        const release = attach();
+        let cleaned = false;
+        const cleanup = () => {
+          if (cleaned) return;
+          cleaned = true;
+          release();
+          if (model[slot] === cleanup) model[slot] = null;
+        };
+        model[slot] = cleanup;
+        return Scope.addFinalizer(scope, Effect.sync(cleanup));
+      };
       const bindSync = (scope: Scope.Closeable, sync: ConnectionSyncClient): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          model.syncBindingCleanup?.();
+        bindResource(scope, "syncBindingCleanup", () => {
           model.syncNoticeUnresponsive = false;
           let latestSnapshot: V1EpisodeSnapshot | null = null;
           let observedDialTimeouts = 0;
@@ -407,31 +406,18 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               }),
             );
           });
-          let cleaned = false;
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
+          return () => {
             unsubscribe();
             sync.stop();
-            if (model.syncBindingCleanup === cleanup) model.syncBindingCleanup = null;
           };
-          model.syncBindingCleanup = cleanup;
-          yield* Scope.addFinalizer(scope, Effect.sync(cleanup));
         });
       const bindMedia = (scope: Scope.Closeable, media: ConnectionMediaClient): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          model.mediaBindingCleanup?.();
+        bindResource(scope, "mediaBindingCleanup", () => {
           const unsubscribe = media.subscribe(() => enqueueBackground(handleMediaSnapshot(media, media.getSnapshot())));
-          let cleaned = false;
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
+          return () => {
             unsubscribe();
             media.stop();
-            if (model.mediaBindingCleanup === cleanup) model.mediaBindingCleanup = null;
           };
-          model.mediaBindingCleanup = cleanup;
-          yield* Scope.addFinalizer(scope, Effect.sync(cleanup));
         });
       const bindPorts = (scope: Scope.Closeable): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -444,7 +430,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const waitForSyncLive = (sync: ConnectionSyncClient, timeoutMs: number): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.callback<void, ConnectionLifecycleFailure>((resume) => {
           const observe = (snapshot: V1EpisodeSnapshot) => {
-            if (episodeEnded(snapshot)) resume(Effect.fail(lifecycleFailure("episode_ended", false, "The Episode has ended")));
+            if (episodeEnded(snapshot)) resume(Effect.fail(episodeEndedFailure()));
             else if (snapshot.connection.phase === "live") resume(Effect.void);
             else if (snapshot.connection.phase === "terminal") resume(Effect.fail(syncTerminalFailure(snapshot)));
             else if (snapshot.connection.phase === "stopped") resume(Effect.fail(lifecycleFailure("sync_start_failed", true, "Sync stopped before becoming live")));
@@ -466,10 +452,56 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           ),
         );
       };
+      const makeMediaClient = (grant: ParsedAccessGrant): ConnectionMediaClient => {
+        const media: ConnectionMediaClient = platform.createMediaClient({
+          access: grant,
+          credential: () => toPromise(access.getMediaToken()),
+          refreshCredential: () => toPromise(access.refresh("access_retry", false).pipe(Effect.map((fresh) => fresh.media.token))),
+          // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
+          // as a lost connection. A refresh then would race the server's own Leave and replace a connection
+          // that is about to go.
+          replaceMediaConnection: (observedConnectionId) =>
+            model.closed || model.state === "leaving" || model.state === "left"
+              ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
+              : toPromise(access.replaceMedia(observedConnectionId)).then(({ access: replacement }) => {
+                  if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
+                  return replacement.media;
+                }),
+          onTransportDiagnostic,
+          onTransportPath,
+          traceparent: reporter?.traceparent,
+          onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
+          onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
+        });
+        return media;
+      };
+      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient =>
+        platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent });
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
         const confirmEntered = sync.confirmEntered?.bind(sync);
         return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
       };
+      const startMedia = (media: ConnectionMediaClient, stream: MediaStream) =>
+        trace(
+          "start_media",
+          (model.startInitialMedia ? model.startInitialMedia(media, stream) : Effect.tryPromise({ try: () => media.start(stream), catch: (cause) => cause })).pipe(
+            Effect.mapError((cause) =>
+              sfuAccessRejected(cause)
+                ? lifecycleFailure("invalid_access", false, "Media access was rejected. Another tab or device may be using it. Rejoin explicitly to request access again.", cause)
+                : model.startInitialMedia
+                  ? lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)
+                  : failureFromCause(cause, "media_start_failed", "The media layer could not start"),
+            ),
+          ),
+        );
+      const startSync = (sync: ConnectionSyncClient) =>
+        trace(
+          "start_sync",
+          foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(
+            Effect.mapError((failure) => (sync.getSnapshot().connection.connectFailure ? syncStartupFailure(sync.getSnapshot()) : failure)),
+            Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))),
+          ),
+        );
       const performJoin = (reason: "join" | "access_retry" = "join", retried = false): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           if (model.state === "live") return;
@@ -490,77 +522,23 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let stream: MediaStream | null = null;
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
-            if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
             const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices));
-            stream = captured.stream;
-            grantedMedia = grantedMediaFromStream(stream);
+            const capturedStream = captured.stream;
+            stream = capturedStream;
+            grantedMedia = grantedMediaFromStream(capturedStream);
             captureWarning = captured.failure;
-            if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
             if (retried) recordAccessRetry();
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
-            const media = yield* trace(
-              "create_media_client",
-              Effect.try({
-                try: () =>
-                  platform.createMediaClient({
-                    access: grant,
-                    credential: () => toPromise(access.getMediaToken()),
-                    refreshCredential: () => toPromise(access.refresh("access_retry", false).pipe(Effect.map((fresh) => fresh.media.token))),
-                    // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
-                    // as a lost connection. A refresh then would race the server's own Leave and replace a connection
-                    // that is about to go.
-                    replaceMediaConnection: (observedConnectionId) =>
-                      model.closed || model.state === "leaving" || model.state === "left"
-                        ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
-                        : toPromise(access.replaceMedia(observedConnectionId)).then(({ access: replacement }) => {
-                            if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
-                            return replacement.media;
-                          }),
-                    onTransportDiagnostic,
-                    onTransportPath,
-                    traceparent: reporter?.traceparent,
-                    onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
-                    onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
-                  }),
-                catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
-              }),
-            );
+            const media = yield* trace("create_media_client", Effect.try({ try: () => makeMediaClient(grant), catch: startFailure("media_start_failed", "The media layer could not start") }));
             model.media = media;
-            const sync = yield* trace(
-              "create_sync_client",
-              Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
-                catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
-              }),
-            );
+            const sync = yield* trace("create_sync_client", Effect.try({ try: () => makeSyncClient(grant, media), catch: startFailure("sync_start_failed", "The sync layer could not start") }));
             model.sync = sync;
             yield* bindPorts(scope);
-            yield* Effect.all(
-              [
-                trace(
-                  "start_media",
-                  (model.startInitialMedia ? model.startInitialMedia(media, stream!) : Effect.tryPromise({ try: () => media.start(stream!), catch: (cause) => cause })).pipe(
-                    Effect.mapError((cause) =>
-                      sfuAccessRejected(cause)
-                        ? lifecycleFailure("invalid_access", false, "Media access was rejected. Another tab or device may be using it. Rejoin explicitly to request access again.", cause)
-                        : model.startInitialMedia
-                          ? lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)
-                          : failureFromCause(cause, "media_start_failed", "The media layer could not start"),
-                    ),
-                  ),
-                ),
-                trace(
-                  "start_sync",
-                  foreign(() => sync.start(), "sync_start_failed", "The sync layer could not start").pipe(
-                    Effect.mapError((failure) => (sync.getSnapshot().connection.connectFailure ? syncStartupFailure(sync.getSnapshot()) : failure)),
-                    Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))),
-                  ),
-                ),
-              ],
-              { concurrency: "unbounded", discard: true },
-            );
-            if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            yield* Effect.all([startMedia(media, capturedStream), startSync(sync)], { concurrency: "unbounded", discard: true });
+            if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
             yield* confirmSyncEntry(sync);
           }).pipe(
             Effect.matchEffect({
@@ -577,7 +555,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   model.failure = toFailure(failure);
                   if (model.joinCancelled) {
                     span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });
-                    return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+                    return yield* Effect.fail(joinCancelledFailure());
                   }
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
                   const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
@@ -854,9 +832,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           if (media.getSnapshot().connection.phase === "recovering") {
             const now = yield* Clock.currentTimeMillis;
-            attempt.expiresAt ??= now + MEDIA_RECOVERY_TIMEOUT_MS;
-            attempt.expiresAt = Math.max(attempt.expiresAt, foregroundRecoveryDeadline);
-            if (typeof document !== "undefined" && document.visibilityState === "hidden") attempt.expiresAt = now + MEDIA_RECOVERY_TIMEOUT_MS;
+            attempt.expiresAt = recoveryExpiry(attempt.expiresAt ?? now + MEDIA_RECOVERY_TIMEOUT_MS, now);
             if (now < attempt.expiresAt) return yield* waitForMediaLive(media);
           }
           const replacement = yield* access.replaceMedia().pipe(Effect.mapError(accessFailure));
@@ -880,14 +856,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             }),
           ),
         );
+      /** A foreground return extends a recovery window; a hidden page restarts it from now. */
+      const recoveryExpiry = (expiresAt: number, now: number): number =>
+        typeof document !== "undefined" && document.visibilityState === "hidden" ? now + MEDIA_RECOVERY_TIMEOUT_MS : Math.max(expiresAt, foregroundRecoveryDeadline);
       const syncAttemptExpired = (attempt: SyncRecoveryAttempt, sync: ConnectionSyncClient, now: number): boolean => {
         if (attempt.client !== sync) {
           attempt.client = sync;
           attempt.expiresAt = now + MEDIA_RECOVERY_TIMEOUT_MS;
           attempt.started = true;
         }
-        attempt.expiresAt = Math.max(attempt.expiresAt ?? 0, foregroundRecoveryDeadline);
-        if (typeof document !== "undefined" && document.visibilityState === "hidden") attempt.expiresAt = now + MEDIA_RECOVERY_TIMEOUT_MS;
+        attempt.expiresAt = recoveryExpiry(attempt.expiresAt ?? 0, now);
         return now >= attempt.expiresAt && sync.getSnapshot().connection.phase !== "live";
       };
       const syncNeedsReplacement = (snapshot: V1EpisodeSnapshot): Effect.Effect<boolean, ConnectionLifecycleFailure> => {
@@ -924,10 +902,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               if (model.epoch !== epoch || !active(model) || !media || !scope || !grant) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery requires active ports"));
               model.syncBindingCleanup?.();
               model.sync = null;
-              const sync = yield* Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
-                catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
-              });
+              const sync = yield* Effect.try({ try: () => makeSyncClient(grant, media), catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause) });
               model.sync = sync;
               yield* bindSync(scope, sync);
               return sync;
@@ -1034,12 +1009,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let rejectedToken: string | null = null;
           while (model.epoch === epoch) {
             yield* waitForPendingEpisodeEnd;
-            if (episodeHasEnded()) return lifecycleFailure("episode_ended", false, "The Episode has ended");
+            if (episodeHasEnded()) return episodeEndedFailure();
             const current = access.currentUnsafe();
             const grant = sameBindingCredential(current, original);
             const result = yield* readEpisodeStatus(platform.getEpisodeStatus, grant, rejectedToken);
             yield* waitForPendingEpisodeEnd;
-            if (episodeHasEnded() || statusIsEnded(result.status)) return lifecycleFailure("episode_ended", false, "The Episode has ended");
+            if (episodeHasEnded() || statusIsEnded(result.status)) return episodeEndedFailure();
             if (result.status === "active") return failure;
             const error = result.cause;
             if (statusCredentialsRejected(error)) {
@@ -1055,7 +1030,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           return lifecycleFailure("invalid_state", false, "The connection changed");
         }).pipe(
           Effect.timeout(60000),
-          Effect.catch(() => Effect.succeed(episodeHasEnded() ? lifecycleFailure("episode_ended", false, "The Episode has ended") : lifecycleFailure("access_unavailable", true, "Could not confirm Episode status. Rejoin to try again."))),
+          Effect.catch(() => Effect.succeed(episodeHasEnded() ? episodeEndedFailure() : lifecycleFailure("access_unavailable", true, "Could not confirm Episode status. Rejoin to try again."))),
         );
       const commitSnapshotFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -1174,14 +1149,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const notifyScreenEnded = (): Effect.Effect<void> =>
         Effect.sync(() => {
-          if (!active(model)) return;
-          for (const listener of screenEndedListeners) {
-            try {
-              listener();
-            } catch {
-              // Feature callbacks cannot affect lifecycle ownership.
-            }
-          }
+          if (active(model)) notifyObservers(screenEndedListeners);
         });
       const process = (work: Work): Effect.Effect<void> =>
         work.join
@@ -1309,6 +1277,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       } satisfies ConnectionLifecycleCapability;
     }),
   );
+/** Feature observers cannot affect lifecycle ownership, so their failures are dropped. */
+function notifyObservers<Args extends unknown[]>(observers: Iterable<(...args: Args) => void>, ...args: Args): void {
+  for (const observer of observers) {
+    try {
+      observer(...args);
+    } catch {
+      // Dropped on purpose; see above.
+    }
+  }
+}
 function localTracksOf(model: Model): MediaStreamTrack[] {
   return (model.media?.getSnapshot().localTracks ?? []).map(({ track }) => track);
 }
@@ -1334,7 +1312,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ syncHealth: model.syncSnapshot?.connection.health, sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : syncPhase(model.syncSnapshot?.connection.phase), media: mediaPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({ syncHealth: model.syncSnapshot?.connection.health, sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : transportPhase(model.syncSnapshot?.connection.phase), media: transportPhase(model.mediaSnapshot?.connection.phase) }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
     episodeEnded: model.episodeEndConfirmed,
     episodeEndReason: model.episodeEndReason,
@@ -1362,8 +1340,17 @@ function active(model: Model): boolean {
 function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {
   return new ConnectionLifecycleFailure({ code, recoverable, message, ...(cause === undefined ? {} : { cause }) });
 }
+function episodeEndedFailure(): ConnectionLifecycleFailure {
+  return lifecycleFailure("episode_ended", false, "The Episode has ended");
+}
+function joinCancelledFailure(): ConnectionLifecycleFailure {
+  return lifecycleFailure("invalid_state", false, "Join was cancelled by Leave");
+}
 function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
   return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
+}
+function startFailure(code: LifecycleFailureCode, message: string): (cause: unknown) => ConnectionLifecycleFailure {
+  return (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause));
 }
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
   const rejectedMessage = connectionSuperseded(value) ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Access was rejected";
@@ -1462,32 +1449,27 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   if (!Number.isSafeInteger(result) || result < minimum || result > maximum) throw new TypeError(`Expected an integer between ${minimum} and ${maximum}`);
   return result;
 }
-function syncPhase(phase: V1EpisodeSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
-  if (phase === "live") return "healthy";
-  if (phase === "recovering") return "recovering";
-  if (phase === "terminal") return "failed";
-  if (phase === "stopped") return "stopped";
-  if (phase === "connecting") return "connecting";
-  return "idle";
+const TRANSPORT_PHASES = new Map<string | undefined, ConnectionConnectionPhase>([
+  ["live", "healthy"],
+  ["recovering", "recovering"],
+  ["terminal", "failed"],
+  ["failed", "failed"],
+  ["stopped", "stopped"],
+  ["connecting", "connecting"],
+]);
+function transportPhase(phase: string | undefined): ConnectionConnectionPhase {
+  return TRANSPORT_PHASES.get(phase) ?? "idle";
 }
 function mediaDiagnosticPhase(snapshot: ConnectionMediaSnapshot | null) {
   return snapshot?.connection.peerConnectionState ?? snapshot?.connection.phase;
 }
 
-function mediaPhase(phase: ConnectionMediaSnapshot["connection"]["phase"] | undefined): ConnectionConnectionPhase {
-  if (phase === "live") return "healthy";
-  if (phase === "recovering") return "recovering";
-  if (phase === "failed") return "failed";
-  if (phase === "stopped") return "stopped";
-  if (phase === "connecting") return "connecting";
-  return "idle";
-}
 function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFailure {
   const reason = snapshot.connection.terminalReason;
   if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
-  if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
+  if (reason === "episode_ended") return episodeEndedFailure();
   if (reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Call access was replaced. Another tab or device may be using it. Rejoin explicitly to request access again.");
-  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+  if (reason === "participant_inactive" || reason === "participant_removed" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   if (reason === "entry_timeout") return lifecycleFailure("sync_start_failed", true, "Call entry was not confirmed in time");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");
 }
