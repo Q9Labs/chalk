@@ -217,3 +217,9 @@ test("the mock-call ratchet runs for every kind of test file it counts, not only
   assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
 });
+
+test("the #1295 board journey change selects the board-e2e lane on a pull request, and an unrelated change does not", () => {
+  assert.ok(jobs(["tests/board.e2e.ts"], "pull_request").rootGroups.includes("board-e2e"));
+  assert.ok(jobs(["packages/whiteboard/src/react/board/Board.tsx"], "pull_request").rootGroups.includes("board-e2e"));
+  assert.ok(!jobs(["apps/api/internal/accessgrants/service.go"], "pull_request").rootGroups.includes("board-e2e"));
+});

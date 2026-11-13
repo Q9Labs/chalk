@@ -430,6 +430,11 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
+  // What the board end-to-end journey (tests/board.e2e.ts) renders and drives. #1295 failed a cut because only the cut ran it.
+  // Inputs only: the journey needs the staging proof configuration, which the full and weekly runs do not carry.
+  const boardE2e = normalizedFiles.some((file) =>
+      startsWithAny(file, ["tests/board.e2e.ts", "e2e.config.ts", "scripts/web-proof", "packages/whiteboard/src", "sdks/typescript/react/src/components/board", "apps/web/src/components/space", "apps/web/src/styles"]),
+    );
   const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/prod-proof", "sdks/typescript/client/src"]));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
@@ -516,6 +521,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
+    task("board-e2e", "Board journey against staging with this checkout's web build", boardE2e, boardE2e ? "board inputs changed" : "the board journey is unaffected", ["bash", "scripts/web-proof/board-gate.sh"]),
     task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
@@ -614,6 +620,7 @@ const rootLaneGroups = {
   "browser-tests": ["browser-tests"],
   "dashboard-engine": ["dashboard-engine"],
   "dashboard-refresh": ["dashboard-refresh"],
+  "board-e2e": ["board-e2e"],
   // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
   sfu: ["sfu"],
   "call-leaks-1": ["call-leaks"],

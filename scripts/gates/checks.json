@@ -241,6 +241,16 @@
       "sample": "4 of 91 pull request runs failed: 1 real Pages Functions build error, 1 duplicate of types, 1 apt failure (noise), 1 unexplained. 12 Nov: 1 more noise failure in 4.9 s, a Hex registry 500 while fetching a package (Gate run 43200994606); the job now restores Mix dependencies from a cache keyed on the lockfile (PR 1210)."
     },
     {
+      "id": "gate:board-e2e",
+      "owner": "Web",
+      "catches": "The board journey (tests/board.e2e.ts) failing against this checkout's web build, before the cut's web-e2e job runs it.",
+      "runs": ["pull_request"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "New for #1334 item 2; the cut's web-e2e caught the #1295 case only at the last gate."
+    },
+    {
       "id": "gate:dashboard-refresh",
       "owner": "Dashboard",
       "catches": "Dashboard media-access credentials failing to refresh across the real five-minute lifetime.",
