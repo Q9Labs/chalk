@@ -12,6 +12,7 @@ defmodule ChalkSync.Operations.Readiness do
   alias ChalkSync.Observability
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Probe
+  alias ChalkSync.Operations.Probe.Report
 
   require Logger
 
@@ -91,7 +92,7 @@ defmodule ChalkSync.Operations.Readiness do
   def handle_info({:probe_result, _pid, _result}, state), do: {:noreply, state}
 
   def handle_info({:DOWN, ref, :process, pid, _reason}, %{probe_pid: pid, probe_ref: ref} = state) do
-    Probe.record_failure(:probe_worker, :probe_failed, %{observed: "terminated"})
+    Report.record_failure(:probe_worker, :probe_failed, %{observed: "terminated"})
     {:noreply, finish_probe(state, {:error, :probe_failed})}
   end
 
@@ -124,11 +125,11 @@ defmodule ChalkSync.Operations.Readiness do
     probe_fun.()
   rescue
     _exception ->
-      Probe.record_failure(:probe_worker, :probe_failed, %{observed: "exception"})
+      Report.record_failure(:probe_worker, :probe_failed, %{observed: "exception"})
       {:error, :probe_failed}
   catch
     :exit, _reason ->
-      Probe.record_failure(:probe_worker, :probe_failed, %{observed: "exit"})
+      Report.record_failure(:probe_worker, :probe_failed, %{observed: "exit"})
       {:error, :probe_failed}
   end
 

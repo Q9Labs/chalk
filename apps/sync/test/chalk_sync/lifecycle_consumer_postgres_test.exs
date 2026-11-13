@@ -4,6 +4,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.ExternalOperationConsumer.Execution
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Operations.Probe
   alias ChalkSync.Operations.Readiness
@@ -169,7 +170,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     finalize = &Postgres.finalize_operation/3
 
     assert :pending =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                fixture.episode,
                claimed,
                media,
@@ -181,7 +182,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(current)
 
     assert :terminal_failure =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                fixture.episode,
                claimed,
                media,
@@ -225,7 +226,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
       Enum.find(operations, fn {_, operation} -> operation.external_operation_id == id end)
 
     assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                fixture.episode,
                claimed,
                nil,
