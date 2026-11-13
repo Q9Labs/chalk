@@ -17,16 +17,17 @@ export type OfflineActionsControllerEffects = {
   readonly dispose: () => void;
 };
 
+type HeldAction = { readonly kind: OfflineActionKind; readonly text?: string; readonly reaction?: import("./types").ChatReactionInput; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] };
+
 /** Internal seam used by the chat and participants controllers. */
 export type OfflineActionsHold = {
   /** Returns the held version of `run`, or null when the connection is live and nothing is waiting. */
-  readonly hold: <A, E>(
-    input: { readonly kind: OfflineActionKind; readonly text?: string; readonly reaction?: import("./types").ChatReactionInput; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] },
-    run: () => Effect.Effect<A, E>,
-  ) => Effect.Effect<A, E | SpaceClientError> | null;
+  readonly hold: <A, E>(input: HeldAction, run: () => Effect.Effect<A, E>) => Effect.Effect<A, E | SpaceClientError> | null;
 };
 
-
+const NOTICE_SCOPE_CHANGED = "Your offline actions were not sent because the Episode or participant changed.";
+const NOTICE_CONNECTION_ENDED = "Your offline actions were not sent because the Episode ended or the connection closed.";
+const NOTICE_EXPIRED = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
 const sameSubject = (current: AccessSubject | null, saved: AccessSubject | null): boolean =>
   !!current && !!saved && current.tenantId === saved.tenantId && current.spaceId === saved.spaceId && current.episodeId === saved.episodeId && current.participantId === saved.participantId && current.participantGeneration === saved.participantGeneration;
 
@@ -46,7 +47,6 @@ export const makeOfflineActions = (input: { readonly connection: ConnectionLifec
     yield* Effect.addFinalizer(() => Effect.sync(() => runtime.dispose()));
     return runtime;
   });
-
 
 class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineActionsHold {
   readonly #connection: ConnectionLifecycleCapability;
@@ -81,10 +81,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       else this.#publish();
     });
 
-  hold = <A, E>(
-    input: { readonly kind: OfflineActionKind; readonly text?: string; readonly reaction?: import("./types").ChatReactionInput; readonly clientMessageId?: string; readonly attachments?: import("./types").ChatSendInput["attachments"] },
-    run: () => Effect.Effect<A, E>,
-  ): Effect.Effect<A, E | SpaceClientError> | null => {
+  hold = <A, E>(input: HeldAction, run: () => Effect.Effect<A, E>): Effect.Effect<A, E | SpaceClientError> | null => {
     if (this.#connection.getSnapshot().state !== "reconnecting" && !this.#decisionNeeded) return null;
     const queuedSubject = this.#connection.getSnapshot().subject;
     const action: StoredOfflineAction = Object.freeze({ ...input, id: this.#connection.createId(), text: input.text ?? null, queuedAt: this.#connection.nowUnsafe() });
@@ -118,7 +115,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     }
     if (state === "live") {
       if (!this.#validScope()) {
-        this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+        this.#notice = NOTICE_SCOPE_CHANGED;
         this.#settle("discard");
         return;
       }
@@ -127,7 +124,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
         this.#publish();
       } else this.#settle(this.#policy);
     } else if (terminal) {
-      this.#notice = "Your offline actions were not sent because the Episode ended or the connection closed.";
+      this.#notice = NOTICE_CONNECTION_ENDED;
       this.#settle("discard");
       this.#clearStorage();
     }
@@ -136,7 +133,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
   #settle(decision: "send" | "discard"): void {
     if (decision === "send" && this.#connection.getSnapshot().state !== "live") return;
     if (decision === "send" && !this.#validScope()) {
-      this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+      this.#notice = NOTICE_SCOPE_CHANGED;
       decision = "discard";
     }
     // Retire before dispatch: a crash after dispatch must never cause a replay.
@@ -163,9 +160,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
   }
 
   #validScope(): boolean {
-    const current = this.#connection.getSnapshot().subject;
-    const saved = this.#subject;
-    return sameSubject(current, saved);
+    return sameSubject(this.#connection.getSnapshot().subject, this.#subject);
   }
 
   #clearStorage(): boolean {
@@ -195,13 +190,13 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     if (!saved) return;
     this.#subject = saved.subject;
     if (!this.#validScope()) {
-      this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+      this.#notice = NOTICE_SCOPE_CHANGED;
       this.#clearStorage();
       this.#publish();
       return;
     }
     const actions = saved.actions.filter((action) => this.#connection.nowUnsafe() - action.queuedAt < OFFLINE_ACTION_MAX_AGE_MS);
-    if (actions.length !== saved.actions.length) this.#notice = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+    if (actions.length !== saved.actions.length) this.#notice = NOTICE_EXPIRED;
     if (!this.#policyExplicit) this.#policy = "ask";
     const restoredSubject = saved.subject;
     this.#waiters = actions.map((action) => ({
@@ -240,14 +235,14 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
 
   #resumeWaiter(waiter: Waiter, decision: "send" | "discard"): void {
     const expired = this.#connection.nowUnsafe() - waiter.action.queuedAt >= OFFLINE_ACTION_MAX_AGE_MS;
-    if (expired) this.#notice = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+    if (expired) this.#notice = NOTICE_EXPIRED;
     waiter.resume(decision === "send" && !expired ? Effect.void : Effect.fail(discardedError()));
   }
 
   #discardSaved(): void {
     try {
       if (!this.#storage?.getItem(this.#storageKey)) return;
-      this.#notice = "Your offline actions were not sent because the Episode ended or the connection closed.";
+      this.#notice = NOTICE_CONNECTION_ENDED;
       this.#clearStorage();
     } catch {
       this.#notice = "Saved offline actions could not be read. They will not be sent.";

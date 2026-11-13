@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { connectionErrorCode } from "./errors";
 import { structurallyEqual } from "./structural-equal";
 import type { ConnectionLifecycleSnapshot } from "../connection";
-import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
+import type { ConnectionSlice, MediaSlice, SpaceSnapshot } from "./types";
 
 const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["connection"]["sync"]>(["unresponsive", "connecting", "recovering", "stopped"]);
 
