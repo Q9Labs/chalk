@@ -17,7 +17,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     )
   end
 
-
   def lock(connection, episode, recording_id) do
     Postgrex.query!(
       connection,
@@ -26,15 +25,14 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     ).rows
   end
 
-
   def advance_capture_ready(
-         connection,
-         episode,
-         recording_id,
-         capture_epoch,
-         start_operation_id,
-         start_operation_uuid
-       ) do
+        connection,
+        episode,
+        recording_id,
+        capture_epoch,
+        start_operation_id,
+        start_operation_uuid
+      ) do
     with :ok <- validate_start_applied(connection, episode, start_operation_id) do
       params =
         Scope.episode(episode) ++
@@ -50,7 +48,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     end
   end
 
-
   def validate_start_applied(connection, episode, start_operation_id) do
     case lock_external_operation(connection, episode, start_operation_id) do
       %{name: :start_recording, status: :applied} -> :ok
@@ -58,16 +55,15 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     end
   end
 
-
   def validate_capture_stopped(
-         connection,
-         episode,
-         %{payload: %{"deadlineAtMs" => deadline_at_ms, "captureEpoch" => epoch}} = operation,
-         recording_status,
-         _recording_stop_id,
-         metadata
-       )
-       when is_integer(deadline_at_ms) and deadline_at_ms > 0 and is_integer(epoch) and epoch > 0 do
+        connection,
+        episode,
+        %{payload: %{"deadlineAtMs" => deadline_at_ms, "captureEpoch" => epoch}} = operation,
+        recording_status,
+        _recording_stop_id,
+        metadata
+      )
+      when is_integer(deadline_at_ms) and deadline_at_ms > 0 and is_integer(epoch) and epoch > 0 do
     recording_id = operation.payload["recordingId"]
     params = Scope.episode(episode) ++ [Scope.uuid(recording_id), epoch, deadline_at_ms]
 
@@ -82,13 +78,13 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
   end
 
   def validate_capture_stopped(
-         connection,
-         episode,
-         operation,
-         recording_status,
-         recording_stop_id,
-         metadata
-       ) do
+        connection,
+        episode,
+        operation,
+        recording_status,
+        recording_stop_id,
+        metadata
+      ) do
     recording_id = operation.payload["recordingId"]
     stop_operation_id = operation.payload["stopOperationId"]
     capture_epoch = operation.payload["captureEpoch"]
@@ -120,15 +116,14 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     end
   end
 
-
   def validate_advanced_capture_epoch(
-         connection,
-         episode,
-         recording_id,
-         capture_epoch,
-         start_operation_id,
-         start_operation_uuid
-       ) do
+        connection,
+        episode,
+        recording_id,
+        capture_epoch,
+        start_operation_id,
+        start_operation_uuid
+      ) do
     case advance_capture_ready(
            connection,
            episode,
@@ -142,7 +137,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
     end
   end
 
-
   defp lock_external_operation(connection, episode, external_operation_id) do
     params = Scope.episode(episode) ++ [Scope.uuid(external_operation_id)]
 
@@ -151,7 +145,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
       [] -> nil
     end
   end
-
 
   def capture_epoch(metadata) when is_map(metadata) do
     case Map.get(metadata, "capture_epoch") do
@@ -162,7 +155,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording.Epoch do
   end
 
   def capture_epoch(_metadata), do: 0
-
 
   defp parse_capture_epoch(value) do
     case Integer.parse(value) do

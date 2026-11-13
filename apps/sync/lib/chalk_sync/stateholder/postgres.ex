@@ -20,8 +20,8 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Lifecycle
-  alias ChalkSync.Stateholder.Postgres.Operations
   alias ChalkSync.Stateholder.Postgres.Media
+  alias ChalkSync.Stateholder.Postgres.Operations
   alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner

@@ -2,11 +2,11 @@ defmodule ChalkSync.WhiteboardV1.AuthorityCase do
   @moduledoc "Shared setup and helpers for the split test files."
   use ExUnit.CaseTemplate
 
-  alias ChalkSync.WhiteboardV1.AuthorityCase.Repository
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.AuthorityCase.Repository
 
   @participant_id "20000000-0000-4000-8000-000000000002"
 

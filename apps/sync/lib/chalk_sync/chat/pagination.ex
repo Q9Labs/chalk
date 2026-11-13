@@ -44,7 +44,6 @@ defmodule ChalkSync.Chat.Pagination do
     {:error, :invalid_payload}
   end
 
-
   defp loaded_page(request_id, page, options) do
     %{
       "type" => "chat_page",
@@ -56,7 +55,6 @@ defmodule ChalkSync.Chat.Pagination do
       "retained_floor_sequence" => page.retained_floor_sequence
     }
   end
-
 
   defp cursor_reset_page(request_id, floor) do
     %{

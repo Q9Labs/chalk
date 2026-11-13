@@ -131,8 +131,9 @@ defmodule ChalkSync.Transport.Router do
     conn |> put_resp_header("retry-after", "10") |> send_json(429, %{"error" => "rate_limited"})
   end
 
-  # TRIPWIRE(owner=sync, by=2027-02-13): a connect without entry_generation is a pre-entry-generation client. Delete this
-  # clause and the :legacy generation (Stateholder, Socket.State, JoinSeats.Admit) once those connects are gone.
+  # TRIPWIRE(owner=sync, by=2027-02-13): a connect without entry_generation is a pre-entry-generation
+  # client. Delete this clause and the :legacy generation (Stateholder, Socket.State, JoinSeats.Admit)
+  # once those connects are gone.
   defp entry_generation(nil), do: :legacy
   defp entry_generation("new"), do: :new
 

@@ -15,12 +15,12 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
                         0x4F, 0xD4, 0x30, 0xC8>>
 
   def maybe_accept_automatic_recording(
-         connection,
-         episode,
-         %{name: "participant_joined"} = intent,
-         policy,
-         state
-       ) do
+        connection,
+        episode,
+        %{name: "participant_joined"} = intent,
+        policy,
+        state
+      ) do
     if automatic_recording_policy?(policy) do
       operation = automatic_recording_operation(episode)
 
@@ -47,14 +47,13 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
   end
 
   def maybe_accept_automatic_recording(
-         _connection,
-         _episode,
-         _intent,
-         _policy,
-         _state
-       ),
-       do: :ok
-
+        _connection,
+        _episode,
+        _intent,
+        _policy,
+        _state
+      ),
+      do: :ok
 
   defp checkpoint_automatic_recording_acceptance(
          connection,
@@ -72,7 +71,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
         :ok
     end
   end
-
 
   defp accept_automatic_recording(connection, episode, operation, policy, state) do
     case ExternalOperationPlanner.persist_new_internal_operation(
@@ -96,7 +94,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
     end
   end
 
-
   defp automatic_recording_policy?(%{
          status: "active",
          artifact_policy: %{
@@ -107,7 +104,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
        do: true
 
   defp automatic_recording_policy?(_policy), do: false
-
 
   defp automatic_recording_operation(%EpisodeKey{} = episode) do
     request_key = "automatic_recording_" <> String.replace(episode.episode_id, "-", "")
@@ -121,7 +117,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording do
 
     operation
   end
-
 
   defp automatic_recording_id(%EpisodeKey{episode_id: episode_id}) do
     <<a::48, _version::4, b::12, _variant::2, c::62, _rest::binary>> =

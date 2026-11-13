@@ -65,7 +65,11 @@ defmodule ChalkSync.Live.Projection do
          :ok <- Validation.validate_items(projection.stream, [frame["item"]]),
          :ok <- encoded_bound(frame, @event_producer_byte_limit),
          items =
-           Map.put(projection.items, Validation.item_key(projection.stream, frame["item"]), frame["item"]),
+           Map.put(
+             projection.items,
+             Validation.item_key(projection.stream, frame["item"]),
+             frame["item"]
+           ),
          true <- map_size(items) <= Map.fetch!(@limits, projection.stream),
          :ok <-
            encoded_bound(
