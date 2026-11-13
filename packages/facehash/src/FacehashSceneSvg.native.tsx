@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Svg, { Defs, G, Path, RadialGradient, Rect, Stop, Text as SvgText } from "react-native-svg";
 import type { FacehashScene, Variant } from "./core/index";
 import { useBlinkTransform } from "./native-blink";
-import { faceBoxTransform, gradientCenter } from "./scene-svg";
+import { faceBoxTransform } from "./scene-svg";
 
 type FacehashSceneSvgNativeProps = {
   backgroundColor: string;
@@ -33,7 +33,7 @@ export function FacehashSceneSvgNative({ backgroundColor, enableBlink = false, f
   return (
     <Svg fill="none" height={size} viewBox="0 0 100 100" width={size}>
       <Defs>
-        <RadialGradient {...gradientCenter(scene)} id={gradientId} r="70%">
+        <RadialGradient cx={`${scene.gradientCenter.x}%`} cy={`${scene.gradientCenter.y}%`} id={gradientId} r="70%">
           <Stop offset="0%" stopColor="#ffffff" stopOpacity={0.15} />
           <Stop offset="60%" stopColor="#ffffff" stopOpacity={0} />
         </RadialGradient>

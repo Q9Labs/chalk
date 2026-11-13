@@ -7,7 +7,3 @@ export function sanitizeId(value: string): string {
 export function faceBoxTransform({ faceBox, faceGeometry }: FacehashScene): string {
   return `translate(${faceBox.x} ${faceBox.y}) scale(${faceBox.width / faceGeometry.viewBox.width} ${faceBox.height / faceGeometry.viewBox.height})`;
 }
-
-export function gradientCenter({ gradientCenter: center }: FacehashScene): { cx: string; cy: string } {
-  return { cx: `${center.x}%`, cy: `${center.y}%` };
-}

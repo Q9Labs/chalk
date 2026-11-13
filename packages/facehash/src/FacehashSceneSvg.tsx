@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { ensureBlinkKeyframes, getBlinkStyle } from "./blink.js";
 import type { FacehashScene, Variant } from "./core/index.js";
-import { faceBoxTransform, gradientCenter } from "./scene-svg.js";
+import { faceBoxTransform } from "./scene-svg.js";
 
 type FacehashSceneSvgProps = {
   backgroundColor: string;
@@ -47,7 +47,7 @@ export function FacehashSceneSvg({ backgroundColor, enableBlink = false, height 
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <radialGradient {...gradientCenter(scene)} id={gradientId} r="70%">
+        <radialGradient cx={`${scene.gradientCenter.x}%`} cy={`${scene.gradientCenter.y}%`} id={gradientId} r="70%">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
           <stop offset="60%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
