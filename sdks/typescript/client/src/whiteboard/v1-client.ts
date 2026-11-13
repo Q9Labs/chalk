@@ -1,8 +1,7 @@
 import { WHITEBOARD_PATH } from "../urls";
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
-import { sessionBaggage } from "../session";
-import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
+import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
   ChalkWhiteboardV1Error,
@@ -22,7 +21,8 @@ import {
   type ChalkWhiteboardV1UpdateInput,
   type ChalkWhiteboardView,
 } from "./types";
-import { decodeWhiteboardV1WireFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { decodeWhiteboardV1WireFrame, elementFromFrame, elementToFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
+import { BARE_HELLO, FIRST_HELLO, helloFrame, nextHelloLevel, type HelloLevel } from "./v1-hello";
 import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes, type WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
 import { WhiteboardV1Watchdog, type WhiteboardV1WatchdogReplacement } from "./v1-watchdog";
 import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
@@ -124,7 +124,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewsSupported = false;
   #presenting = false;
   #presenterId: string | null = null;
-  #hello: HelloLevel = HELLO_LEVELS[0];
+  #hello: HelloLevel = FIRST_HELLO;
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -203,7 +203,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = HELLO_LEVELS[0];
+    this.#hello = FIRST_HELLO;
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -384,24 +384,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (!this.#capabilities.includes("manageWhiteboard")) {
       throw error(failure("set_draw_permission", "permission_denied", false, "Whiteboard management permission is required."));
     }
-    const operationId = this.#nextId();
-    const frame = {
-      type: "set_draw_permission",
-      operation_id: operationId,
-      participant_id: participantId,
-      can_draw: canDraw,
-    } as ClientFrame<"set_draw_permission">;
-    await this.#queueOperation(frame);
+    await this.#queueOperation({ type: "set_draw_permission", operation_id: this.#nextId(), participant_id: participantId, can_draw: canDraw });
   }
 
   async setDrawPolicy(policy: ChalkWhiteboardDrawPolicy): Promise<void> {
     this.#assertLive("set_draw_policy");
-    if (this.#drawPolicy === null) {
-      throw error(policyUnavailable());
-    }
-    if (!this.#capabilities.includes("manageWhiteboard")) {
-      throw error(failure("set_draw_policy", "permission_denied", false, "Whiteboard management permission is required."));
-    }
+    if (this.#drawPolicy === null) throw error(policyUnavailable());
+    if (!this.#capabilities.includes("manageWhiteboard")) throw error(failure("set_draw_policy", "permission_denied", false, "Whiteboard management permission is required."));
     await this.#queueOperation({ type: "set_draw_policy", operation_id: this.#nextId(), policy });
   }
 
@@ -413,12 +402,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (!this.#canDraw) {
       throw error(failure("set_presentation", "permission_denied", false, "Whiteboard draw permission is required."));
     }
-    const frame = {
-      type: "set_presentation",
-      operation_id: this.#nextId(),
-      presenting,
-    } as ClientFrame<"set_presentation">;
-    await this.#queueOperation(frame);
+    await this.#queueOperation({ type: "set_presentation", operation_id: this.#nextId(), presenting });
   }
 
   async #restoreAndConnect(generation: number): Promise<void> {
@@ -1003,13 +987,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = HELLO_LEVELS[0];
+    if (phase === "live") this.#hello = FIRST_HELLO;
     return true;
   }
 
   #stepDownHello(): boolean {
     if (this.#hello === BARE_HELLO) return false;
-    this.#fallbackHello();
+    this.#hello = nextHelloLevel(this.#hello);
+    if (!this.#hello.views) this.#pendingLeadingView = null;
     return true;
   }
 
@@ -1017,12 +1002,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#rejectedHelloRetries >= MAX_REJECTED_HELLO_RETRIES) return false;
     this.#rejectedHelloRetries += 1;
     return true;
-  }
-
-  #fallbackHello(): void {
-    const step = this.#hello.name === "session" && sessionBaggage() === undefined ? 2 : 1;
-    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + step, HELLO_LEVELS.length - 1)] ?? BARE_HELLO;
-    if (!this.#hello.views) this.#pendingLeadingView = null;
   }
 
   #resetDisconnectedState(): void {
@@ -1255,58 +1234,8 @@ function assembleSnapshotElements(assembly: SnapshotAssembly, pageCount: number)
   return elements;
 }
 
-function elementToFrame(element: ChalkWhiteboardV1Element): WhiteboardV1Element {
-  return {
-    id: element.id,
-    type: element.type,
-    version: element.version,
-    version_nonce: element.versionNonce,
-    index: element.index,
-    is_deleted: element.isDeleted,
-    payload: element.payload,
-  };
-}
-
-function elementFromFrame(element: WhiteboardV1Element): ChalkWhiteboardV1Element {
-  return {
-    id: element.id,
-    type: element.type,
-    version: element.version,
-    versionNonce: element.version_nonce,
-    index: element.index,
-    isDeleted: element.is_deleted,
-    payload: element.payload,
-  };
-}
-
 function retryableOperationCode(code: ServerFrame<"operation_error">["code"]): boolean {
   return code === "unavailable" || code === "overloaded" || code === "rate_limited" || code === "storage_unavailable";
-}
-
-const VIEW_WITH_OWNER = { name: "view_v1", origins: true, owner: true } as const;
-const DRAW_POLICY = { name: "draw_policy_v1" } as const;
-const PRESENTER_VIEW_EXTENSIONS = [{ name: "presentation_v1", presenter: true }, VIEW_WITH_OWNER, DRAW_POLICY] as const;
-/** A hello with no extensions, the only one the oldest Sync servers accept. */
-const BARE_HELLO = { name: "bare", views: false, origins: false, drawPolicy: false, extensions: [] } as const;
-// Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = [
-  { name: "session", views: true, origins: true, drawPolicy: true, extensions: PRESENTER_VIEW_EXTENSIONS },
-  { name: "presenter-view", views: true, origins: true, drawPolicy: true, extensions: PRESENTER_VIEW_EXTENSIONS },
-  { name: "owner-view", views: true, origins: true, drawPolicy: true, extensions: [{ name: "presentation_v1" }, VIEW_WITH_OWNER, DRAW_POLICY] },
-  { name: "draw-policy", views: true, origins: true, drawPolicy: true, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }, DRAW_POLICY] },
-  { name: "versioned-view", views: true, origins: true, drawPolicy: false, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] },
-  { name: "view", views: true, origins: false, drawPolicy: false, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] },
-  { name: "presentation", views: false, origins: false, drawPolicy: false, extensions: [{ name: "presentation_v1" }] },
-  BARE_HELLO,
-] as const;
-type HelloLevel = (typeof HELLO_LEVELS)[number];
-
-function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
-  const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
-  if (level === BARE_HELLO) return hello;
-  const baggage = level.name === "session" ? sessionBaggage() : undefined;
-  const withExtensions = { ...hello, extensions: level.extensions };
-  return baggage === undefined ? withExtensions : { ...withExtensions, baggage };
 }
 
 function policyUnavailable(): ChalkWhiteboardV1Failure {
