@@ -15,6 +15,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   alias ChalkSync.WhiteboardV1.Authority.Poller
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.PostgresRepository
+  alias ChalkSync.WhiteboardV1.PostgresRepository.Store
   alias ChalkSync.WhiteboardV1.SQL
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -407,17 +408,17 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   end
 
   test "names a bounded storage failure for close evidence" do
-    assert PostgresRepository.storage_failure(%DBConnection.ConnectionError{
+    assert Store.storage_failure(%DBConnection.ConnectionError{
              reason: :queue_timeout
            }) ==
              "queue_timeout"
 
-    assert PostgresRepository.storage_failure(%DBConnection.ConnectionError{}) == "connection"
+    assert Store.storage_failure(%DBConnection.ConnectionError{}) == "connection"
 
-    assert PostgresRepository.storage_failure(%Postgrex.Error{postgres: %{code: :query_canceled}}) ==
+    assert Store.storage_failure(%Postgrex.Error{postgres: %{code: :query_canceled}}) ==
              "timeout"
 
-    assert PostgresRepository.storage_failure(%Postgrex.Error{
+    assert Store.storage_failure(%Postgrex.Error{
              postgres: %{code: :undefined_table}
            }) == "postgres"
   end

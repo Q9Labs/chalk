@@ -3,6 +3,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.ExternalOperationConsumer.Execution
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Stateholder.Operation
@@ -279,7 +280,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     {:ok, adapter} = MediaPlaneTestAdapter.start_link()
 
     assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                episode,
                external,
                {MediaPlaneTestAdapter, adapter},
