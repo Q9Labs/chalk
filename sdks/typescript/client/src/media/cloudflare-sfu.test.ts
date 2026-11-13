@@ -454,7 +454,12 @@ it("publishes again when the registry no longer lists an enabled microphone publ
   expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
 });
 
-it.each(["microphone", "camera"] as const)("registry recovery republishes a withdrawn enabled %s within one second", async (source) => {
+it.each([
+  ["registry recovery", "microphone", (h: Harness, _oldId: string) => h.client.refreshRemotePublications()],
+  ["registry recovery", "camera", (h: Harness, _oldId: string) => h.client.refreshRemotePublications()],
+  ["a Sync withdrawal notification", "microphone", (h: Harness, oldId: string) => notifyLocalPublicationWithdrawn(h.client, oldId)],
+  ["a Sync withdrawal notification", "camera", (h: Harness, oldId: string) => notifyLocalPublicationWithdrawn(h.client, oldId)],
+] as const)("%s republishes a withdrawn enabled %s within one second", async (_trigger, source, withdrawalSeen) => {
   await withTimedHarness(async (h) => {
     await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
     await vi.advanceTimersByTimeAsync(0);
@@ -462,7 +467,7 @@ it.each(["microphone", "camera"] as const)("registry recovery republishes a with
     const addsBefore = localAddCount(h, source);
     h.transport.withdrawPublication(oldId);
 
-    await h.client.refreshRemotePublications();
+    await withdrawalSeen(h, oldId);
     await vi.advanceTimersByTimeAsync(1000);
 
     const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
@@ -716,24 +721,6 @@ it("drops a stale registry recovery after its re-list still contains the publica
     expect(h.transport.listPublicationCalls).toBe(callsBefore + 2);
     expect(h.transport.closeInputs).toHaveLength(0);
     expect(localAddCount(h, "microphone")).toBe(addsBefore);
-  });
-});
-
-it.each(["microphone", "camera"] as const)("a Sync withdrawal notification republishes an enabled %s within one second", async (source) => {
-  await withTimedHarness(async (h) => {
-    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
-    await vi.advanceTimersByTimeAsync(0);
-    const oldId = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
-    const addsBefore = localAddCount(h, source);
-    h.transport.withdrawPublication(oldId);
-
-    notifyLocalPublicationWithdrawn(h.client, oldId);
-    await vi.advanceTimersByTimeAsync(1000);
-
-    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
-    expect(live).toHaveLength(1);
-    expect(live[0]!.publicationId).not.toBe(oldId);
-    expect(localAddCount(h, source)).toBe(addsBefore + 1);
   });
 });
 
@@ -1666,14 +1653,17 @@ it.each([503, 500])("retries a 5xx local microphone publish until the microphone
   }
 });
 
-it("leaves a failed microphone enable off after a non-retryable publish error", async () => {
+it.each([
+  { name: "leaves a failed microphone enable off after a non-retryable publish error", failure: () => new CloudflareSFUError("invalid_request", "signaling_failed", { status: 400, providerCode: "invalid_request" }), outcome: { outcome: "terminal_failure", errorCode: "signaling_failed" } },
+  { name: "keeps a fetch-failed microphone enable retryable but off without a media-client retry", failure: () => new TypeError("Failed to fetch"), outcome: expect.objectContaining({ outcome: "retryable_failure" }) },
+])("$name", async ({ failure, outcome }) => {
   const onError = vi.fn();
   await withTimedHarness(
     async (harness) => {
       await harness.client.start(fakeStream());
       const track = new FakeTrack("failed-microphone", "audio");
       harness.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
-      harness.transport.nextLocalPublishFailure = new CloudflareSFUError("invalid_request", "signaling_failed", { status: 400, providerCode: "invalid_request" });
+      harness.transport.nextLocalPublishFailure = failure();
       const publish = vi.spyOn(harness.transport, "addTracks");
 
       const result = await harness.client.setLocalPublicationTarget({
@@ -1683,41 +1673,7 @@ it("leaves a failed microphone enable off after a non-retryable publish error", 
         enabled: true,
       });
 
-      expect(result).toEqual({ outcome: "terminal_failure", errorCode: "signaling_failed" });
-      expect(onError).toHaveBeenCalled();
-      expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
-        enabled: false,
-        publicationId: null,
-      });
-      expect(track.enabled).toBe(false);
-      expect(localAddCount(harness, "microphone")).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(30_000);
-      expect(localAddCount(harness, "microphone")).toBe(1);
-      expect(publish).toHaveBeenCalledTimes(1);
-    },
-    { onError },
-  );
-});
-
-it("keeps a fetch-failed microphone enable retryable but off without a media-client retry", async () => {
-  const onError = vi.fn();
-  await withTimedHarness(
-    async (harness) => {
-      await harness.client.start(fakeStream());
-      const track = new FakeTrack("fetch-failed-microphone", "audio");
-      harness.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
-      harness.transport.nextLocalPublishFailure = new TypeError("Failed to fetch");
-      const publish = vi.spyOn(harness.transport, "addTracks");
-
-      const result = await harness.client.setLocalPublicationTarget({
-        operationId: "fetch-failed-microphone-enable",
-        participantId: "participant-1",
-        source: "microphone",
-        enabled: true,
-      });
-
-      expect(result.outcome).toBe("retryable_failure");
+      expect(result).toEqual(outcome);
       expect(onError).toHaveBeenCalled();
       expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
         enabled: false,
@@ -2008,7 +1964,7 @@ describe.each(["microphone", "camera"] as const)("same-binding restart %s retire
   });
 });
 
-it("does not end an automatic replacement when an obsolete local publication gets HTTP 403", async () => {
+it.each([false, true])("ignores an obsolete local publication's HTTP 403 during an automatic replacement (replacement peer failed: %s)", async (peerFailed) => {
   const platform = createCoreTestPlatform();
   let foreground = () => {};
   let offset = 0;
@@ -2058,9 +2014,15 @@ it("does not end an automatic replacement when an obsolete local publication get
     offset = 270000;
     foreground();
     await vi.waitFor(() => expect(harness.peers).toHaveLength(2));
+    if (peerFailed) harness.peers[1].setStates("failed", "failed");
     rejectOld(new CloudflareSFUError("old publication rejected", "signaling_failed", { status: 403 }));
     await publication;
     expect(reported).not.toHaveBeenCalled();
+    if (peerFailed) {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(client.getSnapshot().connection.lastError?.code).not.toBe("access.invalid");
+      return;
+    }
     await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-2" })));
     finishReplacement();
     await vi.waitFor(() => {
@@ -2762,7 +2724,7 @@ it.each([
 });
 
 it.each(["microphone", "camera"] as const)("ownership: manual pause during a production-ordered %s enable leaves no provider publication", async (source) => {
-  const { harness, platform, track, coordinator, client } = createCoordinatedCall(source, "pending-manual-off");
+  const { harness, track, coordinator, client } = createCoordinatedCall(source, "pending-manual-off");
   try {
     await client.join({ microphone: false, camera: false });
     harness.transport.blockConnection("connection-1");
@@ -5221,6 +5183,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
+type Harness = ReturnType<typeof createHarness>;
 function createHarness(
   options: {
     readonly autoConnect?: boolean;
@@ -5684,70 +5647,6 @@ it("does not attribute an old publication rejection to an inner replacement in t
   } finally {
     oldPublication.reject(new Error("Test cleanup"));
     await Promise.allSettled([local]);
-  }
-});
-
-it("ignores obsolete 403 even when the replacement peer has failed", async () => {
-  const platform = createCoreTestPlatform();
-  let foreground = () => {};
-  let offset = 0;
-  let onFailure: (cause: unknown, binding?: string) => void = () => {};
-  const reported = vi.fn((cause: unknown, binding: string) => onFailure(cause, binding));
-  const harness = createHarness({ onError: reported });
-  let rejectOld: (cause: unknown) => void = () => {};
-  let finishReplacement = () => {};
-  const oldPublication = new Promise<CloudflareSFUTracksResponse>((_resolve, reject) => {
-    rejectOld = reject;
-  });
-  const replacement = new Promise<void>((resolve) => {
-    finishReplacement = resolve;
-  });
-  const addTracks = harness.transport.addTracks.bind(harness.transport);
-  const publishing = vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
-    if (input.connectionId === "connection-1") return oldPublication;
-    await replacement;
-    return addTracks(input);
-  });
-  const getAccess = vi.fn(async () => {
-    const grant = opaqueAccessGrant("join", "join", offset ? "connection-2" : "connection-1");
-    const expiresAt = new Date(Date.now() + 900000).toISOString();
-    return offset ? { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt } } : grant;
-  });
-  const client = createSpaceClientForPlatform(
-    { space: "test", getAccess },
-    {
-      ...platform,
-      dependencies: {
-        ...platform.dependencies,
-        clock: { ...platform.dependencies.clock, now: () => Date.now() + offset },
-        subscribeForeground: (listener) => {
-          foreground = listener;
-          return () => {};
-        },
-        createMediaClient: harnessMediaClient(harness, (sink) => (onFailure = sink)),
-      },
-    },
-  );
-  let publication: Promise<unknown> | undefined;
-  try {
-    await client.join({ microphone: false, camera: false });
-    harness.client.prepareLocalTrack("microphone", fakeStream(new FakeTrack("mic", "audio")).getTracks()[0]!);
-    publication = harness.client.setLocalPublicationTarget({ operationId: "old-on", participantId: "participant-1", source: "microphone", enabled: true });
-    await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-1" })));
-    offset = 270000;
-    foreground();
-    await vi.waitFor(() => expect(harness.peers).toHaveLength(2));
-    harness.peers[1].setStates("failed", "failed");
-    rejectOld(new CloudflareSFUError("old publication rejected", "signaling_failed", { status: 403 }));
-    await publication;
-    expect(reported).not.toHaveBeenCalled();
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(client.getSnapshot().connection.lastError?.code).not.toBe("access.invalid");
-  } finally {
-    rejectOld(new Error("test cleanup"));
-    finishReplacement();
-    await publication;
-    client.dispose();
   }
 });
 

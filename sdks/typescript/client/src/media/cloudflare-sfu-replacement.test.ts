@@ -700,7 +700,6 @@ describe("pull-published first poll", () => {
   }
 });
 
-const SYNC_PULL_CAPABILITIES = { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } as const;
 const remoteMicrophone = (connectionId: string, trackName: string) => ({ participantId: "participant-2", source: "microphone", publicationId: versionedPublicationID(connectionId, "0", trackName) }) as const;
 
 // Records the SFU requests in the order the client sends them.
@@ -719,6 +718,16 @@ function recordSfuRequests(h: ReturnType<typeof createHarness>): string[] {
   return calls;
 }
 
+const syncPullBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } };
+
+// A started receiver whose roster lists one remote microphone, with the SFU requests it sends recorded.
+async function receiverListing(h: ReturnType<typeof createHarness>) {
+  const calls = await startReceiver(h);
+  const publication = remoteMicrophone("remote-connection", "microphone-1");
+  h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+  return { calls, publication };
+}
+
 async function startReceiver(h: ReturnType<typeof createHarness>): Promise<string[]> {
   await h.client.start(fakeStream());
   await vi.advanceTimersByTimeAsync(0);
@@ -731,9 +740,7 @@ async function startReceiver(h: ReturnType<typeof createHarness>): Promise<strin
 it("pulls a publication named by a Sync media item before listing publications", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
       await vi.advanceTimersByTimeAsync(0);
@@ -741,7 +748,7 @@ it("pulls a publication named by a Sync media item before listing publications",
       expect(calls).toEqual(["pull", "list"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -761,15 +768,13 @@ it("leaves a Sync-advertised pull to the listing when the offer is over the size
       expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES }, replaceMediaConnection },
+    { bootstrap: syncPullBootstrap, replaceMediaConnection },
   );
 });
 
 it("lists before pulling when the plane does not advertise subscription state", async () => {
   await withTimedHarness(async (h) => {
-    const calls = await startReceiver(h);
-    const publication = remoteMicrophone("remote-connection", "microphone-1");
-    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    const { calls, publication } = await receiverListing(h);
 
     h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
     await vi.advanceTimersByTimeAsync(0);
@@ -781,9 +786,7 @@ it("lists before pulling when the plane does not advertise subscription state", 
 it("lists before pulling when the Sync item names no publication", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ participantId: "participant-2", source: "microphone", enabled: true, publicationId: null }]);
       await vi.advanceTimersByTimeAsync(0);
@@ -791,7 +794,7 @@ it("lists before pulling when the Sync item names no publication", async () => {
       expect(calls).toEqual(["list", "pull"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -810,16 +813,14 @@ it("falls back to the listed publication when the Sync item names a stale one", 
       expect(calls).toEqual(["pull", "list", "pull"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([current.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
 it("pulls a Sync-advertised publication once when the same item arrives twice", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
@@ -829,7 +830,7 @@ it("pulls a Sync-advertised publication once when the same item arrives twice", 
       expect(calls.filter((call) => call === "pull")).toHaveLength(1);
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -850,7 +851,7 @@ it("retires the receiver a newer Sync-advertised publication of the same source 
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
       expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(149);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
