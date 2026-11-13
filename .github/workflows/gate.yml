@@ -11,6 +11,10 @@ name: Gate
 # A draft pull request runs no job: a draft cannot merge, so the required checks have nothing to report on it. Marking it
 # ready starts the Gate (ready_for_review), and so does every later push. Select gate jobs is the only job that decides
 # this; every job below stands down when it was skipped.
+#
+# Runner: a merge group or a manual run uses the label in the repository variable CHALK_GATE_RUNNER (or the manual run's
+# runner input) for every job, and the hosted runners when both are empty. A pull request always runs on the hosted
+# runners, whatever the variable says, so the code of a fork never reaches a machine of ours.
 
 on:
   pull_request:
@@ -21,6 +25,11 @@ on:
     # daily vulnerability scan, not unrelated pull requests.
     - cron: "17 1 * * 1"
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label for every job of this run, such as instabox. Empty uses CHALK_GATE_RUNNER, then the hosted runners.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -41,7 +50,7 @@ jobs:
   changes:
     name: Select gate jobs
     if: github.event.pull_request.draft != true
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     permissions:
       contents: read
@@ -101,7 +110,7 @@ jobs:
     name: Root ${{ matrix.group }}
     needs: changes
     if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
       contents: read
@@ -279,7 +288,7 @@ jobs:
     name: Root gate
     needs: [changes, root-lanes]
     if: ${{ always() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     steps:
       - name: Check out source
@@ -327,7 +336,7 @@ jobs:
     name: API gate
     needs: changes
     if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
@@ -387,7 +396,7 @@ jobs:
     name: Sync ${{ matrix.part }}
     needs: changes
     if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -463,7 +472,7 @@ jobs:
     name: Sync gate
     needs: [changes, sync-parts]
     if: ${{ always() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     steps:
       - name: Require every Sync part to pass
@@ -476,7 +485,7 @@ jobs:
     name: Gate proof
     needs: [changes, root-lanes, api, sync]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.root-lanes.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.api.result) && contains(fromJSON('["success", "skipped"]'), needs.sync.result) }}
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     steps:
       - name: Check out the merged commit
