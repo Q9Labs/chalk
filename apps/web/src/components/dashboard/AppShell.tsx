@@ -8,7 +8,8 @@ import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { Lockup } from "../site/Lockup";
 import { useSiteTheme } from "../site/theme";
-import { ErrorPanel, Menu, MenuItem, Seg, useToast } from "./kit";
+import { ErrorPanel, Seg, useToast } from "./kit";
+import { Menu, MenuItem } from "./menu";
 import { useSession } from "./use-dashboard";
 
 /** The signed-in dashboard: checks the session, then draws the top bar around the page. */

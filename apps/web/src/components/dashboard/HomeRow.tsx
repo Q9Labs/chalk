@@ -2,7 +2,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
-import { CopyAction, Menu, MenuItem, RenameArchiveItems, usePhone, useToast } from "./kit";
+import { CopyAction, usePhone, useToast } from "./kit";
+import { Menu, MenuItem, RenameArchiveItems } from "./menu";
 import { inviteLink } from "./home-rows";
 
 export function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {

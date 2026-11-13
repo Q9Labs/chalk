@@ -13,7 +13,8 @@ import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { callInterval, keptByRow, loadCallPage, newCallRefresh, readCallTick, type CallRefresh } from "./call-refresh";
 import { CallSettings } from "./call-settings";
-import { ErrorPanel, Menu, MoreButton, RenameArchiveItems, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
+import { ErrorPanel, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
+import { Menu, RenameArchiveItems } from "./menu";
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const refresh = useRef(newCallRefresh(spaceId));

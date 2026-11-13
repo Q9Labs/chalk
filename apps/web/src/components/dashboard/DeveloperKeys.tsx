@@ -5,7 +5,8 @@ import { Icon } from "../site/Icon";
 import { accessLabel } from "./KeyDialogs";
 import type { FreshSecret } from "./DeveloperConnect";
 import { KEY_PREFIX_LENGTH, publicPrefix } from "./developer-snippets";
-import { Menu, MenuItem, MoreButton } from "./kit";
+import { MoreButton } from "./kit";
+import { Menu, MenuItem } from "./menu";
 import { SecretField } from "./SecretField";
 
 type Props = {

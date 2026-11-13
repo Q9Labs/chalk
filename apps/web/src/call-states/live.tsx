@@ -7,7 +7,7 @@ import { SELF_NAME, SPACE_NAME, createCallStateClient, type BoardFixture, type C
 export function Live({
   snapshot,
   layout,
-  then,
+  transition: onReady,
   initialColorScheme,
   board,
   width,
@@ -17,7 +17,7 @@ export function Live({
   readonly initialColorScheme?: "light" | "dark";
   readonly snapshot: SpaceSnapshot;
   readonly layout?: SpaceLayout;
-  readonly then?: (client: CallStateClient) => void;
+  readonly transition?: (client: CallStateClient) => void;
   readonly board?: BoardFixture;
   readonly width?: number;
   readonly height?: number;
@@ -25,7 +25,7 @@ export function Live({
 }) {
   const [client] = useState(() => createCallStateClient(snapshot, board));
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
-  const [transition] = useState(() => then);
+  const [transition] = useState(() => onReady);
   useEffect(() => {
     if (!transition) return;
     const timer = setTimeout(() => transition(client), 200);

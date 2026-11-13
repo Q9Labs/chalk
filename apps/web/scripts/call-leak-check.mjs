@@ -176,7 +176,7 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
 }
 
 async function runPool(jobs, concurrency) {
-  const results = new Array(jobs.length);
+  const results = Array.from({ length: jobs.length });
   let next = 0;
   const worker = async () => {
     while (next < jobs.length) {

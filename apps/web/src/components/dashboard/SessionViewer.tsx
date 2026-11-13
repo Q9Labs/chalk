@@ -11,7 +11,8 @@ import { ContactSupport } from "./ContactSupport";
 import { Player } from "./SessionPlayer";
 import type { Actions, Ids, Page } from "./session-reads";
 import { TranscriptPanel } from "./TranscriptPanel";
-import { Menu, MenuItem, useIntentKeys, useToast } from "./kit";
+import { useIntentKeys, useToast } from "./kit";
+import { Menu, MenuItem } from "./menu";
 
 export type Parts = {
   readonly recording: RecordingDTO | undefined;
