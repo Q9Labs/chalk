@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -18,6 +17,12 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/propagation"
+)
+
+var (
+	readTranscriptionsPermission   = authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}
+	writeTranscriptionsPermission  = authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsWrite, MinimumRole: memberships.RoleCollaborator}
+	deleteTranscriptionsPermission = authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsDelete, MinimumRole: memberships.RoleCollaborator}
 )
 
 type TranscriptArtifactService interface {
@@ -64,12 +69,6 @@ type requestTranscriptBody struct {
 	Languages      []string `json:"languages,omitempty"`
 }
 
-func mountTranscriptArtifactRoutes(r chi.Router, service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range transcriptArtifactEndpoints(service, objects, downloads, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func transcriptArtifactEndpoints(service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		requestTranscriptEndpoint(service, authorizer),
@@ -82,13 +81,7 @@ func transcriptArtifactEndpoints(service TranscriptArtifactService, objects Reco
 }
 
 func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[requestTranscriptEndpointRequest, requestTranscriptResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "requestTranscript", decodeRequestTranscriptEndpointRequest, func(ctx context.Context, request requestTranscriptEndpointRequest) (requestTranscriptResponse, error) {
-		if service == nil {
-			return requestTranscriptResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsWrite, MinimumRole: memberships.RoleCollaborator}); err != nil {
-			return requestTranscriptResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "requestTranscript", decodeRequestTranscriptEndpointRequest, func(ctx context.Context, request requestTranscriptEndpointRequest) (requestTranscriptResponse, error) {
 		input, err := request.Body.input(request.TenantID, request.RecordingID)
 		if err != nil {
 			return requestTranscriptResponse{}, err
@@ -103,7 +96,7 @@ func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer Ten
 			status = transcript.Status
 		}
 		return requestTranscriptResponse{Transcript: newTranscriptArtifactResponse(transcript), JobID: job.ID.String(), Status: status}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorTranscriptionDisabled, apiErrorTranscriptSourceExpired, apiErrorTranscriptAlreadyExists, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
+	}).Needs(service).Permission(authorizer, writeTranscriptionsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestTranscriptRequest", requestTranscriptBody{}).Responds(http.StatusAccepted, "TranscriptRequestAcceptedResponse", requestTranscriptResponse{}).Errors(transcriptArtifactErrors(apiErrorInvalidRequest, apiErrorInvalidTranscriptID, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorTranscriptionDisabled, apiErrorTranscriptSourceExpired, apiErrorTranscriptAlreadyExists, apiErrorRateLimited)...).ErrorRules(transcriptArtifactRules)
 }
 
 type requestTranscriptEndpointRequest struct {
@@ -142,13 +135,7 @@ func (body requestTranscriptBody) input(tenantID, recordingID utilities.ID) (tra
 }
 
 func listTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[listTranscriptsRequest, transcriptArtifactListResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts", "/tenants/{tenant_id}/transcripts", "listTranscripts", decodeListTranscriptsRequest, func(ctx context.Context, request listTranscriptsRequest) (transcriptArtifactListResponse, error) {
-		if service == nil {
-			return transcriptArtifactListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-			return transcriptArtifactListResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/transcripts", "listTranscripts", decodeListTranscriptsRequest, func(ctx context.Context, request listTranscriptsRequest) (transcriptArtifactListResponse, error) {
 		list, err := service.List(ctx, request.TenantID, request.RecordingID, request.Page)
 		if err != nil {
 			return transcriptArtifactListResponse{}, err
@@ -162,38 +149,26 @@ func listTranscriptArtifactEndpoint(service TranscriptArtifactService, authorize
 			response.Transcripts = append(response.Transcripts, newTranscriptArtifactResponse(transcript))
 		}
 		return response, nil
-	}).Auth(APIAuthSessionOrBearer).Parameters(append([]APIParameterContract{tenantIDParameter(), recordingIDQueryParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "TranscriptList", transcriptArtifactListResponse{}).Errors(transcriptReadErrors(apiErrorInvalidRecordingID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).MapErrors(transcriptArtifactAPIError)
+	}).Needs(service).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(append([]APIParameterContract{tenantIDParameter(), recordingIDQueryParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "TranscriptList", transcriptArtifactListResponse{}).Errors(transcriptReadErrors(apiErrorInvalidRecordingID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).ErrorRules(transcriptArtifactRules)
 }
 
 func getTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[getTranscriptRequest, transcriptArtifactResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "getTranscript", decodeGetTranscriptRequest, func(ctx context.Context, request getTranscriptRequest) (transcriptArtifactResponse, error) {
-		if service == nil {
-			return transcriptArtifactResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-			return transcriptArtifactResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "getTranscript", decodeGetTranscriptRequest, func(ctx context.Context, request getTranscriptRequest) (transcriptArtifactResponse, error) {
 		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
 		if err != nil {
 			return transcriptArtifactResponse{}, err
 		}
 		return newTranscriptArtifactResponse(transcript), nil
-	}).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "Transcript", transcriptArtifactResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound)...).MapErrors(transcriptArtifactAPIError)
+	}).Needs(service).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "Transcript", transcriptArtifactResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound)...).ErrorRules(transcriptArtifactRules)
 }
 
 func deleteTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[deleteTranscriptRequest, struct{}] {
-	return Delete("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "deleteTranscript", decodeDeleteTranscriptRequest, func(ctx context.Context, request deleteTranscriptRequest) (struct{}, error) {
-		if service == nil {
-			return struct{}{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsDelete, MinimumRole: memberships.RoleCollaborator}); err != nil {
-			return struct{}{}, err
-		}
+	return Delete("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "deleteTranscript", decodeDeleteTranscriptRequest, func(ctx context.Context, request deleteTranscriptRequest) (struct{}, error) {
 		if _, err := service.Delete(ctx, request.TenantID, request.TranscriptID); err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), transcriptIDParameter()).RespondsNoBody(http.StatusNoContent).Errors(transcriptWriteErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorRateLimited)...).MapErrors(transcriptArtifactAPIError)
+	}).Needs(service).Permission(authorizer, deleteTranscriptionsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), transcriptIDParameter()).RespondsNoBody(http.StatusNoContent).Errors(transcriptWriteErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorRateLimited)...).ErrorRules(transcriptArtifactRules)
 }
 
 type deleteTranscriptRequest struct {
@@ -207,13 +182,7 @@ func decodeDeleteTranscriptRequest(r *http.Request) (deleteTranscriptRequest, er
 }
 
 func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createTranscriptDownloadRequest, transcriptDownloadResponse] {
-	return Post("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "createTranscriptDownloadURL", decodeCreateTranscriptDownloadRequest, func(ctx context.Context, request createTranscriptDownloadRequest) (transcriptDownloadResponse, error) {
-		if service == nil || downloads == nil {
-			return transcriptDownloadResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-			return transcriptDownloadResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "createTranscriptDownloadURL", decodeCreateTranscriptDownloadRequest, func(ctx context.Context, request createTranscriptDownloadRequest) (transcriptDownloadResponse, error) {
 		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumArtifactDownloadURLLifetime/time.Second) {
 			return transcriptDownloadResponse{}, apiErrorInvalidURLExpiration
 		}
@@ -229,7 +198,7 @@ func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downl
 			return transcriptDownloadResponse{}, err
 		}
 		return transcriptDownloadResponse{Method: signed.Method, URL: signed.URL, SignedAt: utilities.FormatTimestamp(signed.SignedAt), ExpiresAt: utilities.FormatTimestamp(signed.ExpiresAt), SignedHeaders: cloneSignedHeaders(signed)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), transcriptIDParameter()).RequestBody("CreateTranscriptDownloadURLRequest", createTranscriptDownloadBody{}).Responds(http.StatusOK, "TranscriptDownloadURL", transcriptDownloadResponse{}).Errors(transcriptReadErrors(apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorInvalidURLExpiration)...).MapErrors(transcriptArtifactAPIError)
+	}).Needs(service, downloads).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), transcriptIDParameter()).RequestBody("CreateTranscriptDownloadURLRequest", createTranscriptDownloadBody{}).Responds(http.StatusOK, "TranscriptDownloadURL", transcriptDownloadResponse{}).Errors(transcriptReadErrors(apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorInvalidURLExpiration)...).ErrorRules(transcriptArtifactRules)
 }
 
 type createTranscriptDownloadBody struct {
@@ -276,40 +245,19 @@ func decodeChecksum(value string) ([]byte, error) {
 func transcriptArtifactErrors(extra ...APIError) []APIError {
 	return append([]APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
 }
-func transcriptArtifactAPIError(err error) (APIError, bool) {
-	if value, ok := errorAsAPIError(err); ok {
-		return value, true
-	}
-	switch {
-	case errors.Is(err, transcripts.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, transcripts.ErrInvalidTranscriptID):
-		return apiErrorInvalidTranscriptID, true
-	case errors.Is(err, transcripts.ErrInvalidRecordingID):
-		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, transcripts.ErrRecordingNotFound):
-		return apiErrorRecordingNotFound, true
-	case errors.Is(err, transcripts.ErrSourceNotReady):
-		return apiErrorRecordingNotReady, true
-	case errors.Is(err, transcripts.ErrTranscriptionDisabled):
-		return apiErrorTranscriptionDisabled, true
-	case errors.Is(err, transcripts.ErrSourceExpired):
-		return apiErrorTranscriptSourceExpired, true
-	case errors.Is(err, transcripts.ErrTranscriptAlreadyExists):
-		return apiErrorTranscriptAlreadyExists, true
-	case errors.Is(err, transcripts.ErrIdempotencyConflict):
-		return apiErrorIdempotencyConflict, true
-	case errors.Is(err, transcripts.ErrTranscriptNotFound):
-		return apiErrorTranscriptNotFound, true
-	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
-		return apiErrorInvalidURLExpiration, true
-	case errors.Is(err, transcripts.ErrInvalidLanguages), errors.Is(err, transcripts.ErrInvalidIdempotencyKey), errors.Is(err, transcripts.ErrInvalidManifest), errors.Is(err, transcripts.ErrInvalidChunk), errors.Is(err, transcripts.ErrInvalidArtifact):
-		return apiErrorInvalidRequest, true
-	case errors.Is(err, transcripts.ErrArtifactRepository):
-		return apiErrorServiceUnavailable, true
-	case errors.Is(err, authorization.ErrUnauthenticated), errors.Is(err, authorization.ErrForbidden), errors.Is(err, authorization.ErrInvalidTenantID):
-		return authorizationAPIError(err), true
-	default:
-		return APIError{}, false
-	}
+
+var transcriptArtifactRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, transcripts.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidTranscriptID, transcripts.ErrInvalidTranscriptID),
+	ruleFor(apiErrorInvalidRecordingID, transcripts.ErrInvalidRecordingID),
+	ruleFor(apiErrorRecordingNotFound, transcripts.ErrRecordingNotFound),
+	ruleFor(apiErrorRecordingNotReady, transcripts.ErrSourceNotReady),
+	ruleFor(apiErrorTranscriptionDisabled, transcripts.ErrTranscriptionDisabled),
+	ruleFor(apiErrorTranscriptSourceExpired, transcripts.ErrSourceExpired),
+	ruleFor(apiErrorTranscriptAlreadyExists, transcripts.ErrTranscriptAlreadyExists),
+	ruleFor(apiErrorIdempotencyConflict, transcripts.ErrIdempotencyConflict),
+	ruleFor(apiErrorTranscriptNotFound, transcripts.ErrTranscriptNotFound),
+	ruleFor(apiErrorInvalidURLExpiration, objectstorage.ErrInvalidURLExpiration),
+	ruleFor(apiErrorInvalidRequest, transcripts.ErrInvalidLanguages, transcripts.ErrInvalidIdempotencyKey, transcripts.ErrInvalidManifest, transcripts.ErrInvalidChunk, transcripts.ErrInvalidArtifact),
+	ruleFor(apiErrorServiceUnavailable, transcripts.ErrArtifactRepository),
 }

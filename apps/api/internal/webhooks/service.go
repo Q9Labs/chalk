@@ -197,17 +197,13 @@ func redeliveryMetricOutcome(err error) string {
 
 func validateDeliveryFilters(filters DeliveryFilters) error {
 	states := map[string]struct{}{"pending": {}, "retry_wait": {}, "delivering": {}, "succeeded": {}, "exhausted": {}, "canceled": {}, "erased": {}}
-	events := map[string]struct{}{"endpoint.test": {}}
-	for _, value := range CoreEventTypes {
-		events[value] = struct{}{}
-	}
 	for _, value := range filters.States {
 		if _, ok := states[value]; !ok {
 			return ErrInvalidDeliveryFilter
 		}
 	}
 	for _, value := range filters.EventTypes {
-		if _, ok := events[value]; !ok {
+		if !EventName(value).Known() {
 			return ErrInvalidDeliveryFilter
 		}
 	}
@@ -246,14 +242,7 @@ func validateEventTypes(values []string) ([]string, error) {
 	}
 	set := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		found := false
-		for _, allowed := range CoreEventTypes {
-			if value == allowed {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !EventName(value).Subscribable() {
 			return nil, ErrInvalidEventType
 		}
 		set[value] = struct{}{}

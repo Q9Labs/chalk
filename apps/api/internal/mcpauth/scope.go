@@ -19,9 +19,9 @@ func SupportedScopes() []string { return []string{ScopeRead, ScopeManage} }
 // SmallestBundleGranting names the smallest bundle that includes scope, or ""
 // when no bundle does (API keys, memberships, tenant settings and deletes), so
 // asking the person to approve a bigger bundle would never help.
-func SmallestBundleGranting(scope string) string {
+func SmallestBundleGranting(scope authentication.Scope) string {
 	for _, bundle := range SupportedScopes() {
-		if slices.Contains(AuthenticationScopes(bundle), authentication.Scope(scope)) {
+		if slices.Contains(AuthenticationScopes(bundle), scope) {
 			return bundle
 		}
 	}

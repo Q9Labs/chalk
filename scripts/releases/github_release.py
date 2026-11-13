@@ -149,7 +149,7 @@ class GitHub:
                            f'repos/{self.repository}/{route}{separator}per_page=100'], route)
         return [item for page in json.loads(data) for item in (page[key] if key else page)]
 
-    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None):
+    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None, passed_only=True):
         # GitHub returns newest IDs first. Page only this environment/task, and
         # inspect statuses only after the payload identifies a usable candidate.
         route = f'deployments?environment={environment}&task={task}&per_page=100'
@@ -162,7 +162,7 @@ class GitHub:
                 info = payload(item)
                 if info.get('channel') != task:
                     continue
-                if task == 'nightly-cut' and info.get('proof_result') != 'passed':
+                if task == 'nightly-cut' and passed_only and info.get('proof_result') != 'passed':
                     continue
                 if manifest_sha256 and info.get('manifest_sha256') != manifest_sha256:
                     continue

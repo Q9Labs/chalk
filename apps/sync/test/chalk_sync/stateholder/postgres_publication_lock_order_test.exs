@@ -9,8 +9,6 @@ defmodule ChalkSync.Stateholder.PostgresPublicationLockOrderTest do
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
-
   # The API ends an Episode by locking its control row and then the Episode. A publication
   # reservation inserts a row that needs the control row through a foreign key, so it must lock
   # the control row first too. Otherwise each side waits for what the other holds until a lock

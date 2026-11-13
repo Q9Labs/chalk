@@ -15,12 +15,13 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   alias ChalkSync.Chat.Repository.SQL
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.UUID
 
-  @transaction_timeout_ms 3_000
+  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
   # One person may send 30 messages in 10 seconds and hold at most 4% of a Space stream's
   # 250,000 messages and 2 GiB, however many times they rejoin.
   @person_limits %{
@@ -34,32 +35,34 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   @impl true
   def authorize(%Identity{} = identity, capability)
       when is_binary(capability) or is_nil(capability) do
-    Postgrex.transaction(
-      Database.connection(identity.episode),
-      &authorize_transaction(&1, identity, capability),
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync space action authorization"
+    Database.guard(
+      fn ->
+        Postgrex.transaction(
+          Database.connection(identity.episode),
+          &authorize_transaction(&1, identity, capability),
+          timeout: @transaction_timeout_ms,
+          commit_comment: "chalk sync space action authorization"
+        )
+        |> transaction_result()
+      end,
+      {:error, :dependency_unavailable}
     )
-    |> transaction_result()
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   @impl true
   def participant_capabilities(%Identity{} = identity) do
-    Postgrex.transaction(
-      Database.connection(identity.episode),
-      &participant_capabilities_transaction(&1, identity),
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync space action capabilities"
+    Database.guard(
+      fn ->
+        Postgrex.transaction(
+          Database.connection(identity.episode),
+          &participant_capabilities_transaction(&1, identity),
+          timeout: @transaction_timeout_ms,
+          commit_comment: "chalk sync space action capabilities"
+        )
+        |> transaction_result()
+      end,
+      {:error, :dependency_unavailable}
     )
-    |> transaction_result()
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   @impl true
@@ -106,41 +109,49 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   @impl true
   def head(%EpisodeKey{} = episode) do
-    case Postgrex.query(
-           Database.connection(episode),
-           SQL.read_head(),
-           episode_params(episode),
-           timeout: 1_000
-         ) do
-      {:ok, %{rows: []}} -> {:ok, empty_head()}
-      {:ok, %{rows: [[head, floor]]}} -> {:ok, head(head, floor)}
-      {:error, _reason} -> {:error, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.connection(episode),
+               SQL.read_head(),
+               episode_params(episode),
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: []}} -> {:ok, empty_head()}
+          {:ok, %{rows: [[head, floor]]}} -> {:ok, head(head, floor)}
+          {:error, _reason} -> {:error, :dependency_unavailable}
+        end
+      end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   @impl true
   def read_receipts(%EpisodeKey{} = episode) do
-    case Postgrex.query(
-           Database.connection(episode),
-           SQL.list_read_receipts(),
-           episode_params(episode),
-           timeout: 1_000
-         ) do
-      {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &receipt/1)}
-      {:error, _reason} -> {:error, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.connection(episode),
+               SQL.list_read_receipts(),
+               episode_params(episode),
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &receipt/1)}
+          {:error, _reason} -> {:error, :dependency_unavailable}
+        end
+      end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   @impl true
   def mark_read(%Identity{} = identity, sequence) when is_binary(sequence) do
+    Database.guard(fn -> record_read(identity, sequence) end, {:error, :dependency_unavailable})
+  end
+
+  def mark_read(%Identity{}, _sequence), do: {:error, :invalid_payload}
+
+  defp record_read(identity, sequence) do
     case Integer.parse(sequence) do
       {parsed, ""} when parsed > 0 ->
         Postgrex.transaction(
@@ -154,16 +165,14 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       _ ->
         {:error, :invalid_payload}
     end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
-
-  def mark_read(%Identity{}, _sequence), do: {:error, :invalid_payload}
 
   @impl true
   def react(%Identity{} = identity, input) do
+    Database.guard(fn -> set_reaction(identity, input) end, {:error, :dependency_unavailable})
+  end
+
+  defp set_reaction(identity, input) do
     case GeneratedV1.decode_client_frame(%{
            "type" => "chat_reaction_set",
            "request_id" => input.request_id,
@@ -183,10 +192,6 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       _ ->
         {:error, :invalid_payload}
     end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   defp react_transaction(connection, identity, input) do
@@ -577,17 +582,18 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   defp resolve_uncertain_append(identity, client_message_id, fingerprint) do
-    connection = Database.connection(identity.episode, 1)
+    Database.guard(
+      fn ->
+        connection = Database.alternate_connection(identity.episode)
 
-    case select_idempotent(connection, identity, client_message_id) do
-      {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
-      {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
-      nil -> {:error, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
+        case select_idempotent(connection, identity, client_message_id) do
+          {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
+          {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
+          nil -> {:error, :dependency_unavailable}
+        end
+      end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   defp lock_authority(connection, identity, allow_pending \\ false) do
@@ -700,7 +706,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   defp configure_transaction(connection) do
-    Postgrex.query!(connection, SQL.transaction_settings(), [])
+    Postgrex.query!(connection, TransactionSettings.sql(:default), [])
   end
 
   defp head(nil, nil), do: empty_head()

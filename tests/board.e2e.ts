@@ -295,6 +295,7 @@ async function followEdgeStrokes(a: Page, b: Page, directory: string) {
   await drawStroke(a, { x: 0.49, y: 0.45 }, { x: 0.51, y: 0.46 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
+  await b.evaluate(trackProofZoom);
   await b.getByLabel("More options for BoardA", { exact: true }).click();
   await b.getByRole("menuitem", { name: "Stop following", exact: true }).click();
   await b.getByLabel("More options for BoardA", { exact: true }).click();
@@ -381,8 +382,9 @@ test("whiteboard keeps local zoom with desktop teacher and phone follower", asyn
     pages = [a, b];
     await a.getByRole("button", { name: "Board", exact: true }).click();
     await Promise.all(pages.map(settleStage));
-    for (const page of pages) await expect.poll(() => page.evaluate(zoomLabel)).toBe("100%");
-    await b.evaluate(trackProofZoom);
+    await expect.poll(() => a.evaluate(zoomLabel)).toBe("100%");
+    // An empty phone board shows no zoom pill; it appears with the first stroke (Board.tsx: `phone && empty`).
+    await expect.poll(() => b.locator(".chalk-board-zoom").count()).toBe(0);
     await followEdgeStrokes(a, b, directory);
     await resizeAndReconnect(a, b, follower);
     await checkManualZoom(a, b);
