@@ -2,6 +2,9 @@
   "extends": "./tsconfig.json",
   "include": ["server/**/*.ts", "functions/**/*.ts", "src/lib/dashboard/**/*.ts", "tests/dashboard/**/*.ts"],
   "compilerOptions": {
-    "paths": { "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"] }
+    "paths": {
+      "@q9labsai/chalk-client/effect": ["../../sdks/typescript/client/src/effect.ts"],
+      "@q9labsai/chalk-react/utils": ["../../sdks/typescript/react/src/utils/index.ts"]
+    }
   }
 }
