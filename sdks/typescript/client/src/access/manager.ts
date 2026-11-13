@@ -199,19 +199,12 @@ function validateRefresh(previous: ParsedAccessGrant, next: ParsedAccessGrant, r
   if (replaceMediaConnection && hasSameMediaConnection(previous, next)) throw new TypeError("Access grant replacement did not change its media binding");
 }
 function hasSameMediaConnection(previous: ParsedAccessGrant, next: ParsedAccessGrant): boolean {
-  return previous.media.provider === next.media.provider && mediaBinding(previous) === mediaBinding(next);
+  return previous.media.provider === next.media.provider && previous.media.clientPayload.connectionId === next.media.clientPayload.connectionId;
 }
 function hasSameSubject(previous: ParsedAccessGrant, next: ParsedAccessGrant): boolean {
   const left = previous.subject;
   const right = next.subject;
   return left.tenantId === right.tenantId && left.spaceId === right.spaceId && left.episodeId === right.episodeId && left.participantId === right.participantId && left.participantGeneration === right.participantGeneration;
-}
-function mediaBinding(access: ParsedAccessGrant): string {
-  switch (access.media.provider) {
-    case "cloudflare_sfu":
-    case "chalk_sfu":
-      return access.media.clientPayload.connectionId;
-  }
 }
 function expiresAt(value: string): number {
   const timestamp = Date.parse(value);
