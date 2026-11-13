@@ -2,7 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
-import { CopyAction, Menu, MenuItem, usePhone, useToast } from "./kit";
+import { CopyAction, Menu, MenuItem, RenameArchiveItems, usePhone, useToast } from "./kit";
 import { inviteLink } from "./home-rows";
 
 export function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
@@ -60,26 +60,7 @@ function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCal
             Join call
           </MenuItem>
           <CopyMenuItem call={call} onDone={close} />
-          <MenuItem
-            icon="edit"
-            onSelect={() => {
-              close();
-              onRename();
-            }}
-          >
-            Rename
-          </MenuItem>
-          <div className="msep" />
-          <MenuItem
-            icon="trash"
-            danger
-            onSelect={() => {
-              close();
-              onArchive();
-            }}
-          >
-            Archive call
-          </MenuItem>
+          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} />
         </>
       )}
     </Menu>

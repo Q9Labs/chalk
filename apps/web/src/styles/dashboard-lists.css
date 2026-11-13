@@ -10,7 +10,8 @@
 
 /* ---------- Badges ---------- */
 
-.site .dash .bdg {
+.site .dash .bdg,
+.site .dash .dev .pill {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1-5);
@@ -26,23 +27,32 @@
   flex: none;
 }
 
-.site[data-chalk-theme="dark"] .dash .bdg {
+.site[data-chalk-theme="dark"] .dash .bdg,
+.site[data-chalk-theme="dark"] .dash .dev .pill {
   background: var(--chalk-hover);
 }
 
-.site .dash .bdg.ok {
+.site .dash .bdg.ok,
+.site .dash .dev .pill.ok {
   background: var(--tint-positive);
   color: var(--chalk-positive);
 }
 
-.site .dash .bdg.acc {
+.site .dash .bdg.acc,
+.site .dash .dev .pill.acc {
   background: var(--tint-accent);
   color: var(--chalk-accent);
 }
 
-.site .dash .bdg.bad {
+.site .dash .bdg.bad,
+.site .dash .dev .pill.bad {
   background: var(--tint-danger);
   color: var(--chalk-danger-text);
+}
+
+.site .dash .dev .pill.warn {
+  background: var(--tint-warning);
+  color: var(--chalk-warning);
 }
 
 .site .dash .bdg.mu {
@@ -57,7 +67,8 @@
   stroke-width: 2;
 }
 
-.site .dash .bdg .d {
+.site .dash .bdg .d,
+.site .dash .dev .pill .d {
   width: 6px;
   height: 6px;
   border-radius: 50%;

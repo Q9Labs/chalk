@@ -86,6 +86,34 @@ export function MenuItem({ icon, danger, onSelect, children }: { readonly icon?:
   );
 }
 
+/** The rename and archive entries every call menu ends with. */
+export function RenameArchiveItems({ close, onRename, onArchive }: { readonly close: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+  return (
+    <>
+      <MenuItem
+        icon="edit"
+        onSelect={() => {
+          close();
+          onRename();
+        }}
+      >
+        Rename
+      </MenuItem>
+      <div className="msep" />
+      <MenuItem
+        icon="trash"
+        danger
+        onSelect={() => {
+          close();
+          onArchive();
+        }}
+      >
+        Archive call
+      </MenuItem>
+    </>
+  );
+}
+
 /* ---------- idempotency: one key per user intent, kept until it succeeds ---------- */
 
 /** `key(intent)` returns the same key until `done(intent)`, so a retry after a failure replays the same request. */

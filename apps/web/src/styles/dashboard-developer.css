@@ -294,60 +294,13 @@
   background: var(--tint-danger);
 }
 
-.site .dash .dev .pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  height: 20px;
-  padding: 0 var(--space-2);
-  border-radius: var(--corner-pill);
-  background: var(--chalk-raised);
-  color: var(--chalk-soft-text);
-  font-size: var(--type-caption);
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  flex: none;
-}
-
-.site[data-chalk-theme="dark"] .dash .dev .pill {
-  background: var(--chalk-hover);
-}
-
 .site .dash .dev .pill svg.site-icon {
   width: 12px;
   height: 12px;
 }
 
-.site .dash .dev .pill.ok {
-  background: var(--tint-positive);
-  color: var(--chalk-positive);
-}
-
-.site .dash .dev .pill.warn {
-  background: var(--tint-warning);
-  color: var(--chalk-warning);
-}
-
-.site .dash .dev .pill.bad {
-  background: var(--tint-danger);
-  color: var(--chalk-danger-text);
-}
-
-.site .dash .dev .pill.acc {
-  background: var(--tint-accent);
-  color: var(--chalk-accent);
-}
-
 .site .dash .dev .pill.mu {
   color: var(--chalk-muted-text);
-}
-
-.site .dash .dev .pill .d {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentcolor;
 }
 
 .site .dash .dev .pill.mu .d {

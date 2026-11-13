@@ -13,7 +13,7 @@ import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { callInterval, keptByRow, loadCallPage, newCallRefresh, readCallTick, type CallRefresh } from "./call-refresh";
 import { CallSettings } from "./call-settings";
-import { ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
+import { ErrorPanel, Menu, MoreButton, RenameArchiveItems, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const refresh = useRef(newCallRefresh(spaceId));
@@ -102,26 +102,7 @@ function CallHeader({ spaceId, name, onRename, onArchive }: { readonly spaceId: 
         <Menu label={`More actions for ${name}`} align="left">
           {(close) => (
             <>
-              <MenuItem
-                icon="edit"
-                onSelect={() => {
-                  close();
-                  onRename();
-                }}
-              >
-                Rename
-              </MenuItem>
-              <div className="msep" />
-              <MenuItem
-                icon="trash"
-                danger
-                onSelect={() => {
-                  close();
-                  onArchive();
-                }}
-              >
-                Archive call
-              </MenuItem>
+              <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} />
             </>
           )}
         </Menu>

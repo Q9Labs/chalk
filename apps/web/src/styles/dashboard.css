@@ -2342,7 +2342,8 @@
     padding: var(--space-10) var(--space-5) var(--space-8);
   }
 
-  .site .dash .brk::before {
+  .site .dash .brk::before,
+  .site .dash .dlg::before {
     content: "";
     position: absolute;
     top: 8px;
@@ -2365,18 +2366,6 @@
   .site .dash .dlg.tall {
     height: calc(100dvh - 12px);
     max-height: none;
-  }
-
-  .site .dash .dlg::before {
-    content: "";
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    width: 36px;
-    height: 5px;
-    translate: -50% 0;
-    border-radius: var(--corner-xs);
-    background: var(--chalk-line-strong);
   }
 
   .site .dash .acts {
