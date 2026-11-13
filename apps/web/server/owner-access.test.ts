@@ -54,7 +54,8 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
   const episodeId = "33333333-3333-4333-8333-333333333333";
   const participantId = "44444444-4444-4444-8444-444444444444";
   const identity: Identity = { provider: "google", userId: "owner", sessionId: "session", name: "Owner", email: "owner@example.test", avatarUrl: null, expiresAt: Date.now() + 60000 };
-  const request = await requestWithSeats(env, identity, { spaceId, episodeId, participantId, siblingId: "55555555-5555-4555-8555-555555555555" });
+  const siblingId = "55555555-5555-4555-8555-555555555555";
+  const request = await requestWithSeats(env, identity, { spaceId, episodeId, participantId, siblingId });
   const access = {
     subject: { tenant_id: tenantId, space_id: spaceId, episode_id: episodeId, participant_id: participantId, participant_generation: 1 },
     sync: { token: "sync", expires_at: "2026-10-22T15:00:00Z" },

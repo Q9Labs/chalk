@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { strict as assert } from "node:assert";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { startAndJoinCall } from "./call-steps.mjs";
 
 // Only the advertised expiry is shortened. Admission, renewal, signed proofs,
 // the call ending and report delivery still use the real local API and Sync.
@@ -109,10 +110,7 @@ async function dismissalRound(c, dismissal) {
   try {
     const owner = await ownerContext.newPage();
     const guest = await guestContext.newPage();
-    await owner.goto(`${origin}/dashboard`);
-    await owner.getByRole("button", { name: "Start a call", exact: true }).first().click();
-    await owner.getByRole("button", { name: "Join call", exact: true }).click();
-    await owner.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+    await startAndJoinCall(owner, origin);
     const spaceId = new URL(owner.url()).pathname.split("/").at(-2);
     const read = await ownerContext.request.get(`${origin}/dashboard-api/call?spaceId=${spaceId}`);
     assert.equal(read.status(), 200);

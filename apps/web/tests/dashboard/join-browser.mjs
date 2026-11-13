@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import { provePublicAdmission } from "./public-admission-browser.mjs";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
+import { startAndJoinCall } from "./call-steps.mjs";
 
 const admissionProof = process.argv.some((argument) => argument.startsWith("--admission"));
 const { apiOrigin, origin, syncOrigin, repository, context, tenantId, bindings, syncLog, pagesLog, cleanup, recordPage } = await createDashboardProofFixture({
@@ -81,10 +82,7 @@ try {
   const sockets = [];
   page.on("websocket", (socket) => sockets.push(socket.url()));
   try {
-    await page.goto(`${origin}/dashboard`);
-    await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
-    await page.getByRole("button", { name: "Join call", exact: true }).click();
-    await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
+    await startAndJoinCall(page, origin);
     assert(
       sockets.some((url) => url.startsWith(syncOrigin)),
       "Dashboard ignored its configured Sync endpoint",
