@@ -243,18 +243,20 @@ defmodule ChalkSync.ExternalOperationsFindingsTest do
       revision = payload["control_revision"]
       action = if payload["effect"] == "media.grant_publication", do: :granted, else: :revoked
 
-      if action == :granted or apply_revoke? do
-        Agent.update(sfu, fn
-          {recorded, _} = state when revision < recorded -> state
-          {recorded, :revoked} = state when revision == recorded and action == :granted -> state
-          _ -> {revision, action}
-        end)
-      end
+      if action == :granted or apply_revoke?, do: record_control(sfu, revision, action)
 
       outcome = if action == :granted or apply_revoke?, do: "confirmed", else: "ambiguous"
 
       {:ok, 200, [],
        JSON.encode!(%{"operation_id" => id, "effect" => payload["effect"], "outcome" => outcome})}
     end
+  end
+
+  defp record_control(sfu, revision, action) do
+    Agent.update(sfu, fn
+      {recorded, _} = state when revision < recorded -> state
+      {recorded, :revoked} = state when revision == recorded and action == :granted -> state
+      _ -> {revision, action}
+    end)
   end
 end

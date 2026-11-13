@@ -204,24 +204,29 @@ defmodule ChalkSync.ExternalOperationConsumer do
             adapter_timeout_ms
           )
 
-    case {operation, result} do
-      {_operation, {:confirmed, authority}} ->
-        finalize_confirmed(episode, operation, authority, finalize)
+    settle(episode, operation, result, finalize)
+  end
 
-      {%{name: :role_transition_source_stop}, {:terminal_failure, reason}} ->
-        keep_source_stop_pending(operation, reason)
+  defp settle(episode, operation, {:confirmed, authority}, finalize),
+    do: finalize_confirmed(episode, operation, authority, finalize)
 
-      {_operation, {:terminal_failure, reason}} ->
-        finalize_terminal_failure(episode, operation, reason, finalize)
+  defp settle(
+         _episode,
+         %{name: :role_transition_source_stop} = operation,
+         {:terminal_failure, reason},
+         _finalize
+       ),
+       do: keep_source_stop_pending(operation, reason)
 
-      {%{name: :role_transition_source_stop}, :pending} ->
-        :pending
+  defp settle(episode, operation, {:terminal_failure, reason}, finalize),
+    do: finalize_terminal_failure(episode, operation, reason, finalize)
 
-      {_operation, :pending} ->
-        if operation.attempt_count >= @max_attempts,
-          do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize),
-          else: :pending
-    end
+  defp settle(_episode, %{name: :role_transition_source_stop}, :pending, _finalize), do: :pending
+
+  defp settle(episode, operation, :pending, finalize) do
+    if operation.attempt_count >= @max_attempts,
+      do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize),
+      else: :pending
   end
 
   # A person lost the right to publish, so Sync asks the SFU to stop the source until the SFU
