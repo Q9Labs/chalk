@@ -17,7 +17,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
   def storage_failure(%Postgrex.Error{}), do: "postgres"
   def storage_failure(_error), do: "unknown"
 
-
   def transaction(identity, callback) do
     connection = Database.connection(identity.episode)
 
@@ -37,7 +36,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   defp run_transaction(transaction, callback) do
     Postgrex.query!(transaction, TransactionSettings.sql(:default), [])
 
@@ -46,7 +44,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
       failure -> Postgrex.rollback(transaction, {:domain, failure})
     end
   end
-
 
   def authority(connection, identity) do
     params =
@@ -79,7 +76,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def current_scene(connection, identity) do
     generated_scene_id = UUID.generate()
 
@@ -109,14 +105,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def drawing_scene(connection, identity) do
     with {:ok, authority, scene} <- locked_scene(connection, identity),
          :ok <- require_capability(authority, "drawWhiteboard") do
       {:ok, scene}
     end
   end
-
 
   # A policy or per-person change commits while holding the scene lock, so the
   # rule and the policy are read again once this transaction holds it. The
@@ -129,7 +123,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
       {:ok, authority, scene}
     end
   end
-
 
   def receipt(connection, identity, operation_id, fingerprint) do
     params = [
@@ -154,15 +147,14 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def insert_receipt(
-         connection,
-         identity,
-         operation_id,
-         fingerprint,
-         operation_name,
-         event
-       ) do
+        connection,
+        identity,
+        operation_id,
+        fingerprint,
+        operation_name,
+        event
+      ) do
     event_encoded_bytes =
       if event.elements, do: event.elements |> JSON.encode!() |> byte_size(), else: 0
 
@@ -187,10 +179,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def nullable_uuid(nil), do: nil
   def nullable_uuid(id), do: uuid(id)
-
 
   def notify_head(connection, identity, scene_id, revision) do
     payload =
@@ -211,7 +201,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def notify_access(connection, identity) do
     case Postgrex.query(connection, SQL.notify_access(), [Fanout.access_payload(identity.episode)]) do
       {:ok, _result} -> :ok
@@ -219,18 +208,15 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
     end
   end
 
-
   def require_capability(authority, capability) do
     if capability in authority.participant_capabilities,
       do: :ok,
       else: {:error, :permission_denied}
   end
 
-
   def current_scene?(scene, scene_id) do
     if scene.scene_id == scene_id, do: :ok, else: {:error, :stale_scene}
   end
-
 
   def commit(operation_id, outcome, scene_id, revision),
     do: %{
@@ -240,10 +226,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
       revision: revision
     }
 
-
   def fingerprint(operation),
     do: :crypto.hash(:sha256, JSON.encode!(operation))
-
 
   def context(identity),
     do: [
@@ -251,7 +235,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Store do
       uuid(identity.episode.space_id),
       uuid(identity.episode.episode_id)
     ]
-
 
   def uuid(value), do: UUID.dump!(value)
 end

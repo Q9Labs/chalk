@@ -42,8 +42,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end
   end
 
-
-
   defp reserve_admission_decision(_connection, _episode, _external, nil), do: :ok
 
   defp reserve_admission_decision(connection, episode, external, admission) do
@@ -59,8 +57,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end
   end
 
-
-
   defp lock_all_operation_participants(connection, episode) do
     Postgrex.query!(connection, SQL.lock_active_participants(), Scope.episode(episode)).rows
     |> Enum.map(fn [id, generation, role, capabilities] ->
@@ -74,8 +70,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end)
   end
 
-
-
   defp install_operation_fences(connection, episode, external, participants, context) do
     sources = if context[:end_episode], do: [:microphone, :camera, :screen], else: context.sources
 
@@ -84,8 +78,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
       &PublicationFences.install(connection, episode, external, &1, sources)
     )
   end
-
-
 
   defp mark_operation_participant_leaving(connection, episode, external) do
     params =
@@ -103,16 +95,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end
   end
 
-
-
   defp mark_operation_episode_ending(connection, episode) do
     case Postgrex.query!(connection, SQL.mark_episode_ending(), Scope.episode(episode)).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :episode_ended})
     end
   end
-
-
 
   defp accept_recording_start(connection, episode, external) do
     params =
@@ -130,8 +118,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end
   end
 
-
-
   defp accept_recording_stop(connection, episode, external) do
     params =
       Scope.episode(episode) ++
@@ -143,8 +129,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
     end
   end
 
-
-
   defp persist_acceptance_fact(connection, episode, external, state, status) do
     payload = %{
       "recording_id" => external.recording_id,
@@ -154,7 +138,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist.PreCal
 
     case Reducer.apply_external(state, :recording_status_changed, payload) do
       {:ok, event, next_state} ->
-        ExternalOperationFinalizer.Products.persist_event(connection, episode, external, event, next_state)
+        ExternalOperationFinalizer.Products.persist_event(
+          connection,
+          episode,
+          external,
+          event,
+          next_state
+        )
+
         next_state
 
       {:error, reason} ->

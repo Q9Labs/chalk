@@ -30,7 +30,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
     )
 
     accepted_state =
-      PreCallAuthority.persist_pre_call_authority(connection, identity.episode, external, state, context)
+      PreCallAuthority.persist_pre_call_authority(
+        connection,
+        identity.episode,
+        external,
+        state,
+        context
+      )
 
     insert_pending_operation_receipt(connection, identity, operation, external)
 
@@ -39,16 +45,19 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
   end
 
   def persist_internal_operation_acceptance(
-         connection,
-         episode,
-         operation,
-         _policy,
-         state,
-         context
-       ) do
+        connection,
+        episode,
+        operation,
+        _policy,
+        state,
+        context
+      ) do
     external = build_external_operation(nil, operation, context)
     insert_external_operation(connection, episode, external, context, operation.observed_context)
-    _accepted_state = PreCallAuthority.persist_pre_call_authority(connection, episode, external, state, context)
+
+    _accepted_state =
+      PreCallAuthority.persist_pre_call_authority(connection, episode, external, state, context)
+
     finalize_local_leave(connection, episode, external)
   end
 

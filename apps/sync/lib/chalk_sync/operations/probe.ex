@@ -15,8 +15,10 @@ defmodule ChalkSync.Operations.Probe do
     boot? = Keyword.get(options, :boot?, false)
 
     with :ok <- Report.observe(:production_modules, &production_modules/0),
-         {:ok, provider_bridge} <- Report.observe(:provider_bridge, &provider_bridge_observation/0),
-         {:ok, database, oldest_due} <- Report.observe(:database, &Database.database_observations/0),
+         {:ok, provider_bridge} <-
+           Report.observe(:provider_bridge, &provider_bridge_observation/0),
+         {:ok, database, oldest_due} <-
+           Report.observe(:database, &Database.database_observations/0),
          :ok <- Database.validate_observed_database(database, oldest_due),
          {:ok, processes} <- Workers.process_observations(boot?) do
       {:ok, %{database: database, processes: processes, provider_bridge: provider_bridge}}

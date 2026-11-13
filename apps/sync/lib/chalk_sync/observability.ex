@@ -11,63 +11,29 @@ defmodule ChalkSync.Observability do
 
   require Logger
 
+  alias ChalkSync.Observability.Correlation
+  alias ChalkSync.Observability.Journey
+  alias ChalkSync.Observability.Sink
+  alias ChalkSync.Observability.Support
   alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.UUID
-  alias OpenTelemetry.Span
 
   @event [:chalk_sync, :observability, :event]
   @runtime_event [:chalk_sync, :runtime, :health]
   @runtime_interval_ms 30_000
-  @journey_id_pattern ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  @session_id_pattern ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
-  @episode_event_names ~w(
-    admission_denied admission_expired admission_policy_changed admission_requested
-    deadline_changed episode_ended episode_started hand_lowered hand_raised
-    participant_camera_stopped participant_display_name_changed participant_joined
-    participant_left participant_microphone_stopped participant_screen_share_stopped
-    recording_status_changed role_assigned
-  )
-
-  @type context :: %{
-          journey_id: String.t() | nil,
-          journey_observed?: boolean(),
-          session_id: String.t() | nil,
-          otel_ctx: map(),
-          w3c_trace?: boolean()
-        }
+  @type context :: Correlation.context()
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  @doc """
-  Builds correlation context from HTTP headers or protocol-frame fields.
+  defdelegate context(carrier), to: Correlation
+  defdelegate merge(current, incoming), to: Correlation
+  defdelegate frame_fields(context), to: Correlation
+  defdelegate persisted_context(journey_id, trace_id, span_id), to: Correlation
 
-  The `baggage` header or hello field may carry the connection's `session.id`.
-  It is connection-scoped: it never reaches `frame_fields/1` or durable work.
-  """
-  @spec context(map() | [{String.t(), String.t()}] | nil) :: context() | nil
-  def context(nil), do: nil
-
-  def context(carrier) when is_map(carrier) do
-    fields = Map.take(carrier, ["journey_id", "traceparent", "tracestate", "baggage"])
-
-    if fields == %{}, do: nil, else: build_context(fields)
-  end
-
-  def context(headers) when is_list(headers) do
-    fields =
-      headers
-      |> Map.new(fn {key, value} -> {String.downcase(key), value} end)
-      |> Map.take(["x-chalk-journey-id", "traceparent", "tracestate"])
-      |> Map.new(fn
-        {"x-chalk-journey-id", value} -> {"journey_id", value}
-        pair -> pair
-      end)
-      |> put_baggage(headers)
-
-    if fields == %{}, do: nil, else: build_context(fields)
-  end
+  defdelegate persisted_context(journey_id, trace_id, span_id, traceparent, tracestate),
+    to: Correlation
 
   @doc "Sets the connection process's Logger metadata from its context."
   @spec bind_logger(context() | nil) :: :ok
@@ -79,63 +45,16 @@ defmodule ChalkSync.Observability do
 
   def bind_logger(_context), do: :ok
 
-  @doc "Merges missing protocol-frame context into a connection's existing context."
-  @spec merge(context() | nil, context() | nil) :: context()
-  def merge(nil, nil), do: new_context()
-  def merge(nil, incoming), do: incoming
-  def merge(current, nil), do: current
-
-  def merge(current, %{otel_ctx: incoming_otel_ctx, journey_id: incoming_journey_id} = incoming) do
-    current = Map.put_new(current, :journey_observed?, not is_nil(current.journey_id))
-    current = Map.put_new(current, :w3c_trace?, remote_span?(current.otel_ctx))
-    incoming_journey? = Map.get(incoming, :journey_observed?, not is_nil(incoming_journey_id))
-    incoming_trace? = remote_span?(incoming_otel_ctx)
-
-    %{
-      current
-      | journey_id:
-          current_or_incoming_journey(
-            current.journey_id,
-            incoming_journey_id,
-            current.journey_observed?
-          ),
-        journey_observed?: current.journey_observed? or incoming_journey?,
-        session_id: current.session_id || incoming.session_id,
-        otel_ctx: current_or_incoming(current.otel_ctx, incoming_otel_ctx, current.w3c_trace?),
-        w3c_trace?: current.w3c_trace? or incoming_trace?
-    }
-  end
-
-  @doc "Returns the public, optional context fields for a protocol frame."
-  @spec frame_fields(context() | nil) :: map()
-  def frame_fields(nil), do: %{}
-
-  def frame_fields(context) do
-    headers =
-      safely(
-        fn ->
-          :otel_propagator_text_map.inject_from(
-            context.otel_ctx,
-            :otel_propagator_trace_context,
-            []
-          )
-        end,
-        []
-      )
-
-    headers
-    |> Map.new()
-    |> Map.take(["traceparent", "tracestate"])
-    |> Map.put("journey_id", context.journey_id)
-  end
-
   @doc "Captures one operation's durable journey and W3C producing context."
   @spec observed_operation_context(context() | nil) :: ObservedContext.t()
   def observed_operation_context(context) do
-    context = ensure_context(context)
+    context = Journey.ensure_context(context)
 
     metadata =
-      safely(fn -> span_metadata(:otel_tracer.current_span_ctx(context.otel_ctx)) end, [])
+      Support.safely(
+        fn -> Sink.span_metadata(:otel_tracer.current_span_ctx(context.otel_ctx)) end,
+        []
+      )
 
     {:ok, observed} =
       ObservedContext.new(
@@ -146,40 +65,8 @@ defmodule ChalkSync.Observability do
         DateTime.utc_now()
       )
 
-    fields = frame_fields(context)
+    fields = Correlation.frame_fields(context)
     ObservedContext.with_w3c(observed, fields["traceparent"], fields["tracestate"])
-  end
-
-  @doc "Reconstructs a bounded context from correlation fields stored with durable work."
-  @spec persisted_context(String.t(), String.t() | nil, String.t() | nil) :: context()
-  def persisted_context(journey_id, trace_id, span_id),
-    do: persisted_context(journey_id, trace_id, span_id, nil, nil)
-
-  @spec persisted_context(
-          String.t(),
-          String.t() | nil,
-          String.t() | nil,
-          String.t() | nil,
-          String.t() | nil
-        ) :: context()
-  def persisted_context(journey_id, trace_id, span_id, traceparent, tracestate) do
-    fields =
-      cond do
-        is_binary(traceparent) ->
-          %{"journey_id" => journey_id, "traceparent" => traceparent}
-          |> maybe_put_tracestate(tracestate)
-
-        is_binary(trace_id) and is_binary(span_id) ->
-          %{
-            "journey_id" => journey_id,
-            "traceparent" => "00-#{trace_id}-#{span_id}-01"
-          }
-
-        true ->
-          %{"journey_id" => journey_id}
-      end
-
-    build_context(fields)
   end
 
   @doc "Emits the root event for a journey that starts at this service."
@@ -198,21 +85,21 @@ defmodule ChalkSync.Observability do
   @spec episode_event(context() | nil, map()) :: context()
   def episode_event(context, event) when is_map(event) do
     linked_phase(context, "sync.episode.event.committed", %{
-      event_name: bounded_episode_event_name(event)
+      event_name: Sink.bounded_episode_event_name(event)
     })
   end
 
   @doc "Emits a short span for work that crossed an OTP process boundary while preserving the explicit upstream trace context."
   @spec linked_phase(context() | nil, String.t(), map()) :: context()
   def linked_phase(context, name, attributes \\ %{}) do
-    context = ensure_context(context)
-    metadata = metadata(context, name, attributes, :phase)
-    safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
+    context = Journey.ensure_context(context)
+    metadata = Sink.metadata(context, name, attributes, :phase)
+    Support.safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
 
     if enabled?() do
-      safely(fn -> export_linked(context, name, attributes, metadata) end, :ok)
-      safely(fn -> log(metadata, context) end, :ok)
-      safely(fn -> deliver_to_sink(metadata) end, :ok)
+      Support.safely(fn -> Sink.export_linked(context, name, attributes, metadata) end, :ok)
+      Support.safely(fn -> Sink.log(metadata, context) end, :ok)
+      Support.safely(fn -> Sink.deliver_to_sink(metadata) end, :ok)
     end
 
     context
@@ -223,9 +110,9 @@ defmodule ChalkSync.Observability do
         when result: term()
   def with_worker_span(context, name, attributes, callback)
       when is_function(callback, 1) do
-    context = ensure_context(context)
-    metadata = metadata(context, name, attributes, :phase)
-    safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
+    context = Journey.ensure_context(context)
+    metadata = Sink.metadata(context, name, attributes, :phase)
+    Support.safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
 
     if enabled?() do
       span =
@@ -233,7 +120,7 @@ defmodule ChalkSync.Observability do
           context.otel_ctx,
           :opentelemetry.get_application_tracer(__MODULE__),
           name,
-          %{kind: :internal, attributes: span_attributes(metadata, attributes)}
+          %{kind: :internal, attributes: Sink.span_attributes(metadata, attributes)}
         )
 
       worker_context = %{
@@ -241,18 +128,18 @@ defmodule ChalkSync.Observability do
         | otel_ctx: :otel_tracer.set_current_span(context.otel_ctx, span)
       }
 
-      safely(fn -> log(metadata, worker_context) end, :ok)
-      safely(fn -> deliver_to_sink(metadata) end, :ok)
+      Support.safely(fn -> Sink.log(metadata, worker_context) end, :ok)
+      Support.safely(fn -> Sink.deliver_to_sink(metadata) end, :ok)
 
       try do
         callback.(worker_context)
       after
-        safely(
-          fn -> :otel_span.add_event(span, name, span_attributes(metadata, attributes)) end,
+        Support.safely(
+          fn -> :otel_span.add_event(span, name, Sink.span_attributes(metadata, attributes)) end,
           :ok
         )
 
-        safely(fn -> :otel_span.end_span(span) end, :ok)
+        Support.safely(fn -> :otel_span.end_span(span) end, :ok)
       end
     else
       callback.(context)
@@ -281,7 +168,10 @@ defmodule ChalkSync.Observability do
       run_queue: :erlang.statistics(:run_queue)
     }
 
-    safely(fn -> :telemetry.execute(@runtime_event, measurements, %{component: "beam"}) end, :ok)
+    Support.safely(
+      fn -> :telemetry.execute(@runtime_event, measurements, %{component: "beam"}) end,
+      :ok
+    )
 
     phase(nil, "sync.runtime.health", %{
       component: "beam",
@@ -293,286 +183,30 @@ defmodule ChalkSync.Observability do
   end
 
   def enabled? do
-    config() |> Map.get(:enabled, false)
+    Support.config() |> Map.get(:enabled, false)
   end
 
   defp emit(context, name, attributes, stage) do
-    context = ensure_context(context)
-    metadata = metadata(context, name, attributes, stage)
-    safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
+    context = Journey.ensure_context(context)
+    metadata = Sink.metadata(context, name, attributes, stage)
+    Support.safely(fn -> :telemetry.execute(@event, %{count: 1}, metadata) end, :ok)
 
     if enabled?() do
-      context = safely(fn -> export(context, name, attributes, metadata) end, context)
-      safely(fn -> log(metadata, context) end, :ok)
-      safely(fn -> deliver_to_sink(metadata) end, :ok)
+      context =
+        Support.safely(fn -> Sink.export(context, name, attributes, metadata) end, context)
+
+      Support.safely(fn -> Sink.log(metadata, context) end, :ok)
+      Support.safely(fn -> Sink.deliver_to_sink(metadata) end, :ok)
       context
     else
       context
     end
   end
 
-  defp build_context(fields) do
-    journey_id = valid_journey_id(fields["journey_id"])
-    otel_ctx = extract_otel_context(fields)
-
-    %{
-      journey_id: journey_id,
-      journey_observed?: not is_nil(journey_id),
-      session_id: session_id_from_baggage(fields["baggage"]),
-      otel_ctx: otel_ctx,
-      w3c_trace?: remote_span?(otel_ctx)
-    }
-  end
-
-  defp new_context do
-    %{
-      journey_id: new_journey_id(),
-      journey_observed?: false,
-      session_id: nil,
-      otel_ctx: :otel_ctx.new(),
-      w3c_trace?: false
-    }
-  end
-
-  defp ensure_context(nil), do: new_context()
-  defp ensure_context(%{journey_id: nil} = context), do: %{context | journey_id: new_journey_id()}
-  defp ensure_context(context), do: context
-
-  defp current_or_incoming_journey(current, _incoming, true), do: current
-  defp current_or_incoming_journey(current, incoming, false), do: incoming || current
-
-  defp current_or_incoming(current, _incoming, true), do: current
-
-  defp current_or_incoming(current, incoming, false) do
-    if remote_span?(incoming), do: incoming, else: current
-  end
-
-  defp remote_span?(otel_ctx) do
-    safely(fn -> otel_ctx |> :otel_tracer.current_span_ctx() |> Span.is_valid() end, false)
-  end
-
-  defp extract_otel_context(fields) do
-    carrier =
-      fields
-      |> Map.take(["traceparent", "tracestate"])
-      |> Map.to_list()
-
-    safely(
-      fn ->
-        :otel_propagator_text_map.extract_to(
-          :otel_ctx.new(),
-          :otel_propagator_trace_context,
-          carrier
-        )
-      end,
-      :otel_ctx.new()
-    )
-  end
-
-  defp export(context, name, attributes, metadata) do
-    span =
-      :otel_tracer.start_span(
-        context.otel_ctx,
-        :opentelemetry.get_application_tracer(__MODULE__),
-        name,
-        %{kind: :internal, attributes: span_attributes(metadata, attributes)}
-      )
-
-    :otel_span.add_event(span, name, span_attributes(metadata, attributes))
-    ended_span = :otel_span.end_span(span)
-    %{context | otel_ctx: :otel_tracer.set_current_span(context.otel_ctx, ended_span)}
-  end
-
-  defp export_linked(context, name, attributes, metadata) do
-    options = %{
-      kind: :internal,
-      attributes: span_attributes(metadata, attributes)
-    }
-
-    span =
-      :otel_tracer.start_span(
-        context.otel_ctx,
-        :opentelemetry.get_application_tracer(__MODULE__),
-        name,
-        options
-      )
-
-    :otel_span.add_event(span, name, span_attributes(metadata, attributes))
-    :otel_span.end_span(span)
-  end
-
-  defp metadata(context, name, attributes, stage) do
-    %{
-      event: name,
-      journey_id: context.journey_id,
-      session_id: context.session_id,
-      attributes: attributes,
-      stage: Atom.to_string(stage)
-    }
-  end
-
-  @doc false
-  def span_attributes(metadata, attributes) do
-    attributes
-    |> Map.merge(%{
-      "chalk.journey.id" => metadata.journey_id,
-      "chalk.sync.event" => metadata.event,
-      "chalk.sync.stage" => metadata.stage
-    })
-    |> put_session_id(metadata, "session.id")
-  end
-
-  defp put_session_id(fields, %{session_id: session_id}, key) when is_binary(session_id),
-    do: Map.put(fields, key, session_id)
-
-  defp put_session_id(fields, _metadata, _key), do: fields
-
-  defp log(metadata, context) do
-    trace_metadata =
-      case context do
-        nil ->
-          []
-
-        %{otel_ctx: otel_ctx} ->
-          safely(fn -> span_metadata(:otel_tracer.current_span_ctx(otel_ctx)) end, [])
-      end
-
-    Logger.info(
-      if(
-        metadata.event in [
-          "sync.websocket.handshake",
-          "sync.websocket.authenticated",
-          "sync.websocket.closed"
-        ],
-        do:
-          JSON.encode!(
-            metadata.attributes
-            |> Map.merge(%{event: metadata.event, journey_id: metadata.journey_id})
-            |> put_session_id(metadata, "session.id")
-          ),
-        else: "chalk_sync_observability"
-      ),
-      [
-        observability_event: metadata.event,
-        journey_id: metadata.journey_id,
-        observability_stage: metadata.stage,
-        observability_attributes: metadata.attributes
-      ] ++ session_metadata(metadata) ++ trace_metadata
-    )
-  end
-
-  defp session_metadata(%{session_id: session_id}) when is_binary(session_id),
-    do: [session_id: session_id]
-
-  defp session_metadata(_metadata), do: []
-
-  defp span_metadata(nil), do: []
-
-  defp span_metadata(span) do
-    [trace_id: Span.hex_trace_id(span), span_id: Span.hex_span_id(span)]
-  end
-
-  defp bounded_episode_event_name(event) do
-    event
-    |> Map.get(:name, Map.get(event, "name"))
-    |> episode_event_label()
-  end
-
-  defp episode_event_label(name) when is_atom(name),
-    do: name |> Atom.to_string() |> episode_event_label()
-
-  defp episode_event_label(name) when is_binary(name) and name in @episode_event_names, do: name
-  defp episode_event_label(_name), do: "other"
-
-  defp deliver_to_sink(metadata) do
-    case config() do
-      %{event_sink: sink} when is_function(sink, 1) -> sink.(metadata)
-      _ -> :ok
-    end
-  end
-
-  defp maybe_put_tracestate(fields, tracestate) when is_binary(tracestate),
-    do: Map.put(fields, "tracestate", tracestate)
-
-  defp maybe_put_tracestate(fields, _tracestate), do: fields
-
-  defp config do
-    :chalk_sync
-    |> Application.get_env(:observability, [])
-    |> Map.new()
-  end
-
   defp runtime_interval_ms do
-    case Map.get(config(), :runtime_health_interval_ms, @runtime_interval_ms) do
+    case Map.get(Support.config(), :runtime_health_interval_ms, @runtime_interval_ms) do
       interval when is_integer(interval) and interval > 0 -> interval
       _ -> @runtime_interval_ms
     end
-  end
-
-  defp valid_journey_id(value) when is_binary(value) do
-    normalized = String.downcase(value)
-
-    if Regex.match?(@journey_id_pattern, normalized) and
-         String.replace(normalized, "-", "") != String.duplicate("0", 32),
-       do: normalized
-  end
-
-  defp valid_journey_id(_value), do: nil
-
-  # W3C baggage: comma-separated `key=value;property` members. Only a lowercase
-  # UUID `session.id` member is kept; anything else is ignored.
-  defp put_baggage(fields, headers) do
-    case for({key, value} <- headers, String.downcase(key) == "baggage", do: value) do
-      [] -> fields
-      values -> Map.put(fields, "baggage", Enum.join(values, ","))
-    end
-  end
-
-  defp session_id_from_baggage(baggage) when is_binary(baggage) do
-    baggage
-    |> String.split(",")
-    |> Enum.find_value(fn member ->
-      with [pair | _properties] <- String.split(member, ";"),
-           [key, value] <- String.split(pair, "=", parts: 2),
-           "session.id" <- String.trim(key),
-           value = String.trim(value),
-           true <- Regex.match?(@session_id_pattern, value) do
-        value
-      else
-        _other -> nil
-      end
-    end)
-  end
-
-  defp session_id_from_baggage(_baggage), do: nil
-
-  defp new_journey_id do
-    <<prefix::binary-size(6), version, next, variant, suffix::binary-size(7)>> =
-      :crypto.strong_rand_bytes(16)
-
-    bytes =
-      <<prefix::binary, Bitwise.bor(Bitwise.band(version, 0x0F), 0x40), next,
-        Bitwise.bor(Bitwise.band(variant, 0x3F), 0x80), suffix::binary>>
-
-    hex = Base.encode16(bytes, case: :lower)
-
-    Enum.join(
-      [
-        binary_part(hex, 0, 8),
-        binary_part(hex, 8, 4),
-        binary_part(hex, 12, 4),
-        binary_part(hex, 16, 4),
-        binary_part(hex, 20, 12)
-      ],
-      "-"
-    )
-  end
-
-  defp safely(fun, fallback) do
-    fun.()
-  rescue
-    _exception -> fallback
-  catch
-    :exit, _reason -> fallback
   end
 end

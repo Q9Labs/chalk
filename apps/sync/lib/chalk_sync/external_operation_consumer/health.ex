@@ -21,7 +21,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Health do
     }
   end
 
-
   defp active_work_age_ms(nil, _now_ms), do: nil
 
   defp active_work_age_ms(active_work, now_ms) do

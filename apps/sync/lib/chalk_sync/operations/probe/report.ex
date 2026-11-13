@@ -18,7 +18,6 @@ defmodule ChalkSync.Operations.Probe.Report do
     result
   end
 
-
   @doc false
   @spec record_failure(atom(), atom(), map()) :: :ok
   def record_failure(check, reason, measurements) do

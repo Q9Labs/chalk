@@ -37,9 +37,17 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
         with :ok <- Authority.validate_operation_actor(identity, operation, policy, participant),
              :ok <- JoinSeats.validate_leave(connection, identity, operation),
              {:ok, state} <- Control.validate_fold(identity.episode, control, policy),
-             {:ok, context} <- Prepare.prepare_operation(connection, identity, operation, policy, state),
+             {:ok, context} <-
+               Prepare.prepare_operation(connection, identity, operation, policy, state),
              :ok <- ensure_operation_capacity(connection, identity.episode) do
-          Persist.persist_operation_acceptance(connection, identity, operation, policy, state, context)
+          Persist.persist_operation_acceptance(
+            connection,
+            identity,
+            operation,
+            policy,
+            state,
+            context
+          )
         else
           {:error, :overloaded} ->
             Postgrex.rollback(connection, {:retryable, :overloaded})

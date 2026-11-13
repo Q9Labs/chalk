@@ -41,7 +41,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
     end
   end
 
-
   def advance_scene(connection, identity, scene_id) do
     params = Store.context(identity) ++ [Store.uuid(scene_id)]
 
@@ -52,30 +51,34 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
     end
   end
 
-
   def retire_scene(connection, identity, scene_id) do
-    case Postgrex.query(connection, SQL.retire_scene(), Store.context(identity) ++ [Store.uuid(scene_id)]) do
+    case Postgrex.query(
+           connection,
+           SQL.retire_scene(),
+           Store.context(identity) ++ [Store.uuid(scene_id)]
+         ) do
       {:ok, %Postgrex.Result{num_rows: 1}} -> :ok
       {:ok, _result} -> {:error, :stale_scene}
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
 
-
   def insert_scene(connection, identity, scene_id, is_presenting, presenter_id) do
     case Postgrex.query(
            connection,
            SQL.insert_scene(),
-           Store.context(identity) ++ [Store.uuid(scene_id), is_presenting, Store.nullable_uuid(presenter_id)]
+           Store.context(identity) ++
+             [Store.uuid(scene_id), is_presenting, Store.nullable_uuid(presenter_id)]
          ) do
       {:ok, _result} -> :ok
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
 
-
   def update_presentation(connection, identity, scene_id, presenting) do
-    params = Store.context(identity) ++ [Store.uuid(scene_id), presenting, Store.uuid(identity.participant_id)]
+    params =
+      Store.context(identity) ++
+        [Store.uuid(scene_id), presenting, Store.uuid(identity.participant_id)]
 
     case Postgrex.query(connection, SQL.update_presentation(), params) do
       {:ok, %Postgrex.Result{rows: [[revision, is_presenting]]}} ->
@@ -88,7 +91,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
         {:retryable, :storage_unavailable}
     end
   end
-
 
   # Under picked, no row already means not picked, and a stored false would
   # still block the person after the host switches back to everyone.
@@ -106,7 +108,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
   def store_permission(connection, identity, _draw_policy, operation),
     do: upsert_permission(connection, identity, operation)
 
-
   defp upsert_permission(connection, identity, operation) do
     params =
       Store.context(identity) ++
@@ -123,7 +124,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
     end
   end
 
-
   def apply_draw_policy(connection, identity, operation) do
     with :missing <- draw_policy_receipt(connection, identity, operation),
          :ok <- draw_policy_capacity(connection, identity),
@@ -136,7 +136,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
       other -> other
     end
   end
-
 
   defp draw_policy_receipt(connection, identity, operation) do
     params = [
@@ -154,7 +153,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
     end
   end
 
-
   defp upsert_draw_policy(connection, identity, operation) do
     params = Store.context(identity) ++ [operation.policy, Store.uuid(identity.participant_id)]
 
@@ -163,7 +161,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
-
 
   defp insert_draw_policy_receipt(connection, identity, operation) do
     params =
@@ -175,7 +172,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Mutations do
       {:error, _error} -> {:retryable, :storage_unavailable}
     end
   end
-
 
   # Receipts are never evicted, so a retry from any time in the call stays a
   # duplicate. New changes stop at the cap instead.

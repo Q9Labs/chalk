@@ -16,7 +16,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Reads do
   @max_replay_items @limits["snapshotPageMaxItems"]
 
   def episode_access(%EpisodeKey{} = episode) do
-    params = [Store.uuid(episode.tenant_id), Store.uuid(episode.space_id), Store.uuid(episode.episode_id)]
+    params = [
+      Store.uuid(episode.tenant_id),
+      Store.uuid(episode.space_id),
+      Store.uuid(episode.episode_id)
+    ]
 
     case Postgrex.query(Database.connection(episode), SQL.episode_access(), params,
            timeout: 1_000
@@ -113,7 +117,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Reads do
   # Only hosts see the per-person choices, because only hosts can change them.
   def draw_grants(connection, identity, authority) do
     if "manageWhiteboard" in authority.capabilities do
-      case Postgrex.query(connection, SQL.draw_grants(), Store.context(identity) ++ [@max_draw_grants]) do
+      case Postgrex.query(
+             connection,
+             SQL.draw_grants(),
+             Store.context(identity) ++ [@max_draw_grants]
+           ) do
         {:ok, %Postgrex.Result{rows: rows}} ->
           {:ok, Enum.map(rows, fn [participant_id, can_draw] -> {participant_id, can_draw} end)}
 
@@ -126,7 +134,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository.Reads do
   end
 
   def snapshot_elements(connection, identity, scene_id) do
-    params = [Store.uuid(identity.episode.tenant_id), Store.uuid(identity.episode.space_id), Store.uuid(scene_id)]
+    params = [
+      Store.uuid(identity.episode.tenant_id),
+      Store.uuid(identity.episode.space_id),
+      Store.uuid(scene_id)
+    ]
 
     case Postgrex.query(connection, SQL.snapshot_elements(), params) do
       {:ok, %Postgrex.Result{rows: rows}} when length(rows) <= 10_000 ->

@@ -57,7 +57,11 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       else
         {:duplicate, scene_id, revision, _event_presenting} ->
           {:ok,
-           Map.put(Store.commit(operation.operation_id, :duplicate, scene_id, revision), :elements, [])}
+           Map.put(
+             Store.commit(operation.operation_id, :duplicate, scene_id, revision),
+             :elements,
+             []
+           )}
 
         other ->
           other
@@ -114,7 +118,8 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       with {:ok, authority, scene} <- Store.locked_scene(connection, identity),
            :ok <- Store.require_capability(authority, "manageWhiteboard"),
            :missing <- Store.receipt(connection, identity, operation.operation_id, fingerprint),
-           :ok <- Mutations.store_permission(connection, identity, authority.draw_policy, operation),
+           :ok <-
+             Mutations.store_permission(connection, identity, authority.draw_policy, operation),
            :ok <-
              Store.insert_receipt(
                connection,
@@ -171,7 +176,12 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
       with {:ok, scene} <- Store.drawing_scene(connection, identity),
            :missing <- Store.receipt(connection, identity, operation.operation_id, fingerprint),
            {:ok, revision, presenting} <-
-             Mutations.update_presentation(connection, identity, scene.scene_id, operation.presenting),
+             Mutations.update_presentation(
+               connection,
+               identity,
+               scene.scene_id,
+               operation.presenting
+             ),
            :ok <-
              Store.insert_receipt(
                connection,

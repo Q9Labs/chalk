@@ -12,36 +12,23 @@ defmodule ChalkSync.Stateholder.Postgres do
   require Logger
 
   alias ChalkSync.Database
-  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.LifecycleDecision
-  alias ChalkSync.Stateholder.Operation
-  alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Postgres.CommandDecision
-  alias ChalkSync.Stateholder.Postgres.ExternalOperationClaims
-  alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
-  alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
-  alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.Lifecycle
-  alias ChalkSync.Stateholder.Postgres.MediaPauses
-  alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
-  alias ChalkSync.Stateholder.Postgres.ParticipantDevices
+  alias ChalkSync.Stateholder.Postgres.Operations
+  alias ChalkSync.Stateholder.Postgres.Media
   alias ChalkSync.Stateholder.Postgres.Presence
-  alias ChalkSync.Stateholder.Postgres.PublicationGrants
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
   alias ChalkSync.Stateholder.Postgres.RoleTransitionPlanner
-  alias ChalkSync.Stateholder.Postgres.Scope
-  alias ChalkSync.Stateholder.Postgres.SQL.MediaPauses, as: MediaPausesSQL
   alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.Stateholder.Recovery
   alias ChalkSync.UUID
-
-  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
 
   @impl ChalkSync.Stateholder
   def decide_command(%Identity{} = identity, %Command{} = command) do
@@ -82,11 +69,7 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def admit_entry(%Identity{} = identity, requested) do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &JoinSeats.admit_entry(&1, identity, requested),
-           timeout: @transaction_timeout_ms
-         ) do
+    case Transaction.run(identity.episode, &JoinSeats.admit_entry(&1, identity, requested)) do
       {:ok, admitted} -> {:ok, admitted}
       {:error, {:error, reason}} -> {:error, reason}
       {:error, {:retryable, reason}} -> {:retryable, reason}
@@ -98,11 +81,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   def renew_presence(%Identity{} = identity) do
     Database.guard(
       fn ->
-        case Postgrex.transaction(
-               Database.connection(identity.episode),
-               &Presence.transaction(&1, identity),
-               timeout: @transaction_timeout_ms
-             ) do
+        case Transaction.run(identity.episode, &Presence.transaction(&1, identity)) do
           {:ok, :ok} -> :ok
           {:error, {:error, reason}} -> {:error, reason}
           {:error, _reason} -> {:retryable, :dependency_unavailable}
@@ -116,11 +95,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   def prepare_entry_leave(episode, operation_id) do
     Database.guard(
       fn ->
-        case Postgrex.transaction(
-               Database.connection(episode),
-               &JoinSeats.prepare_leave(&1, episode, operation_id),
-               timeout: @transaction_timeout_ms
-             ) do
+        case Transaction.run(episode, &JoinSeats.prepare_leave(&1, episode, operation_id)) do
           {:ok, disposition} -> disposition
           {:error, _reason} -> :pending
         end
@@ -172,225 +147,13 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: Lifecycle.pending_lifecycle_intents(limit)
 
   @impl ChalkSync.Stateholder
-  def begin_operation(%Identity{} = identity, %Operation{} = operation) do
-    case run_operation_transaction(identity, operation) do
-      {:ok, %OperationDecision{} = decision} ->
-        WebhookObservation.external_operation(
-          identity.episode,
-          decision.external_operation_id,
-          decision
-        )
-
-        {:ok, decision}
-
-      {:error, {:retryable, reason}} ->
-        {:retryable, reason}
-
-      {:error, _reason} ->
-        ExternalOperationDecision.resolve_uncertain_operation(identity, operation)
-    end
-  rescue
-    exception ->
-      Logger.error(
-        "sync external operation acceptance became uncertain: #{Exception.message(exception)}"
-      )
-
-      ExternalOperationDecision.resolve_uncertain_operation(identity, operation)
-  catch
-    :exit, reason ->
-      Logger.error("sync external operation acceptance exited: #{inspect(reason)}")
-      ExternalOperationDecision.resolve_uncertain_operation(identity, operation)
-  end
-
-  @impl ChalkSync.Stateholder
-  def begin_internal_operation(%EpisodeKey{} = episode, %Operation{} = operation) do
-    case run_internal_operation_transaction(episode, operation) do
-      {:ok, %OperationDecision{} = decision} ->
-        WebhookObservation.external_operation(episode, decision.external_operation_id, decision)
-        {:ok, decision}
-
-      {:error, {:retryable, reason}} ->
-        {:retryable, reason}
-
-      {:error, {:error, reason}} ->
-        {:error, reason}
-
-      {:error, _reason} ->
-        ExternalOperationDecision.resolve_uncertain_internal_operation(episode, operation)
-    end
-  rescue
-    exception ->
-      Logger.error(
-        "sync internal operation acceptance became uncertain: #{Exception.message(exception)}"
-      )
-
-      ExternalOperationDecision.resolve_uncertain_internal_operation(episode, operation)
-  catch
-    :exit, reason ->
-      Logger.error("sync internal operation acceptance exited: #{inspect(reason)}")
-      ExternalOperationDecision.resolve_uncertain_internal_operation(episode, operation)
-  end
-
-  @impl ChalkSync.Stateholder
-  def claim_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: claim_operation_rows(&ExternalOperationClaims.claim_operations(&1, limit))
-
-  @impl ChalkSync.Stateholder
-  def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: claim_operation_rows(&ExternalOperationClaims.claim_local_operations(&1, limit))
-
-  @impl ChalkSync.Stateholder
-  def claim_provider_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: claim_operation_rows(&ExternalOperationClaims.claim_provider_operations(&1, limit))
-
-  defp claim_operation_rows(claim) do
-    Database.guard(fn -> run_claim(claim) end, {:retryable, :dependency_unavailable})
-  end
-
-  defp run_claim(claim) do
-    case Postgrex.transaction(Database.connection_for(:background), fn connection ->
-           Transaction.configure(connection)
-           claim.(connection)
-         end) do
-      {:ok, rows} -> {:ok, rows}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  end
-
-  @impl ChalkSync.Stateholder
-  def read_operation(%EpisodeKey{} = episode, external_operation_id)
-      when is_binary(external_operation_id),
-      do: ExternalOperationClaims.read_operation(episode, external_operation_id)
-
-  @impl ChalkSync.Stateholder
-  def participant_authority(%EpisodeKey{} = episode, participant_id, expected_generation)
-      when is_binary(participant_id) and
-             (is_nil(expected_generation) or
-                (is_integer(expected_generation) and expected_generation > 0)),
-      do: ParticipantAuthority.participant_authority(episode, participant_id, expected_generation)
-
-  @impl ChalkSync.Stateholder
-  def participant_devices(%EpisodeKey{} = episode),
-    do: ParticipantDevices.list(episode)
-
-  @impl ChalkSync.Stateholder
-  def media_pauses(%EpisodeKey{} = episode) do
-    Database.guard(
-      fn ->
-        case Postgrex.query(
-               Database.connection(episode),
-               MediaPausesSQL.list(),
-               Scope.episode(episode),
-               timeout: 1_000
-             ) do
-          {:ok, %{rows: rows}} -> MediaPauses.decode_rows(rows)
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
-
-  @impl ChalkSync.Stateholder
-  def media_stops(%EpisodeKey{} = episode) do
-    Database.guard(
-      fn ->
-        case Postgrex.query(
-               Database.connection(episode),
-               MediaPausesSQL.list_stops(),
-               Scope.episode(episode),
-               timeout: 1_000
-             ) do
-          {:ok, %{rows: rows}} -> MediaPauses.decode_stop_rows(rows)
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
-
-  @impl ChalkSync.Stateholder
-  def set_media_pause(%Identity{} = identity, source, publication_id)
-      when source in [:microphone, :camera, :screen] do
-    Database.guard(
-      fn ->
-        case Postgrex.transaction(
-               Database.connection(identity.episode),
-               &MediaPauses.set_transaction(&1, identity, source, publication_id),
-               timeout: @transaction_timeout_ms,
-               commit_comment: "chalk sync media pause"
-             ) do
-          {:ok, :ok} -> :ok
-          {:error, {:error, reason}} -> {:error, reason}
-          {:error, {:retryable, reason}} -> {:retryable, reason}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
-
-  @impl ChalkSync.Stateholder
-  def reserve_publication_grant(%Identity{} = identity, operation_id, source)
-      when is_binary(operation_id) and source in [:microphone, :camera, :screen] do
-    Database.guard(
-      fn ->
-        case Postgrex.transaction(
-               Database.connection(identity.episode),
-               &PublicationGrants.reserve_transaction(&1, identity, operation_id, source),
-               timeout: @transaction_timeout_ms,
-               commit_comment: "chalk sync publication grant reservation"
-             ) do
-          {:ok, reservation} -> {:ok, reservation}
-          {:error, {:error, reason}} -> {:error, reason}
-          {:error, {:retryable, reason}} -> {:retryable, reason}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
-
-  def reserve_publication_grant(_identity, _operation_id, _source),
-    do: {:error, :invalid_operation}
-
-  @impl ChalkSync.Stateholder
-  def complete_publication_grant(%EpisodeKey{} = episode, reservation_id, outcome)
-      when is_binary(reservation_id) do
-    Database.guard(
-      fn ->
-        case UUID.dump(reservation_id) do
-          {:ok, _id} -> complete_publication_grant(episode, reservation_id, outcome, :valid)
-          :error -> {:error, :reservation_not_found}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
-
-  defp complete_publication_grant(episode, reservation_id, outcome, :valid) do
-    case Postgrex.transaction(
-           Database.connection(episode),
-           &PublicationGrants.complete_transaction(&1, episode, reservation_id, outcome),
-           timeout: @transaction_timeout_ms,
-           commit_comment: "chalk sync publication grant completion"
-         ) do
-      {:ok, result} -> {:ok, result}
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, {:retryable, reason}} -> {:retryable, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  end
-
-  @impl ChalkSync.Stateholder
   def begin_role_transition(%Identity{} = identity, %Command{} = command, publications)
       when command.name in [:assign_roles] and is_list(publications) do
     Database.guard(
       fn ->
-        case Postgrex.transaction(
-               Database.connection(identity.episode),
+        case Transaction.run(
+               identity.episode,
                &RoleTransitionPlanner.transaction(&1, identity, command, publications),
-               timeout: @transaction_timeout_ms,
                commit_comment: "chalk sync role transition"
              ) do
           {:ok, decision} -> {:ok, decision}
@@ -406,70 +169,16 @@ defmodule ChalkSync.Stateholder.Postgres do
     do: decide_command(identity, command)
 
   @impl ChalkSync.Stateholder
-  def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome)
-      when is_binary(external_operation_id) and is_tuple(outcome) do
-    case UUID.dump(external_operation_id) do
-      {:ok, _id} -> finalize_known_operation(episode, external_operation_id, outcome)
-      :error -> {:error, :operation_not_found}
-    end
-  rescue
-    exception ->
-      Logger.error(
-        "sync external operation finalization became uncertain: #{Exception.message(exception)}"
-      )
-
-      ExternalOperationDecision.resolve_uncertain_finalization(episode, external_operation_id)
-  catch
-    :exit, reason ->
-      Logger.error("sync external operation finalization exited: #{inspect(reason)}")
-      ExternalOperationDecision.resolve_uncertain_finalization(episode, external_operation_id)
-  end
-
-  defp finalize_known_operation(episode, external_operation_id, outcome) do
-    case run_operation_finalization(episode, external_operation_id, outcome) do
-      {:ok, %OperationDecision{} = decision} ->
-        WebhookObservation.external_operation(episode, external_operation_id, decision)
-        {:ok, decision}
-
-      {:error, {:retryable, reason}} ->
-        {:retryable, reason}
-
-      {:error, {:error, reason}} ->
-        {:error, reason}
-
-      {:error, _reason} ->
-        ExternalOperationDecision.resolve_uncertain_finalization(episode, external_operation_id)
-    end
-  end
-
-  @impl ChalkSync.Stateholder
-  def recover(%Identity{} = identity, cursor) do
-    Database.guard(
-      fn ->
-        case Postgrex.transaction(
-               Database.connection(identity.episode),
-               &RecoveryReader.transaction(&1, identity, cursor),
-               timeout: @transaction_timeout_ms
-             ) do
-          {:ok, %Recovery{} = recovery} -> {:ok, recovery}
-          {:ok, {:error, reason}} -> {:error, reason}
-          {:error, {:error, reason}} -> {:error, reason}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
-  end
+  def recover(%Identity{} = identity, cursor),
+    do: read_recovery(identity.episode, identity, cursor)
 
   @doc false
-  def recover(%EpisodeKey{} = episode, cursor) do
+  def recover(%EpisodeKey{} = episode, cursor), do: read_recovery(episode, episode, cursor)
+
+  defp read_recovery(episode, subject, cursor) do
     Database.guard(
       fn ->
-        case Postgrex.transaction(
-               Database.connection(episode),
-               &RecoveryReader.transaction(&1, episode, cursor),
-               timeout: @transaction_timeout_ms
-             ) do
+        case Transaction.run(episode, &RecoveryReader.transaction(&1, subject, cursor)) do
           {:ok, %Recovery{} = recovery} -> {:ok, recovery}
           {:ok, {:error, reason}} -> {:error, reason}
           {:error, {:error, reason}} -> {:error, reason}
@@ -487,57 +196,61 @@ defmodule ChalkSync.Stateholder.Postgres do
   def recovery_page(%EpisodeKey{} = episode, after_revision, through_revision),
     do: RecoveryReader.page(episode, after_revision, through_revision)
 
+  @impl ChalkSync.Stateholder
+  defdelegate begin_operation(a, b), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate begin_internal_operation(a, b), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate claim_operations(a), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate claim_local_operations(a), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate claim_provider_operations(a), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate read_operation(a, b), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate finalize_operation(a, b, c), to: Operations
+
+  @impl ChalkSync.Stateholder
+  defdelegate participant_authority(a, b, c), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate participant_devices(a), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate media_pauses(a), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate media_stops(a), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate set_media_pause(a, b, c), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate reserve_publication_grant(a, b, c), to: Media
+
+  @impl ChalkSync.Stateholder
+  defdelegate complete_publication_grant(a, b, c), to: Media
+
   @doc false
   @spec durable_synchronous_commit?(term()) :: boolean()
   def durable_synchronous_commit?(setting), do: Transaction.durable_synchronous_commit?(setting)
 
   defp run_decision_transaction(identity, command) do
-    Postgrex.transaction(
-      Database.connection(identity.episode),
-      &CommandDecision.transaction(&1, identity, command),
-      timeout: @transaction_timeout_ms,
+    Transaction.run(identity.episode, &CommandDecision.transaction(&1, identity, command),
       commit_comment: "chalk sync command"
     )
   end
 
   defp run_lifecycle_transaction(episode, lifecycle_intent_id, identity) do
-    Postgrex.transaction(
-      Database.connection(episode),
-      &Lifecycle.transaction(&1, episode, lifecycle_intent_id, identity),
-      timeout: @transaction_timeout_ms,
+    Transaction.run(episode, &Lifecycle.transaction(&1, episode, lifecycle_intent_id, identity),
       commit_comment: "chalk sync lifecycle intent"
-    )
-  end
-
-  defp run_operation_transaction(identity, operation) do
-    Postgrex.transaction(
-      Database.connection(identity.episode),
-      &ExternalOperationPlanner.accept_transaction(&1, identity, operation),
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync external operation acceptance"
-    )
-  end
-
-  defp run_internal_operation_transaction(episode, operation) do
-    Postgrex.transaction(
-      Database.connection(episode),
-      &ExternalOperationPlanner.accept_internal_transaction(&1, episode, operation),
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync internal operation acceptance"
-    )
-  end
-
-  defp run_operation_finalization(episode, external_operation_id, outcome) do
-    Postgrex.transaction(
-      Database.connection(episode),
-      &ExternalOperationFinalizer.finalize_transaction(
-        &1,
-        episode,
-        external_operation_id,
-        outcome
-      ),
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync external operation finalization"
     )
   end
 end
