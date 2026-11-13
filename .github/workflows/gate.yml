@@ -64,6 +64,7 @@ jobs:
       sync: ${{ steps.select.outputs.sync }}
       root_groups: ${{ steps.select.outputs.root_groups }}
       full: ${{ steps.select.outputs.full }}
+      fatal: ${{ steps.select.outputs.fatal }}
     steps:
       # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
       # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
@@ -136,11 +137,13 @@ jobs:
           cat "${GITHUB_OUTPUT}"
 
   # Jobs narrow a pull request only when Select gate jobs succeeded and reported full=false. A failed job can still
-  # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded.
+  # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded. The one
+  # exception is fatal=true, a gate task with no register entry: every lane would fail on the same error, so no lane runs
+  # and Root gate reports it.
   root-lanes:
     name: Root ${{ matrix.group }}
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' }}
     # The sfu lane stays on the hosted runner for now: TestViewerWithoutTWCCStepsDownOnALossyLink (features/media/sfu/tests/no_twcc_test.go)
     # failed 3 of 6 runs on Instabox 4x8 and passes on the hosted image. The test runs unchanged; the lane goes back to the shared runner once it passes there.
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && matrix.group != 'sfu' && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
@@ -374,7 +377,7 @@ jobs:
           node-version-file: .tool-versions
 
       - name: Download leak shard reports
-        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: call-leaks-*
@@ -382,7 +385,7 @@ jobs:
           merge-multiple: true
 
       - name: Require complete leak journey coverage
-        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
         env:
           LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
           ROOT_LANES_RESULT: ${{ needs.root-lanes.result }}
@@ -404,12 +407,13 @@ jobs:
       - name: Require every root lane group to pass
         run: |
           echo "Select gate jobs: ${{ needs.changes.result }}; root lane groups: ${{ needs.root-lanes.result }}"
+          if [[ "${{ needs.changes.outputs.fatal }}" == "true" ]]; then echo "::error::A gate task has no entry in scripts/gates/checks.json, so no lane ran. See the Select gate jobs log."; fi
           [[ "${{ needs.root-lanes.result }}" == "success" ]]
 
   api:
     name: API gate
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
@@ -499,7 +503,7 @@ jobs:
   sync-parts:
     name: Sync ${{ matrix.part }}
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 60
     strategy:

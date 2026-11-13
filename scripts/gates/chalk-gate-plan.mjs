@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { requireRegistered } from "./register.mjs";
+import { RegisterError, requireRegistered } from "./register.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
@@ -690,14 +690,16 @@ export function shareProvenGroups(jobs, proof, drift) {
 }
 
 // A selection that cannot be planned runs every job in full rather than skipping lanes. full tells the jobs to pass
-// --full, because the base that broke the plan would break their own diff too.
-function selectCiJobs(base) {
-  if (base === "--full") return { ...ciJobs([], { full: true }), full: true };
+// --full, because the base that broke the plan would break their own diff too. A register error is the exception:
+// every lane would fail on the same throw, so it propagates and CI stops after this one job.
+export function selectCiJobs(base, plan = ciJobs) {
+  if (base === "--full") return { ...plan([], { full: true }), full: true };
   try {
-    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" }, event: process.env.GATE_EVENT }), full: false };
+    return { ...plan(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" }, event: process.env.GATE_EVENT }), full: false };
   } catch (error) {
+    if (error instanceof RegisterError) throw error;
     console.error(`::warning title=Gate job selection failed::Running every gate job in full. Selection against ${base} failed: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
-    return { ...ciJobs([], { full: true }), full: true };
+    return { ...plan([], { full: true }), full: true };
   }
 }
 
@@ -726,7 +728,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full> [--proof <file>]");
     process.exit(2);
   }
-  const selected = selectCiJobs(base);
+  let selected;
+  try {
+    selected = selectCiJobs(base);
+  } catch (error) {
+    if (!(error instanceof RegisterError)) throw error;
+    // fatal=true tells the other Gate jobs not to run; the job still fails, so the Gate is red.
+    console.error(`::error title=Gate task is not registered::${error.message}`);
+    console.log("fatal=true");
+    process.exit(1);
+  }
   const jobs = proofPath && !selected.full ? applyProof(selected, base, proofPath) : selected;
   console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
 }
