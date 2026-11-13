@@ -62,5 +62,3 @@ A session is one run of a Chalk app on one device, not an Episode. Its ID arrive
 ```sh
 box run -- 'bash scripts/gates/instabox-run.sh --browser scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness'
 ```
-
-The external [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md) controls nightly provider drills.
