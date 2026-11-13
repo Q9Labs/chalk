@@ -299,7 +299,7 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
               </MenuItem>
               <div className="msep" />
               <MenuItem
-                icon="trash"
+                icon="archive"
                 danger
                 onSelect={() => {
                   close();
