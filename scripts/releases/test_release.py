@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -802,6 +803,25 @@ class GateCheckedTests(unittest.TestCase):
             block = ci[start:ci.index('\n    runs-on:', start)]
             self.assertIn('needs: require-gate', block)
             self.assertIn("""contains(fromJSON('["success","skipped"]'), needs.require-gate.result)""", block)
+
+    def test_every_job_below_the_skipped_check_runs_on_a_status_function(self):
+        # Without always() or !cancelled(), a skipped ancestor skips a job even when the job's direct needs succeeded.
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        jobs = ci[ci.index('\njobs:\n'):]
+        bodies = dict(re.findall(r'(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)', jobs))
+        needs = {}
+        for name, body in bodies.items():
+            found = re.search(r'(?m)^    needs: (.+)$', body)
+            needs[name] = re.findall(r'[a-z][a-z0-9-]*', found.group(1)) if found else []
+        below, frontier = set(), {'require-gate'}
+        while frontier:
+            frontier = {name for name, parents in needs.items() if name not in below and frontier & set(parents)}
+            below |= frontier
+        self.assertTrue({'plan-managed', 'check-managed-contracts', 'build-media', 'publish-managed-manifest', 'build-web', 'deploy-web'} <= below)
+        for name in sorted(below):
+            condition = re.search(r'(?m)^    if: .*(?:\n {6,}.*)*', bodies[name])
+            self.assertIsNotNone(condition, name)
+            self.assertRegex(condition.group(0), r'always\(\)|!cancelled\(\)', name)
 
     def test_nightly_releases_exactly_the_target_its_plan_checked(self):
         nightly = (self.WORKFLOWS / 'nightly.yml').read_text()

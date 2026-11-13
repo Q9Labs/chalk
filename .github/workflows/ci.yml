@@ -335,6 +335,8 @@ jobs:
   check-managed-contracts:
     name: Validate release source and pre-deploy contracts
     needs: plan-managed
+    # Without a status function a skipped require-gate (a cut) would skip this job through plan-managed, so it names plan-managed itself.
+    if: ${{ !cancelled() && needs.plan-managed.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact release
@@ -491,7 +493,10 @@ jobs:
   build-media:
     name: Build immutable media release archives
     needs: plan-managed
-    if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
+    # A status function keeps a skipped require-gate (a cut) from skipping this job through plan-managed.
+    if: >-
+      !cancelled() && needs.plan-managed.result == 'success' &&
+      needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: nightly
