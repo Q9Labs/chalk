@@ -217,3 +217,20 @@ test("the mock-call ratchet runs for every kind of test file it counts, not only
   assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
 });
+
+test("a change to a proof script, its test inputs or the client sources runs the proof tests", () => {
+  for (const file of [
+    "scripts/prod-proof/webhooks.mjs",
+    "scripts/prod-proof/proof-server.test.mjs",
+    "scripts/web-proof/guest.mjs",
+    "features/scorecard/schema.mjs",
+    ".github/workflows/real-call-proof.yml",
+    "apps/api/internal/accessgrants/types.go",
+    "sdks/typescript/client/src/index.ts",
+  ]) {
+    assert.ok(selected([file], "pull_request").includes("proof-bundle"), file);
+    assert.ok(selected([file], "merge_group").includes("proof-bundle"), file);
+  }
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("proof-bundle"));
+  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("proof-bundle"));
+});

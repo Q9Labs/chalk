@@ -24,9 +24,11 @@ const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workfl
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
 export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
 export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs"];
-// scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
+// The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including own-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
+// What the proof tests run or read: the proof scripts, the scorecard modules and workflow they import, the API access-grant types and the client sources they bundle.
+const proofTestRoots = ["scripts/prod-proof", "scripts/web-proof", "features/scorecard", ".github/workflows/real-call-proof.yml", "apps/api/internal/accessgrants", "sdks/typescript/client/src"];
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -429,7 +431,7 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/prod-proof", "sdks/typescript/client/src"]));
+  const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, proofTestRoots));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
@@ -515,7 +517,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
-    task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs"]),
+    task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
       "publint",

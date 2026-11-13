@@ -293,7 +293,7 @@
     {
       "id": "gate:proof-bundle",
       "owner": "Release chain",
-      "catches": "A production proof script that no longer bundles against the Leave baseline client.",
+      "catches": "A production or web proof script whose unit test fails, such as the proof origin collision of the nightly cut, or one that no longer bundles against the Leave baseline client.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
