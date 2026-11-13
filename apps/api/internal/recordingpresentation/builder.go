@@ -1,22 +1,12 @@
 package recordingpresentation
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
-	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 )
-
-type assetMaterial struct {
-	Asset    Asset
-	Existing *ObjectFact
-	Body     []byte
-}
 
 type builtPresentation struct {
 	Timeline Timeline
@@ -226,22 +216,6 @@ func validateCapturePlanStream(source CompletionSource) error {
 	return nil
 }
 
-func addAssetMaterial(material assetMaterial, materials *[]assetMaterial, assetByID map[string]int) error {
-	if priorIndex, exists := assetByID[material.Asset.ID]; exists {
-		prior := (*materials)[priorIndex]
-		if prior.Asset != material.Asset || !sameOptionalObject(prior.Existing, material.Existing) || !bytes.Equal(prior.Body, material.Body) {
-			return fmt.Errorf("%w: conflicting asset identity", ErrInvalidCompletionSource)
-		}
-		return nil
-	}
-	if len(*materials) >= MaximumAssets {
-		return fmt.Errorf("%w: asset count exceeds bounds", ErrInvalidCompletionSource)
-	}
-	assetByID[material.Asset.ID] = len(*materials)
-	*materials = append(*materials, material)
-	return nil
-}
-
 func elapsedMillis(source CompletionSource, at time.Time) (int64, error) {
 	if at.IsZero() || at.Before(source.CaptureReadyAt) {
 		return 0, fmt.Errorf("%w: event precedes recording origin", ErrInvalidCompletionSource)
@@ -284,18 +258,6 @@ func setEventBase(event Event, base EventBase) {
 	default:
 		panic("unknown recording presentation event type")
 	}
-}
-
-func presentationObjectPrefix(source CompletionSource) string {
-	return recordingobjectkey.Presentation(source.TenantID.String(), source.RecordingID.String(), int64(source.CaptureEpoch), source.PresentationHandle.String())
-}
-
-func existingAssetObjectKey(source CompletionSource, assetID, kind, digest string) string {
-	identity := sha256.Sum256([]byte(assetID))
-	return fmt.Sprintf(
-		"%s/assets/%s-%s-%s",
-		presentationObjectPrefix(source), kind, digest, hex.EncodeToString(identity[:]),
-	)
 }
 
 func cloneInt64(value *int64) *int64 {
