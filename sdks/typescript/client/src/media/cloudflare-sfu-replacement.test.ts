@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
-import { bootstrap, FakeTrack, FakeTransport, fakeStream, publicationSnapshot, versionedPublicationID } from "./cloudflare-sfu.test.helpers";
+import { bootstrap, failAddTracks, FakeTrack, FakeTransport, fakeStream, publicationSnapshot, receiverExpired, versionedPublicationID } from "./cloudflare-sfu.test.helpers";
 it("does not publish a microphone muted during remote connection replacement", async () => {
   const replacementStarted = Promise.withResolvers<void>();
   const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
@@ -18,13 +18,7 @@ it("does not publish a microphone muted during remote connection replacement", a
       const track = new FakeTrack("local-microphone", "audio");
       h.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
       h.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
-      const addTracks = h.transport.addTracks.bind(h.transport);
-      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
-        if (input.connectionId === "connection-1") {
-          throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
-        }
-        return addTracks(input);
-      });
+      failAddTracks(h.transport, (input) => input.connectionId === "connection-1", receiverExpired);
 
       const pulling = h.client.refreshRemotePublications();
       await replacementStarted.promise;

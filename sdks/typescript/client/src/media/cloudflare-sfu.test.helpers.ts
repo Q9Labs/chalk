@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
@@ -242,4 +243,17 @@ export class FakeTrack extends EventTarget {
     this.readyState = "ended";
     this.dispatchEvent(new Event("ended"));
   }
+}
+
+export function receiverExpired(status = 410): CloudflareSFUError {
+  return new CloudflareSFUError("receiver expired", "signaling_failed", { status, retryableConnection: true });
+}
+
+/** Rejects every addTracks request that `shouldFail` accepts with a fresh `error()` and passes the rest to the fake. */
+export function failAddTracks(transport: FakeTransport, shouldFail: (input: Parameters<FakeTransport["addTracks"]>[0]) => boolean, error: () => Error): void {
+  const addTracks = transport.addTracks.bind(transport);
+  vi.spyOn(transport, "addTracks").mockImplementation(async (input) => {
+    if (shouldFail(input)) throw error();
+    return addTracks(input);
+  });
 }
