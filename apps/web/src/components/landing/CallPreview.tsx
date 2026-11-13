@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Avatar, Faces, identityColor } from "../site/Avatar";
 import { Icon } from "../site/Icon";
+import { useSiteTheme } from "../site/theme";
 
 type CallPerson = { readonly name: string; readonly camera: boolean; readonly speaking?: boolean; readonly muted?: boolean; readonly you?: boolean };
 const TEAM_CALL: readonly CallPerson[] = [
@@ -43,7 +44,10 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
   const [sharing, setSharing] = useState(false);
   const [hand, setHand] = useState(false);
   const [chat, setChat] = useState(false);
-  const [light, setLight] = useState(false);
+  // Unset follows the site's theme; the preview's own sun button pins it. A recording still is video, so it stays dark.
+  const [pinned, setPinned] = useState<"light" | "dark" | undefined>(still ? "dark" : undefined);
+  const { theme: siteTheme } = useSiteTheme();
+  const light = (pinned ?? siteTheme) === "light";
   const [left, setLeft] = useState(false);
   const [seconds, setSeconds] = useState(521);
   const [speaker, setSpeaker] = useState(0);
@@ -96,7 +100,7 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
 
   return (
     <div className={`xwrap${still ? " still" : ""}`} role="group" aria-label={label}>
-      <div className={`xcall${chat ? " chat" : ""}${sharing ? " sharing" : ""}`} data-theme={light ? "light" : "dark"}>
+      <div className={`xcall${chat ? " chat" : ""}${sharing ? " sharing" : ""}`} data-theme={pinned}>
         {!still && !left ? (
           <div className="xhd">
             <div className="xname">
@@ -207,7 +211,7 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
               <button type="button" className={`xrb${chat ? " active" : ""}`} aria-label="Open preview chat" aria-expanded={chat} onClick={() => setChat((value) => !value)}>
                 <Icon name="chat" />
               </button>
-              <button type="button" className={`xrb${light ? " active" : ""}`} aria-label="Toggle preview light theme" aria-pressed={light} onClick={() => setLight((value) => !value)}>
+              <button type="button" className={`xrb${light ? " active" : ""}`} aria-label="Toggle preview light theme" aria-pressed={light} onClick={() => setPinned(light ? "dark" : "light")}>
                 <Icon name="sun" />
               </button>
               <button
