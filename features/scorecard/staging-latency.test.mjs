@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { DIAGNOSTICS_SCHEMA, diagnosticsFileName } from "./diagnostics.mjs";
 
-function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false, foreignJoin = true, standby = false, sidecar } = {}) {
+function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false, foreignJoin = true, standby = false, sidecar, samples = "" } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "staging-observation-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, ".private"));
@@ -31,6 +31,7 @@ cp.spawn = (program, args, options) => {
   assert.equal(program, "timeout");
   assert.equal(options.env.CHALK_AXIOM_METRICS_QUERY_TOKEN, undefined);
   workloadStarted = true;
+  fs.writeFileSync(".private/workload-command.json", JSON.stringify([program, ...args]));
   fs.appendFileSync(".private/workloads-started", "workload\n");
   const id = options.env.CHALK_PROOF_RUN_ID;
   const episode = "own-" + sequence;
@@ -96,9 +97,10 @@ globalThis.fetch = async (_url, options) => {
       TEST_FOREIGN_JOIN: foreignJoin ? "yes" : "no",
       TEST_STANDBY: standby ? "yes" : "no",
       TEST_SIDECAR: sidecar ? join(directory, "sidecar.json") : "",
+      CHALK_LATENCY_SAMPLES: samples,
     },
   });
-  return { result, card: JSON.parse(readFileSync(join(directory, ".private/latency-scorecard/scorecard-chalk_sfu.json"), "utf8")), summary: join(directory, "summary.md"), directory };
+  return { result, card: JSON.parse(readFileSync(join(directory, ".private/latency-scorecard/scorecard-chalk_sfu.json"), "utf8")), summary: join(directory, "summary.md"), directory, command: () => JSON.parse(readFileSync(join(directory, ".private/workload-command.json"), "utf8")) };
 }
 
 test("a foreign join during metric preflight cannot enter an isolated baseline", (t) => {
@@ -191,4 +193,16 @@ test("the diagnostics sidecar travels from the latency run to the summary and th
   assert.deepEqual(uploaded.summary.ice, iceSummary);
   assert.ok(existsSync(join(out.artifacts, diagnosticsFileName("chalk_sfu"))));
   assert.ok(existsSync(join(out.artifacts, "scorecard-chalk_sfu.json")));
+});
+
+test("the kit is timeout's direct child and the cap leaves 55 seconds for each cycle", (t) => {
+  for (const [samples, cap, requested] of [["", "3300s", "60"], ["45", "2475s", "45"]]) {
+    const { result, command } = run(t, { foreignJoin: false, samples });
+    assert.equal(result.status, 0, result.stderr);
+    const [program, ...args] = command();
+    assert.equal(program, "timeout");
+    // timeout signals only its direct child under --foreground, so a wrapper such as pnpm would leave the kit cycling past the cap.
+    assert.deepEqual(args.slice(0, 6), ["--foreground", "--signal=TERM", "--kill-after=10s", cap, "node", "scripts/prod-proof/latency.mjs"]);
+    assert.equal(args[args.indexOf("--samples") + 1], requested);
+  }
 });
