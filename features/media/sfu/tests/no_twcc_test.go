@@ -54,6 +54,21 @@ func (c *noTWCCCall) cameraLayer(t *testing.T) string {
 	return ""
 }
 
+// logDelivery records what the node forwards the viewer, so a stalled second names its cause.
+func (c *noTWCCCall) logDelivery(t *testing.T, second, packets int) {
+	t.Helper()
+	var response protocol.InspectResponse
+	c.svc.mustCall(t, "/v1/sessions/"+c.viewer.conn+"/inspect", protocol.InspectRequest{Scope: c.viewer.scope}, &response)
+	dropped, _ := c.viewer.link.dropped()
+	for _, track := range response.Tracks {
+		if strings.HasPrefix(track.TrackName, cameraName) && track.Subscription != nil {
+			t.Logf("second %d: %d video packets; camera %s %s layer %q; estimate %d bps, queued %d B, pacer dropped %d, link dropped %d",
+				second, packets, track.Subscription.State, track.Subscription.Reason, track.Subscription.EffectiveRID,
+				response.Transport.EstimateBps, response.Transport.QueuedBytes, response.Transport.Dropped, dropped)
+		}
+	}
+}
+
 // A viewer that sends no transport-wide feedback is still adapted: heavy loss in its receiver
 // reports lowers its ceiling, the allocator moves its camera to the low layer, and media keeps
 // flowing on a link that cannot carry the high one.
@@ -68,7 +83,9 @@ func TestViewerWithoutTWCCStepsDownOnALossyLink(t *testing.T) {
 	for second := range 4 {
 		before := call.received.count(webrtc.RTPCodecTypeVideo)
 		time.Sleep(time.Second)
-		if got := call.received.count(webrtc.RTPCodecTypeVideo) - before; got < 10 {
+		got := call.received.count(webrtc.RTPCodecTypeVideo) - before
+		call.logDelivery(t, second, got)
+		if got < 10 {
 			t.Fatalf("second %d after the step down carried %d video packets, want a flowing stream", second, got)
 		}
 	}
