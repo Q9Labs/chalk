@@ -16,6 +16,8 @@ name: Gate
 # runner input) for every job, and the hosted runners when both are empty. This file sends no pull request job to that
 # label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
 # runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
+# Only so many pull requests against master are ready at once (scripts/gates/ready-cap.mjs). Ready cap runs first when a
+# pull request is marked ready; over the cap it sends the pull request back to draft, and Select gate jobs then stands down too.
 
 on:
   pull_request:
@@ -50,9 +52,42 @@ env:
   PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
 
 jobs:
+  # Pushes to a ready pull request are not counted again: only the moment it becomes ready is. If this job fails (an API error),
+  # Select gate jobs still runs, so a broken cap never stops the Gate.
+  ready-cap:
+    name: Ready cap
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft != true && contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      capped: ${{ steps.cap.outputs.capped }}
+    steps:
+      - name: Check out the cap script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          sparse-checkout: |
+            .tool-versions
+            scripts/gates/ready-cap.mjs
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+
+      - name: Send the pull request back to draft when too many are ready
+        id: cap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHALK_READY_CAP: ${{ vars.CHALK_READY_CAP }}
+        run: node scripts/gates/ready-cap.mjs --pr "${{ github.event.pull_request.number }}" --enforce
+
   changes:
     name: Select gate jobs
-    if: github.event.pull_request.draft != true
+    needs: ready-cap
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && needs.ready-cap.outputs.capped != 'true' }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 10
     permissions:

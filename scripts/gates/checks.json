@@ -421,6 +421,16 @@
       "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
     },
     {
+      "id": "workflow:gate.yml#ready-cap",
+      "owner": "Gate",
+      "catches": "Too many pull requests ready at once: it sends a newly ready pull request back to draft before the Gate starts.",
+      "runs": ["pull_request"],
+      "blocks": "action",
+      "minutes": 0.3,
+      "record": "unmeasured",
+      "sample": "New with the ready cap; no history yet."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
