@@ -7,6 +7,7 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
   alias ChalkSync.Episodes.Coordinator.LiveFrames
   alias ChalkSync.Episodes.Coordinator.Outbound
   alias ChalkSync.Episodes.Coordinator.SocketRecovery
+  alias ChalkSync.Episodes.Coordinator.SocketRecovery.Pop
   alias ChalkSync.Episodes.Coordinator.Subscribers
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Stateholder.EpisodeKey
@@ -105,7 +106,7 @@ defmodule ChalkSync.Episodes.Coordinator.Server do
 
       {:ok, subscriber} ->
         if subscriber.mode == :recovering do
-          SocketRecovery.pop_recovery_socket(state, socket, subscriber)
+          Pop.pop_recovery_socket(state, socket, subscriber)
         else
           Outbound.pop_socket(state, socket, subscriber)
         end

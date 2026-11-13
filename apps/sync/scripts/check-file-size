@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Fails when a hand-written Elixir file under lib/ or test/ is over 300 lines without a reason
+# in size-baseline.txt, or when a baseline line has no reason or names a file that is no longer over.
+# Baseline lines are "path: reason". Generated files are listed in GENERATED and never count.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+limit=300
+baseline=size-baseline.txt
+generated=(
+  lib/chalk_sync/contract/generated.ex
+  lib/chalk_sync/contract/generated_whiteboard_v1.ex
+)
+failed=0
+
+declare -A reasons=()
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  path="${line%%:*}"
+  reason="${line#*:}"
+  if [[ "$path" == "$line" || -z "${reason// /}" ]]; then
+    echo "size-baseline.txt: '$path' needs a reason after the colon" >&2
+    failed=1
+    continue
+  fi
+  reasons["$path"]=1
+done <"$baseline"
+
+declare -A over=()
+while IFS= read -r file; do
+  for skip in "${generated[@]}"; do [[ "$file" == "$skip" ]] && continue 2; done
+  lines=$(wc -l <"$file")
+  ((lines > limit)) || continue
+  over["$file"]=1
+  if [[ -z "${reasons[$file]:-}" ]]; then
+    echo "$file has $lines lines (limit $limit): split it by responsibility or add a reason to $baseline" >&2
+    failed=1
+  fi
+done < <(git ls-files 'lib/*.ex' 'lib/**/*.ex' 'test/*.ex' 'test/*.exs' 'test/**/*.ex' 'test/**/*.exs')
+
+for path in "${!reasons[@]}"; do
+  if [[ -z "${over[$path]:-}" ]]; then
+    echo "$baseline lists $path, which is not over $limit lines: remove the entry" >&2
+    failed=1
+  fi
+done
+
+exit "$failed"

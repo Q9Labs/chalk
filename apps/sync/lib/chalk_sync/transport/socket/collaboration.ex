@@ -4,6 +4,8 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
   """
 
   alias ChalkSync.Chat
+  alias ChalkSync.Chat.Negotiation
+  alias ChalkSync.Chat.Pagination
   alias ChalkSync.Observability
   alias ChalkSync.Reactions
   alias ChalkSync.Stateholder.Identity
@@ -14,7 +16,7 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
   def negotiate_collaboration(_identity, nil, _observability), do: {:ok, %{}, false, nil}
 
   def negotiate_collaboration(identity, chat_cursor, observability) do
-    case Chat.negotiate(identity, chat_cursor, self(), observability: observability) do
+    case Negotiation.negotiate(identity, chat_cursor, self(), observability: observability) do
       {:ok, extension} ->
         {:ok, %{collaboration_extension: extension}, true,
          if(extension["name"] == "collaboration_v2", do: 2, else: 1)}
@@ -166,7 +168,7 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
   end
 
   defp run(:chat_page_request, input, %{identity: identity} = state) do
-    case Chat.read_chat_page(identity, input,
+    case Pagination.read_chat_page(identity, input,
            version: state.collaboration_version,
            observability: state.observability
          ) do
