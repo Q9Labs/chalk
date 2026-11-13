@@ -11,7 +11,7 @@ import { playSound, type SoundName } from "../sounds/sounds";
 import { useTheme } from "../theme/theme";
 import type { Palette } from "../theme/tokens";
 import { describeMediaFailure, mediaFailureMessage } from "./media-failure-copy";
-import { callNotices, firstName, type Notice } from "./notices";
+import { callEventNotice, firstName, type Notice } from "./notices";
 
 /** A device the call asks the OS for. */
 export type Permission = "microphone" | "camera";
@@ -19,8 +19,6 @@ export type Permission = "microphone" | "camera";
 type Toasts = ReturnType<typeof useToasts>;
 
 export type CallEventToasts = {
-  /** Call before the person turns their own microphone off, so it isn't reported as a host mute. */
-  readonly noteOwnMicrophoneChange: () => void;
   /** Says why turning on the microphone or camera failed, with the way forward (F1, K1, K2). */
   readonly reportMediaFailure: (permission: Permission, cause: unknown, retry: () => Promise<void>) => void;
   /** Logs why turning the microphone or camera off failed, then says so. There is nothing to retry. */
@@ -44,33 +42,24 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
   const toasts = useToasts();
   const { colors } = useTheme();
   const { soundsEnabled } = usePreferences();
-  const ownMicrophoneChange = useRef(false);
   const latest = useRef({ colors, soundsEnabled });
   latest.current = { colors, soundsEnabled };
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Diff client snapshots into native call notices and sounds; unsubscribe when the client or toast owner changes.
-  useEffect(() => {
-    let previous = client.getSnapshot();
-    return client.subscribe(() => {
-      const next = client.getSnapshot();
-      if (next === previous) return;
-      const notices = callNotices(previous, next, ownMicrophoneChange.current);
-      if (previous.media.local.microphone.state !== next.media.local.microphone.state) ownMicrophoneChange.current = false;
-      previous = next;
-      for (const notice of notices) {
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Turn the client's call events into native notices and sounds; unsubscribe when the client or toast owner changes.
+  useEffect(
+    () =>
+      client.on("callEvent", ({ event }) => {
+        const notice = callEventNotice(event);
+        if (!notice) return;
         let id = 0;
         const { input, sound } = noticeToast(notice, { client, toasts, colors: latest.current.colors, dismiss: () => toasts.dismiss(id) });
         id = toasts.show(input);
         if (sound) playSound(sound, latest.current.soundsEnabled);
-      }
-    });
-  }, [client, toasts]);
+      }),
+    [client, toasts],
+  );
 
   useResumedAfterSettings(resumedAfterSettings, toasts);
-
-  const noteOwnMicrophoneChange = useCallback(() => {
-    ownMicrophoneChange.current = true;
-  }, []);
 
   const reportMediaFailure = useCallback(
     function reportMediaFailure(permission: Permission, cause: unknown, retry: () => Promise<void>): void {
@@ -141,7 +130,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
     [toasts],
   );
 
-  return { noteOwnMicrophoneChange, reportMediaFailure, reportMediaOffFailure };
+  return { reportMediaFailure, reportMediaOffFailure };
 }
 
 /** After Open Settings on iOS the OS restarts Chalk; once the call is live again, say why it rejoined. */

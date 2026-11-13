@@ -1,4 +1,6 @@
 export { SpaceClientError } from "./errors";
+export { callEvents, type CallEvent } from "./call-events";
+export { nextHandOrder } from "./hand-order";
 export { createSpaceClient } from "./space-client";
 export { preconnect, releasePreconnect, type PreconnectOptions } from "./preconnect";
 export type { AccessGrant } from "../access/grant";
@@ -65,5 +67,6 @@ export type {
   WhiteboardController,
   WhiteboardSlice,
 } from "./types";
-export { reloadRejoinAccess, readReloadRejoin, writeReloadRejoin, resumeReloadRejoin, reloadRejoinStorageKey } from "./reload-rejoin";
+export { sessionExit, type SessionExit } from "./session-exit";
+export { reloadRejoinAccess, reloadRejoinPresence, readReloadRejoin, writeReloadRejoin, resumeReloadRejoin, reloadRejoinStorageKey } from "./reload-rejoin";
 export type { ReloadRejoinMarker } from "./reload-rejoin";

@@ -21,7 +21,12 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
-const workflowGraphRoots = [".github/workflows", "features/scorecard"];
+// The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
+export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs"];
+// scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
+// The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
+export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -410,6 +415,7 @@ export function createGatePlan(files, options = {}) {
         "apps/web/call-states.html",
         "perf/budgets.json",
         "features/scorecard/budgets.mjs",
+        "features/scorecard/call-budgets.mjs",
         "apps/web/vite.aliases.ts",
         "apps/web/vite.call-states.config.ts",
         "apps/web/vite.call-performance.config.ts",
@@ -441,23 +447,31 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
-  const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
+  // The ratchet counts every JavaScript and TypeScript test file. Edits to scripts/gates select the full gate, so its baseline is covered.
+  const mockCallInputs = full || dependencyChange || nonDocumentationFiles.some((file) => /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
-    task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
-    task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
+    task("self-test", "Test network isolation and gate selection", true, "always required", [
       "node",
       "scripts/test/run.mjs",
       "node",
       "--test",
-      "features/scorecard/promote-graph.test.mjs",
-      "features/scorecard/nightly-graph.test.mjs",
-      "features/scorecard/lease-arguments.test.mjs",
+      "scripts/test/no-network.test.mjs",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/feature-map.test.mjs",
+      "scripts/gates/ast-grep.test.mjs",
+      "scripts/gates/mock-calls.test.mjs",
+    ]),
+    task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
+    task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
+      "bash",
+      "-c",
+      `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
@@ -479,7 +493,7 @@ export function createGatePlan(files, options = {}) {
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
-    task("mock-calls", "Assertions on mock calls may only shrink", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["node", "scripts/gates/mock-calls.mjs"]),
+    task("mock-calls", "Assertions on mock calls may only shrink", mockCallInputs, mockCallInputs ? "test files or dependency inputs changed" : "test files are unaffected", ["node", "scripts/gates/mock-calls.mjs"], { GATE_BASE_REF: base }),
     task("react-tokens", "React design-token reach", reactTokens, reactTokens ? "React design-token inputs changed" : "React design tokens are unaffected", ["node", "sdks/typescript/react/scripts/check-token-reach.mjs"]),
     task("native-quality", "React Native design tokens and worklets", nativeQuality, nativeQuality ? "React Native inputs changed" : "React Native is unaffected", [
       "bash",

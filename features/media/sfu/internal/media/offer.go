@@ -6,13 +6,9 @@ import (
 
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
-)
 
-// maxSDPBytes bounds an offer before it is parsed. A browser offer lists every section it ever
-// opened, live and closed: about 7.5 KB per camera-and-microphone guest, so a call with ten camera
-// guests passes 64 KiB. It must stay below the request body limit (SFU_MAX_REQUEST_BYTES), which
-// carries the offer inside JSON.
-const maxSDPBytes = 256 << 10
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
+)
 
 // sectionHeadroom lets a session outlive closed tracks: Pion keeps a stopped
 // transceiver for the life of the peer connection, so the total is bounded
@@ -42,8 +38,8 @@ func (o offerSection) supports(kind webrtc.RTPCodecType) bool {
 // connection. Unparseable SDP is a plain error. A parseable offer the node must not apply
 // wraps ErrInvalidRequest.
 func parseOffer(raw string) (map[string]offerSection, error) {
-	if len(raw) > maxSDPBytes {
-		return nil, fmt.Errorf("%w: the offer is larger than %d bytes", ErrInvalidRequest, maxSDPBytes)
+	if len(raw) > protocol.MaxSDPBytes {
+		return nil, fmt.Errorf("%w: the offer is larger than %d bytes", ErrInvalidRequest, protocol.MaxSDPBytes)
 	}
 	var description sdp.SessionDescription
 	if err := description.Unmarshal([]byte(raw)); err != nil {
@@ -56,7 +52,7 @@ func parseOffer(raw string) (map[string]offerSection, error) {
 			return nil, fmt.Errorf("%w: the offer has a %q section; only audio and video are supported", ErrInvalidRequest, kind)
 		}
 		mid, ok := media.Attribute(sdp.AttrKeyMID)
-		if !ok || !identifierPattern.MatchString(mid) {
+		if !ok || !protocol.IdentifierPattern.MatchString(mid) {
 			return nil, fmt.Errorf("%w: every section of the offer needs a valid mid", ErrInvalidRequest)
 		}
 		if _, repeated := sections[mid]; repeated {

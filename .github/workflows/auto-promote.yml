@@ -1,0 +1,78 @@
+name: Auto-promote
+run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a manual check' }}
+# Production follows a healthy nightly with no human step, behind one repository variable.
+#
+# Switch: CHALK_AUTO_PROMOTE. Set it to "true" to turn this on (gh variable set CHALK_AUTO_PROMOTE --body true);
+# delete it or set anything else to turn it off (gh variable delete CHALK_AUTO_PROMOTE). It ships off. An off run
+# skips every job, so it changes nothing.
+#
+# It asks the same question Promote asks. The newest held nightly must have a passed own-SFU proof, a passed Staging
+# SFU latency verdict, a passed scorecard and a green master Gate, and production must not already run it. A cut that
+# is not ready yet is not a failure: the latency verdict arrives last, and finishing it starts this workflow. It never
+# applies a scorecard override, because only a person accepts a failed gate.
+#
+# It dispatches Promote, which already retains the live Pages deployment and media pins, deploys the held release,
+# proves a real call on production, and rolls back to the retained release when that call does not pass. This run
+# then follows Promote to its end, so it turns red when production was rolled back or Promote failed.
+# A SHA is tried automatically once: a second attempt is a person's call, because Promote is named by its SHA and a
+# rolled-back SHA would otherwise be tried again after every latency run.
+on:
+  workflow_run:
+    workflows: [Staging SFU latency]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write # Dispatches Promote.
+  deployments: read
+concurrency:
+  group: chalk-auto-promote
+  cancel-in-progress: false
+jobs:
+  promote:
+    if: >-
+      vars.CHALK_AUTO_PROMOTE == 'true' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Refuse non-master runs before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Name the held nightly that Promote would take now
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/release.py auto_promote
+      - name: Skip a SHA that Promote already ran for
+        id: tried
+        if: steps.decide.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.decide.outputs.sha }}
+        run: |
+          tried="$(gh run list --workflow promote.yml --limit 100 --json displayTitle --jq "[.[] | select(.displayTitle | endswith(\"${SHA}\"))] | length")"
+          echo "tried=${tried}" >> "$GITHUB_OUTPUT"
+          if [[ "${tried}" != 0 ]]; then
+            echo "Promote already ran ${tried} time(s) for ${SHA}. Not promoting it again automatically." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Dispatch Promote and follow it to its end
+        if: steps.decide.outputs.sha != '' && steps.tried.outputs.tried == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.decide.outputs.sha }}
+        run: |
+          gh workflow run promote.yml --ref master -f expected_sha="${SHA}"
+          run_id=""
+          for _ in $(seq 24); do
+            run_id="$(gh run list --workflow promote.yml --event workflow_dispatch --limit 10 --json databaseId,displayTitle --jq "[.[] | select(.displayTitle | endswith(\"${SHA}\"))][0].databaseId // empty")"
+            [[ -n "${run_id}" ]] && break
+            sleep 5
+          done
+          [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
+          echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh run watch "${run_id}" --exit-status --compact --interval 30

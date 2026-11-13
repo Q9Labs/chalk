@@ -90,6 +90,8 @@ export type CloudflareSFUPublication = {
   readonly participantId: string;
   readonly source: MediaPublicationSource;
   readonly publicationId: string;
+  /** The owner muted it in place: it stays listed and subscribed, and sends nothing until it resumes. */
+  readonly paused?: boolean;
 };
 export type CloudflareSFUPublicationSnapshot = {
   readonly incarnation: number;

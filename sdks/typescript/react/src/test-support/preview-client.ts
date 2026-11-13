@@ -1,6 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
-import { createSpaceClient } from "@q9labsai/chalk-client";
+import { callEvents, createSpaceClient } from "@q9labsai/chalk-client";
 
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
 
@@ -60,11 +60,14 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
   let attachmentSequence = 0;
   let recordingSequence = 0;
   const listeners = new Set<() => void>();
+  const callEventHandlers = new Set<ClientEventHandler<"callEvent">>();
   let cameraPreviewClient: SpaceClient | undefined;
 
   const setSnapshot = (nextSnapshot: SpaceSnapshot): void => {
+    const previous = snapshot;
     snapshot = nextSnapshot;
     for (const listener of listeners) listener();
+    for (const event of callEvents(previous, nextSnapshot)) for (const handler of callEventHandlers) handler({ event });
   };
   const updateSnapshot = (update: (current: SpaceSnapshot) => SpaceSnapshot): void => setSnapshot(update(snapshot));
   const dispatch = async (command: PreviewClientCommand): Promise<void> => {
@@ -73,6 +76,11 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     options.onCommand?.(command, nextSnapshot);
   };
 
+  const dispose = (): void => {
+    cameraPreviewClient?.dispose();
+    listeners.clear();
+    callEventHandlers.clear();
+  };
   const client = {
     media: {
       observeAudioElement: () => ({ played: () => {}, detach: () => {} }),
@@ -168,10 +176,8 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     whiteboard: { transport: () => null },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
-    dispose: () => {
-      cameraPreviewClient?.dispose();
-      listeners.clear();
-    },
+    close: async () => dispose(),
+    dispose,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -179,10 +185,13 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     getSnapshot: () => snapshot,
     endEpisode: () => dispatch({ type: "endEpisode" }),
     extendEpisode: (minutes: number) => dispatch({ type: "extendEpisode", minutes }),
-    on:
-      <TEvent extends ClientEventName>(_event: TEvent, _handler: ClientEventHandler<TEvent>) =>
-      () =>
-        undefined,
+    // Only call events are real: a preview announces what a snapshot change would announce in a live call.
+    on: <TEvent extends ClientEventName>(event: TEvent, handler: ClientEventHandler<TEvent>) => {
+      if (event !== "callEvent") return () => undefined;
+      const callEventHandler = handler as ClientEventHandler<"callEvent">;
+      callEventHandlers.add(callEventHandler);
+      return () => callEventHandlers.delete(callEventHandler);
+    },
   } satisfies SpaceClient;
 
   return Object.assign(client, { setSnapshot, updateSnapshot, dispatch });

@@ -42,7 +42,6 @@ func newLoggedTestNode(t *testing.T, mutate func(*config.Config), handler slog.H
 	t.Helper()
 	cfg := config.Config{
 		UDPAddr:                    "127.0.0.1:0",
-		UDPBatch:                   true,
 		AnnounceIPs:                []string{"127.0.0.1"},
 		IncludeLoopback:            true,
 		MaxSessions:                8,
@@ -84,7 +83,7 @@ func newLoggedTestNode(t *testing.T, mutate func(*config.Config), handler slog.H
 
 func (n *Node) newTestSession(t *testing.T, scope protocol.Scope) *Session {
 	t.Helper()
-	response, err := n.CreateSession("create-"+scope.EpisodeID+"-"+scope.ParticipantID+"-"+fmt.Sprint(scope.Generation), scope)
+	response, err := n.Create("create-"+scope.EpisodeID+"-"+scope.ParticipantID+"-"+fmt.Sprint(scope.Generation), scope, ParticipantSession, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +263,7 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 	})
 
 	t.Run("oversized SDP", func(t *testing.T) {
-		huge := &protocol.SessionDescription{Type: "offer", SDP: "v=0\r\n" + strings.Repeat("a=padding:x\r\n", maxSDPBytes/10)}
+		huge := &protocol.SessionDescription{Type: "offer", SDP: "v=0\r\n" + strings.Repeat("a=padding:x\r\n", protocol.MaxSDPBytes/10)}
 		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: huge, Tracks: localTracks("mic", []string{"0"}, "microphone"),
 		})
@@ -485,13 +484,13 @@ func TestStaleGenerationStaysFencedAfterTheSessionCloses(t *testing.T) {
 		t.Fatal("the newer session did not close")
 	}
 
-	if _, err := node.CreateSession("delayed-create", older); !errors.Is(err, ErrStaleGeneration) {
+	if _, err := node.Create("delayed-create", older, ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
 		t.Fatalf("delayed create from generation 1 after generation 2 closed: %v, want stale generation", err)
 	}
 	if node.SessionCount() != 0 {
 		t.Fatal("the stale create left a session")
 	}
-	if _, err := node.CreateSession("create-gen-3", testScope("alice", 3)); err != nil {
+	if _, err := node.Create("create-gen-3", testScope("alice", 3), ParticipantSession, nil); err != nil {
 		t.Fatalf("a newer generation was refused: %v", err)
 	}
 }

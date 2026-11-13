@@ -1,24 +1,24 @@
-import { METRICS } from "./schema.mjs";
+// Number helpers with no dependencies, shared by the scorecard, the production proofs and the web call check.
 
-/** percentile is the nearest-rank percentile, the same rule the call performance check uses. */
+/** percentile is the nearest-rank percentile of unsorted values, or null when there are none. */
 export function percentile(values, p) {
+  if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.ceil(sorted.length * p) - 1];
+  return sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)];
 }
 
-/**
- * metric turns raw samples into a scorecard metric. The unit comes from the registry, so an
- * adapter cannot disagree with it. Samples that are not finite numbers are an adapter bug.
- */
-export function metric(id, samples, source) {
-  if (!METRICS[id]) throw new Error(`Unknown metric id ${id}`);
-  if (samples.some((value) => !Number.isFinite(value))) throw new Error(`${id}: a sample is not a finite number`);
-  const empty = samples.length === 0;
-  return { id, unit: METRICS[id].unit, n: samples.length, p50: empty ? null : percentile(samples, 0.5), p95: empty ? null : percentile(samples, 0.95), source };
+/** formatNumber keeps three significant digits below 100 and whole numbers above; a missing value is a dash. */
+export function formatNumber(value) {
+  if (value === undefined || value === null) return "–";
+  return String(Math.abs(value) >= 100 ? Math.round(value) : Number(value.toPrecision(3)));
 }
 
-/** passRate is a pass metric: the share of runs that passed, from 0 to 1. */
-export function passMetric(id, outcomes, source) {
-  const share = outcomes.length === 0 ? null : outcomes.filter(Boolean).length / outcomes.length;
-  return { id, unit: "pass", n: outcomes.length, p50: share, p95: share, source };
+/** limitText writes a budget's limits for a table cell, or "none" when the metric has no budget. */
+export function limitText(budget) {
+  if (!budget) return "none";
+  const parts = [];
+  if (budget.max_p50 !== undefined) parts.push(`p50 ≤ ${formatNumber(budget.max_p50)}`);
+  if (budget.max_p95 !== undefined) parts.push(`p95 ≤ ${formatNumber(budget.max_p95)}`);
+  if (budget.min_p50 !== undefined) parts.push(`p50 ≥ ${formatNumber(budget.min_p50)}`);
+  return parts.join(", ");
 }

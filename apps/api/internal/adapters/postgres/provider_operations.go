@@ -322,6 +322,7 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 		Source        string  `json:"source"`
 		Enabled       bool    `json:"enabled"`
 		PublicationID *string `json:"publication_id"`
+		Held          bool    `json:"held"`
 	}
 	if err := json.Unmarshal(row.Publications, &publications); err != nil {
 		return provideroperations.Observation{}, fmt.Errorf("decode provider observation: %w", err)
@@ -336,7 +337,7 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 		if publication.PublicationID != nil {
 			publicationID = *publication.PublicationID
 		}
-		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID})
+		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID, Held: publication.Held})
 	}
 	return result, nil
 }
