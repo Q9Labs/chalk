@@ -77,10 +77,10 @@ func recorderFleetDemandHandler(service RecorderFleetControllerService, environm
 		// The private listener's 10 s WriteTimeout bounds the whole response.
 		if request.URL.Query().Get("wait") == "8" && demand.DesiredNodes == 0 {
 			demand, err = waitForRecorderFleetDemand(request.Context(), service, key, demand, 8*time.Second, 500*time.Millisecond)
+			if err != nil && request.Context().Err() == nil {
+				writeRecorderFleetError(w, request, logger, "get_demand", err)
+			}
 			if err != nil {
-				if request.Context().Err() == nil {
-					writeRecorderFleetError(w, request, logger, "get_demand", err)
-				}
 				return
 			}
 		}

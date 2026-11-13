@@ -37,25 +37,57 @@ type listSpaceLiveEpisodesRequest struct {
 var apiErrorInvalidSpaceIDs = APIError{Status: http.StatusBadRequest, Code: "episode.invalid_space_ids", Message: "Provide 1 to 30 distinct comma-separated Space IDs"}
 
 func decodeListSpaceLiveEpisodesRequest(r *http.Request) (listSpaceLiveEpisodesRequest, error) {
+	tenantID, spaceIDs, err := decodeSpaceIDList(r, episodes.MaximumLiveEpisodeSpaces, apiErrorInvalidSpaceIDs)
+	return listSpaceLiveEpisodesRequest{TenantID: tenantID, SpaceIDs: spaceIDs}, err
+}
+
+// decodeSpaceIDList reads the tenant and the distinct comma-separated space_ids query value,
+// and refuses more than limit IDs or any invalid or repeated ID with invalid.
+func decodeSpaceIDList(r *http.Request, limit int, invalid APIError) (utilities.ID, []utilities.ID, error) {
 	tenantID, err := tenantIDRequest(r)
 	if err != nil {
-		return listSpaceLiveEpisodesRequest{}, err
+		return utilities.ID{}, nil, err
 	}
 	values := strings.Split(r.URL.Query().Get("space_ids"), ",")
-	if len(values) > episodes.MaximumLiveEpisodeSpaces {
-		return listSpaceLiveEpisodesRequest{}, apiErrorInvalidSpaceIDs
+	if len(values) > limit {
+		return utilities.ID{}, nil, invalid
 	}
-	result := listSpaceLiveEpisodesRequest{TenantID: tenantID, SpaceIDs: make([]utilities.ID, 0, len(values))}
+	spaceIDs := make([]utilities.ID, 0, len(values))
 	seen := make(map[utilities.ID]bool, len(values))
 	for _, value := range values {
 		id, err := utilities.ParseID(value)
 		if err != nil || id.IsZero() || seen[id] {
-			return listSpaceLiveEpisodesRequest{}, apiErrorInvalidSpaceIDs
+			return utilities.ID{}, nil, invalid
 		}
 		seen[id] = true
-		result.SpaceIDs = append(result.SpaceIDs, id)
+		spaceIDs = append(spaceIDs, id)
 	}
-	return result, nil
+	return tenantID, spaceIDs, nil
+}
+
+func newPresentParticipantResponses(participants []episodes.PresentParticipant) []presentParticipantResponse {
+	responses := make([]presentParticipantResponse, 0, len(participants))
+	for _, participant := range participants {
+		responses = append(responses, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
+	}
+	return responses
+}
+
+func newLiveEpisodeResponse(episode episodes.LiveEpisode, participantCount int) liveEpisodeResponse {
+	return liveEpisodeResponse{EpisodeID: episode.EpisodeID.String(), ParticipantCount: participantCount, Participants: newPresentParticipantResponses(episode.Participants)}
+}
+
+func newSpaceLiveEpisodeListResponse(list []episodes.SpaceLiveEpisode) spaceLiveEpisodeListResponse {
+	result := spaceLiveEpisodeListResponse{Spaces: make([]spaceLiveEpisodeResponse, 0, len(list))}
+	for _, space := range list {
+		item := spaceLiveEpisodeResponse{SpaceID: space.SpaceID.String()}
+		if space.Episode != nil {
+			live := newLiveEpisodeResponse(*space.Episode, len(space.Episode.Participants))
+			item.LiveEpisode = &live
+		}
+		result.Spaces = append(result.Spaces, item)
+	}
+	return result
 }
 
 func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceLiveEpisodesRequest, spaceLiveEpisodeListResponse] {
@@ -64,19 +96,7 @@ func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer T
 		if err != nil {
 			return spaceLiveEpisodeListResponse{}, err
 		}
-		result := spaceLiveEpisodeListResponse{Spaces: make([]spaceLiveEpisodeResponse, 0, len(list))}
-		for _, space := range list {
-			item := spaceLiveEpisodeResponse{SpaceID: space.SpaceID.String()}
-			if space.Episode != nil {
-				live := liveEpisodeResponse{EpisodeID: space.Episode.EpisodeID.String(), ParticipantCount: len(space.Episode.Participants), Participants: make([]presentParticipantResponse, 0, len(space.Episode.Participants))}
-				for _, participant := range space.Episode.Participants {
-					live.Participants = append(live.Participants, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
-				}
-				item.LiveEpisode = &live
-			}
-			result.Spaces = append(result.Spaces, item)
-		}
-		return result, nil
+		return newSpaceLiveEpisodeListResponse(list), nil
 	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceLiveEpisodeList", spaceLiveEpisodeListResponse{}).

@@ -42,39 +42,7 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 	}
 
 	return func(next http.Handler) http.Handler {
-		serve := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin != "" {
-				w.Header().Add("Vary", "Origin")
-			}
-			allowedOrigin, policy, err := requestAllowedCORSOrigin(r, origin, allowed, allowAnyOrigin, options)
-			if err != nil {
-				recordCORSDecision(r.Context(), policy, "unavailable")
-				writeError(w, http.StatusServiceUnavailable, "cors.policy_unavailable", "CORS policy is unavailable")
-				return
-			}
-			ok := allowedOrigin != ""
-			if ok {
-				setCORSAllowHeaders(w.Header(), allowedOrigin)
-			}
-			if origin != "" {
-				recordCORSOutcome(r, policy, origin, ok)
-			}
-
-			if r.Method == http.MethodOptions {
-				w.Header().Add("Vary", "Access-Control-Request-Method")
-				w.Header().Add("Vary", "Access-Control-Request-Headers")
-				if !ok {
-					writeError(w, http.StatusForbidden, "cors.origin_forbidden", "CORS origin is not allowed")
-					return
-				}
-
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-
-			next.ServeHTTP(w, r)
-		})
+		serve := serveCORS(next, options, allowed, allowAnyOrigin)
 		limited := rateLimit(rateLimits, corsPolicyLookupRateLimit)(serve)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if requiresTenantOriginLookup(r, r.Header.Get("Origin"), allowed, options) {
@@ -84,6 +52,43 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 			serve.ServeHTTP(w, r)
 		})
 	}
+}
+
+// serveCORS sets the CORS headers for the request origin, answers preflight requests, and passes the rest to next.
+func serveCORS(next http.Handler, options CORSOptions, allowed map[string]struct{}, allowAnyOrigin bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Add("Vary", "Origin")
+		}
+		allowedOrigin, policy, err := requestAllowedCORSOrigin(r, origin, allowed, allowAnyOrigin, options)
+		if err != nil {
+			recordCORSDecision(r.Context(), policy, "unavailable")
+			writeError(w, http.StatusServiceUnavailable, "cors.policy_unavailable", "CORS policy is unavailable")
+			return
+		}
+		ok := allowedOrigin != ""
+		if ok {
+			setCORSAllowHeaders(w.Header(), allowedOrigin)
+		}
+		if origin != "" {
+			recordCORSOutcome(r, policy, origin, ok)
+		}
+
+		if r.Method == http.MethodOptions {
+			w.Header().Add("Vary", "Access-Control-Request-Method")
+			w.Header().Add("Vary", "Access-Control-Request-Headers")
+			if !ok {
+				writeError(w, http.StatusForbidden, "cors.origin_forbidden", "CORS origin is not allowed")
+				return
+			}
+
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func observableCORSOrigin(origin string) string {

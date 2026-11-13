@@ -49,30 +49,25 @@ func requirePublicOrigin(origins []string) func(http.Handler) http.Handler {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isNativePublicRequest(r) {
-				if r.Header.Get("Cookie") != "" {
-					writeAPIError(w, apiErrorForbidden)
-					return
-				}
-				next.ServeHTTP(w, r)
-				return
-			}
-			if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind != authentication.PrincipalUser {
-				next.ServeHTTP(w, r)
-				return
-			}
-			origin := strings.TrimSpace(r.Header.Get("Origin"))
-			if origin == "" {
-				writeAPIError(w, apiErrorForbidden)
-				return
-			}
-			if _, ok := allowed[origin]; !ok {
+			if !publicRequestAllowed(r, allowed) {
 				writeAPIError(w, apiErrorForbidden)
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// publicRequestAllowed admits native clients without cookies, non-user principals, and browsers from an allowed origin.
+func publicRequestAllowed(r *http.Request, allowed map[string]struct{}) bool {
+	if isNativePublicRequest(r) {
+		return r.Header.Get("Cookie") == ""
+	}
+	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind != authentication.PrincipalUser {
+		return true
+	}
+	_, ok := allowed[strings.TrimSpace(r.Header.Get("Origin"))]
+	return ok
 }
 
 func noStoreResponses(next http.Handler) http.Handler {

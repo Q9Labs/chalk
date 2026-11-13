@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"net/http"
-	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -36,25 +35,28 @@ type listSpaceActivityRequest struct {
 var apiErrorInvalidActivitySpaceIDs = APIError{Status: http.StatusBadRequest, Code: "episode.invalid_space_ids", Message: "Provide 1 to 300 distinct comma-separated Space IDs"}
 
 func decodeListSpaceActivityRequest(r *http.Request) (listSpaceActivityRequest, error) {
-	tenantID, err := tenantIDRequest(r)
-	if err != nil {
-		return listSpaceActivityRequest{}, err
-	}
-	values := strings.Split(r.URL.Query().Get("space_ids"), ",")
-	if len(values) > episodes.MaximumActivitySpaces {
-		return listSpaceActivityRequest{}, apiErrorInvalidActivitySpaceIDs
-	}
-	result := listSpaceActivityRequest{TenantID: tenantID, SpaceIDs: make([]utilities.ID, 0, len(values))}
-	seen := make(map[utilities.ID]bool, len(values))
-	for _, value := range values {
-		id, err := utilities.ParseID(value)
-		if err != nil || id.IsZero() || seen[id] {
-			return listSpaceActivityRequest{}, apiErrorInvalidActivitySpaceIDs
+	tenantID, spaceIDs, err := decodeSpaceIDList(r, episodes.MaximumActivitySpaces, apiErrorInvalidActivitySpaceIDs)
+	return listSpaceActivityRequest{TenantID: tenantID, SpaceIDs: spaceIDs}, err
+}
+
+func newSpaceActivityListResponse(list []episodes.SpaceActivity) spaceActivityListResponse {
+	result := spaceActivityListResponse{Spaces: make([]spaceActivityResponse, 0, len(list))}
+	for _, space := range list {
+		item := spaceActivityResponse{SpaceID: space.SpaceID.String(), Archived: space.Archived, RecentParticipants: newPresentParticipantResponses(space.RecentParticipants)}
+		if latest := space.LatestEpisode; latest != nil {
+			item.LatestEpisode = &latestEpisodeResponse{EpisodeID: latest.EpisodeID.String(), Status: latest.Status, StartedAt: episodeTimestampString(latest.StartedAt)}
+			if latest.EndedAt != nil {
+				value := episodeTimestampString(*latest.EndedAt)
+				item.LatestEpisode.EndedAt = &value
+			}
 		}
-		seen[id] = true
-		result.SpaceIDs = append(result.SpaceIDs, id)
+		if space.LiveEpisode != nil {
+			live := newLiveEpisodeResponse(*space.LiveEpisode, space.LiveParticipantCount)
+			item.LiveEpisode = &live
+		}
+		result.Spaces = append(result.Spaces, item)
 	}
-	return result, nil
+	return result
 }
 
 func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceActivityRequest, spaceActivityListResponse] {
@@ -63,29 +65,7 @@ func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer Tenan
 		if err != nil {
 			return spaceActivityListResponse{}, err
 		}
-		result := spaceActivityListResponse{Spaces: make([]spaceActivityResponse, 0, len(list))}
-		for _, space := range list {
-			item := spaceActivityResponse{SpaceID: space.SpaceID.String(), Archived: space.Archived, RecentParticipants: make([]presentParticipantResponse, 0, len(space.RecentParticipants))}
-			if latest := space.LatestEpisode; latest != nil {
-				item.LatestEpisode = &latestEpisodeResponse{EpisodeID: latest.EpisodeID.String(), Status: latest.Status, StartedAt: episodeTimestampString(latest.StartedAt)}
-				if latest.EndedAt != nil {
-					value := episodeTimestampString(*latest.EndedAt)
-					item.LatestEpisode.EndedAt = &value
-				}
-			}
-			for _, participant := range space.RecentParticipants {
-				item.RecentParticipants = append(item.RecentParticipants, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
-			}
-			if space.LiveEpisode != nil {
-				live := liveEpisodeResponse{EpisodeID: space.LiveEpisode.EpisodeID.String(), ParticipantCount: space.LiveParticipantCount, Participants: make([]presentParticipantResponse, 0, len(space.LiveEpisode.Participants))}
-				for _, participant := range space.LiveEpisode.Participants {
-					live.Participants = append(live.Participants, presentParticipantResponse{ParticipantID: participant.ParticipantID.String(), DisplayName: participant.DisplayName})
-				}
-				item.LiveEpisode = &live
-			}
-			result.Spaces = append(result.Spaces, item)
-		}
-		return result, nil
+		return newSpaceActivityListResponse(list), nil
 	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceActivityList", spaceActivityListResponse{}).

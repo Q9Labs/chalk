@@ -44,28 +44,32 @@ func recorderFleetNodesHandler(service RecorderFleetControllerService, environme
 		if nodes == nil {
 			nodes = []recorderfleet.NodeObservation{}
 		}
-		leaseAuthority := request.Header.Get("X-Chalk-Fleet-Lease-Authority") == "1"
-		// Older controllers cannot preserve live counts under skew or decode revoked identities.
-		if !leaseAuthority {
-			nodes = slices.Clone(nodes)
-			for index := range nodes {
-				if nodes[index].ActiveLeases > 0 {
-					writeRecorderFleetError(w, request, logger, "observe_nodes", fmt.Errorf("%w: legacy controller cannot safely observe live leases", recorderfleet.ErrProviderUnavailable))
-					return
-				}
-				if request.Header.Get("X-Chalk-Fleet-Lease-Observation") != "1" {
-					nodes[index].LeasesObservedAt = time.Time{}
-				}
-			}
-			nodes = slices.DeleteFunc(nodes, func(node recorderfleet.NodeObservation) bool { return node.IdentityRevoked })
-		} else {
+		if request.Header.Get("X-Chalk-Fleet-Lease-Authority") == "1" {
 			w.Header().Set("X-Chalk-Fleet-Lease-Authority", "1")
+		} else if nodes, err = withoutLeaseDetail(nodes, request.Header.Get("X-Chalk-Fleet-Lease-Observation") == "1"); err != nil {
+			writeRecorderFleetError(w, request, logger, "observe_nodes", err)
+			return
 		}
 		writeJSON(w, http.StatusOK, recorderFleetNodesResponse{
 			SchemaVersion: recorderfleet.NodesSchemaVersion, Environment: environment,
 			Role: key.Role, Nodes: nodes,
 		})
 	}
+}
+
+// withoutLeaseDetail adapts nodes for an older controller: it cannot preserve live counts under skew
+// or decode revoked identities, so nodes with live leases are refused and revoked identities are dropped.
+func withoutLeaseDetail(nodes []recorderfleet.NodeObservation, keepObservedAt bool) ([]recorderfleet.NodeObservation, error) {
+	nodes = slices.Clone(nodes)
+	for index := range nodes {
+		if nodes[index].ActiveLeases > 0 {
+			return nil, fmt.Errorf("%w: legacy controller cannot safely observe live leases", recorderfleet.ErrProviderUnavailable)
+		}
+		if !keepObservedAt {
+			nodes[index].LeasesObservedAt = time.Time{}
+		}
+	}
+	return slices.DeleteFunc(nodes, func(node recorderfleet.NodeObservation) bool { return node.IdentityRevoked }), nil
 }
 
 func recorderFleetBootstrapHandler(service RecorderFleetControllerService, environment string, logger *slog.Logger) http.HandlerFunc {
