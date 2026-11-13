@@ -188,25 +188,9 @@ func readEnvironmentFile(path string, allowed map[string]struct{}) (map[string]s
 	values := make(map[string]string, len(allowed))
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		name, value, ok := strings.Cut(line, "=")
-		if !ok {
-			return nil, fmt.Errorf("%w: malformed environment line", ErrInvalidConfig)
-		}
-		if _, ok := allowed[name]; !ok {
-			return nil, fmt.Errorf("%w: unsupported environment key %s", ErrInvalidConfig, name)
-		}
-		if _, duplicate := values[name]; duplicate {
-			return nil, fmt.Errorf("%w: duplicate environment key %s", ErrInvalidConfig, name)
-		}
-		decoded, err := decodeEnvironmentValue(value)
-		if err != nil {
+		if err := addEnvironmentLine(values, allowed, strings.TrimSpace(scanner.Text())); err != nil {
 			return nil, err
 		}
-		values[name] = decoded
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("%w: read environment file", ErrInvalidConfig)
@@ -217,6 +201,29 @@ func readEnvironmentFile(path string, allowed map[string]struct{}) (map[string]s
 		}
 	}
 	return values, nil
+}
+
+// addEnvironmentLine records one KEY=value line; blank lines and comments are skipped.
+func addEnvironmentLine(values map[string]string, allowed map[string]struct{}, line string) error {
+	if line == "" || strings.HasPrefix(line, "#") {
+		return nil
+	}
+	name, value, ok := strings.Cut(line, "=")
+	if !ok {
+		return fmt.Errorf("%w: malformed environment line", ErrInvalidConfig)
+	}
+	if _, ok := allowed[name]; !ok {
+		return fmt.Errorf("%w: unsupported environment key %s", ErrInvalidConfig, name)
+	}
+	if _, duplicate := values[name]; duplicate {
+		return fmt.Errorf("%w: duplicate environment key %s", ErrInvalidConfig, name)
+	}
+	decoded, err := decodeEnvironmentValue(value)
+	if err != nil {
+		return err
+	}
+	values[name] = decoded
+	return nil
 }
 
 func decodeEnvironmentValue(value string) (string, error) {
