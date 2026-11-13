@@ -83,7 +83,9 @@
     "apps/mobile/src/space/mobile-space-features.ts",
     "apps/mobile/src/preferences/call-preferences.ts",
     "apps/mobile/plugins/with-worklets-legacy-output.js",
-    "apps/mobile/plugins/with-ios-scene-lifecycle.js"
+    "apps/mobile/plugins/with-ios-scene-lifecycle.js",
+    "apps/recording-renderer/src/compose-cli.ts",
+    "apps/recording-renderer/src/compose-fixture.ts"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": [],

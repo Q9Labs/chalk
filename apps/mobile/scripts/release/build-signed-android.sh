@@ -115,7 +115,7 @@ if [[ "$(normalize_fingerprint "$bundle_certificate_sha256")" != "$(normalize_fi
 fi
 
 timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
-version_name=$(jq -er '.android.version_name' "$manifest")
+version_name=$(jq -er '.version_name' "$manifest")
 output_bundle="$output_dir/chalk-android-$version_name-$version_code-$timestamp.aab"
 cp "$built_bundle" "$output_bundle"
 

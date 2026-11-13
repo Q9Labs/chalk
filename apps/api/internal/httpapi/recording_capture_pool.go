@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -30,27 +29,17 @@ type recordingCaptureSlotResponse struct {
 	LeaseExpiresAt string `json:"lease_expires_at"`
 }
 
-func mountRecordingCapturePoolRoute(r chi.Router, service RecordingCapturePoolService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	getRecordingCapturePoolEndpoint(service, authorizer).Mount(r, limits)
-}
-
 // getRecordingCapturePoolEndpoint answers why a Recording has not started: the
 // Capture pool is shared, so a slot held by a stuck job blocks every Tenant.
 // Slots held for other Tenants are counted without identifiers.
 func getRecordingCapturePoolEndpoint(service RecordingCapturePoolService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, recordingCapturePoolResponse] {
-	return Get("/v1/tenants/{tenant_id}/recording-capture-pool", "/tenants/{tenant_id}/recording-capture-pool", "getRecordingCapturePool", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (recordingCapturePoolResponse, error) {
-		if service == nil {
-			return recordingCapturePoolResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return recordingCapturePoolResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/recording-capture-pool", "getRecordingCapturePool", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (recordingCapturePoolResponse, error) {
 		pool, err := service.GetCapturePool(ctx, request.TenantID)
 		if err != nil {
 			return recordingCapturePoolResponse{}, err
 		}
 		return newRecordingCapturePoolResponse(pool), nil
-	}).
+	}).Needs(service).Permission(authorizer, readRecordingsPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter()).
 		Responds(http.StatusOK, "RecordingCapturePool", recordingCapturePoolResponse{}).

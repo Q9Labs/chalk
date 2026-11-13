@@ -12,6 +12,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Reactions
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.Command
@@ -698,7 +699,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        ) do
     activated =
       entry_stage(:activate, fn ->
-        Coordinator.activate_recovery(coordinator, recovery, self(), recovery_timeout())
+        Coordinator.activate_recovery(coordinator, recovery, self(), ProviderCall.deadline_ms())
       end)
 
     case activated do
@@ -950,10 +951,6 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp cancel_timer(timer) when is_reference(timer), do: Process.cancel_timer(timer)
   defp cancel_timer(_timer), do: false
-
-  defp recovery_timeout do
-    Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5_000) + 1_000
-  end
 
   defp negotiate_collaboration(_identity, nil, _observability), do: {:ok, %{}, false, nil}
 

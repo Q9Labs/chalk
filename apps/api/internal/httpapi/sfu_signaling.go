@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -122,13 +121,6 @@ type EpisodeLookup interface {
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
 }
 
-func mountParticipantMediaRoutes(r chi.Router, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry, verifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, limits RateLimitOptions) {
-	r.Use(requireParticipantMedia(verifier, active))
-	for _, endpoint := range sfuSignalingEndpoints(spaces, episodeLookup, tenants, media, publications) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) []RouteEndpoint {
 	return []RouteEndpoint{
 		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
@@ -146,7 +138,6 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
 		"addCloudflareSFUTracks",
 		decodeSFUTracksRequest,
 		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
@@ -162,7 +153,7 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
@@ -197,14 +188,14 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 }
 
 // expandPullPublishedAudio turns a pull-published-audio request into the remote tracks the SDK's first poll would
-// pull: every enabled microphone and screen audio publication of another Participant. Video waits for the UI's
+// pull: every listed microphone and screen audio publication of another Participant, a muted microphone included. Video waits for the UI's
 // tile reports, so it is never part of this request.
 func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointRequest, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.PublicationList, error) {
 	body := request.Body
 	if service.Provider() != mediaplane.ProviderChalkSFU || len(body.Tracks) > 0 || body.SessionDescription != nil {
 		return mediaplane.PublicationList{}, mediaplane.ErrInvalidSignalRequest
 	}
-	list, err := listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
+	list, err := listPublications(ctx, publications, request.TenantID, request.EpisodeID)
 	if err != nil {
 		return mediaplane.PublicationList{}, err
 	}
@@ -226,7 +217,7 @@ func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointReq
 	return list, nil
 }
 
-func listEnabledPublications(ctx context.Context, publications mediapublications.Registry, tenantID, episodeID utilities.ID) (mediaplane.PublicationList, error) {
+func listPublications(ctx context.Context, publications mediapublications.Registry, tenantID, episodeID utilities.ID) (mediaplane.PublicationList, error) {
 	if publications == nil {
 		return mediaplane.PublicationList{}, mediapublications.ErrUnavailable
 	}
@@ -235,10 +226,8 @@ func listEnabledPublications(ctx context.Context, publications mediapublications
 		return mediaplane.PublicationList{}, err
 	}
 	list := mediaplane.PublicationList{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]mediaplane.ListedPublication, 0, len(snapshot.Publications))}
-	for _, publication := range snapshot.Publications {
-		if publication.Enabled && publication.PublicationID != "" {
-			list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
-		}
+	for _, publication := range snapshot.Listed() {
+		list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID, Paused: !publication.Enabled})
 	}
 	return list, nil
 }
@@ -494,7 +483,6 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
 		"closeCloudflareSFUTracks",
 		decodeSFUCloseTracksRequest,
 		func(ctx context.Context, request sfuCloseTracksEndpointRequest) (mediaplane.CloseTracksResponse, error) {
@@ -507,7 +495,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 		RequestBody("CloudflareSFUCloseTracksRequest", sfuCloseTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUCloseTracksAPIResponse", mediaplane.CloseTracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 func attachPublishedReferences(response *mediaplane.TracksResponse, references []mediapublications.PublishedReference) error {
@@ -543,7 +531,6 @@ func attachPublishedReferences(response *mediaplane.TracksResponse, references [
 func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationsEndpointRequest, sfuPublicationsResponse] {
 	return Get(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
 		"listCloudflareSFUPublications",
 		decodeSFUPublicationsRequest,
 		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuPublicationsResponse, error) {
@@ -554,7 +541,7 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		Responds(http.StatusOK, "CloudflareSFUPublicationsResponse", sfuPublicationsResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 // sfuListSubscriptionsEndpoint reports whether the plane is delivering each
@@ -566,7 +553,6 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuPublicationsEndpointRequest, sfuSubscriptionsResponse] {
 	return Get(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
 		"listSFUSubscriptions",
 		decodeSFUPublicationsRequest,
 		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuSubscriptionsResponse, error) {
@@ -577,7 +563,7 @@ func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLook
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		Responds(http.StatusOK, "SFUSubscriptionsResponse", sfuSubscriptionsResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 // legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
@@ -585,7 +571,6 @@ func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLook
 func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
 		"updateCloudflareSFUTracks",
 		decodeSFUUpdateTracksRequest,
 		func(ctx context.Context, request sfuUpdateTracksEndpointRequest) (mediaplane.TracksResponse, error) {
@@ -598,7 +583,7 @@ func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, t
 		RequestBody("CloudflareSFUUpdateTracksRequest", sfuUpdateTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUUpdateTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 // holdLocalTracks parks or resumes the caller's own publications for a mute that keeps the
@@ -659,7 +644,6 @@ func holdLocalTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest
 func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
 		"renegotiateCloudflareSFU",
 		decodeSFURenegotiateRequest,
 		func(ctx context.Context, request sfuRenegotiateEndpointRequest) (sfuRenegotiateResponse, error) {
@@ -672,7 +656,7 @@ func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 		RequestBody("CloudflareSFURenegotiateRequest", sfuRenegotiateRequest{}).
 		Responds(http.StatusOK, "CloudflareSFURenegotiateResponse", sfuRenegotiateResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 func decodeSFUUpdateTracksRequest(request *http.Request) (sfuUpdateTracksEndpointRequest, error) {
@@ -806,6 +790,13 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	for _, track := range request.Body.Tracks {
 		tracks = append(tracks, mediaplane.CloseTrack{Mid: track.Mid, Source: track.Source, PublicationID: track.PublicationID})
 	}
+	slog.InfoContext(ctx, "media tracks close requested",
+		"event", "media_publication.tracks_close_requested",
+		"participant_id", request.ParticipantID.String(),
+		"connection_id", request.Body.ConnectionID,
+		"reason", closeReasonOf(request.Body),
+		"track_count", len(tracks),
+	)
 	if request.Body.ReceiveOnly {
 		return service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
 			Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
@@ -854,6 +845,29 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	return response, nil
 }
 
+// closeReason names which kind of close a caller sent, so the log says why a track went away.
+type closeReason string
+
+const (
+	closeReasonReceiveOnly closeReason = "receive_only" // stops the caller's subscriptions and never a publication
+	closeReasonForce       closeReason = "force"        // stops the publication without waiting for the client's offer
+	closeReasonNegotiated  closeReason = "negotiated"   // stops the publication and answers the client's offer
+	closeReasonBare        closeReason = "bare"         // stops the publication with neither a force nor an offer
+)
+
+func closeReasonOf(body sfuCloseTracksRequest) closeReason {
+	switch {
+	case body.ReceiveOnly:
+		return closeReasonReceiveOnly
+	case body.Force:
+		return closeReasonForce
+	case body.SessionDescription != nil:
+		return closeReasonNegotiated
+	default:
+		return closeReasonBare
+	}
+}
+
 func listSFUPublications(ctx context.Context, request sfuPublicationsEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (sfuPublicationsResponse, error) {
 	if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, ""); err != nil {
 		return sfuPublicationsResponse{}, err
@@ -861,7 +875,7 @@ func listSFUPublications(ctx context.Context, request sfuPublicationsEndpointReq
 	if _, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID); err != nil {
 		return sfuPublicationsResponse{}, err
 	}
-	return listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
+	return listPublications(ctx, publications, request.TenantID, request.EpisodeID)
 }
 
 func listSFUSubscriptions(ctx context.Context, request sfuPublicationsEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) (sfuSubscriptionsResponse, error) {

@@ -261,7 +261,7 @@ func clientFamilies(userAgent string) (family, system string) {
 // A still-valid signed credential is enough: the last summary is sent as the
 // participant leaves, after active presence may already be gone.
 func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequest, struct{}] {
-	return Post("/v1/tenants/{tenant_id}/call-stats", "/tenants/{tenant_id}/call-stats", "uploadCallStats", func(r *http.Request) (callStatsRequest, error) {
+	return Post("/v1/tenants/{tenant_id}/call-stats", "uploadCallStats", func(r *http.Request) (callStatsRequest, error) {
 		tenantID, err := tenantIDRequest(r)
 		if err != nil {
 			return callStatsRequest{}, err

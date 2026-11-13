@@ -1,15 +1,6 @@
 defmodule ChalkSync.Retention.SQL do
   @moduledoc false
 
-  def transaction_settings do
-    """
-    select
-      set_config('lock_timeout', '250ms', true),
-      set_config('statement_timeout', '30s', true),
-      set_config('synchronous_commit', 'on', true)
-    """
-  end
-
   def claim_eligible_episodes do
     """
     select

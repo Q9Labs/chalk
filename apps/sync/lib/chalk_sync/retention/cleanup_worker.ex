@@ -8,6 +8,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
   folded in bounded pages, checkpointed, and deleted in foreign-key order.
   """
 
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Retention.SQL
   alias ChalkSync.UUID
@@ -80,7 +81,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     cutoff = DateTime.add(now, -@retention_seconds, :second)
 
     Postgrex.transaction(connection, fn transaction ->
-      Postgrex.query!(transaction, SQL.transaction_settings(), [])
+      Postgrex.query!(transaction, TransactionSettings.sql(:retention), [])
 
       Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [cutoff, now, batch_size])
       |> Map.fetch!(:rows)

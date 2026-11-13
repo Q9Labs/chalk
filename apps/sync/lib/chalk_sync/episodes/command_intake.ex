@@ -10,7 +10,6 @@ defmodule ChalkSync.Episodes.CommandIntake do
 
   use GenServer
 
-  alias ChalkSync.DeliveryGate
   alias ChalkSync.Live.MediaPlaneCall
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder
@@ -159,12 +158,7 @@ defmodule ChalkSync.Episodes.CommandIntake do
              result = decide_safely(decision_fun, identity, command)
              emit_episode_event(command, result)
 
-             DeliveryGate.emit(
-               :command_result,
-               %{outcome: command_result_outcome(result)},
-               caller,
-               {:sync_command_result, lease, command.id, result}
-             )
+             send(caller, {:sync_command_result, lease, command.id, result})
            after
              safe_release(server, lease)
            end
@@ -190,11 +184,6 @@ defmodule ChalkSync.Episodes.CommandIntake do
   catch
     :exit, _reason -> {:retryable, :decision_unavailable}
   end
-
-  defp command_result_outcome({:ok, %{result: outcome}}), do: outcome
-  defp command_result_outcome({:error, reason}), do: reason
-  defp command_result_outcome({:retryable, reason}), do: reason
-  defp command_result_outcome(_result), do: :unknown
 
   defp emit_episode_event(
          %Command{observed_context: %ObservedContext{} = observed},

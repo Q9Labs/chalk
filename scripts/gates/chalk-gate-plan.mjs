@@ -123,11 +123,11 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces, narrow) {
   if (isGateDefinition(file, narrow)) return true;
   // No lane reads these, so a full gate would run the same lanes as the always-on ones.
-  if (narrow && (startsWithAny(file, ["infrastructure/observability"]) || file === "e2e.config.ts")) return true;
+  if (narrow && (startsWithAny(file, ["infrastructure/observability", "infrastructure/host-change-alert"]) || file === "e2e.config.ts")) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
+  if (startsWithAny(file, ["apps/api", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
-  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
+  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "features.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
@@ -382,7 +382,7 @@ export function createGatePlan(files, options = {}) {
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
   // The API's chalksfu conformance tests build and run the SFU from features/media/sfu.
-  const isApiInput = (file) => startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", ...deploymentRoots]);
+  const isApiInput = (file) => startsWithAny(file, ["apps/api", "features/media/sfu", ...deploymentRoots]);
   const api = full || nonDocumentationFiles.some(isApiInput);
   const queue = mergeGroup && nonDocumentationFiles.length > 0;
   const shippedFiles = narrow ? nonDocumentationFiles.filter((file) => !isTestFile(file)) : nonDocumentationFiles;
@@ -446,10 +446,22 @@ export function createGatePlan(files, options = {}) {
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
+  // The ratchet counts every JavaScript and TypeScript test file. Edits to scripts/gates select the full gate, so its baseline is covered.
+  const mockCallInputs = full || dependencyChange || nonDocumentationFiles.some((file) => /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", [
+      "node",
+      "scripts/test/run.mjs",
+      "node",
+      "--test",
+      "scripts/test/no-network.test.mjs",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/feature-map.test.mjs",
+      "scripts/gates/ast-grep.test.mjs",
+      "scripts/gates/mock-calls.test.mjs",
+    ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "node",
@@ -480,7 +492,7 @@ export function createGatePlan(files, options = {}) {
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
-    task("mock-calls", "Assertions on mock calls may only shrink", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["node", "scripts/gates/mock-calls.mjs"]),
+    task("mock-calls", "Assertions on mock calls may only shrink", mockCallInputs, mockCallInputs ? "test files or dependency inputs changed" : "test files are unaffected", ["node", "scripts/gates/mock-calls.mjs"], { GATE_BASE_REF: base }),
     task("react-tokens", "React design-token reach", reactTokens, reactTokens ? "React design-token inputs changed" : "React design tokens are unaffected", ["node", "sdks/typescript/react/scripts/check-token-reach.mjs"]),
     task("native-quality", "React Native design tokens and worklets", nativeQuality, nativeQuality ? "React Native inputs changed" : "React Native is unaffected", [
       "bash",
@@ -624,11 +636,34 @@ export function laneGroupLanes(lanes, group) {
 export function ciJobs(files, options = {}) {
   const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", ...options });
   const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].includes(task.id)));
-  return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups] };
+  return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups], planFull: plan.full };
 }
 
 function changedFiles(base) {
   return gitLines(["diff", "--name-only", `${base}...HEAD`]);
+}
+
+// A merge queue group repeats the checks its pull request's own Gate run passed. A group is skipped when that run
+// proved it and nothing master gained since (the drift) is an input of it. The drift is selected by input, with test
+// files counting, so a change that only the queue's wider rules would have run is still run. The checks group, the
+// leak shards (all three or none, because the Root gate checks their reports together), any drift that changes the
+// Gate itself and any group that holds more than one pull request are never skipped.
+export function shareProvenGroups(jobs, proof, drift) {
+  if (jobs.full || jobs.planFull || drift.planFull || drift.entries !== 1) return { ...jobs, shared: [] };
+  const proven = new Set(proof.rootGroups);
+  const reusable = (group) => proven.has(group) && !drift.rootGroups.includes(group);
+  const leakShards = jobs.rootGroups.filter((group) => group.startsWith("call-leaks-"));
+  const leaksReusable = leakShards.length > 0 && leakShards.every(reusable);
+  const skipped = (group) => group !== "checks" && (group.startsWith("call-leaks-") ? leaksReusable : reusable(group));
+  const sharedApi = jobs.api && proof.api && !drift.api;
+  const sharedSync = jobs.sync && proof.sync && !drift.sync;
+  return {
+    ...jobs,
+    api: jobs.api && !sharedApi,
+    sync: jobs.sync && !sharedSync,
+    rootGroups: jobs.rootGroups.filter((group) => !skipped(group)),
+    shared: [...jobs.rootGroups.filter(skipped), ...(sharedApi ? ["api"] : []), ...(sharedSync ? ["sync"] : [])],
+  };
 }
 
 // A selection that cannot be planned runs every job in full rather than skipping lanes. full tells the jobs to pass
@@ -643,12 +678,32 @@ function selectCiJobs(base) {
   }
 }
 
+// The proof file is untrusted input from an earlier run: any doubt about it means no sharing, never a skipped check.
+function applyProof(jobs, base, proofPath) {
+  try {
+    const proof = JSON.parse(readFileSync(proofPath, "utf8"));
+    const valid = typeof proof.base === "string" && /^[0-9a-f]{40}$/u.test(proof.base) && typeof proof.api === "boolean" && typeof proof.sync === "boolean" && Array.isArray(proof.rootGroups) && proof.rootGroups.every((group) => typeof group === "string");
+    if (!valid) throw new GatePlanningError("invalid-proof", "The Gate proof is malformed");
+    const driftFiles = gitLines(["diff", "--name-only", "--no-renames", proof.base, base]);
+    // The proof belongs to one pull request; a group that holds more than one carries changes the proof never saw.
+    const entries = Number(gitLines(["rev-list", "--count", `${base}..HEAD`])[0]);
+    const drift = { ...ciJobs(driftFiles, { base, snapshot: { mode: "ref", ref: "HEAD" } }), entries };
+    const shared = shareProvenGroups(jobs, proof, drift);
+    console.error(`Shared with the pull request's Gate run (${driftFiles.length} files of drift since ${proof.base.slice(0, 12)}): ${shared.shared.join(", ") || "nothing"}`);
+    return shared;
+  } catch (error) {
+    console.error(`::warning title=Gate proof not used::Running the full queue selection. ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
+    return { ...jobs, shared: [] };
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [flag, base] = process.argv.slice(2);
-  if (flag !== "--ci-jobs" || !base) {
-    console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full>");
+  const [flag, base, proofFlag, proofPath] = process.argv.slice(2);
+  if (flag !== "--ci-jobs" || !base || (proofFlag !== undefined && (proofFlag !== "--proof" || !proofPath))) {
+    console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full> [--proof <file>]");
     process.exit(2);
   }
-  const jobs = selectCiJobs(base);
+  const selected = selectCiJobs(base);
+  const jobs = proofPath && !selected.full ? applyProof(selected, base, proofPath) : selected;
   console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
 }

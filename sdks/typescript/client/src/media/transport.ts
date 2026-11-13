@@ -242,6 +242,7 @@ type WirePublicationList = {
     readonly participant_session_id?: string;
     readonly source: MediaPublicationSource;
     readonly publication_id: string;
+    readonly paused?: boolean;
   }[];
 };
 function tracksResponse(response: TracksWireResponse): CloudflareSFUTracksResponse {
@@ -255,6 +256,7 @@ function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublic
       participantId: publication.participant_id ?? publication.participant_session_id ?? "",
       source: publication.source,
       publicationId: publication.publication_id,
+      ...(publication.paused ? { paused: true } : {}),
     })),
   };
 }

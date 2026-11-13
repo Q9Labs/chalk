@@ -3,12 +3,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
-  alias ChalkSync.Stateholder.Postgres.FaultHooks
-  alias ChalkSync.Stateholder.Postgres.Lifecycle
+  alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
@@ -20,6 +20,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.Producer, as: WebhookProducer
+  require OperationTable
 
   @max_event_bytes 32 * 1024
   @schema_version 1
@@ -183,7 +184,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp validate_finalization_episode(%{name: name}, %{status: "ending"})
-       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       when OperationTable.is_episode_end_name(name),
        do: :ok
 
   defp validate_finalization_episode(%{name: :recording_capture_stopped}, %{status: status})
@@ -191,7 +192,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
        do: :ok
 
   defp validate_finalization_episode(%{name: name}, %{status: "active"})
-       when name not in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       when not OperationTable.is_episode_end_name(name),
        do: :ok
 
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
@@ -493,7 +494,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         )
 
         WebhookProducer.produce_external(connection, episode, external, event, webhook_object)
-        FaultHooks.external_operation(:after_webhook_production, episode, external)
         Control.notify_head(connection, episode, event.revision)
 
         applied = %{
@@ -557,7 +557,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, :participant_joined, payload) do
       finalize_admission_row(connection, episode, admission.id, "admitted", external)
-      decision = Lifecycle.persist_commit(connection, episode, intent, event, next_state)
+      decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
       mark_external_applied(connection, episode, external, nil, nil)
 
       commit_external_receipt(
@@ -643,7 +643,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
         if participant && participant.generation == generation && participant.status == "joining" &&
              participant.role == admission.role do
-          {:ok, Lifecycle.lock_intent(connection, episode, UUID.load!(intent_id))}
+          {:ok, LifecycleCommit.lock_intent(connection, episode, UUID.load!(intent_id))}
         else
           {:error, :invalid_state}
         end
@@ -826,7 +826,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp update_external_products(connection, episode, external, _event, _state)
-       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+       when OperationTable.is_episode_end_name(external.name) do
     complete_external_episode(connection, episode, external)
   end
 
@@ -942,7 +942,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
           Postgrex.rollback(connection, {:error, :invalid_state})
       end
 
-    Lifecycle.complete_episode_participants(
+    LifecycleCommit.complete_episode_participants(
       connection,
       episode,
       external,
@@ -1091,7 +1091,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp release_failed_acceptance(connection, episode, external)
-       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+       when OperationTable.is_episode_end_name(external.name) do
     case Postgrex.query!(connection, SQL.restore_episode_active(), Scope.episode(episode)).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})

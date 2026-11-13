@@ -1,12 +1,11 @@
+import type { VideoEncoder } from "../generated/render-contract.js";
 import type { VideoPlacement, VideoSegment } from "./scene.js";
-
-export type ComposeEncoder = "libx264" | "h264_videotoolbox" | "h264_nvenc";
 
 export interface ComposeOutput {
   readonly width: number;
   readonly height: number;
   readonly fps: number;
-  readonly encoder: ComposeEncoder;
+  readonly encoder: VideoEncoder;
   /** FFmpeg thread cap for every run; undefined lets FFmpeg use every core. */
   readonly threads?: number;
 }
@@ -21,7 +20,7 @@ export interface PlannedSource {
 
 const COMMON_ARGS = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error"];
 
-function encoderArgs(encoder: ComposeEncoder): readonly string[] {
+function encoderArgs(encoder: VideoEncoder): readonly string[] {
   // ultrafast measured SSIM 0.998 against medium at 2 Mb/s for about a third of
   // its CPU; the cost is roughly 14% larger files.
   if (encoder === "libx264") return ["-c:v", "libx264", "-preset", "ultrafast", "-profile:v", "high"];
@@ -48,7 +47,7 @@ function seconds(value: number): string {
  * Seconds of video decoded only to reach segment starts: each segment's input
  * seek decodes forward from the nearest earlier keyframe. Keyframes are sorted.
  */
-export function seekDecodeSeconds(keyframes: readonly number[], starts: readonly number[]): number {
+function seekDecodeSeconds(keyframes: readonly number[], starts: readonly number[]): number {
   let total = 0;
   for (const start of starts) {
     let previous = 0;
@@ -173,7 +172,7 @@ function placementFit(placement: VideoPlacement, dynamicCover: boolean): string 
   return dynamicCover ? scale : `${scale},crop=${width}:${height}`;
 }
 
-export function segmentFilter(
+function segmentFilter(
   placements: readonly VideoPlacement[],
   output: ComposeOutput,
   firstFrameHolds: ReadonlyMap<string, number> = new Map(),

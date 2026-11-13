@@ -79,6 +79,12 @@ export function providerFailureKind(error: unknown): ProviderFailureKind {
   return "nonretryable";
 }
 
+/** A terminal failure is reported once and never retried. */
+export function isTerminalFailure(error: unknown): boolean {
+  const kind = providerFailureKind(error);
+  return kind === "nonretryable" || kind === "schema";
+}
+
 export function safeErrorCode(error: unknown): string {
   if (error instanceof ProviderError) {
     if (error.kind === "timeout") return "provider_timeout";

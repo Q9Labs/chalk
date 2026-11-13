@@ -20,18 +20,17 @@ defmodule ChalkSync.ExternalOperationConsumer do
   require Logger
 
   alias ChalkSync.Observability
-  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
-  alias ChalkSync.ProviderBridge.RecordingPlane, as: ProviderBridgeRecordingPlane
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Telemetry
 
-  require ExternalOperation
+  require OperationTable
 
   @local_page_size 32
   @default_max_backoff_ms 5_000
-  @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
   @worker_completion_grace_ms 5_000
   @max_attempts 100
@@ -57,11 +56,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
       provider_calls: true
     }
   }
-  @end_episode_operations [
-    :end_episode,
-    :tenant_end_episode,
-    :maximum_duration_expired
-  ]
 
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -100,7 +94,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
     state = %{
       page_size: Keyword.get(options, :page_size, lane.page_size),
       concurrency: lane.concurrency,
-      adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
+      adapter_timeout_ms:
+        Keyword.get(options, :adapter_timeout_ms, ProviderCall.default_timeout_ms()),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
       claim_operations:
@@ -193,7 +188,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
         media_plane,
         recording_plane,
         finalize,
-        adapter_timeout_ms \\ @default_adapter_timeout_ms
+        adapter_timeout_ms \\ ProviderCall.default_timeout_ms()
       )
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
@@ -211,11 +206,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
     case result do
       {:confirmed, authority} ->
-        execution_checkpoint(:after_provider_confirmation_before_finalize, episode, operation)
         finalize_confirmed(episode, operation, authority, finalize)
 
       {:terminal_failure, reason} ->
-        execution_checkpoint(:after_provider_terminal_failure_before_finalize, episode, operation)
         finalize_terminal_failure(episode, operation, reason, finalize)
 
       :pending ->
@@ -334,38 +327,27 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp outcome_name(_result), do: "unknown"
 
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
-       when ExternalOperation.is_local_name(name),
+       when OperationTable.is_local_name(name),
        do: {:confirmed, :local}
 
   defp dispatch(episode, %{name: name} = operation, media_plane, recording_plane, timeout_ms)
-       when name in @end_episode_operations do
+       when OperationTable.is_episode_end_name(name) do
     invoke_end_cleanup(media_plane, recording_plane, episode, operation, timeout_ms)
   end
 
   defp dispatch(episode, %{name: name} = operation, media_plane, _recording_plane, timeout_ms)
-       when name in [
-              :mute_participant,
-              :stop_participant_camera,
-              :stop_participant_screen_share,
-              :remove_participant,
-              :role_transition_source_stop
-            ] do
+       when OperationTable.is_media_name(name) do
     invoke_media_plane(media_plane, episode, operation, timeout_ms)
   end
 
   defp dispatch(episode, %{name: name} = operation, _media_plane, recording_plane, timeout_ms)
-       when name in [:start_recording, :stop_recording] do
+       when OperationTable.is_recording_name(name) do
     invoke_recording_plane(recording_plane, episode, operation, timeout_ms)
   end
 
   defp invoke_media_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_media_plane({module, adapter}, episode, operation, timeout_ms) do
-    adapter =
-      if module == ProviderBridgeMediaPlane,
-        do: ProviderBridgeMediaPlane.with_control_revision(adapter, operation.control_revision),
-        else: adapter
-
     arguments = media_arguments(adapter, episode, operation)
     invoke_adapter(module, arguments, :provider, timeout_ms)
   end
@@ -389,7 +371,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp media_arguments(adapter, episode, %{name: name} = operation)
-       when name in @end_episode_operations,
+       when OperationTable.is_episode_end_name(name),
        do: {:end_episode, [adapter, operation.external_operation_id, episode]}
 
   defp revoke_arguments(adapter, episode, operation, source) do
@@ -406,11 +388,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_recording_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_recording_plane({module, adapter}, episode, operation, timeout_ms) do
-    adapter =
-      if module == ProviderBridgeRecordingPlane and is_map(operation.payload),
-        do: ProviderBridgeRecordingPlane.with_operation_payload(adapter, operation.payload),
-        else: adapter
-
     arguments =
       {operation.name,
        [adapter, operation.external_operation_id, episode, operation.recording_id]}
@@ -539,21 +516,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
     end
   end
 
-  defp execution_checkpoint(point, episode, operation) do
-    case Application.get_env(:chalk_sync, :external_operation_fault_hook) do
-      hook when is_function(hook, 2) ->
-        hook.(point, %{
-          tenant_id: episode.tenant_id,
-          episode_id: episode.episode_id,
-          external_operation_id: operation.external_operation_id,
-          operation: operation.name
-        })
-
-      _ ->
-        :ok
-    end
-  end
-
   defp finalization_failure(operation, result) do
     Logger.warning(
       "sync external operation finalization unavailable: operation=#{operation} " <>
@@ -593,19 +555,19 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms) do
-    if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
+    if ProviderCall.contextual?(media_plane) or ProviderCall.contextual?(recording_plane) do
       Observability.with_worker_span(
         persisted_provider_context(operation),
         "sync.external_operation.provider_bridge",
         %{operation: operation.name},
         fn worker_context ->
-          headers = Observability.frame_fields(worker_context)
+          call = provider_call(operation, Observability.frame_fields(worker_context))
 
           dispatch(
             episode,
             operation,
-            contextual_adapter(media_plane, operation, headers),
-            contextual_adapter(recording_plane, operation, headers),
+            ProviderCall.attach(media_plane, call),
+            ProviderCall.attach(recording_plane, call),
             timeout_ms
           )
         end
@@ -615,31 +577,18 @@ defmodule ChalkSync.ExternalOperationConsumer do
     end
   end
 
-  defp provider_bridge_adapter?({module, _adapter})
-       when module in [ProviderBridgeMediaPlane, ProviderBridgeRecordingPlane],
-       do: true
+  defp provider_call(operation, headers) do
+    call = %{
+      headers: headers,
+      control_revision: operation.control_revision,
+      participant_id: operation.target_participant_id,
+      participant_generation: operation.target_participant_generation
+    }
 
-  defp provider_bridge_adapter?(_adapter), do: false
-
-  defp contextual_adapter(nil, _operation, _headers), do: nil
-
-  defp contextual_adapter({ProviderBridgeMediaPlane, adapter}, operation, headers) do
-    adapter =
-      adapter
-      |> ProviderBridgeMediaPlane.with_context(headers)
-      |> ProviderBridgeMediaPlane.with_participant_generation(
-        operation.target_participant_id,
-        operation.target_participant_generation
-      )
-
-    {ProviderBridgeMediaPlane, adapter}
+    if OperationTable.is_recording_name(operation.name) and is_map(operation.payload),
+      do: Map.put(call, :payload, operation.payload),
+      else: call
   end
-
-  defp contextual_adapter({ProviderBridgeRecordingPlane, adapter}, _operation, headers) do
-    {ProviderBridgeRecordingPlane, ProviderBridgeRecordingPlane.with_context(adapter, headers)}
-  end
-
-  defp contextual_adapter(adapter, _operation, _headers), do: adapter
 
   defp persisted_provider_context(operation) do
     case operation do

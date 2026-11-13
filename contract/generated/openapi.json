@@ -14565,6 +14565,9 @@
                 "participant_id": {
                   "$ref": "#/components/schemas/ParticipantId"
                 },
+                "paused": {
+                  "type": "boolean"
+                },
                 "publication_id": {
                   "type": "string"
                 },

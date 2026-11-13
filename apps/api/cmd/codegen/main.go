@@ -637,7 +637,7 @@ func traceIdentifierSchema(length int) map[string]any {
 func applyFieldConstraints(schema map[string]any, schemaName string, fieldName string, request bool) map[string]any {
 	if fieldName == "event_types" && schemaTypeIs(schema, "array") {
 		if items, ok := schema["items"].(map[string]any); ok {
-			items["enum"] = webhooks.CoreEventTypes
+			items["enum"] = webhooks.SubscribableEventTypes()
 		}
 	}
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {

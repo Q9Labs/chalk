@@ -27,7 +27,7 @@ defmodule ChalkSync.Transport.DirectLimits do
     max_unauthenticated_per_ip: 8,
     max_sockets_per_tenant: 512,
     tracked_ip_limit: 8_192,
-    max_frame_bytes: 65_536
+    max_frame_bytes: ChalkSync.Contract.GeneratedV1.limits()["decodedInboundFrameBytes"]
   ]
 
   @type denial :: :rate_limited | :ip_limit | :tenant_limit | :overloaded

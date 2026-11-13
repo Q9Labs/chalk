@@ -13,12 +13,13 @@ import { CallScreen } from "./src/call/CallScreen";
 import { useClipboardOffer } from "./src/home/ClipboardCard";
 import { HomeScreen } from "./src/home/HomeScreen";
 import { useRecentCalls, type RecentCall, type RecentCalls } from "./src/home/recent-calls";
-import { JoiningScreen, type ArrivedCall, type JoinTarget } from "./src/join/JoiningScreen";
+import { JoiningScreen, type JoinTarget } from "./src/join/JoiningScreen";
+import type { ArrivedCall } from "./src/lib/arrived-call";
 import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
 import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spaces";
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
-import { loadOnboardingState, saveOnboardingState } from "./src/screens/onboarding-store";
+import { loadDisplayName, saveDisplayName } from "./src/screens/display-name-store";
 
 installNativeSession();
 void SplashScreen.preventAutoHideAsync();
@@ -43,14 +44,11 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     let mounted = true;
-    void loadOnboardingState()
-      .then(
-        (state) => state.displayName,
-        (cause: unknown) => {
-          reportError("load-display-name")(cause);
-          return null;
-        },
-      )
+    void loadDisplayName()
+      .catch((cause: unknown) => {
+        reportError("load-display-name")(cause);
+        return null;
+      })
       .then((stored) => {
         if (mounted) setName(stored);
       });
@@ -76,7 +74,6 @@ export default function App(): React.JSX.Element {
   return (
     <ChalkUI colorScheme={preferences?.colorScheme ?? "dark"}>
       {ready ? <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} /> : <Splash />}
-      {/* Dev states: the harness lane mounts its route on the next line. */}
     </ChalkUI>
   );
 }
@@ -117,7 +114,7 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
   const saveName = useCallback(
     (next: string) => {
       onNameChange(next);
-      saveOnboardingState(next).catch(reportError("save-display-name"));
+      saveDisplayName(next).catch(reportError("save-display-name"));
     },
     [onNameChange, reportError],
   );

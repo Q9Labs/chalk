@@ -1,7 +1,6 @@
 defmodule ChalkSync.Stateholder.Postgres.Control do
   @moduledoc false
 
-  alias ChalkSync.DeliveryGate
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Control, as: SQL
@@ -67,10 +66,8 @@ defmodule ChalkSync.Stateholder.Postgres.Control do
   def notify_head(connection, episode, revision) do
     payload = "#{episode.tenant_id}:#{episode.space_id}:#{episode.episode_id}:#{revision}"
 
-    case DeliveryGate.decide(:postgres_head_hint, %{revision: revision}) do
-      :deliver -> Postgrex.query!(connection, SQL.notify_head(), [payload])
-      :drop -> :ok
-    end
+    Postgrex.query!(connection, SQL.notify_head(), [payload])
+    :ok
   end
 
   def validate_fold(episode, control, episode_policy) do
