@@ -3,8 +3,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Access do
   Drawing permission of a whiteboard-v1 socket: read the server answer, repair missed notifications with a timer.
   """
 
-  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1.Delivery
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.WhiteboardV1.Episode
 
   @access_reconcile_ms 30_000
