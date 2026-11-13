@@ -37,14 +37,14 @@ The model found three bugs. The code fixes them, and `runs` keeps each old behav
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- sdks/typescript/client/src/connection/lifecycle.ts sdks/typescript/client/src/access/manager.ts sdks/typescript/client/src/sync/v1-client.ts sdks/typescript/client/src/media/client.ts
+git diff --stat cb63aa3cc2606b1a25dca59916ce144c8aedd559 -- sdks/typescript/client/src/connection/lifecycle.ts sdks/typescript/client/src/access/manager.ts sdks/typescript/client/src/sync/v1-client.ts sdks/typescript/client/src/media/client.ts
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as diagnostics or the join trace, needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Sync commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
+Sync commit: `cb63aa3cc2606b1a25dca59916ce144c8aedd559`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
 All paths are under `sdks/typescript/client/src/`.
 
