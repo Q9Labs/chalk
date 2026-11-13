@@ -267,6 +267,27 @@ where
 order by created_at desc, id desc
 limit sqlc.arg(page_size)::integer;
 
+-- name: ListTenantSpacesByActivity :many
+select sqlc.embed(s), a.active_at
+from space_activity a
+join spaces s on s.tenant_id = a.tenant_id and s.id = a.space_id
+where
+    a.tenant_id = sqlc.arg(tenant_id)
+    and (
+        not sqlc.arg(archived_set)::boolean
+        or (sqlc.arg(archived)::boolean and s.archived_at is not null)
+        or (not sqlc.arg(archived)::boolean and s.archived_at is null)
+    )
+    and (
+        not sqlc.arg(cursor_set)::boolean
+        or (a.active_at, a.space_id) < (
+            sqlc.arg(cursor_active_at)::timestamptz,
+            sqlc.arg(cursor_id)::uuid
+        )
+    )
+order by a.active_at desc, a.space_id desc
+limit sqlc.arg(page_size)::integer;
+
 -- name: UpdateTenantSpace :one
 update spaces
 set

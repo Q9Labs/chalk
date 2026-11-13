@@ -1408,6 +1408,7 @@ const spacesGroup = HttpApiGroup.make("spaces")
         S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
         S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidArchiveFilterErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidOrderErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),

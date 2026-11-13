@@ -140,10 +140,28 @@ type IdempotentRepository interface {
 	CreateSpaceIdempotent(ctx context.Context, input CreateSpaceInput) (Space, error)
 }
 
+// ListOrder is the order a list of Spaces comes in.
+type ListOrder string
+
+const (
+	// ListOrderCreated lists the newest Space first. A page's cursor holds the last Space's creation time.
+	ListOrderCreated ListOrder = "created"
+	// ListOrderActive lists the most recently active Space first: the latest of its creation and its Episodes'
+	// creation, start and end. A page's cursor holds the last Space's activity time, so a Space that becomes active
+	// while a person pages moves to the first page instead of turning up again on a later one.
+	ListOrderActive ListOrder = "active"
+)
+
+// ListOptions narrows and orders a list of Spaces. The zero value lists every Space, newest first.
+type ListOptions struct {
+	Archived *bool
+	Order    ListOrder
+}
+
 // FilteredRepository optionally supports the dashboard's archived-state
-// filter without changing the original list method used by older callers.
+// filter and activity order without changing the original list method used by older callers.
 type FilteredRepository interface {
-	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error)
+	ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options ListOptions) (SpaceList, error)
 }
 
 type Service struct {
@@ -411,15 +429,15 @@ func (s Service) ListSpaces(ctx context.Context, tenantID utilities.ID, page pag
 	return s.repository.ListSpaces(ctx, tenantID, page)
 }
 
-func (s Service) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (SpaceList, error) {
+func (s Service) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options ListOptions) (SpaceList, error) {
 	if tenantID.IsZero() {
 		return SpaceList{}, ErrInvalidTenantID
 	}
 	filtered, ok := s.repository.(FilteredRepository)
-	if !ok || archived == nil {
+	if !ok || options == (ListOptions{}) {
 		return s.repository.ListSpaces(ctx, tenantID, page)
 	}
-	return filtered.ListSpacesFiltered(ctx, tenantID, page, archived)
+	return filtered.ListSpacesFiltered(ctx, tenantID, page, options)
 }
 
 func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input UpdateSpaceInput) (Space, error) {

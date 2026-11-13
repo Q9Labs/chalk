@@ -3474,6 +3474,7 @@ export const ListSpacesQueryParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     archived: Schema.optional(Schema.Boolean),
     cursor: Schema.optional(Schema.String),
+    order: Schema.optional(Schema.Literals(["created", "active"])),
     page_size: Schema.optional(Schema.NumberFromString),
   }))();
 export type ListSpacesQueryParams = typeof ListSpacesQueryParamsSchema.Type;
@@ -5670,6 +5671,25 @@ export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWire
   }),
 );
 
+export class SpaceInvalidOrderError extends Schema.TaggedErrorClass<SpaceInvalidOrderError>()("SpaceInvalidOrderError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_order"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceInvalidOrderErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.invalid_order"),
+    message: Schema.String,
+  }),
+});
+export const SpaceInvalidOrderErrorSchema = SpaceInvalidOrderErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceInvalidOrderError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceInvalidOrderError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceMediaPlaneNotPermittedError extends Schema.TaggedErrorClass<SpaceMediaPlaneNotPermittedError>()("SpaceMediaPlaneNotPermittedError", {
   error: Schema.Struct({
     code: Schema.Literal("space.media_plane_not_permitted"),
@@ -7288,6 +7308,7 @@ export const ListSpacesErrorSchema = Schema.Union([
   ServiceInternalErrorSchema,
   ServiceUnavailableErrorSchema,
   SpaceInvalidArchiveFilterErrorSchema,
+  SpaceInvalidOrderErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
 export type ListSpacesError = typeof ListSpacesErrorSchema.Type;

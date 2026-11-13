@@ -303,6 +303,7 @@ type Querier interface {
 	ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error)
 	ListTenantSpaceRecordings(ctx context.Context, arg ListTenantSpaceRecordingsParams) ([]Recording, error)
 	ListTenantSpaces(ctx context.Context, arg ListTenantSpacesParams) ([]Space, error)
+	ListTenantSpacesByActivity(ctx context.Context, arg ListTenantSpacesByActivityParams) ([]ListTenantSpacesByActivityRow, error)
 	ListTenantTranscriptions(ctx context.Context, arg ListTenantTranscriptionsParams) ([]Transcription, error)
 	ListTenants(ctx context.Context, arg ListTenantsParams) ([]ListTenantsRow, error)
 	ListTranscriptChunks(ctx context.Context, arg ListTranscriptChunksParams) ([]TranscriptChunk, error)

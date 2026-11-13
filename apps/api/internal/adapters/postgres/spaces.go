@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,6 +26,7 @@ type spaceQuerier interface {
 	ListSpaceRoles(ctx context.Context, arg sqlc.ListSpaceRolesParams) ([]sqlc.SpaceRole, error)
 	GetTenantSpace(ctx context.Context, arg sqlc.GetTenantSpaceParams) (sqlc.Space, error)
 	ListTenantSpaces(ctx context.Context, arg sqlc.ListTenantSpacesParams) ([]sqlc.Space, error)
+	ListTenantSpacesByActivity(ctx context.Context, arg sqlc.ListTenantSpacesByActivityParams) ([]sqlc.ListTenantSpacesByActivityRow, error)
 	UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error)
 	ArchiveTenantSpace(ctx context.Context, arg sqlc.ArchiveTenantSpaceParams) (sqlc.Space, error)
 	RestoreTenantSpace(ctx context.Context, arg sqlc.RestoreTenantSpaceParams) (sqlc.Space, error)
@@ -78,17 +80,28 @@ func (r SpaceRepository) GetSpace(ctx context.Context, tenantID utilities.ID, sp
 }
 
 func (r SpaceRepository) ListSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (spaces.SpaceList, error) {
-	return r.listSpaces(ctx, tenantID, page, nil)
+	return r.ListSpacesFiltered(ctx, tenantID, page, spaces.ListOptions{})
 }
 
-func (r SpaceRepository) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
-	return r.listSpaces(ctx, tenantID, page, archived)
-}
-
-func (r SpaceRepository) listSpaces(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, archived *bool) (spaces.SpaceList, error) {
-	rows, err := r.queries.ListTenantSpaces(ctx, listTenantSpacesParams(tenantID, page, archived))
-	if err != nil {
-		return spaces.SpaceList{}, fmt.Errorf("list spaces: %w", err)
+func (r SpaceRepository) ListSpacesFiltered(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest, options spaces.ListOptions) (spaces.SpaceList, error) {
+	// Each row comes with the time its order sorts by, which a next page's cursor carries.
+	var rows []spaceListRow
+	if options.Order == spaces.ListOrderActive {
+		found, err := r.queries.ListTenantSpacesByActivity(ctx, listTenantSpacesByActivityParams(tenantID, page, options.Archived))
+		if err != nil {
+			return spaces.SpaceList{}, fmt.Errorf("list spaces by activity: %w", err)
+		}
+		for _, row := range found {
+			rows = append(rows, spaceListRow{space: row.Space, sortedAt: row.ActiveAt.Time})
+		}
+	} else {
+		found, err := r.queries.ListTenantSpaces(ctx, listTenantSpacesParams(tenantID, page, options.Archived))
+		if err != nil {
+			return spaces.SpaceList{}, fmt.Errorf("list spaces: %w", err)
+		}
+		for _, row := range found {
+			rows = append(rows, spaceListRow{space: row, sortedAt: row.CreatedAt.Time})
+		}
 	}
 
 	size := page.Size()
@@ -102,18 +115,23 @@ func (r SpaceRepository) listSpaces(ctx context.Context, tenantID utilities.ID, 
 		Page:   pagination.Page{PageSize: size, HasMore: hasMore},
 	}
 	for _, row := range rows {
-		space, err := r.withSpaceRoles(ctx, mapSpace(row))
+		space, err := r.withSpaceRoles(ctx, mapSpace(row.space))
 		if err != nil {
 			return spaces.SpaceList{}, err
 		}
 		list.Spaces = append(list.Spaces, space)
 	}
-	if hasMore && len(list.Spaces) > 0 {
-		last := list.Spaces[len(list.Spaces)-1]
-		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.sortedAt, ID: utilities.IDFromBytes(last.space.ID.Bytes)}
 	}
 
 	return list, nil
+}
+
+type spaceListRow struct {
+	space    sqlc.Space
+	sortedAt time.Time
 }
 
 func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
@@ -243,6 +261,23 @@ func listTenantSpacesParams(tenantID utilities.ID, page pagination.PageRequest, 
 	params.CursorSet = true
 	params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
 	params.CursorID = uuid(cursor.ID)
+	return params
+}
+
+func listTenantSpacesByActivityParams(tenantID utilities.ID, page pagination.PageRequest, archived *bool) sqlc.ListTenantSpacesByActivityParams {
+	params := sqlc.ListTenantSpacesByActivityParams{
+		TenantID: uuid(tenantID),
+		PageSize: int32(page.Size() + 1),
+	}
+	if archived != nil {
+		params.ArchivedSet = true
+		params.Archived = *archived
+	}
+	if cursor := page.Cursor(); cursor != nil {
+		params.CursorSet = true
+		params.CursorActiveAt = pgtype.Timestamptz{Time: cursor.CreatedAt, Valid: true}
+		params.CursorID = uuid(cursor.ID)
+	}
 	return params
 }
 

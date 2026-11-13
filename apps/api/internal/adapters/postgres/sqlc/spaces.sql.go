@@ -1061,6 +1061,94 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 	return items, nil
 }
 
+const listTenantSpacesByActivity = `-- name: ListTenantSpacesByActivity :many
+select s.id, s.name, s.tenant_id, s.slug, s.media_plane, s.media_plane_setting_written, s.media_plane_setting_against, s.media_plane_setting, s.metadata, s.recurring_policy, s.admission_policy, s.recording_policy, s.transcription_policy, s.transcript_language, s.default_episode_duration_seconds, s.maximum_episode_duration_seconds, s.linger_window_seconds, s.created_by_user_id, s.updated_at, s.created_at, s.archived_at, a.active_at
+from space_activity a
+join spaces s on s.tenant_id = a.tenant_id and s.id = a.space_id
+where
+    a.tenant_id = $1
+    and (
+        not $2::boolean
+        or ($3::boolean and s.archived_at is not null)
+        or (not $3::boolean and s.archived_at is null)
+    )
+    and (
+        not $4::boolean
+        or (a.active_at, a.space_id) < (
+            $5::timestamptz,
+            $6::uuid
+        )
+    )
+order by a.active_at desc, a.space_id desc
+limit $7::integer
+`
+
+type ListTenantSpacesByActivityParams struct {
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	ArchivedSet    bool               `json:"archived_set"`
+	Archived       bool               `json:"archived"`
+	CursorSet      bool               `json:"cursor_set"`
+	CursorActiveAt pgtype.Timestamptz `json:"cursor_active_at"`
+	CursorID       pgtype.UUID        `json:"cursor_id"`
+	PageSize       int32              `json:"page_size"`
+}
+
+type ListTenantSpacesByActivityRow struct {
+	Space    Space              `json:"space"`
+	ActiveAt pgtype.Timestamptz `json:"active_at"`
+}
+
+func (q *Queries) ListTenantSpacesByActivity(ctx context.Context, arg ListTenantSpacesByActivityParams) ([]ListTenantSpacesByActivityRow, error) {
+	rows, err := q.db.Query(ctx, listTenantSpacesByActivity,
+		arg.TenantID,
+		arg.ArchivedSet,
+		arg.Archived,
+		arg.CursorSet,
+		arg.CursorActiveAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTenantSpacesByActivityRow
+	for rows.Next() {
+		var i ListTenantSpacesByActivityRow
+		if err := rows.Scan(
+			&i.Space.ID,
+			&i.Space.Name,
+			&i.Space.TenantID,
+			&i.Space.Slug,
+			&i.Space.MediaPlane,
+			&i.Space.MediaPlaneSettingWritten,
+			&i.Space.MediaPlaneSettingAgainst,
+			&i.Space.MediaPlaneSetting,
+			&i.Space.Metadata,
+			&i.Space.RecurringPolicy,
+			&i.Space.AdmissionPolicy,
+			&i.Space.RecordingPolicy,
+			&i.Space.TranscriptionPolicy,
+			&i.Space.TranscriptLanguage,
+			&i.Space.DefaultEpisodeDurationSeconds,
+			&i.Space.MaximumEpisodeDurationSeconds,
+			&i.Space.LingerWindowSeconds,
+			&i.Space.CreatedByUserID,
+			&i.Space.UpdatedAt,
+			&i.Space.CreatedAt,
+			&i.Space.ArchivedAt,
+			&i.ActiveAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reserveSpaceCreateRequest = `-- name: ReserveSpaceCreateRequest :one
 insert into space_create_requests (
     tenant_id,

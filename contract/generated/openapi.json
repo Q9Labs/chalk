@@ -5376,6 +5376,15 @@
           },
           {
             "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": ["created", "active"],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "page_size",
             "required": false,
             "schema": {
@@ -5411,7 +5420,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_archive_filter", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "space.invalid_archive_filter", "space.invalid_order", "tenant.invalid_id"]
           },
           "401": {
             "content": {
