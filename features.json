@@ -724,6 +724,7 @@
         "sdks/typescript/client/docs",
         "sdks/typescript/client/package.json",
         "sdks/typescript/client/scripts",
+        "sdks/typescript/client/src/api-urls.ts",
         "sdks/typescript/client/src/client.ts",
         "sdks/typescript/client/src/collaboration",
         "sdks/typescript/client/src/connection",

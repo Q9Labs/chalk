@@ -67,11 +67,13 @@ function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallE
 function recordingEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const was = previous.recording.current;
   const now = next.recording.current;
-  const wasRecording = was?.status === "recording";
-  const nowRecording = now?.status === "recording";
   if (now?.status === "failed") return was?.status === "failed" && was.recordingId === now.recordingId ? [] : [{ kind: "recordingFailed", failureCode: now.failureCode }];
-  if (nowRecording) return wasRecording ? [] : [{ kind: "recordingStarted" }];
-  return wasRecording ? [{ kind: "recordingStopped" }] : [];
+  return recordingToggleEvents(was?.status === "recording", now?.status === "recording");
+}
+
+function recordingToggleEvents(wasRecording: boolean, nowRecording: boolean): CallEvent[] {
+  if (wasRecording === nowRecording) return [];
+  return [{ kind: nowRecording ? "recordingStarted" : "recordingStopped" }];
 }
 
 function deviceEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
