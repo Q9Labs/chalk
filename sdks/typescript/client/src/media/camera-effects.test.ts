@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cameraEffectFailure } from "./camera-effects";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
-import { captureClient, track, stream } from "./camera-effects.test.helpers";
+import { captureClient, track, stream } from "../space-client/capture.test.helpers";
 import { openCameraEffectsTrack as createCameraEffectsTrack, getCameraBackgroundFallback, processCameraStream, setCameraBackground, configureCameraEffectProvider } from "./camera-effects";
 import { getCameraBackground } from "./camera-effect-operations";
 

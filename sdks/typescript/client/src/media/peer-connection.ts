@@ -85,3 +85,8 @@ export function withDeadline<T>(operation: Promise<T>, ms: number, expired: () =
   });
   return Promise.race([operation, deadline]).finally(() => globalThis.clearTimeout(timer));
 }
+
+/** The transceiver whose receiver carries `track`. */
+export function transceiverOf(connection: RTCPeerConnection, track: MediaStreamTrack): RTCRtpTransceiver | undefined {
+  return connection.getTransceivers().find((item) => item.receiver.track === track);
+}

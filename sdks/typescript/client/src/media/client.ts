@@ -23,6 +23,7 @@ import {
   requireTransceiverMid,
   safeStopTrack,
   safeStopTransceiver,
+  transceiverOf,
   withDeadline,
 } from "./peer-connection";
 import { createCallStatsCollector } from "./call-stats";
@@ -1527,7 +1528,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #receiversOf(publications: readonly CloudflareSFURemoteTrack[]) {
     return publications.flatMap((publication) => {
-      const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
+      const transceiver = transceiverOf(this.#connection, publication.track);
       return transceiver?.mid && !this.#closedReceiverTracks.has(publication.track) ? [{ publication, transceiver, mid: transceiver.mid }] : [];
     });
   }
@@ -1591,7 +1592,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // Returns the publications whose update failed.
   async #setVideoPaused(entries: readonly RemoteTrackEntry[], paused: boolean, generation: number): Promise<ReadonlySet<string>> {
     const targets = entries.flatMap(([, publication]) => {
-      const mid = this.#connection.getTransceivers().find((transceiver) => transceiver.receiver.track === publication.track)?.mid;
+      const mid = transceiverOf(this.#connection, publication.track)?.mid;
       const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
       return mid ? [{ publication, request: { location: "remote", mid, sessionId: connectionId, trackName, paused } satisfies CloudflareSFUTrackRequest }] : [];
     });
@@ -1753,7 +1754,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const connection = this.#connection;
       const receivers = stalled.map((publication) => {
         const remote = [...this.#remoteTracks.values()].find((track) => track.publicationId === publication.publicationId);
-        const transceiver = connection.getTransceivers().find((item) => item.receiver.track === remote?.track);
+        const transceiver = remote && transceiverOf(connection, remote.track);
         if (!transceiver || transceiver.mid === null) throw new CloudflareSFUError("The stalled receiver has no negotiated MID", "media_failed");
         return { publication, transceiver, mid: transceiver.mid };
       });
@@ -2018,7 +2019,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const batch = [...this.#viewerLayerPending.values()]
       .filter((change) => !this.#viewerPaused.has(change.publicationId))
       .flatMap((change) => {
-        const mid = connection.getTransceivers().find((transceiver) => transceiver.receiver.track === change.track)?.mid;
+        const mid = transceiverOf(connection, change.track)?.mid;
         return mid === null || mid === undefined ? [] : [{ change, mid }];
       })
       .slice(0, VIEWER_LAYER_BATCH_SIZE);
@@ -2090,10 +2091,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // The SFU's subscription state decides whether a quiet video is stalled or paused for network.
   #observeDelivery(now: number, connection: RTCPeerConnection, received: readonly CloudflareSFURemoteTrack[], advanced: ReadonlySet<string>, current: () => boolean): void {
-    const transceivers = connection.getTransceivers();
     const videos = received.flatMap((publication): DeliveredVideo[] => {
       if (!isVideoPublication(publication)) return [];
-      const mid = transceivers.find((transceiver) => transceiver.receiver.track === publication.track)?.mid;
+      const mid = transceiverOf(connection, publication.track)?.mid;
       if (!mid) return [];
       const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
       return [{ publicationId: publication.publicationId, trackId: publication.track.id, mid, sessionId: connectionId, trackName }];
