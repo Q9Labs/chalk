@@ -18,11 +18,6 @@ variable "size" {
   description = "Droplet size. Production runs s-2vcpu-2gb; staging stays on s-1vcpu-1gb. Resizing changes CPU and RAM only, never the disk."
   type        = string
   default     = "s-1vcpu-1gb"
-
-  validation {
-    condition     = contains(["s-1vcpu-1gb", "s-2vcpu-2gb"], var.size)
-    error_message = "size must be s-1vcpu-1gb or s-2vcpu-2gb, the sizes the design budgets for."
-  }
 }
 
 variable "ssh_key_name" {
@@ -32,7 +27,7 @@ variable "ssh_key_name" {
 }
 
 variable "control_addresses" {
-  description = "Public addresses, in CIDR form, of the API hosts allowed to reach control on TCP 8443."
+  description = "Public addresses, in CIDR form, of the API hosts allowed to reach the control port."
   type        = list(string)
 
   validation {
@@ -45,10 +40,4 @@ variable "ssh_addresses" {
   description = "Addresses, in CIDR form, allowed to reach SSH. Password login is off; only the operator key works."
   type        = list(string)
   default     = ["0.0.0.0/0", "::/0"]
-}
-
-variable "media_port" {
-  description = "The one port every peer shares: UDP (SFU_UDP_ADDR) and, for peers whose network blocks UDP, TCP (SFU_TCP_ADDR)."
-  type        = number
-  default     = 50000
 }

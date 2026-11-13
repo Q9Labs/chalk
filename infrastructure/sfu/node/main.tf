@@ -1,5 +1,9 @@
 locals {
-  name = "chalk-sfu-${var.environment}"
+  # The SFU's own node table: the ports and the sizes it was load-tested on.
+  table        = jsondecode(file("${path.module}/../../../features/media/sfu/internal/config/node.json"))
+  control_port = local.table.ports.control
+  media_port   = local.table.ports.media
+  name         = "chalk-sfu-${var.environment}"
   # chalk-sfu marks every own-SFU node; the second tag names its environment.
   # The droplet creates them by name, so neither environment's state owns them.
   tags = ["chalk-sfu", var.environment == "production" ? "chalk-sfu-prod" : "chalk-sfu-staging"]
@@ -26,10 +30,17 @@ resource "digitalocean_droplet" "node" {
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     control_addresses = var.control_addresses
     ssh_addresses     = var.ssh_addresses
-    media_port        = var.media_port
+    control_port      = local.control_port
+    udp_buffer        = local.table.udpBufferBytes
+    media_port        = local.media_port
   })
 
   lifecycle {
+    precondition {
+      condition     = contains(keys(local.table.sizes), var.size)
+      error_message = "size must be one of ${join(", ", keys(local.table.sizes))}, the sizes in node.json."
+    }
+
     # Changing the bootstrap of a live node would replace it and drop its calls.
     # Rebuild a node deliberately with `tofu apply -replace`.
     ignore_changes = [user_data, ssh_keys, image]
@@ -37,27 +48,27 @@ resource "digitalocean_droplet" "node" {
 }
 
 # The node's ufw mirrors these control and SSH sources: first boot sets it, and
-# features/media/sfu/deploy/deploy matches it to this firewall after every change.
+# infrastructure/sfu/deploy matches it to this firewall after every change.
 resource "digitalocean_firewall" "node" {
   name        = local.name
   droplet_ids = [digitalocean_droplet.node.id]
 
   inbound_rule {
     protocol         = "udp"
-    port_range       = tostring(var.media_port)
+    port_range       = tostring(local.media_port)
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   # A peer whose network blocks UDP reaches the node on the same port over TCP (SFU_TCP_ADDR).
   inbound_rule {
     protocol         = "tcp"
-    port_range       = tostring(var.media_port)
+    port_range       = tostring(local.media_port)
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   inbound_rule {
     protocol         = "tcp"
-    port_range       = "8443"
+    port_range       = tostring(local.control_port)
     source_addresses = var.control_addresses
   }
 

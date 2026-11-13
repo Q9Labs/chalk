@@ -40,7 +40,7 @@ func TestMalformedSDPStaysOnTheNode(t *testing.T) {
 	t.Cleanup(node.Close)
 
 	scope := protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: "alice", Generation: 1}
-	created, err := node.CreateSession("create-1", scope)
+	created, err := node.Create("create-1", scope, media.ParticipantSession, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

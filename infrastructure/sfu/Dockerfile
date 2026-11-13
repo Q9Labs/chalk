@@ -7,11 +7,12 @@ FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /src
+# go.mod replaces the protocol module with ./protocol, so it must be here before the download.
 COPY go.mod go.sum ./
+COPY protocol ./protocol
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
-COPY protocol ./protocol
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
@@ -29,5 +30,4 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /out/chalk-sfu /usr/local/bin/chalk-sfu
 
 USER 65532:65532
-EXPOSE 8443/tcp 50000/udp 50000/tcp
 ENTRYPOINT ["/usr/local/bin/chalk-sfu"]
