@@ -117,6 +117,17 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
 });
 
+test("a change to the release scripts, the managed-host controller or the scorecard runs the release contracts in the checks group", () => {
+  for (const file of ["scripts/releases/test_release.py", "scripts/releases/release.py", "infrastructure/managed-episode/controller/chalk-deployment-controller", "features/scorecard/evaluate.mjs", "perf/budgets.json"]) {
+    assert.ok(selected([file], "pull_request").includes("release-contracts"), file);
+    assert.ok(selected([file], "merge_group").includes("release-contracts"), file);
+  }
+  assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "release-contracts").selected);
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("release-contracts"));
+  assert.equal(laneGroup("release-contracts"), "checks");
+});
+
 const queueJobs = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"], full: false };
 const proof = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] };
 const noDrift = { api: false, sync: false, rootGroups: ["checks"], planFull: false, entries: 1 };

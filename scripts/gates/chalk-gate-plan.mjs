@@ -22,6 +22,8 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 const workflowGraphRoots = [".github/workflows", "features/scorecard"];
+// What the release tests and the plan contracts read: the release scripts, the managed-host controller and its units, and the scorecard and budgets whose verdicts the release scripts act on.
+const releaseContractRoots = ["scripts/releases", "infrastructure/managed-episode", "features/scorecard", "perf/budgets.json"];
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -442,6 +444,7 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
@@ -471,6 +474,7 @@ export function createGatePlan(files, options = {}) {
       "features/scorecard/nightly-graph.test.mjs",
       "features/scorecard/lease-arguments.test.mjs",
     ]),
+    task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
