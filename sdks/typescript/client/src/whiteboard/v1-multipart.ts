@@ -82,7 +82,7 @@ export class WhiteboardV1UpdateAssembler {
   }
 }
 
-export function whiteboardV1UpdateAssemblyKey(frame: Pick<UpdatePartFrame, "operation_id" | "scene_id" | "revision">): string {
+function whiteboardV1UpdateAssemblyKey(frame: Pick<UpdatePartFrame, "operation_id" | "scene_id" | "revision">): string {
   return `${frame.scene_id}:${frame.revision}:${frame.operation_id}`;
 }
 
