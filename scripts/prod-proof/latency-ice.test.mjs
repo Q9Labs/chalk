@@ -74,7 +74,7 @@ function pageWith(now = () => 100, extra = {}) {
   return context;
 }
 
-const ice = (local_type, remote_type, requests_sent, responses_received, read_after_ms = null) => ({ local_type, remote_type, relay_protocol: null, requests_sent, responses_received, read_after_ms });
+const ice = (local_type, remote_type, requests_sent, responses_received, read_after_ms = null, protocol = "udp") => ({ local_type, remote_type, protocol, relay_protocol: null, requests_sent, responses_received, read_after_ms });
 
 test("a connecting peer leaves only a marker, and the pair is read later by readIce", async () => {
   let reads = 0;
@@ -169,7 +169,7 @@ test("hostile stats give nulls or no reading, never a throw, and the connection 
   const nonsense = pageWith();
   new nonsense.RTCPeerConnection(async () => chromeStats({ local: "carrier-pigeon", remote: 7, requestsSent: -3, responsesReceived: "five", pair: { localCandidateId: { id: 1 } } })).connect();
   await nonsense.proofTrace.readIce();
-  assert.deepEqual(icePairOf(nonsense.proofTrace.take(0), 0), ice(null, null, null, null, 0));
+  assert.deepEqual(icePairOf(nonsense.proofTrace.take(0), 0), ice(null, null, null, null, 0, null));
 });
 
 // The measured join must be the same with and without the diagnostic. The judge's synthetic clock advances 5 s inside every getStats call,
@@ -245,8 +245,8 @@ test("the join reads no pair when its connection never connected, and ignores ma
   const connected = { t: 10, k: "ice_connected", peer: 3 };
   for (const d of [undefined, "{broken", "null", "[]", JSON.stringify({ peer: 4 }), JSON.stringify({ peer: "3" }), JSON.stringify({ since: 10 })]) assert.equal(icePairOf([connected, { t: 12, k: "ice_pair", d }], 0), null, String(d));
   const good = { t: 12, k: "ice_pair", d: JSON.stringify({ peer: 3, local: "host", remote: "host", requestsSent: 1, responsesReceived: 1, readAfterMs: 250 }) };
-  assert.deepEqual(icePairOf([connected, { t: 11, k: "ice_pair", d: "{broken" }, good], 0), ice("host", "host", 1, 1, 250), "a broken event does not hide a later good one");
-  assert.deepEqual(icePairOf([connected, { t: 12, k: "ice_pair", d: JSON.stringify({ peer: 3, local: "bogus", requestsSent: 1.5, responsesReceived: null, readAfterMs: -4 }) }], 0), ice(null, null, null, null, null));
+  assert.deepEqual(icePairOf([connected, { t: 11, k: "ice_pair", d: "{broken" }, good], 0), ice("host", "host", 1, 1, 250, null), "a broken event does not hide a later good one");
+  assert.deepEqual(icePairOf([connected, { t: 12, k: "ice_pair", d: JSON.stringify({ peer: 3, local: "bogus", requestsSent: 1.5, responsesReceived: null, readAfterMs: -4 }) }], 0), ice(null, null, null, null, null, null));
 });
 
 test("the summary counts pairs by type and gives p50 and p95 of the checks that got no reply", () => {

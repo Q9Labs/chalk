@@ -16,8 +16,9 @@ export const INTERRUPTION_MS = 2000;
  * @param {"fa" | "fv"} kind
  * @param {number} from
  * @param {number} until
- * @returns {{ gap_ms: number, stalled_at: number, back_at: number | null }}
- *   back_at is null when the flow never resumed before `until`.
+ * @returns {{ gap_ms: number, stalled_at: number, back_at: number | null, tail_ms: number }}
+ *   back_at is null when the flow never resumed before `until`. tail_ms is the silence at the very end, which can be shorter than the
+ *   longest gap: a recovered interruption followed by a second one that never ends has its longest gap behind it.
  */
 export function flowGap(samples, kind, from, until) {
   const times = samples.filter((sample) => sample[kind] && sample.t >= from && sample.t <= until).map((sample) => sample.t);
@@ -27,8 +28,9 @@ export function flowGap(samples, kind, from, until) {
     if (t - previous > best.gap_ms) best = { gap_ms: Math.round(t - previous), stalled_at: previous, back_at: t };
     previous = t;
   }
-  if (until - previous > best.gap_ms) best = { gap_ms: Math.round(until - previous), stalled_at: previous, back_at: null };
-  return best;
+  const tail_ms = Math.round(until - previous);
+  if (tail_ms > best.gap_ms) best = { gap_ms: tail_ms, stalled_at: previous, back_at: null };
+  return { ...best, tail_ms };
 }
 
 /**
@@ -46,16 +48,18 @@ export function recoveryOf(samples, { faultStart, faultEnd, watchEnd }) {
     Object.entries(kinds).map(([name, kind]) => {
       const gap = flowGap(samples, kind, from, watchEnd);
       const interrupted = gap.gap_ms > INTERRUPTION_MS;
+      // Media is stopped when observation ends if the last stretch of silence is itself an interruption, whatever the longest gap was.
+      const unresolved = gap.back_at === null || gap.tail_ms > INTERRUPTION_MS;
       return [
         name,
         {
           interrupted,
           longest_gap_s: seconds(gap.gap_ms),
-          // Seconds from the end of the fault to the first packet or frame after the interruption; null when it never came back, and
-          // 0 when the flow resumed while the fault still held.
-          back_after_fault_end_s: !interrupted ? null : gap.back_at === null ? null : seconds(Math.max(0, gap.back_at - faultEnd)),
-          back_after_fault_start_s: !interrupted ? null : gap.back_at === null ? null : seconds(gap.back_at - faultStart),
-          never_back: interrupted && gap.back_at === null,
+          // Seconds from the end of the fault to the first packet or frame after the longest interruption; null when the media is
+          // stopped at the end of the watch (even after an earlier recovery), and 0 when the flow resumed while the fault still held.
+          back_after_fault_end_s: !interrupted || unresolved ? null : seconds(Math.max(0, gap.back_at - faultEnd)),
+          back_after_fault_start_s: !interrupted || unresolved ? null : seconds(gap.back_at - faultStart),
+          never_back: interrupted && unresolved,
         },
       ];
     }),
