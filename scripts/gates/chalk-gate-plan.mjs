@@ -594,7 +594,11 @@ export function laneEnvironment(laneId, taskEnv, changedFiles, explicitFiles) {
 }
 
 export function laneResult(laneId, result) {
-  if (!result.failed) return { status: "passed" };
+  if (!result.failed) {
+    // q9gate keeps a passing lane's output, so a demoted check's warning (scripts/gates/demoted.mjs) is printed here for Actions to see.
+    for (const line of String(result.stdout ?? "").split("\n")) if (line.startsWith("::warning title=Demoted check ")) console.log(line);
+    return { status: "passed" };
+  }
   const message = [result.stdout, result.stderr].filter(Boolean).join("\n") || `${laneId} failed`;
   return { status: "failed", findings: [{ file: "gate.config.ts", rule: laneId, message }] };
 }
