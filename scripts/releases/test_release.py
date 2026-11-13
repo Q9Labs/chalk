@@ -17,7 +17,33 @@ from datetime import datetime, timezone
 
 from github_release import GitHub, digest, first_cut_of_day, payload
 
-SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
+FIXTURES = Path(__file__).parent / 'fixtures'
+# The commit the nightly fixture card scores: one commit holding perf/budgets.json as it was at 693cb26f (8 Nov 2026),
+# with fixed authorship and dates so its SHA never changes. The evaluator reads budgets with `git show <sha>:perf/budgets.json`,
+# so the tests build that commit themselves instead of needing an old commit in the checkout's history, which a shallow clone lacks.
+SHA = '8e7a9381803d7e24e924a0f847250ec6c2bb390a'
+EVALUATE = str(Path(__file__).resolve().parents[2] / 'features/scorecard/evaluate.mjs')
+SCORED = None
+
+
+def setUpModule():
+    global SCORED
+    directory = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(directory.cleanup)
+    SCORED = Path(directory.name)
+    environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1',
+                   'GIT_AUTHOR_NAME': 'Test', 'GIT_AUTHOR_EMAIL': 'test@example.com', 'GIT_AUTHOR_DATE': '2026-11-08T00:00:00Z',
+                   'GIT_COMMITTER_NAME': 'Test', 'GIT_COMMITTER_EMAIL': 'test@example.com', 'GIT_COMMITTER_DATE': '2026-11-08T00:00:00Z'}
+    git = lambda *command: subprocess.run(['git', *command], cwd=SCORED, env=environment, check=True,
+                                          capture_output=True, text=True).stdout
+    (SCORED / 'perf').mkdir()
+    (SCORED / 'perf/budgets.json').write_bytes((FIXTURES / 'perf_budgets.json').read_bytes())
+    git('init', '--quiet', '--initial-branch', 'main', '.')
+    git('add', 'perf/budgets.json')
+    git('commit', '--quiet', '--no-gpg-sign', '-m', 'budgets')
+    revision = git('rev-parse', 'HEAD').strip()
+    if revision != SHA:
+        raise AssertionError(f'the scored fixture commit is {revision}, want {SHA}')
 OTHER_SHA = 'b' * 40
 RUN = '123'
 
@@ -25,7 +51,7 @@ RUN = '123'
 def complete(card, budgets=None):
     """Add the gated chalk_sfu action metrics the card lacks, well under their ceilings, as evaluate.mjs requires."""
     if budgets is None:
-        budgets = json.loads(subprocess.check_output(['git', 'show', f'{SHA}:perf/budgets.json'], cwd=release.ROOT, text=True))['budgets']
+        budgets = json.loads((FIXTURES / 'perf_budgets.json').read_text())['budgets']
     have = {metric['id'] for metric in card['metrics']}
     for key, entry in sorted(budgets.items()):
         metric = key.removeprefix('chalk_sfu.')
@@ -404,8 +430,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 path = Path(directory) / 'card.json'
                 path.write_text(json.dumps(complete(card)))
                 verdict_output = Path(directory) / 'output'
-                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)],
-                                        cwd=release.ROOT, capture_output=True, text=True,
+                result = subprocess.run(['node', EVALUATE, SHA, RUN, str(path)],
+                                        cwd=SCORED, capture_output=True, text=True,
                                         env={**os.environ, 'GITHUB_OUTPUT': str(verdict_output)})
                 self.assertEqual(result.returncode, 0 if passing else 1, result.stderr)
                 verdict = json.loads(result.stdout)
@@ -448,14 +474,14 @@ class OwnSfuPromotionTests(unittest.TestCase):
             for metric in fixture['metrics']:
                 metric['p95'] = 100
             own.write_text(json.dumps(complete(fixture)))
-            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path), str(own)], cwd=release.ROOT,
+            result = subprocess.run(['node', EVALUATE, SHA, RUN, str(path), str(own)], cwd=SCORED,
                                     capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)['gated_metrics'], [])
 
     def evaluate(self, *card_paths):
-        result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, *card_paths],
-                                cwd=release.ROOT, capture_output=True, text=True,
+        result = subprocess.run(['node', EVALUATE, SHA, RUN, *card_paths],
+                                cwd=SCORED, capture_output=True, text=True,
                                 env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
         self.assertEqual(result.returncode, 1, result.stderr)
         return json.loads(result.stdout)
@@ -466,8 +492,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'proof.json'
             path.write_text(json.dumps(fixture))
-            command = ['node', 'features/scorecard/evaluate.mjs']
-            run = lambda *flags: subprocess.run([*command, *flags, SHA, RUN, str(path)], cwd=release.ROOT, capture_output=True,
+            command = ['node', EVALUATE]
+            run = lambda *flags: subprocess.run([*command, *flags, SHA, RUN, str(path)], cwd=SCORED, capture_output=True,
                                                 text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
             self.assertEqual(json.loads(run().stdout)['result'], 'missing')
             deferred = run('--latency-deferred')
@@ -475,7 +501,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
 
     def test_the_cut_needs_no_own_card_when_latency_is_deferred(self):
         # The cut's proofs write no scorecard; the staging latency run supplies the own-SFU card that Promote reads next to the cut.
-        result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', '--latency-deferred', SHA, RUN], cwd=release.ROOT,
+        result = subprocess.run(['node', EVALUATE, '--latency-deferred', SHA, RUN], cwd=SCORED,
                                 capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((json.loads(result.stdout)['result'], json.loads(result.stdout)['missing_items']), ('passed', []))
@@ -557,7 +583,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 for index, card in enumerate(cards):
                     paths.append(Path(directory) / f'card{index}.json')
                     paths[-1].write_text(json.dumps(card))
-                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, *map(str, paths)], cwd=release.ROOT,
+                result = subprocess.run(['node', EVALUATE, SHA, RUN, *map(str, paths)], cwd=SCORED,
                                         capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
                 verdict = json.loads(result.stdout)
                 self.assertEqual(verdict['result'], expected)
@@ -566,7 +592,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 self.assertEqual(verdict['gated_metrics'], [])
 
     def test_budget_limits_come_from_scored_commit_not_newer_checkout(self):
-        script = release.ROOT / 'features/scorecard/evaluate.mjs'
+        script = EVALUATE
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
         budgets = json.loads((release.ROOT / 'perf/budgets.json').read_text())
         fixture['metrics'] = [dict(id='action.join.first_audio_ms', unit='ms', n=20, p50=100, p95=300, source='latency-kit')]
@@ -620,7 +646,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'card.json'
             path.write_text(json.dumps(card))
-            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
+            result = subprocess.run(['node', EVALUATE, SHA, RUN, str(path)], cwd=SCORED,
                                     capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, '')
