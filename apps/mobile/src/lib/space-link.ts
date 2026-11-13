@@ -2,10 +2,7 @@ import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
 import { getApiBaseURL } from "./mobile-config";
-
-const NIGHTLY_API = "https://nightly-api.chalkmeet.com";
-const NIGHTLY_WEB_HOST = "nightly.chalkmeet.com";
-const CHALK_WEB_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"];
+import origins from "./origins.json";
 
 export type SpaceRoute = {
   readonly kind: "space";
@@ -18,10 +15,10 @@ export type SpaceRoute = {
 
 /** On the nightly build, a link on the nightly web host is read as the production link it mirrors. */
 function productionLink(link: string): string {
-  if (getApiBaseURL() !== NIGHTLY_API) return link;
+  if (getApiBaseURL() !== origins.nightlyApiBaseURL) return link;
   try {
     const url = new URL(link);
-    if (url.protocol !== "https:" || url.hostname !== NIGHTLY_WEB_HOST || url.username || url.password || url.port) return link;
+    if (url.protocol !== "https:" || url.hostname !== origins.nightlyWebHost || url.username || url.password || url.port) return link;
     url.hostname = "chalkmeet.com";
     return url.toString();
   } catch {
@@ -62,8 +59,8 @@ function parseUrl(input: string): URL | undefined {
 }
 
 function isChalkWebLink(url: URL): boolean {
-  const isNightlyHost = url.hostname === NIGHTLY_WEB_HOST && getApiBaseURL() === NIGHTLY_API;
-  return (url.protocol === "https:" || url.protocol === "http:") && (CHALK_WEB_HOSTS.includes(url.hostname) || isNightlyHost);
+  const isNightlyHost = url.hostname === origins.nightlyWebHost && getApiBaseURL() === origins.nightlyApiBaseURL;
+  return (url.protocol === "https:" || url.protocol === "http:") && (origins.webHosts.includes(url.hostname) || isNightlyHost);
 }
 
 async function openInBrowser(url: URL): Promise<void> {

@@ -562,7 +562,6 @@
         "apps/mobile/package.json",
         "apps/mobile/src/brand",
         "apps/mobile/src/lib/mobile-config.ts",
-        "apps/mobile/src/privacy",
         "apps/mobile/src/screens",
         "apps/mobile/tsconfig.json",
         "apps/sync/.credo.exs",
