@@ -4,6 +4,7 @@ import { errorMessage } from "../../lib/dashboard/client";
 import { linkParts } from "../../lib/dashboard/format";
 import { trapDialogFocus } from "../docs/dialog-focus";
 import { ChalkToast } from "@q9labsai/chalk-react/toast";
+import { CopyButton } from "../site/CopyButton";
 import { Icon, type IconName } from "../site/Icon";
 
 const PHONE = "(max-width: 640px)";
@@ -355,6 +356,8 @@ export function ErrorPanel({ title, detail, onRetry, more }: { readonly title: s
 }
 
 /** Puts text on the clipboard. Success is the control's own copy-to-check morph, so only a failure raises a toast. */
+const COPY_FAILED = "Couldn’t copy. Select the text to copy it.";
+
 export function useCopy() {
   const [copied, setCopied] = useState(false);
   const toast = useToast();
@@ -369,7 +372,7 @@ export function useCopy() {
         await navigator.clipboard.writeText(typeof text === "string" ? text : await text());
         setCopied(true);
       } catch {
-        toast("Couldn’t copy. Select the text to copy it.", { icon: "alert" });
+        toast(COPY_FAILED, { icon: "alert" });
       }
     },
     [toast],
@@ -377,20 +380,10 @@ export function useCopy() {
   return { copied, copy };
 }
 
-/** The one copy control: a round icon button whose copy icon morphs to a check, with a tooltip naming what it copies. */
+/** The dashboard's copy control: the site's copy button, whose tooltip names what it copies, and a toast when a copy fails. */
 export function CopyAction({ text, label = "Copy link" }: { readonly text: string | (() => Promise<string>); readonly label?: string }) {
-  const { copied, copy } = useCopy();
-  return (
-    <button type="button" className={copied ? "ib copy ok" : "ib copy"} aria-label={copied ? "Copied" : label} data-tip onClick={() => void copy(text)}>
-      <span className="copy-glyph" aria-hidden="true">
-        <Icon name="copy" />
-        <Icon name="check" />
-      </span>
-      <span className="sr" role="status">
-        {copied ? "Copied" : ""}
-      </span>
-    </button>
-  );
+  const toast = useToast();
+  return <CopyButton text={text} label={label} onFailed={() => toast(COPY_FAILED, { icon: "alert" })} />;
 }
 
 /** A link as people read it, in a field with its copy control at the end. */

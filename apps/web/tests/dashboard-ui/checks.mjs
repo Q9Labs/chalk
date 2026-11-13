@@ -84,7 +84,11 @@ try {
     const reads = () => fixture("log").then((log) => log.filter((entry) => entry.method === "GET" && entry.path === "/dashboard-api/call-invite"));
     check("Home loads without fetching any invite links", (await reads()).length === 0);
     await tab.getByRole("button", { name: "Copy link", exact: true }).first().click();
-    await tab.getByRole("button", { name: "Copied", exact: true }).waitFor();
+    await tab
+      .getByRole("status")
+      .filter({ hasText: /^Copied$/ })
+      .first()
+      .waitFor();
     const link = await tab.evaluate(() => navigator.clipboard.readText());
     check("Home copies one invite despite unrelated Call history failures", (await reads()).length === 1 && /^https:\/\/chalkmeet\.com\/[a-z]+(?:-[a-z]+){2,3}$/.test(link));
     await context.close();
