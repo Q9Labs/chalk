@@ -1486,6 +1486,7 @@ export interface components {
       incarnation: number;
       publications: {
         participant_id: components["schemas"]["ParticipantId"];
+        paused?: boolean;
         publication_id: string;
         source: string;
       }[];

@@ -156,23 +156,39 @@ def defer_cut(github, target, reason, *, manual, records=None):
     if manual:
         github.dispatch_nightly()
         print('Nightly: manual request requeued on master with fresh orchestration')
+        with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+            summary.write('The manual request was requeued on master as a new run.\n')
     outputs(dict(should_cut=False, target_sha=target))
 
 
+def record_sha(item):
+    return payload(item).get('target_sha') or item['sha']
+
+
 def plan(github, args):
-    tip = github.request('git/ref/heads/master')['object']['sha']
-    if tip != env('GITHUB_SHA'):
-        defer_cut(github, tip, 'workflow revision is not the current master tip', manual=args.manual)
+    # A run cuts the revision it started on, not the master tip: the merge queue lands a commit every 20 to 40 minutes
+    # and `plan` can wait 30 for a runner, so a tip check at this point almost never passed. The workflow revision
+    # supplies the deploy tooling and the target is that revision or an ancestor, so both stay one consistent commit.
+    revision = env('GITHUB_SHA')
+    if not github.is_on_master(revision):
+        defer_cut(github, revision, 'workflow revision is not on master', manual=args.manual)
         return
-    # The schedule ships the newest commit whose push Gate already passed and never waits: master pushes supersede each
-    # other, so the tip may have no Gate, or one still queued behind the running one. A manual cut ships the tip and
-    # refuses at once when its Gate has not passed, instead of holding a runner for a Gate that takes longer than the wait.
-    newest_green = github.newest_green_push_gate()
-    target = tip if args.manual else newest_green
+    # The schedule ships the newest commit at or before the revision whose push Gate already passed and never waits:
+    # master pushes supersede each other, so the revision may have no Gate, or one still queued behind the running one.
+    # A manual cut ships the revision and refuses at once when its Gate has not passed, instead of holding a runner
+    # for a Gate that takes longer than the wait.
+    newest_green = github.newest_green_push_gate(revision)
+    target = revision if args.manual else newest_green
     if not target:
-        defer_cut(github, tip, 'no master commit has a successful push Gate', manual=False)
+        defer_cut(github, revision, 'no master commit up to the workflow revision has a successful push Gate', manual=False)
         return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
+    # A newer commit was already cut or reserved, and cutting this target would roll nightly back. It is not requeued:
+    # a fresh run starts on a revision at least as new, and the newer record already answers the request.
+    newer = next((sha for sha in map(record_sha, records) if sha != target and github.is_ancestor(target, sha)), None)
+    if newer:
+        defer_cut(github, target, f'nightly already has the newer commit {newer}', manual=False, records=records)
+        return
     now = datetime.now(timezone.utc)
     cut, reason = cut_decision(target, records, now, args.manual)
     print(f'Nightly: {reason}; target {target}')
@@ -198,9 +214,6 @@ def plan(github, args):
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
-        if github.request('git/ref/heads/master')['object']['sha'] != tip:
-            defer_cut(github, target, 'master moved during planning', manual=args.manual, records=records)
-            return
         github.reserve_cut(target)
     outputs(result)
 
@@ -316,7 +329,7 @@ def summarize_override(audit):
                           + json.dumps(audit, indent=2) + '\n```\n')
 
 
-def select(github, args):
+def choose(github):
     records = github.deployments('nightly')
     held = held_candidates(records)
     require(held, 'no held nightly')
@@ -336,10 +349,31 @@ def select(github, args):
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
     if audit:
         result['scorecard_override'] = audit
+    return result
+
+
+def select(github, args):
+    result = choose(github)
     outputs({'selection': result})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write('## Exact promotion choice and rollback source\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
-    summarize_override(audit)
+    summarize_override(result.get('scorecard_override'))
+
+
+def auto_promote(github, args):
+    """Name the SHA Promote takes now, or nothing. Not ready is an answer, not a failure: the next latency verdict asks again."""
+    os.environ.pop('EXPECTED_RELEASE_SHA', None)
+    os.environ.pop('SCORECARD_OVERRIDE', None)  # Only a person accepts a failed gate.
+    try:
+        result = choose(github)
+        sha = result['selection']['target_sha']
+        require(result['previous']['target_sha'] != sha, f'production already runs {sha}')
+        reason = f'promoting {sha}'
+    except ValueError as error:
+        sha, reason = '', str(error)
+    outputs({'sha': sha})
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f'## Automatic promotion\n\n{"Promoting" if sha else "Not promoting"}: {reason}\n')
 
 
 def deployed_cut(github):
@@ -558,7 +592,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

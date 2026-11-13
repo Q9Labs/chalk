@@ -148,6 +148,9 @@ type Publication struct {
 	Source        mediaplane.PublicationSource
 	Enabled       bool
 	PublicationID string
+	// Held marks a publication its owner muted in place: disabled, still open on the SFU, and still listed to listeners.
+	// It is stored so that retiring it, when its owner leaves or reconnects, advances the cursor like any other change.
+	Held bool
 }
 
 type ObservationInput struct {
@@ -215,6 +218,7 @@ type canonicalPublication struct {
 	Source        mediaplane.PublicationSource `json:"source"`
 	Enabled       bool                         `json:"enabled"`
 	PublicationID *string                      `json:"publication_id"`
+	Held          bool                         `json:"held,omitempty"`
 }
 
 func (input OperationInput) Canonicalize() (CanonicalOperation, error) {
@@ -438,7 +442,7 @@ func (input ObservationInput) Canonicalize() (ObservationInput, [32]byte, json.R
 	})
 	publications := make([]canonicalPublication, len(input.Publications))
 	for index, publication := range input.Publications {
-		canonical := canonicalPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, Enabled: publication.Enabled}
+		canonical := canonicalPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, Enabled: publication.Enabled, Held: publication.Held}
 		if publication.PublicationID != "" {
 			canonical.PublicationID = &publication.PublicationID
 		}

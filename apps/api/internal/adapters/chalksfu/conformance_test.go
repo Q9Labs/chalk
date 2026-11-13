@@ -219,6 +219,34 @@ func TestConformanceSignaling(t *testing.T) {
 		}
 	})
 
+	t.Run("a publication held in place stays on the node, so a pull of it reports nothing missing", func(t *testing.T) {
+		hold := func(paused bool) {
+			t.Helper()
+			held, err := service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{
+				ConnectionID: aliceConn, Scope: alice,
+				Tracks: []mediaplane.Track{{Location: "local", Mid: aliceMid, TrackName: "alice-mic", Source: "microphone", Paused: &paused}},
+			})
+			if err != nil || len(held.TrackErrors) != 0 {
+				t.Fatalf("hold=%t: %+v, %v", paused, held, err)
+			}
+		}
+		hold(true)
+		defer hold(false)
+		state, err := service.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: aliceConn, Scope: alice})
+		if err != nil || len(state.Tracks) != 1 || state.Tracks[0].Active {
+			t.Fatalf("held publication inspect = %+v, %v; want it listed and not active", state, err)
+		}
+		carol := scopeOf("ep-signal", "carol")
+		carolConn, _ := join(t, service, carol)
+		late, err := service.AddTracks(ctx, mediaplane.TracksRequest{
+			ConnectionID: carolConn, Scope: carol,
+			Tracks: []mediaplane.Track{{Location: "remote", SessionID: aliceConn, TrackName: "alice-mic"}},
+		})
+		if err != nil || len(late.Tracks) != 1 || len(late.TrackErrors) != 0 {
+			t.Fatalf("pull of a held publication = %+v, %v; want it pulled with no missing-publication error", late, err)
+		}
+	})
+
 	t.Run("inspect sees own and peer sessions and a gone one as absent", func(t *testing.T) {
 		own, err := service.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: aliceConn, Scope: alice})
 		if err != nil || !own.Found || len(own.Tracks) != 1 || !own.Tracks[0].Active {
