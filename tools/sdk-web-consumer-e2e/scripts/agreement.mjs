@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { setTimeout as wait } from "node:timers/promises";
-import { assertAgreement, assertNoResources, installAgreementProbe, sampleAgreement, truthIssues } from "../../../scripts/web-proof/agreement.mjs";
+import { assertAgreement, installAgreementProbe, sampleAgreement, truthIssues } from "../../../scripts/web-proof/agreement.mjs";
 import { recoveryBudgets } from "../../../scripts/web-proof/recovery-budgets.mjs";
 
 const recoveryTimeoutMs = recoveryBudgets().timeoutMs;
@@ -225,7 +225,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         assert.equal(await pages[0].getByRole("button", { name: "Try again", exact: true }).count(), 1);
         assert.equal(await pages[0].getByRole("button", { name: "Mute microphone", exact: true }).count(), 0);
         assert.equal(await pages[0].getByRole("button", { name: "Turn off camera", exact: true }).count(), 0);
-        await assertNoResources(pages[0]);
+        assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
         await replaceParticipant(pages, open);
       });
     await scenario("same participant takes over during media recovery", async (pages, open) => {
@@ -235,7 +235,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       const replacement = await replaceParticipant(pages, open);
       // The superseded tab must not regain publication authority in the background.
       await waitForState(pages[0], "failed", recoveryTimeoutMs);
-      await assertNoResources(pages[0]);
+      assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
       await agree([replacement, pages[1]]);
     });
   }

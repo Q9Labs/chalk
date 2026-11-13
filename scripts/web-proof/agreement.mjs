@@ -197,9 +197,3 @@ export async function playProofMedia() {
     await element.play();
   }
 }
-
-// The page reaches `failed` while its last timers are still being cleared, so a leak is a count that stays above zero.
-export async function assertNoResources(page) {
-  await page.waitForFunction(() => Object.values(window.__chalk.resources()).every((count) => count === 0), null, { timeout: 5_000 }).catch(() => undefined);
-  assert.deepEqual(await page.evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
-}
