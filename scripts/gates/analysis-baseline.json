@@ -319,8 +319,6 @@
     "apps/api/internal/adapters/chalksfu/fleet.go (*Fleet).Place": 16,
     "apps/api/cmd/recording-bundle/main.go run": 16,
     "apps/api/cmd/media-settings/main.go run": 16,
-    "features/mcp/api/server.go Bind": 23,
-    "features/mcp/api/server.go NewHandler": 17,
     "features/media/sfu/internal/media/reserve.go (*Node).ReserveEpisode": 31,
     "features/media/sfu/internal/media/session.go (*Session).UpdateTracks": 26,
     "features/media/sfu/internal/media/guard.go (*guard).tick": 25,
