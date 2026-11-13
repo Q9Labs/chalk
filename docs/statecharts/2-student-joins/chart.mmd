@@ -1,0 +1,61 @@
+---
+title: "A student opens an invite link"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Before the call
+    lg1: Waiting
+    lg2: Joining
+    lg3: In the call
+    lg4: Turned away
+    lg5: Breaks WaiterNotTurnedAwayWhenHostOpens
+    lg6: Path to the WaiterNotTurnedAwayWhenHostOpens bug
+  }
+  class lg0 tan
+  class lg1 blue
+  class lg2 yellow
+  class lg3 teal
+  class lg4 orange
+  class lg5 breaks
+  class lg6 bugPath
+  s0: Invite link opened
+  s1: Waiting for the host to let you in
+  s2: Joining the call
+  s3: Invite link no longer works
+  s4: Host declined your request
+  s5: Request expired
+  s6: In the call
+  s7: Request expired, the host just opened the room
+  s8: Page reloaded, returning to the call
+  s9: Could not return, seat is open elsewhere
+  [*] --> s0
+  s0 --> s1: you press Join
+  s0 --> s2: you press Join
+  s1 --> s3: the host replaces the invite link
+  s1 --> s4: the host declines
+  s1 --> s2: the host lets you in
+  s1 --> s5: the request times out
+  s1 --> s7: the host opens the room to everyone
+  s2 --> s6: the video connects
+  s4 --> s0: you press Join again
+  s5 --> s0: you press Join again
+  s6 --> s8: you reload the page [within 2 minutes]
+  s7 --> s0: you press Join again
+  s8 --> s6: the call takes you back
+  s8 --> s9: the call refuses your old seat
+  s9 --> s0: you press Join again
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 tan
+  class s0 bugPath
+  class s1 blue
+  class s1 bugPath
+  class s2 yellow
+  class s3 orange
+  class s4 orange
+  class s5 orange
+  class s6 teal
+  class s7 orange
+  class s7 breaks
+  class s7 bugPath
+  class s8 yellow
+  class s9 orange

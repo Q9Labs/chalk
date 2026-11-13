@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	probeInterval = 2 * time.Second
+	probeInterval = time.Second
 	probeTimeout  = time.Second
 	// A probe older than this no longer counts, so a node that stops answering
 	// leaves placement within a few intervals.

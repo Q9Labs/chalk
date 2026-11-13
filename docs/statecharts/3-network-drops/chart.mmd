@@ -1,0 +1,65 @@
+---
+title: "A student's connection drops during a call"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: In the call
+    lg1: Reconnecting
+    lg2: Away
+    lg3: Out of the call
+    lg4: Breaks LeftOnlyWhenYouLeave
+    lg5: Path to the LeftOnlyWhenYouLeave bug
+  }
+  class lg0 teal
+  class lg1 yellow
+  class lg2 tan
+  class lg3 orange
+  class lg4 breaks
+  class lg5 bugPath
+  s0: In the call
+  s1: Device asleep, seat still held
+  s2: Reconnecting
+  s3: In the call, your mute not yet sent
+  s4: You left (you pressed Leave)
+  s5: Device asleep, seat given up
+  s6: Connection lost, seat still held
+  s7: Reconnecting, your mute not yet sent
+  s8: You left (you did not press Leave)
+  s9: Connection lost, seat given up
+  [*] --> s0
+  s0 --> s1: the device goes to sleep
+  s0 --> s2: the connection drops
+  s0 --> s3: you turn your microphone off
+  s0 --> s4: you press Leave
+  s1 --> s2: the device wakes up
+  s1 --> s5: 2 minutes pass and the server gives up your seat
+  s2 --> s0: the connection comes back
+  s2 --> s1: the device goes to sleep
+  s2 --> s6: 60 seconds pass without a connection
+  s2 --> s7: you turn your microphone off
+  s3 --> s0: the page tells the call your microphone is off
+  s3 --> s1: the device goes to sleep
+  s3 --> s7: the connection drops
+  s3 --> s4: you press Leave
+  s5 --> s8: the device wakes up
+  s6 --> s9: 2 minutes pass and the server gives up your seat
+  s1 --> s7: the device wakes up
+  s7 --> s3: the connection comes back
+  s7 --> s1: the device goes to sleep
+  s7 --> s6: 60 seconds pass without a connection
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 teal
+  class s0 bugPath
+  class s1 tan
+  class s1 bugPath
+  class s2 yellow
+  class s3 teal
+  class s4 orange
+  class s5 tan
+  class s5 bugPath
+  class s6 tan
+  class s7 yellow
+  class s8 orange
+  class s8 breaks
+  class s8 bugPath
+  class s9 tan
