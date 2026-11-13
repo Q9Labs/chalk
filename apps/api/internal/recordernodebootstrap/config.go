@@ -41,28 +41,52 @@ func LoadRenewalConfig(nodeEnvironmentFile, imageEnvironmentFile string) (Config
 	return loadConfig(nodeEnvironmentFile, imageEnvironmentFile, false)
 }
 
-func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAttestation bool) (Config, error) {
-	bootstrap, err := readEnvironmentFile(bootstrapEnvironmentFile, map[string]struct{}{
-		"CHALK_RECORDER_ENVIRONMENT": {}, "CHALK_RECORDER_POOL": {}, "CHALK_RECORDER_RELEASE": {},
-		"CHALK_RECORDER_IMAGE_DIGEST": {}, "CHALK_RECORDER_BOOTSTRAP_ENDPOINT": {},
-		"CHALK_RECORDER_BOOT_GENERATION": {}, "CHALK_RECORDER_GPU": {},
-		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE": {},
-	})
-	if err != nil {
-		return Config{}, err
-	}
-	image, err := readEnvironmentFile(imageEnvironmentFile, map[string]struct{}{
-		"CHALK_RECORDER_IMAGE_GPU":            {},
-		"CHALK_RECORDER_INSTALLED_RELEASE_ID": {}, "CHALK_RECORDER_INSTALLED_IMAGE_DIGEST": {},
-		"CHALK_RECORDER_IMAGE_MANIFEST":    {},
-		"CHALK_RECORDER_BOOTSTRAP_CA_FILE": {}, "CHALK_RECORDER_BOOTSTRAP_SERVER_NAME": {},
-		"CHALK_RECORDER_IDENTITY_DIRECTORY": {}, "CHALK_RECORDER_WORKER_ENV_FILE": {},
-		"CHALK_RECORDER_NODE_ENV_FILE": {},
-	})
-	if err != nil {
-		return Config{}, err
-	}
+var bootstrapEnvironmentKeys = map[string]struct{}{
+	"CHALK_RECORDER_ENVIRONMENT": {}, "CHALK_RECORDER_POOL": {}, "CHALK_RECORDER_RELEASE": {},
+	"CHALK_RECORDER_IMAGE_DIGEST": {}, "CHALK_RECORDER_BOOTSTRAP_ENDPOINT": {},
+	"CHALK_RECORDER_BOOT_GENERATION": {}, "CHALK_RECORDER_GPU": {},
+	"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE": {},
+}
 
+var imageEnvironmentKeys = map[string]struct{}{
+	"CHALK_RECORDER_IMAGE_GPU":            {},
+	"CHALK_RECORDER_INSTALLED_RELEASE_ID": {}, "CHALK_RECORDER_INSTALLED_IMAGE_DIGEST": {},
+	"CHALK_RECORDER_IMAGE_MANIFEST":    {},
+	"CHALK_RECORDER_BOOTSTRAP_CA_FILE": {}, "CHALK_RECORDER_BOOTSTRAP_SERVER_NAME": {},
+	"CHALK_RECORDER_IDENTITY_DIRECTORY": {}, "CHALK_RECORDER_WORKER_ENV_FILE": {},
+	"CHALK_RECORDER_NODE_ENV_FILE": {},
+}
+
+func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAttestation bool) (Config, error) {
+	bootstrap, err := readEnvironmentFile(bootstrapEnvironmentFile, bootstrapEnvironmentKeys)
+	if err != nil {
+		return Config{}, err
+	}
+	image, err := readEnvironmentFile(imageEnvironmentFile, imageEnvironmentKeys)
+	if err != nil {
+		return Config{}, err
+	}
+	config, err := configFromEnvironment(bootstrap, image)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := config.Validate(); err != nil {
+		return Config{}, err
+	}
+	if bootstrap["CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE"] != "external-reconciler" {
+		return Config{}, fmt.Errorf("%w: bootstrap authority", ErrInvalidConfig)
+	}
+	if verifyAttestation {
+		if err := verifyInstalledImage(config); err != nil {
+			return Config{}, err
+		}
+	}
+	return config, nil
+}
+
+// configFromEnvironment checks that the bootstrap and image files describe the
+// same CPU image, then merges them into one Config.
+func configFromEnvironment(bootstrap, image map[string]string) (Config, error) {
 	bootGeneration, err := strconv.ParseUint(bootstrap["CHALK_RECORDER_BOOT_GENERATION"], 10, 64)
 	if err != nil || bootGeneration == 0 {
 		return Config{}, fmt.Errorf("%w: boot generation", ErrInvalidConfig)
@@ -79,7 +103,7 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 	if role != workeridentity.RoleCapture && role != workeridentity.RoleRender || gpu {
 		return Config{}, fmt.Errorf("%w: this image requires a CPU recorder release", ErrInvalidConfig)
 	}
-	config := Config{
+	return Config{
 		Environment: bootstrap["CHALK_RECORDER_ENVIRONMENT"], Role: role,
 		ReleaseID: bootstrap["CHALK_RECORDER_RELEASE"], ImageDigest: bootstrap["CHALK_RECORDER_IMAGE_DIGEST"],
 		BootGeneration: bootGeneration, BootstrapEndpoint: bootstrap["CHALK_RECORDER_BOOTSTRAP_ENDPOINT"],
@@ -87,38 +111,33 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 		IdentityDirectory: image["CHALK_RECORDER_IDENTITY_DIRECTORY"], WorkerEnvironment: image["CHALK_RECORDER_WORKER_ENV_FILE"],
 		NodeEnvironment: image["CHALK_RECORDER_NODE_ENV_FILE"],
 		ImageManifest:   image["CHALK_RECORDER_IMAGE_MANIFEST"],
+	}, nil
+}
+
+func verifyInstalledImage(config Config) error {
+	if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
+		return err
 	}
-	if err := config.Validate(); err != nil {
-		return Config{}, err
+	claims, err := VerifyImageManifestClaims(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role)
+	if err != nil {
+		return err
 	}
-	if bootstrap["CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE"] != "external-reconciler" {
-		return Config{}, fmt.Errorf("%w: bootstrap authority", ErrInvalidConfig)
+	ca, err := os.ReadFile(config.BootstrapCAFile)
+	if err != nil {
+		return fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
 	}
-	if verifyAttestation {
-		if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
-			return Config{}, err
-		}
-		claims, err := VerifyImageManifestClaims(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role)
-		if err != nil {
-			return Config{}, err
-		}
-		ca, err := os.ReadFile(config.BootstrapCAFile)
-		if err != nil {
-			return Config{}, fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
-		}
-		caDigest := sha256.Sum256(ca)
-		if claims.ServerName != "" && (claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:])) {
-			return Config{}, fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
-		}
+	caDigest := sha256.Sum256(ca)
+	if claims.ServerName != "" && (claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:])) {
+		return fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
 	}
-	return config, nil
+	return nil
 }
 
 func (config Config) Validate() error {
 	key := recorderfleet.PoolKey{Environment: config.Environment, Role: config.Role}
-	endpoint, err := url.Parse(config.BootstrapEndpoint)
-	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" && endpoint.Path != "/" {
-		return fmt.Errorf("%w: bootstrap endpoint", ErrInvalidConfig)
+	endpoint, err := parseBootstrapEndpoint(config.BootstrapEndpoint)
+	if err != nil {
+		return err
 	}
 	if key.Validate() != nil || !validClaim(config.ReleaseID, 128) || !validSHA256(config.ImageDigest) || config.BootGeneration == 0 {
 		return ErrInvalidConfig
@@ -129,12 +148,24 @@ func (config Config) Validate() error {
 	if !strings.EqualFold(endpoint.Hostname(), config.BootstrapServerName) {
 		return fmt.Errorf("%w: bootstrap server name %q differs from endpoint host %q", ErrInvalidConfig, config.BootstrapServerName, endpoint.Hostname())
 	}
-	for label, path := range map[string]string{
-		"bootstrap ca": config.BootstrapCAFile, "identity directory": config.IdentityDirectory, "worker environment": config.WorkerEnvironment,
-		"node environment": config.NodeEnvironment, "image manifest": config.ImageManifest,
+	return config.validatePaths()
+}
+
+func parseBootstrapEndpoint(raw string) (*url.URL, error) {
+	endpoint, err := url.Parse(raw)
+	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" && endpoint.Path != "/" {
+		return nil, fmt.Errorf("%w: bootstrap endpoint", ErrInvalidConfig)
+	}
+	return endpoint, nil
+}
+
+func (config Config) validatePaths() error {
+	for _, entry := range []struct{ label, path string }{
+		{"bootstrap ca", config.BootstrapCAFile}, {"identity directory", config.IdentityDirectory}, {"worker environment", config.WorkerEnvironment},
+		{"node environment", config.NodeEnvironment}, {"image manifest", config.ImageManifest},
 	} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-			return fmt.Errorf("%w: %s path", ErrInvalidConfig, label)
+		if !filepath.IsAbs(entry.path) || filepath.Clean(entry.path) != entry.path {
+			return fmt.Errorf("%w: %s path", ErrInvalidConfig, entry.label)
 		}
 	}
 	return nil
@@ -157,25 +188,9 @@ func readEnvironmentFile(path string, allowed map[string]struct{}) (map[string]s
 	values := make(map[string]string, len(allowed))
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		name, value, ok := strings.Cut(line, "=")
-		if !ok {
-			return nil, fmt.Errorf("%w: malformed environment line", ErrInvalidConfig)
-		}
-		if _, ok := allowed[name]; !ok {
-			return nil, fmt.Errorf("%w: unsupported environment key %s", ErrInvalidConfig, name)
-		}
-		if _, duplicate := values[name]; duplicate {
-			return nil, fmt.Errorf("%w: duplicate environment key %s", ErrInvalidConfig, name)
-		}
-		decoded, err := decodeEnvironmentValue(value)
-		if err != nil {
+		if err := addEnvironmentLine(values, allowed, strings.TrimSpace(scanner.Text())); err != nil {
 			return nil, err
 		}
-		values[name] = decoded
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("%w: read environment file", ErrInvalidConfig)
@@ -186,6 +201,29 @@ func readEnvironmentFile(path string, allowed map[string]struct{}) (map[string]s
 		}
 	}
 	return values, nil
+}
+
+// addEnvironmentLine records one KEY=value line; blank lines and comments are skipped.
+func addEnvironmentLine(values map[string]string, allowed map[string]struct{}, line string) error {
+	if line == "" || strings.HasPrefix(line, "#") {
+		return nil
+	}
+	name, value, ok := strings.Cut(line, "=")
+	if !ok {
+		return fmt.Errorf("%w: malformed environment line", ErrInvalidConfig)
+	}
+	if _, ok := allowed[name]; !ok {
+		return fmt.Errorf("%w: unsupported environment key %s", ErrInvalidConfig, name)
+	}
+	if _, duplicate := values[name]; duplicate {
+		return fmt.Errorf("%w: duplicate environment key %s", ErrInvalidConfig, name)
+	}
+	decoded, err := decodeEnvironmentValue(value)
+	if err != nil {
+		return err
+	}
+	values[name] = decoded
+	return nil
 }
 
 func decodeEnvironmentValue(value string) (string, error) {

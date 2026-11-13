@@ -73,24 +73,50 @@ func readImageManifest(path, releaseID, expectedDigest string, role workeridenti
 	var manifest imageManifest
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || (manifest.SchemaVersion != imageManifestSchemaVersion && manifest.SchemaVersion != "chalk_recorder_cpu_image.v2") || manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) || len(manifest.Files) == 0 || !slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) }) {
+	if decoder.Decode(&manifest) != nil || !validManifestHeader(manifest, releaseID, role) {
 		return imageManifest{}, fmt.Errorf("%w: invalid image manifest", ErrInvalidConfig)
 	}
-	if manifest.SchemaVersion == imageManifestSchemaVersion {
-		if !validServerName(manifest.BootstrapServerName) || !validHexSHA256(manifest.BootstrapCASHA256) {
-			return imageManifest{}, fmt.Errorf("%w: invalid image bootstrap claims", ErrInvalidConfig)
-		}
-	} else if manifest.BootstrapServerName != "" || manifest.BootstrapCASHA256 != "" {
-		return imageManifest{}, fmt.Errorf("%w: portable image contains environment claims", ErrInvalidConfig)
+	if err := validateManifestClaims(manifest); err != nil {
+		return imageManifest{}, err
 	}
+	if err := validateManifestFiles(manifest.Files); err != nil {
+		return imageManifest{}, err
+	}
+	return manifest, nil
+}
+
+func validManifestHeader(manifest imageManifest, releaseID string, role workeridentity.Role) bool {
+	if manifest.SchemaVersion != imageManifestSchemaVersion && manifest.SchemaVersion != "chalk_recorder_cpu_image.v2" {
+		return false
+	}
+	if manifest.ReleaseID != releaseID || !validClaim(manifest.SourceCommit, 128) || !validHexSHA256(manifest.SourceTreeSHA256) || !validImageProfile(manifest.Profile, role) {
+		return false
+	}
+	return len(manifest.Files) > 0 && slices.IsSortedFunc(manifest.Files, func(left, right imageManifestFile) int { return strings.Compare(left.Path, right.Path) })
+}
+
+func validateManifestClaims(manifest imageManifest) error {
+	if manifest.SchemaVersion != imageManifestSchemaVersion {
+		if manifest.BootstrapServerName != "" || manifest.BootstrapCASHA256 != "" {
+			return fmt.Errorf("%w: portable image contains environment claims", ErrInvalidConfig)
+		}
+		return nil
+	}
+	if !validServerName(manifest.BootstrapServerName) || !validHexSHA256(manifest.BootstrapCASHA256) {
+		return fmt.Errorf("%w: invalid image bootstrap claims", ErrInvalidConfig)
+	}
+	return nil
+}
+
+func validateManifestFiles(files []imageManifestFile) error {
 	previous := ""
-	for _, file := range manifest.Files {
+	for _, file := range files {
 		if file.Path == previous || !filepath.IsAbs(file.Path) || filepath.Clean(file.Path) != file.Path || !validHexSHA256(file.SHA256) {
-			return imageManifest{}, fmt.Errorf("%w: invalid image manifest file", ErrInvalidConfig)
+			return fmt.Errorf("%w: invalid image manifest file", ErrInvalidConfig)
 		}
 		previous = file.Path
 	}
-	return manifest, nil
+	return nil
 }
 
 func validImageProfile(profile string, role workeridentity.Role) bool {

@@ -24,28 +24,34 @@ func prepareRequestInput(input *RequestInput) error {
 		return ErrInvalidRecordingID
 	}
 	key, err := utilities.RequiredString(input.IdempotencyKey)
-	if err != nil || len(key) > maxRequestIdempotencyKeySize {
+	if err != nil || len(key) > maxRequestIdempotencyKeySize || strings.ContainsFunc(key, isInvalidIdempotencyKeyChar) {
 		return ErrInvalidIdempotencyKey
-	}
-	for _, char := range key {
-		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-') {
-			return ErrInvalidIdempotencyKey
-		}
 	}
 	input.IdempotencyKey = key
 	// Queue priority and retry budget are release policy, never tenant input.
 	input.Priority = 0
 	input.AttemptLimit = 4
-	if input.Language != "" {
-		if _, err := artifactpolicy.ParseTranscriptLanguage(input.Language); err != nil {
-			return ErrInvalidLanguages
-		}
+	if err := prepareRequestLanguages(input); err != nil {
+		return err
 	}
-	if input.Language != "" && len(input.Language) > 32 {
+	if len(input.Traceparent) > 256 || len(input.Tracestate) > 512 {
 		return ErrInvalidTranscriptField
 	}
-	if input.Language != "" && len(input.Languages) > 0 && (len(input.Languages) != 1 || input.Languages[0] != input.Language) {
-		return ErrInvalidLanguages
+	if input.Now.IsZero() {
+		input.Now = time.Now()
+	}
+	return nil
+}
+
+func isInvalidIdempotencyKeyChar(char rune) bool {
+	return !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '.' || char == '_' || char == '-')
+}
+
+func prepareRequestLanguages(input *RequestInput) error {
+	if input.Language != "" {
+		if err := validateSingleRequestLanguage(input); err != nil {
+			return err
+		}
 	}
 	if len(input.Languages) == 0 && input.Language != "" {
 		input.Languages = []string{input.Language}
@@ -63,11 +69,18 @@ func prepareRequestInput(input *RequestInput) error {
 		}
 		input.Languages[i] = language
 	}
-	if len(input.Traceparent) > 256 || len(input.Tracestate) > 512 {
+	return nil
+}
+
+func validateSingleRequestLanguage(input *RequestInput) error {
+	if _, err := artifactpolicy.ParseTranscriptLanguage(input.Language); err != nil {
+		return ErrInvalidLanguages
+	}
+	if len(input.Language) > 32 {
 		return ErrInvalidTranscriptField
 	}
-	if input.Now.IsZero() {
-		input.Now = time.Now()
+	if len(input.Languages) > 0 && (len(input.Languages) != 1 || input.Languages[0] != input.Language) {
+		return ErrInvalidLanguages
 	}
 	return nil
 }
@@ -103,22 +116,7 @@ func prepareResultInput(input *ResultInput) error {
 	if !input.ChunkID.IsZero() && input.Generation < 1 {
 		return ErrInvalidArtifact
 	}
-	if len(input.ResultSHA256) != 32 || input.ResultSize < 1 || input.ResultSize > 524288000 {
-		return ErrInvalidArtifact
-	}
-	if input.ResultContentType != "application/json" {
-		return ErrInvalidArtifact
-	}
-	if len(input.Provider) == 0 || len(input.Provider) > 128 || len(input.Model) == 0 || len(input.Model) > 256 || len(input.ProviderVersion) == 0 || len(input.ProviderVersion) > 256 {
-		return ErrInvalidArtifact
-	}
-	if input.BilledAudioSeconds < 0 || input.BilledAudioSeconds > 86400 {
-		return ErrInvalidArtifact
-	}
-	if input.ProviderDurationSeconds != nil && (*input.ProviderDurationSeconds < 0 || *input.ProviderDurationSeconds > 86400) {
-		return ErrInvalidArtifact
-	}
-	if input.MeasuredAudioMS < 0 || input.MeasuredAudioMS > 86400000 || (input.ProviderObservedDurationMS != nil && (*input.ProviderObservedDurationMS < 0 || *input.ProviderObservedDurationMS > 86400000)) {
+	if !validResultObject(input) || !validResultProvider(input) || !validResultDurations(input) {
 		return ErrInvalidArtifact
 	}
 	if len(input.ExecutionIdentity) > 256 || len(input.ProviderRequestID) > 256 {
@@ -131,6 +129,28 @@ func prepareResultInput(input *ResultInput) error {
 		return ErrInvalidArtifact
 	}
 	return nil
+}
+
+func validResultObject(input *ResultInput) bool {
+	return len(input.ResultSHA256) == 32 && input.ResultSize >= 1 && input.ResultSize <= 524288000 && input.ResultContentType == "application/json"
+}
+
+func validResultProvider(input *ResultInput) bool {
+	return inRange(len(input.Provider), 1, 128) && inRange(len(input.Model), 1, 256) && inRange(len(input.ProviderVersion), 1, 256)
+}
+
+func validResultDurations(input *ResultInput) bool {
+	if !inRange(input.BilledAudioSeconds, 0, 86400) || !inRange(input.MeasuredAudioMS, 0, 86400000) {
+		return false
+	}
+	if input.ProviderDurationSeconds != nil && !inRange(*input.ProviderDurationSeconds, 0, 86400) {
+		return false
+	}
+	return input.ProviderObservedDurationMS == nil || inRange(*input.ProviderObservedDurationMS, 0, 86400000)
+}
+
+func inRange[T int | int64](value, low, high T) bool {
+	return value >= low && value <= high
 }
 
 func validateBoundedKey(value string) error {

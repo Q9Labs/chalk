@@ -74,19 +74,30 @@ func (s Service) CompleteFinalizer(ctx context.Context, input FinalizerCompleteI
 	if s.finalizer == nil {
 		return Transcript{}, ErrArtifactRepository
 	}
-	if input.JobID.IsZero() || input.Attempt < 1 || input.LeaseToken == "" || len(input.ArtifactSHA256) != 32 || input.ArtifactSize < 1 || input.ArtifactSize > 524288000 || input.ArtifactContentType != "application/json" {
-		return Transcript{}, ErrInvalidArtifact
+	if err := prepareFinalizerComplete(&input); err != nil {
+		return Transcript{}, err
 	}
-	if input.Provider == "" || len(input.Provider) > 128 || input.Model == "" || len(input.Model) > 256 || input.VersionContract == "" || len(input.VersionContract) > 256 || len(input.ExecutionIdentity) > 256 || len(input.ProviderRequestID) > 256 {
-		return Transcript{}, ErrInvalidArtifact
+	return s.finalizer.CompleteFinalizer(ctx, input)
+}
+
+func prepareFinalizerComplete(input *FinalizerCompleteInput) error {
+	if input.JobID.IsZero() || input.Attempt < 1 || input.LeaseToken == "" || len(input.ArtifactSHA256) != 32 || input.ArtifactSize < 1 || input.ArtifactSize > 524288000 || input.ArtifactContentType != "application/json" {
+		return ErrInvalidArtifact
+	}
+	if !validFinalizerProvider(input) {
+		return ErrInvalidArtifact
 	}
 	if len(input.Quality) == 0 {
 		input.Quality = json.RawMessage(`{}`)
 	}
 	if !json.Valid(input.Quality) || len(input.Quality) > 16384 {
-		return Transcript{}, ErrInvalidArtifact
+		return ErrInvalidArtifact
 	}
-	return s.finalizer.CompleteFinalizer(ctx, input)
+	return nil
+}
+
+func validFinalizerProvider(input *FinalizerCompleteInput) bool {
+	return inRange(len(input.Provider), 1, 128) && inRange(len(input.Model), 1, 256) && inRange(len(input.VersionContract), 1, 256) && len(input.ExecutionIdentity) <= 256 && len(input.ProviderRequestID) <= 256
 }
 
 func (s Service) FinalizerKey(ctx context.Context, input LeaseInput) (string, error) {
