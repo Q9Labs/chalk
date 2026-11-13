@@ -17,7 +17,7 @@ name: Gate
 # label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
 # runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
 # Only so many pull requests against master are ready at once (scripts/gates/ready-cap.mjs). Ready cap runs first when a
-# pull request is marked ready; over the cap it sends the pull request back to draft, and Select gate jobs then stands down too.
+# pull request is marked ready; over the cap it comments, Select gate jobs stands down, and Root gate fails until the pull request is a draft again.
 
 on:
   pull_request:
@@ -77,7 +77,7 @@ jobs:
         with:
           node-version-file: .tool-versions
 
-      - name: Send the pull request back to draft when too many are ready
+      - name: Refuse the pull request when too many are ready
         id: cap
         env:
           GH_TOKEN: ${{ github.token }}
@@ -393,11 +393,18 @@ jobs:
 
   root:
     name: Root gate
-    needs: [changes, root-lanes]
-    if: ${{ always() && needs.changes.result != 'skipped' }}
+    needs: [ready-cap, changes, root-lanes]
+    if: ${{ always() && (needs.changes.result != 'skipped' || needs.ready-cap.outputs.capped == 'true') }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 10
     steps:
+      # A skipped required job counts as passed, so a pull request over the cap must fail here, not just skip the Gate.
+      - name: Refuse a pull request over the ready cap
+        if: needs.ready-cap.outputs.capped == 'true'
+        run: |
+          echo "::error title=Over the ready cap::Too many pull requests are ready against master. Run 'gh pr ready --undo ${{ github.event.pull_request.number }}' and see the Ready cap comment."
+          exit 1
+
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

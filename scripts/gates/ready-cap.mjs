@@ -57,12 +57,11 @@ async function openPullRequests(owner, name) {
   }
 }
 
-async function backToDraft(self, result) {
-  await graphql("mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { id } } }", { id: self.id });
+async function explainRefusal(self, result) {
   const body = [
-    `Back to draft: ${result.others} other pull requests are ready against master (${result.queued} in the merge queue), and the cap is ${result.cap}.`,
+    `Over the ready cap: ${result.others} other pull requests are ready against master (${result.queued} in the merge queue), and the cap is ${result.cap}. \`Root gate\` fails on this pull request until it is a draft again.`,
     "",
-    `Every push to a ready pull request reruns the Gate, and a long line of them is mostly cancelled reruns. Keep working on this one as a draft (pushes to a draft run nothing), and mark it ready when \`node scripts/gates/ready-cap.mjs --pr ${self.number}\` says there is room.`,
+    `Run \`gh pr ready --undo ${self.number}\`. Every push to a ready pull request reruns the Gate, and a long line of them is mostly cancelled reruns, so keep working here as a draft (a push to a draft runs nothing) and mark it ready when \`node scripts/gates/ready-cap.mjs --pr ${self.number}\` says there is room.`,
     "",
     `Related changes belong in one pull request. Maintainers can raise the cap with the repository variable \`CHALK_READY_CAP\`, or let one pull request through with the \`${EXEMPT_LABEL}\` label.`,
   ].join("\n");
@@ -98,9 +97,9 @@ async function main() {
     process.exitCode = result.over ? 1 : 0;
     return;
   }
-  // The Gate job reads this output: a pull request sent back to draft runs no other Gate job.
-  if (result.over) await backToDraft(self, result);
+  // The Gate reads this output first: over the cap, Select gate jobs stands down and Root gate fails. The comment comes after, so a failed comment cannot unbind the cap.
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `capped=${result.over}\n`);
+  if (result.over) await explainRefusal(self, result);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();
