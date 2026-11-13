@@ -14,7 +14,7 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
   setup_all do
     if @database_url do
       connections = SyncPostgres.start_connections(@database_url, 2)
-      on_exit(fn -> Enum.each(connections, &stop_connection/1) end)
+      on_exit(fn -> Enum.each(connections, &TestProcess.stop/1) end)
       {:ok, connections: connections}
     else
       :ok
@@ -220,6 +220,4 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
       Postgrex.query!(transaction, "delete from tenants where id = $1", [tenant_id])
     end)
   end
-
-  defp stop_connection(connection), do: TestProcess.stop(connection)
 end
