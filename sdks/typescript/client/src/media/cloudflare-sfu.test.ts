@@ -528,6 +528,33 @@ it.each(["microphone", "camera"] as const)("registry recovery republishes a with
   });
 });
 
+it("keeps the remote microphone a publisher mutes in place and takes it back on the unmute with no pull", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: "remote-connection|microphone" };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    await h.client.refreshRemotePublications();
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    const pulls = h.transport.addInputs.length;
+    const closes = h.transport.closeInputs.length;
+
+    h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [{ ...publication, paused: true }] };
+    await h.client.refreshRemotePublications();
+    h.transport.snapshot = { incarnation: 1, sequence: 3, publications: [publication] };
+    await h.client.refreshRemotePublications();
+
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    expect(h.transport.addInputs).toHaveLength(pulls);
+    expect(h.transport.closeInputs).toHaveLength(closes);
+    expect(h.peers).toHaveLength(1);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("resuming a paused %s never reattaches a registry-withdrawn publication", async (source) => {
   await withTimedHarness(async (h) => {
     await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
