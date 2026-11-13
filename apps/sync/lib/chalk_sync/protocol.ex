@@ -389,7 +389,9 @@ defmodule ChalkSync.ProtocolV1 do
     })
   end
 
-  # A call whose policy turns recording off rejects start_recording with a reason protocol v1 does not carry. To the participant it is a capability the call does not grant, and an unlisted reason would make the frame invalid and crash the socket.
+  # A call whose policy turns recording off rejects start_recording with a reason protocol v1
+  # does not carry. To the participant it is a capability the call does not grant, and an
+  # unlisted reason would make the frame invalid and crash the socket.
   defp wire_reason(:recording_policy_disabled), do: "capability_denied"
   defp wire_reason(reason), do: Atom.to_string(reason)
 
