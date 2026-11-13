@@ -502,6 +502,30 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))),
           ),
         );
+      const failJoin = (cause: unknown, stream: MediaStream | null, span: ReturnType<typeof diagnostics.startSpan>, retried: boolean): Effect.Effect<void, ConnectionLifecycleFailure> =>
+        Effect.gen(function* () {
+          yield* releaseLocalTracks(platform.mediaDevices, liveTracks(stream));
+          const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
+          const failure = yield* resolveMediaRejection(originalFailure);
+          if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
+            span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "episode_ended" });
+            yield* finishEpisodeEnded();
+            return;
+          }
+          model.failure = toFailure(failure);
+          if (model.joinCancelled) {
+            span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });
+            return yield* Effect.fail(joinCancelledFailure());
+          }
+          span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
+          const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
+          if (!retry) yield* recordFailure(failure);
+          model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
+          yield* stopPorts();
+          if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
+          yield* transition("failed");
+          return yield* Effect.fail(failure);
+        });
       const performJoin = (reason: "join" | "access_retry" = "join", retried = false): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           if (model.state === "live") return;
@@ -542,30 +566,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             yield* confirmSyncEntry(sync);
           }).pipe(
             Effect.matchEffect({
-              onFailure: (cause) =>
-                Effect.gen(function* () {
-                  yield* releaseLocalTracks(platform.mediaDevices, liveTracks(stream));
-                  const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
-                  const failure = yield* resolveMediaRejection(originalFailure);
-                  if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
-                    span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "episode_ended" });
-                    yield* finishEpisodeEnded();
-                    return;
-                  }
-                  model.failure = toFailure(failure);
-                  if (model.joinCancelled) {
-                    span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });
-                    return yield* Effect.fail(joinCancelledFailure());
-                  }
-                  span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
-                  const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
-                  if (!retry) yield* recordFailure(failure);
-                  model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
-                  yield* stopPorts();
-                  if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
-                  yield* transition("failed");
-                  return yield* Effect.fail(failure);
-                }),
+              onFailure: (cause) => failJoin(cause, stream, span, retried),
               onSuccess: () =>
                 Effect.gen(function* () {
                   model.syncSnapshot = model.sync?.getSnapshot() ?? null;
@@ -659,6 +660,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           );
         });
 
+      const phaseOf = (kind: RecoveryKind) => (kind === "sync" ? model.sync : model.media)?.getSnapshot().connection.phase;
       const recover = (kind: RecoveryKind): Effect.Effect<void> =>
         Effect.gen(function* () {
           const scope = model.activeScope;
@@ -669,68 +671,61 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             return;
           }
           model.recoveryQueued = kind;
-          const phase = kind === "sync" ? model.sync?.getSnapshot().connection.phase : model.media?.getSnapshot().connection.phase;
+          const phase = phaseOf(kind);
           if (phase === "terminal" || phase === "failed") yield* transition("reconnecting");
-          const epoch = model.epoch;
-          yield* Effect.forkIn(
-            Effect.gen(function* () {
-              yield* Effect.sleep(RECONNECT_GRACE_MS);
-              const phase = kind === "sync" ? model.sync?.getSnapshot().connection.phase : model.media?.getSnapshot().connection.phase;
-              if (phase === "live") {
-                enqueueBackground(finishRecovery(0, epoch));
-                return;
-              }
-              yield* enqueue(
-                Effect.gen(function* () {
-                  if (model.epoch === epoch && active(model)) yield* transition("reconnecting");
-                }),
-              );
-              let cycle = 0;
-              const syncAttempt: SyncRecoveryAttempt = { client: null, expiresAt: null, started: true };
-              while (model.epoch === epoch && active(model)) {
-                const plan = yield* recoveryPlan(model.recoveryQueued ?? kind);
-                let attempts = 0;
-                const outcome = yield* attemptRecovery(plan, mediaAttempt, syncAttempt, () => attempts++).pipe(
-                  Effect.match({
-                    onSuccess: (attempt) => ({ attempt, failure: null }),
-                    onFailure: (failure) => ({ attempt: null, failure }),
-                  }),
-                );
-                if (outcome.failure) {
-                  const failure = outcome.failure;
-                  enqueueBackground(Effect.suspend(() => (model.epoch === epoch && active(model) ? failForSnapshot(failure) : Effect.void)));
-                  return;
-                }
-                if (outcome.attempt !== null) {
-                  enqueueBackground(finishRecovery(outcome.attempt, epoch));
-                  return;
-                }
-                yield* enqueue(
-                  Effect.gen(function* () {
-                    if (model.epoch !== epoch || !active(model)) return;
-                    if (plan.kind === "sync" && model.sync?.getSnapshot().connection.phase === "live") {
-                      model.recoveryQueued = "media";
-                      return;
-                    }
-                    const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
-                    const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
-                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, media: mediaFailure, grantedMedia });
-                    if (plan.kind === "sync") {
-                      yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
-                      return;
-                    }
-                    model.failure = toFailure(lifecycleFailure(code, true, "Connection interrupted. Reconnecting in the background."));
-                    yield* publish();
-                  }),
-                );
-                if (model.recoveryQueued !== plan.kind) continue;
-                const delay = Math.min(BACKGROUND_RETRY_MAX_MS, 250 * 2 ** cycle);
-                cycle = Math.min(cycle + 1, 8);
-                yield* Effect.race(Effect.sleep(delay * (0.5 + Math.random() * 0.5)), waitForTransportChange(plan.kind));
-              }
-            }),
-            scope,
-          );
+          yield* Effect.forkIn(recoverInBackground(kind, model.epoch), scope);
+        });
+      const recoverInBackground = (kind: RecoveryKind, epoch: number): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          yield* Effect.sleep(RECONNECT_GRACE_MS);
+          if (phaseOf(kind) === "live") {
+            enqueueBackground(finishRecovery(0, epoch));
+            return;
+          }
+          yield* enqueue(Effect.suspend(() => (model.epoch === epoch && active(model) ? transition("reconnecting") : Effect.void)));
+          let cycle = 0;
+          const syncAttempt: SyncRecoveryAttempt = { client: null, expiresAt: null, started: true };
+          while (model.epoch === epoch && active(model)) {
+            const plan = yield* recoveryPlan(model.recoveryQueued ?? kind);
+            let attempts = 0;
+            const outcome = yield* attemptRecovery(plan, mediaAttempt, syncAttempt, () => attempts++).pipe(
+              Effect.match({
+                onSuccess: (attempt) => ({ attempt, failure: null }),
+                onFailure: (failure) => ({ attempt: null, failure }),
+              }),
+            );
+            if (outcome.failure) {
+              const failure = outcome.failure;
+              enqueueBackground(Effect.suspend(() => (model.epoch === epoch && active(model) ? failForSnapshot(failure) : Effect.void)));
+              return;
+            }
+            if (outcome.attempt !== null) {
+              enqueueBackground(finishRecovery(outcome.attempt, epoch));
+              return;
+            }
+            yield* enqueue(recoveryExhausted(plan, epoch, attempts));
+            if (model.recoveryQueued !== plan.kind) continue;
+            const delay = Math.min(BACKGROUND_RETRY_MAX_MS, 250 * 2 ** cycle);
+            cycle = Math.min(cycle + 1, 8);
+            yield* Effect.race(Effect.sleep(delay * (0.5 + Math.random() * 0.5)), waitForTransportChange(plan.kind));
+          }
+        });
+      const recoveryExhausted = (plan: RecoveryPlan, epoch: number, attempts: number): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          if (model.epoch !== epoch || !active(model)) return;
+          if (plan.kind === "sync" && model.sync?.getSnapshot().connection.phase === "live") {
+            model.recoveryQueued = "media";
+            return;
+          }
+          const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
+          const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
+          diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, media: mediaFailure, grantedMedia });
+          if (plan.kind === "sync") {
+            yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
+            return;
+          }
+          model.failure = toFailure(lifecycleFailure(code, true, "Connection interrupted. Reconnecting in the background."));
+          yield* publish();
         });
       const recoveryPlan = (kind: RecoveryKind): Effect.Effect<RecoveryPlan> =>
         Clock.currentTimeMillis.pipe(
