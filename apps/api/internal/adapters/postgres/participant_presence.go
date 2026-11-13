@@ -36,7 +36,8 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 		func(room sqlc.ClaimExpiredParticipantPresenceRow) pgtype.UUID { return room.EpisodeID },
 		func(room sqlc.ClaimExpiredParticipantPresenceRow) error {
 			// The API is now an entry-aware Leave writer too. The rollout barrier
-			// rejects legacy writers once confirmed entry generations are in use.
+			// rejects writers from the previous release once confirmed entry generations are in use.
+			// TRIPWIRE(api-db, 2026-12-15): remove the barrier once the previous release is retired.
 			if !authorized {
 				if _, err := tx.Exec(ctx, "select set_config('chalk.entry_writer', '1', true)"); err != nil {
 					return fmt.Errorf("authorize participant presence leave writer: %w", err)

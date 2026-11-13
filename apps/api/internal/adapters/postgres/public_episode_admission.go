@@ -199,6 +199,8 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 
 // admissionDecision is one decision transaction. legacy is set when the request has no canonical
 // Episode admission, which a previous API created.
+// TRIPWIRE(api-db, 2026-12-15): remove the legacy path once no pending public request lacks an
+// Episode admission.
 type admissionDecision struct {
 	queries       *sqlc.Queries
 	tx            pgx.Tx

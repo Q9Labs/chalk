@@ -30,6 +30,7 @@ func retryParticipantJoinSeat(ctx context.Context, tx pgx.Tx, participant sqlc.P
 		return fmt.Errorf("retry pending participant join: %w", err)
 	}
 	switch state {
+	// TRIPWIRE(api-db, 2026-12-15): drop "legacy" once no participants row predates join seats.
 	case "legacy", "pending", "joined":
 		return nil
 	case "episode_ended":

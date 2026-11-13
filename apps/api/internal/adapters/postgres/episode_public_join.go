@@ -84,7 +84,7 @@ func (j publicJoin) lockSpace(ctx context.Context) (sqlc.SpacePublicInvite, sqlc
 			return invite, sqlc.Space{}, publicinvites.ErrArrivalUnavailable
 		}
 		if err != nil {
-			return invite, sqlc.Space{}, fmt.Errorf("lock legacy knock invite: %w", err)
+			return invite, sqlc.Space{}, fmt.Errorf("lock knock invite: %w", err)
 		}
 	}
 	space, err := j.queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
@@ -106,7 +106,7 @@ func (j publicJoin) checkKnockArrival(ctx context.Context, space sqlc.Space, inv
 		return publicinvites.ErrArrivalUnavailable
 	}
 	if err != nil {
-		return fmt.Errorf("lock legacy knock arrival: %w", err)
+		return fmt.Errorf("lock knock arrival: %w", err)
 	}
 	if arrival.TenantID != uuid(j.input.TenantID) || arrival.SpaceID != uuid(j.input.SpaceID) {
 		return publicinvites.ErrArrivalUnavailable
