@@ -76,9 +76,6 @@ func RecordLostRace(ctx context.Context, reason LossReason) {
 // RecordMoved counts a recovery whose binding commit won.
 func RecordMoved(ctx context.Context, reason LossReason) { RecordRecovery(ctx, reason, outcomeMoved) }
 
-// errStaleIncarnation means a node answered for another boot than the binding's.
-var errStaleIncarnation = errors.New("chalk sfu answered for a replaced node incarnation")
-
 // Lost reports whether the allocation an Episode is bound to is gone, from the last probes
 // and without I/O. A node that has not answered within the freshness window is silent; one
 // failed probe is not enough, because the window runs from the last answer. A
@@ -265,96 +262,4 @@ func (f *Fleet) logRecovery(ctx context.Context, message, node string, err error
 		attrs = append(attrs, "error", err.Error())
 	}
 	f.log.Log(ctx, slog.LevelWarn, message, attrs...)
-}
-
-// reserve asks the node to hold room for a whole Episode.
-func (a *Adapter) reserve(ctx context.Context, request wireReserveRequest) (wireReserveResponse, error) {
-	var reply wireReserveResponse
-	if err := a.call(ctx, "/v1/episodes/reserve", request, &reply); err != nil {
-		return wireReserveResponse{}, err
-	}
-	return reply, nil
-}
-
-// Bound returns the node's adapter for an Episode placed on the given boot incarnation and
-// binding generation. Every create, capture and source control it sends names that generation, so
-// the node refuses it once the Episode is retired above it (see Retire). A
-// join that the node answers for another incarnation is refused as stale instead of being
-// handed to a client: the node restarted and the binding has not caught up yet.
-func (a *Adapter) Bound(incarnation string, generation int64) *Adapter {
-	bound := *a
-	bound.incarnation = incarnation
-	bound.allocation = &generation
-	return &bound
-}
-
-// WithFence returns an adapter that checks a join against the Episode's durable binding once
-// the node has created the session. A replica that resolved the binding before another one moved
-// it would otherwise create a second live allocation on the node the Episode left, and the
-// incarnation check cannot see that, because it compares against the replica's own stale
-// binding. When the fence fails, the join closes its session on the node it was issued to and
-// returns the fence's error, which the caller retries under the current binding.
-func (a *Adapter) WithFence(fence func(context.Context) error) *Adapter {
-	fenced := *a
-	fenced.fence = fence
-	return &fenced
-}
-
-// checkIncarnation refuses a node's answer from an incarnation other than the one the
-// Episode is bound to.
-func (a *Adapter) checkIncarnation(answered string) error {
-	if a.incarnation == "" || answered == "" || answered == a.incarnation {
-		return nil
-	}
-	return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, errStaleIncarnation)
-}
-
-// retireNodeTimeout bounds one retire call to one node, so a node that swallows the request cannot
-// hold up the others.
-const retireNodeTimeout = 2 * time.Second
-
-// Retirement outcomes, the label of the retirement metric.
-const (
-	retireAcknowledged = "acknowledged"
-	retireGone         = "gone"
-	retirePending      = "pending"
-)
-
-var retirements, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
-	"chalk.sfu.retirements",
-	metric.WithDescription("Retire calls to the own-SFU allocations whole-Episode recovery left, by outcome"),
-	metric.WithUnit("{retirement}"),
-)
-
-// RetireAllocation retires the Episode on one allocation it left, at the binding's generation:
-// the node closes the Episode's sessions of lower generations, lapses their source leases, and
-// refuses any later create, capture or source grant under one (see the SFU's POST
-// /v1/episodes/retire). Retiring is idempotent, so a retry is harmless. It reports settled when
-// there is nothing left to do: the node acknowledged, answers with another boot than the
-// allocation's and so holds nothing of the Episode, or is no longer configured. Otherwise it
-// returns the error and the caller keeps the debt. A node the probes call silent is still asked,
-// because silent only means its last probe failed and its HTTP side may be up.
-func (f *Fleet) RetireAllocation(ctx context.Context, old mediaplane.Allocation, tenantID, episodeID string, generation int64) (settled bool, err error) {
-	adapter, err := f.Node(old.Node)
-	if err != nil {
-		recordRetirement(ctx, retireGone)
-		return true, nil // a node removed from the configuration has no process to clean
-	}
-	if reason, lost := f.Confirm(ctx, old); lost && reason == LossRestarted {
-		recordRetirement(ctx, retireGone)
-		return true, nil
-	}
-	nodeCtx, cancel := context.WithTimeout(ctx, retireNodeTimeout)
-	defer cancel()
-	err = adapter.call(nodeCtx, "/v1/episodes/retire", wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: generation}, nil)
-	if err != nil {
-		recordRetirement(ctx, retirePending)
-		return false, fmt.Errorf("retire the episode on node %q: %w", old.Node, err)
-	}
-	recordRetirement(ctx, retireAcknowledged)
-	return true, nil
-}
-
-func recordRetirement(ctx context.Context, outcome string) {
-	retirements.Add(ctx, 1, metric.WithAttributes(attribute.String("chalk.sfu.retirement.outcome", outcome)))
 }
