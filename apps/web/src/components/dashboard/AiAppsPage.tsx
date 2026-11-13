@@ -36,12 +36,12 @@ export function AiAppsPage() {
           <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       ) : null}
-      {state.kind === "ready" && !previewOnly(state.data) ? (
+      {state.kind === "ready" ? (
         <div className="secth" style={{ marginTop: "var(--space-12)" }}>
           <h2>Connected apps</h2>
         </div>
       ) : null}
-      {state.kind === "ready" && state.data.listError && !previewOnly(state.data) ? <ErrorPanel title="Couldn’t load your connected apps" detail="Your connections are still in place. Try again in a moment." onRetry={reload} /> : null}
+      {state.kind === "ready" && state.data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Your connections are still in place. Try again in a moment." onRetry={reload} /> : null}
       {state.kind === "ready" && !state.data.listError && state.data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
@@ -125,12 +125,6 @@ export function AiAppsPage() {
     </div>
   );
 }
-
-/**
- * A preview on a private address can't hold connections, and its address notice already says so, so the page doesn't
- * add a list error under it.
- */
-const previewOnly = (data: { readonly mcpUrl: string; readonly listError: boolean }) => data.listError && isInternalLink(data.mcpUrl);
 
 /**
  * The address AI apps add. A test server that only knows its loopback address can't be reached by an AI app, so the

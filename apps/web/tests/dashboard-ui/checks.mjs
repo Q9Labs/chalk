@@ -348,7 +348,7 @@ try {
     await tab.getByRole("button", { name: "Start a call" }).first().click();
     await tab.waitForTimeout(900);
     const [create] = await posted("create-call");
-    check("Start a call sends no name", Boolean(create) && !("name" in create.body), JSON.stringify(create?.body ?? null));
+    check("Start a call names the call by when it starts", /^Call on \S+ \d{1,2} \S+, \d{1,2}:\d{2}/.test(create?.body?.name ?? ""), JSON.stringify(create?.body ?? null));
     check("the new call's link shows in the ready dialog", /chalkmeet\.com\/[a-z]+(?:-[a-z]+){2,3}/.test((await tab.getByRole("dialog").locator(".lf-text").textContent()) ?? ""));
     const roboto = await tab.evaluate(() => [...document.querySelectorAll("link[rel=stylesheet]")].some((link) => link.href.includes("Roboto")));
     check("Roboto is not loaded off the sign-in page", !roboto);

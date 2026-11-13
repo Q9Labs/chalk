@@ -317,9 +317,13 @@ async function auth(request, response, path, url) {
   return fail(response, 404, "route_not_found");
 }
 
+/** Like the server's activity order: unarchived calls, the most recently used first. */
+const byUse = (data) => data.calls.filter((call) => !call.archived).sort((a, b) => Date.parse(b.lastActiveAt ?? b.createdAt) - Date.parse(a.lastActiveAt ?? a.createdAt));
+
 function homeDTO(data) {
-  const calls = data.calls.filter((call) => !call.archived);
-  const live = calls.map((call, i) => ({ spaceId: call.id, episode: data.live && i === 0 ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
+  const calls = byUse(data);
+  const inUse = data.calls.find((call) => !call.archived)?.id;
+  const live = calls.map((call) => ({ spaceId: call.id, episode: data.live && call.id === inUse ? { id: uuid(0x2ff), count: 3, participants: ["Nora Patel", "Akash Rao", "Sofia Lind"].map((name, n) => ({ id: uuid(0x600 + n), name })) } : null }));
   return { calls: calls.map(homeCallDTO), live, nextCursor: null };
 }
 
@@ -369,14 +373,14 @@ async function dashboard(request, response, page, url, entry) {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       const ids = query.spaceIds ? query.spaceIds.split(",") : [];
       const live = ids.map((spaceId) => ({ spaceId, episode: data.live && spaceId === data.calls[0]?.id ? { id: uuid(0x2ff), count: participants.length, participants } : null }));
-      // Like the server: every row's activity, and with `home` the first page when the newest call isn't listed.
+      // Like the server: every row's activity, and with `home` the first page when the most recently used call isn't listed.
       const calls = ids
         .map((spaceId) => data.calls.find((call) => call.id === spaceId))
         .filter(Boolean)
         .map(homeCallDTO)
         .map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople }));
       if (!query.home) return send(response, 200, { live, calls });
-      const newest = data.calls.find((call) => !call.archived)?.id;
+      const newest = byUse(data)[0]?.id;
       return send(response, 200, newest && !ids.includes(newest) ? { live, calls, first: homeDTO(data) } : { live, calls });
     }
     if (page === "call-metadata") {

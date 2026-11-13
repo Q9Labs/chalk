@@ -30,15 +30,15 @@ const merge = (row: Row, call: CallDTO): Row => ({ ...row, ...call });
 type Home = { rows: Row[]; nextCursor: string | null };
 const capped = (rows: Row[]): Row[] => rows.slice(0, HOME_STATUS_ROWS);
 /** When a call was last used: its last session, else when it was made. */
-const usedAt = (row: Row): string => row.lastActiveAt ?? row.createdAt;
+const usedAt = (call: HomeCallDTO): string => call.lastActiveAt ?? call.createdAt;
 /**
- * What Home lists: unarchived calls, the one in use now first, then by last use, newest first. Home holds its rows by
- * creation time, 25 to a page, and shows the first five of this order: it sorts everything it holds, then cuts, so a
- * call used yesterday is never hidden behind calls made today.
+ * What Home lists: unarchived calls, the ones in use now first, then by last use, newest first. The server pages calls
+ * in that same order of last use, so the first page holds the calls used most recently, however old they are.
  */
-const listed = (home: Home): Row[] => home.rows.filter((row) => !row.archived).sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || Date.parse(usedAt(b)) - Date.parse(usedAt(a)));
-/** How many rows Home shows at first, and how many more each Show more calls adds. */
+const listed = (home: Home): Row[] => home.rows.filter((row) => !row.archived).sort((a, b) => Number(Boolean(b.live)) - Number(Boolean(a.live)) || newestFirst(a, b));
+/** How many rows Home shows at first, and how many more each Show more calls adds. A call in use now always shows. */
 const SHOWN_ROWS = 5;
+const shownRows = (rows: Row[], limit: number) => Math.max(limit, rows.filter((row) => row.live).length);
 const rowsOf = (page: HomeDTO): Row[] => page.calls.map((call) => ({ ...call, live: page.live.find((item) => item.spaceId === call.id)?.episode ?? null }));
 
 /** One status answer applied by Space ID: whether each call is archived, its activity, and its live Episode. */
@@ -52,20 +52,22 @@ function withStatus(rows: Row[], status: HomeStatusDTO): Row[] {
 }
 
 /**
- * Where a call sits in Home's order: newest first by creation time, then by ID. The engine writes UTC timestamps with
- * up to nine fraction digits and drops trailing zeros, so with the "Z" removed and a space before the ID, which sorts
- * below every digit, the key compares as a string.
+ * Where a call sits in Home's order: most recently used first, then by ID, as the server pages it. The engine writes
+ * UTC timestamps with up to nine fraction digits and drops trailing zeros, so with the "Z" removed and a space before
+ * the ID, which sorts below every digit, the key compares as a string.
  */
-const sortKey = (call: HomeCallDTO): string => `${call.createdAt.slice(0, -1)} ${call.id}`;
+const sortKey = (call: HomeCallDTO): string => `${usedAt(call).slice(0, -1)} ${call.id}`;
 const newestFirst = (a: HomeCallDTO, b: HomeCallDTO) => (sortKey(a) > sortKey(b) ? -1 : 1);
 
 /**
  * Reloads Home from its first page into `rows`, the list it holds, so expanded rows survive: reads on until a row sorts
- * at or past Home's last row, up to 300 calls, since new calls on top push that depth onto later pages. Pages list only
- * unarchived calls, so a held call within the depth read that no page lists is archived, and it stays hidden in place.
+ * at or past Home's oldest row, up to 300 calls, since calls used since push that depth onto later pages. A call's last
+ * use only moves forward, and pages list only unarchived calls, so a held call within the depth read that no page lists
+ * is archived, and it stays hidden in place.
  */
 async function replay(rows: Row[], page: HomeDTO): Promise<Home> {
-  const end = rows.at(-1);
+  // Checks move a held row's last use forward in place, so the oldest row may no longer be the last.
+  const end = rows.reduce<Row | undefined>((oldest, row) => (oldest === undefined || newestFirst(row, oldest) > 0 ? row : oldest), undefined);
   const deeper = (call: HomeCallDTO | undefined) => end !== undefined && call !== undefined && newestFirst(call, end) < 0;
   let data = page;
   while (data.nextCursor && data.calls.length < HOME_STATUS_ROWS && deeper(data.calls.at(-1))) {
@@ -192,12 +194,12 @@ export function HomePage() {
         <>
           <div className="list calls">
             {listed(state.data)
-              .slice(0, limit)
+              .slice(0, shownRows(listed(state.data), limit))
               .map((call) => (
                 <CallRow key={call.id} call={call} live={call.live} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
               ))}
           </div>
-          {listed(state.data).length > limit ? (
+          {listed(state.data).length > shownRows(listed(state.data), limit) ? (
             <div className="more-row">
               <button type="button" className="btn sec sm" onClick={() => setLimit((value) => value + SHOWN_ROWS)}>
                 Show more calls

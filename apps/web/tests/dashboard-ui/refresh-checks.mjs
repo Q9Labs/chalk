@@ -514,7 +514,9 @@ export async function budgetChecks({ open, fixture, check, CALL }) {
       // The first retry after a failure waits twice the interval.
       await tick(10000);
       await tab.locator(".live").first().waitFor({ state: "hidden" });
-      check(`Home ${count} catches up on every row in the next check`, (await tab.locator('.ra[aria-label*="1 Jan"]').count()) === count);
+      // Home shows five calls once none is live; every row it shows has caught up.
+      const shown = await tab.locator(".list.calls .ra").count();
+      check(`Home ${count} catches up on every row in the next check`, shown > 0 && (await tab.locator('.ra[aria-label*="1 Jan"]').count()) === shown, `shown=${shown}`);
       await tick();
       await tick();
       check(`Home ${count} makes one request per check for every row and never rereads its pages`, perTick.every((reads) => reads === 1) && checks.every((ids) => ids.length === count) && full === initialFull, JSON.stringify({ perTick, ids: checks.map((ids) => ids.length), initialFull, full }));
