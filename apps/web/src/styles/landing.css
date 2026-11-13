@@ -1346,10 +1346,15 @@
     width: 100%;
     justify-content: center;
   }
+  /* On a phone the two call actions are one column of equal width. */
+  .site .hact .btn.lg,
   .site .hact .joinwrap {
     min-width: 0;
     width: 100%;
     flex-basis: 100%;
+  }
+  .site .hact .btn.lg {
+    justify-content: center;
   }
   .site .h1 {
     max-width: 14ch;
