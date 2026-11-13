@@ -10,7 +10,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
   require OperationTable
 
   def release_failed_acceptance(connection, episode, external)
-       when external.name in [:admit_participant, :deny_admission, :admission_request_expired] do
+      when external.name in [:admit_participant, :deny_admission, :admission_request_expired] do
     params =
       Scope.episode(episode) ++
         [
@@ -25,7 +25,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
   end
 
   def release_failed_acceptance(connection, episode, external)
-       when external.name in [:remove_participant, :participant_leave] do
+      when external.name in [:remove_participant, :participant_leave] do
     params =
       Scope.episode(episode) ++
         [
@@ -42,7 +42,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
   end
 
   def release_failed_acceptance(connection, episode, external)
-       when OperationTable.is_episode_end_name(external.name) do
+      when OperationTable.is_episode_end_name(external.name) do
     case Postgrex.query!(connection, SQL.restore_episode_active(), Scope.episode(episode)).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})
@@ -50,7 +50,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
   end
 
   def release_failed_acceptance(_connection, _episode, _external), do: :ok
-
 
   def mark_external_applied(connection, episode, external, event_id, revision) do
     params =
@@ -63,7 +62,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
     end
   end
 
-
   def mark_external_failed(connection, episode, external, failure_code) do
     params = Scope.episode(episode) ++ [Scope.uuid(external.external_operation_id), failure_code]
 
@@ -72,7 +70,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})
     end
   end
-
 
   def commit_external_receipt(connection, episode, external, event_id, revision, state) do
     if external.actor_participant_id do
@@ -93,7 +90,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Receipts do
       end
     end
   end
-
 
   def reject_external_receipt(connection, episode, external) do
     if external.actor_participant_id do

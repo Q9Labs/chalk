@@ -254,8 +254,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp handle_frame({:cursor, cursor}, %{phase: :live} = state), do: Views.cursor(cursor, state)
 
-  defp handle_frame({:view, _view}, %{phase: :live, extensions: %Extensions{view: :none}} = state),
-    do: {:ok, state}
+  defp handle_frame(
+         {:view, _view},
+         %{phase: :live, extensions: %Extensions{view: :none}} = state
+       ),
+       do: {:ok, state}
 
   defp handle_frame({:view, view}, %{phase: :live} = state), do: Views.view(view, state)
 

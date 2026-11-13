@@ -580,7 +580,6 @@
         "apps/sync/.gitignore",
         "apps/sync/README.md",
         "apps/sync/config",
-        "apps/sync/docs",
         "apps/sync/integration",
         "apps/sync/lib/chalk_sync.ex",
         "apps/sync/lib/chalk_sync/application.ex",

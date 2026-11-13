@@ -14,13 +14,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
   alias ChalkSync.UUID
 
   def finalize_admission_approval(
-         connection,
-         episode,
-         external,
-         state,
-         :participant_joined,
-         payload
-       ) do
+        connection,
+        episode,
+        external,
+        state,
+        :participant_joined,
+        payload
+      ) do
     with {:ok, admission} <- lock_reserved_admission_for_external(connection, episode, external),
          true <- payload == admission_join_payload(admission, state),
          {:ok, intent} <- lock_admission_join_intent(connection, episode, admission),
@@ -54,15 +54,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
   end
 
   def finalize_admission_approval(
-         _connection,
-         _episode,
-         _external,
-         _state,
-         _name,
-         _payload
-       ),
-       do: {:error, :invalid_operation_outcome}
-
+        _connection,
+        _episode,
+        _external,
+        _state,
+        _name,
+        _payload
+      ),
+      do: {:error, :invalid_operation_outcome}
 
   def lock_reserved_admission_for_external(connection, episode, external) do
     request_id = external.payload["admissionRequestId"]
@@ -95,7 +94,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
     end
   end
 
-
   def admission_join_payload(admission, state) do
     %{
       "participant_id" => admission.participant_id,
@@ -104,7 +102,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
       "admission_revision" => state.revision + 1
     }
   end
-
 
   defp lock_admission_join_intent(connection, episode, admission) do
     params = Scope.episode(episode) ++ [Scope.uuid(admission.participant_id)]
@@ -125,7 +122,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission do
         {:error, :invalid_state}
     end
   end
-
 
   def finalize_admission_row(connection, episode, admission_id, status, external) do
     params =

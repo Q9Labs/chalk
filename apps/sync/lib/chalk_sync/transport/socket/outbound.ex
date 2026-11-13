@@ -17,12 +17,18 @@ defmodule ChalkSync.Transport.Socket.Outbound do
          %{state | terminal: %{close_code: 1000, reason: :terminal_recovery}}}
 
       {:ok, encoded, :recovery_complete} ->
-        next = state |> Map.put(:phase, :live) |> Lifecycle.start_heartbeat() |> Lifecycle.start_entry_deadline()
+        next =
+          state
+          |> Map.put(:phase, :live)
+          |> Lifecycle.start_heartbeat()
+          |> Lifecycle.start_entry_deadline()
+
         send(self(), :collaboration_drain)
         {:push, {:text, Frames.encode_with_context(next, encoded)}, next}
 
       {:ok, encoded, false} ->
-        {:push, {:text, Frames.encode_with_context(state, encoded)}, Lifecycle.mark_control_checked(state)}
+        {:push, {:text, Frames.encode_with_context(state, encoded)},
+         Lifecycle.mark_control_checked(state)}
 
       {:ok, encoded, {:terminal, revision, state_digest}} ->
         Lifecycle.cancel_timer(state.heartbeat_timer)

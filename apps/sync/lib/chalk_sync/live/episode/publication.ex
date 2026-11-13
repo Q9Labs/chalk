@@ -29,7 +29,7 @@ defmodule ChalkSync.Live.Episode.Publication do
   end
 
   def apply_live_target(state, identity, authority, source, target)
-       when source in [:camera, :microphone, :screen] do
+      when source in [:camera, :microphone, :screen] do
     key = {authority.participant_id, Atom.to_string(source)}
 
     publication_id =
@@ -47,7 +47,10 @@ defmodule ChalkSync.Live.Episode.Publication do
         :ok ->
           pauses = Map.put(state.media_pauses, key, publication_id)
           next = %{state | media_pauses: pauses}
-          next = ScreenLeases.maybe_release_screen_lease(next, authority, source, false, :confirmed)
+
+          next =
+            ScreenLeases.maybe_release_screen_lease(next, authority, source, false, :confirmed)
+
           {next, live_result(target, :confirmed)}
 
         {:retryable, reason} ->
@@ -62,9 +65,9 @@ defmodule ChalkSync.Live.Episode.Publication do
     end
   end
 
-
   defp enable_publication(state, identity, authority, source, target) do
-    with {module, adapter} <- MediaObservation.media_plane(authority) || {:error, :dependency_unavailable},
+    with {module, adapter} <-
+           MediaObservation.media_plane(authority) || {:error, :dependency_unavailable},
          {:ok, reservation} <-
            timed(:reserve, fn ->
              Stateholder.reserve_publication_grant(identity, target.operation_id, source)
@@ -83,7 +86,6 @@ defmodule ChalkSync.Live.Episode.Publication do
       {:error, reason} -> {state, live_result(target, :terminal_failure, reason)}
     end
   end
-
 
   defp enable_reserved_publication(
          state,
@@ -125,9 +127,7 @@ defmodule ChalkSync.Live.Episode.Publication do
     {state, live_result(target, reported)}
   end
 
-
   defp timed(stage, fun), do: Telemetry.timed([:live_target, :stage], stage, fun)
-
 
   defp grant(module, adapter, state, authority, source, operation_id, reservation) do
     {module, adapter} =
@@ -147,7 +147,6 @@ defmodule ChalkSync.Live.Episode.Publication do
     |> provider_outcome()
   end
 
-
   defp complete_grant(state, reservation, outcome) do
     completion =
       timed(:complete, fn ->
@@ -161,7 +160,6 @@ defmodule ChalkSync.Live.Episode.Publication do
     completed_grant_result(outcome, completion)
   end
 
-
   defp completed_grant_result(outcome, {:ok, %{result: :authorized}}),
     do: {retryable_provider_outcome(outcome), retain_grant_authority?(outcome)}
 
@@ -174,20 +172,16 @@ defmodule ChalkSync.Live.Episode.Publication do
   defp completed_grant_result(_outcome, {:error, _reason}),
     do: {{:terminal_failure, :authority_changed}, false}
 
-
   defp retryable_provider_outcome(:ambiguous),
     do: {:retryable_failure, :dependency_unavailable}
 
   defp retryable_provider_outcome(outcome), do: outcome
 
-
   defp provider_outcome({:error, reason}), do: {:retryable_failure, reason}
   defp provider_outcome(outcome), do: outcome
 
-
   defp retain_grant_authority?({:terminal_failure, _reason}), do: false
   defp retain_grant_authority?(_outcome), do: true
-
 
   defp retain_or_release_screen_lease(state, authority, lease, true, target, outcome) do
     leases = Map.put(state.screen_leases, authority.participant_id, lease)
@@ -199,21 +193,18 @@ defmodule ChalkSync.Live.Episode.Publication do
     {state, live_result(target, outcome)}
   end
 
-
   defp screen_lease_failure(target, :dependency_unavailable),
     do: live_result(target, :retryable_failure, :dependency_unavailable)
 
   defp screen_lease_failure(target, reason),
     do: live_result(target, :terminal_failure, reason)
 
-
   defp name_string(name) when is_atom(name), do: Atom.to_string(name)
   defp name_string(name) when is_binary(name), do: name
 
-
   def live_result(target, {outcome, error_code})
-       when outcome in [:retryable_failure, :terminal_failure],
-       do: live_result(target, outcome, error_code)
+      when outcome in [:retryable_failure, :terminal_failure],
+      do: live_result(target, outcome, error_code)
 
   def live_result(target, outcome), do: live_result(target, outcome, nil)
 

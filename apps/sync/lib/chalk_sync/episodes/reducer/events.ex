@@ -24,7 +24,12 @@ defmodule ChalkSync.Episodes.Reducer.Events do
 
   def apply_payload(state, "participant_joined", payload) do
     with :ok <-
-           Validation.exact_keys(payload, ["admission_revision", "display_name", "participant_id", "role"]),
+           Validation.exact_keys(payload, [
+             "admission_revision",
+             "display_name",
+             "participant_id",
+             "role"
+           ]),
          false <- joined?(state, payload["participant_id"]),
          true <- map_size(state.participants) < @max_participants,
          {:ok, admission_request_id} <- matching_admission_request(state, payload) do
@@ -140,7 +145,7 @@ defmodule ChalkSync.Episodes.Reducer.Events do
   end
 
   def apply_payload(state, name, payload)
-       when name in ["admission_denied", "admission_expired"] do
+      when name in ["admission_denied", "admission_expired"] do
     with :ok <- Validation.exact_keys(payload, ["admission_request_id"]),
          request_id when is_binary(request_id) <- payload["admission_request_id"],
          true <- Map.has_key?(state.admission_requests, request_id) do
@@ -151,11 +156,11 @@ defmodule ChalkSync.Episodes.Reducer.Events do
   end
 
   def apply_payload(state, name, payload)
-       when name in [
-              "participant_microphone_stopped",
-              "participant_camera_stopped",
-              "participant_screen_share_stopped"
-            ] do
+      when name in [
+             "participant_microphone_stopped",
+             "participant_camera_stopped",
+             "participant_screen_share_stopped"
+           ] do
     with :ok <- Validation.exact_keys(payload, ["participant_id"]),
          true <- joined?(state, payload["participant_id"]) do
       {:ok, state}
@@ -193,7 +198,6 @@ defmodule ChalkSync.Episodes.Reducer.Events do
 
   def apply_payload(_state, _name, _payload), do: {:error, :unknown_event}
 
-
   defp valid_recording_transition(nil, %{"status" => "starting"}), do: :ok
 
   defp valid_recording_transition(%{"status" => status}, %{"status" => "starting"})
@@ -217,7 +221,6 @@ defmodule ChalkSync.Episodes.Reducer.Events do
 
   defp valid_recording_transition(_current, _next), do: {:error, :invalid_transition}
 
-
   defp matching_admission_request(state, payload) do
     matches =
       Enum.filter(state.admission_requests, fn {_id, request} ->
@@ -239,7 +242,6 @@ defmodule ChalkSync.Episodes.Reducer.Events do
     end
   end
 
-
   defp remove_admission_request(state, nil), do: state
 
   defp remove_admission_request(state, request_id),
@@ -249,10 +251,8 @@ defmodule ChalkSync.Episodes.Reducer.Events do
         admission_request_order: List.delete(state.admission_request_order, request_id)
     }
 
-
   defp participant_id(value) when is_binary(value) and byte_size(value) > 0, do: {:ok, value}
   defp participant_id(_value), do: {:error, :invalid_payload}
-
 
   def participant(state, participant_id) do
     case state.participants do
@@ -260,7 +260,6 @@ defmodule ChalkSync.Episodes.Reducer.Events do
       _ -> {:error, :not_joined}
     end
   end
-
 
   defp event_participant(state, payload) do
     with :ok <- Validation.exact_keys(payload, ["participant_id"]),

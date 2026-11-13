@@ -39,15 +39,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
     end
   end
 
-
   def maybe_persist_recording_failure(connection, episode, external, state, failure_code)
-       when external.name in [
-              :start_recording,
-              :stop_recording,
-              :recording_capture_ready,
-              :recording_capture_stopped,
-              :recording_capture_failed
-            ] do
+      when external.name in [
+             :start_recording,
+             :stop_recording,
+             :recording_capture_ready,
+             :recording_capture_stopped,
+             :recording_capture_failed
+           ] do
     payload = %{
       "recording_id" => external.recording_id,
       "status" => "failed",

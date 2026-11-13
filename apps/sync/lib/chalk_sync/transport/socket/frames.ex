@@ -21,7 +21,6 @@ defmodule ChalkSync.Transport.Socket.Frames do
     |> ProtocolV1.encode!()
   end
 
-
   # The authenticated seat can still be pending when its media startup policy runs.
   # Send its verified association privately, without making pending seats public.
   defp own_identity_projection(%{"type" => "welcome", "mode" => mode} = frame, %{
@@ -33,20 +32,17 @@ defmodule ChalkSync.Transport.Socket.Frames do
 
   defp own_identity_projection(frame, _state), do: frame
 
-
   # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
   defp presence_hint_keys(%{connection_quality: false} = state),
     do: ["connection_quality" | device_hint_keys(state)]
 
   defp presence_hint_keys(state), do: device_hint_keys(state)
 
-
   defp device_hint_keys(%{participant_devices: false}),
     do: ["identity_id", "device_type", "admission_revision"]
 
   defp device_hint_keys(%{participant_device_admissions: false}), do: ["admission_revision"]
   defp device_hint_keys(_state), do: []
-
 
   defp device_projection(%{"stream" => "presence", "items" => items} = frame, keys),
     do: %{frame | "items" => Enum.map(items, &Map.drop(&1, keys))}
@@ -55,7 +51,6 @@ defmodule ChalkSync.Transport.Socket.Frames do
     do: %{frame | "item" => Map.drop(item, keys)}
 
   defp device_projection(frame, _keys), do: frame
-
 
   defp media_projection(frame, %{media_off_reason: true}), do: frame
 
@@ -66,7 +61,6 @@ defmodule ChalkSync.Transport.Socket.Frames do
     do: %{frame | "item" => Map.drop(item, @off_reason_keys)}
 
   defp media_projection(frame, _state), do: frame
-
 
   def device_type(nil), do: nil
 
@@ -79,14 +73,12 @@ defmodule ChalkSync.Transport.Socket.Frames do
     end
   end
 
-
   def protocol_error(reason, state),
     do:
       {:push,
        {:text,
         encode_with_context(state, ProtocolV1.error(:protocol_error, Atom.to_string(reason)))},
        state}
-
 
   def close_invalid_frame(reason, state) do
     detail =

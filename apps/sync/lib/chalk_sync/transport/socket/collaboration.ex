@@ -24,7 +24,6 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
     end
   end
 
-
   def enqueue_collaboration(frame, state, kind \\ :frame) do
     encoded = Frames.encode_with_context(state, frame)
 
@@ -37,7 +36,6 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
     end
   end
 
-
   def buffer_collaboration(frame, state) do
     encoded = Frames.encode_with_context(state, frame)
 
@@ -49,7 +47,6 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
         Lifecycle.stop(state, 1012, "space action delivery recovery required", :delivery_failure)
     end
   end
-
 
   def push_collaboration(state) do
     case CollaborationQueue.take(state.collaboration_queue, false) do
@@ -75,16 +72,14 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
     end
   end
 
-
   def unsubscribe_collaboration(%{
-         identity: %Identity{} = identity,
-         collaboration_negotiated: true
-       }) do
+        identity: %Identity{} = identity,
+        collaboration_negotiated: true
+      }) do
     Chat.unsubscribe(identity, self())
   end
 
   def unsubscribe_collaboration(_state), do: :ok
-
 
   def observe_collaboration(state, operation, outcome) do
     observability =
@@ -95,7 +90,6 @@ defmodule ChalkSync.Transport.Socket.Collaboration do
 
     %{state | observability: observability}
   end
-
 
   def negotiation_outcome(true), do: "negotiated"
   def negotiation_outcome(false), do: "not_requested"

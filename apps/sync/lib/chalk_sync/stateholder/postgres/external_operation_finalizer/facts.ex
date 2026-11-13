@@ -6,7 +6,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
   alias ChalkSync.Episodes.Reducer
 
   def local_operation_outcome(%{name: name} = external, state)
-       when name in [:participant_leave, :remove_participant] do
+      when name in [:participant_leave, :remove_participant] do
     reason = if name == :participant_leave, do: "left", else: "removed"
 
     case Reducer.decide_external(state, :participant_leave, %{
@@ -28,9 +28,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
     end
   end
 
-
   def expected_external_fact(external, state, name, payload)
-       when external.name in [:remove_participant, :participant_leave] do
+      when external.name in [:remove_participant, :participant_leave] do
     reason = if external.name == :remove_participant, do: "removed", else: "left"
 
     case Reducer.decide_external(state, :participant_leave, %{
@@ -56,7 +55,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
       {:error, :invalid_operation_outcome}
     end
   end
-
 
   defp expected_fact(%{name: :deny_admission} = external, _state),
     do: {:admission_denied, %{"admission_request_id" => external.payload["admissionRequestId"]}}

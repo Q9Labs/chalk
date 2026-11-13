@@ -795,7 +795,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
 
     case Reducer.apply_external(state, :recording_status_changed, payload) do
       {:ok, event, next_state} ->
-        ExternalOperationFinalizer.Products.persist_event(connection, episode, external, event, next_state)
+        ExternalOperationFinalizer.Products.persist_event(
+          connection,
+          episode,
+          external,
+          event,
+          next_state
+        )
+
         next_state
 
       {:error, reason} ->

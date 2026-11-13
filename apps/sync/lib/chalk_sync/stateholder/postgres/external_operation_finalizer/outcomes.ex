@@ -14,22 +14,23 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   alias ChalkSync.Stateholder.Postgres.RoleTransitionSettlement
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: :participant_leave} = external,
-         state,
-         {:confirmed, :local}
-       ),
-       do: finalize_confirmed_operation(connection, episode, external, state)
+        connection,
+        episode,
+        %{name: :participant_leave} = external,
+        state,
+        {:confirmed, :local}
+      ),
+      do: finalize_confirmed_operation(connection, episode, external, state)
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: :admit_participant} = external,
-         state,
-         {:confirmed, :local}
-       ) do
-    with {:ok, admission} <- Admission.lock_reserved_admission_for_external(connection, episode, external) do
+        connection,
+        episode,
+        %{name: :admit_participant} = external,
+        state,
+        {:confirmed, :local}
+      ) do
+    with {:ok, admission} <-
+           Admission.lock_reserved_admission_for_external(connection, episode, external) do
       Admission.finalize_admission_approval(
         connection,
         episode,
@@ -42,65 +43,65 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   end
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: name} = external,
-         state,
-         {:confirmed, :local}
-       )
-       when name in [:deny_admission, :admission_request_expired, :tenant_set_deadline],
-       do: finalize_confirmed_operation(connection, episode, external, state)
+        connection,
+        episode,
+        %{name: name} = external,
+        state,
+        {:confirmed, :local}
+      )
+      when name in [:deny_admission, :admission_request_expired, :tenant_set_deadline],
+      do: finalize_confirmed_operation(connection, episode, external, state)
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: name} = external,
-         state,
-         {:confirmed, :local}
-       )
-       when name in [
-              :recording_capture_ready,
-              :recording_capture_stopped,
-              :recording_capture_failed
-            ],
-       do: finalize_confirmed_operation(connection, episode, external, state)
+        connection,
+        episode,
+        %{name: name} = external,
+        state,
+        {:confirmed, :local}
+      )
+      when name in [
+             :recording_capture_ready,
+             :recording_capture_stopped,
+             :recording_capture_failed
+           ],
+      do: finalize_confirmed_operation(connection, episode, external, state)
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: name} = external,
-         state,
-         {:confirmed, :provider}
-       )
-       when name in [
-              :mute_participant,
-              :stop_participant_camera,
-              :stop_participant_screen_share,
-              :remove_participant,
-              :participant_leave,
-              :end_episode,
-              :tenant_end_episode,
-              :maximum_duration_expired
-            ],
-       do: finalize_confirmed_operation(connection, episode, external, state)
+        connection,
+        episode,
+        %{name: name} = external,
+        state,
+        {:confirmed, :provider}
+      )
+      when name in [
+             :mute_participant,
+             :stop_participant_camera,
+             :stop_participant_screen_share,
+             :remove_participant,
+             :participant_leave,
+             :end_episode,
+             :tenant_end_episode,
+             :maximum_duration_expired
+           ],
+      do: finalize_confirmed_operation(connection, episode, external, state)
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: name} = external,
-         state,
-         {:confirmed, :recording}
-       )
-       when name in [:start_recording, :stop_recording],
-       do: RecordingOutcome.finalize_recording_reservation(connection, episode, external, state)
+        connection,
+        episode,
+        %{name: name} = external,
+        state,
+        {:confirmed, :recording}
+      )
+      when name in [:start_recording, :stop_recording],
+      do: RecordingOutcome.finalize_recording_reservation(connection, episode, external, state)
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: :role_transition_source_stop} = external,
-         _state,
-         {:confirmed, _provider}
-       ) do
+        connection,
+        episode,
+        %{name: :role_transition_source_stop} = external,
+        _state,
+        {:confirmed, _provider}
+      ) do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
@@ -112,12 +113,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   end
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: :role_transition_source_stop} = external,
-         _state,
-         {:applied, _name, _payload}
-       ) do
+        connection,
+        episode,
+        %{name: :role_transition_source_stop} = external,
+        _state,
+        {:applied, _name, _payload}
+      ) do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
@@ -129,13 +130,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   end
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         %{name: :role_transition_source_stop} = external,
-         _state,
-         {:failed, reason}
-       )
-       when is_atom(reason) do
+        connection,
+        episode,
+        %{name: :role_transition_source_stop} = external,
+        _state,
+        {:failed, reason}
+      )
+      when is_atom(reason) do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
@@ -150,14 +151,22 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   end
 
   def finalize_pending_operation(connection, episode, external, state, {:failed, reason})
-       when is_atom(reason) do
+      when is_atom(reason) do
     failure_code = Atom.to_string(reason)
 
     if byte_size(failure_code) > 96 do
       Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
     end
 
-    state = RecordingOutcome.maybe_persist_recording_failure(connection, episode, external, state, failure_code)
+    state =
+      RecordingOutcome.maybe_persist_recording_failure(
+        connection,
+        episode,
+        external,
+        state,
+        failure_code
+      )
+
     Receipts.release_failed_acceptance(connection, episode, external)
     PublicationFences.delete(connection, episode, external)
     Receipts.mark_external_failed(connection, episode, external, failure_code)
@@ -168,13 +177,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
   end
 
   def finalize_pending_operation(
-         connection,
-         episode,
-         external,
-         state,
-         {:applied, name, payload}
-       )
-       when is_atom(name) and is_map(payload) do
+        connection,
+        episode,
+        external,
+        state,
+        {:applied, name, payload}
+      )
+      when is_atom(name) and is_map(payload) do
     if external.name == :admit_participant do
       Admission.finalize_admission_approval(connection, episode, external, state, name, payload)
     else

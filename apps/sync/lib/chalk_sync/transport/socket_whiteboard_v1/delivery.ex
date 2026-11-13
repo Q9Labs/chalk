@@ -186,8 +186,11 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Delivery do
   def head(state, _scene_id, _revision), do: {:ok, state}
 
   @doc "A Fanout frame for this socket: deliver it in order, hold it while recovering, or drop it."
-  def frame(%{"type" => "cursor", "participant_id" => id}, %{identity: %{participant_id: id}} = state),
-    do: {:ok, state}
+  def frame(
+        %{"type" => "cursor", "participant_id" => id},
+        %{identity: %{participant_id: id}} = state
+      ),
+      do: {:ok, state}
 
   def frame(
         %{"type" => "view", "participant_id" => id},
