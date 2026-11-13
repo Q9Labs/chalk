@@ -19,6 +19,7 @@ import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
+const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
 const IDLE_RELEASE_MS = 30_000;
@@ -642,7 +643,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!intent.enabled) return this.#send(ports, source, intent, false);
     let captured: MediaStreamTrack | null = null;
     let prepared = false;
-    const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
+    const action = ENABLE_ACTION[source];
     return this.#mediaAction(
       true,
       Effect.suspend(() => {
@@ -895,20 +896,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
 
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
+    const waitLive = enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
     const command = this.#mediaAction(
       enabled,
       foreign(async () => {
         // Revision check and transport invocation are one synchronous turn, owned by the source worker.
         this.#assertCurrentIntent(source, intent.revision, enabled);
-        this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
+        this.#assertActivePorts(ports, ENABLE_ACTION[source]);
         const send = source === "microphone" ? ports.sync.setMicrophoneEnabled : source === "camera" ? ports.sync.setCameraEnabled : ports.sync.setScreenShareEnabled;
         await send.call(ports.sync, enabled);
       }).pipe(
-        Effect.andThen(enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void),
-        Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
+        Effect.andThen(waitLive),
+        Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, ENABLE_ACTION[source]), catch: (cause) => cause })),
       ),
     );
-    return enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports).pipe(Effect.andThen(command)) : command;
+    return waitLive.pipe(Effect.andThen(command));
   }
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
@@ -1349,7 +1351,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
             }),
           ),
         ),
-      (cause) => captureError(cause, source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled", `${source} permission was denied`),
+      (cause) => captureError(cause, ENABLE_ACTION[source], `${source} permission was denied`),
       signal,
     );
   }
@@ -1359,7 +1361,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.sync(() => {
           const current = this.#store.getSnapshot().media;
           const next = Object.freeze({ microphones: mediaDevicesOfKind(devices, "audioinput"), cameras: mediaDevicesOfKind(devices, "videoinput"), speakers: mediaDevicesOfKind(devices, "audiooutput") });
-          if (!sameDevices(current.devices, next)) this.#store.updateMedia(Object.freeze({ ...current, devices: next }));
+          if (!sameDevices(current.devices, next)) this.#store.update("media", Object.freeze({ ...current, devices: next }));
         }),
       ),
       Effect.asVoid,
@@ -1704,7 +1706,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       callStats: snapshot?.callStats,
       link,
     });
-    if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
+    if (!sameMediaSlice(current.media, media)) this.#store.update("media", media);
   }
 }
 function pausedPublicationIds(snapshot: ConnectionMediaSnapshot | undefined): ReadonlySet<string> {

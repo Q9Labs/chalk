@@ -44,7 +44,6 @@ class ReactionsControllerRuntime implements ReactionsControllerEffects {
       catch: normalizeClientError,
     }).pipe(
       Effect.andThen(this.#connection.runCommand(({ sync }) => foreign(() => sync.sendReaction(emoji)))),
-
       Effect.map(reactionFor),
       Effect.tap((reaction) =>
         Effect.sync(() => {
@@ -106,7 +105,7 @@ class ReactionsControllerRuntime implements ReactionsControllerEffects {
     const active = Object.freeze([...this.#active.values()]);
     const current = this.#store.getSnapshot().reactions.active;
     if (sameReactions(current, active)) return;
-    this.#store.updateReactions(Object.freeze({ active }));
+    this.#store.update("reactions", Object.freeze({ active }));
   }
 }
 function reactionFor(reaction: import("../collaboration/types").ChalkReactionEvent): ActiveReaction {

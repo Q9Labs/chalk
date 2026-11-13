@@ -270,6 +270,6 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
 
   #publish(): void {
     const slice: OfflineSlice = Object.freeze({ pending: Object.freeze(this.#waiters.map((waiter) => waiter.action)), decisionNeeded: this.#decisionNeeded, policy: this.#policy, ...(this.#notice ? { notice: this.#notice } : {}) });
-    this.#store.updateOffline(slice);
+    this.#store.update("offline", slice);
   }
 }

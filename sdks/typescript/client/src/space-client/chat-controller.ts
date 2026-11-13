@@ -86,11 +86,10 @@ class ChatControllerRuntime implements ChatControllerEffects {
         const sendNow = () => Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "sending", null)).pipe(Effect.andThen(command));
         const held = this.#offline?.hold({ kind: "chat_message", text: input.text, clientMessageId, attachments }, sendNow);
         if (held) this.#upsertPending(clientMessageId, input.text, attachments, "queued", null);
-        return (held ?? sendNow()).pipe(Effect.tap(() => Effect.void)).pipe(
+        return (held ?? sendNow()).pipe(
           Effect.map(chatMessageFor),
           Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
           Effect.map((message) => this.#observeMessage(message, false)),
-
           Effect.catch((cause) => {
             const error = normalizeClientError(cause, "chat.payload_invalid");
             return Effect.sync(() => {
@@ -128,13 +127,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
             this.#applyPage(result);
           }),
         ),
-        Effect.mapError((cause) => {
-          const error = normalizeClientError(cause, "chat.payload_invalid");
-          this.#status = "failed";
-          this.#lastError = failureFromError(error);
-          this.#publish();
-          return error;
-        }),
+        Effect.mapError((cause) => this.#fail(cause)),
       );
   };
   markRead = (messageId: string): ClientEffect<ChatReadReceipt | null> => {
@@ -153,7 +146,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
         .pipe(
           Effect.map(chatReceiptFor),
           Effect.tap((receipt) => Effect.sync(() => this.#mergeReceipt(receipt))),
-
           Effect.mapError(normalizeClientError),
         );
     });
@@ -224,6 +216,13 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#scheduleCatchUp();
     this.#publish();
   }
+  #fail(cause: unknown): SpaceClientError {
+    const error = normalizeClientError(cause, "chat.payload_invalid");
+    this.#status = "failed";
+    this.#lastError = failureFromError(error);
+    this.#publish();
+    return error;
+  }
   #refreshLoaded(ports: ConnectionPorts): void {
     const first = this.#messages[0];
     const last = this.#messages.at(-1);
@@ -268,10 +267,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
         Effect.catch((cause) =>
           Effect.sync(() => {
             if (this.#ports !== ports) return;
-            const error = normalizeClientError(cause, "chat.payload_invalid");
-            this.#status = "failed";
-            this.#lastError = failureFromError(error);
-            this.#publish();
+            this.#fail(cause);
           }),
         ),
         Effect.ensuring(
@@ -450,7 +446,8 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#publish();
   }
   #publish(): void {
-    this.#store.updateChat(
+    this.#store.update(
+      "chat",
       Object.freeze({
         status: this.#status,
         messages: this.#messages,
