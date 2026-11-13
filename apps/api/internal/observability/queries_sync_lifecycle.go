@@ -2,126 +2,80 @@ package observability
 
 import (
 	"context"
-	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 )
 
 func (q operationQuerier) CreateLifecycleIntent(ctx context.Context, arg sqlc.CreateLifecycleIntentParams) (sqlc.SyncLifecycleIntent, error) {
-	startedAt := time.Now()
-	intent, err := q.next.CreateLifecycleIntent(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateLifecycleIntent", startedAt, err)
-	return intent, err
+	return observe(ctx, q, "CreateLifecycleIntent", func() (sqlc.SyncLifecycleIntent, error) { return q.next.CreateLifecycleIntent(ctx, arg) })
 }
 
 func (q operationQuerier) CreateLifecycleParticipant(ctx context.Context, arg sqlc.CreateLifecycleParticipantParams) (sqlc.Participant, error) {
-	startedAt := time.Now()
-	participant, err := q.next.CreateLifecycleParticipant(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateLifecycleParticipant", startedAt, err)
-	return participant, err
+	return observe(ctx, q, "CreateLifecycleParticipant", func() (sqlc.Participant, error) { return q.next.CreateLifecycleParticipant(ctx, arg) })
 }
 
 func (q operationQuerier) CreateLifecycleEpisode(ctx context.Context, arg sqlc.CreateLifecycleEpisodeParams) (sqlc.Episode, error) {
-	startedAt := time.Now()
-	episode, err := q.next.CreateLifecycleEpisode(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateLifecycleEpisode", startedAt, err)
-	return episode, err
+	return observe(ctx, q, "CreateLifecycleEpisode", func() (sqlc.Episode, error) { return q.next.CreateLifecycleEpisode(ctx, arg) })
 }
 
 func (q operationQuerier) CreateSyncEpisodeControl(ctx context.Context, arg sqlc.CreateSyncEpisodeControlParams) (sqlc.SyncEpisodeControl, error) {
-	startedAt := time.Now()
-	control, err := q.next.CreateSyncEpisodeControl(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateSyncEpisodeControl", startedAt, err)
-	return control, err
+	return observe(ctx, q, "CreateSyncEpisodeControl", func() (sqlc.SyncEpisodeControl, error) { return q.next.CreateSyncEpisodeControl(ctx, arg) })
 }
 
 func (q operationQuerier) GetEpisodeCreateRequest(ctx context.Context, arg sqlc.GetEpisodeCreateRequestParams) (sqlc.EpisodeCreateRequest, error) {
-	startedAt := time.Now()
-	request, err := q.next.GetEpisodeCreateRequest(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "GetEpisodeCreateRequest", startedAt, err)
-	return request, err
+	return observe(ctx, q, "GetEpisodeCreateRequest", func() (sqlc.EpisodeCreateRequest, error) { return q.next.GetEpisodeCreateRequest(ctx, arg) })
 }
 
 func (q operationQuerier) LockLifecycleIntentForParticipantTransitionForUpdate(ctx context.Context, arg sqlc.LockLifecycleIntentForParticipantTransitionForUpdateParams) (sqlc.SyncLifecycleIntent, error) {
-	startedAt := time.Now()
-	intent, err := q.next.LockLifecycleIntentForParticipantTransitionForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockLifecycleIntentForParticipantTransitionForUpdate", startedAt, err)
-	return intent, err
+	return observe(ctx, q, "LockLifecycleIntentForParticipantTransitionForUpdate", func() (sqlc.SyncLifecycleIntent, error) {
+		return q.next.LockLifecycleIntentForParticipantTransitionForUpdate(ctx, arg)
+	})
 }
 
 func (q operationQuerier) LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg sqlc.LockLifecycleIntentForRequestForUpdateParams) (sqlc.SyncLifecycleIntent, error) {
-	startedAt := time.Now()
-	intent, err := q.next.LockLifecycleIntentForRequestForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockLifecycleIntentForRequestForUpdate", startedAt, err)
-	return intent, err
+	return observe(ctx, q, "LockLifecycleIntentForRequestForUpdate", func() (sqlc.SyncLifecycleIntent, error) {
+		return q.next.LockLifecycleIntentForRequestForUpdate(ctx, arg)
+	})
 }
 
 func (q operationQuerier) LockLifecycleParticipantForUpdate(ctx context.Context, arg sqlc.LockLifecycleParticipantForUpdateParams) (sqlc.Participant, error) {
-	startedAt := time.Now()
-	participant, err := q.next.LockLifecycleParticipantForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockLifecycleParticipantForUpdate", startedAt, err)
-	return participant, err
+	return observe(ctx, q, "LockLifecycleParticipantForUpdate", func() (sqlc.Participant, error) { return q.next.LockLifecycleParticipantForUpdate(ctx, arg) })
 }
 
 func (q operationQuerier) LockLifecycleEpisodeForUpdate(ctx context.Context, arg sqlc.LockLifecycleEpisodeForUpdateParams) (sqlc.Episode, error) {
-	startedAt := time.Now()
-	episode, err := q.next.LockLifecycleEpisodeForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockLifecycleEpisodeForUpdate", startedAt, err)
-	return episode, err
+	return observe(ctx, q, "LockLifecycleEpisodeForUpdate", func() (sqlc.Episode, error) { return q.next.LockLifecycleEpisodeForUpdate(ctx, arg) })
 }
 
 func (q operationQuerier) LockEpisodeEndLifecycleIntentForUpdate(ctx context.Context, arg sqlc.LockEpisodeEndLifecycleIntentForUpdateParams) (sqlc.SyncLifecycleIntent, error) {
-	startedAt := time.Now()
-	intent, err := q.next.LockEpisodeEndLifecycleIntentForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockEpisodeEndLifecycleIntentForUpdate", startedAt, err)
-	return intent, err
+	return observe(ctx, q, "LockEpisodeEndLifecycleIntentForUpdate", func() (sqlc.SyncLifecycleIntent, error) {
+		return q.next.LockEpisodeEndLifecycleIntentForUpdate(ctx, arg)
+	})
 }
 
 func (q operationQuerier) LockSyncEpisodeControlForUpdate(ctx context.Context, arg sqlc.LockSyncEpisodeControlForUpdateParams) (sqlc.SyncEpisodeControl, error) {
-	startedAt := time.Now()
-	control, err := q.next.LockSyncEpisodeControlForUpdate(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "LockSyncEpisodeControlForUpdate", startedAt, err)
-	return control, err
+	return observe(ctx, q, "LockSyncEpisodeControlForUpdate", func() (sqlc.SyncEpisodeControl, error) { return q.next.LockSyncEpisodeControlForUpdate(ctx, arg) })
 }
 
 func (q operationQuerier) MarkLifecycleParticipantLeaving(ctx context.Context, arg sqlc.MarkLifecycleParticipantLeavingParams) (sqlc.Participant, error) {
-	startedAt := time.Now()
-	participant, err := q.next.MarkLifecycleParticipantLeaving(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "MarkLifecycleParticipantLeaving", startedAt, err)
-	return participant, err
+	return observe(ctx, q, "MarkLifecycleParticipantLeaving", func() (sqlc.Participant, error) { return q.next.MarkLifecycleParticipantLeaving(ctx, arg) })
 }
 
 func (q operationQuerier) MarkLifecycleEpisodeEnding(ctx context.Context, arg sqlc.MarkLifecycleEpisodeEndingParams) (sqlc.Episode, error) {
-	startedAt := time.Now()
-	episode, err := q.next.MarkLifecycleEpisodeEnding(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "MarkLifecycleEpisodeEnding", startedAt, err)
-	return episode, err
+	return observe(ctx, q, "MarkLifecycleEpisodeEnding", func() (sqlc.Episode, error) { return q.next.MarkLifecycleEpisodeEnding(ctx, arg) })
 }
 
 func (q operationQuerier) ReserveParticipantAdmission(ctx context.Context, arg sqlc.ReserveParticipantAdmissionParams) (sqlc.SyncEpisodeControl, error) {
-	startedAt := time.Now()
-	control, err := q.next.ReserveParticipantAdmission(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveParticipantAdmission", startedAt, err)
-	return control, err
+	return observe(ctx, q, "ReserveParticipantAdmission", func() (sqlc.SyncEpisodeControl, error) { return q.next.ReserveParticipantAdmission(ctx, arg) })
 }
 
 func (q operationQuerier) ReserveParticipantRemoval(ctx context.Context, arg sqlc.ReserveParticipantRemovalParams) (sqlc.SyncEpisodeControl, error) {
-	startedAt := time.Now()
-	control, err := q.next.ReserveParticipantRemoval(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveParticipantRemoval", startedAt, err)
-	return control, err
+	return observe(ctx, q, "ReserveParticipantRemoval", func() (sqlc.SyncEpisodeControl, error) { return q.next.ReserveParticipantRemoval(ctx, arg) })
 }
 
 func (q operationQuerier) ReserveEpisodeEnd(ctx context.Context, arg sqlc.ReserveEpisodeEndParams) (sqlc.SyncEpisodeControl, error) {
-	startedAt := time.Now()
-	control, err := q.next.ReserveEpisodeEnd(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveEpisodeEnd", startedAt, err)
-	return control, err
+	return observe(ctx, q, "ReserveEpisodeEnd", func() (sqlc.SyncEpisodeControl, error) { return q.next.ReserveEpisodeEnd(ctx, arg) })
 }
 
 func (q operationQuerier) ReserveEpisodeCreateRequest(ctx context.Context, arg sqlc.ReserveEpisodeCreateRequestParams) (sqlc.EpisodeCreateRequest, error) {
-	startedAt := time.Now()
-	request, err := q.next.ReserveEpisodeCreateRequest(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ReserveEpisodeCreateRequest", startedAt, err)
-	return request, err
+	return observe(ctx, q, "ReserveEpisodeCreateRequest", func() (sqlc.EpisodeCreateRequest, error) { return q.next.ReserveEpisodeCreateRequest(ctx, arg) })
 }

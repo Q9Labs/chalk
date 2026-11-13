@@ -12,57 +12,42 @@ import (
 var errAPIKeyQueryFailed = errors.New("query failed")
 
 func (q operationQuerier) CreateAPIKey(ctx context.Context, arg sqlc.CreateAPIKeyParams) (sqlc.CreateAPIKeyRow, error) {
-	startedAt := time.Now()
-	key, err := q.next.CreateAPIKey(ctx, arg)
-	q.logAPIKeyQuery(ctx, "CreateAPIKey", startedAt, err)
-	return key, err
+	return observeAPIKey(ctx, q, "CreateAPIKey", func() (sqlc.CreateAPIKeyRow, error) { return q.next.CreateAPIKey(ctx, arg) })
 }
 
 func (q operationQuerier) GetActiveAPIKeyByPrefix(ctx context.Context, prefix string) (sqlc.GetActiveAPIKeyByPrefixRow, error) {
-	startedAt := time.Now()
-	key, err := q.next.GetActiveAPIKeyByPrefix(ctx, prefix)
-	q.logAPIKeyQuery(ctx, "GetActiveAPIKeyByPrefix", startedAt, err)
-	return key, err
+	return observeAPIKey(ctx, q, "GetActiveAPIKeyByPrefix", func() (sqlc.GetActiveAPIKeyByPrefixRow, error) { return q.next.GetActiveAPIKeyByPrefix(ctx, prefix) })
 }
 
 func (q operationQuerier) GetTenantAPIKey(ctx context.Context, arg sqlc.GetTenantAPIKeyParams) (sqlc.GetTenantAPIKeyRow, error) {
-	startedAt := time.Now()
-	key, err := q.next.GetTenantAPIKey(ctx, arg)
-	q.logAPIKeyQuery(ctx, "GetTenantAPIKey", startedAt, err)
-	return key, err
+	return observeAPIKey(ctx, q, "GetTenantAPIKey", func() (sqlc.GetTenantAPIKeyRow, error) { return q.next.GetTenantAPIKey(ctx, arg) })
 }
 
 func (q operationQuerier) ListTenantAPIKeys(ctx context.Context, arg sqlc.ListTenantAPIKeysParams) ([]sqlc.ListTenantAPIKeysRow, error) {
-	startedAt := time.Now()
-	keys, err := q.next.ListTenantAPIKeys(ctx, arg)
-	q.logAPIKeyQuery(ctx, "ListTenantAPIKeys", startedAt, err)
-	return keys, err
+	return observeAPIKey(ctx, q, "ListTenantAPIKeys", func() ([]sqlc.ListTenantAPIKeysRow, error) { return q.next.ListTenantAPIKeys(ctx, arg) })
 }
 
 func (q operationQuerier) RevokeActiveAPIKey(ctx context.Context, arg sqlc.RevokeActiveAPIKeyParams) (pgtype.UUID, error) {
-	startedAt := time.Now()
-	id, err := q.next.RevokeActiveAPIKey(ctx, arg)
-	q.logAPIKeyQuery(ctx, "RevokeActiveAPIKey", startedAt, err)
-	return id, err
+	return observeAPIKey(ctx, q, "RevokeActiveAPIKey", func() (pgtype.UUID, error) { return q.next.RevokeActiveAPIKey(ctx, arg) })
 }
 
 func (q operationQuerier) RotateActiveAPIKey(ctx context.Context, arg sqlc.RotateActiveAPIKeyParams) (sqlc.RotateActiveAPIKeyRow, error) {
-	startedAt := time.Now()
-	key, err := q.next.RotateActiveAPIKey(ctx, arg)
-	q.logAPIKeyQuery(ctx, "RotateActiveAPIKey", startedAt, err)
-	return key, err
+	return observeAPIKey(ctx, q, "RotateActiveAPIKey", func() (sqlc.RotateActiveAPIKeyRow, error) { return q.next.RotateActiveAPIKey(ctx, arg) })
 }
 
 func (q operationQuerier) TouchActiveAPIKeyLastUsed(ctx context.Context, arg sqlc.TouchActiveAPIKeyLastUsedParams) error {
-	startedAt := time.Now()
-	err := q.next.TouchActiveAPIKeyLastUsed(ctx, arg)
-	q.logAPIKeyQuery(ctx, "TouchActiveAPIKeyLastUsed", startedAt, err)
+	_, err := observeAPIKey(ctx, q, "TouchActiveAPIKeyLastUsed", func() (struct{}, error) { return struct{}{}, q.next.TouchActiveAPIKeyLastUsed(ctx, arg) })
 	return err
 }
 
-func (q operationQuerier) logAPIKeyQuery(ctx context.Context, name string, startedAt time.Time, err error) {
-	if err != nil {
-		err = errAPIKeyQueryFailed
+// observeAPIKey logs an API key query without its error: the driver error can echo the key prefix.
+func observeAPIKey[T any](ctx context.Context, q operationQuerier, name string, call func() (T, error)) (T, error) {
+	startedAt := time.Now()
+	result, err := call()
+	logged := err
+	if logged != nil {
+		logged = errAPIKeyQueryFailed
 	}
-	LogOperation(ctx, q.logger, "db.query", name, startedAt, err)
+	LogOperation(ctx, q.logger, "db.query", name, startedAt, logged)
+	return result, err
 }
