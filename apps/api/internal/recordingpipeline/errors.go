@@ -1,0 +1,41 @@
+package recordingpipeline
+
+import (
+	"errors"
+)
+
+var (
+	ErrInvalidTenantID              = errors.New("invalid recording pipeline tenant id")
+	ErrInvalidSpaceID               = errors.New("invalid recording pipeline space id")
+	ErrInvalidEpisodeID             = errors.New("invalid recording pipeline episode id")
+	ErrInvalidRecordingID           = errors.New("invalid recording pipeline recording id")
+	ErrInvalidReservationID         = errors.New("invalid recording reservation id")
+	ErrInvalidJobID                 = errors.New("invalid recording job id")
+	ErrInvalidParticipantCount      = errors.New("recording participant count must be between one and ten")
+	ErrInvalidDuration              = errors.New("recording duration must be greater than zero and at most four hours")
+	ErrInvalidInputBitrate          = errors.New("recording input bitrate must be greater than zero and at most four Mbps")
+	ErrExtensionUnavailable         = errors.New("recording reservation extension is fail-closed until render capacity is qualified")
+	ErrReservationConflict          = errors.New("recording reservation idempotency conflict")
+	ErrCaptureUnsupported           = errors.New("recording capture is not supported for this media plane")
+	ErrCapacityExceeded             = errors.New("recording capacity exceeded")
+	ErrRecordingCapacityUnavailable = ErrCapacityExceeded
+	ErrReservationExpired           = errors.New("recording reservation expired before capture")
+	ErrInvalidIdempotencyKey        = errors.New("invalid recording idempotency key")
+	ErrInvalidOwner                 = errors.New("invalid recording lease owner")
+	ErrCaptureStopPublication       = errors.New("capture stopped publication failed")
+	ErrInvalidLease                 = errors.New("invalid recording lease")
+	ErrInvalidAttempt               = errors.New("invalid recording attempt")
+	ErrInvalidStateTransition       = errors.New("invalid recording state transition")
+	ErrReservationNotFound          = errors.New("recording reservation not found")
+	ErrPipelineNotFound             = errors.New("recording pipeline not found")
+	ErrJobNotFound                  = errors.New("recording job not found or lease lost")
+	ErrArtifactNotFound             = errors.New("recording artifact not found")
+	ErrArtifactConflict             = errors.New("recording artifact metadata conflict")
+	ErrPoolHealthNotFound           = errors.New("recording pool health not found")
+	ErrStopConflict                 = errors.New("recording stop operation conflict")
+	ErrInvalidPolicySnapshotVersion = errors.New("invalid Recording policy snapshot version")
+	ErrClaimConflict                = errors.New("recording claim request conflict")
+	ErrInvalidEnvelope              = errors.New("invalid recorder job envelope")
+	ErrExportUnavailable            = errors.New("recording export source is unavailable")
+	ErrExportRetryLimit             = errors.New("recording export retry limit reached")
+)
