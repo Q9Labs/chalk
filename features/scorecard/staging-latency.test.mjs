@@ -196,7 +196,10 @@ test("the diagnostics sidecar travels from the latency run to the summary and th
 });
 
 test("the kit is timeout's direct child and the cap leaves 55 seconds for each cycle", (t) => {
-  for (const [samples, cap, requested] of [["", "3300s", "60"], ["45", "2475s", "45"]]) {
+  for (const [samples, cap, requested] of [
+    ["", "3300s", "60"],
+    ["45", "2475s", "45"],
+  ]) {
     const { result, command } = run(t, { foreignJoin: false, samples });
     assert.equal(result.status, 0, result.stderr);
     const [program, ...args] = command();
