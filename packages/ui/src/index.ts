@@ -12,6 +12,7 @@ export * from "./skeleton";
 export * from "./icon-button";
 export * from "./progress-bar";
 export * from "./lib/utils";
+export { resolvePortalThemeFromDocument, resolveThemeFromDocument, type ResolveThemeOptions, type ThemeMode } from "./lib/theme";
 export * from "./reactions";
 export * from "./status-badge";
 export * from "./toast";

@@ -19,7 +19,7 @@ const resolveThemeFromElement = (element: Element | null): ThemeMode | null => {
   return attributeTheme ?? classTheme ?? null;
 };
 
-interface ResolveThemeOptions {
+export interface ResolveThemeOptions {
   defaultTheme?: ThemeMode;
   allowSystem?: boolean;
 }
@@ -40,7 +40,7 @@ const resolveFallbackTheme = ({ defaultTheme, allowSystem }: Required<ResolveThe
   return resolveSystemTheme() ?? defaultTheme;
 };
 
-const resolveThemeFromDocument = ({ defaultTheme = "light", allowSystem = true }: ResolveThemeOptions = {}): ThemeMode => {
+export const resolveThemeFromDocument = ({ defaultTheme = "light", allowSystem = true }: ResolveThemeOptions = {}): ThemeMode => {
   const explicitTheme = resolveExplicitThemeFromDocument();
   return explicitTheme ?? resolveFallbackTheme({ defaultTheme, allowSystem });
 };

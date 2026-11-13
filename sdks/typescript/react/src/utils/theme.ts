@@ -1,55 +1,9 @@
-export type ThemeMode = "light" | "dark";
+import { resolveThemeFromDocument, type ResolveThemeOptions, type ThemeMode } from "@q9labsai/chalk-ui";
+
+export { resolvePortalThemeFromDocument, resolveThemeFromDocument, type ThemeMode } from "@q9labsai/chalk-ui";
 
 const THEME_ATTRIBUTE_NAMES = ["data-chalk-theme", "data-theme"] as const;
 const SYSTEM_DARK_QUERY = "(prefers-color-scheme: dark)";
-
-const normalizeTheme = (value?: string | null): ThemeMode | null => {
-  if (value === "dark" || value === "light") {
-    return value;
-  }
-  return null;
-};
-
-const resolveThemeFromElement = (element: Element | null): ThemeMode | null => {
-  if (!element) return null;
-
-  for (const attributeName of THEME_ATTRIBUTE_NAMES) {
-    const attributeTheme = normalizeTheme(element.getAttribute(attributeName));
-    if (attributeTheme) return attributeTheme;
-  }
-
-  const classList = element.classList;
-  if (classList.contains("dark")) return "dark";
-  if (classList.contains("light")) return "light";
-  return null;
-};
-
-interface ResolveThemeOptions {
-  defaultTheme?: ThemeMode;
-  allowSystem?: boolean;
-}
-
-export const resolveThemeFromDocument = ({ defaultTheme = "light", allowSystem = true }: ResolveThemeOptions = {}): ThemeMode => {
-  if (typeof document === "undefined") return defaultTheme;
-
-  const explicitTheme = resolveThemeFromElement(document.documentElement) ?? resolveThemeFromElement(document.body);
-  if (explicitTheme) return explicitTheme;
-
-  if (allowSystem && typeof window !== "undefined" && typeof window.matchMedia === "function") {
-    return window.matchMedia(SYSTEM_DARK_QUERY).matches ? "dark" : "light";
-  }
-
-  return defaultTheme;
-};
-
-export const resolvePortalThemeFromDocument = ({ defaultTheme = "light", allowSystem = true }: ResolveThemeOptions = {}): ThemeMode => {
-  if (typeof document === "undefined") return defaultTheme;
-
-  const portalTheme = normalizeTheme(document.querySelector<HTMLElement>("[data-chalk-theme]")?.getAttribute("data-chalk-theme"));
-  if (portalTheme) return portalTheme;
-
-  return resolveThemeFromDocument({ defaultTheme, allowSystem });
-};
 
 export const applyThemeToDocument = (theme: ThemeMode): void => {
   if (typeof document === "undefined") return;
