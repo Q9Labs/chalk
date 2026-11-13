@@ -2,7 +2,6 @@ package recordingrender
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
@@ -25,25 +24,6 @@ const (
 	MaximumManifestBytes             int64 = 1 << 20
 	MaximumVideoBytes                int64 = 32 << 30
 	MaximumAudioBytes                int64 = 500 << 20
-)
-
-var (
-	ErrInvalidRequest           = errors.New("invalid recording render request")
-	ErrAuthorityMismatch        = errors.New("recording render authority mismatch")
-	ErrLeaseStale               = errors.New("recording render lease is stale")
-	ErrInputNotFound            = errors.New("recording render input not found")
-	ErrInputIncomplete          = errors.New("recording render input is incomplete")
-	ErrInputTooLarge            = errors.New("recording render input exceeds bounds")
-	ErrKeyNotFound              = errors.New("recording render key not found")
-	ErrAllocationNotFound       = errors.New("recording render allocation not found")
-	ErrAllocationConflict       = errors.New("recording render allocation conflict")
-	ErrAllocationExpired        = errors.New("recording render allocation expired")
-	ErrObjectFactsMismatch      = errors.New("recording render object facts mismatch")
-	ErrCommitConflict           = errors.New("recording render commit conflict")
-	ErrTranscriptionUnavailable = errors.New("recording render transcription runtime unavailable")
-	ErrRepositoryUnavailable    = errors.New("recording render repository unavailable")
-	ErrStorageUnavailable       = errors.New("recording render storage unavailable")
-	ErrKMSUnavailable           = errors.New("recording render kms unavailable")
 )
 
 type ObjectPurpose string
@@ -242,32 +222,6 @@ type CommitObjectReference struct {
 	DurationMillis *int64
 }
 
-type TranscriptionChunk struct {
-	ChunkID               utilities.ID
-	Index                 int
-	Generation            int64
-	StartMillis           int64
-	EndMillis             int64
-	SourceStartMillis     int64
-	SourceEndMillis       int64
-	ParticipantRef        string
-	ParticipantGeneration int64
-	DisplayNameSnapshot   string
-	TrackID               string
-	TrackEpoch            string
-	IdentityKind          string
-	TrackClass            string
-	Overlap               bool
-	Object                CommitObjectReference
-}
-
-type TranscriptionSource struct {
-	SchemaVersion      string
-	PresentationSHA256 []byte
-	Manifest           CommitObjectReference
-	Chunks             []TranscriptionChunk
-}
-
 type CommitInput struct {
 	VideoDegradation    []recordingpipeline.VideoDegradation
 	Authority           Authority
@@ -277,22 +231,6 @@ type CommitInput struct {
 	Video               CommitObjectReference
 	FFprobeFactsDigest  []byte
 	TranscriptionSource *TranscriptionSource
-}
-
-// TranscriptionPreparationInput atomically admits the microphone source
-// material prepared by the transcription job. A nil source records that the
-// sealed capture did not contain a microphone source.
-type TranscriptionPreparationInput struct {
-	Authority           Authority
-	CommitDigest        []byte
-	PresentationSHA256  []byte
-	DurationMillis      int64
-	TranscriptionSource *TranscriptionSource
-}
-
-type TranscriptionResult struct {
-	SourceID utilities.ID
-	JobIDs   []utilities.ID
 }
 
 type CommitResult struct {
