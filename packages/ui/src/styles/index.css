@@ -808,6 +808,14 @@
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
   --chalk-toast-lift: 242px;
 }
+/* An open leave menu rises over the dock, so notices rise above it. */
+[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {
+  --chalk-toast-lift: 200px;
+}
+/* An open sheet covers the notices under its scrim; the reactions sheet has no scrim, so notices stay over it. */
+[data-chalk]:has(.chalk-sheet[data-open]:not([data-variant="reactions"])) .chalk-toasts {
+  z-index: 40;
+}
 /* A notice is a grid of icon, message, action and dismiss. The icon, action and dismiss share the first line's 36px row, so a two-line notice keeps its close button beside the title. Spacing lives on the items, so a missing action or dismiss leaves no gap. */
 .chalk-toast {
   display: grid;
@@ -1516,9 +1524,13 @@
   .chalk-menu-item {
     min-height: 48px;
   }
+  /* The phone dock and its home-indicator inset; the leave menu's two rows sit above it. */
   .chalk-toasts {
     --chalk-toast-top: 52px;
-    --chalk-toast-lift: 110px;
+    --chalk-toast-lift: 146px;
+  }
+  [data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {
+    --chalk-toast-lift: 254px;
   }
   .chalk-drawer {
     inset: auto 0 0;
@@ -1559,9 +1571,13 @@
   .chalk-menu-item {
     min-height: 48px;
   }
+  /* The phone dock and its home-indicator inset; the leave menu's two rows sit above it. */
   .chalk-toasts {
     --chalk-toast-top: 52px;
-    --chalk-toast-lift: 110px;
+    --chalk-toast-lift: 146px;
+  }
+  [data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {
+    --chalk-toast-lift: 254px;
   }
   .chalk-drawer {
     inset: auto 0 0;
