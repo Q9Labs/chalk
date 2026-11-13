@@ -1,5 +1,5 @@
 import { CALL_METRICS, ROUTE_METRICS, callMetricId, routeMetricId } from "../metrics.mjs";
-import { metric } from "../stats.mjs";
+import { metric } from "./metric.mjs";
 
 const SOURCE = "check-call-performance";
 

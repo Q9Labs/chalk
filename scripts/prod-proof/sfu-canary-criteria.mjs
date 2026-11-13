@@ -1,9 +1,5 @@
 // Pass and fail rules for the M7 canary check, apart from the browser run that feeds them.
-export function percentile(values, fraction) {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1)];
-}
+import { percentile } from "../../features/scorecard/stats.mjs";
 
 export function summarize(trials, limitMs) {
   const times = trials.filter((trial) => trial.ms !== undefined).map((trial) => trial.ms);

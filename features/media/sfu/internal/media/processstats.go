@@ -9,6 +9,10 @@ import (
 
 const rssPath = "/proc/self/statm"
 
+// ResidentBytes is the process's resident memory, from /proc/self/statm. It reports false where the
+// host has no procfs.
+func ResidentBytes() (uint64, bool) { return readRSS(rssPath) }
+
 // readRSS reads the process's resident memory from /proc/self/statm, whose second field is
 // resident pages. It reports false where the host has no such file.
 func readRSS(path string) (uint64, bool) {

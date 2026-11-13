@@ -364,10 +364,20 @@
       "builtin": true
     },
     {
+      "id": "workflow:boot-smoke.yml#changes",
+      "owner": "Call",
+      "catches": "A merge group that changes no path the developer bootstrap reads, so the boot check can be skipped.",
+      "runs": ["pull_request", "merge_queue", "manual"],
+      "blocks": "action",
+      "minutes": 0.3,
+      "record": "never-failed",
+      "sample": "New with Boot smoke moving to the merge queue; no history yet."
+    },
+    {
       "id": "workflow:boot-smoke.yml#boot",
       "owner": "Call",
       "catches": "A broken developer bootstrap: `pnpm dev` not reaching ready from an empty machine, `pnpm dev:doctor` failing, or a fake-media call that cannot join through the SFU.",
-      "runs": ["pull_request", "manual"],
+      "runs": ["pull_request", "merge_queue", "manual"],
       "blocks": "advisory",
       "minutes": null,
       "record": "unmeasured",
@@ -739,7 +749,7 @@
       "id": "workflow:codeql.yml#languages",
       "owner": "Security",
       "catches": "Selects the languages CodeQL analyses.",
-      "runs": ["pull_request", "weekly"],
+      "runs": ["push", "weekly", "manual"],
       "blocks": "action",
       "minutes": null,
       "record": "never-failed",
@@ -749,7 +759,7 @@
       "id": "workflow:codeql.yml#analyze",
       "owner": "Security",
       "catches": "A code-scanning finding in JavaScript, TypeScript or Go; findings appear as Security alerts.",
-      "runs": ["pull_request", "push", "weekly"],
+      "runs": ["push", "weekly", "manual"],
       "blocks": "advisory",
       "minutes": 1.4,
       "record": "never-failed",
@@ -1121,6 +1131,28 @@
       "record": "caught",
       "sample": "2 real catches in 29 pull request runs; 1 unexplained failure in 6 nightly runs.",
       "reason": "The Gate runs the packed consumer in Chromium on every SDK change; this workflow adds Firefox and WebKit nightly and runs on a pull request only when its own setup changes."
+    },
+    {
+      "id": "workflow:ui-check.yml#ui-check",
+      "owner": "Web",
+      "catches": "A change to the call or pre-join screens that breaks their layout: overflow, clipped or overlapping content, a control that cannot be reached, a journey that no longer runs.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": 5.2,
+      "record": "unmeasured",
+      "sample": "Four hosted runs on its own pull request took 304 to 375 seconds and found no false alarm; no history on other pull requests yet.",
+      "reason": "Not a required context yet: it becomes required after it has run on 10 UI-changing pull requests with 0 false alarms. It always reports, and a pull request that changes no UI path passes it in seconds, so requiring it later cannot hold such a pull request in expected."
+    },
+    {
+      "id": "workflow:ui-check.yml#report",
+      "owner": "Web",
+      "catches": "The UI check's result missing from the pull request: it posts the sticky comment and the images the comment points at.",
+      "runs": ["pull_request"],
+      "blocks": "advisory",
+      "minutes": 0.2,
+      "record": "unmeasured",
+      "sample": "6 to 10 seconds on each run of its own pull request; no history on other pull requests yet.",
+      "reason": "Not a required context, and never to become one: it only reports the UI check job, which carries the verdict. It has write permissions, so it runs no code from the branch."
     },
     {
       "id": "workflow:sfu-bench-reaper.yml#reap",

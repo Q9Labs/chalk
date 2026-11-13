@@ -67,6 +67,10 @@ box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-pos
 
 `instabox-run.sh` installs locked dependencies, mounts data-disk scratch at `/tmp` (the snapshot's 4 GB tmpfs cannot satisfy the queue proofs' 8 GB admission floor, and one mount preserves hard links), installs Chromium with `--browser`, and runs `pnpm gate:full` when given no command. Use `with-postgres.sh --` for Sync runs; the API gate manages its own database. Tool versions are pinned in `.tool-versions`, `apps/api/go.mod` and the CI setup actions. The [performance runbook](../../docs/performance-budget.md) separates diagnostic timings from calibrated budgets; do not enforce old timing limits on a new runner without re-measuring.
 
+## UI check
+
+A pull request that changes a UI path also runs the **UI check** workflow beside Gate. It walks the call journeys on the branch and on the base and fails on a layout problem that only the branch has; `scripts/ui-check/README.md` explains what it checks and how to run it. It is a separate required status check because it needs the call-state harness and a browser, not a Gate lane.
+
 ## Documentation checks
 
 `node scripts/gates/doclint.mjs` checks maintained Markdown for missing local links and literal repository paths, undeclared package scripts in package-manager commands, and retired runner guidance. Fixture documents, changesets and changelogs are exempt. An example path needs an exact document/path entry and a reason in `doclint-examples.json`; never allow whole directories. The SDK effect rule takes one adjacent, reasoned suppression per call, never a whole file.

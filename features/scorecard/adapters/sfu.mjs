@@ -1,8 +1,5 @@
 import { WHOLE_CYCLE } from "../schema.mjs";
-import { metric, passMetric } from "../stats.mjs";
-
-// TestAPublisherThatSendsRTXUnderItsRIDCannotHangShutdown is skipped unconditionally, so it is not listed.
-const IMPAIRMENT_TESTS = ["TestOneConstrainedSubscriberAdaptsAlone", "TestVideoOnlySubscriberResumesAfterStarvation", "TestLossOnEachLegIsRepairedOverRTX", "TestTenPersonCallWithAScreenShareStaysUnderTheEpisodeCeiling", "TestImpairedCallsLogNothingForbidden"];
+import { metric, passMetric } from "./metric.mjs";
 
 const jsonLines = (text) =>
   text
@@ -10,28 +7,16 @@ const jsonLines = (text) =>
     .filter((line) => line.trim() !== "")
     .map((line) => JSON.parse(line));
 
-/**
- * goTestMetrics maps `go test -json` output of features/media/sfu/tests to pass rates for the
- * loopback test (real HTTP and real Pion peers) and the impaired-network tests. A skipped test is not counted.
- */
+/** goTestMetrics maps `go test -json` output of features/media/sfu/tests to the pass rate of the loopback test (real HTTP and real Pion peers). */
 export function goTestMetrics(text) {
   const outcomes = new Map();
   for (const event of jsonLines(text)) {
     if (event.Test && ["pass", "fail"].includes(event.Action)) outcomes.set(event.Test, event.Action === "pass");
   }
-  const source = "sfu-go-test";
-  const metrics = [];
-  const dropped = [];
-  const loopback = outcomes.has("TestLoopback") ? [outcomes.get("TestLoopback")] : [];
-  const impairment = IMPAIRMENT_TESTS.filter((name) => outcomes.has(name)).map((name) => outcomes.get(name));
-  for (const [id, results, expected] of [
-    ["sfu.loopback.pass", loopback, 1],
-    ["sfu.impairment.pass", impairment, IMPAIRMENT_TESTS.length],
-  ]) {
-    metrics.push(passMetric(id, results, source));
-    if (results.length < expected) dropped.push({ metric: id, reason: "test_not_run", count: expected - results.length });
-  }
-  return { metrics, dropped };
+  const id = "sfu.loopback.pass";
+  const results = outcomes.has("TestLoopback") ? [outcomes.get("TestLoopback")] : [];
+  const dropped = results.length === 0 ? [{ metric: id, reason: "test_not_run", count: 1 }] : [];
+  return { metrics: [passMetric(id, results, "sfu-go-test")], dropped };
 }
 
 // The live smoke test writes Go durations such as "1m0.5s" or "1h2m3s".

@@ -2,23 +2,18 @@ name: Boot smoke
 
 # Starts the whole dev stack (web, API, Sync, Postgres, Redis) from an empty machine with `pnpm dev`, checks it with
 # `pnpm dev:doctor`, drives one call with fake media through the non-production Cloudflare SFU, and tears it down.
-# It runs on pull requests, not on master pushes, because the pull request already booted the same code. It does not run for
-# docs-only changes or for changes that only touch features/media/sfu.
+# No Gate lane boots the dev stack or reaches the SFU with secrets, so this is the only check of both.
+# A merge group runs it when it changes any file in `the paths in the Select step` below, because `merge_group` has no path filter. A pull
+# request runs it only when it changes the dev stack itself (`scripts/dev`, the verify-chalk skill, this file, the tool
+# versions), so ordinary application changes boot once, at the merge group. It is not a required check, so a failure never
+# blocks a merge. Master pushes do not run it: the merge group booted the same code. Run it by hand on a branch with
+# `workflow_dispatch`.
 on:
+  merge_group:
   pull_request:
     paths:
-      - apps/web/**
-      - apps/api/**
-      - apps/sync/**
       - scripts/dev/**
-      - scripts/deploy/**
-      - scripts/web-proof/**
-      - packages/**
-      - sdks/typescript/**
       - .agents/skills/verify-chalk/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
       - .tool-versions
       - .github/workflows/boot-smoke.yml
       - "!**/*.md"
@@ -32,9 +27,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select boot smoke
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    outputs:
+      boot: ${{ steps.select.outputs.boot }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Select
+        id: select
+        env:
+          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+        run: |
+          if [[ "${{ github.event_name }}" != "merge_group" ]]; then
+            echo "boot=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          # The same paths as the pull request filter used to list. A failed diff boots anyway.
+          changed=$(git diff --name-only "${GROUP_BASE_SHA}...HEAD" -- \
+            apps/web apps/api apps/sync scripts/dev scripts/deploy scripts/web-proof packages sdks/typescript \
+            .agents/skills/verify-chalk package.json pnpm-lock.yaml pnpm-workspace.yaml .tool-versions \
+            .github/workflows/boot-smoke.yml ':(exclude,glob)**/*.md') || changed=failed
+          if [[ -n "${changed}" ]]; then echo "boot=true" >> "${GITHUB_OUTPUT}"; else echo "boot=false" >> "${GITHUB_OUTPUT}"; fi
+          cat "${GITHUB_OUTPUT}"
+
   boot:
+    needs: changes
     # Pull requests from forks get no secrets, so the stack cannot reach the SFU there.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    if: ${{ needs.changes.outputs.boot == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:

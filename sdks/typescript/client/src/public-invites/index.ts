@@ -1,5 +1,11 @@
 export { createChalkPublicClient, createChalkPublicInviteClient } from "./client.js";
 export { parseInviteCode } from "./code.js";
+export { arrivalErrorCode, arrivalRetryDelayMs, arriveRetryingEndingEpisode, entranceStep, isTerminalArrivalError } from "./entrance.js";
+export type { EntranceStep } from "./entrance.js";
+export { createPublicSpaceSession, resumePublicSpaceSession } from "./session.js";
+export type { AdmittedArrival, PublicSpaceSession, PublicSpaceSessionOptions } from "./session.js";
+export { buildInviteCodeLink, buildSpaceInviteLink, canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, INVITE_HOSTS, parseChalkInviteLink, parseSpaceInviteLink, readSpaceInviteToken, verifiedSpaceInviteLink } from "./link.js";
+export type { ChalkInviteLink, InviteLinkOptions, SpaceInviteLink } from "./link.js";
 export type {
   ArriveBySpacePublicInviteInput,
   ChalkPublicClient,

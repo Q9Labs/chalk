@@ -8,6 +8,5 @@ export { corners, fontSizes, space } from "./theme/tokens";
 export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useRecording, useSelf, useWhiteboard } from "./hooks/space-hooks";
-export { extractSpaceInviteFromLink, getClipboardInviteSuggestion, parseChalkInviteLink, parseSpaceInviteLink } from "./invites";
+export { buildChalkInviteLink, extractSpaceInviteFromLink, getClipboardInviteSuggestion, parseChalkInviteLink, parseSpaceInviteLink } from "./invites";
 export type { ChalkInviteLink, SpaceInviteLink } from "./invites";
-export { buildChalkInviteLink } from "./utils/build-chalk-invite-link";

@@ -5,7 +5,7 @@ import Animated from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { ownNativeBoardSession } from "../whiteboard/native-board-session";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import { useDeviceLayout } from "../frame/device-layout";
 import { useMeasuredRef } from "../frame/measurement";
 import { MovingFrame, type Frame } from "../motion/MovingFrame";
