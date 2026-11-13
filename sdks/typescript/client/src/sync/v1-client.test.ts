@@ -68,13 +68,7 @@ describe("V1SyncClient", () => {
     expect(observed.mock.lastCall?.[0].connection).toMatchObject({ phase: "connecting", connectAttempt: { stage: "upgrade", opened: false, durationMs: 0 } });
   });
   it("publishes a fresh upgrade attempt when an opened socket is retried", async () => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      reconnectDelayMs: 1,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
     const observed = vi.fn();
     client.subscribe(observed);
     await client.start();
@@ -99,13 +93,7 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().connection.connectAttempt).toMatchObject({ stage: "upgrade", opened: false });
   });
   it.each(["live", "replay"] as const)("replaces a %s digest mismatch with one snapshot before durable replay", async (source) => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      reconnectDelayMs: 1,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
     // B1's second knock arrived after a larger request ID. The old server hashed
     // sorted IDs while the client hashed arrival order (the retained #382 fixture).
     const initial = await restoreV1Snapshot(Schema.decodeUnknownSync(SnapshotSchema)(admissionOrder.initial_snapshot));
@@ -157,15 +145,8 @@ describe("V1SyncClient", () => {
     { receiptTiming: "before", outcome: "satisfied" },
     { receiptTiming: "after", outcome: "satisfied" },
   ] as const)("reconciles older $outcome receipts received $receiptTiming the forced snapshot", async ({ receiptTiming, outcome }) => {
-    const clock = new TestClock();
     const store = new InMemoryV1PendingTargetStore();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      pendingStore: store,
-      reconnectDelayMs: 1,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ pendingStore: store, reconnectDelayMs: 1 });
     const initial = stateWithPeer("collaborator");
     const snapshot = await wireSnapshot(initial);
     const committed = { ...initial, revision: 2, participants: initial.participants.map((participant) => ({ ...participant, handRaised: participant.participantId === ownerId })) };
@@ -241,11 +222,8 @@ describe("V1SyncClient", () => {
     expect(await store.load()).toHaveLength(2);
   });
   it.each(["digest", "head", "semantics", "replay"] as const)("stops an invalid replacement snapshot (%s) without installing or retrying it", async (fault) => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
     let resume: (() => void) | undefined;
-    const client = syncClient({
-      clock,
+    const { client, clock, sockets } = recordingClient({
       reconnectDelayMs: 1,
       lifecycle: {
         subscribe: (listener) => {
@@ -255,7 +233,6 @@ describe("V1SyncClient", () => {
           };
         },
       },
-      webSocket: collectSockets(sockets),
     });
     const snapshot = await wireSnapshot(baseState());
     const state = snapshotToState(snapshot);
@@ -291,13 +268,7 @@ describe("V1SyncClient", () => {
     expect(sockets).toHaveLength(2);
   });
   it("resumes recovery after a validated snapshot loses its transport before projections arrive", async () => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      reconnectDelayMs: 1,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 1 });
     const snapshot = await wireSnapshot(baseState());
     const state = snapshotToState(snapshot);
     const head = { revision: state.revision, state_schema_version: state.stateSchemaVersion, state_digest: state.stateDigest };
@@ -1054,13 +1025,7 @@ describe("V1SyncClient", () => {
     client.stop();
   });
   it("uses capped exponential reconnect backoff until a connection becomes live", async () => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      webSocket: collectSockets(sockets),
-      clock,
-      reconnectDelayMs: 100,
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 100 });
     await client.start();
     sockets[0]?.close(1012);
     clock.advance(0);
@@ -1080,12 +1045,7 @@ describe("V1SyncClient", () => {
   });
   it("bounds the default fast retry burst before backing off and cancels it on stop", async () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      webSocket: collectSockets(sockets),
-      clock,
-    });
+    const { client, clock, sockets } = recordingClient();
     await client.start();
     for (const delay of [250, 250, 250, 250, 250, 250, 250, 250, 500, 1000, 2000, 4000, 5000, 5000]) {
       sockets.at(-1)?.close(1012);
@@ -1574,13 +1534,7 @@ describe("V1SyncClient", () => {
     { operation: "end_episode" as const, reason: "episode_ended" as const },
     { operation: "participant_leave" as const, reason: "participant_inactive" as const },
   ])("settles $operation from the authoritative $reason terminal recovery head", async ({ operation, reason }) => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      reconnectDelayMs: 0,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 0 });
     const snapshot = await wireSnapshot(baseState());
     const state = snapshotToState(snapshot);
     await client.start();
@@ -1948,14 +1902,7 @@ describe("V1SyncClient", () => {
     expect(operationFrames(socket, commandIds[0])).toHaveLength(1);
   });
   it("clears pending polls on disconnect and resumes once after recovery", async () => {
-    const clock = new TestClock();
-    const sockets: TestSocket[] = [];
-    const client = syncClient({
-      clock,
-      reconnectDelayMs: 0,
-      maxOperationPendingAgeMs: 10000,
-      webSocket: collectSockets(sockets),
-    });
+    const { client, clock, sockets } = recordingClient({ reconnectDelayMs: 0, maxOperationPendingAgeMs: 10000 });
     const snapshot = await wireSnapshot(baseState());
     const state = snapshotToState(snapshot);
     await client.start();
@@ -2535,6 +2482,12 @@ function syncClient(options: ClientOptions = {}): V1SyncClient {
   const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", webSocket: { connect: () => new TestSocket() }, ...options });
   clients.push(client);
   return client;
+}
+function recordingClient(options: ClientOptions = {}) {
+  const clock = new TestClock();
+  const sockets: TestSocket[] = [];
+  const client = syncClient({ clock, webSocket: collectSockets(sockets), ...options });
+  return { client, clock, sockets };
 }
 function collectSockets(sockets: TestSocket[]): SyncWebSocketFactory {
   return {
