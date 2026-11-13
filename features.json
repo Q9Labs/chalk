@@ -705,7 +705,6 @@
         "apps/web/vite.config.ts",
         "apps/web/vitest.camera.config.ts",
         "apps/web/vitest.config.ts",
-        "apps/web/web-space-journey.html",
         "apps/web/wrangler.toml",
         "apps/web/wrangler.vendor-assets.toml",
         "docs/agent-participant.md",
