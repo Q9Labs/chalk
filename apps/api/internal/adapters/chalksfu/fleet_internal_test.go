@@ -359,10 +359,15 @@ func TestTheLogSaysWhenANodeBecomesReadyOrReturnsToPlacement(t *testing.T) {
 	if got := readyLines(); got != 4 {
 		t.Errorf("a node that stopped draining returns to placement: %d ready lines, want 4", got)
 	}
-	record(5*time.Second+2*probeFreshness, nodeAnswer("boot-2", func(r *wireReady) { r.Protocol = minNodeProtocol - 1 }))
+	record(4*time.Second+3*probeFreshness, nodeAnswer("not a valid incarnation!", nil))
+	record(5*time.Second+3*probeFreshness, nodeAnswer("not a valid incarnation!", nil))
+	if got := readyLines(); got != 5 {
+		t.Errorf("a node with a malformed incarnation that keeps answering: %d ready lines, want 5", got)
+	}
+	record(5*time.Second+2*probeFreshness+4*time.Second, nodeAnswer("boot-2", func(r *wireReady) { r.Protocol = minNodeProtocol - 1 }))
 	record(6*time.Second+2*probeFreshness, nodeAnswer("boot-2", func(r *wireReady) { r.Protocol = minNodeProtocol - 1 }))
-	if got := readyLines(); got != 4 {
-		t.Errorf("a node too old for this API: %d ready lines, want still 4", got)
+	if got := readyLines(); got != 5 {
+		t.Errorf("a node too old for this API: %d ready lines, want still 5", got)
 	}
 }
 
