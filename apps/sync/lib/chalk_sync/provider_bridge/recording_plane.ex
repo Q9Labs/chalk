@@ -30,6 +30,19 @@ defmodule ChalkSync.ProviderBridge.RecordingPlane do
     end
   end
 
+  @impl true
+  def with_call(%__MODULE__{} = adapter, call) do
+    adapter
+    |> apply_headers(call)
+    |> apply_payload(call)
+  end
+
+  defp apply_headers(adapter, %{headers: headers}), do: with_context(adapter, headers)
+  defp apply_headers(adapter, _call), do: adapter
+
+  defp apply_payload(adapter, %{payload: payload}), do: with_operation_payload(adapter, payload)
+  defp apply_payload(adapter, _call), do: adapter
+
   @spec with_context(t(), map() | keyword()) :: t()
   def with_context(%__MODULE__{} = adapter, context) when is_list(context),
     do: with_context(adapter, Map.new(context))

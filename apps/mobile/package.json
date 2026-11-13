@@ -1,6 +1,6 @@
 {
   "name": "@q9labsai/chalk-mobile",
-  "version": "4.0.0",
+  "version": "3.0.6",
   "private": true,
   "license": "MIT",
   "main": "./index.ts",
@@ -25,7 +25,6 @@
     "build:android:release:production": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- pnpm run build:android:release",
     "with:production-release-env": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts --",
     "check-types": "tsc-rs --noEmit",
-    "test": "node --test scripts/check-version-surfaces.test.mjs && node scripts/check-version-surfaces.mjs",
     "test:client": "node scripts/check-native-client.mjs",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },

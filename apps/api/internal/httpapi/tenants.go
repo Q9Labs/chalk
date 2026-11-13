@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -113,12 +112,6 @@ type updateTenantEndpointRequest struct {
 	Body     updateTenantRequest
 }
 
-func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range tenantEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createTenantEndpoint(service),
@@ -130,10 +123,7 @@ func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []Route
 }
 
 func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, tenantResponse] {
-	return Post("/v1/tenants", "/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
+	return Post("/v1/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsWrite)
 		if err != nil {
 			return tenantResponse{}, err
@@ -147,7 +137,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("CreateTenantRequest", createTenantRequest{}).
@@ -164,14 +154,11 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
-	return Get("/v1/tenants", "/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
-		if service == nil {
-			return tenantListResponse{}, apiErrorServiceUnavailable
-		}
+	return Get("/v1/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
 
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
 		if err != nil {
@@ -193,7 +180,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 		}
 
 		return response, nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(
@@ -210,26 +197,18 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, tenantResponse] {
-	return Get("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
-
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
-			return tenantResponse{}, err
-		}
-
+	return Get("/v1/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
 		tenant, err := service.GetTenant(ctx, request.TenantID)
 		if err != nil {
 			return tenantResponse{}, err
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Permission(authorizer, readTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
@@ -243,26 +222,18 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[updateTenantEndpointRequest, tenantResponse] {
-	return Patch("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
-
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTenantPermission); err != nil {
-			return tenantResponse{}, err
-		}
-
+	return Patch("/v1/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
 		tenant, err := service.UpdateTenant(ctx, request.TenantID, request.Body.input())
 		if err != nil {
 			return tenantResponse{}, err
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Permission(authorizer, writeTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
@@ -284,7 +255,7 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func decodeListTenantsRequest(r *http.Request) (listTenantsRequest, error) {
@@ -360,42 +331,15 @@ func tenantIDFromRequest(r *http.Request) (utilities.ID, error) {
 	return id, nil
 }
 
-func tenantEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := tenantServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func tenantServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, tenants.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, tenants.ErrInvalidTenantName):
-		return apiErrorInvalidTenantName, true
-	case errors.Is(err, tenants.ErrInvalidTenantField):
-		return apiErrorInvalidTenantField, true
-	case errors.Is(err, tenants.ErrMediaPlaneNotPermitted):
-		return apiErrorTenantMediaPlaneNotPermitted, true
-	case errors.Is(err, tenants.ErrInvalidCORSOrigin):
-		return apiErrorInvalidTenantCORSOrigin, true
-	case errors.Is(err, artifactpolicy.ErrDefaultExceedsCeiling):
-		return apiErrorTenantArtifactPolicyConflict, true
-	case errors.Is(err, artifactpolicy.ErrInvalidRecordingMode),
-		errors.Is(err, artifactpolicy.ErrInvalidTranscriptionMode),
-		errors.Is(err, artifactpolicy.ErrInvalidRetention),
-		errors.Is(err, artifactpolicy.ErrInvalidSourceWindow),
-		errors.Is(err, artifactpolicy.ErrMissingProviderPolicy),
-		errors.Is(err, tenants.ErrInvalidArtifactPolicy):
-		return apiErrorInvalidTenantArtifactPolicy, true
-	case errors.Is(err, tenants.ErrTenantNotFound):
-		return apiErrorTenantNotFound, true
-	default:
-		return APIError{}, false
-	}
+var tenantRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, tenants.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidTenantName, tenants.ErrInvalidTenantName),
+	ruleFor(apiErrorInvalidTenantField, tenants.ErrInvalidTenantField),
+	ruleFor(apiErrorTenantMediaPlaneNotPermitted, tenants.ErrMediaPlaneNotPermitted),
+	ruleFor(apiErrorInvalidTenantCORSOrigin, tenants.ErrInvalidCORSOrigin),
+	ruleFor(apiErrorTenantArtifactPolicyConflict, artifactpolicy.ErrDefaultExceedsCeiling),
+	ruleFor(apiErrorInvalidTenantArtifactPolicy, artifactpolicy.ErrInvalidRecordingMode, artifactpolicy.ErrInvalidTranscriptionMode, artifactpolicy.ErrInvalidRetention, artifactpolicy.ErrInvalidSourceWindow, artifactpolicy.ErrMissingProviderPolicy, tenants.ErrInvalidArtifactPolicy),
+	ruleFor(apiErrorTenantNotFound, tenants.ErrTenantNotFound),
 }
 
 func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) {
@@ -494,16 +438,13 @@ func authorizeTenantCollection(ctx context.Context, scope authentication.Scope) 
 type findServiceTenantRequest struct{ ExternalID string }
 
 func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenantRequest, tenantResponse] {
-	return Get("/v1/tenants/by-external-id", "/tenants/by-external-id", "findTenantByExternalID", func(r *http.Request) (findServiceTenantRequest, error) {
+	return Get("/v1/tenants/by-external-id", "findTenantByExternalID", func(r *http.Request) (findServiceTenantRequest, error) {
 		externalID := r.URL.Query().Get("external_id")
 		if !tenants.ValidExternalID(externalID) {
 			return findServiceTenantRequest{}, apiErrorInvalidTenantField
 		}
 		return findServiceTenantRequest{ExternalID: externalID}, nil
 	}, func(ctx context.Context, request findServiceTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
 		if err != nil {
 			return tenantResponse{}, err
@@ -516,11 +457,11 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 			return tenantResponse{}, err
 		}
 		return newTenantResponse(tenant), nil
-	}).Auth(APIAuthSessionOrBearer).
+	}).Needs(service).Auth(APIAuthSessionOrBearer).
 		Description("The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.").
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512, CodePointLength: true}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(apiErrorRateLimited, apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }

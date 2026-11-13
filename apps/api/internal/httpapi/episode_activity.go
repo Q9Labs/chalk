@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -59,13 +58,7 @@ func decodeListSpaceActivityRequest(r *http.Request) (listSpaceActivityRequest, 
 }
 
 func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceActivityRequest, spaceActivityListResponse] {
-	return Get("/v1/tenants/{tenant_id}/space-activity", "/tenants/{tenant_id}/space-activity", "listSpaceActivity", decodeListSpaceActivityRequest, func(ctx context.Context, request listSpaceActivityRequest) (spaceActivityListResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
-			return spaceActivityListResponse{}, err
-		}
-		if service == nil {
-			return spaceActivityListResponse{}, apiErrorServiceUnavailable
-		}
+	return Get("/v1/tenants/{tenant_id}/space-activity", "listSpaceActivity", decodeListSpaceActivityRequest, func(ctx context.Context, request listSpaceActivityRequest) (spaceActivityListResponse, error) {
 		list, err := service.ListSpaceActivity(ctx, request.TenantID, request.SpaceIDs)
 		if err != nil {
 			return spaceActivityListResponse{}, err
@@ -93,13 +86,8 @@ func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer Tenan
 			result.Spaces = append(result.Spaces, item)
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceActivityList", spaceActivityListResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidActivitySpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (APIError, bool) {
-		if errors.Is(err, episodes.ErrInvalidActivitySpaceIDs) {
-			return apiErrorInvalidActivitySpaceIDs, true
-		}
-		return episodeLifecycleEndpointAPIError(err)
-	})
+		Errors(lifecycleReadErrors(apiErrorInvalidActivitySpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(errorRules{ruleFor(apiErrorInvalidActivitySpaceIDs, episodes.ErrInvalidActivitySpaceIDs)}, episodeLifecycleRules)
 }

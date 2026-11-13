@@ -5,7 +5,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
-  alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Reads
   alias ChalkSync.WhiteboardV1.ViewOwner
 
   setup do
@@ -295,7 +295,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
     Process.sleep(2)
 
-    Authority.store(
+    Reads.store(
       episode,
       %{status: "active", participants: %{{active, 1} => "active"}},
       System.monotonic_time(:millisecond),
@@ -323,7 +323,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     for {status, count} <- [{"leaving", 1}, {"left", 0}] do
       Process.sleep(2)
 
-      Authority.store(
+      Reads.store(
         episode,
         %{status: "active", participants: %{{c.person, 1} => status}},
         System.monotonic_time(:millisecond),
@@ -344,7 +344,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
 
     person = String.upcase(UUID.generate())
 
-    Authority.store(
+    Reads.store(
       episode,
       %{status: "active", participants: %{}},
       System.monotonic_time(:millisecond) - 10,
@@ -356,7 +356,7 @@ defmodule ChalkSync.WhiteboardV1.ViewOwnerTest do
     {:ok, ^owner, _, [%{"participant_id" => ^person}]} = ViewOwner.join(episode, UUID.generate())
     Process.sleep(2)
 
-    Authority.store(
+    Reads.store(
       episode,
       %{status: "active", participants: %{{String.downcase(person), 1} => "active"}},
       System.monotonic_time(:millisecond),

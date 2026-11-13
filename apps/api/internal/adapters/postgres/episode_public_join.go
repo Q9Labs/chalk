@@ -393,7 +393,7 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("create public Episode control: %w", err)
 	}
 	snapshot := webhooks.EpisodeSnapshot{ID: id.String(), SpaceID: spaceID.String(), Status: episode.Status, StartedAt: nullableTimestamp(episode.StartedAt), EndedAt: nullableTimestamp(episode.EndedAt), CreatedAt: timestamp(episode.CreatedAt), UpdatedAt: timestamp(episode.UpdatedAt)}
-	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "episode.started", SemanticKey: "episode:" + id.String() + ":started", ResourceType: "episode", ResourceID: id, OccurredAt: timestamp(episode.CreatedAt), Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: webhooks.EventEpisodeStarted, SemanticKey: "episode:" + id.String() + ":started", ResourceType: "episode", ResourceID: id, OccurredAt: timestamp(episode.CreatedAt), Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 		return webhooks.EncodeEpisodeEvent(metadata, snapshot)
 	}})
 	if err != nil {

@@ -1,7 +1,6 @@
 defmodule ChalkSync.RealBrowserFixture do
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Database
-  alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
 
   def run do
@@ -28,7 +27,7 @@ defmodule ChalkSync.RealBrowserFixture do
     Application.put_env(:chalk_sync, :database_url, database_url)
     Application.put_env(:chalk_sync, :database_pool_size, 4)
     Application.put_env(:chalk_sync, :port, :none)
-    Application.put_env(:chalk_sync, :stateholder, Postgres)
+    Application.put_env(:chalk_sync, :database_workers, true)
   end
 
   defp database_url do

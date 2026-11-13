@@ -14,15 +14,16 @@ import (
 )
 
 type webhookProduction struct {
-	TenantID                             utilities.ID
-	EventName, SemanticKey, ResourceType string
-	ResourceID, LinkedUserID             utilities.ID
-	OccurredAt                           time.Time
-	Body                                 func(webhooks.EventMetadata) ([]byte, [32]byte, error)
+	TenantID                  utilities.ID
+	EventName                 webhooks.EventName
+	SemanticKey, ResourceType string
+	ResourceID, LinkedUserID  utilities.ID
+	OccurredAt                time.Time
+	Body                      func(webhooks.EventMetadata) ([]byte, [32]byte, error)
 }
 
 type webhookCommitMetric struct {
-	EventName string
+	EventName webhooks.EventName
 	Fanout    int
 }
 
@@ -43,7 +44,7 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 	if err := queries.LockWebhookTenantStateForShare(ctx, uuid(tenantID)); err != nil {
 		return webhookCommitMetric{}, err
 	}
-	targets, err := queries.ListMatchingWebhookTargets(ctx, sqlc.ListMatchingWebhookTargetsParams{TenantID: uuid(tenantID), ApiVersion: webhooks.APIVersion, EventName: production.EventName})
+	targets, err := queries.ListMatchingWebhookTargets(ctx, sqlc.ListMatchingWebhookTargetsParams{TenantID: uuid(tenantID), ApiVersion: webhooks.APIVersion, EventName: string(production.EventName)})
 	if err != nil || len(targets) == 0 {
 		return webhookCommitMetric{}, err
 	}
@@ -61,7 +62,7 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 		return webhookCommitMetric{}, err
 	}
 	metadata.ParentJourneyEventID = rootID
-	event, err := queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{ID: uuid(metadata.ID), TenantID: uuid(tenantID), EventName: production.EventName, ApiVersion: webhooks.APIVersion, OccurredAt: timestamptz(&production.OccurredAt), Body: body, BodySha256: digest[:], SemanticTransitionKey: production.SemanticKey, ResourceType: production.ResourceType, ResourceID: uuid(production.ResourceID), LinkedUserID: uuid(production.LinkedUserID), JourneyID: uuid(metadata.JourneyID), ParentJourneyEventID: uuid(metadata.ParentJourneyEventID), ProducingTraceID: optionalText(metadata.ProducingTraceID), ProducingSpanID: optionalText(metadata.ProducingSpanID)})
+	event, err := queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{ID: uuid(metadata.ID), TenantID: uuid(tenantID), EventName: string(production.EventName), ApiVersion: webhooks.APIVersion, OccurredAt: timestamptz(&production.OccurredAt), Body: body, BodySha256: digest[:], SemanticTransitionKey: production.SemanticKey, ResourceType: production.ResourceType, ResourceID: uuid(production.ResourceID), LinkedUserID: uuid(production.LinkedUserID), JourneyID: uuid(metadata.JourneyID), ParentJourneyEventID: uuid(metadata.ParentJourneyEventID), ProducingTraceID: optionalText(metadata.ProducingTraceID), ProducingSpanID: optionalText(metadata.ProducingSpanID)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return webhookCommitMetric{}, nil
 	}
@@ -94,7 +95,7 @@ func fanoutWebhookEvent(ctx context.Context, tx pgx.Tx, production webhookProduc
 	return webhookCommitMetric{EventName: production.EventName, Fanout: len(targets)}, nil
 }
 
-func webhookEventMetadata(ctx context.Context, tenantID utilities.ID, name string, occurredAt time.Time) (webhooks.EventMetadata, error) {
+func webhookEventMetadata(ctx context.Context, tenantID utilities.ID, name webhooks.EventName, occurredAt time.Time) (webhooks.EventMetadata, error) {
 	occurredAt = occurredAt.UTC().Truncate(time.Millisecond)
 	eventID, err := utilities.NewID()
 	if err != nil {

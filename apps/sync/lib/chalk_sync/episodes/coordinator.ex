@@ -1,8 +1,15 @@
 defmodule ChalkSync.Episodes.Coordinator do
-  @moduledoc "Disposable node-local delivery coordinator for one durable Episode.\n\nPostgreSQL remains authoritative. The coordinator owns only bounded socket\nqueues, coalesced head repair, and exact-next local delivery. Losing this\nprocess forces normal recovery and cannot lose a durable event or decision.\n"
+  @moduledoc """
+  Disposable node-local delivery coordinator for one durable Episode.
+
+  PostgreSQL remains authoritative. The coordinator owns only bounded socket queues, coalesced
+  head repair, and exact-next local delivery. Losing this process forces normal recovery and
+  cannot lose a durable event or decision.
+  """
+
   use GenServer
-  alias ChalkSync.DeliveryGate
   alias ChalkSync.Live.Episode, as: LiveEpisode
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -186,7 +193,7 @@ defmodule ChalkSync.Episodes.Coordinator do
     GenServer.call(
       coordinator,
       {:live_target, socket, identity, target},
-      provider_call_timeout()
+      ProviderCall.deadline_ms()
     )
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
@@ -224,7 +231,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   @doc false
   @spec reconcile_live(pid()) :: :ok | {:error, atom()}
   def reconcile_live(coordinator) do
-    GenServer.call(coordinator, :reconcile_live, provider_call_timeout())
+    GenServer.call(coordinator, :reconcile_live, ProviderCall.deadline_ms())
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
@@ -658,10 +665,6 @@ defmodule ChalkSync.Episodes.Coordinator do
     end
   end
 
-  defp provider_call_timeout do
-    Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5000) + 1000
-  end
-
   defp repair(%{head: nil} = state) do
     state
   end
@@ -882,10 +885,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   defp notify_reserved_event(socket, subscriber, true) when not subscriber.notified? do
-    deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
-      phase: :live,
-      revision: subscriber.enqueued_revision
-    })
+    send(socket, {:sync_outbound_ready, self()})
 
     {:ok, %{subscriber | notified?: true}}
   end
@@ -1134,10 +1134,7 @@ defmodule ChalkSync.Episodes.Coordinator do
 
     case OutboundQueue.push(subscriber.queue, encoded, options) do
       :ok ->
-        deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
-          phase: :recovery,
-          revision: acknowledgement && acknowledgement.revision
-        })
+        send(socket, {:sync_outbound_ready, self()})
 
         recovery = %{subscriber.recovery | expected_ack: acknowledgement}
         {:ok, %{subscriber | recovery: recovery, notified?: true}}
@@ -1241,10 +1238,7 @@ defmodule ChalkSync.Episodes.Coordinator do
     next_subscriber = Map.put(subscriber, :notified?, more?)
 
     if more? do
-      deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
-        phase: :live,
-        revision: entry.revision
-      })
+      send(socket, {:sync_outbound_ready, self()})
     end
 
     {:reply, {:ok, entry.encoded, false},
@@ -1429,10 +1423,7 @@ defmodule ChalkSync.Episodes.Coordinator do
     notify? = not subscriber.notified? and unsent?
 
     if notify? do
-      deliver(socket, :control_ready, {:sync_outbound_ready, self()}, %{
-        phase: :draining,
-        revision: subscriber.enqueued_revision
-      })
+      send(socket, {:sync_outbound_ready, self()})
     end
 
     Map.put(kept, socket, %{
@@ -1456,10 +1447,7 @@ defmodule ChalkSync.Episodes.Coordinator do
     {live, deliveries} = LiveEpisode.expire_requests(state.live, now_ms)
 
     Enum.each(deliveries, fn {socket, frame} ->
-      deliver(socket, :live_frame, {:sync_v1_live_frame, self(), frame}, %{
-        frame_type: field(frame, :type),
-        stream: field(frame, :stream)
-      })
+      send(socket, {:sync_v1_live_frame, self(), frame})
     end)
 
     %{state | live: live}
@@ -1575,15 +1563,8 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   defp send_live_frames(socket, frames) do
     Enum.each(frames, fn frame ->
-      deliver(socket, :live_frame, {:sync_v1_live_frame, self(), frame}, %{
-        frame_type: field(frame, :type),
-        stream: field(frame, :stream)
-      })
+      send(socket, {:sync_v1_live_frame, self(), frame})
     end)
-  end
-
-  defp deliver(socket, checkpoint, message, metadata) do
-    DeliveryGate.emit(checkpoint, metadata, socket, message)
   end
 
   defp close_subscriber(subscriber) do

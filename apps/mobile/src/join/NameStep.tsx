@@ -2,6 +2,7 @@ import { ChalkText, PillButton, useTheme } from "@q9labsai/chalk-react-native/ui
 import { useEffect, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, StyleSheet, View } from "react-native";
 import { TextField } from "../home/TextField";
+import { DISPLAY_NAME_MAX_LENGTH } from "../screens/display-name-store";
 import { space, corners } from "@q9labsai/chalk-react-native";
 
 type NameStepProps = {
@@ -29,7 +30,7 @@ export function NameStep({ onSubmit, onCancel }: NameStepProps): React.JSX.Eleme
     <KeyboardAvoidingView behavior="padding" style={[styles.root, { backgroundColor: colors.canvas }]} testID="join.name-step">
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
         <ChalkText variant="button">Your name</ChalkText>
-        <TextField accessibilityLabel="Your name" autoComplete="name" autoFocus enterKeyHint="go" maxLength={40} onChangeText={setName} onSubmitEditing={submit} size="card" testID="join.name" textContentType="name" value={name} />
+        <TextField accessibilityLabel="Your name" autoComplete="name" autoFocus enterKeyHint="go" maxLength={DISPLAY_NAME_MAX_LENGTH} onChangeText={setName} onSubmitEditing={submit} size="card" testID="join.name" textContentType="name" value={name} />
         <View style={styles.submit}>
           <PillButton disabled={!trimmed} label="Join call" onPress={submit} size="card" testID="join.name.submit" variant="primary" />
         </View>
