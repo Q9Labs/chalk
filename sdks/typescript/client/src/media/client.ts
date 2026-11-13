@@ -144,6 +144,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
+  // The steps of a parked microphone's unmute that run before Sync answers (resume, park again), in order. It never rejects.
+  // Only the microphone goes ahead, so the maps below never hold another source.
+  readonly #headStarts = new Map<MediaPublicationSource, Promise<void>>();
+  // A head start the caller has cancelled, by operation: a step still queued must not start, and one under way must stop short of the request.
+  readonly #headStartCancelled = new Map<string, { cancelled: boolean }>();
+  readonly #resumesInFlight = new WeakMap<OwnedLocalPublication, Promise<unknown>>();
+  // The publication the microphone's head start tried to resume, set before the request goes out, until the enable has used it.
+  // A lost response leaves the node's state unknown, so an attempt counts as a resume.
+  readonly #resumedAhead = new Map<MediaPublicationSource, OwnedLocalPublication>();
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
   #remoteParticipantIds: ReadonlySet<string> | null = null;
@@ -582,13 +591,30 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#schedulePoll(0);
   }
   /**
-   * Swaps a connection that never carried media for a fresh one while Sync still decides the enable, so the
-   * grant does not wait behind that round trip. It adds no transceiver and sends no offer. A denied grant
-   * leaves an unused fresh connection, which is what the enable would have built anyway.
+   * Runs what an enable can do while Sync still decides it, so the grant does not wait behind that round trip.
+   * A parked microphone (mute in place) is resumed on the SFU at once; no other source goes ahead, so a camera
+   * unmute waits for the result. The node's source lease authorizes what the microphone forwards: a closed lease
+   * forwards nothing, and a role change, a removal and the end of the Episode revoke it.
+   * Until Sync's first result, the resumed microphone may forward under a standing lease; the caller then either runs
+   * `setLocalPublicationTarget` or undoes the resume with `cancelPreparedLocalPublicationTarget`. Otherwise this
+   * swaps a connection that never carried media for a fresh one, adds no transceiver and sends no offer. A fresh
+   * publish never goes ahead, because a new publication needs the grant. `setLocalPublicationTarget` redoes
+   * whatever this left undone, so a rejection is safe to ignore.
    */
   async prepareLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
     if (!target.enabled || this.#locallyPausedSources.has(target.source)) return;
-    if (resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target).kind !== "state") return;
+    const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
+    if (resolved.kind !== "state") return;
+    if (target.source === "microphone" && this.#heldPublication(target.source) && !this.#replacement) {
+      const head = { cancelled: false };
+      this.#headStartCancelled.set(target.operationId, head);
+      return this.#enqueueHeadStart(target.source, () => this.#resumeHeldAheadOfGrant(resolved.value, head)).finally(() => {
+        if (this.#headStartCancelled.get(target.operationId) === head) this.#headStartCancelled.delete(target.operationId);
+      });
+    }
+    await this.#replaceDormantConnectionAhead();
+  }
+  async #replaceDormantConnectionAhead(): Promise<void> {
     const generation = this.#generation;
     const attemptedBefore = this.#replacementAttemptedGeneration === generation;
     try {
@@ -603,9 +629,50 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
+  /**
+   * Silences what `prepareLocalPublicationTarget` resumed, and parks it again the way a user mute does. The sender goes quiet
+   * at once and locally (the track is disabled; no request, so a lost response cannot delay it), and a queued head start of the
+   * same operation never starts. The SFU hold follows once any resume request has settled, whether or not it was acknowledged,
+   * because a lost response may still have reached the node. It does nothing when nothing was resumed ahead, or when the enable
+   * has already taken the publication over: that enable owns its own failure.
+   */
+  cancelPreparedLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
+    const head = this.#headStartCancelled.get(target.operationId);
+    if (head) head.cancelled = true;
+    const publication = this.#resumedAhead.get(target.source);
+    if (!publication) return Promise.resolve();
+    const state = this.#localTracks.get(target.source);
+    if (state && !state.desiredEnabled) state.track.enabled = false;
+    return this.#enqueueHeadStart(target.source, () => this.#parkResumedAhead(target.source, publication));
+  }
+  async #parkResumedAhead(source: MediaPublicationSource, publication: OwnedLocalPublication): Promise<void> {
+    if (this.#resumedAhead.get(source) !== publication) return;
+    this.#resumedAhead.delete(source);
+    const { state } = publication;
+    if (state.desiredEnabled) return;
+    state.track.enabled = false;
+    // A resume that failed or got no answer may still have reached the node, so the publication is parked as a resumed one.
+    if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
+    if (publication.lifecycle.kind !== "confirmed") return;
+    this.#markPublicationRetiring(publication, "user_pause");
+    await this.#retireOwnedPublications(undefined, { sources: [source], goneIsComplete: true });
+  }
+  #enqueueHeadStart<T>(source: MediaPublicationSource, step: () => Promise<T>): Promise<T> {
+    const run = (this.#headStarts.get(source) ?? Promise.resolve()).then(step);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#headStarts.set(source, settled);
+    void settled.then(() => {
+      if (this.#headStarts.get(source) === settled) this.#headStarts.delete(source);
+    });
+    return run;
+  }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
-    const result = await this.#enablePublicationTarget(target);
+    await this.#headStarts.get(target.source);
+    const result = await this.#enablePublicationTarget(target).finally(() => this.#resumedAhead.delete(target.source));
     if (target.source !== "screen" || !this.#localTracks.has("screen_audio") || (result.outcome !== "confirmed" && result.outcome !== "satisfied")) return result;
     return this.#enablePublicationTarget({ ...target, source: "screen_audio" });
   }
@@ -733,7 +800,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
     // The publication list leaves out a parked publication, so absence there is not loss.
-    if (this.#heldPublication(state.source)?.handle.publicationId === publicationId) return;
+    if ((this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state))?.handle.publicationId === publicationId) return;
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     if (state.providerPublicationId !== publicationId || this.#localRecoveries.has(state.source)) return;
@@ -886,6 +953,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return keep;
   }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
+    // A resume still in flight must reach the SFU before the close, or the close would be answered by the resume.
+    await this.#resumesInFlight.get(publication);
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
@@ -1023,11 +1092,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (this.#locallyPausedSources.has(state.source)) return false;
       state.desiredEnabled = true;
       state.track.enabled = true;
-      const held = this.#heldPublication(state.source);
-      if (held && !state.transceiver) {
-        state.transceiver = held.publication.transceiver;
-        state.providerPublicationId = held.handle.publicationId;
-      }
+      this.#adoptParkedPublication(state);
       if (state.providerPublicationId && state.transceiver) return await this.#reattachLocalTrack(state, state.transceiver);
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
@@ -1042,6 +1107,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       throw error;
     }
+  }
+  #adoptParkedPublication(state: LocalTrackState): void {
+    const parked = this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state);
+    if (!parked || state.transceiver) return;
+    state.transceiver = parked.publication.transceiver;
+    state.providerPublicationId = parked.handle.publicationId;
   }
   async #retireExpiredCapture(state: LocalTrackState): Promise<void> {
     const publication = [...this.#ownedPublications].find((item) => item.transceiver === state.transceiver && item.lifecycle.kind === "confirmed");
@@ -1084,10 +1155,41 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #resumeHeldPublication(publication: OwnedLocalPublication, handle: LocalPublicationHandle, state: LocalTrackState): Promise<boolean> {
     if (!(await this.#setLocalPublicationHeld(publication, handle, false))) return false;
-    publication.lifecycle = { kind: "confirmed", handle };
+    // A close that overtook this resume already marked the publication retiring; it stays retiring so the waiting close still runs.
+    if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle };
     publication.state = state;
     publication.detachedAt = null;
     return true;
+  }
+  // Resumes the parked microphone on the SFU before Sync answers. It leaves the track's own state (enabled, published ID) to the
+  // grant-gated enable, so nothing local shows the microphone on until Sync has granted it. A failed resume is left to that enable.
+  async #resumeHeldAheadOfGrant(state: LocalTrackState, head: { readonly cancelled: boolean }): Promise<void> {
+    const held = this.#heldPublication(state.source);
+    if (!held || head.cancelled || this.#locallyPausedSources.has(state.source)) return;
+    this.#resumedAhead.set(state.source, held.publication);
+    try {
+      state.track.enabled = true;
+      await this.#boundPeerOperation(held.publication.transceiver.sender.replaceTrack(state.track));
+      await this.#resumeIfStillHeld(held, state, head);
+      const cause = this.#locallyPausedSources.get(state.source);
+      if (cause) {
+        this.#pauseLocalSource(state.source, cause);
+        await this.#retireOwnedPublications();
+      }
+    } catch {
+      // The grant-gated enable redoes the resume and reports its own failure.
+    }
+  }
+  async #resumeIfStillHeld(held: { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle }, state: LocalTrackState, head: { readonly cancelled: boolean }): Promise<void> {
+    if (head.cancelled || this.#heldPublication(state.source)?.publication !== held.publication || this.#locallyPausedSources.has(state.source)) return;
+    const resuming = this.#resumeHeldPublication(held.publication, held.handle, state);
+    this.#resumesInFlight.set(held.publication, resuming);
+    await resuming;
+  }
+  #resumedAheadPublication(state: LocalTrackState): { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle } | undefined {
+    const publication = this.#resumedAhead.get(state.source);
+    if (publication?.state !== state || publication.connection !== this.#connection || publication.lifecycle.kind !== "confirmed") return undefined;
+    return { publication, handle: publication.lifecycle.handle };
   }
   // The SFU no longer holds the parked track (for example after it lost the session), so publish a new one.
   async #republishAfterFailedResume(publication: OwnedLocalPublication, state: LocalTrackState): Promise<boolean> {

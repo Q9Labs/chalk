@@ -9,6 +9,7 @@ it("hands the controller the media client's mute path, so a mute closes over the
   const calls: string[] = [];
   const client = {
     prepareLocalPublicationTarget: vi.fn(),
+    cancelPreparedLocalPublicationTarget: vi.fn(),
     setLocalPublicationTarget: vi.fn(),
     pauseLocalCapture: vi.fn(async (source: string) => void calls.push(`capture:${source}`)),
     setLocalSourceIntent: vi.fn((source: string, enabled: boolean, cause?: string) => void calls.push(`intent:${source}:${enabled}:${cause}`)),

@@ -147,6 +147,7 @@ export function createSFUConnectionMediaClient(client: CloudflareSFUClient): Nat
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    cancelPreparedLocalPublicationTarget: client.cancelPreparedLocalPublicationTarget.bind(client),
     pauseLocalCapture: client.pauseLocalCapture.bind(client),
     setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
     closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),

@@ -10,6 +10,7 @@ describe("production media adapter", () => {
       prepareLocalPublicationTarget: vi.fn(async function (this: object) {
         expect(this).toBe(source);
       }),
+      cancelPreparedLocalPublicationTarget: vi.fn(),
       setLocalPublicationTarget: vi.fn(),
       setLocalSourceIntent: vi.fn(function (this: object) {
         expect(this).toBe(source);
