@@ -126,7 +126,7 @@ class DeployBranchesTest(unittest.TestCase):
         shutil.copytree(INFRA, repo / 'infrastructure/sfu', ignore=shutil.ignore_patterns('.terraform*', '*.tfstate*', '__pycache__'))
         (repo / 'infrastructure/sfu/certs').write_text(CERTS)
         (repo / 'infrastructure/sfu/certs').chmod(0o755)
-        for path in ('apps/api', 'features/mcp/api', 'features/media/sfu'):
+        for path in ('apps/api', 'features/media/sfu'):
             (repo / path).parent.mkdir(parents=True, exist_ok=True)
             (repo / path).symlink_to(REPO / path)
         bin_dir = self.root / 'bin'

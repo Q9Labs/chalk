@@ -2,12 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -134,12 +132,6 @@ type updateSpaceEndpointRequest struct {
 	Body     updateSpaceRequest
 }
 
-func mountSpaceRoutes(r chi.Router, service SpaceService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range spaceEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createSpaceEndpoint(service, authorizer),
@@ -152,13 +144,7 @@ func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEn
 }
 
 func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[createSpaceEndpointRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces", "/tenants/{tenant_id}/spaces", "createSpace", decodeCreateSpaceRequest, func(ctx context.Context, request createSpaceEndpointRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/spaces", "createSpace", decodeCreateSpaceRequest, func(ctx context.Context, request createSpaceEndpointRequest) (spaceResponse, error) {
 
 		input, err := request.Body.toCreateInput(request.TenantID, createdByUserID(ctx), request.RequestKey)
 		if err != nil {
@@ -169,24 +155,18 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces", "/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
-		if service == nil {
-			return spaceListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return spaceListResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
 
 		var list spaces.SpaceList
 		var err error
@@ -203,44 +183,32 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 			return spaceListResponse{}, err
 		}
 		return newSpaceListResponse(ctx, service, request.TenantID, list)
-	}).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
 		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
 		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}", "/tenants/{tenant_id}/spaces/{space_id}", "getSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}", "getSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 
 		space, err := service.GetSpace(ctx, request.TenantID, request.SpaceID)
 		if err != nil {
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[updateSpaceEndpointRequest, spaceResponse] {
-	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}", "/tenants/{tenant_id}/spaces/{space_id}", "updateSpace", decodeUpdateSpaceRequest, func(ctx context.Context, request updateSpaceEndpointRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
+	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}", "updateSpace", decodeUpdateSpaceRequest, func(ctx context.Context, request updateSpaceEndpointRequest) (spaceResponse, error) {
 
 		input, err := request.Body.toUpdateInput()
 		if err != nil {
@@ -251,18 +219,18 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/archive", "/tenants/{tenant_id}/spaces/{space_id}/archive", "archiveSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/archive", "archiveSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 		archive, ok := service.(SpaceArchiveService)
 		if !ok {
 			return spaceResponse{}, apiErrorServiceUnavailable
@@ -277,11 +245,11 @@ func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules)
 }
 
 func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/restore", "/tenants/{tenant_id}/spaces/{space_id}/restore", "restoreSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/restore", "restoreSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 		restore, ok := service.(SpaceArchiveService)
 		if !ok {
 			return spaceResponse{}, apiErrorServiceUnavailable
@@ -296,7 +264,7 @@ func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules)
 }
 
 func decodeCreateSpaceRequest(r *http.Request) (createSpaceEndpointRequest, error) {
@@ -395,49 +363,19 @@ func spaceWriteErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func spaceEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := spaceServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func spaceServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, spaces.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, spaces.ErrInvalidSpaceID):
-		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, spaces.ErrInvalidSpaceName):
-		return apiErrorInvalidSpaceName, true
-	case errors.Is(err, spaces.ErrInvalidSpaceSlug):
-		return apiErrorInvalidSpaceSlug, true
-	case errors.Is(err, spaces.ErrInvalidMediaPlane):
-		return apiErrorInvalidMediaPlane, true
-	case errors.Is(err, spaces.ErrMediaPlaneNotPermitted):
-		return apiErrorSpaceMediaPlaneNotPermitted, true
-	case errors.Is(err, spaces.ErrInvalidAdmissionPolicy),
-		errors.Is(err, spaces.ErrInvalidEpisodeDuration),
-		errors.Is(err, spaces.ErrInvalidEpisodeCeiling),
-		errors.Is(err, spaces.ErrInvalidLingerWindow),
-		errors.Is(err, spaces.ErrInvalidSpaceField):
-		return apiErrorInvalidSpaceField, true
-	case errors.Is(err, spaces.ErrInvalidRecordingPolicy),
-		errors.Is(err, spaces.ErrInvalidTranscriptionPolicy):
-		return apiErrorInvalidSpaceArtifactPolicy, true
-	case errors.Is(err, spaces.ErrSpaceNotFound):
-		return apiErrorSpaceNotFound, true
-	case errors.Is(err, spaces.ErrSpaceSlugAlreadyUsed):
-		return apiErrorSpaceSlugAlreadyUsed, true
-	case errors.Is(err, spaces.ErrInvalidRequestKey):
-		return apiErrorInvalidRequestKey, true
-	case errors.Is(err, spaces.ErrIdempotencyConflict):
-		return apiErrorIdempotencyConflict, true
-	default:
-		return APIError{}, false
-	}
+var spaceRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, spaces.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidSpaceID, spaces.ErrInvalidSpaceID),
+	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
+	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
+	ruleFor(apiErrorInvalidMediaPlane, spaces.ErrInvalidMediaPlane),
+	ruleFor(apiErrorSpaceMediaPlaneNotPermitted, spaces.ErrMediaPlaneNotPermitted),
+	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField),
+	ruleFor(apiErrorInvalidSpaceArtifactPolicy, spaces.ErrInvalidRecordingPolicy, spaces.ErrInvalidTranscriptionPolicy),
+	ruleFor(apiErrorSpaceNotFound, spaces.ErrSpaceNotFound),
+	ruleFor(apiErrorSpaceSlugAlreadyUsed, spaces.ErrSpaceSlugAlreadyUsed),
+	ruleFor(apiErrorInvalidRequestKey, spaces.ErrInvalidRequestKey),
+	ruleFor(apiErrorIdempotencyConflict, spaces.ErrIdempotencyConflict),
 }
 
 // SpacePlaneService reports the plane a new Episode would start on in each Space.

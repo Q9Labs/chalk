@@ -175,9 +175,7 @@ require (
 require (
 	github.com/aws/aws-sdk-go-v2/feature/cloudfront/sign v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/q9labs/chalk/features/mcp/api v0.0.0
 	github.com/q9labs/chalk/features/media/sfu/protocol v0.0.0
 )
 
-replace github.com/q9labs/chalk/features/mcp/api => ../../features/mcp/api
 replace github.com/q9labs/chalk/features/media/sfu/protocol => ../../features/media/sfu/protocol

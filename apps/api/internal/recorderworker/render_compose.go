@@ -26,14 +26,6 @@ type ComposeResult struct {
 	Height             int    `json:"height"`
 	FPS                int    `json:"fps"`
 	FrameCount         int64  `json:"frame_count"`
-	OverlayCount       int64  `json:"overlay_count"`
-	SegmentCount       int64  `json:"segment_count"`
-	DenseKeyframes     int64  `json:"dense_keyframe_source_count"`
-	PlanWallMs         int64  `json:"plan_wall_ms"`
-	PaintWallMs        int64  `json:"paint_wall_ms"`
-	CompositeWallMs    int64  `json:"composite_wall_ms"`
-	MuxWallMs          int64  `json:"mux_wall_ms"`
-	WallDurationMs     int64  `json:"wall_duration_ms"`
 }
 
 func (result ComposeResult) Validate(request FrameRenderRequest) error {

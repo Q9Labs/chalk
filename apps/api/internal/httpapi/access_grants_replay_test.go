@@ -109,7 +109,7 @@ func TestAccessGrantRefreshReplayPastDeadlineIsRefused(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := newReplayScenario(t, age)
 			grant, err := s.endpoint.handle(s.ctx(), s.request)
-			if err == nil || accessGrantAPIError(err).Code != "participant.connection_superseded" {
+			if err == nil || episodeLifecycleRules.apiError(err).Code != "participant.connection_superseded" {
 				t.Fatalf("consumed request past replay deadline: grant=%v err=%v", grant.Media.Token != "", err)
 			}
 			if s.fixture.created != 0 || s.fixture.resumed != 0 {

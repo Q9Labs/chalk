@@ -33,6 +33,10 @@ defmodule ChalkSync.MediaPlane do
           publications: [publication()]
         }
 
+  @doc "Applies the facts of one provider call to the adapter."
+  @callback with_call(adapter :: term(), ChalkSync.ProviderCall.t()) :: term()
+  @optional_callbacks with_call: 2
+
   @callback grant_publication(
               adapter :: term(),
               operation_id :: String.t(),

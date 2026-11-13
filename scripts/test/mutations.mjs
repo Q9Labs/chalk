@@ -111,9 +111,9 @@ const cases = [
   },
   {
     name: "transcription-terminal-failure",
-    file: "apps/transcription-dispatcher/src/finalizer.ts",
-    from: 'const terminal = kind === "nonretryable" || kind === "schema";',
-    to: 'const terminal = kind === "schema";',
+    file: "apps/transcription-dispatcher/src/errors.ts",
+    from: 'return kind === "nonretryable" || kind === "schema";',
+    to: 'return kind === "schema";',
     ...vitest("apps/transcription-dispatcher", "test/finalizer.test.ts"),
   },
   {

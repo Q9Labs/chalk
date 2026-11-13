@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # The capture worker that runs beside the SFU. Build with named contexts, because the API module and
-# the modules it replaces live outside infrastructure/sfu:
+# the protocol module it replaces live outside infrastructure/sfu:
 #   docker buildx build --file Dockerfile.capture --build-context api=apps/api \
-#     --build-context mcpapi=features/mcp/api --build-context protocol=features/media/sfu/protocol infrastructure/sfu
+#     --build-context protocol=features/media/sfu/protocol infrastructure/sfu
 
 ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:ee3901c61e423732605a51f1b8157c849ec01194ea0a274213b5202b2c11e7bf
 
@@ -11,7 +11,6 @@ ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /src/apps/api
 COPY --from=api go.mod go.sum ./
-COPY --from=mcpapi . /src/features/mcp/api
 COPY --from=protocol . /src/features/media/sfu/protocol
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY --from=api . .

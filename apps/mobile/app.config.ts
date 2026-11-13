@@ -1,3 +1,5 @@
+import release from "../../release/manifest.json";
+
 const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
 // The call's dark canvas, so the launch screen hands over to the first frame without a flash.
 const SPLASH_BACKGROUND = "#000000";
@@ -24,7 +26,7 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       owner: "q9labs",
       slug: "chalk-mobile",
       scheme: "chalk",
-      version: "3.0.6",
+      version: release.version_name,
       // The call turns to landscape; Home stays usable in either.
       orientation: "default",
       icon: "./assets/icon.png",
@@ -42,21 +44,21 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
       ios: {
         jsEngine: "jsc",
         supportsTablet: true,
-        bundleIdentifier: "ai.q9labs.chalk.mobile",
-        buildNumber: "40",
+        bundleIdentifier: release.apple.bundle_id,
+        buildNumber: release.apple.build_number,
         associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
         entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false,
           NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a call.",
           NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a call.",
-          RTCAppScreenSharingExtension: "ai.q9labs.chalk.mobile.screenshare",
+          RTCAppScreenSharingExtension: release.apple.screen_share_bundle_id,
           UIBackgroundModes: ["audio", "voip"],
         },
       },
       android: {
-        package: "ai.q9labs.chalk.mobile",
-        versionCode: 66,
+        package: release.android.package_name,
+        versionCode: release.android.version_code,
         adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
         intentFilters: [
           {

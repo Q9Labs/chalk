@@ -11,25 +11,21 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantAuthority do
       when is_binary(participant_id) and
              (is_nil(expected_generation) or
                 (is_integer(expected_generation) and expected_generation > 0)) do
-    case UUID.dump(participant_id) do
-      {:ok, participant_id} ->
-        read_participant_authority(
-          episode,
-          participant_id,
-          participant_id,
-          expected_generation
-        )
+    Database.guard(
+      fn ->
+        case UUID.dump(participant_id) do
+          {:ok, participant_id} ->
+            read_participant_authority(episode, participant_id, expected_generation)
 
-      :error ->
-        {:error, :participant_inactive}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+          :error ->
+            {:error, :participant_inactive}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
-  defp read_participant_authority(episode, participant_id, participant_id, expected) do
+  defp read_participant_authority(episode, participant_id, expected) do
     result =
       Postgrex.query(
         Database.connection(episode),

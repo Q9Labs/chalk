@@ -11,7 +11,6 @@ defmodule ChalkSync.Retention.Scheduler do
 
   alias ChalkSync.Database
   alias ChalkSync.Retention.CleanupWorker
-  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Telemetry
 
   @default_interval_ms 1_000
@@ -215,8 +214,7 @@ defmodule ChalkSync.Retention.Scheduler do
   defp normalize_error_reason(_reason), do: :unknown_reason
 
   defp cleanup_once do
-    episode = %EpisodeKey{tenant_id: "retention", space_id: "retention", episode_id: "retention"}
-    CleanupWorker.run_once(Database.connection(episode))
+    CleanupWorker.run_once(Database.connection_for(:retention))
   end
 
   defp public_health(state) do

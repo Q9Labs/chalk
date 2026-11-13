@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { AssignmentError } from "./errors.js";
 
-interface GetAudioOptions {
+interface FetchVerifiedOptions {
   fetch: typeof fetch;
   url: string;
   expectedContentType: string;
@@ -11,13 +11,13 @@ interface GetAudioOptions {
   signal?: AbortSignal;
 }
 
-export interface AudioChunk {
+export interface VerifiedBytes {
   bytes: Uint8Array;
   contentType: string;
   sha256: string;
 }
 
-export async function fetchAudioChunk(options: GetAudioOptions): Promise<AudioChunk> {
+export async function fetchVerified(options: FetchVerifiedOptions): Promise<VerifiedBytes> {
   const response = await options.fetch(options.url, { method: "GET", ...(options.signal === undefined ? {} : { signal: options.signal }) });
   if (!response.ok) throw new AssignmentError("chunk download failed", response.status === 408 || response.status === 429 || response.status >= 500);
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
