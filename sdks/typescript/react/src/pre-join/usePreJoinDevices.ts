@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NO_DETECTED_DEVICES, watchMediaDevices, type DetectedMediaDevices } from "../internal/media-devices";
 import { playSpeakerTestTone } from "../internal/speaker-test";
 import { useInputLevel } from "../internal/useInputLevel";
-import { useMirrorSetting } from "../internal/useMirrorSetting";
+import { useMirrorSetting } from "../internal/useStoredSettings";
 import { readRememberedDevices, rememberDevices, type RememberedDevices } from "./remembered-devices";
 
 /**

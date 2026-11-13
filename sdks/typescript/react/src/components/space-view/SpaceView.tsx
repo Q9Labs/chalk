@@ -11,7 +11,7 @@ import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { useSoundsSetting } from "../../internal/useSoundsSetting";
+import { useSoundsSetting } from "../../internal/useStoredSettings";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";

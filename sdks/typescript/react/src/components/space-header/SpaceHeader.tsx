@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
 import { useNarrowCall } from "../../internal/call-width";
-import { useSoundsSetting } from "../../internal/useSoundsSetting";
+import { useSoundsSetting } from "../../internal/useStoredSettings";
 import { ChalkPopover, ChalkSheet } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
 import { LayoutMenu } from "./LayoutMenu";

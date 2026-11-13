@@ -3,7 +3,7 @@ import type React from "react";
 
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { mediaToggleTarget } from "./media-toggle";
-import { useMirrorSetting } from "../../internal/useMirrorSetting";
+import { useMirrorSetting } from "../../internal/useStoredSettings";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { NO_DETECTED_DEVICES, watchMediaDevices } from "../../internal/media-devices";

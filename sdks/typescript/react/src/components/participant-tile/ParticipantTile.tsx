@@ -2,7 +2,7 @@ import { Facehash } from "@q9labsai/facehash/react";
 import React, { useMemo, useRef } from "react";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
-import { useMirrorSetting } from "../../internal/useMirrorSetting";
+import { useMirrorSetting } from "../../internal/useStoredSettings";
 import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
