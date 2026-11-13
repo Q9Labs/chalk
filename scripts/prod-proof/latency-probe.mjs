@@ -20,7 +20,6 @@ export function installLatencyProbe() {
   const remote = (participantId, source) => (snapshot()?.media.remote ?? []).filter((entry) => entry.participantId === participantId && entry.source === source && entry.track.readyState === "live");
   // Opus DTX sends a packet at least every 400 ms while the sender is silent, so a shorter gap proves nothing.
   const quietMs = 600;
-  let actionAt = 0;
   const member = (participantId) => snapshot()?.participants.roster.find((entry) => entry.participantId === participantId);
 
   const conditions = {
@@ -33,8 +32,8 @@ export function installLatencyProbe() {
     gone: ({ participantId, source }) => remote(participantId, source).length === 0,
     // A muted microphone stays published and its remote track stays live, so "no live track" means: the track
     // ended, or every live one is disabled and no packet reached it for quietMs. Every live track must have
-    // inbound counters, so missing stats never count as silence. Returns when the silence began (the last
-    // packet, or the first sample that saw it), never before the action.
+    // inbound counters, so missing stats never count as silence. Returns when the silence began: the last
+    // packet, or the first sample that saw it. The receiver arms the watch, so the caller floors it at the sender's action.
     async silenced({ participantId, source }, _baseline, memory) {
       const live = remote(participantId, source);
       if (!live.length) return now();
@@ -53,7 +52,7 @@ export function installLatencyProbe() {
       const at = now();
       if (memory.since == null || counts !== memory.counts) memory.since = at;
       memory.counts = counts;
-      return at - memory.since >= quietMs ? Math.max(memory.since, actionAt) : false;
+      return at - memory.since >= quietMs ? memory.since : false;
     },
     silent: ({ participantId }) => !(snapshot()?.media.remote ?? []).some((entry) => entry.participantId === participantId && entry.track.readyState === "live"),
     roster: ({ participantId, field, value }) => member(participantId)?.media[field] === value,
@@ -100,7 +99,6 @@ export function installLatencyProbe() {
     },
     async act(action, value) {
       const at = now();
-      actionAt = at;
       await actions[action](value);
       return { at, settledAt: now(), leaveAckAt: window.proofLeave?.ackAt ?? null };
     },

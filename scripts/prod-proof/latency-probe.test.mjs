@@ -80,16 +80,6 @@ test("without inbound counters for the microphone track, silence is unproved", a
   assert.equal((await watch(900)).at, null);
 });
 
-test("silence that held before the action is timed from the action", async () => {
-  const track = { id: "t1", readyState: "live", enabled: false, muted: false };
-  const watch = pageWith(track, { count: 5 });
-  const watching = watch(3000);
-  await pause(100);
-  const { at: actionAt } = await window.proofLatency.act("microphone", false);
-  const seen = await watching;
-  assert.ok(seen.at >= actionAt, `a duration measured from the action is never negative (${seen.at - actionAt} ms)`);
-});
-
 test("an ended microphone track is silenced at once", async () => {
   const track = { id: "t1", readyState: "ended", enabled: true, muted: false };
   const watch = pageWith(track, { count: 5 });

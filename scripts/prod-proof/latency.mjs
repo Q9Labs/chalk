@@ -67,7 +67,9 @@ async function measure(sender, receiver, action, value, specs) {
   const id = randomUUID();
   await receiver.evaluate((watch) => window.proofLatency.arm(watch.id, watch.specs, watch.timeoutMs), { id, specs, timeoutMs });
   const acted = await sender.evaluate((step) => window.proofLatency.act(step.action, step.value), { action, value });
-  const seen = await receiver.evaluate((watch) => window.proofLatency.result(watch), id);
+  const found = await receiver.evaluate((watch) => window.proofLatency.result(watch), id);
+  // Silence can start before the sender acts: a track that was already disabled and quiet. That measures zero, not a negative time.
+  const seen = found.map(({ name, at }) => ({ name, at: at !== null && specs.find((spec) => spec.name === name)?.kind === "silenced" ? Math.max(at, acted.at) : at }));
   return { acted, delays: Object.fromEntries(seen.map(({ name, at }) => [name, at === null ? null : Math.round(at - acted.at)])), ats: Object.fromEntries(seen.map(({ name, at }) => [name, at])) };
 }
 
