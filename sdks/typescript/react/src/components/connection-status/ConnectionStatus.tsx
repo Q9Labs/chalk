@@ -112,7 +112,7 @@ const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:40;
 .chalk-connection-dim[data-lifting] {animation:chalk-connection-veil .3s ease-out reverse forwards;}
 @keyframes chalk-connection-veil {from {opacity:0;}}
 .chalk-connection-card {position:absolute;z-index:41;left:50%;top:50%;transform:translate(-50%,-50%);width:max-content;max-width:calc(100% - 32px);display:grid;justify-items:center;gap:var(--space-1-5);padding:var(--space-5) var(--space-6);border-radius:var(--corner-2xl);background:var(--chalk-surface);border:1px solid var(--chalk-line);box-shadow:var(--chalk-shadow);color:var(--chalk-text);text-align:center;pointer-events:none;animation:chalk-connection-veil .3s var(--chalk-ease-out-expo, ease-out) both;}
-.chalk-connection-card h3 {display:flex;gap:var(--space-2-5);align-items:center;font-size:17px;font-weight:600;line-height:1.3;}
+.chalk-connection-card h3 {display:flex;gap:var(--space-2-5);align-items:center;font-size:var(--type-lead);font-weight:600;line-height:1.3;}
 .chalk-connection-card h3 .chalk-connection-ring {width:20px;height:20px;}
 .chalk-connection-time {color:var(--chalk-muted-text);font-weight:400;font-size:var(--type-body);font-variant-numeric:tabular-nums;}
 .chalk-connection-card p {color:var(--chalk-muted-text);font-size:var(--type-body-sm);line-height:1.45;text-wrap:balance;}
