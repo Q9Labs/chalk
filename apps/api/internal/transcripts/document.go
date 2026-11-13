@@ -145,19 +145,7 @@ type persistedCueQuality struct {
 }
 
 func (document persistedDocument) validate() error {
-	if document.TranscriptLanguage != nil && !document.TranscriptLanguage.validate() {
-		return ErrInvalidDocument
-	}
-	if document.SchemaVersion != "transcript.v1" || document.JobID == "" || document.EpisodeID == "" || document.Cues == nil || !validDocumentProvider(document.Provider) || document.Model == "" || document.VersionContract == "" || document.Attempt == nil || *document.Attempt < 0 || document.MeasuredAudioMS == nil || *document.MeasuredAudioMS < 0 {
-		return ErrInvalidDocument
-	}
-	if document.Language != nil && *document.Language == "" {
-		return ErrInvalidDocument
-	}
-	if document.ProviderObservedDurationMS != nil && *document.ProviderObservedDurationMS < 0 {
-		return ErrInvalidDocument
-	}
-	if !validNonNegativeFloat(document.BilledAudioSeconds) || !validNonNegativeFloat(document.ProviderReportedCostUSD) || !validQuality(document.Quality) {
+	if !document.validHeader() || !document.validMetrics() {
 		return ErrInvalidDocument
 	}
 	for _, cue := range document.Cues {
@@ -166,6 +154,26 @@ func (document persistedDocument) validate() error {
 		}
 	}
 	return nil
+}
+
+func (document persistedDocument) validHeader() bool {
+	if document.TranscriptLanguage != nil && !document.TranscriptLanguage.validate() {
+		return false
+	}
+	if document.Language != nil && *document.Language == "" {
+		return false
+	}
+	return document.SchemaVersion == "transcript.v1" && document.JobID != "" && document.EpisodeID != "" && document.Cues != nil && validDocumentProvider(document.Provider) && document.Model != "" && document.VersionContract != ""
+}
+
+func (document persistedDocument) validMetrics() bool {
+	if document.Attempt == nil || *document.Attempt < 0 || document.MeasuredAudioMS == nil || *document.MeasuredAudioMS < 0 {
+		return false
+	}
+	if document.ProviderObservedDurationMS != nil && *document.ProviderObservedDurationMS < 0 {
+		return false
+	}
+	return validNonNegativeFloat(document.BilledAudioSeconds) && validNonNegativeFloat(document.ProviderReportedCostUSD) && validQuality(document.Quality)
 }
 
 func (cue persistedCue) validate() error {
