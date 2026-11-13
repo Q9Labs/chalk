@@ -27,8 +27,22 @@ export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mj
 // The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including own-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
-// What the proof tests run or read: the proof scripts, the scorecard modules and workflow they import, the API access-grant types and the client sources they bundle.
-const proofTestRoots = ["scripts/prod-proof", "scripts/web-proof", "features/scorecard", ".github/workflows/real-call-proof.yml", "apps/api/internal/accessgrants", "sdks/typescript/client/src"];
+// What the proof tests run or read: the proof scripts, the scorecard modules, budgets and workflow they import, the API access-grant types, the web routes, docs manifest and public association files they read, and the client sources and dependencies they bundle.
+const proofTestRoots = [
+  "scripts/prod-proof",
+  "scripts/web-proof",
+  "features/scorecard",
+  "perf/budgets.json",
+  ".github/workflows/real-call-proof.yml",
+  "apps/api/internal/accessgrants",
+  "apps/web/public",
+  "apps/web/src/routeTree.gen.ts",
+  "apps/web/src/docs/manifest.ts",
+  "sdks/typescript/client/src",
+  "sdks/typescript/client/package.json",
+  "sdks/typescript/client/tsconfig.json",
+  "pnpm-lock.yaml",
+];
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",

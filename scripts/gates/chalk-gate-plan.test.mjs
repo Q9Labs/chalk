@@ -227,6 +227,13 @@ test("a change to a proof script, its test inputs or the client sources runs the
     ".github/workflows/real-call-proof.yml",
     "apps/api/internal/accessgrants/types.go",
     "sdks/typescript/client/src/index.ts",
+    "sdks/typescript/client/package.json",
+    "sdks/typescript/client/tsconfig.json",
+    "perf/budgets.json",
+    "apps/web/public/.well-known/apple-app-site-association",
+    "apps/web/src/routeTree.gen.ts",
+    "apps/web/src/docs/manifest.ts",
+    "pnpm-lock.yaml",
   ]) {
     assert.ok(selected([file], "pull_request").includes("proof-bundle"), file);
     assert.ok(selected([file], "merge_group").includes("proof-bundle"), file);
