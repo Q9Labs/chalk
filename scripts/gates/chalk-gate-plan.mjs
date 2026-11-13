@@ -458,6 +458,7 @@ export function createGatePlan(files, options = {}) {
       "features/scorecard/promote-graph.test.mjs",
       "features/scorecard/nightly-graph.test.mjs",
       "features/scorecard/lease-arguments.test.mjs",
+      "scripts/gates/stale-merge-group.test.mjs",
     ]),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
