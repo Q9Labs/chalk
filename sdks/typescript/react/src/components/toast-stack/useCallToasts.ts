@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSpaceClient } from "../../bindings/hooks";
-import { callEventToasts, mediaFailureToast } from "./call-events";
+import { callEventToast, mediaFailureToast } from "./call-events";
 import type { Toast } from "./ToastStack";
 
 export function useCallToasts() {
   const client = useSpaceClient();
   const [toasts, setToasts] = useState<readonly (Toast & { readonly failureCode?: string })[]>([]);
   const sequence = useRef(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Diff committed client snapshots into bounded toasts and media errors; unsubscribe and invalidate queued errors on cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Turn client call events into bounded toasts and attribute media errors to the source that failed; unsubscribe and invalidate queued errors on cleanup.
   useEffect(() => {
     setToasts([]);
     let previous = client.getSnapshot();
     let failedSource: "microphone" | "camera" | "screen" | undefined;
-    const push = (events: readonly Omit<Toast, "id">[]) => {
-      if (events.length) setToasts((current) => [...current, ...events.map((event) => ({ ...event, id: `call-event-${++sequence.current}` }))].slice(-20));
-    };
     const unsubscribe = client.subscribe(() => {
       const next = client.getSnapshot();
       for (const source of ["microphone", "camera"] as const) if (previous.media.local[source].state !== "failed" && next.media.local[source].state === "failed") failedSource = source;
       if (previous.media.screenShare.state !== "failed" && next.media.screenShare.state === "failed") failedSource = "screen";
-      push(callEventToasts(previous, next));
       previous = next;
+    });
+    const offCallEvent = client.on("callEvent", ({ event }) => {
+      const toast = callEventToast(event);
+      if (toast) setToasts((current) => [...current, { ...toast, id: `call-event-${++sequence.current}` }].slice(-20));
     });
     let disposed = false;
     const offError = client.on("error", ({ error }) => {
@@ -39,6 +39,7 @@ export function useCallToasts() {
     return () => {
       disposed = true;
       unsubscribe();
+      offCallEvent();
       offError();
     };
   }, [client]);

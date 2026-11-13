@@ -1,4 +1,4 @@
-import type { AccessContext } from "../space-client/types.js";
+import type { AccessContext } from "../access/context.js";
 import type { IssueAccessGrantInput } from "./types.js";
 import { parseParsedAccessGrant, type AccessGrant, type ParticipantMediaCredential } from "../access/grant.js";
 

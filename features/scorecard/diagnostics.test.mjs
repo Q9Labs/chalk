@@ -7,7 +7,7 @@ import test from "node:test";
 import { gatedActionIds, readBudgets } from "./budgets.mjs";
 import { DIAGNOSTICS_SCHEMA, diagnosticsFileName, diagnosticsReport, problemOf } from "./diagnostics.mjs";
 import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
-import { RETIRED_STAGE_IDS, STAGE_IDS } from "./stages.mjs";
+import { STAGE_IDS } from "./stages.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
@@ -101,27 +101,6 @@ test("the report lists measured stages", () => {
   assert.match(text, /Checks sent without a reply on that pair: 0 \/ 3 \(n=20\)/);
   assert.match(text, /\| `media.network_jitter_one_way_ms` \| 20 \| 120 \| 180 \| one-way network time plus listener jitter-buffer delay; capture, encode, SFU forwarding and playout are excluded \|/);
   assert.doesNotMatch(diagnosticsReport(JSON.stringify(sidecar({ summary: { ...summary, audio: undefined } }))), /Audio delay/);
-});
-
-test("a sidecar written before the turn-off stages were retired still validates and shows the remaining stages", () => {
-  const empty = { n: 0, p50: null, p95: null };
-  const retiredNull = Object.fromEntries(RETIRED_STAGE_IDS.map((id) => [id, null]));
-  const retiredSummary = Object.fromEntries(RETIRED_STAGE_IDS.map((id, index) => [id, index % 2 ? empty : stat]));
-  assert.equal(RETIRED_STAGE_IDS.length, 6);
-  assert.ok(RETIRED_STAGE_IDS.every((id) => !STAGE_IDS.includes(id)));
-  const legacy = sidecar({
-    cycles: [
-      { cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", stages: { "camera_off.prepare": 592, "camera_off.track_removed": 2, ...retiredNull } },
-      { cycle: 2, stages: { "mic_off.close_tracks": 150, "screen_stop.renegotiate": 30 } },
-    ],
-    summary: { stages: { "camera_off.track_removed": stat, "camera_off.sfu_close": stat, ...retiredSummary } },
-  });
-  assert.equal(problemOf(legacy), undefined);
-  const report = diagnosticsReport(JSON.stringify(legacy));
-  assert.doesNotMatch(report, /invalid, not shown/);
-  assert.match(report, /`track_removed`/);
-  assert.match(report, /`sfu_close`/);
-  assert.doesNotMatch(report, /close_tracks/);
 });
 
 test("no budget names the audio delay", async () => {

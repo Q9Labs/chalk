@@ -53,7 +53,7 @@ The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow
 
 ## Test policy checks
 
-The `ast-grep` lane rejects a test that mocks a module of this repository. The `mock-calls` lane counts assertions on mock calls per package against `mock-call-baseline.json` and fails when a count rises; `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
+The `ast-grep` lane rejects a test that mocks a module of this repository, whatever name the mock call hangs on (`vi`, an alias of it, node:test's `mock`) and whether the path is a string, a template or `import(...)`, in any file. An `ast-grep-ignore` comment without a rule name, or one naming that rule, fails the lane, because ast-grep would honor it and hide the mock. The `mock-calls` lane counts assertions on mock calls (matchers, reads of `fn.mock.calls`, and node:test's `fn.mock.callCount()`) per package in every JavaScript and TypeScript test file and fails when a count differs from `mock-call-baseline.json`: a rise is a new assertion, and a fall means the baseline is stale. `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop and refuses to raise it. The lane also reads the baseline on the merge base with `GATE_BASE_REF` (default `origin/master`) and fails when the committed one is higher, or when that base cannot be read. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
 
 ## Heavy runs on Instabox
 
@@ -66,6 +66,10 @@ box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-pos
 ```
 
 `instabox-run.sh` installs locked dependencies, mounts data-disk scratch at `/tmp` (the snapshot's 4 GB tmpfs cannot satisfy the queue proofs' 8 GB admission floor, and one mount preserves hard links), installs Chromium with `--browser`, and runs `pnpm gate:full` when given no command. Use `with-postgres.sh --` for Sync runs; the API gate manages its own database. Tool versions are pinned in `.tool-versions`, `apps/api/go.mod` and the CI setup actions. The [performance runbook](../../docs/performance-budget.md) separates diagnostic timings from calibrated budgets; do not enforce old timing limits on a new runner without re-measuring.
+
+## UI check
+
+A pull request that changes a UI path also runs the **UI check** workflow beside Gate. It walks the call journeys on the branch and on the base and fails on a layout problem that only the branch has; `scripts/ui-check/README.md` explains what it checks and how to run it. It is a separate required status check because it needs the call-state harness and a browser, not a Gate lane.
 
 ## Documentation checks
 

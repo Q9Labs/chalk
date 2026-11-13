@@ -3,7 +3,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { METRICS, validateBudgets } from "./call-performance-metrics.mjs";
-import { loadCallBudgets, readBudgets, withCallLimits } from "../../../features/scorecard/budgets.mjs";
+import { readBudgets } from "../../../features/scorecard/budgets.mjs";
+import { loadCallBudgets, withCallLimits } from "../../../features/scorecard/call-budgets.mjs";
 
 const { values } = parseArgs({ options: { baseline: { type: "string" }, out: { type: "string" } } });
 if (!values.baseline || !values.out) throw new Error("Pass --baseline <report.json> --out <candidate.json>");

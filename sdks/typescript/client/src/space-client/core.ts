@@ -5,12 +5,13 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
 import type { ConnectionDiagnostic } from "../connection/diagnostics";
 import { createDefaultConnectionDependencies } from "../connection/production";
+import { callEvents } from "./call-events";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
-import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "./urls";
+import { DEFAULT_API_BASE_URL, defaultSyncUrl, normalizeBaseUrl } from "../urls";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
 export type SpaceClientPlatform = {
@@ -34,7 +35,7 @@ export type SpaceClientPlatform = {
 export class SpaceClientCoreService extends Context.Service<SpaceClientCoreService, SpaceClientCore>()("@chalk/client/SpaceClientCore") {}
 /** Production composition keeps every mutable owner inside a scoped Layer. */
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
-  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
+  const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
@@ -68,7 +69,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       const space = options.space.trim();
       if (space.length === 0) return yield* Effect.die(new TypeError("A Space slug is required"));
       if (typeof options.getAccess !== "function") return yield* Effect.die(new TypeError("getAccess is required"));
-      const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
+      const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
       const selection = new MediaDeviceSelection(dependencies.mediaDevices);
       const controllers = yield* makeControllerEffects({
         offlineActionsStorage: options.offlineActionsStorage,
@@ -92,7 +93,7 @@ export class SpaceClientCore {
   readonly #store: SpaceStore;
   readonly #handlers: {
     [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>>;
-  } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set() };
+  } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set(), callEvent: new Set() };
   #disposed = false;
   #episodeEnded = false;
   #previous: SpaceSnapshot;
@@ -178,6 +179,12 @@ export class SpaceClientCore {
     this.#emitParticipantChanges(previous, next);
     this.#emitScreenShareChanges(previous, next);
     this.#emitErrorChange(previous, next);
+    this.#emitCallEvents(previous, next);
+  }
+  #emitCallEvents(previous: SpaceSnapshot, next: SpaceSnapshot): void {
+    const micTurnedOff = previous.media.local.microphone.state !== next.media.local.microphone.state;
+    const ownMicrophoneOff = micTurnedOff && this.controllers.media.consumeOwnMicrophoneOff();
+    for (const event of callEvents(previous, next, ownMicrophoneOff)) this.#emit("callEvent", { event });
   }
   #emitParticipantChanges(previous: SpaceSnapshot, next: SpaceSnapshot): void {
     const before = new Map(previous.participants.roster.map((participant) => [participant.participantId, participant]));
@@ -237,13 +244,6 @@ function accessReason(reason: ConnectionAccessReason | undefined): "join" | "ref
   if (reason === undefined || reason === "join") return "join";
   if (reason === "scheduled_refresh") return "refresh";
   return "retry";
-}
-function normalizedBaseUrl(value: string): string {
-  const url = new URL(value);
-  url.pathname = url.pathname.replace(/\/+$/u, "");
-  url.search = "";
-  url.hash = "";
-  return url.toString().replace(/\/$/u, "");
 }
 function screenShares(snapshot: SpaceSnapshot): ReadonlySet<string> {
   const participants = new Set(snapshot.media.remote.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));

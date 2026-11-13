@@ -2,19 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
-import { nextHandOrder, useHandOrder } from "./useHandOrder";
-
-it("keeps hands in the order they went up and drops lowered ones", () => {
-  const first = nextHandOrder([], ["b", "a"]);
-  expect(first).toEqual(["b", "a"]);
-  expect(nextHandOrder(first, ["a", "b", "c"])).toEqual(["b", "a", "c"]);
-  expect(nextHandOrder(["b", "a", "c"], ["c", "a"])).toEqual(["a", "c"]);
-});
-
-it("returns the same array when nothing changed", () => {
-  const order = ["a", "b"];
-  expect(nextHandOrder(order, ["b", "a"])).toBe(order);
-});
+import { useHandOrder } from "./useHandOrder";
 
 it("numbers hands from 1 across renders", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);

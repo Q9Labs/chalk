@@ -1,0 +1,352 @@
+#!/usr/bin/env bash
+# Deploys the SFU at the current commit to one own-SFU node.
+#
+#   deploy <staging|production|bench> <node address> [--force|--firewall-only]
+#
+# It first makes the node's host firewall allow exactly the control and SSH
+# sources of the environment's cloud firewall, which OpenTofu owns; first boot
+# set the host firewall once, so an address change in OpenTofu alone would leave
+# the old address allowed and the new one blocked. --firewall-only stops there,
+# so an address change needs no restart. Otherwise it builds the image, loads it into the node's rootless Podman, installs the
+# certificates as Podman secrets, the settings and the Quadlet unit, drains the
+# running node, restarts it and checks readiness through an SSH tunnel with an
+# operator certificate. Running it twice converges on the same state. Without
+# --force it sends the node a drain request and waits up to SFU_DRAIN_TIMEOUT
+# seconds (default 3600) until the node reports zero allocations and zero cleanup
+# debt. If that does not happen it reopens the node and exits: a restart then
+# would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. SSH uses SFU_SSH_KEY (default ~/.ssh/chalk-sfu-operator_ed25519); the script exits at the start if that file is missing. Metrics export
+# turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
+# which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
+# The capture worker beside the SFU is installed when the directory also holds capture.conf
+# (NODE_ID, CONTROL_PLANE_URL, SERVER_NAME), capture-ca.crt (certs capture-ca) and bridge-ca.crt.
+# Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
+# Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
+# `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
+set -euo pipefail
+
+usage="usage: deploy <staging|production|bench> <node address> [--force|--firewall-only]"
+environment="${1:?$usage}"
+host="${2:?$usage}"
+mode="${3:-}"
+case "$mode" in
+  "" | --force | --firewall-only) ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+case "$environment" in
+  staging) spiffe_environment=nightly sfu_environment=staging ;;
+  production) spiffe_environment=production sfu_environment=production ;;
+  bench) spiffe_environment=bench sfu_environment=staging ;; # the SFU knows local, staging and production
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+source "$(dirname "$0")/lib.sh"
+dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
+drain_timeout="${SFU_DRAIN_TIMEOUT:-3600}"
+identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
+for file in ca.crt server.crt server.key; do
+  [[ -f "${dir}/${file}" ]] || { echo "missing ${dir}/${file}; see certs" >&2; exit 1; }
+done
+
+# An unusable key makes BatchMode ssh fail quietly, and the bootstrap wait below would retry for ten minutes.
+[[ -f "$SFU_SSH_KEY" && -r "$SFU_SSH_KEY" ]] || { echo "no readable SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY to the operator key" >&2; exit 1; }
+sfu_ssh_options "${dir}/known_hosts"
+remote() { ssh "${ssh_options[@]}" "root@${host}" "$@"; }
+# as_sfu runs a command as the chalk-sfu user, inside its user session.
+as_sfu() {
+  remote "cd /home/chalk-sfu && uid=\$(id -u chalk-sfu) && runuser -u chalk-sfu -- env -i HOME=/home/chalk-sfu PATH=/usr/bin:/bin \
+    XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus $*"
+}
+
+echo "==> waiting for the node's bootstrap"
+for _ in $(seq 60); do
+  status=0
+  probe="$(remote test -f /var/lib/chalk-sfu-bootstrapped 2>&1)" || status=$?
+  [[ $status -eq 0 ]] && break
+  # A node that is not up yet refuses or times out and is worth waiting for; a key the node rejects is not.
+  if grep -q -E 'Permission denied|Load key|no such identity|Too many authentication failures' <<<"$probe"; then
+    echo "ssh cannot authenticate to the node with ${SFU_SSH_KEY}: ${probe}" >&2
+    exit 1
+  fi
+  sleep 10
+done
+remote test -f /var/lib/chalk-sfu-bootstrapped
+
+echo "==> matching the host firewall to the cloud firewall"
+sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '
+  [.[] | select(.name == $name)] as $found
+  | if ($found | length) != 1 then error("want exactly one cloud firewall named \($name)") else $found[0] end
+  | .inbound_rules[] | select(.protocol == "tcp" and (.ports == $control or .ports == "22"))
+  | "\(.ports) \(.sources.addresses[])"')"
+for port in "$control_port" 22; do
+  grep -q "^${port} " <<<"$sources" ||
+    { echo "the cloud firewall allows no source on TCP ${port}; refusing to close it on the node" >&2; exit 1; }
+done
+# Rules compare by canonical network, the form ufw stores, so an address written
+# another way (host bits set, a /32) is not taken for a new source and its
+# existing rule removed. New rules go in before stale ones come out, so this SSH
+# session stays allowed.
+remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
+set -euo pipefail
+python3 - "$1" "$2" <<'PY'
+import base64, ipaddress, re, subprocess, sys
+
+def rule(port, source):
+    network = ipaddress.ip_network(source, strict=False)
+    if network.prefixlen == 0:
+        return f"allow {port}/tcp"
+    if network.prefixlen == network.max_prefixlen:
+        network = network.network_address
+    return f"allow from {network} to any port {port} proto tcp"
+
+def ufw(*args):
+    subprocess.run(["ufw", *args], check=True, stdout=subprocess.DEVNULL)
+
+control = sys.argv[2]
+want = {rule(*line.split()) for line in base64.b64decode(sys.argv[1]).decode().splitlines() if line}
+have = {}
+added = subprocess.run(["ufw", "show", "added"], check=True, capture_output=True, text=True).stdout
+for line in added.splitlines():
+    match = re.fullmatch(rf"ufw (allow ({control}|22)/tcp|allow from (\S+) to any port ({control}|22) proto tcp)", line)
+    if match:
+        key = rule(match[2], "::/0") if match[2] else rule(match[4], match[3])
+        have.setdefault(key, []).append(match[1])
+for key in sorted(want - have.keys()):
+    ufw(*key.split())
+    print("host firewall: added", key)
+for key in sorted(have.keys() - want):
+    for existing in have[key]:
+        ufw("delete", *existing.split())
+        print("host firewall: removed", existing)
+PY
+# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
+# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
+ufw allow "$3"/tcp > /dev/null
+RECONCILE
+[[ "$mode" == --firewall-only ]] && exit 0
+
+# A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
+remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
+
+# The node's size picks its settings from the SFU's node table (packet budget, steal limit, memory),
+# and the node reads the budget and steal limit itself from SFU_NODE_SIZE and SFU_ENVIRONMENT.
+if [[ -n "${SFU_PACKET_BUDGET:-}" && "$environment" != bench ]]; then
+  echo "SFU_PACKET_BUDGET applies to the bench environment only" >&2
+  exit 2
+fi
+vcpus="$(remote nproc)"
+node_size="$(node_table --argjson vcpus "$vcpus" '.sizes | to_entries[] | select(.value.vcpus == $vcpus) | .key')"
+[[ -n "$node_size" ]] || { echo "no measured node size for ${vcpus} vCPUs; load-test the size and add it to ${sfu_table}" >&2; exit 1; }
+gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].goMemLimit')"
+memory_limit="$(node_table --arg size "$node_size" '.sizes[$size].containerMemory')"
+
+revision="$(git -C "$sfu_root" rev-parse HEAD)"
+if [[ -n "$(git -C "$sfu_root" status --porcelain -- .)" ]]; then
+  echo "features/media/sfu has uncommitted changes; the image must match ${revision}" >&2
+  exit 1
+fi
+echo "==> building chalk-sfu at ${revision}"
+docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+  --file "${node_dir}/Dockerfile" --tag "chalk-sfu:${revision}" --load "$sfu_root" >/dev/null
+
+echo "==> loading the image"
+docker save "chalk-sfu:${revision}" | as_sfu podman load --quiet >/dev/null
+# The unit names the image by the ID the node computed, after checking that
+# the loaded image carries this revision.
+image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-sfu:${revision}")"
+loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$image_id")"
+[[ "$loaded" == "$revision" ]] || { echo "node image ${image_id} is revision ${loaded}, want ${revision}" >&2; exit 1; }
+
+echo "==> installing certificates, settings and unit"
+# put_secret <name> <file> creates the node's Podman secret, or replaces it. Podman 4.9 refuses
+# --replace for a secret that does not exist yet.
+put_secret() {
+  local replace=()
+  as_sfu podman secret inspect "$1" >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" "$1" - <"$2" >/dev/null
+}
+for pair in server-cert:server.crt server-key:server.key client-ca:ca.crt; do
+  put_secret "chalk-sfu-${pair%%:*}" "${dir}/${pair#*:}"
+done
+otlp_endpoint="" otlp_secret="# Metrics export is off: the deploy found no otlp-headers."
+if [[ -f "${dir}/otlp-headers" ]]; then
+  put_secret chalk-sfu-otlp-headers "${dir}/otlp-headers"
+  otlp_endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}"
+  otlp_secret="Secret=chalk-sfu-otlp-headers,type=env,target=OTEL_EXPORTER_OTLP_METRICS_HEADERS"
+else
+  echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
+fi
+# Logs go to the dataset the API's logs go to, with their own token and dataset header.
+otlp_log_secret="# Log export is off: the deploy found no otlp-log-headers."
+if [[ -f "${dir}/otlp-log-headers" && -n "$otlp_endpoint" ]]; then
+  put_secret chalk-sfu-otlp-log-headers "${dir}/otlp-log-headers"
+  otlp_log_secret="Secret=chalk-sfu-otlp-log-headers,type=env,target=OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+else
+  echo "warning: no ${dir}/otlp-log-headers, so the node ships no logs" >&2
+fi
+if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
+  echo "SFU_MAX_EPISODE_PARTICIPANTS applies to the bench environment only" >&2
+  exit 2
+fi
+{
+  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+    -e "s|__UDP_BUFFER__|${udp_buffer}|" -e "s|__NODE_SIZE__|${node_size}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
+    -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
+    "${node_dir}/sfu.env.in"
+  if [[ -n "${SFU_PACKET_BUDGET:-}" ]]; then echo "SFU_PACKET_BUDGET=${SFU_PACKET_BUDGET}"; fi
+  if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" ]]; then echo "SFU_MAX_EPISODE_PARTICIPANTS=${SFU_MAX_EPISODE_PARTICIPANTS}"; fi
+} |
+  as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
+sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" \
+  "${node_dir}/chalk-sfu.container.in" |
+  as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
+# The capture worker beside the SFU is on when the operator directory holds capture.conf and the
+# worker identity. Without them the deploy removes the worker, so switching it off is deleting
+# those files and deploying again; every capture then goes to the on-demand fleet.
+capture_on=false
+if [[ -f "${dir}/capture.conf" ]]; then
+  for file in capture-ca.crt bridge-ca.crt; do
+    [[ -f "${dir}/${file}" ]] || { echo "capture.conf is present but ${dir}/${file} is missing; see certs ... capture-ca" >&2; exit 1; }
+  done
+  capture_on=true
+fi
+if $capture_on; then
+  echo "==> building chalk-recorder-capture at ${revision}"
+  repo_root="$(git -C "$sfu_root" rev-parse --show-toplevel)"
+  if [[ -n "$(git -C "$repo_root" status --porcelain -- apps/api)" ]]; then
+    echo "apps/api has uncommitted changes; the capture image must match ${revision}" >&2
+    exit 1
+  fi
+  docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+    --build-context "api=${repo_root}/apps/api" --build-context "protocol=${sfu_root}/protocol" \
+    --file "${node_dir}/Dockerfile.capture" --tag "chalk-recorder-capture:${revision}" --load "$node_dir" >/dev/null
+  docker save "chalk-recorder-capture:${revision}" | as_sfu podman load --quiet >/dev/null
+  capture_image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-recorder-capture:${revision}")"
+  loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$capture_image_id")"
+  [[ "$loaded" == "$revision" ]] || { echo "node image ${capture_image_id} is revision ${loaded}, want ${revision}" >&2; exit 1; }
+  # capture.conf holds NODE_ID (this node's ID in CHALK_SFU_NODES), CONTROL_PLANE_URL, SERVER_NAME and
+  # optionally SLOTS; no secrets. Every deploy issues the node's worker identity afresh, so it never
+  # lapses, and refuses to install one that is not this node's, from the capture CA, with 14 days left.
+  node_id="$(sed -n 's/^NODE_ID=//p' "${dir}/capture.conf")"
+  [[ -n "$node_id" ]] || { echo "${dir}/capture.conf needs NODE_ID=" >&2; exit 1; }
+  "${node_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
+  "${node_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
+  for pair in worker-cert:capture-worker.crt worker-key:capture-worker.key server-ca:bridge-ca.crt; do
+    name="chalk-capture-${pair%%:*}"
+    replace=()
+    as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
+    as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
+  done
+  control_plane_url="$(sed -n 's/^CONTROL_PLANE_URL=//p' "${dir}/capture.conf")"
+  server_name="$(sed -n 's/^SERVER_NAME=//p' "${dir}/capture.conf")"
+  slots="$(sed -n 's/^SLOTS=//p' "${dir}/capture.conf")"
+  [[ -n "$control_plane_url" && -n "$server_name" ]] || { echo "${dir}/capture.conf needs CONTROL_PLANE_URL= and SERVER_NAME=" >&2; exit 1; }
+  # The worker gets a share the SFU was not admitted against: a quarter of the vCPUs and of the
+  # memory. The measured per-recording cost in the PR keeps well inside it.
+  capture_memory="$(node_table --arg size "$node_size" '.sizes[$size].capture.memory')"
+  capture_gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].capture.goMemLimit')"
+  capture_cpus="$(node_table --arg size "$node_size" '.sizes[$size].capture.cpus')"
+  sed -e "s|__ENVIRONMENT__|${spiffe_environment}|" -e "s|__CONTROL_PLANE_URL__|${control_plane_url}|" -e "s|__SERVER_NAME__|${server_name}|" \
+    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${node_dir}/capture.env.in" |
+    as_sfu sh -c "'umask 077 && cat > .config/chalk-sfu/capture.env'"
+  sed -e "s|__IMAGE__|${capture_image_id}|" -e "s|__MEMORY_LIMIT__|${capture_memory}|" -e "s|__CPU_LIMIT__|${capture_cpus}|" \
+    "${node_dir}/chalk-recorder-capture.container.in" |
+    as_sfu sh -c "'cat > .config/containers/systemd/chalk-recorder-capture.container'"
+else
+  echo "==> no capture.conf: the capture worker is off on this node"
+  remote systemctl --user -M chalk-sfu@ stop chalk-recorder-capture >/dev/null 2>&1 || true
+  as_sfu sh -c "'rm -f .config/containers/systemd/chalk-recorder-capture.container .config/chalk-sfu/capture.env'"
+fi
+remote systemctl --user -M chalk-sfu@ daemon-reload
+
+port=$((20000 + RANDOM % 20000))
+tunnel=""
+# draining is the obligation to reopen the node on exit. It is set before the drain request is
+# sent, because a lost reply can hide a drain that took effect, and cleared only once a
+# restarted process answers. Undrain is idempotent, so a spurious reopen is harmless.
+draining=false
+old_incarnation=""
+# sfu_curl calls the node's control API through the SSH tunnel with the operator certificate.
+sfu_node_curl() { sfu_curl "$dir" 127.0.0.1 "$port" --max-time 10 "$@"; }
+open_tunnel() {
+  "${node_dir}/certs" "$environment" operator >/dev/null
+  sfu_tunnel "$port" "$host"
+}
+# An aborted deploy reopens the node it drained, so it takes new Episodes again.
+cleanup() {
+  if $draining; then
+    sfu_node_curl --output /dev/null -X POST "https://chalk-sfu:${port}/v1/undrain" || true
+  fi
+  [[ -z "$tunnel" ]] || kill "$tunnel" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
+  if [[ "$mode" == --force ]]; then
+    echo "==> restarting without waiting for live calls"
+  else
+    echo "==> draining: no new Episodes; waiting up to ${drain_timeout}s for zero allocations and cleanup debt"
+    open_tunnel
+    deadline=$((SECONDS + drain_timeout))
+    status=000
+    draining=true
+    for _ in $(seq 10); do # the tunnel needs a moment
+      status="$(sfu_node_curl --output /dev/null --write-out '%{http_code}' -X POST "https://chalk-sfu:${port}/v1/drain")" && break
+      sleep 1
+    done
+    if [[ "$status" == 404 ]]; then
+      # The running node predates the drain request; remove this branch once no node does.
+      draining=false # it has no undrain either
+      since="$(remote date -u +%Y-%m-%dT%H:%M:%SZ)"
+      as_sfu podman kill --signal USR1 chalk-sfu >/dev/null
+      until as_sfu podman logs --since "$since" chalk-sfu 2>&1 | grep -q '"msg":"sfu drained"'; do
+        ((SECONDS < deadline)) || { echo "live calls remain after ${drain_timeout}s; restarting would be a disruptive replacement; rerun with --force to cut them" >&2; exit 1; }
+        sleep 5
+      done
+    else
+      [[ "$status" == 200 ]] || { echo "the drain request answered ${status}" >&2; exit 1; }
+      last=""
+      until state="$(sfu_node_curl --max-time 5 "https://chalk-sfu:${port}/readyz")" && [[ "$(jq -r '.allocations == 0 and .cleanupDebt == 0' <<<"$state" 2>/dev/null)" == true ]]; do
+        counts="$(jq -r '"allocations \(.allocations), cleanup debt \(.cleanupDebt)"' <<<"$state" 2>/dev/null || echo unknown)"
+        [[ "$counts" == "$last" ]] || { echo "    draining: ${counts}"; last="$counts"; }
+        ((SECONDS < deadline)) || { echo "${counts} remain after ${drain_timeout}s; restarting now would be a disruptive replacement that cuts live calls; the node is reopened. Rerun with --force to accept it" >&2; exit 1; }
+        sleep 5
+      done
+      old_incarnation="$(jq -r .nodeIncarnation <<<"$state")"
+    fi
+  fi
+fi
+remote systemctl --user -M chalk-sfu@ restart chalk-sfu
+as_sfu podman image prune --force >/dev/null
+
+echo "==> checking readiness"
+[[ -n "$tunnel" ]] || open_tunnel
+ready=""
+for _ in $(seq 30); do
+  # A new process answers with a new boot incarnation and is not draining. Until then a failed
+  # restart leaves the old process, and the exit trap reopens it.
+  if ready="$(sfu_node_curl --fail --max-time 3 "https://chalk-sfu:${port}/readyz")" &&
+    [[ "$(jq -r --arg old "$old_incarnation" '.draining == false and .nodeIncarnation != $old' <<<"$ready")" == true ]]; then
+    break
+  fi
+  ready=""
+  sleep 2
+done
+[[ -n "$ready" ]] || { echo "the node did not become ready" >&2; exit 1; }
+draining=false # the new process is up, so there is nothing left to reopen
+granted="$(jq -r '.host.udpReceiveBufferBytes' <<<"$ready")"
+echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .packetBudget <<<"$ready"), receive buffer ${granted} bytes, receive-buffer drops $(jq -r '.host.udpReceiveBufferErrors // "unknown"' <<<"$ready")"
+((granted >= udp_buffer)) || { echo "the receive buffer is below ${udp_buffer} bytes; check net.core.rmem_max" >&2; exit 1; }
+sent="$(jq -r '.host.udpSendBufferBytes' <<<"$ready")"
+echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferErrors // "unknown"' <<<"$ready")"
+((sent >= udp_buffer)) || { echo "the send buffer is below ${udp_buffer} bytes; check net.core.wmem_max" >&2; exit 1; }
+
+if $capture_on; then
+  echo "==> starting the capture worker"
+  remote systemctl --user -M chalk-sfu@ restart chalk-recorder-capture
+  for _ in $(seq 15); do
+    remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-recorder-capture && break
+    sleep 2
+  done
+  remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-recorder-capture || { echo "the capture worker did not start" >&2; exit 1; }
+  as_sfu podman image prune --force >/dev/null
+fi

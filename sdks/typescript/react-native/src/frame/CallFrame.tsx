@@ -23,7 +23,7 @@ import { ArrivalScreen } from "../status/ChalkArrival";
 import { callScreen } from "../status/call-screen";
 import { useTheme } from "../theme/theme";
 import { useCallEventToasts, type Permission } from "../toasts/CallEventToasts";
-import { useDevScenario } from "./dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalCount } from "./portal";
 import { useMeasuredRef } from "./measurement";
@@ -84,15 +84,14 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
 
   const microphoneOn = media.local.microphone.state === "enabled";
   const cameraOn = media.local.camera.state === "enabled";
-  const { noteOwnMicrophoneChange, reportMediaFailure, reportMediaOffFailure } = callEvents;
+  const { reportMediaFailure, reportMediaOffFailure } = callEvents;
   const toggleMicrophone = useCallback(() => {
     haptics.mute();
     playSound(microphoneOn ? "mute" : "unmute", soundsEnabled);
-    if (microphoneOn) noteOwnMicrophoneChange();
     const turnOn = () => client.media.setMicrophoneEnabled(true);
     if (microphoneOn) client.media.setMicrophoneEnabled(false).catch((cause: unknown) => reportMediaOffFailure("microphone", cause));
     else void turnOn().catch((cause: unknown) => reportMediaFailure("microphone", cause, turnOn));
-  }, [client, microphoneOn, noteOwnMicrophoneChange, reportMediaFailure, reportMediaOffFailure, soundsEnabled]);
+  }, [client, microphoneOn, reportMediaFailure, reportMediaOffFailure, soundsEnabled]);
   const toggleCamera = useCallback(() => {
     const turnOn = () => client.media.setCameraEnabled(true);
     if (cameraOn) client.media.setCameraEnabled(false).catch((cause: unknown) => reportMediaOffFailure("camera", cause));
