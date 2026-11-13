@@ -1,7 +1,7 @@
 defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   @moduledoc false
 
-  alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationColumns
 
   # A claim hides an operation from other nodes for this long. A page of provider
@@ -33,10 +33,10 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     """)
   end
 
-  defp local_names do
-    ExternalOperation.local_names()
-    |> Enum.map_join(", ", &"'#{&1}'")
-  end
+  defp local_names, do: stored_names_list(OperationTable.local_names())
+
+  defp stored_names_list(names),
+    do: Enum.map_join(names, ", ", &"'#{OperationTable.stored_name(&1)}'")
 
   defp claim_operations_where(operation_filter) do
     """
@@ -75,7 +75,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
           or (
-            operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+            operation_name in (#{stored_names_list(OperationTable.episode_end_names())})
             and not exists (
               select 1
               from sync_publication_grant_reservations reservation
@@ -89,7 +89,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             source is null
             and operation_name not in (
               'remove_participant',
-              'end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired'
+              #{stored_names_list(OperationTable.episode_end_names())}
             )
           )
         )

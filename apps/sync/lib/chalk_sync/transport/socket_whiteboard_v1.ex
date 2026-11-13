@@ -10,6 +10,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
   alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Reads
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.Multipart
@@ -135,7 +136,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_message(:whiteboard_authority_tick, state) do
-    Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
+    Process.send_after(self(), :whiteboard_authority_tick, Reads.poll_ms())
     {:ok, state}
   end
 
@@ -1170,7 +1171,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
            ViewOwner.join(identity.episode, identity.participant_id) do
       Process.cancel_timer(state.hello_timer)
       Fanout.subscribe(identity.episode)
-      Process.send_after(self(), :whiteboard_authority_tick, Authority.poll_ms())
+      Process.send_after(self(), :whiteboard_authority_tick, Reads.poll_ms())
 
       welcome =
         if presentation_negotiated do

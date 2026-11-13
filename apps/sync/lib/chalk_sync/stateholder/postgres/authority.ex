@@ -14,7 +14,7 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
   end
 
   def lock_episode(connection, episode) do
-    case Postgrex.query!(connection, SQL.lock_operation_episode(), Scope.episode(episode)).rows do
+    case Postgrex.query!(connection, SQL.lock_episode(), Scope.episode(episode)).rows do
       [
         [
           status,

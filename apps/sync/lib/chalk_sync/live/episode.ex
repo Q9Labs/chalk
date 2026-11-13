@@ -6,7 +6,7 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Live.MediaPlaneCall
   alias ChalkSync.Live.Projection
   alias ChalkSync.Live.ScreenShareLease
-  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -586,7 +586,8 @@ defmodule ChalkSync.Live.Episode do
   defp timed(stage, fun), do: Telemetry.timed([:live_target, :stage], stage, fun)
 
   defp grant(module, adapter, state, authority, source, operation_id, reservation) do
-    adapter = with_control_revision(module, adapter, reservation.control_revision)
+    {module, adapter} =
+      ProviderCall.attach({module, adapter}, %{control_revision: reservation.control_revision})
 
     timed(:grant, fn ->
       MediaPlaneCall.invoke(fn ->
@@ -928,23 +929,10 @@ defmodule ChalkSync.Live.Episode do
 
   defp media_plane, do: Application.get_env(:chalk_sync, :media_plane)
 
-  defp with_control_revision(ProviderBridgeMediaPlane, adapter, revision),
-    do: ProviderBridgeMediaPlane.with_control_revision(adapter, revision)
-
-  defp with_control_revision(_module, adapter, _revision), do: adapter
-
   defp media_plane(authority) do
-    case media_plane() do
-      {ProviderBridgeMediaPlane, adapter} ->
-        {ProviderBridgeMediaPlane,
-         ProviderBridgeMediaPlane.with_participant_generation(
-           adapter,
-           authority.participant_id,
-           authority.generation
-         )}
-
-      configured ->
-        configured
-    end
+    ProviderCall.attach(media_plane(), %{
+      participant_id: authority.participant_id,
+      participant_generation: authority.generation
+    })
   end
 end

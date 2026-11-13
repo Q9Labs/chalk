@@ -35,7 +35,7 @@ func produceRecordingWebhook(ctx context.Context, tx pgx.Tx, tenantID, recording
 		snapshot.FailedAt = &occurredAt
 		snapshot.Failure = &webhooks.ArtifactFailure{Code: publicArtifactFailureCode(failureCode)}
 	}
-	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: "recording." + status, SemanticKey: "recording:" + recordingID.String() + ":" + status, ResourceType: "recording", ResourceID: recordingID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: tenantID, EventName: webhooks.EventName("recording." + status), SemanticKey: "recording:" + recordingID.String() + ":" + status, ResourceType: "recording", ResourceID: recordingID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 		return webhooks.EncodeRecordingEvent(metadata, snapshot)
 	}})
 }
@@ -99,7 +99,7 @@ func produceTranscriptWebhook(ctx context.Context, tx pgx.Tx, row sqlc.Transcrip
 		snapshot.FailedAt = &occurredAt
 		snapshot.Failure = &webhooks.ArtifactFailure{Code: publicArtifactFailureCode(failureCode)}
 	}
-	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: id(row.TenantID), EventName: "transcript." + status, SemanticKey: fmt.Sprintf("transcript:%s:%d:%s", transcriptID.String(), row.Generation, status), ResourceType: "transcript", ResourceID: transcriptID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+	return fanoutWebhookEvent(ctx, tx, webhookProduction{TenantID: id(row.TenantID), EventName: webhooks.EventName("transcript." + status), SemanticKey: fmt.Sprintf("transcript:%s:%d:%s", transcriptID.String(), row.Generation, status), ResourceType: "transcript", ResourceID: transcriptID, OccurredAt: occurredAt, Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 		return webhooks.EncodeTranscriptEvent(metadata, snapshot)
 	}})
 }

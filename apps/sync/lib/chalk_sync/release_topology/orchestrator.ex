@@ -1,6 +1,8 @@
 defmodule ChalkSync.ReleaseTopology.Orchestrator do
   @moduledoc false
 
+  require Logger
+
   alias ChalkSync.ReleaseTopology.Command
   alias ChalkSync.ReleaseTopology.Evidence
   alias ChalkSync.ReleaseTopology.Schedule
@@ -204,7 +206,9 @@ defmodule ChalkSync.ReleaseTopology.Orchestrator do
         {state, _status} = run_action(state, event, "cleanup")
         state
       rescue
-        _error -> state
+        error ->
+          Logger.warning("release topology cleanup failed: #{Exception.message(error)}")
+          state
       end
     else
       state

@@ -2,12 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/authorization"
-	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -43,24 +39,17 @@ type transcriptDocumentCueIdentity struct {
 }
 
 func transcriptDocumentEndpoint(service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptDocumentResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
-		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
+		transcript, document, err := readTranscriptDocument(ctx, service, objects, request)
 		if err != nil {
 			return transcriptDocumentResponse{}, err
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
-	}).Auth(APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+	}).Needs(service, objects).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).ErrorRules(transcriptArtifactRules, objectStorageRules, transcriptDocumentRules)
 }
 
-func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
-	if service == nil || objects == nil {
-		return transcripts.Transcript{}, transcripts.Document{}, apiErrorServiceUnavailable
-	}
-	if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-		return transcripts.Transcript{}, transcripts.Document{}, err
-	}
-
+func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
 	transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err
@@ -131,15 +120,4 @@ func newTranscriptDocumentResponse(transcript transcripts.Transcript, document t
 	return response
 }
 
-func transcriptDocumentAPIError(err error) (APIError, bool) {
-	if apiErr, ok := transcriptArtifactAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := objectStorageAPIError(err); ok {
-		return apiErr, true
-	}
-	if errors.Is(err, transcripts.ErrDocumentTooLarge) || errors.Is(err, transcripts.ErrInvalidDocument) {
-		return apiErrorInternal, true
-	}
-	return APIError{}, false
-}
+var transcriptDocumentRules = errorRules{}
