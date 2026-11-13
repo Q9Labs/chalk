@@ -1744,7 +1744,7 @@
     opacity 0.2s var(--chalk-ease-out-expo),
     transform 0.2s var(--chalk-ease-out-expo);
 }
-.chalk-sheet:is([data-variant="details"], [data-variant="ready"]) {
+.chalk-sheet[data-variant="details"] {
   max-height: 88%;
   overflow: auto;
   padding: 0 var(--space-3) var(--chalk-sheet-bottom);
@@ -1769,7 +1769,7 @@
   padding: var(--space-0-5) 0 var(--space-1) var(--space-2-5);
   font-size: var(--type-body-lg);
 }
-.chalk-sheet:is([data-variant="details"], [data-variant="ready"]):is([data-starting-style], [data-ending-style]) {
+.chalk-sheet[data-variant="details"]:is([data-starting-style], [data-ending-style]) {
   opacity: 0;
   transform: translateY(32px);
 }
