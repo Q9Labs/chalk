@@ -6,9 +6,13 @@ import { CloudflareSFUError } from "./types";
 export function failuresOf(error: unknown): readonly unknown[] {
   return error instanceof AggregateError ? error.errors : [error];
 }
+/** The SFU answered 404 or 410: the session or track is gone. */
+export function isGoneStatus(error: unknown): boolean {
+  return error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
+}
 export function isGonePublicationFailure(error: unknown): boolean {
   const failures = failuresOf(error);
-  return failures.length > 0 && failures.every((failure) => failure instanceof CloudflareSFUError && (failure.options.status === 404 || failure.options.status === 410));
+  return failures.length > 0 && failures.every(isGoneStatus);
 }
 export function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;

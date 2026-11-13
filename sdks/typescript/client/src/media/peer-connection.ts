@@ -76,3 +76,12 @@ export function firefoxCameraSimulcastUnsupported(): boolean {
   // camera path for Gecko Firefox; FxiOS uses WebKit and is not matched.
   return typeof navigator !== "undefined" && /\bFirefox\/\d+/i.test(navigator.userAgent);
 }
+
+/** Settles like `operation`, or rejects with `expired()` once `ms` pass. `expired` runs when the timer fires, so it can record the expiry. */
+export function withDeadline<T>(operation: Promise<T>, ms: number, expired: () => Error): Promise<T> {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = globalThis.setTimeout(() => reject(expired()), ms);
+  });
+  return Promise.race([operation, deadline]).finally(() => globalThis.clearTimeout(timer));
+}
