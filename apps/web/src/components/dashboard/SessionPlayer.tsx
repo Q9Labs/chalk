@@ -8,27 +8,70 @@ import type { Ids } from "./session-reads";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
 
-export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly onTime: (seconds: number) => void; readonly seekRef: RefObject<(seconds: number) => void> }) {
-  const video = useRef<HTMLVideoElement>(null);
-  const box = useRef<HTMLDivElement>(null);
+/** The signed address of a recording, or that it couldn't be read. */
+function useRecordingSource(ids: Ids, recordingId: string) {
   const [source, setSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [time, setTime] = useState(0);
-  const [length, setLength] = useState(0);
-
   useEffect(() => {
     let current = true;
-    act("past-session", { action: "recording-url", ...ids, recordingId: recording.id, download: false }).then(
+    act("past-session", { action: "recording-url", ...ids, recordingId, download: false }).then(
       ({ url }) => current && setSource(url),
       () => current && setFailed(true),
     );
     return () => {
       current = false;
     };
-  }, [ids, recording.id]);
+  }, [ids, recordingId]);
+  return { source, failed };
+}
+
+function Scrubber({ time, length, onSeek }: { readonly time: number; readonly length: number; readonly onSeek: (seconds: number) => void }) {
+  const percent = length ? (time / length) * 100 : 0;
+  function scrub(event: PointerEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    onSeek(((event.clientX - rect.left) / rect.width) * length);
+  }
+  function scrubKeys(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    onSeek(time + (event.key === "ArrowRight" ? 5 : -5));
+  }
+  return (
+    <div className="pscrub" role="slider" tabIndex={0} aria-label="Position" aria-valuemin={0} aria-valuemax={Math.round(length)} aria-valuenow={Math.round(time)} aria-valuetext={`${playbackTime(time)} of ${playbackTime(length)}`} onPointerDown={scrub} onKeyDown={scrubKeys}>
+      <span>
+        <i style={{ width: `${percent}%` }} />
+        <b style={{ left: `${percent}%` }} />
+      </span>
+    </div>
+  );
+}
+
+function SpeedButton({ video }: { readonly video: RefObject<HTMLVideoElement | null> }) {
+  const [speed, setSpeed] = useState(1);
+  return (
+    <button
+      type="button"
+      className="pb sp hide-ph"
+      aria-label={`Playback speed ${speed} times`}
+      onClick={() => {
+        const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 1;
+        setSpeed(next);
+        if (video.current) video.current.playbackRate = next;
+      }}
+    >
+      {speed}×
+    </button>
+  );
+}
+
+export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly onTime: (seconds: number) => void; readonly seekRef: RefObject<(seconds: number) => void> }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const { source, failed } = useRecordingSource(ids, recording.id);
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [time, setTime] = useState(0);
+  const [length, setLength] = useState(0);
 
   const jump = (seconds: number) => {
     const element = video.current;
@@ -48,16 +91,6 @@ export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids;
       </div>
     );
 
-  const percent = length ? (time / length) * 100 : 0;
-  function scrub(event: PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    jump(((event.clientX - rect.left) / rect.width) * length);
-  }
-  function scrubKeys(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-    event.preventDefault();
-    jump(time + (event.key === "ArrowRight" ? 5 : -5));
-  }
   return (
     <div className="player" role="region" aria-label="Recording" ref={box}>
       <video
@@ -82,24 +115,8 @@ export function Player({ ids, recording, onTime, seekRef }: { readonly ids: Ids;
         <span className="ptime num">
           {playbackTime(time)} / {playbackTime(length)}
         </span>
-        <div className="pscrub" role="slider" tabIndex={0} aria-label="Position" aria-valuemin={0} aria-valuemax={Math.round(length)} aria-valuenow={Math.round(time)} aria-valuetext={`${playbackTime(time)} of ${playbackTime(length)}`} onPointerDown={scrub} onKeyDown={scrubKeys}>
-          <span>
-            <i style={{ width: `${percent}%` }} />
-            <b style={{ left: `${percent}%` }} />
-          </span>
-        </div>
-        <button
-          type="button"
-          className="pb sp hide-ph"
-          aria-label={`Playback speed ${speed} times`}
-          onClick={() => {
-            const next = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] ?? 1;
-            setSpeed(next);
-            if (video.current) video.current.playbackRate = next;
-          }}
-        >
-          {speed}×
-        </button>
+        <Scrubber time={time} length={length} onSeek={jump} />
+        <SpeedButton video={video} />
         <button type="button" className="pb hide-ph" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} onClick={() => setMuted((value) => !value)}>
           <Icon name="vol" />
         </button>

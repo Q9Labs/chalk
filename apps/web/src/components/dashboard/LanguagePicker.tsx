@@ -3,6 +3,7 @@ import { Icon } from "../site/Icon";
 import { usePhone } from "./kit";
 import { Current, sectionsFor, type Choice } from "./language-rows";
 import { LanguageList } from "./LanguageList";
+import { useOutsidePress } from "./use-outside-press";
 
 const POPOVER_WIDTH = 352;
 const SCREEN_MARGIN = 16;
@@ -38,19 +39,6 @@ function usePlacement(open: boolean, wrap: RefObject<HTMLDivElement | null>) {
     setOpensUp(below < POPOVER_HEIGHT && box.top > below);
   }, [open, wrap]);
   return { alignEnd, opensUp };
-}
-
-function useOutsidePress(open: boolean, wrap: RefObject<HTMLDivElement | null>, onOutside: () => void) {
-  const latest = useRef(onOutside);
-  latest.current = onOutside;
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !wrap.current?.contains(event.target)) latest.current();
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [open, wrap]);
 }
 
 type SearchKeys = {

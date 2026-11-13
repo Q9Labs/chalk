@@ -107,6 +107,98 @@ function Endpoint({ webhook, open, onToggle, onRotate, onEdit }: { readonly webh
   );
 }
 
+function EndpointSettings({ webhook, onEdit, onRotate, onTest }: { readonly webhook: WebhookDTO; readonly onEdit: () => void; readonly onRotate: () => void; readonly onTest: () => void }) {
+  return (
+    <dl className="kv">
+      <dt>
+        <Icon name="send" size={16} />
+        Events
+      </dt>
+      <dd>
+        {webhook.eventTypes.map((type) => (
+          <span className="chip mono" key={type}>
+            {type}
+          </span>
+        ))}
+        <button type="button" className="btn gh" onClick={onEdit}>
+          <Icon name="edit" size={16} />
+          Edit events
+        </button>
+      </dd>
+      <dt>
+        <Icon name="lock" size={16} />
+        Signing secret
+      </dt>
+      <dd>
+        <span className="mono mu">whsec_••••••••</span>
+        <button type="button" className="btn out" onClick={onRotate}>
+          <Icon name="retry" size={16} />
+          Rotate secret
+        </button>
+        <p>The secret is shown once, when it’s made. Rotating keeps the old one working for 24 hours unless you stop it.</p>
+      </dd>
+      <dt>
+        <Icon name="play" size={14} />
+        Test
+      </dt>
+      <dd>
+        <button type="button" className="btn out" onClick={onTest}>
+          <Icon name="send" size={16} />
+          Send test event
+        </button>
+        <p>Sends a signed test Event to this URL and adds it to recent deliveries.</p>
+      </dd>
+    </dl>
+  );
+}
+
+function DeliveriesTable({ deliveries, onRedeliver }: { readonly deliveries: readonly DeliveryDTO[]; readonly onRedeliver: (delivery: DeliveryDTO) => void }) {
+  return (
+    <div className="rows" role="table" aria-label="Recent deliveries">
+      <div className="row head" role="row">
+        <div role="columnheader">Event</div>
+        <div role="columnheader">Status</div>
+        <div className="r" role="columnheader">
+          Response
+        </div>
+        <div className="r" role="columnheader">
+          Attempts
+        </div>
+        <div role="columnheader">Time</div>
+        <div role="columnheader">
+          <span className="sr">Actions</span>
+        </div>
+      </div>
+      {deliveries.map((delivery) => (
+        <div className="row" role="row" key={delivery.id}>
+          <div className="mono ell" role="cell">
+            {delivery.eventType}
+          </div>
+          <div role="cell">
+            <StatePill pill={deliveryPill(delivery.state)} />
+          </div>
+          <div className="r mono num" role="cell">
+            {delivery.status ?? "–"}
+          </div>
+          <div className="r num" role="cell">
+            {delivery.attempts}
+          </div>
+          <div className="mu" role="cell">
+            {sessionDay(delivery.createdAt)}, {clock(delivery.createdAt)}
+          </div>
+          <div className="r" role="cell">
+            {delivery.state === "failed" ? (
+              <button type="button" className="btn out" onClick={() => onRedeliver(delivery)}>
+                Redeliver
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** An open endpoint. Its deliveries load only while it's open, since each one costs engine reads. */
 function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly webhook: WebhookDTO; readonly onRotate: () => void; readonly onEdit: () => void; readonly onLatest: (delivery: DeliveryDTO | null) => void }) {
   const toast = useToast();
@@ -142,46 +234,7 @@ function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly web
   return (
     <div className="epb" id={`endpoint-${webhook.id}`}>
       <div className="in">
-        <dl className="kv">
-          <dt>
-            <Icon name="send" size={16} />
-            Events
-          </dt>
-          <dd>
-            {webhook.eventTypes.map((type) => (
-              <span className="chip mono" key={type}>
-                {type}
-              </span>
-            ))}
-            <button type="button" className="btn gh" onClick={onEdit}>
-              <Icon name="edit" size={16} />
-              Edit events
-            </button>
-          </dd>
-          <dt>
-            <Icon name="lock" size={16} />
-            Signing secret
-          </dt>
-          <dd>
-            <span className="mono mu">whsec_••••••••</span>
-            <button type="button" className="btn out" onClick={onRotate}>
-              <Icon name="retry" size={16} />
-              Rotate secret
-            </button>
-            <p>The secret is shown once, when it’s made. Rotating keeps the old one working for 24 hours unless you stop it.</p>
-          </dd>
-          <dt>
-            <Icon name="play" size={14} />
-            Test
-          </dt>
-          <dd>
-            <button type="button" className="btn out" onClick={() => void test()}>
-              <Icon name="send" size={16} />
-              Send test event
-            </button>
-            <p>Sends a signed test Event to this URL and adds it to recent deliveries.</p>
-          </dd>
-        </dl>
+        <EndpointSettings webhook={webhook} onEdit={onEdit} onRotate={onRotate} onTest={() => void test()} />
         <div className="dl">
           <h3>
             <Icon name="clock" size={14} />
@@ -194,48 +247,7 @@ function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly web
           ) : !deliveries?.length ? (
             <p className="tempty">No deliveries yet. Send a test event to try the endpoint.</p>
           ) : (
-            <div className="rows" role="table" aria-label="Recent deliveries">
-              <div className="row head" role="row">
-                <div role="columnheader">Event</div>
-                <div role="columnheader">Status</div>
-                <div className="r" role="columnheader">
-                  Response
-                </div>
-                <div className="r" role="columnheader">
-                  Attempts
-                </div>
-                <div role="columnheader">Time</div>
-                <div role="columnheader">
-                  <span className="sr">Actions</span>
-                </div>
-              </div>
-              {deliveries.map((delivery) => (
-                <div className="row" role="row" key={delivery.id}>
-                  <div className="mono ell" role="cell">
-                    {delivery.eventType}
-                  </div>
-                  <div role="cell">
-                    <StatePill pill={deliveryPill(delivery.state)} />
-                  </div>
-                  <div className="r mono num" role="cell">
-                    {delivery.status ?? "–"}
-                  </div>
-                  <div className="r num" role="cell">
-                    {delivery.attempts}
-                  </div>
-                  <div className="mu" role="cell">
-                    {sessionDay(delivery.createdAt)}, {clock(delivery.createdAt)}
-                  </div>
-                  <div className="r" role="cell">
-                    {delivery.state === "failed" ? (
-                      <button type="button" className="btn out" onClick={() => void redeliver(delivery)}>
-                        Redeliver
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DeliveriesTable deliveries={deliveries} onRedeliver={(delivery) => void redeliver(delivery)} />
           )}
         </div>
       </div>
