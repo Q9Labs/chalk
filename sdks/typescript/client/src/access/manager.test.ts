@@ -54,3 +54,49 @@ describe("media replacement", () => {
     expect(requests[2]?.expectedMediaConnectionId).toBe("connection-2");
   });
 });
+
+describe("a media client that runs on an older binding", () => {
+  async function accessAfterLifecycleCommit(refreshWindowMs?: number) {
+    const requests: ConnectionAccessRequest[] = [];
+    const provider = (request: ConnectionAccessRequest) =>
+      Effect.sync(() => {
+        requests.push(request);
+        return parseParsedAccessGrant(opaqueAccessGrant(requests.length, `g${requests.length}`, `connection-${requests.length}`));
+      });
+    const access = await Effect.runPromise(Effect.service(ConnectionAccessService).pipe(Effect.provide(makeConnectionAccessLayer(provider, refreshWindowMs))));
+    await Effect.runPromise(access.initialize("join"));
+    // The lifecycle commits connection-2 before it restarts the media client, which still runs on connection-1.
+    await Effect.runPromise(access.refresh("access_retry", true));
+    return { access, requests };
+  }
+
+  it("takes the binding the lifecycle committed instead of replacing it again", async () => {
+    const { access, requests } = await accessAfterLifecycleCommit();
+
+    const result = await Effect.runPromise(access.replaceMedia("connection-1"));
+
+    expect(result.created).toBe(false);
+    expect(result.access.media.clientPayload.connectionId).toBe("connection-2");
+    expect(requests).toHaveLength(2);
+  });
+
+  it("takes a committed binding that is already inside the refresh window", async () => {
+    const { access, requests } = await accessAfterLifecycleCommit(10 * 60_000);
+
+    const result = await Effect.runPromise(access.replaceMedia("connection-1"));
+
+    expect(result.created).toBe(false);
+    expect(result.access.media.clientPayload.connectionId).toBe("connection-2");
+    expect(requests).toHaveLength(2);
+  });
+
+  it("replaces the binding the client runs on", async () => {
+    const { access, requests } = await accessAfterLifecycleCommit();
+
+    const result = await Effect.runPromise(access.replaceMedia("connection-2"));
+
+    expect(result.created).toBe(true);
+    expect(result.access.media.clientPayload.connectionId).toBe("connection-3");
+    expect(requests[2]?.expectedMediaConnectionId).toBe("connection-2");
+  });
+});

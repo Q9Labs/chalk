@@ -18,10 +18,11 @@ export type ConnectionAccessEffectService = {
   readonly refresh: (reason: Exclude<ConnectionAccessReason, "join">, replaceMediaConnection: boolean) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
   readonly refreshAfterRejection: () => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
   /**
-   * Replaces the media binding the caller sees now. When another caller already replaced it while this one waited, the
-   * binding in place is returned with `created: false`, and the caller that created it adopts it.
+   * Replaces the media binding the caller runs on: `observedConnectionId`, or the binding in place when it is left out.
+   * When another caller already replaced it, the binding in place is returned with `created: false`, and the caller
+   * that created it adopts it.
    */
-  readonly replaceMedia: () => Effect.Effect<{ readonly access: ParsedAccessGrant; readonly created: boolean }, ConnectionAccessFailure>;
+  readonly replaceMedia: (observedConnectionId?: string) => Effect.Effect<{ readonly access: ParsedAccessGrant; readonly created: boolean }, ConnectionAccessFailure>;
   readonly getSyncToken: (reason?: ConnectionAccessReason) => Effect.Effect<ParticipantSyncCredential, ConnectionAccessFailure>;
   readonly getMediaToken: () => Effect.Effect<ParticipantMediaCredential, ConnectionAccessFailure>;
   readonly subscribeAutomaticMediaReplacement: (listener: AutomaticMediaReplacementListener) => Effect.Effect<() => void>;
@@ -101,7 +102,7 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
         ensureFresh,
         refresh: (reason, replaceMediaConnection) => fetch(reason, replaceMediaConnection, true),
         refreshAfterRejection: () => fetch("access_retry", true, true),
-        replaceMedia: () => Effect.suspend(() => fetchResult("media_recovery", true, true, SynchronizedRef.getUnsafe(state).access?.media.clientPayload.connectionId)).pipe(Effect.map(({ access, created }) => ({ access, created }))),
+        replaceMedia: (observedConnectionId) => Effect.suspend(() => fetchResult("media_recovery", true, true, observedConnectionId ?? SynchronizedRef.getUnsafe(state).access?.media.clientPayload.connectionId)).pipe(Effect.map(({ access, created }) => ({ access, created }))),
         getSyncToken: (reason = "sync_recovery") => ensureFresh(reason).pipe(Effect.map((access) => access.sync.token)),
         getMediaToken: () => ensureFresh("scheduled_refresh").pipe(Effect.map((access) => access.media.token)),
         subscribeAutomaticMediaReplacement: (listener) =>
@@ -128,7 +129,7 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
     if (canReuseAccess(input, now) && currentAccess) {
       return [unchanged(currentAccess), input.current] as const;
     }
-    if (currentAccess && replacedSinceObserved(input, currentAccess, now)) return [unchanged(currentAccess), input.current] as const;
+    if (currentAccess && replacedSinceObserved(input, currentAccess)) return [unchanged(currentAccess), input.current] as const;
     const gate = input.replacementGate();
     const shouldReplaceMediaConnection = mediaReplacementRequested(input, now, Boolean(gate));
     if (shouldReplaceMediaConnection && gate) return yield* Effect.fail(new MediaReplacementPending({ done: gate }));
@@ -147,8 +148,8 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
   });
 }
 // Callers queue on the state, so one that asked to replace a binding another has since replaced would replace the new one.
-function replacedSinceObserved(input: FetchInput, current: ParsedAccessGrant, now: number): boolean {
-  return input.observedBinding !== undefined && mediaBinding(current) !== input.observedBinding && millisecondsUntil(current, now, input.refreshWindowMs) > 0;
+function replacedSinceObserved(input: FetchInput, current: ParsedAccessGrant): boolean {
+  return input.observedBinding !== undefined && mediaBinding(current) !== input.observedBinding;
 }
 function unchanged(access: ParsedAccessGrant): FetchResult {
   return { access, automaticMediaReplacement: false, created: false };
