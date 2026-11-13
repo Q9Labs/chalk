@@ -8,9 +8,9 @@ import { PEOPLE, liveSnapshot } from "./fixtures";
 type ToastEvent = NonNullable<ReturnType<typeof callEventToasts>[number]>;
 
 /** The one production toast a snapshot change raises. */
-function eventToast(before: SpaceSnapshot, after: SpaceSnapshot, missing: string): ToastEvent {
+function eventToast(before: SpaceSnapshot, after: SpaceSnapshot): ToastEvent {
   const toast = callEventToasts(before, after)[0];
-  if (!toast) throw new Error(missing);
+  if (!toast) throw new Error("No production toast event");
   return toast;
 }
 
@@ -26,7 +26,7 @@ const mutedToast = {
 function hostTransferToast(previous: SpaceSnapshot): ToastEvent {
   const before = { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, role: "host" as const, displayName: "Nora" })) } };
   const after = { ...previous, self: { ...previous.self, role: "host" as const }, participants: { ...previous.participants, roster: previous.participants.roster.filter((p) => p.participantId === previous.self.participantId) } };
-  return eventToast(before, after, "No host transfer event");
+  return eventToast(before, after);
 }
 
 function deviceToast(previous: SpaceSnapshot): ToastEvent {
@@ -34,7 +34,7 @@ function deviceToast(previous: SpaceSnapshot): ToastEvent {
   const selected = { deviceId: "built-in", label: "MacBook Air Microphone" };
   const before = { ...previous, media: { ...previous.media, selection: { ...previous.media.selection, microphone: old.deviceId }, devices: { ...previous.media.devices, microphones: [old, selected] } } };
   const after = { ...before, media: { ...before.media, selection: { ...before.media.selection, microphone: selected.deviceId }, devices: { ...before.media.devices, microphones: [selected] } } };
-  return eventToast(before, after, "No device disconnect event");
+  return eventToast(before, after);
 }
 
 /** The snapshot the call moves to for the fixtures that start from one remote person. */
@@ -57,7 +57,7 @@ export function toastForFixture(id: string) {
   const previous = liveSnapshot({ others: id === "joined" ? [] : PEOPLE.slice(0, 1) });
   if (id === "host") return hostTransferToast(previous);
   if (id === "device") return deviceToast(previous);
-  return eventToast(previous, changedSnapshot(id, previous), `No production event for ${id}`);
+  return eventToast(previous, changedSnapshot(id, previous));
 }
 
 export function ToastFixture({ message, icon, action, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly action?: { readonly label: string; readonly onClick: () => void }; readonly error?: boolean; readonly light?: boolean }) {
