@@ -4,7 +4,7 @@ export type ChalkChatFileOperation = "initiate_upload" | "store_upload" | "final
 
 export const CHAT_FILE_REACHABILITY_MESSAGE = "Could not reach the chat attachment service (network or browser access failure).";
 
-export const CHAT_FILE_STORAGE_UNREACHABLE_MESSAGE = "Could not send the file to storage (network or browser access failure).";
+const CHAT_FILE_STORAGE_UNREACHABLE_MESSAGE = "Could not send the file to storage (network or browser access failure).";
 
 /** Where an upload broke. `storage_unreachable` means the browser never got an HTTP answer from storage: a network failure or a CORS block. */
 export type ChatUploadFailureKind = "initiate_failed" | "storage_unreachable" | "storage_rejected" | "finalize_failed";
