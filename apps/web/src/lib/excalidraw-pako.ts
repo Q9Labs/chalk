@@ -11,9 +11,31 @@ export function deflate(input: Input): Uint8Array {
   return zlibSync(toBytes(input));
 }
 
+const ADLER_MODULUS = 65521;
+// The largest run of bytes whose sums stay exact before they are reduced, as in zlib.
+const ADLER_RUN = 5552;
+
+function adler32(bytes: Uint8Array): number {
+  let a = 1;
+  let b = 0;
+  for (let start = 0; start < bytes.length; start += ADLER_RUN) {
+    for (const byte of bytes.subarray(start, start + ADLER_RUN)) {
+      a += byte;
+      b += a;
+    }
+    a %= ADLER_MODULUS;
+    b %= ADLER_MODULUS;
+  }
+  return ((b << 16) | a) >>> 0;
+}
+
 export function inflate(input: Input, options: { to: "string" }): string;
 export function inflate(input: Input): Uint8Array;
 export function inflate(input: Input, options?: { to: "string" }): string | Uint8Array {
-  const bytes = unzlibSync(toBytes(input));
+  const compressed = toBytes(input);
+  const bytes = unzlibSync(compressed);
+  // fflate skips the Adler-32 trailer; pako rejects a stream whose trailer disagrees, so a corrupted scene never loads.
+  const trailer = new DataView(compressed.buffer, compressed.byteOffset + compressed.byteLength - 4, 4).getUint32(0);
+  if (trailer !== adler32(bytes)) throw new Error("incorrect data check");
   return options?.to === "string" ? strFromU8(bytes) : bytes;
 }
