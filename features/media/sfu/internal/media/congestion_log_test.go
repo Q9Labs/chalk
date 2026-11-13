@@ -14,7 +14,7 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 	// The same MID belongs to different subscriptions on different connections.
 	for _, connectionID := range []string{"connection-a", "connection-b"} {
 		sub := &subscription{
-			owner: &Session{id: connectionID},
+			owner: &Session{kind: ParticipantSession, id: connectionID},
 			mid:   "2",
 			alloc: allocation{decided: true, rid: "l"},
 			transport: &transport{estimator: bandwidthEstimator{
@@ -36,11 +36,11 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 			}
 			for field, want := range map[string]any{
 				"level": "INFO", "msg": message,
-				"connectionId": connectionID, "mid": "2", "rid": "l", "reason": reason,
-				"estimateBps": float64(356_530), "provenBps": float64(356_530),
-				"deliveredShare": float64(1), "probing": false, "hostPressure": false,
-				"lossShare": 0.04, "lossy": false, "trend": "normal", "ackedBps": float64(0),
-				"decreaseCause": "overuse", "decreaseFromBps": float64(900_000), "decreaseToBps": float64(356_530), "decreaseAckedBps": float64(419_447),
+				"connection_id": connectionID, "mid": "2", "rid": "l", "reason": reason,
+				"estimate_bps": float64(356_530), "proven_bps": float64(356_530),
+				"delivered_share": float64(1), "probing": false, "host_pressure": false,
+				"loss_share": 0.04, "lossy": false, "trend": "normal", "acked_bps": float64(0),
+				"decrease_cause": "overuse", "decrease_from_bps": float64(900_000), "decrease_to_bps": float64(356_530), "decrease_acked_bps": float64(419_447),
 			} {
 				if got, ok := record[field]; !ok || got != want {
 					t.Errorf("%s: %s = %v (present=%t), want %v", message, field, got, ok, want)
@@ -58,7 +58,7 @@ func TestPauseLogNamesTheCauseOfTheLastCut(t *testing.T) {
 		t.Helper()
 		var logs bytes.Buffer
 		node := &Node{log: slog.New(slog.NewJSONHandler(&logs, nil))}
-		node.logCongestionPause(&subscription{owner: &Session{id: "c"}, mid: "1", alloc: allocation{decided: true, rid: "l"}, transport: tr}, true, now)
+		node.logCongestionPause(&subscription{owner: &Session{kind: ParticipantSession, id: "c"}, mid: "1", alloc: allocation{decided: true, rid: "l"}, transport: tr}, true, now)
 		var record map[string]any
 		if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
 			t.Fatalf("decode congestion log: %v", err)
@@ -78,17 +78,17 @@ func TestPauseLogNamesTheCauseOfTheLastCut(t *testing.T) {
 		sim.now += int64(time.Second)
 		sim.tr.estimator.onFeedback(acks, sim.now)
 		record := logOf(t, sim.tr, sim.now+int64(500*time.Millisecond))
-		if record["decreaseCause"] != "loss" || record["decreaseAgoMs"] != float64(500) {
-			t.Errorf("cause %v ago %v, want loss 500 ms ago", record["decreaseCause"], record["decreaseAgoMs"])
+		if record["decrease_cause"] != "loss" || record["decrease_ago_ms"] != float64(500) {
+			t.Errorf("cause %v ago %v, want loss 500 ms ago", record["decrease_cause"], record["decrease_ago_ms"])
 		}
-		if share, _ := record["lossShare"].(float64); share <= lossHigh || share > 0.34 {
-			t.Errorf("lossShare %v, want over the heavy-loss line and up to 0.33", record["lossShare"])
+		if share, _ := record["loss_share"].(float64); share <= lossHigh || share > 0.34 {
+			t.Errorf("loss_share %v, want over the heavy-loss line and up to 0.33", record["loss_share"])
 		}
 		if record["lossy"] != true {
 			t.Errorf("lossy %v, want true", record["lossy"])
 		}
-		from, _ := record["decreaseFromBps"].(float64)
-		to, _ := record["decreaseToBps"].(float64)
+		from, _ := record["decrease_from_bps"].(float64)
+		to, _ := record["decrease_to_bps"].(float64)
 		if from < before*0.9 || to >= from {
 			t.Errorf("cut from %v to %v, want a cut from about %.0f", from, to, before)
 		}
@@ -106,12 +106,12 @@ func TestPauseLogNamesTheCauseOfTheLastCut(t *testing.T) {
 		}
 		sim.run(4 * time.Second)
 		record := logOf(t, sim.tr, sim.now)
-		if record["decreaseCause"] != "overuse" || record["lossShare"] != float64(0) || record["lossy"] != false {
-			t.Errorf("cause %v lossShare %v lossy %v, want overuse 0 false", record["decreaseCause"], record["lossShare"], record["lossy"])
+		if record["decrease_cause"] != "overuse" || record["loss_share"] != float64(0) || record["lossy"] != false {
+			t.Errorf("cause %v loss_share %v lossy %v, want overuse 0 false", record["decrease_cause"], record["loss_share"], record["lossy"])
 		}
-		from, _ := record["decreaseFromBps"].(float64)
-		to, _ := record["decreaseToBps"].(float64)
-		acked, _ := record["decreaseAckedBps"].(float64)
+		from, _ := record["decrease_from_bps"].(float64)
+		to, _ := record["decrease_to_bps"].(float64)
+		acked, _ := record["decrease_acked_bps"].(float64)
 		if to > from || acked <= 0 {
 			t.Errorf("cut from %v to %v with acked %v", from, to, acked)
 		}

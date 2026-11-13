@@ -1,6 +1,6 @@
 import { Clock, Context, Data, Deferred, Effect, Layer, SynchronizedRef } from "effect";
 import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./grant";
-import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
+import type { ConnectionAccessReason, ConnectionAccessRequest } from "./context";
 const DEFAULT_REFRESH_WINDOW_MS = 60000;
 const ACCESS_PROVIDER_TIMEOUT_MS = 7000;
 export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessFailure")<{

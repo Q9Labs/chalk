@@ -44,15 +44,15 @@ func TestStealAboveThresholdRefusesNewEpisodesAndKeepsExistingOnes(t *testing.T)
 		node.guard.tick()
 	}
 	health := node.guard.snapshot()
-	if health.AdmissionReason != reasonCPUSteal || health.StealPercent < 4.9 || health.StealPercent > 5.1 {
+	if health.AdmissionReason != RefusedCPUSteal || health.StealPercent < 4.9 || health.StealPercent > 5.1 {
 		t.Fatalf("health %+v, want cpu_steal near 5%%", health)
 	}
-	_, err := node.CreateSession("create-new-episode", episodeScope("new", "bob"))
-	if !errors.Is(err, errAdmissionClosed) || !strings.Contains(err.Error(), reasonCPUSteal) {
+	_, err := node.Create("create-new-episode", episodeScope("new", "bob"), ParticipantSession, nil)
+	if !errors.Is(err, errAdmissionClosed) || !strings.Contains(err.Error(), RefusedCPUSteal) {
 		t.Fatalf("new Episode under steal: %v, want admission closed for cpu_steal", err)
 	}
 	// A lone Participant replacing their own connection is not a new Episode.
-	if _, err := node.CreateSession("create-replace-dave", episodeScope("solo", "dave")); err != nil {
+	if _, err := node.Create("create-replace-dave", episodeScope("solo", "dave"), ParticipantSession, nil); err != nil {
 		t.Fatalf("a lone Participant's reconnect under steal: %v, want admitted", err)
 	}
 	// The live Episode still admits its own Participants and its session stays up.
@@ -137,11 +137,11 @@ func TestAHostStallUnderTheStealThresholdClosesAdmissionAndReopensWithinSeconds(
 	run(10, 4, 0, open("steal falls back"))
 	run(10, 40, 1_000, func(second int, health HostHealth) {
 		t.Helper()
-		if second >= 3 && health.AdmissionReason != reasonSchedulerLatency {
+		if second >= 3 && health.AdmissionReason != RefusedSchedulerLatency {
 			t.Fatalf("stall, second %d: health %+v, want admission closed for scheduler latency", second, health)
 		}
 	})
-	if _, err := node.CreateSession("create-new", episodeScope("new", "bob")); !errors.Is(err, errAdmissionClosed) {
+	if _, err := node.Create("create-new", episodeScope("new", "bob"), ParticipantSession, nil); !errors.Is(err, errAdmissionClosed) {
 		t.Fatalf("new Episode during the stall: %v, want admission closed", err)
 	}
 	node.newTestSession(t, episodeScope("live", "carol"))
@@ -152,7 +152,7 @@ func TestAHostStallUnderTheStealThresholdClosesAdmissionAndReopensWithinSeconds(
 	reopened := -1
 	run(10, 25, 0, func(second int, health HostHealth) {
 		t.Helper()
-		if health.AdmissionReason == reasonCPUSteal {
+		if health.AdmissionReason == RefusedCPUSteal {
 			t.Fatalf("after the stall, second %d: health %+v, want steal under its threshold", second, health)
 		}
 		if health.AdmissionReason == "" && reopened < 0 {

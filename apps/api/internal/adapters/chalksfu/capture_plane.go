@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
@@ -17,15 +18,13 @@ import (
 // participant, and the capture epoch as its generation, so the node fences an older epoch.
 const (
 	captureReplayCapacity = 1024
-	captureSessionKind    = "capture"
-	captureTrackNotFound  = "track_not_found"
 )
 
 var _ captureplane.CapturePlane = (*Adapter)(nil)
 
-func captureScope(metadata captureplane.OperationMetadata) wireScope {
+func captureScope(metadata captureplane.OperationMetadata) protocol.Scope {
 	identity := metadata.Identity
-	return wireScope{
+	return protocol.Scope{
 		TenantID:      identity.TenantID.String(),
 		EpisodeID:     identity.EpisodeID.String(),
 		ParticipantID: "capture:" + identity.RecordingID.String(),
@@ -84,7 +83,7 @@ func captureLayerRID(layer captureplane.TrackLayer) string {
 
 // captureOffer is the node's offer for a pull. The recorder must answer it through
 // RenegotiateCaptureConnection before media flows.
-func captureOffer(metadata captureplane.OperationMetadata, connection captureplane.ProviderReference, description *wireDescription) (captureplane.Negotiation, error) {
+func captureOffer(metadata captureplane.OperationMetadata, connection captureplane.ProviderReference, description *protocol.SessionDescription) (captureplane.Negotiation, error) {
 	if description == nil {
 		return captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}, nil
 	}
@@ -111,9 +110,9 @@ func (a *Adapter) CreateCaptureConnection(ctx context.Context, input captureplan
 	if err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, err
 	}
-	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Kind: captureSessionKind, AllocationGeneration: a.allocation}
-	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
+	var created protocol.CreateSessionResponse
+	request := protocol.CreateSessionRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Kind: protocol.SessionKindCapture, AllocationGeneration: a.allocation}
+	if err := a.call(ctx, protocol.RouteSessions, request, &created); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
@@ -143,7 +142,7 @@ func (a *Adapter) PullCaptureTracks(ctx context.Context, input captureplane.Pull
 	if result, replayed, err := captureplane.ReplayLookup[captureplane.PullCaptureTracksResult](a.captureReplay, input.Metadata, operation, input); err != nil || replayed {
 		return result, err
 	}
-	path, err := sessionPath(input.Connection.String(), "tracks")
+	path, err := sessionPath(input.Connection.String(), protocol.ActionTracks)
 	if err != nil {
 		return captureplane.PullCaptureTracksResult{}, captureFailure(operation, input.Metadata, err)
 	}
@@ -151,18 +150,18 @@ func (a *Adapter) PullCaptureTracks(ctx context.Context, input captureplane.Pull
 	if err != nil {
 		return captureplane.PullCaptureTracksResult{}, err
 	}
-	request := wireTracksRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Tracks: make([]wireTrack, 0, len(tracks))}
+	request := protocol.TracksRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Tracks: make([]protocol.Track, 0, len(tracks))}
 	if input.LocalDescription != nil {
-		request.SessionDescription = &wireDescription{SDP: input.LocalDescription.SDP, Type: input.LocalDescription.Type}
+		request.SessionDescription = &protocol.SessionDescription{SDP: input.LocalDescription.SDP, Type: input.LocalDescription.Type}
 	}
 	for _, track := range tracks {
-		wired := wireTrack{Location: "remote", SessionID: track.OwnerReference.String(), TrackName: track.TrackReference.String()}
+		wired := protocol.Track{Location: protocol.LocationRemote, SessionID: track.OwnerReference.String(), TrackName: track.TrackReference.String()}
 		if rid := captureLayerRID(track.RequestedLayer); rid != "" {
-			wired.Simulcast = &wireSimulcast{PreferredRID: rid, PriorityOrdering: "none", RIDNotAvailable: "none"}
+			wired.Simulcast = &protocol.Simulcast{PreferredRID: rid, PriorityOrdering: "none", RIDNotAvailable: "none"}
 		}
 		request.Tracks = append(request.Tracks, wired)
 	}
-	var response wireTracksResponse
+	var response protocol.TracksResponse
 	if err := a.call(ctx, path, request, &response); err != nil {
 		return captureplane.PullCaptureTracksResult{}, captureFailure(operation, input.Metadata, err)
 	}
@@ -178,15 +177,15 @@ type captureTrackKey struct{ owner, track string }
 // capturePullResult pairs the node's answer with the requested tracks. A track the node
 // reports as not published is Unavailable, which the caller retries. Any other per-track
 // error, a missing answer, or an answer for a track nobody asked for breaks the contract.
-func capturePullResult(input captureplane.PullCaptureTracksInput, response wireTracksResponse) (captureplane.PullCaptureTracksResult, error) {
-	protocol := captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}
+func capturePullResult(input captureplane.PullCaptureTracksInput, response protocol.TracksResponse) (captureplane.PullCaptureTracksResult, error) {
+	invalidContract := captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}
 	mids := make(map[captureTrackKey]string, len(response.Tracks))
 	for _, track := range response.Tracks {
 		mids[captureTrackKey{track.SessionID, track.TrackName}] = track.Mid
 	}
 	missing := make(map[captureTrackKey]bool, len(response.TrackErrors))
 	for _, failed := range response.TrackErrors {
-		if failed.Code != captureTrackNotFound {
+		if failed.Code != protocol.TrackCodeNotFound {
 			return captureplane.PullCaptureTracksResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "track_error"}
 		}
 		missing[captureTrackKey{failed.SessionID, failed.TrackName}] = true
@@ -200,7 +199,7 @@ func capturePullResult(input captureplane.PullCaptureTracksInput, response wireT
 		}
 		mid, err := captureplane.NewProviderReference(strings.TrimSpace(mids[key]))
 		if err != nil {
-			return captureplane.PullCaptureTracksResult{}, protocol
+			return captureplane.PullCaptureTracksResult{}, invalidContract
 		}
 		result.Tracks = append(result.Tracks, captureplane.PulledCaptureTrack{CaptureTrack: track, MID: mid})
 	}
@@ -221,7 +220,7 @@ func (a *Adapter) RenegotiateCaptureConnection(ctx context.Context, input captur
 	if result, replayed, err := captureplane.ReplayLookup[captureplane.RenegotiateCaptureConnectionResult](a.captureReplay, input.Metadata, operation, input); err != nil || replayed {
 		return result, err
 	}
-	path, err := sessionPath(input.Connection.String(), "renegotiate")
+	path, err := sessionPath(input.Connection.String(), protocol.ActionRenegotiate)
 	if err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
@@ -229,10 +228,10 @@ func (a *Adapter) RenegotiateCaptureConnection(ctx context.Context, input captur
 	if err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, err
 	}
-	request := wireRenegotiateRequest{
+	request := protocol.RenegotiateRequest{
 		OperationID:        operationID,
 		Scope:              captureScope(input.Metadata),
-		SessionDescription: wireDescription{SDP: input.Description.SDP, Type: input.Description.Type},
+		SessionDescription: protocol.SessionDescription{SDP: input.Description.SDP, Type: input.Description.Type},
 	}
 	if err := a.call(ctx, path, request, nil); err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
@@ -259,12 +258,12 @@ func (a *Adapter) InspectCaptureConnection(ctx context.Context, input capturepla
 	if result, replayed, err := captureplane.ReplayLookup[captureplane.InspectCaptureConnectionResult](a.captureReplay, input.Metadata, operation, input); err != nil || replayed {
 		return result, err
 	}
-	path, err := sessionPath(input.Connection.String(), "inspect")
+	path, err := sessionPath(input.Connection.String(), protocol.ActionInspect)
 	if err != nil {
 		return captureplane.InspectCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
-	var response wireInspectResponse
-	if err := a.call(ctx, path, wireInspectRequest{Scope: captureScope(input.Metadata)}, &response); err != nil {
+	var response protocol.InspectResponse
+	if err := a.call(ctx, path, protocol.InspectRequest{Scope: captureScope(input.Metadata)}, &response); err != nil {
 		return captureplane.InspectCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
 	activeByMID := make(map[string]bool, len(response.Tracks))
@@ -299,7 +298,7 @@ func (a *Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clo
 	if result, replayed, err := captureplane.ReplayLookup[captureplane.CloseCaptureTracksResult](a.captureReplay, input.Metadata, operation, input); err != nil || replayed {
 		return result, err
 	}
-	path, err := sessionPath(input.Connection.String(), "tracks/close")
+	path, err := sessionPath(input.Connection.String(), protocol.ActionCloseTracks)
 	if err != nil {
 		return captureplane.CloseCaptureTracksResult{}, captureFailure(operation, input.Metadata, err)
 	}
@@ -307,11 +306,11 @@ func (a *Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clo
 	if err != nil {
 		return captureplane.CloseCaptureTracksResult{}, err
 	}
-	closing := make([]wireCloseTrack, 0, len(input.Tracks))
+	closing := make([]protocol.CloseTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		closing = append(closing, wireCloseTrack{Mid: track.MID.String()})
+		closing = append(closing, protocol.CloseTrack{Mid: track.MID.String()})
 	}
-	request := wireCloseRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Tracks: closing, Force: true, ReceiveOnly: true}
+	request := protocol.CloseTracksRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Tracks: closing, Force: true, ReceiveOnly: true}
 	if err := a.call(ctx, path, request, nil); err != nil && !errors.Is(err, mediaplane.ErrConnectionNotFound) {
 		return captureplane.CloseCaptureTracksResult{}, captureFailure(operation, input.Metadata, err)
 	}
@@ -333,11 +332,11 @@ func (a *Adapter) CloseCaptureConnection(ctx context.Context, input captureplane
 	if result, replayed, err := captureplane.ReplayLookup[captureplane.CloseCaptureConnectionResult](a.captureReplay, input.Metadata, operation, input); err != nil || replayed {
 		return result, err
 	}
-	path, err := sessionPath(input.Connection.String(), "remove")
+	path, err := sessionPath(input.Connection.String(), protocol.ActionRemove)
 	if err != nil {
 		return captureplane.CloseCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
-	if err := a.call(ctx, path, wireRemoveRequest{Scope: captureScope(input.Metadata)}, nil); err != nil && !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+	if err := a.call(ctx, path, protocol.RemoveSessionRequest{Scope: captureScope(input.Metadata)}, nil); err != nil && !errors.Is(err, mediaplane.ErrConnectionNotFound) {
 		return captureplane.CloseCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
 	result := captureplane.CloseCaptureConnectionResult{Connection: captureConnection(input.Metadata, input.Connection), Closed: true}

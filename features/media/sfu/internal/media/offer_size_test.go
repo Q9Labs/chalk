@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // testdata/chromium-offer.sdp is a real Chromium offer built the way the SDK builds one: a
@@ -69,18 +71,18 @@ func TestParseOfferAcceptsTheChromiumOfferAsCapturedAndGrownUpToTheCap(t *testin
 	if len(raw) <= 48<<10 {
 		t.Fatalf("captured offer is %d bytes; it must be larger than the 48 KiB proof bar to mean anything", len(raw))
 	}
-	grown, count := grownOffer(t, maxSDPBytes)
+	grown, count := grownOffer(t, protocol.MaxSDPBytes)
 	got, err := parseOffer(grown)
 	if err != nil || len(got) != count {
 		t.Fatalf("offer of %d bytes: %d of %d sections, %v; want all accepted", len(grown), len(got), count, err)
 	}
-	if len(grown) != maxSDPBytes {
-		t.Fatalf("grown offer is %d bytes, want exactly the cap %d", len(grown), maxSDPBytes)
+	if len(grown) != protocol.MaxSDPBytes {
+		t.Fatalf("grown offer is %d bytes, want exactly the cap %d", len(grown), protocol.MaxSDPBytes)
 	}
 }
 
 func TestParseOfferRefusesTheChromiumOfferOneByteOverTheCap(t *testing.T) {
-	over, _ := grownOffer(t, maxSDPBytes+1)
+	over, _ := grownOffer(t, protocol.MaxSDPBytes+1)
 	if _, err := parseOffer(over); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("offer of %d bytes: %v, want invalid request", len(over), err)
 	}

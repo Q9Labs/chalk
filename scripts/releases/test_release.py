@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -148,6 +149,25 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.assert_blocked(lambda: release.select(self.github(held(), latency=None), None), 'latency-missing')
         self.assert_blocked(lambda: release.select(self.github(held(), latency='failed'), None), 'failed')
         release.select(self.github(held()), None)
+
+    def promoted_sha(self, github):
+        release.auto_promote(github, None)
+        line = [line for line in self.output.read_text().splitlines() if line.startswith('sha=')][-1]
+        return line.removeprefix('sha=')
+
+    def test_automatic_promotion_names_a_held_cut_whose_gates_all_passed(self):
+        self.assertEqual(self.promoted_sha(self.github(held())), SHA)
+
+    def test_automatic_promotion_waits_for_the_latency_verdict_and_never_takes_an_override(self):
+        self.assertEqual(self.promoted_sha(self.github(held(), latency=None)), '')
+        self.assertEqual(self.promoted_sha(self.github(held(), latency='failed')), '')
+        self.assertEqual(self.promoted_sha(self.github(held(), scorecard='gated-breach')), '')
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='accepted by a person'):
+            self.assertEqual(self.promoted_sha(self.github(held(), scorecard='gated-breach')), '')
+
+    def test_automatic_promotion_skips_what_production_already_runs(self):
+        self.previous['target_sha'] = SHA
+        self.assertEqual(self.promoted_sha(self.github(held())), '')
 
     def test_a_failed_proof_keeps_its_own_result_whatever_the_latency_says(self):
         self.assert_blocked(lambda: release.select(self.github(held('failed')), None), 'failed')
@@ -667,7 +687,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
     def test_warn_only_nightly_saves_history_and_never_touches_the_issue(self):
         with tempfile.TemporaryDirectory() as directory:
             result, remote, calls = self.run_nightly(Path(directory), warn_only=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            # Warn-only still turns the calling job red while a gated metric is over its budget (nightly.sh, #1201).
+            self.assertEqual(result.returncode, 1, result.stderr)
             saved = subprocess.check_output(['git', '--git-dir', str(remote), 'show',
                                              'scorecard-history:history.jsonl'], text=True)
             self.assertEqual(json.loads(saved)['run']['commit'], SHA)
@@ -685,6 +706,129 @@ class OwnSfuPromotionTests(unittest.TestCase):
             result, _, _ = self.run_nightly(Path(directory), warn_only=False, reject_push=True)
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertIn('Could not push the scorecard history.', result.stderr)
+
+
+class PlanTests(unittest.TestCase):
+    """`plan` cuts the revision the run started on, whatever master has become since."""
+    OLD, REVISION, NEWER = 'a' * 40, 'c' * 40, 'd' * 40
+
+    def plan(self, *, manual, github):
+        with tempfile.TemporaryDirectory() as directory:
+            output, summary = Path(directory, 'output'), Path(directory, 'summary')
+            environment = {'GITHUB_SHA': self.REVISION, 'GITHUB_OUTPUT': str(output), 'GITHUB_STEP_SUMMARY': str(summary)}
+            with patch.dict(os.environ, environment), \
+                    patch.object(release, 'previous_production', return_value=dict(recorder_control=False)), \
+                    patch.object(release, 'manifest_bytes', side_effect=ValueError('no baseline')):
+                release.plan(github, SimpleNamespace(manual=manual))
+            written = dict(line.split('=', 1) for line in output.read_text().splitlines())
+            return written, summary.read_text() if summary.exists() else ''
+
+    def github(self, *, records=(), newest_green=None, on_master=True):
+        github = Mock()
+        github.is_on_master.return_value = on_master
+        github.newest_green_push_gate.return_value = newest_green
+        github.has_green_gate.return_value = True
+        github.cuts_on.return_value = []
+        github.deployments.side_effect = lambda environment, task='nightly-cut': list(records) if task == 'nightly-cut' else []
+        github.is_ancestor.side_effect = lambda sha, descendant: (sha, descendant) in {(self.OLD, self.REVISION), (self.OLD, self.NEWER), (self.REVISION, self.NEWER)}
+        return github
+
+    def test_a_manual_cut_ships_the_dispatched_revision_after_master_moved(self):
+        github = self.github()
+        written, _ = self.plan(manual=True, github=github)
+        self.assertEqual((written['should_cut'], written['target_sha']), ('true', self.REVISION))
+        github.reserve_cut.assert_called_once_with(self.REVISION)
+        github.dispatch_nightly.assert_not_called()
+        self.assertNotIn('git/ref/heads/master', [call.args[0] for call in github.request.call_args_list])
+
+    def test_the_schedule_ships_the_newest_green_commit_at_or_before_the_revision(self):
+        github = self.github(newest_green=self.OLD)
+        written, _ = self.plan(manual=False, github=github)
+        github.newest_green_push_gate.assert_called_once_with(self.REVISION)
+        self.assertEqual((written['should_cut'], written['target_sha']), ('true', self.OLD))
+
+    def test_a_revision_older_than_the_newest_record_defers_without_a_requeue(self):
+        newer = dict(id=1, sha=self.NEWER, created_at='2026-11-12T10:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', target_sha=self.NEWER))
+        github = self.github(records=[newer])
+        written, summary = self.plan(manual=True, github=github)
+        self.assertEqual(written['should_cut'], 'false')
+        self.assertIn(f'nightly already has the newer commit {self.NEWER}', summary)
+        github.dispatch_nightly.assert_not_called()
+        github.reserve_cut.assert_not_called()
+
+    def test_a_revision_that_left_master_requeues_once_and_says_so(self):
+        github = self.github(on_master=False)
+        written, summary = self.plan(manual=True, github=github)
+        self.assertEqual(written['should_cut'], 'false')
+        github.dispatch_nightly.assert_called_once_with()
+        self.assertIn('requeued on master as a new run', summary)
+
+    def test_a_manual_cut_refuses_a_revision_without_a_green_gate_before_the_release_starts(self):
+        # Nightly passes gate_checked to the release, so this refusal is the only Gate check a manual cut gets.
+        github = self.github()
+        github.has_green_gate.return_value = False
+        with self.assertRaisesRegex(ValueError, 'is not successful'):
+            self.plan(manual=True, github=github)
+        github.has_green_gate.assert_called_with(self.REVISION)
+
+    def test_the_green_commit_search_skips_commits_newer_than_the_revision(self):
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        runs = [dict(head_sha=self.NEWER), dict(head_sha=self.OLD)]
+        github.request = Mock(return_value=dict(workflow_runs=runs))
+        github.is_ancestor = Mock(side_effect=lambda sha, descendant: sha == self.OLD)
+        github.is_on_master = Mock(return_value=True)
+        github.has_green_gate = Mock(return_value=True)
+        self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
+
+
+class GateCheckedTests(unittest.TestCase):
+    """The release skips its own Gate check only when nightly `plan` already made it for the same target."""
+    WORKFLOWS = Path(release.ROOT) / '.github/workflows'
+
+    def test_only_nightly_sets_gate_checked_and_a_dispatch_cannot(self):
+        users = sorted(path.name for path in self.WORKFLOWS.glob('*.yml') if 'gate_checked' in path.read_text())
+        self.assertEqual(users, ['ci.yml', 'nightly.yml'])
+        self.assertRegex((self.WORKFLOWS / 'nightly.yml').read_text(), r'(?m)^      gate_checked: true$')
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        self.assertEqual(ci.count('gate_checked:'), 1)
+        self.assertGreater(ci.index('gate_checked:'), ci.index('\n  workflow_call:'))
+
+    def test_the_release_job_that_repeats_the_check_is_the_only_one_skipped(self):
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        job = ci[ci.index('\n  require-gate:'):ci.index('\n  plan-managed:')]
+        self.assertIn('if: ${{ !inputs.gate_checked }}', job)
+        for name in ('plan-managed', 'build-web'):
+            start = ci.index(f'\n  {name}:')
+            block = ci[start:ci.index('\n    runs-on:', start)]
+            self.assertIn('needs: require-gate', block)
+            self.assertIn("""contains(fromJSON('["success","skipped"]'), needs.require-gate.result)""", block)
+
+    def test_every_job_below_the_skipped_check_runs_on_a_status_function(self):
+        # Without always() or !cancelled(), a skipped ancestor skips a job even when the job's direct needs succeeded.
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        jobs = ci[ci.index('\njobs:\n'):]
+        bodies = dict(re.findall(r'(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)', jobs))
+        needs = {}
+        for name, body in bodies.items():
+            found = re.search(r'(?m)^    needs: (.+)$', body)
+            needs[name] = re.findall(r'[a-z][a-z0-9-]*', found.group(1)) if found else []
+        below, frontier = set(), {'require-gate'}
+        while frontier:
+            frontier = {name for name, parents in needs.items() if name not in below and frontier & set(parents)}
+            below |= frontier
+        self.assertTrue({'plan-managed', 'check-managed-contracts', 'build-media', 'publish-managed-manifest', 'build-web', 'deploy-web'} <= below)
+        for name in sorted(below):
+            condition = re.search(r'(?m)^    if: .*(?:\n {6,}.*)*', bodies[name])
+            self.assertIsNotNone(condition, name)
+            self.assertRegex(condition.group(0), r'always\(\)|!cancelled\(\)', name)
+
+    def test_nightly_releases_exactly_the_target_its_plan_checked(self):
+        nightly = (self.WORKFLOWS / 'nightly.yml').read_text()
+        job = nightly[nightly.index('\n  release:'):nightly.index('\n  proof:')]
+        self.assertIn('needs: plan', job)
+        self.assertIn('target_sha: ${{ needs.plan.outputs.target_sha }}', job)
+        self.assertIn('release.py plan', nightly)
 
 
 class TranscribeOncePerDayTests(unittest.TestCase):

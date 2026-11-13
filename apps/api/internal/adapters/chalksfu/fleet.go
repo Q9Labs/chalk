@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"log/slog"
 	"slices"
 	"strings"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	probeInterval = 2 * time.Second
+	probeInterval = time.Second
 	probeTimeout  = time.Second
 	// A probe older than this no longer counts, so a node that stops answering
 	// leaves placement within a few intervals.
@@ -79,8 +80,8 @@ const (
 	verdictTooOld
 )
 
-func verdictOf(protocol int) verdict {
-	if protocol < minNodeProtocol {
+func verdictOf(version int) verdict {
+	if version < minNodeProtocol {
 		return verdictTooOld
 	}
 	return verdictCompatible
@@ -348,7 +349,7 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 // loadOf turns a node's ready answer into its load record, with no placed
 // Episodes. A standby's budget is capped at the degraded budget the Fleet is
 // configured with.
-func (f *Fleet) loadOf(node string, ready wireReady, at time.Time) nodeLoad {
+func (f *Fleet) loadOf(node string, ready protocol.ReadyResponse, at time.Time) nodeLoad {
 	budget := ready.PacketBudget
 	if f.standbys[node] {
 		budget = min(budget, f.standbyBudget)

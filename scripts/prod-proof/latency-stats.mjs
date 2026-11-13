@@ -1,11 +1,6 @@
 // Percentiles and budgets for the action-latency benchmark. A sample is a map of metric to milliseconds,
 // or null when the remote never saw the action before the timeout.
-
-// percentile uses the nearest rank, so a p95 of twenty samples is the nineteenth smallest.
-export function percentile(sorted, fraction) {
-  if (!sorted.length) return null;
-  return sorted[Math.min(sorted.length, Math.ceil(fraction * sorted.length)) - 1];
-}
+import { percentile } from "../../features/scorecard/stats.mjs";
 
 export function summarize(samples) {
   const metrics = new Set(samples.flatMap((sample) => Object.keys(sample)));

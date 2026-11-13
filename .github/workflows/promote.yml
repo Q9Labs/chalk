@@ -1,4 +1,5 @@
 name: Promote newest held nightly
+run-name: Promote ${{ inputs.expected_sha }}
 on:
   workflow_dispatch:
     inputs:

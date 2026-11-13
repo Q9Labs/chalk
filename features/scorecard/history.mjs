@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { planeBudgets } from "./budgets.mjs";
+import { countsAsEvidence } from "./schema.mjs";
 import { percentile } from "./stats.mjs";
 
 const BASELINE_RUNS = 7;
@@ -30,7 +31,7 @@ export function appendCards(directory, cards) {
   return fresh.length;
 }
 
-const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane && !card.contention?.contended && !card.contention?.unobservable);
+const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane && countsAsEvidence(card));
 
 /**
  * baselineCard is the real-node baseline: the median over the last 7 nightly cards of a plane, per metric.

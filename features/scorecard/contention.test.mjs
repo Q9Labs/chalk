@@ -68,6 +68,34 @@ test("a foreign session in a fake node readout, or a foreign Episode in a bounda
   assert.ok(!JSON.stringify(card(result)).includes("foreign-episode"));
 });
 
+test("a primary and a standby that report in every readout are not an incarnation change", () => {
+  const standby = { ...idle, nodeIncarnation: "boot-standby" };
+  const result = contention({ ...input(), nodeBefore: [idle, standby], nodeWindow: [idle, standby], nodeAfter: [idle, standby] });
+  assert.equal(result.contended, false);
+  assert.equal(result.incarnation_changes.value, 0);
+});
+
+test("a node with no sessions reading cannot be taken for an idle one", () => {
+  const reading = { ...idle, nodeIncarnation: "boot-standby" };
+  const blind = { ...reading, sessions: undefined };
+  for (const field of ["nodeBefore", "nodeWindow", "nodeAfter"]) {
+    const result = contention({ ...input(), nodeBefore: [idle, reading], nodeWindow: [idle, reading], nodeAfter: [idle, reading], [field]: [idle, blind] });
+    assert.equal(result.contended, true, field);
+  }
+  const single = contention({ ...input(), nodeAfter: [{ ...idle, sessions: undefined }] });
+  assert.equal(single.contended, true);
+});
+
+test("a standby that appears or vanishes between readouts taints the card", () => {
+  const standby = { ...idle, nodeIncarnation: "boot-standby" };
+  const appears = contention({ ...input(), nodeBefore: [idle], nodeWindow: [idle, standby], nodeAfter: [idle, standby] });
+  const vanishes = contention({ ...input(), nodeBefore: [idle, standby], nodeWindow: [idle, standby], nodeAfter: [idle] });
+  for (const result of [appears, vanishes]) {
+    assert.equal(result.contended, true);
+    assert.equal(result.incarnation_changes.value, 1);
+  }
+});
+
 test("a node incarnation change taints the card and records peak steal", () => {
   const result = contention({ ...input(), nodeBefore: [idle], nodeAfter: [{ ...idle, nodeIncarnation: "boot-b", host: { stealPercent: 14 } }] });
   assert.equal(result.contended, true);

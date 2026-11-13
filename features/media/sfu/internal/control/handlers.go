@@ -24,28 +24,27 @@ const maxProfileSeconds = int(requestDeadline / time.Second)
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("GET "+protocol.RouteHealth, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	// Readiness names the node incarnation and its load, so it needs the same identity as /v1.
-	mux.Handle("GET /readyz", s.v1(s.ready))
+	mux.Handle("GET "+protocol.RouteReady, s.v1(s.ready))
 	// Profiles hold heap contents and stacks, so they need the same identity. The index serves
 	// heap, goroutine and allocs. A CPU profile samples for ?seconds= (default and limit 15, the request deadline).
 	mux.Handle("GET /debug/pprof/", s.v1(servePprof(pprof.Index)))
 	mux.Handle("GET /debug/pprof/profile", s.v1(s.profile))
 
-	prefix := "/" + protocol.Version
-	mux.Handle("POST "+prefix+"/sessions", s.v1(s.createSession))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks", s.v1(s.addTracks))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/renegotiate", s.v1(s.renegotiate))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks/close", s.v1(s.closeTracks))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks/update", s.v1(s.updateTracks))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/inspect", s.v1(s.inspect))
-	mux.Handle("POST "+prefix+"/sessions/{connectionId}/remove", s.v1(s.removeSession))
-	mux.Handle("POST "+prefix+"/episodes/end", s.v1(s.endEpisode))
-	mux.Handle("POST "+prefix+"/episodes/reserve", s.v1(s.reserveEpisode))
-	mux.Handle("POST "+prefix+"/episodes/retire", s.v1(s.retireEpisode))
-	mux.Handle("POST "+prefix+"/episodes/sources", s.v1(s.controlSources))
-	mux.Handle("POST "+prefix+"/drain", s.v1(s.drain))
-	mux.Handle("POST "+prefix+"/undrain", s.v1(s.undrain))
+	mux.Handle("POST "+protocol.RouteSessions, s.v1(s.createSession))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionTracks), s.v1(s.addTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRenegotiate), s.v1(s.renegotiate))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionCloseTracks), s.v1(s.closeTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionUpdateTrack), s.v1(s.updateTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionInspect), s.v1(s.inspect))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRemove), s.v1(s.removeSession))
+	mux.Handle("POST "+protocol.RouteEpisodesEnd, s.v1(s.endEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesReserve, s.v1(s.reserveEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesRetire, s.v1(s.retireEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesSources, s.v1(s.controlSources))
+	mux.Handle("POST "+protocol.RouteDrain, s.v1(s.drain))
+	mux.Handle("POST "+protocol.RouteUndrain, s.v1(s.undrain))
 	return s.logged(mux)
 }
 
@@ -126,16 +125,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
-	create := s.node.CreateSessionAt
-	switch request.Kind {
-	case protocol.SessionKindParticipant:
-	case protocol.SessionKindCapture:
-		create = s.node.CreateCaptureSessionAt
-	default:
-		return errors.Join(media.ErrInvalidRequest, errors.New("unknown session kind"))
+	kind, err := media.KindOf(request.Kind)
+	if err != nil {
+		return err
 	}
 	trace := traceOf(r)
-	response, err := create(request.OperationID, request.Scope, request.AllocationGeneration)
+	response, err := s.node.Create(request.OperationID, request.Scope, kind, request.AllocationGeneration)
 	if err != nil {
 		s.traceRefused(request, trace, err)
 		return err
@@ -273,7 +268,7 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) error {
 	if request.Peer {
 		find = s.node.PeerSession
 	}
-	session, err := find(r.PathValue("connectionId"), request.Scope)
+	session, err := find(r.PathValue(protocol.SessionConnectionWildcard), request.Scope)
 	if err != nil {
 		return err
 	}
@@ -290,7 +285,7 @@ func (s *Server) sessionFor(w http.ResponseWriter, r *http.Request, body any, sc
 	if err := s.decode(w, r, body); err != nil {
 		return nil, err
 	}
-	session, err := s.node.Session(r.PathValue("connectionId"), scope())
+	session, err := s.node.Session(r.PathValue(protocol.SessionConnectionWildcard), scope())
 	if err == nil {
 		session.Note(traceOf(r))
 	}

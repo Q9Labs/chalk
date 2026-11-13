@@ -29,8 +29,8 @@ func TestAdmissionDefaults(t *testing.T) {
 	if cfg.VideoStreamCost != 300 || cfg.CameraUplinkCost != 390 || cfg.AudioStreamCost != 50 {
 		t.Errorf("stream costs %d video, %d camera uplink and %d audio, want 300, 390 and 50", cfg.VideoStreamCost, cfg.CameraUplinkCost, cfg.AudioStreamCost)
 	}
-	if cfg.PacketBudget != 16000 {
-		t.Errorf("packet budget %d, want 16000 for the smallest node", cfg.PacketBudget)
+	if cfg.PacketBudget != 22000 {
+		t.Errorf("packet budget %d, want 22000 for the smallest node", cfg.PacketBudget)
 	}
 	if cfg.MaxEpisodeParticipants != 16 {
 		t.Errorf("Participant cap %d, want 16", cfg.MaxEpisodeParticipants)
@@ -45,8 +45,8 @@ func TestAdmissionDefaults(t *testing.T) {
 	if cfg.Memory != want {
 		t.Errorf("memory caps %+v, want the design's budget %+v", cfg.Memory, want)
 	}
-	if cfg.Guard.MaxStealPercent != 3 || cfg.Guard.MaxSchedulerLatency != 20*time.Millisecond || cfg.Guard.Window != 30*time.Second {
-		t.Errorf("guard %+v, want 3%% steal or 50 ms queue delay over 30 s", cfg.Guard)
+	if cfg.Guard.MaxStealPercent != 25 || cfg.Guard.MaxSchedulerLatency != 20*time.Millisecond || cfg.Guard.Window != 30*time.Second {
+		t.Errorf("guard %+v, want 25%% steal or 20 ms scheduler latency over 30 s", cfg.Guard)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestGuardDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 20 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
+	want := Guard{MaxStealPercent: 25, MaxBusyPercent: 90, MaxSchedulerLatency: 20 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
 	if cfg.Guard != want {
 		t.Errorf("guard %+v, want %+v", cfg.Guard, want)
 	}
@@ -199,5 +199,37 @@ func TestSubscriptionLimitsFitTheAdmittedCallShape(t *testing.T) {
 	}
 	if _, err := load(map[string]string{"SFU_MAX_CAPTURE_SUBSCRIPTIONS": "40"}); err == nil || !strings.Contains(err.Error(), "SFU_MAX_CAPTURE_SUBSCRIPTIONS") {
 		t.Errorf("40 capture subscriptions loaded: %v", err)
+	}
+}
+
+func TestNodeSizeAndEnvironmentSetTheNodeNumbers(t *testing.T) {
+	cases := []struct {
+		name          string
+		values        map[string]string
+		budget, steal int
+	}{
+		{"the smallest node in a staging environment", map[string]string{"SFU_NODE_SIZE": "s-1vcpu-1gb", "SFU_ENVIRONMENT": "staging"}, 22000, 25},
+		{"the larger node in production", map[string]string{"SFU_NODE_SIZE": "s-2vcpu-2gb", "SFU_ENVIRONMENT": "production"}, 36000, 40},
+		{"an explicit budget over the size's", map[string]string{"SFU_NODE_SIZE": "s-2vcpu-2gb", "SFU_PACKET_BUDGET": "5000"}, 5000, 25},
+	}
+	for _, tc := range cases {
+		values := map[string]string{}
+		maps.Copy(values, required)
+		maps.Copy(values, tc.values)
+		cfg, err := Load(lookupOf(values))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if cfg.PacketBudget != tc.budget || int(cfg.Guard.MaxStealPercent) != tc.steal {
+			t.Errorf("%s: budget %d and steal limit %v, want %d and %d", tc.name, cfg.PacketBudget, cfg.Guard.MaxStealPercent, tc.budget, tc.steal)
+		}
+	}
+	values := map[string]string{"SFU_NODE_SIZE": "s-8vcpu-16gb"}
+	maps.Copy(values, required)
+	if _, err := Load(lookupOf(values)); err == nil || !strings.Contains(err.Error(), "SFU_NODE_SIZE") {
+		t.Errorf("a size missing from the table loaded: %v", err)
+	}
+	if cfg, err := Load(lookupOf(required)); err != nil || cfg.ControlAddr != ":8443" || cfg.UDPAddr != ":50000" {
+		t.Errorf("default addresses %q and %q (%v), want the table's ports", cfg.ControlAddr, cfg.UDPAddr, err)
 	}
 }
