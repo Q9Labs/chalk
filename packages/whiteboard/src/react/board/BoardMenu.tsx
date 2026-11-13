@@ -1,5 +1,6 @@
 import { Menu } from "@base-ui/react/menu";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel } from "./controls";
+import { MenuCheck } from "./controls/MenuCheck";
 import { BoardIcon } from "./BoardIcon";
 import type { WhoCanDraw } from "./board-draw-policy";
 import { DRAW_POLICIES, ISLAND_PLACES, SURFACES, type BoardSurface, type IslandPlace } from "./board-model";
@@ -78,18 +79,6 @@ function Tiles<T extends string>({
   );
 }
 
-function Check({ on }: { readonly on: boolean }) {
-  return (
-    <span data-part="menu-check" className="chalk-menu-check" aria-hidden="true">
-      {on ? (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-      ) : null}
-    </span>
-  );
-}
-
 function PickedPeople({ people, onPick }: Pick<WhoCanDraw, "people" | "onPick">) {
   if (people.length === 0) return <p className="chalk-board-picked-note">No one else is here yet. Hosts can always draw.</p>;
   return (
@@ -97,7 +86,7 @@ function PickedPeople({ people, onPick }: Pick<WhoCanDraw, "people" | "onPick">)
       <div className="chalk-board-picked" role="group" aria-label="Picked people">
         {people.map((person) => (
           <Menu.CheckboxItem key={person.id} className="chalk-menu-item" checked={person.picked} onCheckedChange={(picked) => onPick(person.id, picked)} closeOnClick={false}>
-            <Check on={person.picked} />
+            <MenuCheck on={person.picked} />
             <span className="chalk-board-picked-name">{person.name}</span>
           </Menu.CheckboxItem>
         ))}

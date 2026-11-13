@@ -324,7 +324,7 @@ function requireTraceparent(value: unknown): string {
   return traceparent;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -332,3 +332,19 @@ function encodedBytes(value: unknown): number {
   return new TextEncoder().encode(typeof value === "string" ? value : JSON.stringify(value)).byteLength;
 }
 
+const MAX_RECENT_MESSAGE_IDS = 2_048;
+
+export function createRandomId(prefix: string): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Returns false for an id seen before; remembers only the most recent ids. */
+export function recordMessageId(messageIds: Set<string>, messageId: string): boolean {
+  if (messageIds.has(messageId)) return false;
+  messageIds.add(messageId);
+  if (messageIds.size > MAX_RECENT_MESSAGE_IDS) {
+    const oldest = messageIds.values().next().value;
+    if (oldest) messageIds.delete(oldest);
+  }
+  return true;
+}

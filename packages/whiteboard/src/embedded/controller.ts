@@ -7,7 +7,10 @@ import {
   CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES,
   CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID,
   decodeEmbeddedWhiteboardRendererMessage,
+  createRandomId,
   encodeEmbeddedWhiteboardMessage,
+  isRecord,
+  recordMessageId,
   type ChalkEmbeddedWhiteboardHostMessage,
   type ChalkEmbeddedWhiteboardRendererEnvelope,
   type ChalkEmbeddedWhiteboardTheme,
@@ -17,7 +20,6 @@ import {
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 16_384;
 const MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024;
-const MAX_RECENT_MESSAGE_IDS = 2_048;
 const permittedMimeTypes = new Set(["application/octet-stream", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp"]);
 const permittedRendererMetrics = new Set(["whiteboard.bridge.backlog", "whiteboard.file.failure", "whiteboard.frame.delay_ms", "whiteboard.input.delay_ms", "whiteboard.recovery.count", "whiteboard.renderer.memory_bytes", "whiteboard.renderer.termination"]);
 const permittedRendererErrorCodes = new Set(["export_failed", "invalid_file_result", "invalid_host_message", "invalid_operation_result", "renderer_load_failed", "submission_failed"]);
@@ -136,7 +138,7 @@ export class ChalkWhiteboardController {
     this.#canDraw = options.canDraw;
     this.#canClear = options.canClear;
     this.#fetch = options.fetch ?? globalThis.fetch;
-    this.#nextMessageId = options.nextMessageId ?? createMessageId;
+    this.#nextMessageId = options.nextMessageId ?? (() => createRandomId("chalk-whiteboard"));
   }
 
   start(): void {
@@ -285,7 +287,7 @@ export class ChalkWhiteboardController {
           const commit = await this.options.transport.clear();
           this.#sceneId = commit.sceneId;
           this.#sceneRevision = commit.revision;
-          this.#sceneGeneration = createSceneGeneration();
+          this.#sceneGeneration = createRandomId("scene");
           return { ...commit, sceneGeneration: this.#sceneGeneration };
         });
         return;
@@ -422,7 +424,7 @@ export class ChalkWhiteboardController {
         this.#updateDocumentCompatibility(event.elements);
         this.#sceneId = event.sceneId;
         this.#sceneRevision = event.revision;
-        this.#sceneGeneration = createSceneGeneration();
+        this.#sceneGeneration = createRandomId("scene");
         this.#send({
           type: "apply_snapshot",
           payload: {
@@ -726,10 +728,6 @@ function requireString(value: unknown, label: string, maxBytes = 32 * 1024): str
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -930,28 +928,6 @@ function compareRevision(left: string, right: string): number {
 
 function isRevision(value: string): boolean {
   return /^(?:0|[1-9]\d*)$/u.test(value);
-}
-
-function createSceneGeneration(): string {
-  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
-  if (randomUUID) return randomUUID();
-  return `scene-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function createMessageId(): string {
-  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
-  if (randomUUID) return randomUUID();
-  return `chalk-whiteboard-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function recordMessageId(messageIds: Set<string>, messageId: string): boolean {
-  if (messageIds.has(messageId)) return false;
-  messageIds.add(messageId);
-  if (messageIds.size > MAX_RECENT_MESSAGE_IDS) {
-    const oldest = messageIds.values().next().value;
-    if (oldest) messageIds.delete(oldest);
-  }
-  return true;
 }
 
 function isWhiteboardView(value: unknown, bounds: { readonly maxCoordinate: number; readonly maxExtent: number }): value is WhiteboardView {

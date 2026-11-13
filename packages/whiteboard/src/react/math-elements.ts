@@ -65,8 +65,6 @@ export function createMathImageAsset(args: { svg: string; width: number; height:
   };
 }
 
-// Excalidraw custom data is untrusted and requires explicit runtime narrowing.
-// fallow-ignore-next-line complexity
 export function getChalkMathData(element: ExcalidrawElement | null | undefined): ChalkMathCustomData | null {
   const data = element?.customData?.[CHALK_MATH_CUSTOM_DATA_KEY] as Partial<ChalkMathCustomData> | undefined;
   if (data?.kind !== "math" || typeof data.latex !== "string") return null;
@@ -90,8 +88,6 @@ export function getSelectedMathElement(api: ExcalidrawImperativeAPI): Excalidraw
   return selected ? (selected as ExcalidrawImageElement) : null;
 }
 
-// Excalidraw's zoom shape varies across serialized and live app states.
-// fallow-ignore-next-line complexity
 const getZoom = (zoom: unknown): number => {
   const value = typeof zoom === "object" && zoom !== null && "value" in zoom ? Number(zoom.value) : 1;
   return Number.isFinite(value) && value > 0 ? value : 1;

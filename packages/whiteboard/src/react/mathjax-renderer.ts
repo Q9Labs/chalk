@@ -37,7 +37,6 @@ let mathJaxReady: Promise<MathJaxRuntime> | null = null;
 const getMathJaxGlobal = () => (typeof window === "undefined" ? globalThis.MathJax : window.MathJax);
 
 // MathJax exposes readiness through a late-installed browser global.
-// fallow-ignore-next-line complexity
 async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
   const startedAt = Date.now();
 
@@ -54,7 +53,6 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
 }
 
 // Existing global configuration must be preserved when a host initializes MathJax first.
-// fallow-ignore-next-line complexity
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
   const configuredPath = getWhiteboardAssets()?.mathJaxBasePath;
   // The speech worker uses blob URLs, so importScripts and map fetches need absolute URLs.
@@ -88,8 +86,6 @@ function loadMathJaxScript(): Promise<void> {
   });
 }
 
-// Browser and preloaded-runtime branches are both supported public integration paths.
-// fallow-ignore-next-line complexity
 async function initializeMathJax(): Promise<MathJaxRuntime> {
   if (typeof document === "undefined") throw new Error("Math rendering is only available in the browser");
 
@@ -119,7 +115,6 @@ const parseSvgLength = (value: string | null, unitScale: number) => {
 };
 
 // MathJax emits multiple valid SVG dimension formats that require ordered fallbacks.
-// fallow-ignore-next-line complexity
 export function getRenderedSvgSize(svg: string): { width: number; height: number } {
   const widthAttr = /<svg\b[^>]*\bwidth="([^"]+)"/u.exec(svg)?.[1] ?? null;
   const heightAttr = /<svg\b[^>]*\bheight="([^"]+)"/u.exec(svg)?.[1] ?? null;

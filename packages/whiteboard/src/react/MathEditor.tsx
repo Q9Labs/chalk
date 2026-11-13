@@ -16,8 +16,6 @@ interface MathEditorProps {
   onSubmit: (latex: string) => Promise<void>;
 }
 
-// Conditional branches directly represent the editor's submission and error states.
-// fallow-ignore-next-line complexity
 export function MathEditor({ initialLatex, isEditing, classNames, icons, onClose, onSubmit }: MathEditorProps): React.JSX.Element {
   const [latex, setLatex] = useState(initialLatex);
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -8,8 +8,7 @@ import type { WhiteboardCollaborationEvent } from "../collab/engine";
 import { BoardToastContext, type BoardToast } from "../react/board/board-toasts";
 import { Board } from "../react/board/Board";
 import { WhiteboardCanvas, type WhiteboardCanvasProps } from "../react/WhiteboardCanvas";
-import type { ChalkEmbeddedBoardContext } from "./protocol";
-import type { ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
+import { isRecord, type ChalkEmbeddedBoardContext, type ChalkEmbeddedWhiteboardHostEnvelope } from "./protocol";
 import { ChalkEmbeddedWhiteboardRendererBridge } from "./renderer-bridge";
 import { applyEmbeddedWhiteboardViewport } from "./renderer-viewport";
 
@@ -326,10 +325,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
     reader.onload = () => resolve(String(reader.result));
     reader.readAsDataURL(blob);
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 createRoot(rendererRoot).render(
