@@ -48,7 +48,7 @@ dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.10+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.11+auto}"
 export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 
 host="${SFU_NODE_ADDRESS:-}"
