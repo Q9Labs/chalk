@@ -43,7 +43,7 @@ it("shows nothing for a drop shorter than 2 seconds and the card after it", () =
 
 it("confirms the return with how long the person was away, as a bottom notice rather than over the stage", () => {
   expect(reconnectedToast(14_000)).toMatchObject({ type: "success", message: "Back in the call · Away 14 s" });
-  const { host, unmount } = mount(<ConnectionStatus phase="reconnected" since={null} awayMs={14_000} />);
+  const { host, unmount } = mount(<ConnectionStatus phase="reconnected" since={null} />);
   expect(host.textContent).not.toContain("Back in the call");
   unmount();
 });
