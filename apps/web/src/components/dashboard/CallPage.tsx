@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { rememberJoiningCall } from "./join-call";
+import { rememberJoiningCall, usePendingJoin } from "./join-call";
 import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
@@ -28,6 +28,7 @@ const ADMISSION: readonly (readonly [Admission, string])[] = [
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const pendingDecisions = useRef(new Set<string>());
+  const joining = usePendingJoin() === spaceId;
   const pages = useRef(1);
   const metadata = useRef({ after: Date.now() + 10000, next: 0, unlisted: new Set<string>(), unavailable: new Set<string>() });
   const lifecycleRefresh = useRef({ spaceId, after: 0, pending: false });
@@ -274,8 +275,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             )}
           </Menu>
         </h1>
-        <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }} preload="intent" onClick={() => rememberJoiningCall(call)}>
-          <Icon name="cam" />
+        <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }} preload="intent" aria-busy={joining || undefined} onClick={() => rememberJoiningCall(call)}>
+          {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
           Join call
         </Link>
       </div>

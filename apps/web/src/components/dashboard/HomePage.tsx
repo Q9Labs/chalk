@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useJoinCall } from "./join-call";
+import { useJoinCall, usePendingJoin } from "./join-call";
 import { useEffect, useRef, useState } from "react";
 
 import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
@@ -218,6 +218,7 @@ export function HomePage() {
 function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
   const joinCall = useJoinCall();
+  const joining = usePendingJoin() === call.id;
   const join = () => joinCall(call);
   const status = live ? (
     <span className="live">
@@ -244,7 +245,8 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
-          <button type="button" className="btn sec sm" onClick={join}>
+          <button type="button" className="btn sec sm" aria-busy={joining || undefined} onClick={join}>
+            {joining ? <span className="spin" aria-hidden="true" /> : null}
             Join
           </button>
         ) : null}
@@ -312,6 +314,7 @@ function CopyMenuItem({ call, onDone }: { readonly call: HomeCallDTO; readonly o
 
 function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
   const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());
+  const joining = usePendingJoin() === call.id;
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
@@ -337,8 +340,8 @@ function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly
       description="Share this link with the people you want in the call. It keeps working after the call ends."
       onClose={onClose}
       actions={
-        <button type="button" className="btn pri" onClick={onJoin}>
-          <Icon name="cam" />
+        <button type="button" className="btn pri" aria-busy={joining || undefined} onClick={onJoin}>
+          {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
           Join call
         </button>
       }

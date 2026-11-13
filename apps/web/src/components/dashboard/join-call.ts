@@ -1,7 +1,8 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 const names = new Map<string, string>();
+const JOIN_PATH = /^\/dashboard\/call\/([^/]+)\/join\/?$/;
 
 /** The name of a call the dashboard just opened, so the joining card names it from its first frame. */
 export const joiningCallName = (spaceId: string): string | undefined => names.get(spaceId);
@@ -32,4 +33,12 @@ export function useJoinCall(preloadSpaceId?: string): (call: { readonly id: stri
 /** For a plain link to the join route, which navigates by itself. */
 export function rememberJoiningCall(call: { readonly id: string; readonly name: string }): void {
   names.set(call.id, call.name);
+}
+
+/**
+ * The call a Join press is opening while the join route still loads, so the pressed control shows it is working from
+ * the next frame instead of sitting unchanged until the call page paints.
+ */
+export function usePendingJoin(): string | null {
+  return useRouterState({ select: (state) => (state.status === "pending" ? (JOIN_PATH.exec(state.location.pathname)?.[1] ?? null) : null) });
 }
