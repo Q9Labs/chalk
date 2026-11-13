@@ -1,16 +1,25 @@
 import { parseCloudflareSFUPublicationID, publicationKey } from "./tracks";
 import { CloudflareSFUError, type CloudflareSFUPublication, type CloudflareSFURemoteTrack, type CloudflareSFUTrackRequest } from "./types";
 
-export function matchRemotePullTracks(publications: readonly CloudflareSFUPublication[], tracks: readonly CloudflareSFUTrackRequest[]) {
-  const requested = new Map(
+export function trackKey(connectionId: string, trackName: string): string {
+  return `${connectionId}\u0000${trackName}`;
+}
+
+/** Publications keyed by the SFU session and track name a pull request or its errors name. */
+export function publicationsByTrack(publications: readonly CloudflareSFUPublication[]): Map<string, CloudflareSFUPublication> {
+  return new Map(
     publications.map((publication) => {
       const reference = parseCloudflareSFUPublicationID(publication.publicationId);
-      return [`${reference.connectionId}\u0000${reference.trackName}`, publication] as const;
+      return [trackKey(reference.connectionId, reference.trackName), publication] as const;
     }),
   );
+}
+
+export function matchRemotePullTracks(publications: readonly CloudflareSFUPublication[], tracks: readonly CloudflareSFUTrackRequest[]) {
+  const requested = publicationsByTrack(publications);
   const mids = new Set<string>();
   return tracks.map(({ location, sessionId: connectionId, trackName, mid }) => {
-    const key = `${connectionId}\u0000${trackName}` as const;
+    const key = trackKey(connectionId, trackName);
     const publication = requested.get(key);
     if (location !== "remote" || !publication || !mid || mids.has(mid)) throw new CloudflareSFUError("Cloudflare SFU returned an invalid remote track identity", "invalid_publication");
     requested.delete(key);

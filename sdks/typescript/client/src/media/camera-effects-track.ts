@@ -127,18 +127,7 @@ export async function createCameraEffectsTrack(
     segmenter.segmentForVideo(foreground, time, (result) => {
       const confidence = result.confidenceMasks?.[0];
       if (!confidence) throw new Error("Camera segmentation did not return a mask");
-      if (mask.width !== confidence.width || mask.height !== confidence.height) {
-        mask.width = confidence.width;
-        mask.height = confidence.height;
-      }
-      const pixels = alpha.createImageData(mask.width, mask.height);
-      const values = confidence.getAsFloat32Array();
-      let pixel = 3;
-      for (const value of values) {
-        pixels.data[pixel] = Math.round(Math.max(0, Math.min(1, (value - 0.25) / 0.5)) * 255);
-        pixel += 4;
-      }
-      alpha.putImageData(pixels, 0, 0);
+      writeMask(mask, alpha, confidence);
       person.globalCompositeOperation = "destination-in";
       person.drawImage(mask, 0, 0, canvas.width, canvas.height);
       if (background === "blur") {
@@ -176,23 +165,18 @@ export async function createCameraEffectsTrack(
       input.close();
     }
   };
-  void (async () => {
-    try {
-      while (!stopped) {
-        const { value: input, done } = await pipeline.reader.read();
-        if (done) {
-          if (!stopped) ended();
-          break;
-        }
-        await writeFrame(input);
-      }
-    } catch {
-      if (!stopped) {
-        onFailure(output);
-        ended();
-      }
+  const pump = async () => {
+    while (!stopped) {
+      const { value: input, done } = await pipeline.reader.read();
+      if (done) return stopped ? undefined : ended();
+      await writeFrame(input);
     }
-  })();
+  };
+  pump().catch(() => {
+    if (stopped) return;
+    onFailure(output);
+    ended();
+  });
   return {
     track: output,
     stop,
@@ -200,18 +184,7 @@ export async function createCameraEffectsTrack(
     async prepare(next) {
       const revision = generation;
       if (next !== "none") await loadSegmenter();
-      let nextImage: HTMLImageElement | undefined;
-      if (next !== "none" && next !== "blur") {
-        nextImage = new Image();
-        nextImage.crossOrigin = "anonymous";
-        nextImage.src = images[next].avif;
-        try {
-          await nextImage.decode();
-        } catch {
-          nextImage.src = images[next].image;
-          await nextImage.decode();
-        }
-      }
+      const nextImage = next === "none" || next === "blur" ? undefined : await decodeBackgroundImage(images[next]);
       if (stopped || generation !== revision) throw new Error("Camera effects stopped");
       return () => {
         if (!stopped && generation === revision) {
@@ -224,6 +197,36 @@ export async function createCameraEffectsTrack(
       };
     },
   };
+}
+
+type SegmentationMask = { readonly width: number; readonly height: number; readonly getAsFloat32Array: () => Float32Array };
+
+// Writes the segmenter's confidence into the alpha channel of the mask canvas.
+function writeMask(mask: HTMLCanvasElement, alpha: CanvasRenderingContext2D, confidence: SegmentationMask): void {
+  if (mask.width !== confidence.width || mask.height !== confidence.height) {
+    mask.width = confidence.width;
+    mask.height = confidence.height;
+  }
+  const pixels = alpha.createImageData(mask.width, mask.height);
+  let pixel = 3;
+  for (const value of confidence.getAsFloat32Array()) {
+    pixels.data[pixel] = Math.round(Math.max(0, Math.min(1, (value - 0.25) / 0.5)) * 255);
+    pixel += 4;
+  }
+  alpha.putImageData(pixels, 0, 0);
+}
+
+async function decodeBackgroundImage(sources: { readonly avif: string; readonly image: string }): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+  image.src = sources.avif;
+  try {
+    await image.decode();
+  } catch {
+    image.src = sources.image;
+    await image.decode();
+  }
+  return image;
 }
 
 function drawCover(context: CanvasRenderingContext2D, image: HTMLImageElement, width: number, height: number): void {
