@@ -22,6 +22,20 @@ import (
 // buildCore wires the services every other stage depends on: API keys, Tenants,
 // Memberships, Spaces, Episodes and the media plane.
 func (w *wiring) buildCore() error {
+	planePolicy, err := w.buildAccess()
+	if err != nil {
+		return err
+	}
+	if err := w.buildSpacesAndMedia(planePolicy); err != nil {
+		return err
+	}
+	w.setCoreOptions()
+	return nil
+}
+
+// buildAccess wires API keys, Tenants, the public invite defaults and
+// Memberships, and returns the media plane policy that Tenants and Spaces share.
+func (w *wiring) buildAccess() (spaces.PlanePolicy, error) {
 	cfg, diagnostics := &w.cfg, w.obs.diagnostics
 
 	apiKeyService := apikeys.NewService(postgres.NewAPIKeyRepository(w.queries, w.pool, diagnostics.Queries), apikeys.Config{Telemetry: w.obs.launch})
@@ -34,12 +48,12 @@ func (w *wiring) buildCore() error {
 	var err error
 	w.publicInvite, err = resolvePublicInviteConfig(context.Background(), *cfg, w.tenants)
 	if err != nil {
-		return fmt.Errorf("configure public invite defaults: %w", err)
+		return spaces.PlanePolicy{}, fmt.Errorf("configure public invite defaults: %w", err)
 	}
 	if w.publicInvite.Enabled {
 		managedTenantID, err := utilities.ParseID(w.publicInvite.ManagedTenantID)
 		if err != nil {
-			return fmt.Errorf("configure managed public Tenant limits exemption: %w", err)
+			return spaces.PlanePolicy{}, fmt.Errorf("configure managed public Tenant limits exemption: %w", err)
 		}
 		cfg.TenantLimits.ManagedPublicTenantID = managedTenantID
 	}
@@ -47,7 +61,14 @@ func (w *wiring) buildCore() error {
 	membershipRepository := postgres.NewMembershipRepository(w.queries, w.pool, diagnostics.Queries)
 	w.opts.Memberships = memberships.NewService(membershipRepository)
 	w.tenantAuthz = authorization.NewTenantPolicy(membershipRepository, w.tenantRepository)
+	return planePolicy, nil
+}
 
+// buildSpacesAndMedia wires Spaces, the optional Chalk SFU fleet, Episodes and
+// the media plane registries.
+func (w *wiring) buildSpacesAndMedia(planePolicy spaces.PlanePolicy) error {
+	cfg := &w.cfg
+	var err error
 	killSwitch := postgres.NewKillSwitch(w.pool)
 	w.spaces = spaces.NewServiceWithDefaultProvider(postgres.NewSpaceRepository(w.queries, w.pool), cfg.DefaultMediaPlane).WithPlanePolicy(planePolicy).WithNewSpaceDefaults(cfg.NewSpace, w.tenantRepository).WithNewEpisodeSwitch(killSwitch)
 	if cfg.ChalkSFU.Enabled {
@@ -72,7 +93,11 @@ func (w *wiring) buildCore() error {
 	})
 	w.providerOperations = postgres.NewProviderOperationRepositoryWithPool(w.pool)
 	w.mediaPublications = mediapublications.NewService(w.providerOperations)
+	return nil
+}
 
+// setCoreOptions hands the core services to the HTTP options.
+func (w *wiring) setCoreOptions() {
 	w.opts.Spaces = w.spaces
 	w.opts.Episodes = w.episodes
 	w.opts.ParticipantJoins = w.episodes
@@ -84,5 +109,4 @@ func (w *wiring) buildCore() error {
 		backlog, observed := w.mediaPlaneRegistry.RetirementBacklog()
 		return backlog.Count, backlog.Oldest, observed
 	}
-	return nil
 }

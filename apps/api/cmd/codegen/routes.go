@@ -26,22 +26,7 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		operation["description"] = route.Description
 	}
 
-	switch route.Auth {
-	case httpapi.APIAuthSessionOrBearer:
-		operation["security"] = []map[string][]string{
-			{"sessionOrBearer": {}},
-		}
-	case httpapi.APIAuthParticipantMedia:
-		operation["security"] = []map[string][]string{
-			{"participantMediaBearer": {}},
-		}
-	case httpapi.APIAuthParticipantSync:
-		operation["security"] = []map[string][]string{
-			{"participantSyncBearer": {}},
-		}
-	default:
-		operation["security"] = []map[string][]string{}
-	}
+	operation["security"] = routeSecurity(route.Auth)
 
 	if len(route.Parameters) > 0 {
 		operation["parameters"] = g.parameters(route.Parameters)
@@ -243,5 +228,20 @@ func errorResponseSchema() map[string]any {
 			},
 		},
 		"additionalProperties": false,
+	}
+}
+
+// routeSecurity names the OpenAPI security scheme a route's auth kind requires;
+// public routes require none.
+func routeSecurity(auth httpapi.APIAuth) []map[string][]string {
+	switch auth {
+	case httpapi.APIAuthSessionOrBearer:
+		return []map[string][]string{{"sessionOrBearer": {}}}
+	case httpapi.APIAuthParticipantMedia:
+		return []map[string][]string{{"participantMediaBearer": {}}}
+	case httpapi.APIAuthParticipantSync:
+		return []map[string][]string{{"participantSyncBearer": {}}}
+	default:
+		return []map[string][]string{}
 	}
 }
