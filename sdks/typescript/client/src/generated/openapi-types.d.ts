@@ -1414,6 +1414,7 @@ export interface components {
         local_candidate_type?: "host" | "srflx" | "prflx" | "relay";
         recv_bitrate_kbps?: number | null;
         recv_height?: number | null;
+        recv_hidden_videos?: number | null;
         recv_jitter_ms?: number | null;
         recv_loss_pct?: number | null;
         recv_paused_videos?: number | null;

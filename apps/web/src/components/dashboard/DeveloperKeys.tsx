@@ -25,13 +25,14 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
       <div className="ph">
         <Icon name="key" size={18} />
         <h2 id="keys-title">API keys</h2>
-        {keys.length ? <span className="pill">{keys.length}</span> : null}
-        <span className="end">
-          <button type="button" className="btn pri" onClick={onCreate}>
-            <Icon name="plus" size={16} />
-            Create API key
-          </button>
-        </span>
+        {keys.length ? (
+          <span className="end">
+            <button type="button" className="btn pri" onClick={onCreate}>
+              <Icon name="plus" size={16} />
+              Create API key
+            </button>
+          </span>
+        ) : null}
       </div>
       {fresh && freshKey ? (
         <div className="reveal" role="status">

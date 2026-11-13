@@ -305,6 +305,9 @@ type bandwidthEstimator struct {
 	// lossAt is when the receiver last reported heavy loss. A stalled node delays
 	// packets but does not lose them, so heavy loss is the path's own evidence.
 	lossAt int64
+	// heavyLoss is set by a loss window above lossHigh and cleared by the first window at or below lossLow;
+	// lossCleared records that clearing until lossEnded reads it.
+	heavyLoss, lossCleared bool
 
 	// lastDecrease is why the estimate last fell. lossShare is the packet loss of
 	// the latest loss window. Both only explain the estimate in logs.
@@ -330,6 +333,13 @@ func (e *bandwidthEstimator) pressure(on bool) {
 // lossy reports whether the receiver reported heavy loss within the last pressureHold.
 func (e *bandwidthEstimator) lossy(now int64) bool {
 	return e.lossAt != 0 && now-e.lossAt < int64(pressureHold)
+}
+
+// lossEnded reports once that heavy loss has ended: a loss window at or below lossLow has followed one above lossHigh.
+func (e *bandwidthEstimator) lossEnded() bool {
+	ended := e.lossCleared
+	e.lossCleared = false
+	return ended
 }
 
 // warm reports whether feedback has arrived yet.
@@ -388,8 +398,11 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)
 		e.lossShare = loss
-		if loss > lossHigh {
-			e.lossAt = now
+		switch {
+		case loss > lossHigh:
+			e.lossAt, e.heavyLoss = now, true
+		case loss <= lossLow && e.heavyLoss:
+			e.heavyLoss, e.lossCleared = false, true
 		}
 		switch {
 		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):

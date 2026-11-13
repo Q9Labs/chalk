@@ -20,8 +20,8 @@ export const ROUTE_METRICS = {
   routeJsGzipKiB: { segment: "js_gzip_kib", unit: "kib", description: "Gzipped JavaScript the pre-join route loads" },
   routeCssGzipKiB: { segment: "css_gzip_kib", unit: "kib", description: "Gzipped CSS the pre-join route loads" },
 };
-export const CALL_DEVICES = ["laptop", "phone"];
-export const CALL_SCENARIOS = ["calm-six", "grid-24", "panels", "spotlight-share", "board", "reactions", "reconnect", "first-load"];
+const CALL_DEVICES = ["laptop", "phone"];
+const CALL_SCENARIOS = ["calm-six", "grid-24", "panels", "spotlight-share", "board", "reactions", "reconnect", "first-load"];
 
 export const callMetricId = (device, scenario, metric) => `web.${device}.${scenario}.${CALL_METRICS[metric].segment}`;
 export const routeMetricId = (metric) => `web.route.${ROUTE_METRICS[metric].segment}`;
@@ -52,8 +52,6 @@ const sfu = {
 };
 
 const proof = {
-  "proof.join_startup.retry_ms": { unit: "ms", description: "Join startup proof: time to a live connection when the first dial is refused" },
-  "proof.join_startup.lossy_stalled_ms": { unit: "ms", description: "Join startup proof: time to a live connection under loss and stalled dials" },
   "proof.leave_median_ms": { unit: "ms", description: "Leave proof: median time until the leave is confirmed" },
 };
 

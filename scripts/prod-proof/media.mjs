@@ -6,6 +6,7 @@ import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } fro
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
 import { installLatencyTrace } from "./latency-trace.mjs";
+import { chromiumArgsFor, installIcePath } from "./latency-path.mjs";
 import { buildSdkBundle } from "./sdk-bundle.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
@@ -13,7 +14,8 @@ const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
 // options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
-// deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
+// deferJoin (prepare and admit every guest but leave join() to the caller), headed, path and pathGuest (the latency kit's forced ICE path for one guest, see latency-path.mjs)
+// and executablePaths (a browser executable per guest index, for a guest that runs inside its own network namespace).
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
   if (plane !== "chalk_sfu") return;
@@ -60,9 +62,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       let replaceOnNextAccess = replacing;
       const server = await chromium.launchServer({
         headless: !options.headed,
+        ...(options.executablePaths?.[guest] ? { executablePath: options.executablePaths[guest] } : {}),
         handleSIGINT: false,
         handleSIGTERM: false,
-        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing"],
+        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing", ...(guest === options.pathGuest ? chromiumArgsFor(options.path) : [])],
       });
       close[guest] = async () => {
         if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);
@@ -88,6 +91,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined, turns: ownVoice, camera: options.camera });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       if (options.trace) await context.addInitScript(installLatencyTrace); // After the fixture: it wraps the fixture's RTCPeerConnection.
+      if (guest === options.pathGuest) await context.addInitScript(installIcePath, options.path); // Last: it rewrites the configuration before any other wrapper sees it.
       const page = await context.newPage();
       const network = [];
       networks[guest] = network;
