@@ -12,6 +12,7 @@ import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./transcript-languages";
+import { joiningCallName } from "./join-call";
 
 import { problemReporter, reportUnavailableReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, publicDirectPathControl, publicSyncDirectURL } from "../../lib/chalk-access";
@@ -209,7 +210,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     );
   if (!profile || state.kind !== "ready" || !client) {
     // The same stand-in call and card that Chalk shows while it joins, so opening and joining read as one step.
-    const callName = state.kind === "ready" ? state.data.call.name : undefined;
+    const callName = state.kind === "ready" ? state.data.call.name : joiningCallName(spaceId);
     return (
       <div style={{ position: "absolute", inset: 0 }}>
         <CallLimbo theme={{ colorScheme: theme }} spaceName={callName ?? "Your call"} message={`Joining ${callName ?? "your call"}…`} />

@@ -2,7 +2,7 @@ import "../lib/whiteboard-assets";
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { installChunkLoadAutoReload } from "../lib/chunkReload";
 import { BRAND_DIR, FAVICON_ICO } from "../lib/site-head";
-import { THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
+import { CALL_BOOT_CSS, THEME_BOOTSTRAP_SCRIPT } from "../lib/theme";
 import { ThemeProvider } from "../lib/theme-context";
 import appCss from "../styles.css?url";
 installChunkLoadAutoReload();
@@ -45,6 +45,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <style dangerouslySetInnerHTML={{ __html: CALL_BOOT_CSS }} />
       </head>
       <body>
         {children}

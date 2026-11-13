@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import { useJoinCall } from "./join-call";
 import { useEffect, useRef, useState } from "react";
 
 import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
@@ -107,7 +108,7 @@ export function HomePage() {
   const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
   const toast = useToast();
-  const navigate = useNavigate();
+  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? shown(state.data)[0]?.id : undefined);
   const startKey = useRef(intentKey());
 
   async function startCall() {
@@ -207,13 +208,7 @@ export function HomePage() {
         </>
       )}
       {dialog?.kind === "ready" ? (
-        <CallReadyDialog
-          call={dialog.call}
-          link={dialog.link}
-          onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))}
-          onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })}
-          onClose={() => setDialog(null)}
-        />
+        <CallReadyDialog call={dialog.call} link={dialog.link} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
@@ -222,8 +217,8 @@ export function HomePage() {
 
 function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
-  const navigate = useNavigate();
-  const join = () => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } });
+  const joinCall = useJoinCall();
+  const join = () => joinCall(call);
   const status = live ? (
     <span className="live">
       <span className="dot" />

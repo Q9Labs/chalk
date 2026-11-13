@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { rememberJoiningCall } from "./join-call";
 import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
@@ -273,7 +274,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
             )}
           </Menu>
         </h1>
-        <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }}>
+        <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }} preload="intent" onClick={() => rememberJoiningCall(call)}>
           <Icon name="cam" />
           Join call
         </Link>
