@@ -278,7 +278,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
       const enqueue = <A, E>(effect: Effect.Effect<A, E>, join = false): Effect.Effect<A, E> =>
         Effect.gen(function* () {
-          if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) as Effect.Effect<never, E>;
+          if (model.closed) return yield* Effect.fail(closedFailure()) as Effect.Effect<never, E>;
           const deferred = yield* Deferred.make<A, E>();
           yield* Queue.offer(queue, { effect, deferred, join } as Work);
           return yield* Deferred.await(deferred);
@@ -582,8 +582,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
               onFailure: (cause) => failJoin(cause, stream, span, retried),
               onSuccess: () =>
                 Effect.gen(function* () {
-                  model.syncSnapshot = model.sync?.getSnapshot() ?? null;
-                  model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+                  readSnapshots();
                   model.failure = captureWarning ? toFailure(captureWarning) : null;
                   yield* transition("live");
                   if (model.mediaSnapshot?.connection.phase !== "live") yield* recover("media");
@@ -644,7 +643,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             yield* scheduleRefresh();
           }),
         );
-      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) : Effect.void));
+      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(closedFailure()) : Effect.void));
       const withFreshAccess = <A, E>(operation: () => Effect.Effect<A, E>): Effect.Effect<A, ConnectionLifecycleFailure | E> =>
         Effect.gen(function* () {
           yield* requireOpen;
@@ -785,13 +784,17 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         const mediaMinimum = [1000, 2000, 4000][attempt - 1] ?? 6000;
         return plan.kind === "media" ? Math.min(6000, Math.max(mediaMinimum, finiteDelay)) : finiteDelay;
       };
+      const readSnapshots = () => {
+        model.syncSnapshot = model.sync?.getSnapshot() ?? null;
+        model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+      };
+      const waitForRecoveredSync = (sync: ConnectionSyncClient) => waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
       const finishRecovery = (attempt: number, epoch: number): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (model.epoch !== epoch || !active(model)) return;
           mediaFailure = undefined;
           model.recoveryQueued = null;
-          model.syncSnapshot = model.sync?.getSnapshot() ?? null;
-          model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+          readSnapshots();
           model.failure = null;
           if (model.syncSnapshot?.connection.phase !== "live") return yield* recover("sync");
           if (model.mediaSnapshot?.connection.phase !== "live") return yield* recover("media");
@@ -897,7 +900,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
           // V1 Sync owns reconnect and durable receipts; only custom terminal or
           // unsuccessful replacement transports need a new client.
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
+          yield* waitForRecoveredSync(sync);
         });
       const restartSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
@@ -926,7 +929,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
               else if (attempt.client === sync) attempt.started = true;
             }),
           ).pipe(
-            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000))),
+            Effect.andThen(waitForRecoveredSync(sync)),
             Effect.andThen(Effect.suspend(() => (sync === model.sync && model.epoch === epoch && active(model) ? confirmSyncEntry(sync) : Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery was superseded"))))),
             Effect.tapError(() =>
               enqueue(
@@ -1264,14 +1267,14 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           enqueue(
             Effect.gen(function* () {
               const ports = portsFor(model);
-              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
+              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(interruptedFailure());
               return ports;
             }),
           ).pipe(
             Effect.flatMap((ports) =>
               withFreshAccess(() =>
                 Effect.suspend<A, E | ConnectionLifecycleFailure, never>(() => {
-                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
+                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(interruptedFailure());
                   return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection")))));
                 }),
               ),
@@ -1348,6 +1351,12 @@ function active(model: Model): boolean {
 }
 function lifecycleFailure(code: LifecycleFailureCode, recoverable: boolean, message: string, cause?: unknown): ConnectionLifecycleFailure {
   return new ConnectionLifecycleFailure({ code, recoverable, message, ...(cause === undefined ? {} : { cause }) });
+}
+function closedFailure(): ConnectionLifecycleFailure {
+  return lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.");
+}
+function interruptedFailure(): ConnectionLifecycleFailure {
+  return lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected.");
 }
 function episodeEndedFailure(): ConnectionLifecycleFailure {
   return lifecycleFailure("episode_ended", false, "The Episode has ended");
