@@ -69,8 +69,41 @@ function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
   );
 }
 
-function AccountMenu({ profile }: { readonly profile: ProfileDTO }) {
+function AccountDetails({ profile }: { readonly profile: ProfileDTO }) {
+  return (
+    <div className="mhd">
+      <Avatar name={profile.name} size={36} />
+      <div>
+        <b>{profile.name}</b>
+        <small>{profile.email}</small>
+      </div>
+    </div>
+  );
+}
+
+function AppearanceRow() {
   const { theme, setTheme } = useSiteTheme();
+  return (
+    <div className="mrow" role="group" aria-labelledby="appearance-label">
+      <span id="appearance-label">
+        <Icon name={theme === "dark" ? "moon" : "sun"} />
+        Appearance
+      </span>
+      <Seg
+        small
+        labelledBy="appearance-label"
+        options={[
+          ["dark", "Dark"],
+          ["light", "Light"],
+        ]}
+        value={theme}
+        onChange={setTheme}
+      />
+    </div>
+  );
+}
+
+function AccountMenu({ profile }: { readonly profile: ProfileDTO }) {
   const navigate = useNavigate();
   const toast = useToast();
   async function leave() {
@@ -92,30 +125,9 @@ function AccountMenu({ profile }: { readonly profile: ProfileDTO }) {
     >
       {(close) => (
         <>
-          <div className="mhd">
-            <Avatar name={profile.name} size={36} />
-            <div>
-              <b>{profile.name}</b>
-              <small>{profile.email}</small>
-            </div>
-          </div>
+          <AccountDetails profile={profile} />
           <div className="msep" />
-          <div className="mrow" role="group" aria-labelledby="appearance-label">
-            <span id="appearance-label">
-              <Icon name={theme === "dark" ? "moon" : "sun"} />
-              Appearance
-            </span>
-            <Seg
-              small
-              labelledBy="appearance-label"
-              options={[
-                ["dark", "Dark"],
-                ["light", "Light"],
-              ]}
-              value={theme}
-              onChange={setTheme}
-            />
-          </div>
+          <AppearanceRow />
           <div className="msep" />
           <MenuItem
             icon="logout"

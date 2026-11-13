@@ -3,29 +3,20 @@ import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./use-dashboard";
+import { useLoad, type Update } from "./use-dashboard";
+import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./language-choice";
 import { inviteLink, type Row, type Home, merge, capped, shown, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
-export function HomePage() {
-  const held = useRef<Row[]>([]);
-  const { state, reload, update } = useLoad<Home>(async () => replay(held.current, await readPage("home", {})), "home", {
-    // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
-    // every call Home holds: its live state, whether it is archived, its last active time and recent people, and the
-    // first page when a call was made elsewhere. A failed check keeps the old rows and the next one catches up.
-    interval: () => 5000,
-    read: readHomeStatus,
-  });
-  useEffect(() => {
-    if (state.kind === "ready") held.current = state.data.rows;
-  }, [state]);
-  const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO }>(null);
+type HomeDialog = null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO };
+type UpdateHome = Update<Home>;
+
+function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) {
   const [starting, setStarting] = useState(false);
   const toast = useToast();
-  const navigate = useNavigate();
   const startKey = useRef(intentKey());
 
   async function startCall() {
@@ -39,7 +30,7 @@ export function HomePage() {
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
       update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? { ...item, inviteUrl: link } : item)) }));
-      setDialog({ kind: "ready", call, link });
+      show({ kind: "ready", call, link });
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -70,18 +61,14 @@ export function HomePage() {
     }
   }
 
+  return { starting, startCall, archive };
+}
+
+type HomeBodyProps = { readonly state: Load<Home>; readonly reload: () => void; readonly update: UpdateHome; readonly onRename: (call: HomeCallDTO) => void; readonly onArchive: (call: Row) => void };
+
+function HomeBody({ state, reload, update, onRename, onArchive }: HomeBodyProps) {
   return (
-    <div className="wrap">
-      <div className="secth hhead">
-        <h1>Recent calls</h1>
-        <div className="hact">
-          <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-            <Icon name="plus" />
-            Start a call
-          </button>
-          <JoinLinkField />
-        </div>
-      </div>
+    <>
       {state.kind === "loading" ? (
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
@@ -100,7 +87,7 @@ export function HomePage() {
         <>
           <div className="list">
             {shown(state.data).map((call) => (
-              <CallRow key={call.id} call={call} live={call.live} onRename={() => setDialog({ kind: "rename", call })} onArchive={() => void archive(call)} />
+              <CallRow key={call.id} call={call} live={call.live} onRename={() => onRename(call)} onArchive={() => onArchive(call)} />
             ))}
           </div>
           {state.data.rows.length >= HOME_STATUS_ROWS ? (
@@ -124,6 +111,39 @@ export function HomePage() {
           ) : null}
         </>
       )}
+    </>
+  );
+}
+
+export function HomePage() {
+  const held = useRef<Row[]>([]);
+  const { state, reload, update } = useLoad<Home>(async () => replay(held.current, await readPage("home", {})), "home", {
+    // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
+    // every call Home holds: its live state, whether it is archived, its last active time and recent people, and the
+    // first page when a call was made elsewhere. A failed check keeps the old rows and the next one catches up.
+    interval: () => 5000,
+    read: readHomeStatus,
+  });
+  useEffect(() => {
+    if (state.kind === "ready") held.current = state.data.rows;
+  }, [state]);
+  const [dialog, setDialog] = useState<HomeDialog>(null);
+  const navigate = useNavigate();
+  const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next));
+
+  return (
+    <div className="wrap">
+      <div className="secth hhead">
+        <h1>Recent calls</h1>
+        <div className="hact">
+          <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+            <Icon name="plus" />
+            Start a call
+          </button>
+          <JoinLinkField />
+        </div>
+      </div>
+      <HomeBody state={state} reload={reload} update={update} onRename={(call) => setDialog({ kind: "rename", call })} onArchive={(call) => void archive(call)} />
       {dialog?.kind === "ready" ? (
         <CallReadyDialog
           call={dialog.call}

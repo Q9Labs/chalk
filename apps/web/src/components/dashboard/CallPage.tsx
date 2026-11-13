@@ -6,7 +6,7 @@ import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./use-dashboard";
+import { useLoad, type Update } from "./use-dashboard";
 import { RenameDialog } from "./HomeDialogs";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
@@ -16,17 +16,12 @@ import { CallSettings } from "./call-settings";
 import { ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 export function CallPage({ spaceId }: { readonly spaceId: string }) {
-  const pendingDecisions = useRef(new Set<string>());
   const refresh = useRef(newCallRefresh(spaceId));
   const { state, reload, update } = useLoad(() => loadCallPage(spaceId, refresh.current), `call:${spaceId}`, {
     visibility: "status",
     interval: (data) => callInterval(data, refresh.current),
     read: (data) => readCallTick(data, spaceId, refresh.current),
   });
-  const [renaming, setRenaming] = useState(false);
-  const toast = useToast();
-  const navigate = useNavigate();
-  const intents = useIntentKeys();
   useJumpTarget(state.kind === "ready");
   const back = (
     <Link className="back" to="/dashboard">
@@ -45,8 +40,18 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         </div>
       </div>
     );
+  return <CallLoaded spaceId={spaceId} data={state.data} back={back} refresh={refresh.current} update={update} />;
+}
 
-  const { call, inviteUrl, episodes, live, nextCursor, knocks } = state.data;
+type CallLoadedProps = { readonly spaceId: string; readonly data: CallPageDTO; readonly back: ReactNode; readonly refresh: CallRefresh; readonly update: Update<CallPageDTO> };
+
+function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
+  const pendingDecisions = useRef(new Set<string>());
+  const [renaming, setRenaming] = useState(false);
+  const toast = useToast();
+  const navigate = useNavigate();
+  const intents = useIntentKeys();
+  const { call, inviteUrl, episodes, live, nextCursor, knocks } = data;
   const current = episodes.find((episode) => episode.status === "active");
   const past = episodes.filter((episode) => episode !== current);
 
@@ -83,7 +88,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       {live ? <LiveBanner participants={live.participants.map((person) => person.name)} startedAt={current?.startedAt} /> : null}
       <AdmissionKnocks knocks={knocks} onDecision={answerKnock} />
       <CallSettings spaceId={spaceId} call={call} inviteUrl={inviteUrl} update={update} />
-      <PastSessions spaceId={spaceId} past={past} nextCursor={nextCursor} refresh={refresh.current} update={update} />
+      <PastSessions spaceId={spaceId} past={past} nextCursor={nextCursor} refresh={refresh} update={update} />
       {renaming ? <RenameDialog call={call} page="call" link={inviteUrl} onClose={() => setRenaming(false)} onRenamed={(renamed) => update((data) => ({ ...data, call: renamed }))} /> : null}
     </div>
   );

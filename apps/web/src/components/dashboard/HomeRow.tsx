@@ -39,44 +39,50 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
           </button>
         ) : null}
         {phone ? null : <CopyAction text={() => inviteLink(call)} />}
-        <Menu label={`More actions for ${call.name}`}>
-          {(close) => (
-            <>
-              <MenuItem
-                icon="cam"
-                onSelect={() => {
-                  close();
-                  join();
-                }}
-              >
-                Join call
-              </MenuItem>
-              <CopyMenuItem call={call} onDone={close} />
-              <MenuItem
-                icon="edit"
-                onSelect={() => {
-                  close();
-                  onRename();
-                }}
-              >
-                Rename
-              </MenuItem>
-              <div className="msep" />
-              <MenuItem
-                icon="trash"
-                danger
-                onSelect={() => {
-                  close();
-                  onArchive();
-                }}
-              >
-                Archive call
-              </MenuItem>
-            </>
-          )}
-        </Menu>
+        <RowMenu call={call} onJoin={join} onRename={onRename} onArchive={onArchive} />
       </span>
     </div>
+  );
+}
+
+function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCallDTO; readonly onJoin: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+  return (
+    <Menu label={`More actions for ${call.name}`}>
+      {(close) => (
+        <>
+          <MenuItem
+            icon="cam"
+            onSelect={() => {
+              close();
+              onJoin();
+            }}
+          >
+            Join call
+          </MenuItem>
+          <CopyMenuItem call={call} onDone={close} />
+          <MenuItem
+            icon="edit"
+            onSelect={() => {
+              close();
+              onRename();
+            }}
+          >
+            Rename
+          </MenuItem>
+          <div className="msep" />
+          <MenuItem
+            icon="trash"
+            danger
+            onSelect={() => {
+              close();
+              onArchive();
+            }}
+          >
+            Archive call
+          </MenuItem>
+        </>
+      )}
+    </Menu>
   );
 }
 

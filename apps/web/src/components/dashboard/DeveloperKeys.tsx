@@ -34,49 +34,96 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
           </span>
         ) : null}
       </div>
-      {fresh && freshKey ? (
-        <div className="reveal" role="status">
-          <span className="tile">
-            <Icon name="check" size={18} />
-          </span>
-          <div className="t">
-            <b>{freshKey.name} is ready</b>
-            <p>Copy the secret now. Chalk shows the full key once, and never again.</p>
-            <SecretField key={fresh.secret} secret={fresh.secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" copiedMessage="Secret copied" />
-          </div>
-        </div>
-      ) : null}
+      {fresh && freshKey ? <FreshReveal name={freshKey.name} secret={fresh.secret} /> : null}
       {keys.length ? (
         <div className="rows keys" role="table" aria-label="API keys">
-          <div className="row head" role="row">
-            <div role="columnheader">Name</div>
-            <div role="columnheader">Key</div>
-            <div role="columnheader">Access</div>
-            <div role="columnheader">Expires</div>
-            <div role="columnheader">Last used</div>
-            <div role="columnheader">
-              <span className="sr">Actions</span>
-            </div>
-          </div>
+          <KeysHead />
           {keys.map((key) => (
             <KeyRow key={key.id} apiKey={key} fresh={fresh?.keyId === key.id} onRotate={onRotate} onRevoke={onRevoke} />
           ))}
         </div>
       ) : (
-        <div className="blank">
-          <span className="tile">
-            <Icon name="key" size={20} />
-          </span>
-          <b>No API keys yet</b>
-          <p>Create one to call the API from your server. Keep it there: browsers get an AccessGrant, never a key.</p>
-          <button type="button" className="btn pri" onClick={onCreate}>
-            <Icon name="plus" size={16} />
-            Create API key
-          </button>
-        </div>
+        <KeysEmpty onCreate={onCreate} />
       )}
       {nextCursor ? <MoreButton label="Show more keys" cursor={nextCursor} load={(keyCursor) => readPage("developer", { keyCursor })} onLoaded={onMore} /> : null}
     </section>
+  );
+}
+
+function FreshReveal({ name, secret }: { readonly name: string; readonly secret: string }) {
+  return (
+    <div className="reveal" role="status">
+      <span className="tile">
+        <Icon name="check" size={18} />
+      </span>
+      <div className="t">
+        <b>{name} is ready</b>
+        <p>Copy the secret now. Chalk shows the full key once, and never again.</p>
+        <SecretField key={secret} secret={secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" copiedMessage="Secret copied" />
+      </div>
+    </div>
+  );
+}
+
+function KeysHead() {
+  return (
+    <div className="row head" role="row">
+      <div role="columnheader">Name</div>
+      <div role="columnheader">Key</div>
+      <div role="columnheader">Access</div>
+      <div role="columnheader">Expires</div>
+      <div role="columnheader">Last used</div>
+      <div role="columnheader">
+        <span className="sr">Actions</span>
+      </div>
+    </div>
+  );
+}
+
+function KeysEmpty({ onCreate }: { readonly onCreate: () => void }) {
+  return (
+    <div className="blank">
+      <span className="tile">
+        <Icon name="key" size={20} />
+      </span>
+      <b>No API keys yet</b>
+      <p>Create one to call the API from your server. Keep it there: browsers get an AccessGrant, never a key.</p>
+      <button type="button" className="btn pri" onClick={onCreate}>
+        <Icon name="plus" size={16} />
+        Create API key
+      </button>
+    </div>
+  );
+}
+
+function KeyActions({ apiKey, onRotate, onRevoke }: { readonly apiKey: KeyDTO; readonly onRotate: (key: KeyDTO) => void; readonly onRevoke: (key: KeyDTO) => void }) {
+  return (
+    <Menu label={`Actions for ${apiKey.name}`}>
+      {(close) => (
+        <>
+          <MenuItem
+            icon="retry"
+            onSelect={() => {
+              close();
+              onRotate(apiKey);
+            }}
+          >
+            Rotate secret
+          </MenuItem>
+          <div className="msep" />
+          <MenuItem
+            icon="trash"
+            danger
+            onSelect={() => {
+              close();
+              onRevoke(apiKey);
+            }}
+          >
+            Revoke key
+          </MenuItem>
+        </>
+      )}
+    </Menu>
   );
 }
 
@@ -120,32 +167,7 @@ function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO
         {apiKey.lastUsedAt ? ago(apiKey.lastUsedAt) : "Never"}
       </div>
       <div role="cell">
-        <Menu label={`Actions for ${apiKey.name}`}>
-          {(close) => (
-            <>
-              <MenuItem
-                icon="retry"
-                onSelect={() => {
-                  close();
-                  onRotate(apiKey);
-                }}
-              >
-                Rotate secret
-              </MenuItem>
-              <div className="msep" />
-              <MenuItem
-                icon="trash"
-                danger
-                onSelect={() => {
-                  close();
-                  onRevoke(apiKey);
-                }}
-              >
-                Revoke key
-              </MenuItem>
-            </>
-          )}
-        </Menu>
+        <KeyActions apiKey={apiKey} onRotate={onRotate} onRevoke={onRevoke} />
       </div>
     </div>
   );

@@ -16,6 +16,9 @@ function useSignInRedirect(): () => void {
   }, [router]);
 }
 
+/** Changes the data on screen after a write; `refresh: false` skips the follow-up read. */
+export type Update<T> = (change: (data: T) => T, options?: { refresh?: boolean }) => void;
+
 export function useLoad<T>(load: () => Promise<T>, key: string, polling?: Polling<T>) {
   const [state, setState] = useState<Load<T>>({ kind: "loading" });
   const toSignIn = useSignInRedirect();

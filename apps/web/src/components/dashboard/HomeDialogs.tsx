@@ -130,6 +130,29 @@ export function JoinLinkField() {
   );
 }
 
+/** The typed name, or the previous one when the new text goes past the name limit and isn't shorter. */
+function typed(next: string, current: string): string {
+  const nextLength = Array.from(next).length;
+  return nextLength <= spaceNameMaxCodePoints || nextLength <= Array.from(current).length ? next : current;
+}
+
+function RenameField({ value, bad, onChange }: { readonly value: string; readonly bad: boolean; readonly onChange: (value: string) => void }) {
+  return (
+    <div className="field" style={{ marginTop: "var(--space-4)" }}>
+      <label className="lbl" htmlFor="rename-input">
+        Name
+      </label>
+      <input id="rename-input" className={bad ? "inp bad" : "inp"} value={value} autoComplete="off" aria-invalid={bad} aria-describedby={bad ? "rename-error" : undefined} onChange={(event) => onChange(typed(event.target.value, value))} />
+      {bad ? (
+        <p className="err" id="rename-error">
+          <Icon name="alert" />
+          Give the call a name.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonly call: CallDTO; readonly page: "home" | "call"; readonly link?: string; readonly onClose: () => void; readonly onRenamed: (call: CallDTO) => void }) {
   const [value, setValue] = useState(call.name);
   const [bad, setBad] = useState(false);
@@ -170,31 +193,14 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
         </>
       }
     >
-      <div className="field" style={{ marginTop: "var(--space-4)" }}>
-        <label className="lbl" htmlFor="rename-input">
-          Name
-        </label>
-        <input
-          id="rename-input"
-          className={bad ? "inp bad" : "inp"}
-          value={value}
-          autoComplete="off"
-          aria-invalid={bad}
-          aria-describedby={bad ? "rename-error" : undefined}
-          onChange={(event) => {
-            const next = event.target.value;
-            const nextLength = Array.from(next).length;
-            if (nextLength <= spaceNameMaxCodePoints || nextLength <= Array.from(value).length) setValue(next);
-            setBad(false);
-          }}
-        />
-        {bad ? (
-          <p className="err" id="rename-error">
-            <Icon name="alert" />
-            Give the call a name.
-          </p>
-        ) : null}
-      </div>
+      <RenameField
+        value={value}
+        bad={bad}
+        onChange={(next) => {
+          setValue(next);
+          setBad(false);
+        }}
+      />
     </Dialog>
   );
 }
