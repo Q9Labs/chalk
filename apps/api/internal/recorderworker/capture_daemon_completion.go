@@ -10,7 +10,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func (d *CaptureDaemon) completeCapture(ctx context.Context, lease recordingpipeline.LeaseInput, expiresAt time.Time, retry bool) error {
@@ -152,27 +151,6 @@ func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recor
 		return fmt.Errorf("report capture completion failure (%s): %w", completionFailureDetail(cause), reportErr)
 	}
 	return nil
-}
-
-func captureLeaseInput(claim ClaimResult, leaseFor time.Duration) (recordingpipeline.LeaseInput, error) {
-	jobID, err := utilities.ParseID(claim.Envelope.JobID)
-	if err != nil || claim.Envelope.AttemptCount <= 0 || claim.Envelope.FencingGeneration <= 0 || claim.Envelope.CaptureEpoch <= 0 || claim.LeaseToken == "" || claim.LeaseOwner == "" || claim.LeaseExpiresAt.IsZero() {
-		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: claim authority", ErrInvalidCaptureDaemon)
-	}
-	input := recordingpipeline.LeaseInput{
-		JobID:             jobID,
-		AttemptCount:      claim.Envelope.AttemptCount,
-		FencingGeneration: claim.Envelope.FencingGeneration,
-		LeaseToken:        claim.LeaseToken,
-		LeaseOwner:        claim.LeaseOwner,
-		LeaseFor:          leaseFor,
-		CaptureEpoch:      claim.Envelope.CaptureEpoch,
-		EnvelopeDigest:    append([]byte(nil), claim.EnvelopeDigest...),
-	}
-	if err := recordingpipeline.ValidateLeaseInput(input); err != nil {
-		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: %w", ErrInvalidCaptureDaemon, err)
-	}
-	return input, nil
 }
 
 func renewedCaptureLease(previous recordingpipeline.LeaseInput, job recordingpipeline.Job, leaseFor time.Duration, now time.Time) (recordingpipeline.LeaseInput, error) {

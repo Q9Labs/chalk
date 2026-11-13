@@ -210,21 +210,6 @@ func (d *CaptureDaemon) runLoop(ctx, claimCtx context.Context) error {
 	}
 }
 
-func (d *CaptureDaemon) claimJob(ctx context.Context, claimRequestID utilities.ID) (ClaimResult, error) {
-	for {
-		if d.admissionClosed.Load() {
-			return ClaimResult{}, ErrWorkerDraining
-		}
-		claim, err := d.control.ClaimJob(ctx, claimRequestID, d.config.Lease)
-		if err == nil || !errors.Is(err, ErrControlPlaneRetryable) {
-			return claim, err
-		}
-		if waitErr := d.config.Wait(ctx, d.config.ClaimRetryWait); waitErr != nil {
-			return ClaimResult{}, errors.Join(ErrCaptureDaemonStopped, waitErr)
-		}
-	}
-}
-
 // CloseAdmission stops claim and restart loops without interrupting held work.
 func (d *CaptureDaemon) CloseAdmission() {
 	if d != nil && d.admissionClosed.CompareAndSwap(false, true) {

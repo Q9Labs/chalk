@@ -94,21 +94,6 @@ func (d *RenderDaemon) Run(ctx context.Context) error {
 	}
 }
 
-func (d *RenderDaemon) claimJob(ctx context.Context, claimRequestID utilities.ID) (ClaimResult, error) {
-	for {
-		if d.draining.Load() {
-			return ClaimResult{}, ErrWorkerDraining
-		}
-		claim, err := d.control.ClaimJob(ctx, claimRequestID, d.config.Lease)
-		if err == nil || !errors.Is(err, ErrControlPlaneRetryable) {
-			return claim, err
-		}
-		if waitErr := d.config.Wait(ctx, d.config.ClaimRetryWait); waitErr != nil {
-			return ClaimResult{}, errors.Join(ErrRenderDaemonStopped, waitErr)
-		}
-	}
-}
-
 // Drain prevents a new claim without canceling an in-progress render. A claim
 // already in flight is treated as existing work and is allowed to finish.
 func (d *RenderDaemon) Drain() {
@@ -196,27 +181,6 @@ func (d *RenderDaemon) reportAttemptFailure(ctx context.Context, lease recording
 		return fmt.Errorf("report recorder render failure: %w", errors.Join(cause, reportErr))
 	}
 	return nil
-}
-
-func renderLeaseInput(claim ClaimResult, leaseFor time.Duration) (recordingpipeline.LeaseInput, error) {
-	jobID, err := utilities.ParseID(claim.Envelope.JobID)
-	if err != nil || !isRenderWorkerJobKind(claim.Envelope.Kind) || claim.Envelope.AttemptCount <= 0 || claim.Envelope.FencingGeneration <= 0 || claim.Envelope.CaptureEpoch <= 0 || claim.LeaseToken == "" || claim.LeaseOwner == "" || claim.LeaseExpiresAt.IsZero() {
-		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: claim authority", ErrInvalidRenderDaemon)
-	}
-	input := recordingpipeline.LeaseInput{
-		JobID:             jobID,
-		AttemptCount:      claim.Envelope.AttemptCount,
-		FencingGeneration: claim.Envelope.FencingGeneration,
-		LeaseToken:        claim.LeaseToken,
-		LeaseOwner:        claim.LeaseOwner,
-		LeaseFor:          leaseFor,
-		CaptureEpoch:      claim.Envelope.CaptureEpoch,
-		EnvelopeDigest:    append([]byte(nil), claim.EnvelopeDigest...),
-	}
-	if err := recordingpipeline.ValidateLeaseInput(input); err != nil {
-		return recordingpipeline.LeaseInput{}, fmt.Errorf("%w: %w", ErrInvalidRenderDaemon, err)
-	}
-	return input, nil
 }
 
 func renewedRenderLease(previous recordingpipeline.LeaseInput, expectedKind recordingpipeline.JobKind, job recordingpipeline.Job, leaseFor time.Duration, now time.Time) (recordingpipeline.LeaseInput, error) {
