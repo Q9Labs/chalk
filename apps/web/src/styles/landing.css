@@ -400,7 +400,9 @@
   overflow: hidden;
   --mavring: var(--x-tile);
 }
-.site .xcall[data-theme="light"] {
+/* The preview wears the site's theme from the first paint, until its own sun button pins one. */
+.site .xcall[data-theme="light"],
+.site[data-chalk-theme="light"] .xcall:not([data-theme]) {
   --x-canvas: #f3f3f5;
   --x-surface: #fff;
   --x-raised: #ececf0;
@@ -413,7 +415,8 @@
   --x-muted: #5d5f66;
   --x-ring: #1b1c1f;
 }
-.site .xwrap:has(.xcall[data-theme="light"]) {
+.site .xwrap:has(.xcall[data-theme="light"]),
+.site[data-chalk-theme="light"] .xwrap:has(.xcall:not([data-theme])) {
   background: var(--site-paper);
 }
 .site .xcall button {
