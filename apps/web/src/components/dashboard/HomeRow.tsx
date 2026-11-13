@@ -61,7 +61,7 @@ function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCal
             Join call
           </MenuItem>
           {phone ? <CopyMenuItem call={call} onDone={close} /> : null}
-          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} />
+          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} archiveIcon="archive" />
         </>
       )}
     </Menu>
