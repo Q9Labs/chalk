@@ -8,12 +8,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: SQL
 
   def prepare_recording(
-         _connection,
-         episode,
-         %{name: :start_recording} = operation,
-         policy,
-         state
-       ) do
+        _connection,
+        episode,
+        %{name: :start_recording} = operation,
+        policy,
+        state
+      ) do
     recording_id = operation.payload["recordingId"]
 
     with :ok <- validate_recording_episode(policy),
@@ -35,12 +35,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
   end
 
   def prepare_recording(
-         connection,
-         episode,
-         %{name: :stop_recording} = operation,
-         _policy,
-         state
-       ) do
+        connection,
+        episode,
+        %{name: :stop_recording} = operation,
+        _policy,
+        state
+      ) do
     recording_id = operation.payload["recordingId"]
     params = Scope.episode(episode) ++ [Scope.uuid(recording_id)]
 
@@ -61,8 +61,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
     end
   end
 
-
-
   defp validate_recording_policy(%{artifact_policy: artifact_policy}, operation)
        when is_map(artifact_policy) do
     with "episode_config.v2" <- artifact_policy["schema_version"],
@@ -79,12 +77,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
   defp validate_recording_policy(_policy, _operation),
     do: {:error, :recording_policy_disabled}
 
-
-
   defp validate_recording_episode(%{status: "active"}), do: :ok
   defp validate_recording_episode(_policy), do: {:error, :episode_ended}
-
-
 
   defp derive_recording_reservation(episode, %{
          artifact_policy: artifact_policy,
@@ -117,8 +111,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
 
   defp derive_recording_reservation(_episode, _policy),
     do: {:error, :recording_policy_disabled}
-
-
 
   def system_recording_start?(payload) do
     payload["actorKind"] == "system" and payload["actorId"] == "recording_policy" and

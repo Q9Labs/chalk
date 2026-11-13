@@ -21,7 +21,8 @@ defmodule ChalkSync.Operations.Probe.Workers do
          :ok <- observe_process(RetentionScheduler),
          {:ok, fanout} <-
            Report.observe(PostgresNotifications, fn -> safe_health(PostgresNotifications) end),
-         {:ok, lifecycle} <- Report.observe(LifecycleConsumer, fn -> safe_health(LifecycleConsumer) end),
+         {:ok, lifecycle} <-
+           Report.observe(LifecycleConsumer, fn -> safe_health(LifecycleConsumer) end),
          {:ok, external_operation_failures} <- observe_external_operation_lanes(boot?),
          {:ok, retention} <-
            Report.observe(RetentionScheduler, fn -> safe_health(RetentionScheduler) end),
@@ -49,7 +50,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
     end
   end
 
-
   defp validate_lifecycle_health(_health, true), do: :ok
 
   defp validate_lifecycle_health(health, false) do
@@ -62,7 +62,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
       true -> :ok
     end
   end
-
 
   @doc false
   def validate_external_operation_health(_health, true), do: :ok
@@ -91,7 +90,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
     end
   end
 
-
   defp overdue_external_operation_work?(health) do
     active_work_age_ms = Map.get(health, :active_work_age_ms)
     active_work_timeout_ms = Map.get(health, :active_work_timeout_ms)
@@ -101,11 +99,9 @@ defmodule ChalkSync.Operations.Probe.Workers do
       active_work_age_ms > active_work_timeout_ms
   end
 
-
   defp external_operation_stale?(health, now) do
     now - health.last_success_at_ms > external_operation_staleness_timeout_ms()
   end
-
 
   defp active_external_operation_work?(health) do
     active_work_age_ms = Map.get(health, :active_work_age_ms)
@@ -115,7 +111,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
       is_integer(active_work_timeout_ms) and active_work_timeout_ms > 0 and
       active_work_age_ms <= active_work_timeout_ms
   end
-
 
   @doc false
   def external_operation_staleness_timeout_ms do
@@ -127,7 +122,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
     |> max(@external_operation_staleness_floor_ms)
     |> min(@external_operation_staleness_ceiling_ms)
   end
-
 
   defp safe_health(PostgresNotifications) do
     {:ok, PostgresNotifications.health()}
@@ -147,7 +141,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
     :exit, _reason -> {:error, :retention_cleanup_unavailable}
   end
 
-
   @doc false
   def observe_external_operation_lanes(boot?) do
     Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn {lane, name},
@@ -158,7 +151,6 @@ defmodule ChalkSync.Operations.Probe.Workers do
       end
     end)
   end
-
 
   defp observe_external_operation_lane(lane, name, boot?) do
     with :ok <- observe_process(name),
@@ -173,10 +165,8 @@ defmodule ChalkSync.Operations.Probe.Workers do
     end
   end
 
-
   defp external_operation_check(:local), do: :external_operation_consumer_local
   defp external_operation_check(:provider), do: :external_operation_consumer_provider
-
 
   defp safe_external_operation_health(name) do
     {:ok, ExternalOperationConsumer.health(name)}
@@ -184,13 +174,11 @@ defmodule ChalkSync.Operations.Probe.Workers do
     :exit, _reason -> {:error, :external_operation_consumer_unavailable}
   end
 
-
   defp observe_process(name) do
     Report.observe(name, fn ->
       if is_pid(Process.whereis(name)), do: :ok, else: {:error, :required_process_unavailable}
     end)
   end
-
 
   defp consumer_measurements(health) do
     health

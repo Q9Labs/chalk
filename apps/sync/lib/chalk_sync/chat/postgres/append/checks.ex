@@ -24,7 +24,6 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
        else: {:error, :rate_limited}
   end
 
-
   # The Space stream lock is held here, so two sends from one person, even on two Sync nodes,
   # cannot both pass the window or the caps.
   def within_person_caps(connection, identity, encoded_bytes) do
@@ -43,20 +42,16 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
        else: {:error, :rate_limited}
   end
 
-
   defp person_count(connection, identity, sql, params) do
     [[count]] = Postgrex.query!(connection, sql, person_params(identity) ++ params).rows
     count
   end
 
-
   defp person_params(identity),
     do: Store.space_params(identity.episode) ++ [Store.uuid(identity.participant_id)]
 
-
   defp person_limits,
     do: Map.merge(@person_limits, Application.get_env(:chalk_sync, :chat_person_limits, %{}))
-
 
   def attachments(_connection, _identity, [], _query), do: {:ok, []}
 
@@ -89,7 +84,6 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
     end
   end
 
-
   # Cheap checks before the Space stream lock, so a refused flood or a missing file never holds
   # it. A retry whose original committed after the first duplicate lookup can fail them, because
   # the original now fills the window and holds its files, so it goes on to the duplicate lookup
@@ -109,14 +103,12 @@ defmodule ChalkSync.Chat.Postgres.Append.Checks do
     end
   end
 
-
   def observe(input, key) do
     case Map.get(input, key) do
       observer when is_function(observer, 0) -> observer.()
       _other -> :ok
     end
   end
-
 
   defp attachment_state_error(rows) do
     if Enum.any?(rows, fn [_id, _name, _mime, _bytes, status, _owner, _generation] ->

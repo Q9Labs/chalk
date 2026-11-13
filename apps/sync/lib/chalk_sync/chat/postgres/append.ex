@@ -70,7 +70,12 @@ defmodule ChalkSync.Chat.Postgres.Append do
       nil ->
         Checks.observe(input, :attachment_commit_observer)
 
-        case Checks.attachments(connection, identity, input.attachment_ids, SQL.lock_attachments()) do
+        case Checks.attachments(
+               connection,
+               identity,
+               input.attachment_ids,
+               SQL.lock_attachments()
+             ) do
           {:ok, attachments} ->
             append_new_message(
               connection,

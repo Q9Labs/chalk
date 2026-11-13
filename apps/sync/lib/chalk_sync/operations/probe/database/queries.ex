@@ -16,8 +16,6 @@ defmodule ChalkSync.Operations.Probe.Database.Queries do
     """
   end
 
-
-
   def migration_query do
     """
     select coalesce(max(version_id), 0)
@@ -29,8 +27,6 @@ defmodule ChalkSync.Operations.Probe.Database.Queries do
     where is_applied
     """
   end
-
-
 
   def pending_age_query do
     """
@@ -89,8 +85,6 @@ defmodule ChalkSync.Operations.Probe.Database.Queries do
     ) oldest_due on true
     """
   end
-
-
 
   def replication_query do
     """

@@ -150,14 +150,20 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   @impl true
   def mark_read(%Identity{} = identity, sequence) when is_binary(sequence) do
-    Database.guard(fn -> Marks.record_read(identity, sequence) end, {:error, :dependency_unavailable})
+    Database.guard(
+      fn -> Marks.record_read(identity, sequence) end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   def mark_read(%Identity{}, _sequence), do: {:error, :invalid_payload}
 
   @impl true
   def react(%Identity{} = identity, input) do
-    Database.guard(fn -> Marks.set_reaction(identity, input) end, {:error, :dependency_unavailable})
+    Database.guard(
+      fn -> Marks.set_reaction(identity, input) end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   @impl true

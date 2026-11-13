@@ -40,7 +40,6 @@ defmodule ChalkSync.Chat.Postgres.Store do
     end
   end
 
-
   defp participant_available?(_connection, _identity, "active", _allow_pending), do: true
   defp participant_available?(_connection, _identity, "joining", true), do: true
 
@@ -49,29 +48,23 @@ defmodule ChalkSync.Chat.Postgres.Store do
 
   defp participant_available?(_connection, _identity, _status, _allow_pending), do: false
 
-
   def require_capability(profile, capability) do
     if capability in profile.capabilities, do: :ok, else: {:error, :capability_denied}
   end
-
 
   def transaction_result({:ok, result}), do: {:ok, result}
   def transaction_result({:error, {:error, reason}}), do: {:error, reason}
   def transaction_result({:error, _reason}), do: {:error, :dependency_unavailable}
 
-
   def ordered_capabilities(capabilities) do
     Enum.filter(@capabilities, &(&1 in capabilities))
   end
-
 
   def configure_transaction(connection) do
     Postgrex.query!(connection, TransactionSettings.sql(:default), [])
   end
 
-
   def empty_head, do: %{head_sequence: nil, retained_floor_sequence: nil}
-
 
   def receipt([participant_id, generation, sequence, %DateTime{} = read_at]) do
     %{
@@ -91,14 +84,11 @@ defmodule ChalkSync.Chat.Postgres.Store do
     ])
   end
 
-
   def episode_params(episode) do
     [uuid(episode.tenant_id), uuid(episode.space_id), uuid(episode.episode_id)]
   end
 
-
   def space_params(episode), do: [uuid(episode.tenant_id), uuid(episode.space_id)]
-
 
   def uuid(value), do: UUID.dump!(value)
 

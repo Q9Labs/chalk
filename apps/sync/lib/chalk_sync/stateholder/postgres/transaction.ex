@@ -1,7 +1,18 @@
 defmodule ChalkSync.Stateholder.Postgres.Transaction do
   @moduledoc false
 
+  alias ChalkSync.Database
   alias ChalkSync.Database.TransactionSettings
+
+  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
+
+  def run(episode, fun, options \\ []) do
+    Postgrex.transaction(
+      Database.connection(episode),
+      fun,
+      Keyword.put(options, :timeout, @transaction_timeout_ms)
+    )
+  end
 
   # Two round trips. The settings query returns the synchronous_commit value Postgres
   # now applies to this transaction, and the rollout row is read under its share lock.

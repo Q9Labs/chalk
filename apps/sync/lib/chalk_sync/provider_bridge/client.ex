@@ -7,22 +7,10 @@ defmodule ChalkSync.ProviderBridge.Client do
   Erlang's `:httpc` and does not add a dependency to the Sync application.
   """
 
+  alias ChalkSync.ProviderBridge.Client.Options
+  alias ChalkSync.ProviderBridge.Client.Payload
   alias ChalkSync.ProviderBridge.Codec
-  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.UUID
-
-  @default_request_bytes 16 * 1024
-  @default_response_bytes 64 * 1024
-  @default_connect_timeout 2_000
-  @default_request_timeout 5_000
-  @default_observation_limit 100
-  @max_operation_id_bytes 128
-  @max_identifier_bytes 256
-  @local_hosts ["localhost", "127.0.0.1", "::1"]
-  @effects ~w(media.grant_publication media.revoke_publication media.remove_participant media.end_episode recording.start recording.stop)
-  @sources ~w(microphone camera screen)
-  @recording_policy_snapshot_version "episode_config.v2"
 
   @type transport_response ::
           {:ok, non_neg_integer(), [{binary(), binary()}], binary()}
@@ -46,17 +34,11 @@ defmodule ChalkSync.ProviderBridge.Client do
 
   @enforce_keys [:base_url]
   defstruct [
-    :base_url,
-    transport: {ChalkSync.ProviderBridge.Transport.ErlangHTTP, :request},
-    headers: %{},
-    max_request_bytes: @default_request_bytes,
-    max_response_bytes: @default_response_bytes,
-    max_observations: @default_observation_limit,
-    max_publications: @default_observation_limit,
-    connect_timeout: @default_connect_timeout,
-    request_timeout: @default_request_timeout,
-    tls: []
-  ]
+              :base_url,
+              transport: {ChalkSync.ProviderBridge.Transport.ErlangHTTP, :request},
+              headers: %{},
+              tls: []
+            ] ++ Options.limit_defaults()
 
   @spec new(keyword() | map()) :: {:ok, t()} | {:error, atom()}
   def new(options) when is_map(options), do: new(Map.to_list(options))
@@ -64,26 +46,18 @@ defmodule ChalkSync.ProviderBridge.Client do
   def new(options) when is_list(options) do
     base_url = Keyword.get(options, :base_url)
 
-    with {:ok, base_url} <- validate_endpoint(base_url),
-         {:ok, headers} <- normalize_headers(Keyword.get(options, :headers, %{})),
-         :ok <- positive_options(options),
-         {:ok, transport} <- normalize_transport(Keyword.get(options, :transport)),
-         {:ok, tls} <- normalize_tls(base_url, transport, options) do
-      headers = Map.merge(headers, context_headers(Keyword.get(options, :context, %{})))
+    with {:ok, base_url} <- Options.validate_endpoint(base_url),
+         {:ok, headers} <- Options.normalize_headers(Keyword.get(options, :headers, %{})),
+         {:ok, limits} <- Options.limits(options),
+         {:ok, transport} <- Options.normalize_transport(Keyword.get(options, :transport)),
+         {:ok, tls} <- Options.normalize_tls(base_url, transport, options) do
+      headers = Map.merge(headers, Options.context_headers(Keyword.get(options, :context, %{})))
 
       {:ok,
-       %__MODULE__{
-         base_url: base_url,
-         transport: transport,
-         headers: headers,
-         max_request_bytes: Keyword.get(options, :max_request_bytes, @default_request_bytes),
-         max_response_bytes: Keyword.get(options, :max_response_bytes, @default_response_bytes),
-         max_observations: Keyword.get(options, :max_observations, @default_observation_limit),
-         max_publications: Keyword.get(options, :max_publications, @default_observation_limit),
-         connect_timeout: Keyword.get(options, :connect_timeout, @default_connect_timeout),
-         request_timeout: Keyword.get(options, :request_timeout, @default_request_timeout),
-         tls: tls
-       }}
+       struct!(
+         __MODULE__,
+         [base_url: base_url, transport: transport, headers: headers, tls: tls] ++ limits
+       )}
     end
   end
 
@@ -99,7 +73,7 @@ defmodule ChalkSync.ProviderBridge.Client do
 
   @spec with_context(t(), map() | keyword()) :: t()
   def with_context(%__MODULE__{} = client, context) do
-    %{client | headers: Map.merge(client.headers, context_headers(context))}
+    %{client | headers: Map.merge(client.headers, Options.context_headers(context))}
   end
 
   @spec ready(t()) :: :ok | {:error, term()}
@@ -121,8 +95,8 @@ defmodule ChalkSync.ProviderBridge.Client do
           {:ok, ChalkSync.MediaPlane.outcome()} | {:error, term()}
   def post_operation(%__MODULE__{} = client, operation_id, payload)
       when is_binary(operation_id) and is_map(payload) do
-    with :ok <- validate_operation_id(operation_id),
-         {:ok, request_payload} <- normalize_operation_payload(payload),
+    with :ok <- Payload.validate_operation_id(operation_id),
+         {:ok, request_payload} <- Payload.normalize_operation_payload(payload),
          {:ok, body} <- encode_bounded(request_payload, client.max_request_bytes),
          {:ok, response} <- request(client, :post, operation_path(client, operation_id), body),
          {:ok, decoded} <-
@@ -141,8 +115,8 @@ defmodule ChalkSync.ProviderBridge.Client do
   def observe_episode_publications(client, episode, options \\ [])
 
   def observe_episode_publications(%__MODULE__{} = client, %EpisodeKey{} = episode, options) do
-    with :ok <- validate_uuid(episode.tenant_id),
-         :ok <- validate_uuid(episode.episode_id),
+    with :ok <- Payload.validate_uuid(episode.tenant_id),
+         :ok <- Payload.validate_uuid(episode.episode_id),
          {:ok, query} <- observation_query(client, episode, options),
          {:ok, response} <- request(client, :get, observation_path(client, query), <<>>),
          {:ok, observation} <-
@@ -260,149 +234,6 @@ defmodule ChalkSync.ProviderBridge.Client do
   defp observation_path(client, query),
     do: client.base_url <> "/internal/v1/sync/media-observations?" <> query
 
-  defp normalize_operation_payload(payload) do
-    payload =
-      Enum.reduce(payload, %{}, fn {key, value}, acc ->
-        key = if is_atom(key), do: Atom.to_string(key), else: key
-        Map.put(acc, key, value)
-      end)
-
-    with {:ok, effect} <- normalize_effect(payload["effect"] || payload[:effect]),
-         {:ok, tenant_id} <- required_payload_uuid(payload, "tenant_id"),
-         {:ok, episode_id} <- required_payload_uuid(payload, "episode_id"),
-         {:ok, result} <- optional_payload_fields(payload),
-         {:ok, recording_reservation} <- recording_reservation(payload, effect) do
-      result =
-        result
-        |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "episode_id" => episode_id})
-        |> Map.take(
-          ~w(effect tenant_id episode_id participant_id participant_generation publication_source control_revision recording_id recording_reservation)
-        )
-
-      if is_nil(recording_reservation),
-        do: {:ok, Map.delete(result, "recording_reservation")},
-        else: {:ok, Map.put(result, "recording_reservation", recording_reservation)}
-    end
-  end
-
-  defp recording_reservation(payload, "recording.start") do
-    case Map.fetch(payload, "recording_reservation") do
-      {:ok, reservation} -> normalize_recording_reservation(reservation)
-      :error -> {:error, {:terminal_failure, :invalid_contract}}
-    end
-  end
-
-  defp recording_reservation(payload, "recording.stop") do
-    if Map.has_key?(payload, "recording_reservation"),
-      do: {:error, {:terminal_failure, :invalid_contract}},
-      else: {:ok, nil}
-  end
-
-  defp recording_reservation(payload, _effect) do
-    if Map.has_key?(payload, "recording_reservation"),
-      do: {:error, {:terminal_failure, :invalid_contract}},
-      else: {:ok, nil}
-  end
-
-  defp normalize_recording_reservation(reservation) when is_map(reservation) do
-    reservation =
-      Enum.reduce(reservation, %{}, fn {key, value}, acc ->
-        key = if is_atom(key), do: Atom.to_string(key), else: key
-        Map.put(acc, key, value)
-      end)
-
-    required =
-      ~w(space_id participant_count max_duration_seconds input_bitrate_bps policy_snapshot_version)
-
-    if Map.keys(reservation) |> Enum.sort() != Enum.sort(required),
-      do: {:error, {:terminal_failure, :invalid_contract}},
-      else: validate_recording_reservation(reservation)
-  end
-
-  defp normalize_recording_reservation(_reservation),
-    do: {:error, {:terminal_failure, :invalid_contract}}
-
-  defp validate_recording_reservation(reservation) do
-    with :ok <- validate_uuid(Map.fetch!(reservation, "space_id")),
-         true <-
-           is_integer(Map.fetch!(reservation, "participant_count")) and
-             Map.fetch!(reservation, "participant_count") in 1..10,
-         true <-
-           is_integer(Map.fetch!(reservation, "max_duration_seconds")) and
-             Map.fetch!(reservation, "max_duration_seconds") in 1..RecordingPlane.maximum_duration_seconds(),
-         true <-
-           is_integer(Map.fetch!(reservation, "input_bitrate_bps")) and
-             Map.fetch!(reservation, "input_bitrate_bps") in 1..4_000_000,
-         true <-
-           Map.fetch!(reservation, "policy_snapshot_version") ==
-             @recording_policy_snapshot_version do
-      {:ok, reservation}
-    else
-      _ -> {:error, {:terminal_failure, :invalid_contract}}
-    end
-  end
-
-  defp optional_payload_fields(payload) do
-    fields = [
-      {"participant_id", :uuid},
-      {"participant_generation", :positive_integer},
-      {"publication_source", :source},
-      {"control_revision", :positive_integer},
-      {"recording_id", :uuid}
-    ]
-
-    Enum.reduce_while(fields, {:ok, %{}}, &put_optional_payload_field(&1, &2, payload))
-  end
-
-  defp put_optional_payload_field({key, kind}, {:ok, acc}, payload) do
-    case Map.fetch(payload, key) do
-      :error -> {:cont, {:ok, acc}}
-      {:ok, value} -> validate_optional_payload_field(key, kind, value, acc)
-    end
-  end
-
-  defp validate_optional_payload_field(key, kind, value, acc) do
-    case validate_payload_value(kind, value) do
-      :ok -> {:cont, {:ok, Map.put(acc, key, normalize_payload_value(kind, value))}}
-      {:error, reason} -> {:halt, {:error, reason}}
-    end
-  end
-
-  defp validate_payload_value(:uuid, value), do: validate_uuid(value)
-
-  defp validate_payload_value(:positive_integer, value),
-    do: if(is_integer(value) and value > 0, do: :ok, else: {:error, :invalid_contract})
-
-  defp validate_payload_value(:source, value),
-    do: if(source_string(value), do: :ok, else: {:error, :invalid_source})
-
-  defp normalize_payload_value(:source, value), do: source_string(value)
-  defp normalize_payload_value(_kind, value), do: value
-
-  defp required_payload_uuid(payload, key) do
-    case Map.fetch(payload, key) do
-      {:ok, value} ->
-        if(validate_uuid(value) == :ok, do: {:ok, value}, else: {:error, :invalid_contract})
-
-      :error ->
-        {:error, {:terminal_failure, :invalid_contract}}
-    end
-  end
-
-  defp normalize_effect(effect) when is_atom(effect), do: normalize_effect(Atom.to_string(effect))
-  defp normalize_effect(effect) when is_binary(effect) and effect in @effects, do: {:ok, effect}
-  defp normalize_effect(_effect), do: {:error, {:terminal_failure, :invalid_contract}}
-
-  defp source_string(source) when is_atom(source) do
-    value = Atom.to_string(source)
-    if value in @sources, do: value, else: nil
-  end
-
-  defp source_string(source) when is_binary(source),
-    do: if(source in @sources, do: source, else: nil)
-
-  defp source_string(_source), do: nil
-
   defp transport_failure(:timeout), do: {:retryable_failure, :timeout}
   defp transport_failure(:connect_timeout), do: {:retryable_failure, :timeout}
   defp transport_failure(:econnrefused), do: {:retryable_failure, :provider_unavailable}
@@ -422,100 +253,6 @@ defmodule ChalkSync.ProviderBridge.Client do
     _ -> {:error, {:terminal_failure, :invalid_contract}}
   end
 
-  defp validate_endpoint(base_url) when is_binary(base_url) do
-    case URI.parse(base_url) do
-      %URI{scheme: "https", host: host, userinfo: nil, query: nil, fragment: nil}
-      when is_binary(host) and host != "" ->
-        {:ok, String.trim_trailing(base_url, "/")}
-
-      %URI{scheme: "http", host: host, userinfo: nil, query: nil, fragment: nil}
-      when host in @local_hosts ->
-        {:ok, String.trim_trailing(base_url, "/")}
-
-      %URI{scheme: "http", host: host} when is_binary(host) ->
-        {:error, :insecure_endpoint}
-
-      _ ->
-        {:error, :invalid_endpoint}
-    end
-  end
-
-  defp validate_endpoint(_base_url), do: {:error, :invalid_endpoint}
-
-  defp normalize_transport(nil),
-    do: {:ok, {ChalkSync.ProviderBridge.Transport.ErlangHTTP, :request}}
-
-  defp normalize_transport(transport) when is_function(transport, 5), do: {:ok, transport}
-  defp normalize_transport(transport) when is_function(transport, 1), do: {:ok, transport}
-
-  defp normalize_transport({module, function}) when is_atom(module) and is_atom(function),
-    do: {:ok, {module, function}}
-
-  defp normalize_transport(_transport), do: {:error, :invalid_transport}
-
-  defp normalize_tls(base_url, transport, options) do
-    tls = [
-      certfile: Keyword.get(options, :tls_certfile, Keyword.get(options, :certfile)),
-      keyfile: Keyword.get(options, :tls_keyfile, Keyword.get(options, :keyfile)),
-      cacertfile: Keyword.get(options, :tls_cacertfile, Keyword.get(options, :cacertfile))
-    ]
-
-    if https?(base_url) and default_transport?(transport) and not complete_tls?(tls),
-      do: {:error, :mtls_configuration_required},
-      else: {:ok, Enum.reject(tls, fn {_key, value} -> is_nil(value) end)}
-  end
-
-  defp default_transport?({ChalkSync.ProviderBridge.Transport.ErlangHTTP, :request}), do: true
-  defp default_transport?(_transport), do: false
-
-  defp complete_tls?(tls),
-    do: Enum.all?(tls, fn {_key, value} -> is_binary(value) and byte_size(value) > 0 end)
-
-  defp https?(url), do: URI.parse(url).scheme == "https"
-
-  defp normalize_headers(headers) when is_map(headers) do
-    Enum.reduce_while(headers, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
-      key = normalize_header_key(key)
-
-      if is_binary(key) and is_binary(value) and byte_size(value) <= @max_identifier_bytes,
-        do: {:cont, {:ok, Map.put(acc, key, value)}},
-        else: {:halt, {:error, :invalid_headers}}
-    end)
-  end
-
-  defp normalize_headers(headers) when is_list(headers), do: normalize_headers(Map.new(headers))
-  defp normalize_headers(_headers), do: {:error, :invalid_headers}
-
-  defp normalize_header_key(key) when is_atom(key),
-    do: key |> Atom.to_string() |> String.downcase()
-
-  defp normalize_header_key(key) when is_binary(key), do: String.downcase(key)
-  defp normalize_header_key(_key), do: nil
-
-  defp context_headers(context) when is_list(context), do: context_headers(Map.new(context))
-
-  defp context_headers(context) when is_map(context) do
-    Enum.reduce(context, %{}, &put_context_header/2)
-  end
-
-  defp context_headers(_context), do: %{}
-
-  defp put_context_header({key, value}, headers) when is_binary(value) do
-    case context_header_name(key) do
-      nil -> headers
-      name -> Map.put(headers, name, value)
-    end
-  end
-
-  defp put_context_header(_entry, headers), do: headers
-
-  defp context_header_name(key) when key in [:journey_id, "journey_id", "x-chalk-journey-id"],
-    do: "x-chalk-journey-id"
-
-  defp context_header_name(key) when key in [:traceparent, "traceparent"], do: "traceparent"
-  defp context_header_name(key) when key in [:tracestate, "tracestate"], do: "tracestate"
-  defp context_header_name(_key), do: nil
-
   defp request_headers(headers, :post),
     do:
       headers
@@ -528,51 +265,4 @@ defmodule ChalkSync.ProviderBridge.Client do
       headers
       |> Map.put_new("accept", "application/json")
       |> Enum.map(fn {key, value} -> {key, value} end)
-
-  defp positive_options(options) do
-    keys = [
-      :max_request_bytes,
-      :max_response_bytes,
-      :max_observations,
-      :max_publications,
-      :connect_timeout,
-      :request_timeout
-    ]
-
-    if Enum.all?(keys, fn key ->
-         is_integer(Keyword.get(options, key, default_option(key))) and
-           Keyword.get(options, key, default_option(key)) > 0
-       end), do: :ok, else: {:error, :invalid_options}
-  end
-
-  defp default_option(:max_request_bytes), do: @default_request_bytes
-  defp default_option(:max_response_bytes), do: @default_response_bytes
-  defp default_option(:max_observations), do: @default_observation_limit
-  defp default_option(:max_publications), do: @default_observation_limit
-  defp default_option(:connect_timeout), do: @default_connect_timeout
-  defp default_option(:request_timeout), do: @default_request_timeout
-
-  defp validate_uuid(value) when is_binary(value) do
-    if value != String.downcase(value) do
-      {:error, :invalid_contract}
-    else
-      case UUID.dump(value) do
-        {:ok, _binary} -> :ok
-        :error -> {:error, :invalid_contract}
-      end
-    end
-  end
-
-  defp validate_uuid(_value), do: {:error, :invalid_contract}
-
-  defp validate_operation_id(value)
-       when is_binary(value) and byte_size(value) >= 16 and
-              byte_size(value) <= @max_operation_id_bytes,
-       do:
-         if(Regex.match?(~r/\A[A-Za-z0-9_-]{16,128}\z/, value),
-           do: :ok,
-           else: {:error, {:terminal_failure, :invalid_contract}}
-         )
-
-  defp validate_operation_id(_value), do: {:error, {:terminal_failure, :invalid_contract}}
 end

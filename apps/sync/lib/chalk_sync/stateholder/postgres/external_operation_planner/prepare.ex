@@ -14,20 +14,22 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
   alias ChalkSync.UUID
 
   def validate_internal_operation(%{name: :start_recording, payload: payload}) do
-    if RecordingPolicy.system_recording_start?(payload), do: :ok, else: {:error, :invalid_internal_operation}
+    if RecordingPolicy.system_recording_start?(payload),
+      do: :ok,
+      else: {:error, :invalid_internal_operation}
   end
 
   def validate_internal_operation(%{name: name})
-       when name in [
-              :admission_request_expired,
-              :tenant_set_deadline,
-              :tenant_end_episode,
-              :maximum_duration_expired,
-              :recording_capture_ready,
-              :recording_capture_stopped,
-              :recording_capture_failed
-            ],
-       do: :ok
+      when name in [
+             :admission_request_expired,
+             :tenant_set_deadline,
+             :tenant_end_episode,
+             :maximum_duration_expired,
+             :recording_capture_ready,
+             :recording_capture_stopped,
+             :recording_capture_failed
+           ],
+      do: :ok
 
   def validate_internal_operation(_operation), do: {:error, :invalid_internal_operation}
 
@@ -69,48 +71,48 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
   end
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :start_recording} = operation,
-         policy,
-         state
-       ),
-       do: RecordingPolicy.prepare_recording(connection, episode, operation, policy, state)
+        connection,
+        episode,
+        %{name: :start_recording} = operation,
+        policy,
+        state
+      ),
+      do: RecordingPolicy.prepare_recording(connection, episode, operation, policy, state)
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :recording_capture_ready} = operation,
-         _policy,
-         _state
-       ),
-       do: Recording.prepare_capture_ready(connection, episode, operation)
+        connection,
+        episode,
+        %{name: :recording_capture_ready} = operation,
+        _policy,
+        _state
+      ),
+      do: Recording.prepare_capture_ready(connection, episode, operation)
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :recording_capture_stopped} = operation,
-         _policy,
-         _state
-       ),
-       do: Recording.prepare_capture_stopped(connection, episode, operation)
+        connection,
+        episode,
+        %{name: :recording_capture_stopped} = operation,
+        _policy,
+        _state
+      ),
+      do: Recording.prepare_capture_stopped(connection, episode, operation)
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :recording_capture_failed} = operation,
-         _policy,
-         _state
-       ),
-       do: Recording.prepare_capture_failed(connection, episode, operation)
+        connection,
+        episode,
+        %{name: :recording_capture_failed} = operation,
+        _policy,
+        _state
+      ),
+      do: Recording.prepare_capture_failed(connection, episode, operation)
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :admission_request_expired} = op,
-         _policy,
-         _state
-       ) do
+        connection,
+        episode,
+        %{name: :admission_request_expired} = op,
+        _policy,
+        _state
+      ) do
     case lock_pending_admission(connection, episode, op) do
       {:ok, admission} ->
         params = Scope.episode(episode) ++ [Scope.uuid(admission.id)]
@@ -126,21 +128,21 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
   end
 
   def prepare_internal_operation(
-         _connection,
-         _episode,
-         %{name: :tenant_set_deadline} = operation,
-         policy,
-         _state
-       ),
-       do: prepare_deadline(operation, policy)
+        _connection,
+        _episode,
+        %{name: :tenant_set_deadline} = operation,
+        policy,
+        _state
+      ),
+      do: prepare_deadline(operation, policy)
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :tenant_end_episode},
-         policy,
-         _state
-       ) do
+        connection,
+        episode,
+        %{name: :tenant_end_episode},
+        policy,
+        _state
+      ) do
     if policy.status == "active" do
       prepare_end_operation(connection, episode, nil)
     else
@@ -149,12 +151,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
   end
 
   def prepare_internal_operation(
-         connection,
-         episode,
-         %{name: :maximum_duration_expired, payload: payload},
-         policy,
-         _state
-       ) do
+        connection,
+        episode,
+        %{name: :maximum_duration_expired, payload: payload},
+        policy,
+        _state
+      ) do
     supplied_generation = payload["deadlineGeneration"]
     due = DateTime.compare(policy.deadline_at, DateTime.utc_now()) in [:lt, :eq]
 

@@ -15,7 +15,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
 
   defp prepare_entry_leave(_episode, _operation), do: :ready
 
-
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
        when OperationTable.is_local_name(name),
        do: {:confirmed, :local}
@@ -35,14 +34,12 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     invoke_recording_plane(recording_plane, episode, operation, timeout_ms)
   end
 
-
   defp invoke_media_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_media_plane({module, adapter}, episode, operation, timeout_ms) do
     arguments = media_arguments(adapter, episode, operation)
     invoke_adapter(module, arguments, :provider, timeout_ms)
   end
-
 
   defp media_arguments(adapter, episode, %{name: :mute_participant} = operation),
     do: revoke_arguments(adapter, episode, operation, :microphone)
@@ -66,7 +63,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
        when OperationTable.is_episode_end_name(name),
        do: {:end_episode, [adapter, operation.external_operation_id, episode]}
 
-
   defp revoke_arguments(adapter, episode, operation, source) do
     {:revoke_publication,
      [
@@ -78,7 +74,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
      ]}
   end
 
-
   defp invoke_recording_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_recording_plane({module, adapter}, episode, operation, timeout_ms) do
@@ -88,7 +83,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
 
     invoke_adapter(module, arguments, :recording, timeout_ms)
   end
-
 
   defp invoke_end_cleanup(
          media_plane,
@@ -114,7 +108,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     combine_end_cleanup(List.duplicate(:pending, missing_count) ++ results)
   end
 
-
   defp end_media_call(nil, _episode, _operation), do: nil
 
   defp end_media_call({module, adapter}, episode, operation) do
@@ -122,14 +115,12 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     {module, function, arguments, :provider}
   end
 
-
   defp end_recording_call(nil, _episode, _operation), do: nil
 
   defp end_recording_call({module, adapter}, episode, operation) do
     {module, :stop_recording,
      [adapter, operation.external_operation_id, episode, operation.recording_id], :recording}
   end
-
 
   defp combine_end_cleanup(results) do
     case Enum.find(results, &match?({:terminal_failure, _reason}, &1)) do
@@ -143,13 +134,11 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     end
   end
 
-
   defp invoke_adapter(module, {function, arguments}, authority, timeout_ms) do
     [{module, function, arguments, authority}]
     |> invoke_adapter_calls(timeout_ms)
     |> hd()
   end
-
 
   defp invoke_adapter_calls(calls, timeout_ms) do
     tasks =
@@ -169,7 +158,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     end)
   end
 
-
   defp adapter_task_result(_module, authority, _task, {:ok, {:ok, outcome}}),
     do: adapter_outcome(outcome, authority)
 
@@ -187,7 +175,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     :pending
   end
 
-
   defp safe_adapter_call(module, function, arguments) do
     {:ok, apply(module, function, arguments)}
   rescue
@@ -196,7 +183,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     :exit, _reason -> {:error, :exited}
   end
 
-
   defp adapter_outcome(outcome, authority) when outcome in [:confirmed, :satisfied],
     do: {:confirmed, authority}
 
@@ -204,7 +190,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     do: {:terminal_failure, reason}
 
   defp adapter_outcome(_outcome, _authority), do: :pending
-
 
   def dispatch_with_context(episode, operation, media_plane, recording_plane, timeout_ms) do
     case prepare_entry_leave(episode, operation) do
@@ -218,7 +203,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
         {:terminal_failure, :participant_inactive}
     end
   end
-
 
   defp dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms) do
     if ProviderCall.contextual?(media_plane) or ProviderCall.contextual?(recording_plane) do
@@ -243,7 +227,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
     end
   end
 
-
   defp provider_call(operation, headers) do
     call = %{
       headers: headers,
@@ -256,7 +239,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Dispatch do
       do: Map.put(call, :payload, operation.payload),
       else: call
   end
-
 
   defp persisted_provider_context(operation) do
     case operation do

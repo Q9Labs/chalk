@@ -56,7 +56,6 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
     end
   end
 
-
   defp finalize_confirmed(episode, operation, authority, finalize) do
     case finalize.(episode, operation.external_operation_id, {:confirmed, authority}) do
       {:ok, _decision} -> :confirmed
@@ -64,14 +63,12 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
     end
   end
 
-
   defp finalize_terminal_failure(episode, operation, reason, finalize) do
     case finalize.(episode, operation.external_operation_id, {:failed, reason}) do
       {:ok, _decision} -> :terminal_failure
       result -> finalization_failure(operation.name, result)
     end
   end
-
 
   defp finalization_failure(operation, result) do
     Logger.warning(

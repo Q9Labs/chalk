@@ -28,7 +28,6 @@ defmodule ChalkSync.Chat.Postgres.Marks do
     end
   end
 
-
   def set_reaction(identity, input) do
     case GeneratedV1.decode_client_frame(%{
            "type" => "chat_reaction_set",
@@ -51,7 +50,6 @@ defmodule ChalkSync.Chat.Postgres.Marks do
     end
   end
 
-
   defp react_transaction(connection, identity, input) do
     Store.configure_transaction(connection)
 
@@ -63,7 +61,6 @@ defmodule ChalkSync.Chat.Postgres.Marks do
       {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
     end
   end
-
 
   defp mark_read_transaction(connection, identity, sequence) do
     Store.configure_transaction(connection)
@@ -86,7 +83,6 @@ defmodule ChalkSync.Chat.Postgres.Marks do
         Postgrex.rollback(connection, {:error, reason})
     end
   end
-
 
   defp upsert_receipt(connection, identity, sequence) do
     now = DateTime.utc_now() |> DateTime.truncate(:millisecond)
