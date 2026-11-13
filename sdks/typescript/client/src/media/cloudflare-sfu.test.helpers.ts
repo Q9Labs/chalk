@@ -1,13 +1,5 @@
 import { CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
-import type {
-  CloudflareSFUBootstrap,
-  CloudflareSFUCloseTrackRequest,
-  CloudflareSFUPublicationSnapshot,
-  CloudflareSFUSessionDescription,
-  CloudflareSFUSignalingTransport,
-  CloudflareSFUTrackRequest,
-  CloudflareSFUTracksResponse,
-} from "./cloudflare-sfu";
+import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 /** The part of a fake peer connection that the fake transport drives when the SFU hands out a remote track. */
 export interface TransportPeer {
