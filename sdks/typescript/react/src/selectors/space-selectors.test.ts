@@ -41,3 +41,22 @@ it("keeps your own picture and microphone on while Sync recovers a source it had
   expect(stopped?.isVideoEnabled).toBe(false);
   expect(stopped?.isMuted).toBe(true);
 });
+
+it("keeps another person's picture and microphone while Sync recovers and the SFU still delivers their tracks", () => {
+  const live = (kind: string, readyState = "live") => ({ kind, enabled: true, readyState }) as MediaStreamTrack;
+  const unknown = { ...guest({}), media: { microphone: "unknown", camera: "unknown", screenShare: "unknown" } } satisfies Participant;
+  const remote = (camera: MediaStreamTrack) => [
+    { participantId: "nora", source: "camera" as const, publicationId: "cam", track: camera },
+    { participantId: "nora", source: "microphone" as const, publicationId: "mic", track: live("audio") },
+  ];
+  const recovering = toVideoParticipants([unknown], remote(live("video")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(recovering?.isVideoEnabled).toBe(true);
+  expect(recovering?.isMuted).toBe(false);
+  const ended = toVideoParticipants([unknown], remote(live("video", "ended")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(ended?.isVideoEnabled).toBe(false);
+  const off = toVideoParticipants([guest({})], remote(live("video")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(off?.isVideoEnabled).toBe(false);
+  const withoutTracks = toVideoParticipants([unknown], [], "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(withoutTracks?.isVideoEnabled).toBe(false);
+  expect(withoutTracks?.isMuted).toBe(true);
+});

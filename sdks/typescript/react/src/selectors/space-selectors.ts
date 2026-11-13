@@ -11,12 +11,11 @@ export function toActiveScreenShare(participants: readonly Participant[]): Parti
 }
 
 export function toVideoParticipants(participants: readonly SpaceParticipant[], remoteMedia: readonly RemoteMedia[], localId: string, displayName: string, localMedia: Readonly<Record<MediaSource, LocalMedia>>): Participant[] {
-  const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>> & { cameraPausedForNetwork?: true }>();
+  const remoteByParticipant = new Map<string, Partial<Record<MediaSource | "screen_audio", MediaStreamTrack>> & { cameraPausedForNetwork?: true }>();
   const stateByParticipant = new Map(participants.map((participant) => [participant.participantId, participant.media]));
   for (const publication of remoteMedia) {
-    if (publication.source === "microphone" || publication.source === "screen_audio") continue;
     const state = stateByParticipant.get(publication.participantId);
-    if (!state || (publication.source === "camera" ? state.camera : state.screenShare) !== "active") continue;
+    if (!state || !sending(sourceState(state, publication.source), publication.track)) continue;
     const media = remoteByParticipant.get(publication.participantId) ?? {};
     media[publication.source] = publication.track;
     if (publication.source === "camera" && publication.pausedForNetwork) media.cameraPausedForNetwork = true;
@@ -48,11 +47,11 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       displayName: participant.displayName,
       deviceHint: deviceHint(participant, participants),
       isOwnDevice: Boolean(localFromSync?.identityId && participant.identityId === localFromSync.identityId),
-      isMuted: participant.media.microphone !== "active",
+      isMuted: !sending(participant.media.microphone, media?.microphone),
       isSpeaking: participant.presence.speaking,
       isActiveSpeaker: participant.presence.activeSpeaker,
-      isVideoEnabled: participant.media.camera === "active" && Boolean(media?.camera),
-      isScreenSharing: participant.media.screenShare === "active" && Boolean(media?.screen),
+      isVideoEnabled: Boolean(media?.camera),
+      isScreenSharing: Boolean(media?.screen),
       isHandRaised: participant.handRaised,
       ...tileSignal(participant),
       ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
@@ -72,6 +71,21 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
 function capturing(media: LocalMedia): boolean {
   if (media.state === "enabled") return true;
   return media.state === "requesting" && media.track !== null && media.track.enabled && media.track.readyState === "live";
+}
+
+/**
+ * Another person's source follows Sync while Sync knows it. While Sync recovers it reads "unknown", and the track the SFU still
+ * delivers keeps the source on, so a short Sync drop does not swap their picture for the avatar or mark them muted.
+ */
+function sending(state: SpaceParticipant["media"]["camera"], track: MediaStreamTrack | null | undefined): boolean {
+  if (state === "active") return true;
+  return state === "unknown" && Boolean(track) && track?.readyState === "live";
+}
+
+function sourceState(media: SpaceParticipant["media"], source: RemoteMedia["source"]): SpaceParticipant["media"]["camera"] {
+  if (source === "camera") return media.camera;
+  if (source === "microphone") return media.microphone;
+  return media.screenShare;
 }
 
 /** What a guest's own rating and presence say about their tile. Unknown shows no signal at all. */
@@ -107,8 +121,8 @@ export function toListParticipants(tiles: readonly Participant[], participantMed
       displayName: participant.displayName,
       deviceHint: participant.deviceHint,
       isLocal: participant.isLocal,
-      isMuted: participant.isLocal ? participant.isMuted : media?.microphone !== "active",
-      isVideoEnabled: participant.isLocal ? participant.isVideoEnabled : media?.camera === "active",
+      isMuted: participant.isLocal || media?.microphone === "unknown" ? participant.isMuted : media?.microphone !== "active",
+      isVideoEnabled: participant.isLocal || media?.camera === "unknown" ? participant.isVideoEnabled : media?.camera === "active",
       isHandRaised: participant.isHandRaised,
     };
   });
