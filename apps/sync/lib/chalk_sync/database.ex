@@ -3,6 +3,8 @@ defmodule ChalkSync.Database do
 
   use Supervisor
 
+  require Logger
+
   alias ChalkSync.Stateholder.EpisodeKey
 
   @registry __MODULE__.Registry
@@ -27,6 +29,35 @@ defmodule ChalkSync.Database do
         via(index(episode, pool_size, offset))
     end
   end
+
+  @doc """
+  Runs database work and answers `unavailable` when it raises or exits, so a lost connection
+  becomes a result the caller handles instead of a crash in the calling process.
+  """
+  @spec guard((-> result), unavailable) :: result | unavailable
+        when result: term(), unavailable: term()
+  def guard(fun, unavailable) do
+    fun.()
+  rescue
+    exception ->
+      Logger.warning("database work failed: #{inspect(exception.__struct__)}")
+      unavailable
+  catch
+    :exit, reason ->
+      Logger.warning("database work exited: #{inspect(reason, limit: 5)}")
+      unavailable
+  end
+
+  @doc "A connection for work that belongs to no Episode. Each purpose keeps its own pool slot."
+  @spec connection_for(:background | :retention | :readiness) :: GenServer.server()
+  def connection_for(purpose) when purpose in [:background, :retention, :readiness] do
+    name = Atom.to_string(purpose)
+    connection(%EpisodeKey{tenant_id: name, space_id: name, episode_id: name})
+  end
+
+  @doc "The pool connection next to the Episode's own, for a retry after the first one failed."
+  @spec alternate_connection(EpisodeKey.t()) :: GenServer.server()
+  def alternate_connection(%EpisodeKey{} = episode), do: connection(episode, 1)
 
   @spec connection_options(String.t()) :: {:ok, keyword()} | {:error, atom()}
   def connection_options(url) when is_binary(url) do

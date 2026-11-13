@@ -1,4 +1,4 @@
-package mcpapi
+package mcptools
 
 import "encoding/json"
 
@@ -7,6 +7,9 @@ import "encoding/json"
 type ReadInput struct {
 	ResultOffset int `json:"result_offset,omitempty"`
 }
+
+func (r ReadInput) Offset() int { return r.ResultOffset }
+
 type PageInput struct {
 	ReadInput
 	PageSize int    `json:"page_size,omitempty"`

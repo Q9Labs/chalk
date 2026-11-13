@@ -12,30 +12,36 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
+  alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Authority, as: AuthoritySQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: SQL
   alias ChalkSync.Stateholder.Postgres.Transaction
-  alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.UUID
-  alias ChalkSync.Webhooks.Producer, as: WebhookProducer
 
-  @schema_version 1
-  @max_event_bytes 32 * 1024
   @automatic_recording_policy_snapshot_version 2
   @uuid_namespace_dns <<0x6B, 0xA7, 0xB8, 0x10, 0x9D, 0xAD, 0x11, 0xD1, 0x80, 0xB4, 0x00, 0xC0,
                         0x4F, 0xD4, 0x30, 0xC8>>
 
   def record_lifecycle_failure(%EpisodeKey{} = episode, lifecycle_intent_id, reason)
       when is_binary(lifecycle_intent_id) and is_atom(reason) do
+    Database.guard(
+      fn -> write_lifecycle_failure(episode, lifecycle_intent_id, reason) end,
+      {:retryable, :dependency_unavailable}
+    )
+  end
+
+  defp write_lifecycle_failure(episode, lifecycle_intent_id, reason) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
-        case Postgrex.query(
-               Database.connection(episode),
-               SQL.record_lifecycle_failure(),
-               Scope.lifecycle_intent(episode, lifecycle_intent_id) ++ [Atom.to_string(reason)],
-               timeout: 1_000
-             ) do
+        episode
+        |> Database.connection()
+        |> Postgrex.query(
+          SQL.record_lifecycle_failure(),
+          Scope.lifecycle_intent(episode, lifecycle_intent_id) ++ [Atom.to_string(reason)],
+          timeout: 1_000
+        )
+        |> case do
           {:ok, _result} -> :ok
           {:error, _reason} -> {:retryable, :dependency_unavailable}
         end
@@ -43,21 +49,11 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       :error ->
         :ok
     end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
   def pending_lifecycle_intents(limit) when is_integer(limit) and limit in 1..64 do
-    episode = %EpisodeKey{
-      tenant_id: "background",
-      space_id: "background",
-      episode_id: "background"
-    }
-
     case Postgrex.query(
-           Database.connection(episode),
+           Database.connection_for(:background),
            SQL.discover_pending_lifecycle_intents(),
            [limit],
            timeout: 2_000
@@ -82,12 +78,12 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   def transaction(connection, episode, lifecycle_intent_id, identity \\ nil) do
     Transaction.configure(connection)
     control = lock_lifecycle_control(connection, episode)
-    intent = lock_intent(connection, episode, lifecycle_intent_id)
+    intent = LifecycleCommit.lock_intent(connection, episode, lifecycle_intent_id)
     prepared = JoinSeats.prepare(connection, episode, intent, identity)
 
     intent =
       if prepared in [:expired, :entry_expired],
-        do: lock_intent(connection, episode, lifecycle_intent_id),
+        do: LifecycleCommit.lock_intent(connection, episode, lifecycle_intent_id),
         else: intent
 
     decision =
@@ -118,47 +114,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
     end
   end
 
-  def lock_intent(connection, episode, lifecycle_intent_id) do
-    params = Scope.lifecycle_intent(episode, lifecycle_intent_id)
-
-    case Postgrex.query!(connection, SQL.lock_lifecycle_intent(), params).rows do
-      [
-        [
-          status,
-          name,
-          participant_id,
-          generation,
-          payload,
-          reason,
-          event_id,
-          revision,
-          journey_id,
-          parent_journey_event_id,
-          producing_trace_id,
-          producing_span_id
-        ]
-      ] ->
-        %{
-          id: lifecycle_intent_id,
-          status: status,
-          name: name,
-          participant_id: Scope.nullable_uuid(participant_id),
-          participant_generation: generation,
-          payload: payload,
-          terminal_reason: reason,
-          applied_event_id: Scope.nullable_uuid(event_id),
-          applied_revision: revision,
-          journey_id: Scope.nullable_uuid(journey_id),
-          parent_journey_event_id: Scope.nullable_uuid(parent_journey_event_id),
-          producing_trace_id: producing_trace_id,
-          producing_span_id: producing_span_id
-        }
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :lifecycle_intent_not_found})
-    end
-  end
-
   defp apply_pending_lifecycle(connection, episode, control, intent) do
     policy = Authority.lock_episode(connection, episode)
     participant = lock_lifecycle_participant(connection, episode, intent)
@@ -168,7 +123,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
          payload = lifecycle_payload(intent, participant, state),
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, lifecycle_name(intent.name), payload) do
-      decision = persist_commit(connection, episode, intent, event, next_state)
+      decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
 
       maybe_accept_automatic_recording(connection, episode, intent, policy, next_state)
       decision
@@ -430,180 +385,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   defp validate_lifecycle_product_state(_intent, _status, _participant),
     do: {:error, :invalid_lifecycle_transition}
 
-  def persist_commit(connection, episode, intent, event, state) do
-    event_id = UUID.generate()
-    digest = Reducer.digest(state)
-
-    stored_event =
-      event
-      |> Map.put(:event_id, event_id)
-      |> Map.put(:command_id, nil)
-      |> Map.put(:lifecycle_intent_id, intent.id)
-      |> Map.put(:schema_version, @schema_version)
-      |> Map.put(:resulting_state_digest, digest)
-
-    event_bytes = Control.encoded_event_bytes(stored_event)
-
-    if event_bytes > @max_event_bytes do
-      Postgrex.rollback(connection, {:retryable, :overloaded})
-    end
-
-    insert_lifecycle_event(connection, episode, stored_event, event_bytes)
-    FaultHooks.lifecycle(:after_event_insert, episode, intent.id)
-    update_lifecycle_control(connection, episode, event.name, state, event_bytes)
-    webhook_object = update_lifecycle_product(connection, episode, intent, event)
-    mark_lifecycle_applied(connection, episode, intent.id, event_id, event.revision)
-    FaultHooks.lifecycle(:after_intent_applied, episode, intent.id)
-
-    if webhook_object != :no_webhook do
-      WebhookProducer.produce(connection, episode, intent, webhook_object)
-    end
-
-    FaultHooks.lifecycle(:after_webhook_production, episode, intent.id)
-    Control.notify_head(connection, episode, event.revision)
-
-    %LifecycleDecision{
-      lifecycle_intent_id: intent.id,
-      result: :applied,
-      event_id: event_id,
-      revision: event.revision,
-      event: stored_event
-    }
-  end
-
-  defp insert_lifecycle_event(connection, episode, event, event_bytes) do
-    Postgrex.query!(connection, SQL.insert_lifecycle_event(), [
-      Scope.uuid(episode.tenant_id),
-      Scope.uuid(episode.space_id),
-      Scope.uuid(episode.episode_id),
-      Scope.uuid(event.event_id),
-      event.base_revision,
-      event.revision,
-      event.name,
-      event.payload,
-      Scope.uuid(event.lifecycle_intent_id),
-      event.schema_version,
-      event.resulting_state_digest,
-      event_bytes
-    ])
-  end
-
-  defp update_lifecycle_control(connection, episode, name, state, event_bytes) do
-    params = [
-      Scope.uuid(episode.tenant_id),
-      Scope.uuid(episode.space_id),
-      Scope.uuid(episode.episode_id),
-      state.revision,
-      Reducer.snapshot(state),
-      Reducer.state_schema_version(),
-      Reducer.digest(state),
-      Reducer.snapshot_bytes(state),
-      event_bytes
-    ]
-
-    query =
-      case name do
-        "admission_requested" -> SQL.update_generic_lifecycle_control()
-        "participant_joined" -> SQL.update_join_control()
-        "participant_left" -> SQL.update_generic_lifecycle_control()
-        "episode_ended" -> SQL.update_end_control()
-      end
-
-    case Postgrex.query!(connection, query, params).rows do
-      [[revision]] when revision == state.revision -> :ok
-      [] -> Postgrex.rollback(connection, {:retryable, :overloaded})
-    end
-  end
-
-  defp update_lifecycle_product(
-         connection,
-         episode,
-         %{name: "participant_joined"} = intent,
-         _event
-       ) do
-    params =
-      Scope.episode(episode) ++
-        [Scope.uuid(intent.participant_id), intent.participant_generation]
-
-    case Postgrex.query!(connection, SQL.activate_lifecycle_participant(), params).rows do
-      [row] ->
-        WebhookObservation.participant_object(row)
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :invalid_lifecycle_transition})
-    end
-  end
-
-  defp update_lifecycle_product(
-         _connection,
-         _episode,
-         %{name: "admission_requested"},
-         _event
-       ),
-       do: :no_webhook
-
-  defp update_lifecycle_product(connection, episode, %{name: "participant_left"} = intent, _event) do
-    params =
-      Scope.episode(episode) ++
-        [Scope.uuid(intent.participant_id), intent.participant_generation]
-
-    case Postgrex.query!(connection, SQL.complete_lifecycle_participant(), params).rows do
-      [row] ->
-        WebhookObservation.participant_object(row)
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :invalid_lifecycle_transition})
-    end
-  end
-
-  defp update_lifecycle_product(connection, episode, %{name: "episode_ended"} = intent, _event) do
-    Postgrex.query!(
-      connection,
-      SQL.supersede_pending_lifecycle_intents(),
-      Scope.episode(episode) ++ [Scope.uuid(intent.id)]
-    )
-
-    case Postgrex.query!(connection, SQL.complete_lifecycle_episode(), Scope.episode(episode)).rows do
-      [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
-        complete_episode_participants(connection, episode, intent, ended_at)
-
-        %{
-          id: UUID.load!(id),
-          space_id: UUID.load!(space_id),
-          status: status,
-          started_at: started_at,
-          ended_at: ended_at,
-          created_at: created_at,
-          updated_at: updated_at
-        }
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :invalid_lifecycle_transition})
-    end
-  end
-
-  def complete_episode_participants(connection, episode, source, ended_at) do
-    objects =
-      connection
-      |> Postgrex.query!(
-        SQL.complete_all_episode_participants(),
-        Scope.episode(episode) ++ [ended_at]
-      )
-      |> Map.fetch!(:rows)
-      |> Enum.map(&WebhookObservation.participant_object/1)
-
-    WebhookProducer.produce_episode_departures(connection, episode, source, objects)
-  end
-
-  defp mark_lifecycle_applied(connection, episode, intent_id, event_id, revision) do
-    params = Scope.lifecycle_intent(episode, intent_id) ++ [Scope.uuid(event_id), revision]
-
-    case Postgrex.query!(connection, SQL.mark_lifecycle_intent_applied(), params).rows do
-      [[^revision]] -> :ok
-      [] -> Postgrex.rollback(connection, {:error, :invalid_lifecycle_transition})
-    end
-  end
-
   defp lifecycle_decision(connection, episode, lifecycle_intent_id, intent) do
     params = [
       Scope.uuid(episode.tenant_id),
@@ -665,7 +446,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
       when is_integer(generation) and generation > 0 do
-    connection = Database.connection(episode, 1)
+    connection = Database.alternate_connection(episode)
     params = Scope.participant(identity) ++ [identity.participant_generation, generation]
 
     case Postgrex.query(connection, SQL.read_entry_confirmation(), params, timeout: 1_000) do
@@ -677,7 +458,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   end
 
   def resolve_uncertain(episode, lifecycle_intent_id, _identity) do
-    connection = Database.connection(episode, 1)
+    connection = Database.alternate_connection(episode)
     params = Scope.lifecycle_intent(episode, lifecycle_intent_id)
 
     case Postgrex.query(connection, SQL.read_lifecycle_intent_outcome(), params, timeout: 1_000) do

@@ -23,8 +23,7 @@ type cancelParticipantJoinResponse struct {
 // The signed grant authorizes only cancellation of its own pending generation.
 // Do not require active authority: expired/cancelled retries must be idempotent.
 func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier ParticipantMediaVerifier) Endpoint[cancelParticipantJoinRequest, cancelParticipantJoinResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "cancelEpisodeParticipantJoin",
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "cancelEpisodeParticipantJoin",
 		func(r *http.Request) (cancelParticipantJoinRequest, error) {
 			route, err := decodeIssueSyncTokenRequest(r)
 			if err != nil {
@@ -33,9 +32,6 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 			return cancelParticipantJoinRequest{Route: route}, nil
 		},
 		func(ctx context.Context, request cancelParticipantJoinRequest) (cancelParticipantJoinResponse, error) {
-			if service == nil {
-				return cancelParticipantJoinResponse{}, apiErrorServiceUnavailable
-			}
 			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
 				return cancelParticipantJoinResponse{}, apiErrorUnauthenticated
@@ -49,7 +45,7 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.ConnectionID,
 			})
 			return cancelParticipantJoinResponse{Cancelled: cancelled}, err
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
+		}).Needs(service).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantJoinCancellation", cancelParticipantJoinResponse{}).
 		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,

@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   @moduledoc false
 
   alias ChalkSync.Database
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -11,32 +12,33 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   alias ChalkSync.Stateholder.Postgres.SQL.Recovery, as: SQL
   alias ChalkSync.Stateholder.Recovery
 
-  @transaction_timeout_ms 3_000
+  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
   @max_replay_events 2_048
   @max_replay_bytes 2 * 1024 * 1024
   @schema_version 1
 
   def page(%EpisodeKey{} = episode, after_revision, through_revision) do
-    params = [
-      Scope.uuid(episode.tenant_id),
-      Scope.uuid(episode.episode_id),
-      after_revision,
-      through_revision
-    ]
+    Database.guard(
+      fn ->
+        params = [
+          Scope.uuid(episode.tenant_id),
+          Scope.uuid(episode.episode_id),
+          after_revision,
+          through_revision
+        ]
 
-    case Postgrex.query(
-           Database.connection(episode),
-           SQL.read_recovery_page(),
-           params,
-           timeout: @transaction_timeout_ms
-         ) do
-      {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &Control.event_from_row/1)}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
+        case Postgrex.query(
+               Database.connection(episode),
+               SQL.read_recovery_page(),
+               params,
+               timeout: @transaction_timeout_ms
+             ) do
+          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &Control.event_from_row/1)}
+          {:error, _reason} -> {:retryable, :dependency_unavailable}
+        end
+      end,
+      {:retryable, :dependency_unavailable}
+    )
   end
 
   def transaction(connection, %Identity{} = identity, cursor) do
