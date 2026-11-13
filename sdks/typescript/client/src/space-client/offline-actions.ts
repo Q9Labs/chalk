@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import type { AccessSubject } from "../access/grant";
 import { browserOfflineActionsStorage, decodeOfflineActions, OFFLINE_ACTION_MAX_AGE_MS, type OfflineActionsStorage, type StoredOfflineAction } from "./offline-actions-storage";
 import type { ConnectionLifecycleCapability } from "../connection";
@@ -26,7 +26,6 @@ export type OfflineActionsHold = {
   ) => Effect.Effect<A, E | SpaceClientError> | null;
 };
 
-export class OfflineActionsService extends Context.Service<OfflineActionsService, OfflineActionsControllerEffects & OfflineActionsHold>()("@chalk/client/OfflineActions") {}
 
 const sameSubject = (current: AccessSubject | null, saved: AccessSubject | null): boolean =>
   !!current && !!saved && current.tenantId === saved.tenantId && current.spaceId === saved.spaceId && current.episodeId === saved.episodeId && current.participantId === saved.participantId && current.participantGeneration === saved.participantGeneration;
@@ -48,7 +47,6 @@ export const makeOfflineActions = (input: { readonly connection: ConnectionLifec
     return runtime;
   });
 
-export const makeOfflineActionsLayer = (input: Parameters<typeof makeOfflineActions>[0]) => Layer.effect(OfflineActionsService, makeOfflineActions(input));
 
 class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineActionsHold {
   readonly #connection: ConnectionLifecycleCapability;

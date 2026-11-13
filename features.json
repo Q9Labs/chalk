@@ -766,6 +766,7 @@
         "sdks/typescript/client/src/space-client/reload-rejoin.test.ts",
         "sdks/typescript/client/src/space-client/reload-rejoin.ts",
         "sdks/typescript/client/src/space-client/same-identity.ts",
+        "sdks/typescript/client/src/space-client/scoped-fork.ts",
         "sdks/typescript/client/src/space-client/session-exit.ts",
         "sdks/typescript/client/src/space-client/space-client.ts",
         "sdks/typescript/client/src/space-client/startup-failures.test.ts",

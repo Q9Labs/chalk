@@ -1,9 +1,8 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { SpaceStore } from "./store";
 import type { RecordingSlice } from "./types";
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type RecordingControllerEffects = {
   readonly start: () => ClientEffect<{
     readonly recordingId: string;
@@ -11,13 +10,11 @@ export type RecordingControllerEffects = {
   readonly stop: () => ClientEffect<void>;
   readonly dispose: () => void;
 };
-export class RecordingControllerService extends Context.Service<RecordingControllerService, RecordingControllerEffects>()("@chalk/client/RecordingController") {}
 export const makeRecordingController = (connection: ConnectionLifecycleCapability, store: SpaceStore): Effect.Effect<RecordingControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.acquireRelease(
     Effect.sync(() => new RecordingControllerRuntime(connection, store)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
-export const makeRecordingControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(RecordingControllerService, makeRecordingController(connection, store));
 class RecordingControllerRuntime implements RecordingControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
@@ -101,7 +98,4 @@ function assertConnectedAndAllowed(snapshot: ReturnType<SpaceStore["getSnapshot"
 }
 function invalidState(message: string): SpaceClientError {
   return new SpaceClientError({ code: "connection.invalid_state", recoverable: false, message });
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
