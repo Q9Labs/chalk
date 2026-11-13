@@ -40,6 +40,7 @@ import type {
   V1SyncClientOptions,
   V1TargetCommand,
 } from "./v1-types";
+type SocketCloseEvent = Parameters<NonNullable<V1Socket["onclose"]>>[0];
 type ServerFrame<Type extends SyncV1ServerFrame["type"]> = Extract<SyncV1ServerFrame, { readonly type: Type }>;
 const encoder = new TextEncoder();
 const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
@@ -122,6 +123,9 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly link: LinkJudge;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
+  get #dialing(): boolean {
+    return this.#phase.phase === "connecting" || this.#phase.phase === "recovering";
+  }
   #connectDiagnostic(): SyncConnectDiagnostic {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
@@ -263,8 +267,8 @@ export class V1SyncClient implements V1CollaborationClient {
       connection: {
         ...this.#phase,
         recoveryDiagnostic: { socketAttempts: this.#connectAttemptCount, socketCloses: this.#socketCloses.slice(), omittedSocketCloses: this.#omittedSocketCloses, lastHeartbeatReplyAt: this.#lastHeartbeatReplyAt },
-        ...(this.#connectStartedAt !== null && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectAttempt: this.#connectDiagnostic() } : {}),
-        ...(this.#connectFailure && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectFailure: this.#connectFailure } : {}),
+        ...(this.#connectStartedAt !== null && this.#dialing ? { connectAttempt: this.#connectDiagnostic() } : {}),
+        ...(this.#connectFailure && this.#dialing ? { connectFailure: this.#connectFailure } : {}),
         ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}),
         ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}),
       },
@@ -457,38 +461,39 @@ export class V1SyncClient implements V1CollaborationClient {
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = (event) => {
-      this.#diagnostic({ event: "sync_socket_close", close_code: event.code, duration_ms: this.#clock().now() - socketStartedAt, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
-      if (this.#started) {
-        this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
-        if (this.#socketCloses.length > 50) {
-          this.#socketCloses.shift();
-          this.#omittedSocketCloses += 1;
-        }
-      }
-      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
-        this.#emit();
-      }
-      this.#clock().setTimeout(() => {
-        if (connectionGeneration !== this.#connectionGeneration) return;
-        this.#inbound = this.#inbound.then(() => {
-          const baggageRejected = event.code === 1009 && this.#baggageRejected(socket);
-          if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
-            this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
-            this.#emit();
-          }
-          this.#disconnected(socket, baggageRejected);
-        });
-      }, 0);
-    };
+    socket.onclose = (event) => this.#socketClosed(socket, event, connectionGeneration, socketStartedAt);
     socket.onerror = () => {
-      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
+      if (socket === this.#socket && this.#dialing) {
         this.#connectFailure ??= this.#connectDiagnostic();
         this.#emit();
       }
       socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
     };
+  }
+  #socketClosed(socket: V1Socket, event: SocketCloseEvent, connectionGeneration: number, socketStartedAt: number): void {
+    this.#diagnostic({ event: "sync_socket_close", close_code: event.code, duration_ms: this.#clock().now() - socketStartedAt, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
+    if (this.#started) {
+      this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
+      if (this.#socketCloses.length > 50) {
+        this.#socketCloses.shift();
+        this.#omittedSocketCloses += 1;
+      }
+    }
+    if (socket === this.#socket && this.#dialing) {
+      this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
+      this.#emit();
+    }
+    this.#clock().setTimeout(() => {
+      if (connectionGeneration !== this.#connectionGeneration) return;
+      this.#inbound = this.#inbound.then(() => {
+        const baggageRejected = event.code === 1009 && this.#baggageRejected(socket);
+        if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
+          this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
+          this.#emit();
+        }
+        this.#disconnected(socket, baggageRejected);
+      });
+    }, 0);
   }
   async #authenticate(socket: V1Socket): Promise<void> {
     try {
