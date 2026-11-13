@@ -128,6 +128,8 @@ test("a change to the release scripts, the managed-host controller or the scorec
     "infrastructure/nightly/transcription/main.tf",
     "apps/api/go.mod",
     "apps/api/db/migrations/20261101000000_example.sql",
+    "apps/api/internal/httpapi/router.go",
+    "apps/api/cmd/recorder-render/main.go",
   ]) {
     assert.ok(selected([file], "pull_request").includes("release-contracts"), file);
     assert.ok(selected([file], "merge_group").includes("release-contracts"), file);
@@ -135,6 +137,8 @@ test("a change to the release scripts, the managed-host controller or the scorec
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "release-contracts").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("release-contracts"));
   assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["scripts/recorder/compare-frames.mjs"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["apps/api/internal/httpapi/router_test.go"], "pull_request").includes("release-contracts"));
   assert.equal(laneGroup("release-contracts"), "checks");
 });
 

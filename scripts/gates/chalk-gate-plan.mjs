@@ -24,7 +24,9 @@ const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workfl
 const workflowGraphRoots = [".github/workflows", "features/scorecard"];
 // What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
 // the transcription configuration that check_configuration fingerprints, and the API module files and migrations that the manifest and component planning read.
-const releaseContractRoots = ["scripts/releases", "scripts/recorder", "infrastructure/managed-episode", "infrastructure/nightly/transcription", "features/scorecard", "perf/budgets.json", "apps/api/go.mod", "apps/api/go.sum", "apps/api/db/migrations"];
+const releaseContractRoots = ["scripts/releases", "scripts/recorder/release.py", "scripts/recorder/archive.py", "scripts/recorder/release_core.py", "scripts/recorder/release_io.py", "scripts/recorder/dispatcher_binding.py", "infrastructure/managed-episode", "infrastructure/nightly/transcription", "features/scorecard", "perf/budgets.json", "apps/api/go.mod", "apps/api/go.sum", "apps/api/db/migrations"];
+// plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
+const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -445,7 +447,7 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
-  const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots));
+  const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
