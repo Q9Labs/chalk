@@ -24,6 +24,27 @@ export async function arriveAtSpace(client: ChalkPublicClient, options: { readon
   return { arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink: verifiedSpaceInviteLink(origin, created.space.slug, created.invite_link), spaceName: created.space.name };
 }
 
+/** Puts the Space's own link in the address bar. An arrival the page could not move to is given back. */
+export async function followArrivalLink(client: ChalkPublicClient, arrived: ArrivedSpace, navigate: (canonicalSlug: string, inviteLink: string) => Promise<void>): Promise<void> {
+  try {
+    await navigate(arrived.canonicalSlug, arrived.inviteLink);
+  } catch (cause) {
+    await leaveArrival(client, arrived.arrival);
+    throw cause;
+  }
+}
+
+/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
+export async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
+  if (!inviteToken) throw new Error(neutralSpaceError);
+  return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });
+}
+
+/** Gives back an admission the entrance no longer wants. Any other outcome holds nothing to give back. */
+export function releaseAdmission(outcome: ArrivalOutcome): void {
+  if (outcome.type === "admitted") void outcome.joined.session.leave().catch(() => undefined);
+}
+
 export async function leaveArrival(client: ChalkPublicClient, arrival: PublicSpaceArrival): Promise<void> {
   if (arrival.arrival_handle) await client.leave({ arrivalHandle: arrival.arrival_handle });
 }

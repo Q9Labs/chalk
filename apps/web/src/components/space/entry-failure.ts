@@ -1,4 +1,4 @@
-import { ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "@q9labsai/chalk-client";
+import { AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError } from "@q9labsai/chalk-client";
 
 export type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string; readonly reason?: "declined" | "expired" };
 
@@ -24,4 +24,11 @@ export function entryFailure(cause: unknown): EntryFailure {
     if (cause.status === 409) return { message: "You could not enter this Space. Try entering again.", retryable: true };
   }
   return { message: "Chalk could not connect. Check your connection and try entering again.", retryable: true };
+}
+
+/** What the visitor reads when a reload could not return them to the call. */
+export function resumeFailure(cause: unknown): EntryFailure {
+  if (cause instanceof AccessMediaProofRejectedError) return { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" };
+  if (cause instanceof MediaUnavailableError) return entryFailure(cause);
+  return { message: "Could not return to the Episode. Check your access before joining again.", retryable: true };
 }
