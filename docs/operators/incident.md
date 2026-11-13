@@ -65,7 +65,7 @@ Commands, rules and the rollback caveats are in the [SFU README](../../infrastru
 
 ## Never stop the production node
 
-Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does block termination through the console, CLI or API.
+Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does not block termination: that needs its own protection, `DisableApiTermination`.
 
 The protection is a setting on the instance, not a file in Git. The instance ID is in the private operator notes. Run these with the operator AWS profile:
 
