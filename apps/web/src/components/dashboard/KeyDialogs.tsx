@@ -1,4 +1,4 @@
-import { useRef, useState, type Ref } from "react";
+import { useRef, useState, type Ref, type RefObject } from "react";
 import { type DeveloperAction, type KeyDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
@@ -120,29 +120,22 @@ function useExpiry() {
   return { expiry, setExpiry, expiresAt: new Date(openedAt + Number(expiry) * 24 * 60 * 60 * 1000).toISOString() };
 }
 
-export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () => void; readonly onCreated: (secret: string) => void }) {
-  const [name, setName] = useState("");
-  const [access, setAccess] = useState<Access>("full");
-  const { expiry, setExpiry, expiresAt } = useExpiry();
-  const [custom, setCustom] = useState<readonly Scope[]>([]);
-  const [errors, setErrors] = useState<{ name?: boolean; scopes?: boolean }>({});
-  const [saving, setSaving] = useState(false);
-  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
-  const intents = useIntentKeys();
-  const nameInput = useRef<HTMLInputElement>(null);
-  const toast = useToast();
+type KeyErrors = { name?: boolean; scopes?: boolean };
 
-  async function create() {
-    const trimmed = name.trim();
-    const scopes = scopesFor(access, custom);
-    if (!trimmed || !scopes.length) {
-      setErrors({ name: !trimmed, scopes: !scopes.length });
-      if (!trimmed) nameInput.current?.focus();
+/** Validates the form, then creates the key; a retry of the same request reuses its idempotency key. */
+function useCreateKey(onCreated: (secret: string) => void, setErrors: (errors: KeyErrors) => void, nameInput: RefObject<HTMLInputElement | null>) {
+  const [saving, setSaving] = useState(false);
+  const intents = useIntentKeys();
+  const toast = useToast();
+  async function create(name: string, scopes: readonly Scope[], expiresAt: string) {
+    if (!name || !scopes.length) {
+      setErrors({ name: !name, scopes: !scopes.length });
+      if (!name) nameInput.current?.focus();
       return;
     }
     setSaving(true);
     try {
-      const request = { name: trimmed, scopes: [...scopes], expiresAt };
+      const request = { name, scopes: [...scopes], expiresAt };
       onCreated((await act("developer", { action: "create-key", ...request, idempotencyKey: intents.key(JSON.stringify(request)) })).secret);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
@@ -150,6 +143,17 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
       setSaving(false);
     }
   }
+  return [saving, create] as const;
+}
+
+export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () => void; readonly onCreated: (secret: string) => void }) {
+  const [name, setName] = useState("");
+  const [access, setAccess] = useState<Access>("full");
+  const { expiry, setExpiry, expiresAt } = useExpiry();
+  const [custom, setCustom] = useState<readonly Scope[]>([]);
+  const [errors, setErrors] = useState<KeyErrors>({});
+  const nameInput = useRef<HTMLInputElement>(null);
+  const [saving, create] = useCreateKey(onCreated, setErrors, nameInput);
 
   return (
     <Dialog
@@ -158,7 +162,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
       description="Use the key on your server. It can do what its access allows, until it expires or you revoke it."
       wide={access === "custom"}
       onClose={onClose}
-      onSubmit={() => void create()}
+      onSubmit={() => void create(name.trim(), scopesFor(access, custom), expiresAt)}
       actions={
         <FormActions onClose={onClose} busy={saving}>
           Create key
