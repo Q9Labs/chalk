@@ -19,7 +19,7 @@ export const bounds = {
   markerOffsetMs: 1500,
   // Largest gap between a guest's flash and its beep in the Recording.
   avOffsetMs: 300,
-  // The design's 15 s source lease (docs/plans/sfu-design.md "Reconnect and authority", the lease bound) bounds how long captured media may outlive a mute, an unshare or a host stop.
+  // A mute, an unshare or a host stop the node hears takes effect at once, so captured media may outlive it by 15 s at most. Only a stop the node never heard of waits for the source lease (60 s by default, docs/plans/sfu-design.md "Reconnect and authority"), and this script never cuts the control path.
   endMs: 15_000,
   // Silence beyond the script's own longest gap (hold tones and the next marker start on different clocks).
   silenceToleranceMs: 2500,
