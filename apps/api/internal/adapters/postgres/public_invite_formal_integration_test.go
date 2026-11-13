@@ -18,12 +18,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// Replays the formal finding ArchiveLeavesNoActiveEpisode (tools/formal/public-invite-access). The
-// auto Space lifecycle worker asks to end the live Episode and then archives the Space, in two
-// separate steps. A public join that lands between them creates a new Episode, and ArchiveSpace
-// does not look at Episodes. This test pins today's behavior: when the finding is fixed, it fails,
-// and the finding moves out of `findings` in the same change.
-func TestFormalFindingArchiveLeavesActiveEpisode(t *testing.T) {
+// Replays the formal rule ArchiveLeavesNoActiveEpisode (tools/formal/public-invite-access). The auto
+// Space lifecycle worker ends the live Episode, archives the Space, and ends the live Episode again.
+// A public join that lands between the first end and the archive creates a new Episode; the second
+// end must leave no Episode active in the archived Space.
+func TestArchiveLeavesNoActiveEpisode(t *testing.T) {
 	databaseURL := os.Getenv(config.DatabaseURL)
 	if testing.Short() || databaseURL == "" {
 		t.Skip("isolated PostgreSQL integration database is not configured")
@@ -80,16 +79,21 @@ func TestFormalFindingArchiveLeavesActiveEpisode(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Step 3 of the worker: end again, now that the archived Space takes no new guest.
+	input.RequestKey = accountTenantIntegrationID(t).String()
+	if err := actions.EndEpisode(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+
 	var archived bool
 	var status string
 	if err := pool.QueryRow(ctx, `select spaces.archived_at is not null, episodes.status from spaces join episodes on episodes.tenant_id=spaces.tenant_id and episodes.space_id=spaces.id where spaces.tenant_id=$1 and spaces.id=$2 and episodes.id=$3`,
 		uuid(tenantID), uuid(space.ID), uuid(guest.Episode.ID)).Scan(&archived, &status); err != nil {
 		t.Fatal(err)
 	}
-	if !archived || status != string(episodes.EpisodeStatusActive) {
-		t.Fatalf("archived = %v, Episode status = %q; the finding no longer reproduces, so move ArchiveLeavesNoActiveEpisode out of findings", archived, status)
+	if !archived || status == string(episodes.EpisodeStatusActive) {
+		t.Fatalf("archived = %v, Episode status = %q; want an archived Space with no active Episode", archived, status)
 	}
-	t.Logf("finding reproduced: Space archived while Episode %s is %s", guest.Episode.ID, status)
 }
 
 // publicInviteFixture is a Space with a public invite, an arrival and the services that act on them.

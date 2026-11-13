@@ -23,5 +23,8 @@ Issue	apps/api/db/queries/sync_lifecycle.sql	and episodes.status = 'active'
 Issue	apps/api/db/queries/sync_lifecycle.sql	(participants.status = 'active' and sync_lifecycle_intents.status = 'applied'
 LifecycleEnd	apps/api/internal/publicinvites/lifecycle_worker.go	if err := w.actions.EndEpisode(ctx, input); err != nil {
 LifecycleArchive	apps/api/internal/publicinvites/lifecycle_worker.go	if err := w.actions.ArchiveSpace(ctx, input); err != nil {
+LifecycleEndAfterArchive	apps/api/internal/publicinvites/lifecycle_worker.go	lifecycleActionRequestKey(claimed, "end-after-archive")
 LifecycleEnd	apps/api/internal/publicinviteapp/lifecycle_actions.go	_, err := a.episodes.RequestEpisodeEnd(ctx, episodes.RequestEpisodeEndInput{
 LifecycleArchive	apps/api/internal/publicinviteapp/lifecycle_actions.go	if _, err := a.spaces.ArchiveSpace(ctx, input.TenantID, input.SpaceID); err != nil {
+Opened	apps/api/internal/publicinvites/service.go	space.AdmissionMode != AdmissionKnock && space.AdmissionMode != AdmissionOpen
+Opened	apps/api/internal/publicinvites/service.go	return r.admitPendingArrival(ctx, space, arrival, input.MediaClients)

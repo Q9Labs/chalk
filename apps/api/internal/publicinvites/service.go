@@ -1159,6 +1159,33 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	return PublicSpaceArrival{}, ErrInviteUnavailable
 }
 
+// admitPendingArrival grants access to a pending arrival that needs no host decision and marks it admitted.
+func (r Runtime) admitPendingArrival(ctx context.Context, space PublicSpace, arrival Arrival, clients mediaplane.ClientProviders) (PublicSpaceArrival, error) {
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: clients})
+	if err != nil {
+		return PublicSpaceArrival{}, err
+	}
+	if err := validateAccessGrant(grant, arrival); err != nil {
+		return PublicSpaceArrival{}, err
+	}
+	admitted, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
+		TenantID:              arrival.TenantID,
+		ArrivalHandle:         arrival.ArrivalHandle,
+		State:                 ArrivalAdmitted,
+		EpisodeID:             grant.EpisodeID,
+		ParticipantID:         grant.ParticipantID,
+		ParticipantGeneration: grant.ParticipantGeneration,
+		Provider:              grant.Provider,
+		ProviderSubject:       grant.ProviderSubject,
+	})
+	if err != nil {
+		return PublicSpaceArrival{}, err
+	}
+	result := r.arrivalResult(space, admitted)
+	result.Access = &grant
+	return result, nil
+}
+
 func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalStatusInput, beforeWrite func() error) (PublicSpaceArrival, error) {
 	arrival, err := r.authenticateArrival(ctx, input.ArrivalHandle, input.GuestCredential, input.AccountID)
 	if err != nil {
@@ -1188,6 +1215,13 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 				return PublicSpaceArrival{}, validationErr
 			}
 		}
+	}
+	// The host opened the Space while the guest waited: no decision is left to wait for.
+	if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest && space.AdmissionMode == AdmissionOpen {
+		if err := beforeWrite(); err != nil {
+			return PublicSpaceArrival{}, err
+		}
+		return r.admitPendingArrival(ctx, space, arrival, input.MediaClients)
 	}
 	if arrival.State == ArrivalAdmitted {
 		if err := beforeWrite(); err != nil {
@@ -1289,7 +1323,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 }
 
 func (r Runtime) pendingGuestArrivalValid(ctx context.Context, arrival Arrival, space PublicSpace) (bool, error) {
-	if (!arrival.ExpiresAt.IsZero() && !arrival.ExpiresAt.After(r.service.now())) || space.Archived || space.AdmissionMode != AdmissionKnock {
+	if (!arrival.ExpiresAt.IsZero() && !arrival.ExpiresAt.After(r.service.now())) || space.Archived || (space.AdmissionMode != AdmissionKnock && space.AdmissionMode != AdmissionOpen) {
 		return false, nil
 	}
 	if len(arrival.InviteHandle) == 0 {
