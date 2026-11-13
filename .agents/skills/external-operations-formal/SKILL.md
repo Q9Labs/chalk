@@ -20,15 +20,15 @@ When a host removes someone, ends an Episode, or takes publishAudio away from a 
 
 ## Findings
 
-The real code breaks three of these rules. Each is a finding, kept in `tools/formal/external-operations/findings` and replayed against real Sync code and Postgres in `tools/formal/external-operations/replay/external_operations_findings_test.exs`.
+The model found three bugs in the real code, and all three are fixed. Each is kept as a broken variant in `tools/formal/external-operations/breaks`, so the check proves it would catch the bug again, and each has a regression test in `apps/sync/test/chalk_sync/external_operations_findings_test.exs`.
 
-- **F-A, `DemotedPublishesOnlyWhileCleanupRuns`.** A speaker who is publishing asks for a second grant. While that request is open a host takes publishAudio away, which starts a source-stop child. The SFU refuses the second grant. `complete_publication_grant` sees a failed grant that needs cleanup and settles the pending child as applied without calling the SFU. The first grant is still live and nothing will revoke it.
-- **F-B, `GivingUpLeavesNothingLive`.** A host takes publishAudio away from a speaker who is publishing. The SFU gives no clear answer to the source stop for 100 attempts, so Sync fails the child with `retry_exhausted`. The role change stays committed, the child is failed and the SFU still holds the source.
-- **F-C, `DemotedPublishesOnlyWhileCleanupRuns`.** The Live Episode process reserves a grant and stops before it calls the SFU. The reservation expires. A host takes publishAudio away, and Sync sees an expired reservation and no live source, so it starts no cleanup. The restarted process asks again with the same operation id, gets the expired row back, and the SFU grants the source. The speaker publishes without publishAudio and `complete_publication_grant` only reports `cleanup_required`.
+- **F-A, `DemotedPublishesOnlyWhileCleanupRuns`.** A speaker who is publishing asks for a second grant. While that request is open a host takes publishAudio away, which starts a source-stop child. The SFU refuses the second grant. `complete_publication_grant` sees a failed grant that needs cleanup and settles the pending child as applied without calling the SFU. The first grant is still live and nothing will revoke it. Fix: the child stays pending and revokes the first grant (variant `grant_settles_stop`).
+- **F-B, `GivingUpLeavesNothingLive`.** A host takes publishAudio away from a speaker who is publishing. The SFU gives no clear answer to the source stop for 100 attempts, so Sync fails the child with `retry_exhausted`. The role change stays committed, the child is failed and the SFU still holds the source. Fix: a source stop never gives up. It stays pending and is retried until the SFU confirms, because the role change has already taken effect (variant `rt_gives_up`). A stop whose target is gone settles as applied.
+- **F-C, `DemotedPublishesOnlyWhileCleanupRuns`.** The Live Episode process reserves a grant and stops before it calls the SFU. The reservation expires. A host takes publishAudio away, and Sync sees an expired reservation and no live source, so it starts no cleanup. The restarted process asks again with the same operation id, gets the expired row back, and the SFU grants the source. The speaker publishes without publishAudio and `complete_publication_grant` only reports `cleanup_required`. Fix: the reservation lookup skips an open row that has expired, so the insert replaces it with a new row and a new revision, which `assign_roles` then sees (variant `resend_expired`).
 
-Run the replays with `tools/formal/external-operations/replay/run.sh` (Elixir and Docker; on the Air use `box run -- 'bash scripts/gates/instabox-run.sh tools/formal/external-operations/replay/run.sh'`). Each test passes while its finding is present and fails with "F-x is fixed" when a fix lands. When that happens, remove the row from `findings`, switch its cause off in the model, and delete the test.
+Run the regression tests with `cd apps/sync && scripts/with-reliability-postgres bash -c 'cd apps/sync && mix test test/chalk_sync/external_operations_findings_test.exs'` from the repository root (Elixir and Docker).
 
-The model takes each finding's cause as a constant: `GrantRefusals` (F-A), `GiveUp` (F-B), `ResendsExpired` (F-C). `tools/formal/external-operations/run.sh` requires each finding to keep failing with only its cause on, and requires all rules to hold with the three causes off (the idealized settings).
+Because a source stop never gives up, `OperationsSettle` for it assumes the SFU answers a source stop it receives often enough (strong fairness on `HearsAnswer`). If the SFU never answers, the stop stays pending and every attempt logs a warning.
 
 ## Does my change touch the model?
 
@@ -45,8 +45,8 @@ If the diff touches a function in the coverage record, read it against the model
 Sync commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches.
 
 - `Reserve`: `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex` (`reserve_transaction`, `validate_capability`) and `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` (the reservation insert with a 30-second expiry and the on-conflict overwrite that applies only to an expired row).
-- `ResendGrant`: `reserve_transaction` in `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex` returns the existing row for a known operation id, whatever its status.
-- `CompleteGrant`: `complete_transaction` and `satisfy_failed_grant_child` in `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex`, and the completion update in `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` that extends the reservation to at least 5 minutes.
+- `ResendGrant`: `reserve_transaction` in `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex` returns the existing row for a known operation id, whatever its status, except an open row that has expired (the lookup in `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` skips it, so the insert replaces it).
+- `CompleteGrant`: `complete_transaction` in `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex`, and the completion update in `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` that extends the reservation to at least 5 minutes.
 - `RoleDemote`: `apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex` (`lock_publication_reservations`, the exercised-source check) and `apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex`.
 - `Claim`: `apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex` (`claim_operations_where`: the 60-second lease, the attempt count capped at 100, and the three reservation blocks for a source stop, `remove_participant` and end operations).
 - `NodeCalls`, `NodeHears`, `NodePending`: `apps/sync/lib/chalk_sync/external_operation_consumer.ex` (`dispatch_with_context`, `execute_operation`, `@max_attempts`).
@@ -60,24 +60,22 @@ Each Postgres action is one transaction under the Episode control row lock. `Cla
 tools/formal/external-operations/run.sh
 ```
 
-It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4, pinned by checksum in `tools/formal/tla2tools.sh`) once into `~/.cache/chalk-tla`. It takes about 2 minutes on the Mac mini (the two-node role-transition run has 785,000 states). Run it on the Mac mini or Instabox, not the Air. It does six things and fails if any fails:
+It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4, pinned by checksum in `tools/formal/tla2tools.sh`) once into `~/.cache/chalk-tla`. It takes about 2 minutes on the Mac mini (the two-node role-transition run has 785,000 states). Run it on the Mac mini or Instabox, not the Air. It does four things and fails if any fails:
 
 1. It checks that every fragment in `anchors` is still in its file.
 2. It runs TLC on the real code, one operation at a time on two nodes (`rem`, `end`, `rt`), and needs the rules the code keeps to hold. It checks `OperationsSettle` for each operation on one node with no crashes.
-3. It runs each finding in `findings` with only its cause on and needs TLC to report the rule as broken.
-4. It runs the idealized settings (no finding's cause) and needs every rule to hold.
-5. It runs the idealized settings without the SFU's revision ordering (the Cloudflare path) and needs every rule to hold. Only the claim checks protect a provider that applies controls in arrival order.
-6. It runs each broken variant in `breaks` and needs TLC to report the named rule as broken. This proves the check can still fail.
+3. It runs the real code on one node with every rule, and again without the SFU's revision ordering (the Cloudflare path). Only the claim checks protect a provider that applies controls in arrival order.
+4. It runs each broken variant in `breaks` and needs TLC to report the named rule as broken. This proves the check can still fail.
 
 `MaxAttempts = 2` stands for the 100 attempts of the code. `tools/formal/external-operations/run.sh --deep` uses 3 attempts and 5 control revisions. The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/external-operations/run.sh` in `.github/workflows/formal-external-operations.yml` when a covered file or this model changes.
 
 ## Read a failure
 
-Read every TLC result with the `/statechart` skill. Give it `tools/formal/external-operations/ExternalOperations.chart.cfg` and `tools/formal/external-operations/ExternalOperations.view.mjs` so that states and steps use the words of a person in the call. Use the chart config as it is: its view is not a bisimulation of the model, so do not add a `VIEW` to the cfg. `tools/formal/external-operations/chart/chart.svg` shows the two shortest bug paths, F-C and F-B.
+Read every TLC result with the `/statechart` skill. Give it `tools/formal/external-operations/ExternalOperations.chart.cfg` (set its `Break` to the variant you want to read) and `tools/formal/external-operations/ExternalOperations.view.mjs` so that states and steps use the words of a person in the call. Use the chart config as it is: its view is not a bisimulation of the model, so do not add a `VIEW` to the cfg.
 
 **An anchor fails.** Someone changed code that a model action mirrors. Read the diff against that action. If the guard only moved or was reformatted with the same meaning, update the fragment in `anchors`. If the meaning changed, change the action in `ExternalOperations.tla` (see below).
 
-**A rule breaks on the real code or a finding stops failing.** Tell the path as `/statechart` gives it, then replay it against the real code before you call it a bug: each step is one transaction, so a replay is a Postgres-backed test like `tools/formal/external-operations/replay/external_operations_findings_test.exs`. If a finding stops failing, someone fixed it: remove its row and its replay as described above.
+**A rule breaks on the real code.** Tell the path as `/statechart` gives it, then replay it against the real code before you call it a bug: each step is one transaction, so a replay is a Postgres-backed test like the ones in `apps/sync/test/chalk_sync/external_operations_findings_test.exs`.
 
 **A broken variant no longer breaks its rule.** The model drifted so that the guard that variant removes no longer matters. Compare the action with its code and with the `breaks` line before you change anything. The two claim variants run with `Ordered = FALSE`, because the Chalk SFU refuses a stale control by revision and hides them.
 
@@ -103,4 +101,4 @@ Never weaken a rule or drop a variant to make the check pass. A rule that fails 
 - Provider answers: the SFU grants, refuses (when `GrantRefusals` is on) or does not answer. Other error classes collapse into those.
 - Liveness (`OperationsSettle`) runs on one node with no crashes, because a node that stops forever settles nothing. Crashes are covered by the safety runs on two nodes.
 - The finalizer's other effects (webhooks, attendance, the roster) are not modeled, only the status of the operation.
-- The replay covers the three findings only. The other rules are checked against the model of the code, and the `anchors` tie the model to it.
+- The regression tests cover the three fixed bugs only. The other rules are checked against the model of the code, and the `anchors` tie the model to it.

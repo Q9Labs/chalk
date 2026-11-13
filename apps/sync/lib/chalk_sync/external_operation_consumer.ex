@@ -204,18 +204,36 @@ defmodule ChalkSync.ExternalOperationConsumer do
             adapter_timeout_ms
           )
 
-    case result do
-      {:confirmed, authority} ->
+    case {operation, result} do
+      {_operation, {:confirmed, authority}} ->
         finalize_confirmed(episode, operation, authority, finalize)
 
-      {:terminal_failure, reason} ->
+      {%{name: :role_transition_source_stop}, {:terminal_failure, reason}} ->
+        keep_source_stop_pending(operation, reason)
+
+      {_operation, {:terminal_failure, reason}} ->
         finalize_terminal_failure(episode, operation, reason, finalize)
 
-      :pending ->
+      {%{name: :role_transition_source_stop}, :pending} ->
+        :pending
+
+      {_operation, :pending} ->
         if operation.attempt_count >= @max_attempts,
           do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize),
           else: :pending
     end
+  end
+
+  # A person lost the right to publish, so Sync asks the SFU to stop the source until the SFU
+  # confirms. Giving up would leave the source live with nothing left to revoke it, and a failed
+  # stop would reject a role change that has already taken effect.
+  defp keep_source_stop_pending(operation, reason) do
+    Logger.warning(
+      "sync external operation source stop stays pending: " <>
+        "operation=#{operation.external_operation_id} reason=#{reason}"
+    )
+
+    :pending
   end
 
   defp prepare_entry_leave(episode, %{name: :participant_leave} = operation),

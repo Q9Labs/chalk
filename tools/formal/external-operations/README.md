@@ -6,7 +6,6 @@ Run `./run.sh` (about 2 minutes on the Mac mini, Java 11 or later; `--deep` adds
 
 - `ExternalOperations.tla` and `ExternalOperations.cfg` are the model and its base settings. Each run picks one operation (`rt`, `rem` or `end`), because all three at once is more than the model can enumerate.
 - `anchors` lists the code fragments each action mirrors; `run.sh` fails when one is gone.
-- `findings` lists the three rules the real code breaks, each with the one setting that causes it. `run.sh` requires each to keep failing and requires every rule to hold with the causes off.
 - `breaks` lists the broken variants of the code and the rule each must break.
-- `replay/` replays the three findings against the real Sync code and Postgres (`replay/run.sh`, needs Elixir and Docker).
-- `ExternalOperations.chart.cfg`, `ExternalOperations.view.mjs` and `chart/` hold the statechart of the two shortest bug paths. `chart/chart.svg` is rendered from `chart/chart.mmd`.
+- The three bugs the model found are fixed. `breaks` keeps each as a broken variant, and `apps/sync/test/chalk_sync/external_operations_findings_test.exs` tests each against the real code and Postgres.
+- `ExternalOperations.chart.cfg` and `ExternalOperations.view.mjs` give `/statechart` the words of a person in the call, to read a failing run.

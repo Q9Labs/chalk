@@ -161,9 +161,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          connection,
          episode,
          %{name: :role_transition_source_stop} = external,
-         reason
+         _reason
        ),
-       do: finalize_pending_operation(connection, episode, external, nil, {:failed, reason})
+       do: finalize_pending_operation(connection, episode, external, nil, {:confirmed, :provider})
 
   defp settle_obsolete(connection, episode, external, reason) do
     PublicationFences.delete(connection, episode, external)
@@ -334,8 +334,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
-      external.external_operation_id,
-      :applied
+      external.external_operation_id
     )
 
     ExternalOperationDecision.build(%{external | status: :applied}, :original)
@@ -351,33 +350,22 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
-      external.external_operation_id,
-      :applied
+      external.external_operation_id
     )
 
     ExternalOperationDecision.build(%{external | status: :applied}, :original)
   end
 
+  # The role change has already taken effect, so a source stop that failed would leave the host
+  # reading "failed" about a change that happened and the source live.
   defp finalize_pending_operation(
          connection,
-         episode,
-         %{name: :role_transition_source_stop} = external,
+         _episode,
+         %{name: :role_transition_source_stop},
          _state,
-         {:failed, reason}
-       )
-       when is_atom(reason) do
-    RoleTransitionSettlement.settle_child(
-      connection,
-      episode,
-      external.external_operation_id,
-      {:failed, reason}
-    )
-
-    ExternalOperationDecision.build(
-      %{external | status: :failed, last_error_code: reason},
-      :original
-    )
-  end
+         {:failed, _reason}
+       ),
+       do: Postgrex.rollback(connection, {:error, :source_stop_cannot_fail})
 
   defp finalize_pending_operation(connection, episode, external, state, {:failed, reason})
        when is_atom(reason) do

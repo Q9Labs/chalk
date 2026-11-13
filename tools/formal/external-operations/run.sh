@@ -31,10 +31,9 @@ while IFS=$'\t' read -r action path fragment; do
 done <"$model/anchors"
 ((failures == 0)) && echo "ok   every fragment in anchors is present"
 
-# tlc NAME OPS NODES RESEND REFUSE GIVEUP BREAK CHECKS prints TLC's verdict line and keeps the full log.
+# tlc NAME OPS NODES BREAK CHECKS prints TLC's verdict line and keeps the full log.
 #   OPS     one of rt, rem or end (the operations in the run; the model has no run with all three)
 #   NODES   n1 or n1,n2
-#   RESEND, REFUSE, GIVEUP  TRUE or FALSE: the ResendsExpired, GrantRefusals and GiveUp settings
 #   CHECKS  comma-separated rules, or LIVE for the OperationsSettle property
 # Environment: ORDERED=FALSE removes the provider's revision ordering (the Cloudflare path),
 # CRASHES=FALSE stops nodes from failing in the middle of an operation (the liveness runs).
@@ -45,14 +44,13 @@ tlc() {
   cp "$model/ExternalOperations.tla" "$dir/"
   sed -e "s/Nodes = {[^}]*}/Nodes = {$nodes}/" -e "s/Ops = {[^}]*}/Ops = {\"$ops\"}/" \
     -e "s/MaxAttempts = [0-9]*/MaxAttempts = $attempts/" -e "s/MaxRev = [0-9]*/MaxRev = $revisions/" \
-    -e "s/ResendsExpired = [A-Z]*/ResendsExpired = $4/" -e "s/GrantRefusals = [A-Z]*/GrantRefusals = $5/" \
-    -e "s/GiveUp = [A-Z]*/GiveUp = $6/" -e "s/Ordered = [A-Z]*/Ordered = ${ORDERED:-TRUE}/" \
-    -e "s/Crashes = [A-Z]*/Crashes = ${CRASHES:-TRUE}/" -e "s/Break = \"[a-z_]*\"/Break = \"$7\"/" \
+    -e "s/Ordered = [A-Z]*/Ordered = ${ORDERED:-TRUE}/" \
+    -e "s/Crashes = [A-Z]*/Crashes = ${CRASHES:-TRUE}/" -e "s/Break = \"[a-z_]*\"/Break = \"$4\"/" \
     -e '/^INVARIANTS/,$d' "$model/ExternalOperations.cfg" >"$dir/ExternalOperations.cfg"
-  if [[ "$8" == LIVE ]]; then
+  if [[ "$5" == LIVE ]]; then
     echo "PROPERTY OperationsSettle" >>"$dir/ExternalOperations.cfg"
   else
-    { echo "INVARIANTS"; echo "    TypeOK"; echo "$8" | tr ',' '\n' | sed 's/^/    /'; } >>"$dir/ExternalOperations.cfg"
+    { echo "INVARIANTS"; echo "    TypeOK"; echo "$5" | tr ',' '\n' | sed 's/^/    /'; } >>"$dir/ExternalOperations.cfg"
     [[ "$nodes" == *,* ]] && echo "SYMMETRY NodeSymmetry" >>"$dir/ExternalOperations.cfg"
   fi
   (cd "$dir" && java -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers "$workers" -metadir "$dir/states" \
@@ -87,36 +85,22 @@ expect_breaks() {
   fi
 }
 
-echo "== Real code: every rule the code keeps holds"
-expect_holds real-rem "remove_participant, two nodes" rem n1,n2 TRUE TRUE TRUE none RemovedNeverPublishes,AppliedOnce
-expect_holds real-end "end Episode, two nodes" end n1,n2 TRUE TRUE TRUE none EndedNeverPublishes,AppliedOnce
-expect_holds real-rt "role-transition source stop, two nodes" rt n1,n2 TRUE TRUE TRUE none AppliedOnce
+echo "== Real code: every rule holds"
+expect_holds real-rem "remove_participant, two nodes" rem n1,n2 none RemovedNeverPublishes,AppliedOnce
+expect_holds real-end "end Episode, two nodes" end n1,n2 none EndedNeverPublishes,AppliedOnce
+expect_holds real-rt "role-transition source stop, two nodes" rt n1,n2 none \
+  DemotedPublishesOnlyWhileCleanupRuns,GivingUpLeavesNothingLive,AppliedOnce
 for ops in rem end rt; do
-  CRASHES=FALSE expect_holds "live-$ops" "$ops settles, one node" "$ops" n1 TRUE TRUE TRUE none LIVE
+  CRASHES=FALSE expect_holds "live-$ops" "$ops settles, one node" "$ops" n1 none LIVE
 done
-
-echo "== Findings: each rule the code breaks must keep failing"
-while IFS=$'\t' read -r id cause rule text; do
-  [[ -z "$id" || "$id" == \#* ]] && continue
-  resend=FALSE refuse=FALSE giveup=FALSE
-  case "$cause" in
-    ResendsExpired) resend=TRUE ;;
-    GrantRefusals) refuse=TRUE ;;
-    GiveUp) giveup=TRUE ;;
-    *) fail "$id: unknown cause $cause" ;;
-  esac
-  expect_breaks "finding-$id" "$id breaks $rule: $text" "$rule" rt n1 "$resend" "$refuse" "$giveup" none "$rule"
-done <"$model/findings"
-
-echo "== Idealized settings (no finding's cause): every rule holds"
 for ops in rem end rt; do
-  expect_holds "ideal-$ops" "$ops, one node" "$ops" n1 FALSE FALSE FALSE none \
+  expect_holds "one-$ops" "$ops, one node, every rule" "$ops" n1 none \
     RemovedNeverPublishes,DemotedPublishesOnlyWhileCleanupRuns,GivingUpLeavesNothingLive,EndedNeverPublishes,AppliedOnce
 done
 
-echo "== Idealized settings without provider ordering: every rule holds"
+echo "== Real code without provider ordering: every rule holds"
 for ops in rem end rt; do
-  ORDERED=FALSE expect_holds "unordered-$ops" "$ops, one node" "$ops" n1 FALSE FALSE FALSE none \
+  ORDERED=FALSE expect_holds "unordered-$ops" "$ops, one node" "$ops" n1 none \
     RemovedNeverPublishes,DemotedPublishesOnlyWhileCleanupRuns,GivingUpLeavesNothingLive,EndedNeverPublishes,AppliedOnce
 done
 
@@ -124,9 +108,9 @@ echo "== Broken variants: each must break its rule"
 while IFS=$'\t' read -r break ops nodes ordered rule edit; do
   [[ -z "$break" || "$break" == \#* ]] && continue
   if [[ "$rule" == OperationsSettle ]]; then
-    CRASHES=FALSE ORDERED="$ordered" expect_breaks "break-$break" "$break breaks $rule" "$rule" "$ops" "$nodes" TRUE TRUE TRUE "$break" LIVE
+    CRASHES=FALSE ORDERED="$ordered" expect_breaks "break-$break" "$break breaks $rule" "$rule" "$ops" "$nodes" "$break" LIVE
   else
-    ORDERED="$ordered" expect_breaks "break-$break" "$break breaks $rule" "$rule" "$ops" "$nodes" FALSE FALSE FALSE "$break" "$rule"
+    ORDERED="$ordered" expect_breaks "break-$break" "$break breaks $rule" "$rule" "$ops" "$nodes" "$break" "$rule"
   fi
 done <"$model/breaks"
 

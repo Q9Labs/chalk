@@ -1,5 +1,6 @@
-# Broken variants of the code. `run.sh` runs each one on the idealized settings
-# (see `findings`) and requires TLC to report the named rule as broken.
+# Broken variants of the code. `run.sh` runs each one and requires TLC to report the
+# named rule as broken. The three newest rows are the findings the model made, kept
+# as variants after the code was fixed.
 # Format: <Break value><TAB><operations><TAB><nodes><TAB><Ordered><TAB><rule TLC must report><TAB><code edit it mirrors>
 # The two claim variants run without provider ordering: the Chalk SFU refuses a stale grant
 # by revision, so only the claim check protects a provider that applies controls in arrival order.
@@ -14,3 +15,6 @@ rem_skips_provider	rem	n1	TRUE	RemovedNeverPublishes	external_operation_consumer
 end_skips_provider	end	n1	TRUE	EndedNeverPublishes	external_operation_consumer.ex dispatches the end-Episode operations as local operations
 finalize_ignores_status	rt	n1,n2	TRUE	AppliedOnce	external_operation_finalizer.ex drops the `external.status != :pending` clause
 pending_never_gives_up	rem	n1	TRUE	OperationsSettle	external_operation_consumer.ex drops `operation.attempt_count >= @max_attempts` from the :pending branch
+grant_settles_stop	rt	n1	TRUE	DemotedPublishesOnlyWhileCleanupRuns	publication_grants.ex complete_transaction settles the pending source stop as applied when a grant fails and cleanup is required
+rt_gives_up	rt	n1	TRUE	GivingUpLeavesNothingLive	external_operation_consumer.ex fails a source stop with retry_exhausted after @max_attempts
+resend_expired	rt	n1	TRUE	DemotedPublishesOnlyWhileCleanupRuns	sql/publication_grants.ex select_publication_grant_reservation returns an expired open reservation, so a resent request reaches the SFU with no live reservation behind it

@@ -7,6 +7,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
       participant_generation, source, status, failure_code, expires_at, control_revision
     from sync_publication_grant_reservations
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and operation_id = $4
+      and not (status in ('pending', 'ambiguous') and expires_at <= now())
     """
   end
 
@@ -74,20 +75,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
     select count(*)
     from sync_publication_grant_reservations
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and expires_at > now()
-    """
-  end
-
-  def pending_role_transition_child_for_source do
-    """
-    select external_operation_id
-    from sync_external_operations
-    where tenant_id = $1 and space_id = $2 and episode_id = $3
-      and operation_name = 'role_transition_source_stop' and status = 'pending'
-      and target_participant_id = $4 and target_participant_generation = $5
-      and source = $6
-    order by created_at, external_operation_id
-    for update
-    limit 1
     """
   end
 end

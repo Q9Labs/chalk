@@ -36,8 +36,7 @@ CONSTANTS
     MaxRoleChanges,  \* how many assign_roles commands the model runs
     Ordered,         \* the provider applies source controls in revision order (Chalk SFU)
     GrantRefusals,   \* the provider may refuse a grant for a reason other than a newer revoke
-    GiveUp,          \* an operation fails once attempt_count reaches MaxAttempts
-    ResendsExpired,  \* a reservation that expired is sent to the provider again (the real code)
+    GiveUp,          \* remove and end operations fail once attempt_count reaches MaxAttempts
     Crashes,         \* a node may stop in the middle of an operation (off for the liveness runs)
     Break            \* "none" or one broken variant, see BreakNames
 
@@ -51,7 +50,10 @@ BreakNames == {
     "pending_never_gives_up",        \* external_operation_consumer.ex drops `operation.attempt_count >= @max_attempts` from the :pending branch
     "rt_skips_provider",             \* external_operation_consumer.ex dispatches role_transition_source_stop as local
     "rem_skips_provider",            \* ... dispatches remove_participant as local
-    "end_skips_provider"             \* ... dispatches end operations as local
+    "end_skips_provider",            \* ... dispatches end operations as local
+    "grant_settles_stop",            \* publication_grants.ex complete_transaction settles the pending source stop when a grant fails
+    "rt_gives_up",                   \* external_operation_consumer.ex fails a source stop after @max_attempts, as it does the other operations
+    "resend_expired"                 \* publication_grants.ex reserve_transaction returns an expired open reservation instead of inserting a new one
 }
 
 ASSUME Nodes # {}
@@ -59,7 +61,7 @@ ASSUME Ops \subseteq {"rt", "rem", "end"}
 ASSUME MaxAttempts \in Nat /\ MaxAttempts >= 1
 ASSUME MaxRev \in Nat /\ MaxRev >= 3
 ASSUME MaxRoleChanges \in Nat
-ASSUME {Ordered, GrantRefusals, GiveUp, ResendsExpired, Crashes} \subseteq BOOLEAN
+ASSUME {Ordered, GrantRefusals, GiveUp, Crashes} \subseteq BOOLEAN
 ASSUME Break \in BreakNames
 
 VARIABLES
@@ -193,11 +195,13 @@ Reserve ==
 
 (* reserve_transaction with an operation id that already has a row: it     *)
 (* returns that row, whatever its status, after the same actor checks but   *)
-(* without the fence check.                                                *)
+(* without the fence check. An open row that has expired is not returned:  *)
+(* the insert replaces it with a new row and a new revision, which is the  *)
+(* Reserve action.                                                         *)
 ResendGrant ==
     /\ ep = "active" /\ part = "active" /\ cap
     /\ res # "none"
-    /\ ResendsExpired \/ ~resExp
+    /\ ~resExp \/ Break = "resend_expired"
     /\ lp \in {"done", "dead"}
     /\ lp' = "reserved"
     /\ UNCHANGED <<ep, part, cap, rc, rev, res, resRev, resExp, gsent, gans,
@@ -273,8 +277,9 @@ FailedUpdate(o, reason, restore) ==
 NoUpdate == UNCHANGED <<ep, part, st, applied, fence, fOwner, why>>
 
 (* complete_transaction: store the outcome, then compare the participant   *)
-(* with it. A failed grant that must be cleaned up settles the pending     *)
-(* role-transition child as applied (satisfy_failed_grant_child).          *)
+(* with it. The pending role-transition child stays pending, because an   *)
+(* earlier grant may still be live and only the provider can revoke it.    *)
+(* Break "grant_settles_stop" settles the child as applied instead.        *)
 CompleteGrant ==
     /\ lp = "sent"
     /\ \E out \in {"confirmed", "refused", "ambiguous"} :
@@ -286,7 +291,8 @@ CompleteGrant ==
                                    [] out = "refused"   -> "failed"
                                    [] OTHER              -> "ambiguous"
                cleanup == ~cap \/ fence = "active"
-               satisfy == newStatus = "failed" /\ cleanup /\ "rt" \in Ops
+               satisfy == Break = "grant_settles_stop"
+                          /\ newStatus = "failed" /\ cleanup /\ "rt" \in Ops
                           /\ st["rt"] = "pending"
            IN /\ res' = newStatus
               /\ resExp' = FALSE
@@ -449,6 +455,13 @@ ProviderRuns(o) ==
                    gans, fence, fOwner, st, orev, att, claim, osent, why,
                    applied, nop, nph, natt>>
 
+HearsAnswer(n) ==
+    /\ nph[n] = "sent"
+    /\ oans[nop[n]] /\ nph' = [nph EXCEPT ![n] = "got"]
+    /\ UNCHANGED <<ep, part, cap, rc, rev, res, resRev, resExp, lp, gsent,
+                   gans, pRev, pState, pEnded, fence, fOwner, st, orev, att,
+                   claim, osent, oans, why, applied, nop, natt>>
+
 NodeHears(n) ==
     /\ nph[n] = "sent"
     /\ \/ oans[nop[n]] /\ nph' = [nph EXCEPT ![n] = "got"]
@@ -472,7 +485,8 @@ AuthorityHolds(o) ==
 (* finalize_transaction with {:confirmed, :provider}. A duplicate finalize *)
 (* finds the operation no longer pending. An authority error rolls back,   *)
 (* until the claim that read attempt_count = MaxAttempts, which settles    *)
-(* the operation as obsolete.                                              *)
+(* the operation as obsolete. A source stop whose target is gone settles   *)
+(* as applied: the role change took effect and nothing can be live.        *)
 NodeFinalizes(n) ==
     /\ nph[n] = "got"
     /\ LET o == nop[n]
@@ -482,20 +496,24 @@ NodeFinalizes(n) ==
              ELSE IF AuthorityHolds(o)
                 THEN AppliedUpdate(o)
              ELSE IF att[o] >= MaxAttempts /\ GiveUp
-                THEN FailedUpdate(o, "obsolete", FALSE)
+                THEN IF o = "rt" /\ Break # "rt_gives_up"
+                        THEN AppliedUpdate(o)
+                        ELSE FailedUpdate(o, "obsolete", FALSE)
              ELSE NoUpdate
     /\ UNCHANGED <<rev, cap, rc, res, resRev, resExp, lp, gsent, gans,
                    pRev, pState, pEnded, orev, att, claim, osent, oans>>
 
 (* The call stayed ambiguous. The operation stays pending for the next     *)
 (* claim, until the claim that read attempt_count = MaxAttempts, which     *)
-(* finalizes {:failed, :retry_exhausted}.                                  *)
+(* finalizes {:failed, :retry_exhausted}. A source stop never gives up:    *)
+(* the role change has taken effect, so only the provider can settle it.   *)
 NodePending(n) ==
     /\ nph[n] = "pending"
     /\ LET o == nop[n]
        IN /\ NodeIdle(n)
           /\ IF natt[n] >= MaxAttempts /\ GiveUp /\ st[o] = "pending"
                 /\ Break # "pending_never_gives_up"
+                /\ (o # "rt" \/ Break = "rt_gives_up")
                 THEN IF AuthorityHolds(o)
                         THEN FailedUpdate(o, "exhausted", TRUE)
                         ELSE FailedUpdate(o, "obsolete", FALSE)
@@ -541,6 +559,10 @@ Next ==
     \/ \E n \in Nodes : NodeStops(n)
     \/ Done
 
+(* A source stop is retried until the provider answers, so the liveness    *)
+(* run assumes the provider answers a source stop it receives often enough *)
+(* (the strong fairness on HearsAnswer). Remove and end operations give up *)
+(* and need no such assumption.                                            *)
 Fairness ==
     /\ WF_vars(SendGrant) /\ WF_vars(DeliverGrant)
     /\ SF_vars(ExpireReservation) /\ WF_vars(CompleteGrant)
@@ -549,6 +571,7 @@ Fairness ==
     /\ \A n \in Nodes : WF_vars(NodeCalls(n)) /\ WF_vars(NodeHears(n))
                         /\ WF_vars(NodeFinalizes(n)) /\ WF_vars(NodePending(n))
     /\ \A o \in Ops : WF_vars(ProviderRuns(o))
+    /\ \A n \in Nodes : SF_vars(HearsAnswer(n) /\ nop[n] = "rt")
     /\ WF_vars(FenceExpires)
 
 Spec == Init /\ [][Next]_vars /\ Fairness
