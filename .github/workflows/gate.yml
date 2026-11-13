@@ -54,16 +54,18 @@ jobs:
       full: ${{ steps.select.outputs.full }}
     steps:
       # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
-      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
       - name: Stop when the merge group is gone
         if: github.event_name == 'merge_group'
         env:
           API_TOKEN: ${{ github.token }}
         run: |
           status=0
-          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
-          [[ "${status}" == 2 ]] || exit 0
-          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          advertised="$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
       - name: Check out source
@@ -140,16 +142,18 @@ jobs:
       VITEST_MAX_WORKERS: "4"
     steps:
       # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
-      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
       - name: Stop when the merge group is gone
         if: github.event_name == 'merge_group'
         env:
           API_TOKEN: ${{ github.token }}
         run: |
           status=0
-          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
-          [[ "${status}" == 2 ]] || exit 0
-          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          advertised="$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
       - name: Check out source
@@ -365,16 +369,18 @@ jobs:
       actions: write
     steps:
       # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
-      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
       - name: Stop when the merge group is gone
         if: github.event_name == 'merge_group'
         env:
           API_TOKEN: ${{ github.token }}
         run: |
           status=0
-          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
-          [[ "${status}" == 2 ]] || exit 0
-          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          advertised="$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
       - name: Check out source
@@ -444,16 +450,18 @@ jobs:
       actions: write
     steps:
       # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
-      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
       - name: Stop when the merge group is gone
         if: github.event_name == 'merge_group'
         env:
           API_TOKEN: ${{ github.token }}
         run: |
           status=0
-          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
-          [[ "${status}" == 2 ]] || exit 0
-          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          advertised="$(git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
       - name: Check out source
