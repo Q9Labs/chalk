@@ -1580,36 +1580,6 @@
   height: 36px;
 }
 
-/* The copy icon turns into a check where it sits; the tooltip names what it copies. */
-.site .dash .copy-glyph {
-  display: grid;
-}
-
-.site .dash .copy-glyph > svg.site-icon {
-  grid-area: 1 / 1;
-  transition:
-    opacity 150ms ease-out,
-    transform 150ms ease-out;
-}
-
-.site .dash .copy .copy-glyph > svg:last-child,
-.site .dash .copy.ok .copy-glyph > svg:first-child {
-  opacity: 0;
-  transform: scale(0.6);
-}
-
-.site .dash .copy.ok .copy-glyph > svg:last-child {
-  opacity: 1;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .site .dash .copy-glyph > svg.site-icon {
-    transition: opacity 150ms ease-out;
-    transform: none !important;
-  }
-}
-
 /* A menu that is open covers its button, so the button's tooltip stays away. */
 .site .dash [data-tip][aria-expanded="true"]:hover::after {
   display: none;
