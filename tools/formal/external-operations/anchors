@@ -25,11 +25,11 @@ NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when Operation
 NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_media_name(name) do
 NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_episode_end_name(name) do
 NodeHears	apps/sync/lib/chalk_sync/external_operation_consumer.ex	@max_attempts 100
-NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	{%{name: :role_transition_source_stop}, :pending} ->
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	defp settle(_episode, %{name: :role_transition_source_stop}, :pending, _finalize), do: :pending
 NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	if operation.attempt_count >= @max_attempts, do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize), else: :pending
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	external.status != :pending -> ExternalOperationDecision.build(external, :duplicate)
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	{:error, reason} -> Postgrex.rollback(connection, {:error, reason})
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	PublicationFences.delete(connection, episode, parent)
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	Enum.all?(statuses, &(&1 == "applied"))
-NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	{%{name: :role_transition_source_stop}, {:terminal_failure, reason}} ->
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	do: keep_source_stop_pending(operation, reason)
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	do: finalize_pending_operation(connection, episode, external, nil, {:confirmed, :provider})
