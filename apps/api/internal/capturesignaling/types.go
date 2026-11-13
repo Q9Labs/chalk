@@ -9,12 +9,11 @@ import (
 )
 
 const (
-	MaximumSignalingHandle = captureplane.MaxProviderReference
-	MaximumLeaseOwner      = 256
-	MaximumLeaseToken      = 256
-	MaximumProviderCode    = 128
-	DefaultWait            = 30 * time.Second
-	DefaultPollInterval    = 10 * time.Millisecond
+	MaximumLeaseOwner   = 256
+	MaximumLeaseToken   = 256
+	MaximumProviderCode = 128
+	DefaultWait         = 30 * time.Second
+	DefaultPollInterval = 10 * time.Millisecond
 )
 
 // SignalingHandle identifies the serialized provider connection command stream.

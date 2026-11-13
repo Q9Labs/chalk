@@ -50,14 +50,6 @@ type FinalizerCompleteInput struct {
 	Now                 time.Time
 }
 
-type FinalizerRetryInput struct {
-	CleanupLeaseInput
-	DueAt       time.Time
-	ErrorCode   string
-	ErrorDetail string
-	Terminal    bool
-}
-
 type FinalizerRepository interface {
 	ClaimFinalizer(context.Context, FinalizerClaimInput) (FinalizerAssignment, error)
 	FinalizerKey(context.Context, LeaseInput) (string, error)

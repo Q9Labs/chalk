@@ -35,7 +35,6 @@ type LayoutProfile string
 
 const (
 	LayoutProfileComposite720PV1 LayoutProfile = "composite_720p_v1"
-	LayoutProfileComposite720pV1               = LayoutProfileComposite720PV1
 )
 
 // These aliases keep the capture-plane vocabulary available at the plan
