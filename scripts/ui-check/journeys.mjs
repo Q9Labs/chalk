@@ -46,7 +46,7 @@ export const JOURNEYS = [
   { id: "screen-share", label: "Screen share", state: "stage-share-two", schemes: ["dark"], ready: "button", steps: [] },
   { id: "toggles", label: "Mute and camera toggles", state: "duo", steps: [{ click: "Mute microphone" }, { click: "Turn off camera" }] },
   { id: "cameras-off", label: "Cameras off", state: "cameras-off", steps: [] },
-  { id: "long-names", label: "Long and right-to-left names", state: "stage-long-names", schemes: ["dark"], ready: "button", steps: [] },
+  { id: "long-names", label: "Long and right-to-left names", state: "stage-long-names", twin: true, ready: "button", steps: [] },
   { id: "reconnecting", label: "Reconnecting", state: "conn-reconnecting", twin: true, steps: [] },
   { id: "notices", label: "Device notices over the board", state: "board-notices-dark", ready: ".chalk-toast", steps: [] },
   { id: "notices-join", label: "People joining with long names", state: "board-notices-light&kind=join", ready: ".chalk-toast", steps: [] },
