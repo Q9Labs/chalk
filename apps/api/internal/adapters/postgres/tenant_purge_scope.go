@@ -21,15 +21,32 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 		}
 	}
 	selected["tenants"] = `id=any($1::uuid[])`
+	exclusive, err := c.exclusiveUsers()
+	if err != nil {
+		return nil, err
+	}
+	selected["users"] = `id in (` + exclusive + `)`
+	c.followParents(selected)
+	c.addJourneyEvents(selected)
+	for _, table := range c.Tables {
+		if condition, ok := selected[table.Name]; ok && condition != "false" && len(table.Primary) == 0 {
+			return nil, fmt.Errorf("selected table %s has no primary key", table.Name)
+		}
+	}
+	return selected, nil
+}
+
+// exclusiveUsers selects the accounts that belong only to the erased Tenants. Global user-owned
+// resources are retained unless their ownership proves exclusivity.
+func (c purgeCatalog) exclusiveUsers() (string, error) {
 	exclusive := `select u.id from public.users u where exists(select 1 from public.memberships m where m.user_id=u.id and m.tenant_id=any($1::uuid[])) and not exists(select 1 from public.memberships m where m.user_id=u.id and not(m.tenant_id=any($1::uuid[])))`
-	// Global user-owned resources are retained unless their ownership proves exclusivity.
 	for _, fk := range c.FKs {
 		if fk.Parent != "users" || len(fk.ChildColumns) != 1 || slices.Contains([]string{"memberships", "auth_identities", "login_sessions", "password_resets"}, fk.Child) {
 			continue
 		}
 		t, ok := c.table(fk.Child)
 		if !ok {
-			return nil, errors.New("missing FK child table")
+			return "", errors.New("missing FK child table")
 		}
 		condition := "true"
 		if t.has("tenant_id") {
@@ -40,9 +57,14 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 		column := purgeQuote(fk.ChildColumns[0])
 		exclusive += ` and u.id not in(select ` + column + ` from ` + purgeName(fk.Child) + ` where ` + column + ` is not null and (` + condition + `))`
 	}
-	selected["users"] = `id in (` + exclusive + `)`
-	for {
-		changed := false
+	return exclusive, nil
+}
+
+// followParents selects every table without a Tenant column through the FKs that reach a selected
+// parent, repeating until no table is added.
+func (c purgeCatalog) followParents(selected map[string]string) {
+	for changed := true; changed; {
+		changed = false
 		for _, table := range c.Tables {
 			if _, exists := selected[table.Name]; exists {
 				continue
@@ -60,10 +82,12 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 				changed = true
 			}
 		}
-		if !changed {
-			break
-		}
 	}
+}
+
+// addJourneyEvents selects the journey events that selected rows point at, and the problem reports
+// delivered for the erased Tenants.
+func (c purgeCatalog) addJourneyEvents(selected map[string]string) {
 	var journeys, events []string
 	for _, table := range c.Tables {
 		condition, ok := selected[table.Name]
@@ -91,12 +115,6 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 		}
 		selected["observability_journey_events"] = reports
 	}
-	for _, table := range c.Tables {
-		if condition, ok := selected[table.Name]; ok && condition != "false" && len(table.Primary) == 0 {
-			return nil, fmt.Errorf("selected table %s has no primary key", table.Name)
-		}
-	}
-	return selected, nil
 }
 
 func checkPurgeScope(ctx context.Context, tx purgeQueryer, scope tenantpurge.Scope, requireDeleted bool) error {

@@ -35,55 +35,9 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		locked, err := queries.LockRecordingTranscriptionPreparationAuthority(ctx, transcriptionPreparationAuthorityParams(input.Authority))
-		if errors.Is(err, pgx.ErrNoRows) {
-			return recordingrender.ErrLeaseStale
-		}
-		if err != nil {
-			return fmt.Errorf("lock recording transcription preparation authority: %w", err)
-		}
-		if !bytes.Equal(locked.PresentationSha256, input.PresentationSHA256) || locked.PresentationDurationMillis != input.DurationMillis {
-			return recordingrender.ErrCommitConflict
-		}
-		if input.TranscriptionSource != nil {
-			if err := verifyRenderCommitObject(ctx, queries, input.Authority, input.TranscriptionSource.Manifest); err != nil {
-				return err
-			}
-			for _, chunk := range input.TranscriptionSource.Chunks {
-				if err := verifyRenderCommitObject(ctx, queries, input.Authority, chunk.Object); err != nil {
-					return err
-				}
-			}
-		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(input, committedAt))
-		if err != nil {
-			return mapRenderTranscriptionError(err)
-		}
-		if !r.transcriptionEnabled {
-			return recordingrender.ErrTranscriptionUnavailable
-		}
-		var sourceID pgtype.UUID
-		if admission.Source != nil {
-			sourceID = uuid(input.Authority.RecordingID)
-		}
-		sourceID, err = queries.CompleteRecordingTranscriptionPreparation(ctx, sqlc.CompleteRecordingTranscriptionPreparationParams{
-			TranscriptionJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
-			AttemptCount: int32(input.Authority.AttemptCount), FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
-			RenderInputHandle: uuid(input.Authority.RenderInputHandle), CommitDigest: input.CommitDigest, PresentationSha256: input.PresentationSHA256,
-			DurationMillis: input.DurationMillis, TranscriptionSourceID: sourceID, CommittedAt: timestamptzValue(committedAt),
-			LeaseToken: requiredTextValue(input.Authority.LeaseToken), LeaseOwner: requiredTextValue(input.Authority.LeaseOwner), LeaseExpiresAt: timestamptzValue(input.Authority.LeaseExpiresAt),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return recordingrender.ErrCommitConflict
-		}
-		if err != nil {
-			return fmt.Errorf("complete recording transcription preparation: %w", err)
-		}
-		if !sourceID.Valid {
-			return nil
-		}
-		result = &recordingrender.TranscriptionResult{SourceID: id(sourceID), JobIDs: append([]utilities.ID(nil), admission.JobIDs...)}
-		return nil
+		var err error
+		result, err = r.commitTranscriptionPreparation(ctx, queries, input, committedAt)
+		return err
 	})
 	if err == nil {
 		return result, nil
@@ -92,6 +46,66 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 		return replay, nil
 	}
 	return nil, err
+}
+
+func (r RecordingRenderRepository) commitTranscriptionPreparation(ctx context.Context, queries sqlc.Querier, input recordingrender.TranscriptionPreparationInput, committedAt time.Time) (*recordingrender.TranscriptionResult, error) {
+	locked, err := queries.LockRecordingTranscriptionPreparationAuthority(ctx, transcriptionPreparationAuthorityParams(input.Authority))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, recordingrender.ErrLeaseStale
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock recording transcription preparation authority: %w", err)
+	}
+	if !bytes.Equal(locked.PresentationSha256, input.PresentationSHA256) || locked.PresentationDurationMillis != input.DurationMillis {
+		return nil, recordingrender.ErrCommitConflict
+	}
+	if err := verifyTranscriptionSourceObjects(ctx, queries, input.Authority, input.TranscriptionSource); err != nil {
+		return nil, err
+	}
+	admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(input, committedAt))
+	if err != nil {
+		return nil, mapRenderTranscriptionError(err)
+	}
+	if !r.transcriptionEnabled {
+		return nil, recordingrender.ErrTranscriptionUnavailable
+	}
+	var sourceID pgtype.UUID
+	if admission.Source != nil {
+		sourceID = uuid(input.Authority.RecordingID)
+	}
+	sourceID, err = queries.CompleteRecordingTranscriptionPreparation(ctx, sqlc.CompleteRecordingTranscriptionPreparationParams{
+		TranscriptionJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
+		AttemptCount: int32(input.Authority.AttemptCount), FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
+		RenderInputHandle: uuid(input.Authority.RenderInputHandle), CommitDigest: input.CommitDigest, PresentationSha256: input.PresentationSHA256,
+		DurationMillis: input.DurationMillis, TranscriptionSourceID: sourceID, CommittedAt: timestamptzValue(committedAt),
+		LeaseToken: requiredTextValue(input.Authority.LeaseToken), LeaseOwner: requiredTextValue(input.Authority.LeaseOwner), LeaseExpiresAt: timestamptzValue(input.Authority.LeaseExpiresAt),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, recordingrender.ErrCommitConflict
+	}
+	if err != nil {
+		return nil, fmt.Errorf("complete recording transcription preparation: %w", err)
+	}
+	if !sourceID.Valid {
+		return nil, nil
+	}
+	return &recordingrender.TranscriptionResult{SourceID: id(sourceID), JobIDs: append([]utilities.ID(nil), admission.JobIDs...)}, nil
+}
+
+// verifyTranscriptionSourceObjects checks a transcription source's manifest and every chunk object.
+func verifyTranscriptionSourceObjects(ctx context.Context, queries sqlc.Querier, authority recordingrender.Authority, source *recordingrender.TranscriptionSource) error {
+	if source == nil {
+		return nil
+	}
+	if err := verifyRenderCommitObject(ctx, queries, authority, source.Manifest); err != nil {
+		return err
+	}
+	for _, chunk := range source.Chunks {
+		if err := verifyRenderCommitObject(ctx, queries, authority, chunk.Object); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func transcriptionPreparationAuthorityParams(authority recordingrender.Authority) sqlc.LockRecordingTranscriptionPreparationAuthorityParams {

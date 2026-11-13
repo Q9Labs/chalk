@@ -33,15 +33,8 @@ func (r ProviderOperationRepository) appendObservation(ctx context.Context, inpu
 	var result provideroperations.Observation
 	err = r.transaction(ctx, func(queries providerOperationQuerier) error {
 		if publisher != nil {
-			participant, err := queries.LockPublicationParticipant(ctx, publicationParticipantIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), ParticipantID: uuid(publisher.ID)})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return mediapublications.ErrInvalidPublication
-			}
-			if err != nil {
-				return fmt.Errorf("lock publishing participant: %w", err)
-			}
-			if participant.Generation != publisher.Generation || (participant.ConnectionID != "" && participant.ConnectionID != publisher.ConnectionID) {
-				return mediapublications.ErrInvalidPublication
+			if err := requirePublisher(ctx, queries, canonical, *publisher); err != nil {
+				return err
 			}
 		}
 		params := providerObservationIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID)}
@@ -55,27 +48,11 @@ func (r ProviderOperationRepository) appendObservation(ctx context.Context, inpu
 		if observationCursorBefore(canonical.Cursor(), provideroperationsCursor(head)) {
 			return provideroperations.ErrObservationStale
 		}
+		insert := insertProviderObservationParams{
+			TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
+		}
 		if sameObservationCursor(canonical.Cursor(), provideroperationsCursor(head)) {
-			existing, getErr := queries.GetProviderObservation(ctx, getProviderObservationParams{
-				TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence,
-			})
-			if errors.Is(getErr, pgx.ErrNoRows) {
-				row, insertErr := queries.InsertProviderObservation(ctx, insertProviderObservationParams{
-					TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
-				})
-				if insertErr != nil {
-					return fmt.Errorf("insert provider observation replay: %w", insertErr)
-				}
-				result, err = mapProviderObservation(row)
-				return err
-			}
-			if getErr != nil {
-				return fmt.Errorf("get provider observation replay: %w", getErr)
-			}
-			if !bytes.Equal(existing.ObservationFingerprint, fingerprint[:]) {
-				return provideroperations.ErrObservationConflict
-			}
-			result, err = mapProviderObservation(existing)
+			result, err = replayObservation(ctx, queries, insert)
 			return err
 		}
 		if _, err := queries.UpdateProviderObservationHead(ctx, updateProviderObservationHeadParams{
@@ -83,9 +60,7 @@ func (r ProviderOperationRepository) appendObservation(ctx context.Context, inpu
 		}); err != nil {
 			return fmt.Errorf("advance provider observation head: %w", err)
 		}
-		row, err := queries.InsertProviderObservation(ctx, insertProviderObservationParams{
-			TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), Incarnation: canonical.Incarnation, Sequence: canonical.Sequence, Publications: []byte(payload), ObservationFingerprint: fingerprint[:],
-		})
+		row, err := queries.InsertProviderObservation(ctx, insert)
 		if err != nil {
 			return fmt.Errorf("insert provider observation: %w", err)
 		}
@@ -96,6 +71,43 @@ func (r ProviderOperationRepository) appendObservation(ctx context.Context, inpu
 		return provideroperations.Observation{}, err
 	}
 	return result, nil
+}
+
+// requirePublisher confirms the publishing participant is still the one the observation names.
+func requirePublisher(ctx context.Context, queries providerOperationQuerier, canonical provideroperations.ObservationInput, publisher mediapublications.PublicationParticipant) error {
+	participant, err := queries.LockPublicationParticipant(ctx, publicationParticipantIdentityParams{TenantID: uuid(canonical.TenantID), EpisodeID: uuid(canonical.EpisodeID), ParticipantID: uuid(publisher.ID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return mediapublications.ErrInvalidPublication
+	}
+	if err != nil {
+		return fmt.Errorf("lock publishing participant: %w", err)
+	}
+	if participant.Generation != publisher.Generation || (participant.ConnectionID != "" && participant.ConnectionID != publisher.ConnectionID) {
+		return mediapublications.ErrInvalidPublication
+	}
+	return nil
+}
+
+// replayObservation answers an observation at the head's cursor: it returns the stored row when the
+// fingerprints match and records the observation when the head was advanced without one.
+func replayObservation(ctx context.Context, queries providerOperationQuerier, insert insertProviderObservationParams) (provideroperations.Observation, error) {
+	existing, err := queries.GetProviderObservation(ctx, getProviderObservationParams{
+		TenantID: insert.TenantID, EpisodeID: insert.EpisodeID, Incarnation: insert.Incarnation, Sequence: insert.Sequence,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		row, insertErr := queries.InsertProviderObservation(ctx, insert)
+		if insertErr != nil {
+			return provideroperations.Observation{}, fmt.Errorf("insert provider observation replay: %w", insertErr)
+		}
+		return mapProviderObservation(row)
+	}
+	if err != nil {
+		return provideroperations.Observation{}, fmt.Errorf("get provider observation replay: %w", err)
+	}
+	if !bytes.Equal(existing.ObservationFingerprint, insert.ObservationFingerprint) {
+		return provideroperations.Observation{}, provideroperations.ErrObservationConflict
+	}
+	return mapProviderObservation(existing)
 }
 
 func (r ProviderOperationRepository) ListObservations(ctx context.Context, tenantID, episodeID utilities.ID, after *provideroperations.Cursor, limit int) (provideroperations.ObservationPage, error) {

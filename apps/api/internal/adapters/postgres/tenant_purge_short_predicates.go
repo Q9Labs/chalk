@@ -16,19 +16,9 @@ func shortPredicates(catalog purgeCatalog, plan tenantpurge.Plan, target string)
 	if err != nil {
 		return nil, nil, err
 	}
-	var users []string
-	for _, table := range plan.Tables {
-		if table.Name == "users" {
-			for _, row := range table.Rows {
-				var key struct {
-					ID string `json:"id"`
-				}
-				if err := json.Unmarshal(row.Key, &key); err != nil {
-					return nil, nil, err
-				}
-				users = append(users, key.ID)
-			}
-		}
+	users, err := plannedUserIDs(plan)
+	if err != nil {
+		return nil, nil, err
 	}
 	oldUser := all["users"]
 	needle := `exists(select 1 from public.memberships m where m.user_id=u.id and m.tenant_id=any($1::uuid[]))`
@@ -52,39 +42,7 @@ func shortPredicates(catalog purgeCatalog, plan tenantpurge.Plan, target string)
 		selected[name] = strings.ReplaceAll(strings.ReplaceAll(condition, exclusive, user), "$1::uuid[]", purgeArray([]string{target}))
 	}
 	if table, ok := catalog.table("observability_journey_events"); ok {
-		var known []string
-		var journeys, events []string
-		for _, data := range plan.Tables {
-			if data.Name == table.Name {
-				for _, row := range data.Rows {
-					known = append(known, purgeLiteral(string(row.Key))+"::jsonb")
-					if row.JourneyID != "" {
-						journeys = append(journeys, row.JourneyID)
-					}
-				}
-			}
-		}
-		if plan.DeferredSeeds != nil {
-			journeys = append(journeys, plan.DeferredSeeds.Journeys...)
-			events = append(events, plan.DeferredSeeds.Events...)
-		}
-		var observed []string
-		if len(known) > 0 {
-			observed = append(observed, primaryExpression(table, table.Name)+" in("+strings.Join(known, ",")+")")
-		}
-		quoted := func(values []string) string {
-			var q []string
-			for _, v := range values {
-				q = append(q, purgeLiteral(v))
-			}
-			return strings.Join(q, ",")
-		}
-		if len(journeys) > 0 {
-			observed = append(observed, "journey_id::text in("+quoted(journeys)+")")
-		}
-		if len(events) > 0 {
-			observed = append(observed, "event_id::text in("+quoted(events)+")")
-		}
+		observed := observedJourneyPredicates(table, plan)
 		liveSelected := selected[table.Name]
 		liveRetained := retained[table.Name]
 		selected[table.Name] = "false"
@@ -94,6 +52,66 @@ func shortPredicates(catalog purgeCatalog, plan tenantpurge.Plan, target string)
 		retained[table.Name] = strings.Join(append(observed, "("+liveRetained+")"), " or ")
 	}
 	return selected, retained, nil
+}
+
+// plannedUserIDs lists the account IDs the plan inventoried.
+func plannedUserIDs(plan tenantpurge.Plan) ([]string, error) {
+	var users []string
+	for _, table := range plan.Tables {
+		if table.Name != "users" {
+			continue
+		}
+		for _, row := range table.Rows {
+			var key struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(row.Key, &key); err != nil {
+				return nil, err
+			}
+			users = append(users, key.ID)
+		}
+	}
+	return users, nil
+}
+
+// observedJourneyPredicates selects the journey events the plan inventoried, or seeded as deferred,
+// besides the ones reachable from live rows.
+func observedJourneyPredicates(table purgeTable, plan tenantpurge.Plan) []string {
+	var known, journeys, events []string
+	for _, data := range plan.Tables {
+		if data.Name != table.Name {
+			continue
+		}
+		for _, row := range data.Rows {
+			known = append(known, purgeLiteral(string(row.Key))+"::jsonb")
+			if row.JourneyID != "" {
+				journeys = append(journeys, row.JourneyID)
+			}
+		}
+	}
+	if plan.DeferredSeeds != nil {
+		journeys = append(journeys, plan.DeferredSeeds.Journeys...)
+		events = append(events, plan.DeferredSeeds.Events...)
+	}
+	var observed []string
+	if len(known) > 0 {
+		observed = append(observed, primaryExpression(table, table.Name)+" in("+strings.Join(known, ",")+")")
+	}
+	if len(journeys) > 0 {
+		observed = append(observed, "journey_id::text in("+quotedLiterals(journeys)+")")
+	}
+	if len(events) > 0 {
+		observed = append(observed, "event_id::text in("+quotedLiterals(events)+")")
+	}
+	return observed
+}
+
+func quotedLiterals(values []string) string {
+	quoted := make([]string, 0, len(values))
+	for _, value := range values {
+		quoted = append(quoted, purgeLiteral(value))
+	}
+	return strings.Join(quoted, ",")
 }
 
 func shortBoundaryQueries(catalog purgeCatalog) []string {

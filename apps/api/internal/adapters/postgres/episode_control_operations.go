@@ -114,18 +114,8 @@ func createEndReadyOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.
 		return sqlc.SyncExternalOperation{}, err
 	}
 	for _, participant := range participants {
-		for _, source := range []string{"microphone", "camera", "screen"} {
-			owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
-				TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
-				ParticipantID: participant.ID, ParticipantGeneration: participant.Generation,
-				Source: source, ExternalOperationID: operation.ExternalOperationID,
-			})
-			if err != nil || owner != operation.ExternalOperationID {
-				if err == nil || errors.Is(err, pgx.ErrNoRows) {
-					err = episodes.ErrEpisodeControlBusy
-				}
-				return sqlc.SyncExternalOperation{}, fmt.Errorf("install episode end publication fence: %w", err)
-			}
+		if err := installPublicationFences(ctx, queries, input, participant.ID, participant.Generation, operation, "episode end"); err != nil {
+			return sqlc.SyncExternalOperation{}, err
 		}
 	}
 	if _, err := queries.FailPendingTenantControlOperationsForEnd(ctx, sqlc.FailPendingTenantControlOperationsForEndParams{
@@ -143,24 +133,33 @@ func createEndReadyOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.
 	return operation, nil
 }
 
+// installPublicationFences stops the participant publishing microphone, camera or screen under the
+// operation. Another operation that already owns a fence makes this one busy.
+func installPublicationFences(ctx context.Context, queries *sqlc.Queries, input tenantExternalOperationInput, participantID pgtype.UUID, generation int64, operation sqlc.SyncExternalOperation, purpose string) error {
+	for _, source := range []string{"microphone", "camera", "screen"} {
+		owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
+			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
+			ParticipantID: participantID, ParticipantGeneration: generation,
+			Source: source, ExternalOperationID: operation.ExternalOperationID,
+		})
+		if err != nil || owner != operation.ExternalOperationID {
+			if err == nil || errors.Is(err, pgx.ErrNoRows) {
+				err = episodes.ErrEpisodeControlBusy
+			}
+			return fmt.Errorf("install %s publication fence: %w", purpose, err)
+		}
+	}
+	return nil
+}
+
 func createParticipantRemovalOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input tenantExternalOperationInput, participant sqlc.Participant) (sqlc.SyncExternalOperation, sqlc.Participant, error) {
 	input.FenceActive = true
 	operation, err := createTenantExternalOperation(ctx, queries, tx, input)
 	if err != nil {
 		return sqlc.SyncExternalOperation{}, sqlc.Participant{}, err
 	}
-	for _, source := range []string{"microphone", "camera", "screen"} {
-		owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
-			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
-			ParticipantID: participant.ID, ParticipantGeneration: participant.Generation,
-			Source: source, ExternalOperationID: operation.ExternalOperationID,
-		})
-		if err != nil || owner != operation.ExternalOperationID {
-			if err == nil {
-				err = episodes.ErrEpisodeControlBusy
-			}
-			return sqlc.SyncExternalOperation{}, sqlc.Participant{}, fmt.Errorf("install participant removal publication fence: %w", err)
-		}
+	if err := installPublicationFences(ctx, queries, input, participant.ID, participant.Generation, operation, "participant removal"); err != nil {
+		return sqlc.SyncExternalOperation{}, sqlc.Participant{}, err
 	}
 	participant, err = queries.MarkLifecycleParticipantLeaving(ctx, sqlc.MarkLifecycleParticipantLeavingParams{
 		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),

@@ -35,64 +35,11 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		locked, err := queries.LockRecordingRenderCommitAuthority(ctx, renderCommitAuthorityParams(input.Authority))
-		if errors.Is(err, pgx.ErrNoRows) {
-			return recordingrender.ErrLeaseStale
-		}
+		committed, err := r.commitRender(ctx, queries, input, committedAt)
 		if err != nil {
-			return fmt.Errorf("lock recording render commit authority: %w", err)
-		}
-		if !bytes.Equal(locked.PresentationSha256, input.PresentationSHA256) || locked.PresentationDurationMillis != input.DurationMillis {
-			return recordingrender.ErrCommitConflict
-		}
-		if err := verifyRenderCommitObject(ctx, queries, input.Authority, input.Video); err != nil {
 			return err
 		}
-		if input.TranscriptionSource != nil {
-			if err := verifyRenderCommitObject(ctx, queries, input.Authority, input.TranscriptionSource.Manifest); err != nil {
-				return err
-			}
-			for _, chunk := range input.TranscriptionSource.Chunks {
-				if err := verifyRenderCommitObject(ctx, queries, input.Authority, chunk.Object); err != nil {
-					return err
-				}
-			}
-		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(input, committedAt))
-		if err != nil {
-			return mapRenderTranscriptionError(err)
-		}
-		if !r.transcriptionEnabled && admission.Source != nil {
-			return recordingrender.ErrTranscriptionUnavailable
-		}
-		var sourceID pgtype.UUID
-		var transcription *recordingrender.TranscriptionResult
-		if admission.Source != nil {
-			sourceID = uuid(input.Authority.RecordingID)
-			transcription = &recordingrender.TranscriptionResult{SourceID: input.Authority.RecordingID, JobIDs: append([]utilities.ID(nil), admission.JobIDs...)}
-		}
-		jobIDs := make([]pgtype.UUID, 0, len(admission.JobIDs))
-		for _, jobID := range admission.JobIDs {
-			jobIDs = append(jobIDs, uuid(jobID))
-		}
-		qualityJSON, err := json.Marshal(input.VideoDegradation)
-		if err != nil {
-			return fmt.Errorf("encode Render quality metadata: %w", err)
-		}
-		artifact, err := queries.CompleteRecordingRender(ctx, sqlc.CompleteRecordingRenderParams{
-			VideoDegradation: qualityJSON, RenderJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
-			AttemptCount: int32(input.Authority.AttemptCount), FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
-			RenderInputHandle: uuid(input.Authority.RenderInputHandle), CommitDigest: input.CommitDigest, PresentationSha256: input.PresentationSHA256,
-			DurationMillis: input.DurationMillis, VideoAllocationID: uuid(input.Video.AllocationID), FfprobeFactsDigest: input.FFprobeFactsDigest,
-			TranscriptionSourceID: sourceID, TranscriptionJobIds: jobIDs, CommittedAt: timestamptzValue(committedAt),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return recordingrender.ErrCommitConflict
-		}
-		if err != nil {
-			return fmt.Errorf("complete recording render: %w", err)
-		}
-		result = recordingrender.CommitResult{Artifact: mapCompletedRenderArtifact(artifact), Transcription: transcription}
+		result = committed
 		webhookMetric, err = produceRecordingWebhook(ctx, tx, input.Authority.TenantID, input.Authority.RecordingID, "completed", committedAt, "")
 		return err
 	})
@@ -104,6 +51,67 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 		return replay, nil
 	}
 	return recordingrender.CommitResult{}, err
+}
+
+// commitRender locks the render authority, checks every object, admits the transcription and marks
+// the render complete.
+func (r RecordingRenderRepository) commitRender(ctx context.Context, queries sqlc.Querier, input recordingrender.CommitInput, committedAt time.Time) (recordingrender.CommitResult, error) {
+	locked, err := queries.LockRecordingRenderCommitAuthority(ctx, renderCommitAuthorityParams(input.Authority))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingrender.CommitResult{}, recordingrender.ErrLeaseStale
+	}
+	if err != nil {
+		return recordingrender.CommitResult{}, fmt.Errorf("lock recording render commit authority: %w", err)
+	}
+	if !bytes.Equal(locked.PresentationSha256, input.PresentationSHA256) || locked.PresentationDurationMillis != input.DurationMillis {
+		return recordingrender.CommitResult{}, recordingrender.ErrCommitConflict
+	}
+	if err := verifyRenderCommitObjects(ctx, queries, input); err != nil {
+		return recordingrender.CommitResult{}, err
+	}
+	admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(input, committedAt))
+	if err != nil {
+		return recordingrender.CommitResult{}, mapRenderTranscriptionError(err)
+	}
+	if !r.transcriptionEnabled && admission.Source != nil {
+		return recordingrender.CommitResult{}, recordingrender.ErrTranscriptionUnavailable
+	}
+	var sourceID pgtype.UUID
+	var transcription *recordingrender.TranscriptionResult
+	if admission.Source != nil {
+		sourceID = uuid(input.Authority.RecordingID)
+		transcription = &recordingrender.TranscriptionResult{SourceID: input.Authority.RecordingID, JobIDs: append([]utilities.ID(nil), admission.JobIDs...)}
+	}
+	jobIDs := make([]pgtype.UUID, 0, len(admission.JobIDs))
+	for _, jobID := range admission.JobIDs {
+		jobIDs = append(jobIDs, uuid(jobID))
+	}
+	qualityJSON, err := json.Marshal(input.VideoDegradation)
+	if err != nil {
+		return recordingrender.CommitResult{}, fmt.Errorf("encode Render quality metadata: %w", err)
+	}
+	artifact, err := queries.CompleteRecordingRender(ctx, sqlc.CompleteRecordingRenderParams{
+		VideoDegradation: qualityJSON, RenderJobID: uuid(input.Authority.JobID), TenantID: uuid(input.Authority.TenantID), RecordingID: uuid(input.Authority.RecordingID),
+		AttemptCount: int32(input.Authority.AttemptCount), FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
+		RenderInputHandle: uuid(input.Authority.RenderInputHandle), CommitDigest: input.CommitDigest, PresentationSha256: input.PresentationSHA256,
+		DurationMillis: input.DurationMillis, VideoAllocationID: uuid(input.Video.AllocationID), FfprobeFactsDigest: input.FFprobeFactsDigest,
+		TranscriptionSourceID: sourceID, TranscriptionJobIds: jobIDs, CommittedAt: timestamptzValue(committedAt),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingrender.CommitResult{}, recordingrender.ErrCommitConflict
+	}
+	if err != nil {
+		return recordingrender.CommitResult{}, fmt.Errorf("complete recording render: %w", err)
+	}
+	return recordingrender.CommitResult{Artifact: mapCompletedRenderArtifact(artifact), Transcription: transcription}, nil
+}
+
+// verifyRenderCommitObjects checks the video and, when present, the transcription manifest and chunks.
+func verifyRenderCommitObjects(ctx context.Context, queries sqlc.Querier, input recordingrender.CommitInput) error {
+	if err := verifyRenderCommitObject(ctx, queries, input.Authority, input.Video); err != nil {
+		return err
+	}
+	return verifyTranscriptionSourceObjects(ctx, queries, input.Authority, input.TranscriptionSource)
 }
 
 func renderCommitAuthorityParams(authority recordingrender.Authority) sqlc.LockRecordingRenderCommitAuthorityParams {

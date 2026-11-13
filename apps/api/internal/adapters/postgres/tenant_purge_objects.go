@@ -124,48 +124,55 @@ func checkRetainedObjectReferences(ctx context.Context, tx pgx.Tx, catalog purge
 		if condition == "" {
 			condition = "false"
 		}
-		query := `select to_jsonb(r)::text from (select * from ` + purgeName(table.Name) + ` where not coalesce((` + condition + `),false) and coalesce(cardinality($1::uuid[]),0)>=0) r`
-		rows, err := tx.Query(ctx, query, ids)
-		if err != nil {
+		if err := checkRetainedTable(ctx, tx, table, condition, ids, keys, manifest); err != nil {
 			return err
 		}
-		for rows.Next() {
-			var row string
-			if err := rows.Scan(&row); err != nil {
-				rows.Close()
+	}
+	return nil
+}
+
+func checkRetainedTable(ctx context.Context, tx pgx.Tx, table purgeTable, condition string, ids []string, keys map[string]bool, manifest tenantpurge.ObjectManifest) error {
+	query := `select to_jsonb(r)::text from (select * from ` + purgeName(table.Name) + ` where not coalesce((` + condition + `),false) and coalesce(cardinality($1::uuid[]),0)>=0) r`
+	rows, err := tx.Query(ctx, query, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			return err
+		}
+		for _, token := range purgeJSONString.FindAllString(row, -1) {
+			var value string
+			if err := json.Unmarshal([]byte(token), &value); err != nil {
 				return err
 			}
-			for _, token := range purgeJSONString.FindAllString(row, -1) {
-				var value string
-				if err := json.Unmarshal([]byte(token), &value); err != nil {
-					rows.Close()
-					return err
-				}
-				objectReference := keys[value]
-				for key := range keys {
-					if strings.Contains(value, key) {
-						objectReference = true
-						break
-					}
-				}
-				if objectReference {
-					rows.Close()
-					return errors.New("kept row references an approved storage object")
-				}
-				for _, prefix := range manifest.SharedPrefixes {
-					namespace := strings.TrimSuffix(prefix, "/")
-					if strings.Contains(value, prefix) || value == namespace {
-						rows.Close()
-						return errors.New("kept row still references a shared storage namespace")
-					}
-				}
+			if err := checkRetainedValue(value, keys, manifest); err != nil {
+				return err
 			}
 		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return err
+	}
+	return rows.Err()
+}
+
+// checkRetainedValue fails when a kept string names an approved storage object or still sits in a
+// shared storage namespace.
+func checkRetainedValue(value string, keys map[string]bool, manifest tenantpurge.ObjectManifest) error {
+	objectReference := keys[value]
+	for key := range keys {
+		if strings.Contains(value, key) {
+			objectReference = true
+			break
 		}
-		rows.Close()
+	}
+	if objectReference {
+		return errors.New("kept row references an approved storage object")
+	}
+	for _, prefix := range manifest.SharedPrefixes {
+		if strings.Contains(value, prefix) || value == strings.TrimSuffix(prefix, "/") {
+			return errors.New("kept row still references a shared storage namespace")
+		}
 	}
 	return nil
 }
