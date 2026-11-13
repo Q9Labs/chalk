@@ -1,9 +1,10 @@
 import release from "../../release/manifest.json";
+// Expo config files cannot import app source, so the hosts the app also reads live in JSON.
+import origins from "./src/lib/origins.json";
 
-const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
 // The call's dark canvas, so the launch screen hands over to the first frame without a flash.
 const SPLASH_BACKGROUND = "#000000";
-// The icon plate from `src/brand/mark.ts` (`ICON_COLORS.plate`); Expo config files cannot import app source.
+// The icon plate from `src/brand/mark.ts` (`ICON_COLORS.plate`).
 const ICON_PLATE = "#16181c";
 // The call's typeface, embedded at build time so the first frame already uses it.
 const FIGTREE_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold"] as const;
@@ -43,65 +44,53 @@ function androidIntentFilters(hosts: readonly string[]) {
   ];
 }
 
-export type MobileExpoExtra = {
-  readonly buildProfile: string;
-  readonly apiBaseURL?: string;
-  readonly eas: {
-    readonly projectId: string;
-  };
-};
+const buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development";
+const nightly = buildProfile === "nightly";
 
-export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ?? process.env.CHALK_APP_VARIANT ?? "development") {
-  const extra: MobileExpoExtra = { buildProfile, ...(buildProfile === "nightly" ? { apiBaseURL: "https://nightly-api.chalkmeet.com" } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } };
-  const androidWebHosts = buildProfile === "nightly" ? [...PUBLIC_WEB_HOSTS, "nightly.chalkmeet.com"] : PUBLIC_WEB_HOSTS;
-
-  return {
-    expo: {
-      name: "Chalk",
-      owner: "q9labs",
-      slug: "chalk-mobile",
-      scheme: "chalk",
-      version: release.version_name,
-      // The call turns to landscape; Home stays usable in either.
-      orientation: "default",
-      icon: "./assets/icon.png",
-      userInterfaceStyle: "automatic",
-      assetBundlePatterns: ["**/*"],
-      experiments: { tsconfigPaths: false },
-      plugins: [
-        "expo-secure-store",
-        ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }],
-        // A8: the mark alone on the call background. `pnpm run brand-assets` renders it and the icons from `src/brand/mark.ts`.
-        ["expo-splash-screen", { image: "./assets/splash-mark.png", imageWidth: 112, resizeMode: "contain", backgroundColor: SPLASH_BACKGROUND }],
-        "./plugins/with-worklets-legacy-output.js",
-        "./plugins/with-ios-scene-lifecycle.js",
-      ],
-      ios: {
-        jsEngine: "jsc",
-        supportsTablet: true,
-        bundleIdentifier: release.apple.bundle_id,
-        buildNumber: release.apple.build_number,
-        associatedDomains: PUBLIC_WEB_HOSTS.map((host) => `applinks:${host}`),
-        entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
-        infoPlist: {
-          ITSAppUsesNonExemptEncryption: false,
-          NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a call.",
-          NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a call.",
-          RTCAppScreenSharingExtension: release.apple.screen_share_bundle_id,
-          UIBackgroundModes: ["audio", "voip"],
-        },
+export default {
+  expo: {
+    name: "Chalk",
+    owner: "q9labs",
+    slug: "chalk-mobile",
+    scheme: "chalk",
+    version: release.version_name,
+    // The call turns to landscape; Home stays usable in either.
+    orientation: "default",
+    icon: "./assets/icon.png",
+    userInterfaceStyle: "automatic",
+    assetBundlePatterns: ["**/*"],
+    experiments: { tsconfigPaths: false },
+    plugins: [
+      "expo-secure-store",
+      ["expo-font", { fonts: FIGTREE_WEIGHTS.map((weight) => `./assets/fonts/Figtree-${weight}.ttf`) }],
+      // A8: the mark alone on the call background. `pnpm run brand-assets` renders it and the icons from `src/brand/mark.ts`.
+      ["expo-splash-screen", { image: "./assets/splash-mark.png", imageWidth: 112, resizeMode: "contain", backgroundColor: SPLASH_BACKGROUND }],
+      "./plugins/with-worklets-legacy-output.js",
+      "./plugins/with-ios-scene-lifecycle.js",
+    ],
+    ios: {
+      jsEngine: "jsc",
+      supportsTablet: true,
+      bundleIdentifier: release.apple.bundle_id,
+      buildNumber: release.apple.build_number,
+      associatedDomains: origins.webHosts.map((host) => `applinks:${host}`),
+      entitlements: { "com.apple.security.application-groups": ["group.ai.q9labs.chalk.mobile"] },
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+        NSCameraUsageDescription: "Chalk uses your camera so participants can see you in a call.",
+        NSMicrophoneUsageDescription: "Chalk uses your microphone so participants can hear you in a call.",
+        RTCAppScreenSharingExtension: release.apple.screen_share_bundle_id,
+        UIBackgroundModes: ["audio", "voip"],
       },
-      android: {
-        package: release.android.package_name,
-        versionCode: release.android.version_code,
-        adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
-        intentFilters: androidIntentFilters(androidWebHosts),
-        blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
-        permissions: ANDROID_PERMISSIONS,
-      },
-      extra,
     },
-  };
-}
-
-export default createExpoConfig();
+    android: {
+      package: release.android.package_name,
+      versionCode: release.android.version_code,
+      adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
+      intentFilters: androidIntentFilters(nightly ? [...origins.webHosts, origins.nightlyWebHost] : origins.webHosts),
+      blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+      permissions: ANDROID_PERMISSIONS,
+    },
+    extra: { buildProfile, ...(nightly ? { apiBaseURL: origins.nightlyApiBaseURL } : {}), eas: { projectId: "13257936-7f15-4278-8240-33dc4e01297d" } },
+  },
+};

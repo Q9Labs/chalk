@@ -1,12 +1,12 @@
 import Constants from "expo-constants";
 import { getReactNativeScriptUrl, resolveAppRuntimeUrl } from "@q9labsai/chalk-react-native/runtime";
-const PRODUCTION_API_BASE_URL = "https://api.chalkmeet.com";
+import origins from "./origins.json";
 export function getApiBaseURL(): string {
   const configured: unknown = Constants.expoConfig?.extra?.apiBaseURL;
   return resolveAppRuntimeUrl({
     configuredUrl: supportedApiBaseURL(configured) ? configured.trim() : undefined,
     scriptUrl: getReactNativeScriptUrl(),
-    fallbackUrl: PRODUCTION_API_BASE_URL,
+    fallbackUrl: origins.productionApiBaseURL,
     allowDeviceLocal: typeof __DEV__ !== "undefined" && __DEV__,
   });
 }

@@ -2,9 +2,7 @@ import { INVITE_HOSTS, parseChalkInviteLink } from "@q9labsai/chalk-client/invit
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
 import { getApiBaseURL } from "./mobile-config";
-
-const NIGHTLY_API = "https://nightly-api.chalkmeet.com";
-const NIGHTLY_WEB_HOST = "nightly.chalkmeet.com";
+import origins from "./origins.json";
 
 export type SpaceRoute = {
   readonly kind: "space";
@@ -17,7 +15,7 @@ export type SpaceRoute = {
 
 /** The nightly build also reads links on the nightly web host. */
 function inviteHosts(): readonly string[] {
-  return getApiBaseURL() === NIGHTLY_API ? [...INVITE_HOSTS, NIGHTLY_WEB_HOST] : INVITE_HOSTS;
+  return getApiBaseURL() === origins.nightlyApiBaseURL ? [...INVITE_HOSTS, origins.nightlyWebHost] : INVITE_HOSTS;
 }
 
 export function parseSpaceLink(input: string): SpaceRoute | null {
