@@ -24,15 +24,11 @@ import {
 } from "./types";
 import { decodeWhiteboardV1WireFrame, encodeWhiteboardV1ClientFrame } from "./v1-codec";
 import { WhiteboardV1UpdateAssembler, whiteboardV1OperationFrames, whiteboardV1PendingOperationBytes, type WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
+import { WhiteboardV1Watchdog, type WhiteboardV1WatchdogReplacement } from "./v1-watchdog";
 import { compareChalkWhiteboardV1PendingOperations, InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 
 const CLIENT_RESTART_CLOSE_CODE = 4000;
 const DEPENDENCY_UNAVAILABLE_CLOSE_CODE = 1012;
-const HEARTBEAT_INTERVAL_MS = 4_000;
-const SLOW_HEARTBEAT_MS = 2_000;
-const MAX_SLOW_HEARTBEATS = 2;
-const MAX_TIMER_DRIFT_MS = 250;
-const MAX_SLOW_CONNECTION_BACKOFF_MS = 4_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
 function reconnectDelay(configuredDelay: number | undefined, attempt: number, random: () => number): number {
@@ -144,21 +140,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #reconnectTimer: unknown;
   #reconnectAttempt = 0;
   #rejectedHelloRetries = 0;
-  #heartbeatTimer: unknown;
-  readonly #heartbeats: { readonly sentAt: number; slow: boolean }[] = [];
-  #ignoredHeartbeats = 0;
-  #slowHeartbeats = 0;
-  #nextSlowConnectionReplacementAt = 0;
-  #heartbeatDueAt = 0;
-  #lastProgressAt = Number.NEGATIVE_INFINITY;
-  #slowConnectionBackoffMs = 0;
-  #healthySince: number | null = null;
-  readonly #roundTrips: number[] = [];
-  #resumedAt = Number.NEGATIVE_INFINITY;
-  readonly #visibilityChanged = () => {
-    this.#resumedAt = this.#elapsedNow();
-    this.#resetProbeState();
-  };
+  readonly #watchdog: WhiteboardV1Watchdog;
+  readonly #visibilityChanged = () => this.#watchdog.noteResume();
   #lastCursorAt = Number.NEGATIVE_INFINITY;
   #unsubscribeLifecycle: (() => void) | undefined;
   #transportAvailable = true;
@@ -179,7 +162,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     presentation_updated: (frame) => this.#presentationUpdated(frame),
     reset_required: (frame) => this.#resetRequired(frame),
     operation_error: (frame) => this.#operationError(frame),
-    pong: () => this.#receivePong(),
+    pong: () => this.#watchdog.receivePong(),
   };
 
   constructor(options: ChalkWhiteboardV1ClientOptions) {
@@ -192,6 +175,27 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#store = options.pendingStore ?? new InMemoryChalkWhiteboardV1PendingOperationStore();
     this.#sceneId = options.cursor?.sceneId ?? null;
     this.#revision = options.cursor?.revision ?? null;
+    this.#watchdog = new WhiteboardV1Watchdog({
+      clock: () => this.#clock(),
+      enabled: options.watchdog !== false,
+      isLive: () => this.#phase === "live",
+      ping: () => this.#send({ type: "ping" }),
+      hasConnection: () => this.#socket !== null,
+      replaceConnection: (event) => this.#replaceConnection(event),
+    });
+  }
+
+  #replaceConnection(event: WhiteboardV1WatchdogReplacement): void {
+    const socket = this.#socket;
+    if (!socket) return;
+    // Do not wait for a congested socket's closing handshake to reconnect.
+    this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
+    socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard connection slow");
+    try {
+      this.#options.onWatchdogReplacement?.(event);
+    } catch {
+      // Consumer telemetry callbacks cannot interfere with transport ownership.
+    }
   }
 
   startSceneSubscription(): Promise<void> {
@@ -236,7 +240,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#unsubscribeLifecycle = undefined;
     this.#clearReconnect();
     this.#clearDial();
-    this.#clearHeartbeat();
+    this.#watchdog.stop();
     this.#clearOperationRetryTimers();
     this.#clearUpdateAssemblies();
     this.#awaitingOperationIds.clear();
@@ -513,8 +517,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       }
       const frame = decodeWhiteboardV1WireFrame(data);
       if (frame.type !== "pong") {
-        this.#lastProgressAt = this.#elapsedNow();
-        this.#resetProbeState();
+        this.#watchdog.noteProgress();
       }
       this.#handleFrame(frame);
     } catch {
@@ -648,9 +651,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     // A change restored from the store has no caller to reject, so the summary carries the refusal too.
     const refused = !this.#hello.drawPolicy && this.#dropPolicyChanges();
     this.#publishSummary("loading", refused ? policyUnavailable() : null);
-    this.#clearHeartbeat();
+    this.#watchdog.stop();
     this.#resumePendingOperations();
-    this.#startHeartbeat(HEARTBEAT_INTERVAL_MS + Math.max(0, this.#nextSlowConnectionReplacementAt - this.#elapsedNow()));
+    this.#watchdog.startAfterWelcome();
   }
 
   #resumePendingOperations(): void {
@@ -1028,7 +1031,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#viewVersions.clear();
     this.#socket = null;
     this.#clearDial();
-    this.#clearHeartbeat();
+    this.#watchdog.stop();
     this.#clearUpdateAssemblies();
     this.#phase = "connecting";
     this.#waitingForOperations = false;
@@ -1170,101 +1173,6 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
   }
 
-  #startHeartbeat(delay = HEARTBEAT_INTERVAL_MS): void {
-    this.#heartbeatDueAt = this.#elapsedNow() + delay;
-    this.#heartbeatTimer = this.#clock().setTimeout(() => {
-      this.#heartbeatTimer = undefined;
-      if (this.#phase !== "live") return;
-      const now = this.#elapsedNow();
-      const qualified = this.#qualifyProbe(now);
-      if (qualified && this.#checkSlowHeartbeats(now)) return;
-      if (qualified) this.#heartbeats.push({ sentAt: now, slow: false });
-      else this.#ignoredHeartbeats += 1;
-      this.#send({ type: "ping" });
-      const outstanding = this.#heartbeats.length > 0;
-      this.#startHeartbeat(this.#options.watchdog !== false && outstanding ? SLOW_HEARTBEAT_MS : HEARTBEAT_INTERVAL_MS);
-    }, delay);
-  }
-
-  #checkSlowHeartbeats(now: number): boolean {
-    for (const heartbeat of this.#heartbeats) {
-      if (!heartbeat.slow && now - heartbeat.sentAt >= SLOW_HEARTBEAT_MS) {
-        heartbeat.slow = true;
-        this.#healthySince = null;
-        this.#slowHeartbeats += 1;
-      }
-    }
-    return this.#replaceSlowConnection();
-  }
-
-  #resetProbeState(): void {
-    this.#ignoredHeartbeats += this.#heartbeats.length;
-    this.#heartbeats.length = 0;
-    this.#slowHeartbeats = 0;
-    this.#roundTrips.length = 0;
-    this.#healthySince = null;
-  }
-
-  #qualifyProbe(now: number): boolean {
-    if (this.#options.watchdog === false || globalThis.document?.hidden || now - this.#resumedAt < HEARTBEAT_INTERVAL_MS || now - this.#heartbeatDueAt > MAX_TIMER_DRIFT_MS || now - this.#lastProgressAt < SLOW_HEARTBEAT_MS) {
-      this.#resetProbeState();
-      return false;
-    }
-    return true;
-  }
-
-  #receivePong(): void {
-    // Sync sends exactly one immediate pong per ping; open WebSockets deliver in FIFO order.
-    // A missing pong means a broken/stalled path. Even if one were lost on a working
-    // path, an extra reconnect/catch-up is acceptable; never match it to a newer ping.
-    const now = this.#elapsedNow();
-    const qualified = this.#qualifyProbe(now);
-    if (this.#ignoredHeartbeats > 0) {
-      this.#ignoredHeartbeats -= 1;
-      return;
-    }
-    const heartbeat = this.#heartbeats.shift();
-    if (!heartbeat) {
-      this.#resetProbeState();
-      return;
-    }
-    if (!qualified) return;
-    const roundTrip = now - heartbeat.sentAt;
-    this.#roundTrips.push(roundTrip);
-    if (this.#roundTrips.length > MAX_SLOW_HEARTBEATS) this.#roundTrips.shift();
-    if (roundTrip < SLOW_HEARTBEAT_MS) {
-      this.#slowHeartbeats = 0;
-      this.#healthySince ??= now;
-      if (now - this.#healthySince >= 60_000) this.#slowConnectionBackoffMs = 0;
-      this.#clock().clearTimeout(this.#heartbeatTimer);
-      this.#startHeartbeat();
-    } else {
-      this.#healthySince = null;
-      if (!heartbeat.slow) this.#slowHeartbeats += 1;
-    }
-    this.#replaceSlowConnection();
-  }
-
-  #replaceSlowConnection(): boolean {
-    const now = this.#elapsedNow();
-    if (this.#slowHeartbeats < MAX_SLOW_HEARTBEATS || now < this.#nextSlowConnectionReplacementAt) return false;
-    const socket = this.#socket;
-    if (!socket) return false;
-    this.#slowConnectionBackoffMs = Math.min(MAX_SLOW_CONNECTION_BACKOFF_MS, this.#slowConnectionBackoffMs === 0 ? 1_000 : this.#slowConnectionBackoffMs * 2);
-    // Delay the next probe cycle, rather than ignoring failures during a flat cooldown.
-    this.#nextSlowConnectionReplacementAt = now + this.#slowConnectionBackoffMs;
-    const event = { reason: "slow_heartbeat" as const, roundTripsMs: [...this.#roundTrips], outstandingAgesMs: this.#heartbeats.slice(-2).map((heartbeat) => now - heartbeat.sentAt), backoffMs: this.#slowConnectionBackoffMs };
-    // Do not wait for a congested socket's closing handshake to reconnect.
-    this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
-    socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard connection slow");
-    try {
-      this.#options.onWatchdogReplacement?.(event);
-    } catch {
-      // Consumer telemetry callbacks cannot interfere with transport ownership.
-    }
-    return true;
-  }
-
   #rejectSnapshots(value: ChalkWhiteboardV1Failure): void {
     for (const assembly of this.#snapshots.values()) rejectDeferred(assembly.deferred, error(value));
     this.#snapshots.clear();
@@ -1298,24 +1206,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#reconnectTimer = undefined;
   }
 
-  #clearHeartbeat(): void {
-    this.#heartbeats.length = 0;
-    this.#ignoredHeartbeats = 0;
-    this.#slowHeartbeats = 0;
-    this.#roundTrips.length = 0;
-    this.#healthySince = null;
-    if (this.#heartbeatTimer === undefined) return;
-    this.#clock().clearTimeout(this.#heartbeatTimer);
-    this.#heartbeatTimer = undefined;
-  }
-
   #removeVisibilityListener(): void {
     globalThis.document?.removeEventListener("visibilitychange", this.#visibilityChanged);
-  }
-
-  #elapsedNow(): number {
-    // Wall-clock timestamps remain on #now() for persisted operation ordering.
-    return this.#clock().monotonicNow();
   }
 
   #clock(): NonNullable<ChalkWhiteboardV1ClientOptions["clock"]> {

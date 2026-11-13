@@ -166,7 +166,7 @@ export type ChalkWhiteboardV1ClientOptions = {
   readonly retryDelayMs?: number;
   readonly onSummary?: (summary: ChalkWhiteboardSummary) => void;
   readonly watchdog?: boolean;
-  readonly onWatchdogReplacement?: (event: { readonly reason: "slow_heartbeat"; readonly roundTripsMs: readonly number[]; readonly outstandingAgesMs: readonly number[]; readonly backoffMs: number }) => void;
+  readonly onWatchdogReplacement?: (event: WhiteboardV1WatchdogReplacement) => void;
 };
 
 export type ChalkWhiteboardSummary = {
@@ -188,6 +188,7 @@ export type ChalkWhiteboardSummary = {
 };
 import type { WhiteboardV1DrawPolicy } from "../generated/whiteboard-v1";
 import type { WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
+import type { WhiteboardV1WatchdogReplacement } from "./v1-watchdog";
 import type { ChalkWhiteboardV1Capability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncWebSocketFactory } from "../sync/types";
 
