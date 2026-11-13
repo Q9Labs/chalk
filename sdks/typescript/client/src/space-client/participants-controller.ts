@@ -193,9 +193,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       roster: Object.freeze(projected.roster.map((participant) => Object.freeze({ ...participant, media: Object.freeze({ ...participant.media, screenShareHasAudio: participant.media.screenShare === "active" && audioParticipants.has(participant.participantId) }) }))),
     });
     const self = selfFor(snapshot, participants.roster);
-    const current = this.#store.getSnapshot();
-    if (!sameParticipants(current.participants, participants)) this.#store.update("participants", participants);
-    if (!sameSelf(current.self, self)) this.#store.update("self", self);
+    this.#store.update("participants", participants);
+    if (!sameSelf(this.#store.getSnapshot().self, self)) this.#store.update("self", self);
   }
 }
 function assertIdentifier(value: string, label: string): void {
@@ -301,47 +300,8 @@ function participantPresence(participantId: string, presence: ReturnType<Connect
   if (!item) return Object.freeze({ state: "unknown", speaking: false, activeSpeaker: false });
   return Object.freeze({ state: item.state, speaking: item.speaking, activeSpeaker: item.activeSpeaker, ...(item.connectionQuality === undefined ? {} : { connectionQuality: item.connectionQuality }) });
 }
-function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): boolean {
-  return (
-    sameArray(left.roster, right.roster, sameParticipant) &&
-    sameArray(
-      left.admissionQueue,
-      right.admissionQueue,
-      (current, next) => current.requestId === next.requestId && current.participantId === next.participantId && current.displayName === next.displayName && current.initialRole === next.initialRole && current.expiresAt === next.expiresAt && sameValues(current.eligibleRoles, next.eligibleRoles),
-    )
-  );
-}
-function sameParticipant(left: Participant, right: Participant): boolean {
-  return sameParticipantProfile(left, right) && sameParticipantMedia(left, right) && sameParticipantPresence(left, right);
-}
-function sameParticipantProfile(left: Participant, right: Participant): boolean {
-  return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.eligibleRoles, right.eligibleRoles) && sameValues(left.capabilities, right.capabilities);
-}
-function sameParticipantMedia(left: Participant, right: Participant): boolean {
-  return (
-    left.media.microphone === right.media.microphone &&
-    left.media.camera === right.media.camera &&
-    left.media.screenShare === right.media.screenShare &&
-    left.media.screenShareHasAudio === right.media.screenShareHasAudio &&
-    left.media.cameraPublicationId === right.media.cameraPublicationId &&
-    left.media.screenSharePublicationId === right.media.screenSharePublicationId
-  );
-}
-function sameParticipantPresence(left: Participant, right: Participant): boolean {
-  return (
-    left.identityId === right.identityId &&
-    left.deviceType === right.deviceType &&
-    left.presence.state === right.presence.state &&
-    left.presence.speaking === right.presence.speaking &&
-    left.presence.activeSpeaker === right.presence.activeSpeaker &&
-    left.presence.connectionQuality === right.presence.connectionQuality
-  );
-}
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
   return left.participantId === right.participantId && left.identityId === right.identityId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
-}
-function sameArray<T>(left: readonly T[], right: readonly T[], equal: (current: T, next: T) => boolean): boolean {
-  return left.length === right.length && left.every((value, index) => equal(value, right[index]!));
 }
 function sameValues(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);

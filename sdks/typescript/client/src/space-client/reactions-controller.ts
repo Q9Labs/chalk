@@ -102,10 +102,7 @@ class ReactionsControllerRuntime implements ReactionsControllerEffects {
     this.#publish();
   }
   #publish(): void {
-    const active = Object.freeze([...this.#active.values()]);
-    const current = this.#store.getSnapshot().reactions.active;
-    if (sameReactions(current, active)) return;
-    this.#store.update("reactions", Object.freeze({ active }));
+    this.#store.update("reactions", Object.freeze({ active: Object.freeze([...this.#active.values()]) }));
   }
 }
 function reactionFor(reaction: import("../collaboration/types").ChalkReactionEvent): ActiveReaction {
@@ -113,13 +110,4 @@ function reactionFor(reaction: import("../collaboration/types").ChalkReactionEve
 }
 function validReaction(reaction: ActiveReaction): boolean {
   return reaction.eventId.length > 0 && reaction.participantId.length > 0 && reaction.displayName.length > 0 && REACTIONS.has(reaction.reaction) && Number.isFinite(Date.parse(reaction.occurredAt));
-}
-function sameReactions(left: readonly ActiveReaction[], right: readonly ActiveReaction[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((reaction, index) => {
-      const candidate = right[index]!;
-      return reaction.eventId === candidate.eventId && reaction.participantId === candidate.participantId && reaction.displayName === candidate.displayName && reaction.reaction === candidate.reaction && reaction.occurredAt === candidate.occurredAt && reaction.expiresAt === candidate.expiresAt;
-    })
-  );
 }
