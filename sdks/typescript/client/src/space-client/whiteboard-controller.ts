@@ -27,7 +27,6 @@ export const makeWhiteboardController = (connection: ConnectionLifecycleCapabili
     return controller;
   });
 
-
 class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
   readonly #store: SpaceStore;
   readonly #transport: ChalkWhiteboardV1Transport | null;
