@@ -51,7 +51,7 @@ export function createEffectSpaceClient(options: SpaceClientOptions, platform?: 
   });
 }
 
-function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effect<void, unknown> = () => Effect.sync(() => core.dispose())): EffectSpaceClient {
+function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effect<void, unknown>): EffectSpaceClient {
   return {
     media: core.controllers.media,
     chat: {
