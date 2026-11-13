@@ -84,17 +84,23 @@ func writeServiceUnavailable(w http.ResponseWriter) {
 	writeAPIError(w, apiErrorServiceUnavailable)
 }
 
+// serviceCredentialMatches compares the bearer token against every secret without stopping at the first match.
+func serviceCredentialMatches(credential authentication.ServiceCredential, r *http.Request) bool {
+	token, ok := bearerToken(r.Header.Get("Authorization"))
+	if !ok || credential.ID == "" {
+		return false
+	}
+	matched := 0
+	for _, secret := range credential.Secrets {
+		matched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
+	}
+	return matched == 1
+}
+
 func acceptServiceCredential(credential authentication.ServiceCredential) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token, ok := bearerToken(r.Header.Get("Authorization"))
-			matched := 0
-			if ok && credential.ID != "" {
-				for _, secret := range credential.Secrets {
-					matched |= subtle.ConstantTimeCompare([]byte(token), []byte(secret))
-				}
-			}
-			if matched == 1 {
+			if serviceCredentialMatches(credential, r) {
 				principal := authentication.Principal{Kind: authentication.PrincipalService, ServiceID: credential.ID, Scopes: credential.Scopes}
 				r = r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal))
 			}

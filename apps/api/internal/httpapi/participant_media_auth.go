@@ -31,11 +31,7 @@ func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(h
 			}
 			subject, err := verifier.Verify(r.Context(), credential)
 			if err != nil {
-				if isParticipantMediaCredentialRejection(err) {
-					writeUnauthenticated(w)
-					return
-				}
-				writeServiceUnavailable(w)
+				writeMediaVerificationFailure(w, err)
 				return
 			}
 			ctx := accessgrants.WithSubject(r.Context(), subject)
@@ -102,6 +98,15 @@ func requireParticipantMediaRoute(
 		return apiErrorForbidden
 	}
 	return nil
+}
+
+// writeMediaVerificationFailure answers a rejected credential with 401 and any other verifier failure with 503.
+func writeMediaVerificationFailure(w http.ResponseWriter, err error) {
+	if isParticipantMediaCredentialRejection(err) {
+		writeUnauthenticated(w)
+		return
+	}
+	writeServiceUnavailable(w)
 }
 
 func isParticipantMediaCredentialRejection(err error) bool {

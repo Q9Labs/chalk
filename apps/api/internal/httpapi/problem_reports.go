@@ -117,11 +117,7 @@ func requireReportParticipant(verifier ParticipantMediaVerifier) func(http.Handl
 			}
 			subject, err := verifier.Verify(r.Context(), credential)
 			if err != nil {
-				if isParticipantMediaCredentialRejection(err) {
-					writeUnauthenticated(w)
-				} else {
-					writeServiceUnavailable(w)
-				}
+				writeMediaVerificationFailure(w, err)
 				return
 			}
 			reportState(r.Context()).subject = &subject

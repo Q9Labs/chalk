@@ -64,12 +64,14 @@ func v1RouteGroups(options Options) []routeGroup {
 func mountV1Routes(r chi.Router, options Options) {
 	r.Route(apiPrefix, func(r chi.Router) {
 		for _, group := range v1RouteGroups(options) {
-			r.Group(func(r chi.Router) {
-				r.Use(group.middleware...)
-				for _, endpoint := range group.endpoints {
-					endpoint.Mount(r, options.RateLimit)
-				}
-			})
+			r.Group(func(r chi.Router) { mountRouteGroup(r, group, options.RateLimit) })
 		}
 	})
+}
+
+func mountRouteGroup(r chi.Router, group routeGroup, rateLimit RateLimitOptions) {
+	r.Use(group.middleware...)
+	for _, endpoint := range group.endpoints {
+		endpoint.Mount(r, rateLimit)
+	}
 }

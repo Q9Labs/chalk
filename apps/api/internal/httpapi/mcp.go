@@ -82,28 +82,32 @@ func acceptMCPOAuthToken(service MCPOAuthService) func(http.Handler) http.Handle
 			return next
 		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if token, err := oauthBearer(r); err == nil {
-				principal, err := service.Authenticate(r.Context(), token)
-				switch {
-				case err == nil:
-					next.ServeHTTP(w, r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal)))
-				case errors.Is(err, mcpauth.ErrInvalidAccessToken):
-					writeMCPUnauthenticated(w, service)
-				default:
-					slog.ErrorContext(r.Context(), "MCP OAuth token check failed", "event", "mcp.oauth.authenticate_failed", "error", err)
-					writeServiceUnavailable(w)
-				}
-				return
-			}
-			if _, present := bearerToken(r.Header.Get("Authorization")); !present {
-				if _, ok := authentication.PrincipalFromContext(r.Context()); !ok {
-					writeMCPUnauthenticated(w, service)
-					return
-				}
-			}
-			next.ServeHTTP(w, r)
+			authenticateMCPRequest(service, next, w, r)
 		})
 	}
+}
+
+func authenticateMCPRequest(service MCPOAuthService, next http.Handler, w http.ResponseWriter, r *http.Request) {
+	if token, err := oauthBearer(r); err == nil {
+		principal, err := service.Authenticate(r.Context(), token)
+		switch {
+		case err == nil:
+			next.ServeHTTP(w, r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal)))
+		case errors.Is(err, mcpauth.ErrInvalidAccessToken):
+			writeMCPUnauthenticated(w, service)
+		default:
+			slog.ErrorContext(r.Context(), "MCP OAuth token check failed", "event", "mcp.oauth.authenticate_failed", "error", err)
+			writeServiceUnavailable(w)
+		}
+		return
+	}
+	if _, present := bearerToken(r.Header.Get("Authorization")); !present {
+		if _, ok := authentication.PrincipalFromContext(r.Context()); !ok {
+			writeMCPUnauthenticated(w, service)
+			return
+		}
+	}
+	next.ServeHTTP(w, r)
 }
 
 // mcpStepUp answers a refused tool call from an OAuth connection with a 403 that
