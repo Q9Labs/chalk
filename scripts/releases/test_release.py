@@ -56,7 +56,7 @@ def complete(card, budgets=None):
     for key, entry in sorted(budgets.items()):
         metric = key.removeprefix('chalk_sfu.')
         if key.startswith('chalk_sfu.action.') and entry['gate'] is True and metric not in have:
-            card['metrics'].append(dict(id=metric, unit='ms', n=20, p50=100, p95=100, source='latency-kit'))
+            card['metrics'].append(dict(id=metric, unit='ms', n=60, p50=100, p95=100, source='latency-kit'))
     return card
 
 
@@ -565,14 +565,14 @@ class ChalkSfuPromotionTests(unittest.TestCase):
                 verdict = json.loads(result.stdout)
                 self.assertEqual(verdict['result'], expected)
                 self.assertEqual(result.returncode, 0 if expected == 'passed' else 1, result.stderr)
-                self.assertEqual(verdict['missing_items'], [] if expected == 'passed' else [f'chalk_sfu.{gone}'])
+                self.assertEqual(verdict['missing_items'], [] if expected == 'passed' else [f'chalk_sfu.{gone} (missing: 0 of 48)'])
                 self.assertEqual(verdict['gated_metrics'], [])
 
     def test_budget_limits_come_from_scored_commit_not_newer_checkout(self):
         script = EVALUATE
         fixture = json.loads((Path(__file__).parent / 'fixtures/chalk_sfu_over_budget.json').read_text())
         budgets = json.loads((release.ROOT / 'perf/budgets.json').read_text())
-        fixture['metrics'] = [dict(id='action.join.first_audio_ms', unit='ms', n=20, p50=100, p95=300, source='latency-kit')]
+        fixture['metrics'] = [dict(id='action.join.first_audio_ms', unit='ms', n=60, p50=100, p95=300, source='latency-kit')]
         complete(fixture, budgets['budgets'])
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
