@@ -99,16 +99,6 @@ func (policy SpacePolicy) Validate() error {
 	return policy.Transcription.Validate()
 }
 
-func SeedSpacePolicy(tenant TenantPolicy, recording RecordingMode) (SpacePolicy, error) {
-	if err := tenant.Validate(); err != nil {
-		return SpacePolicy{}, err
-	}
-	if err := recording.Validate(); err != nil {
-		return SpacePolicy{}, err
-	}
-	return SpacePolicy{Recording: recording, Transcription: tenant.TranscriptionDefault}, nil
-}
-
 func Resolve(tenant TenantPolicy, space SpacePolicy) (Snapshot, error) {
 	if err := tenant.Validate(); err != nil {
 		return Snapshot{}, err

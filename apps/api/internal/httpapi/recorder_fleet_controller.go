@@ -291,9 +291,11 @@ func recorderFleetRequestKey(w http.ResponseWriter, request *http.Request, envir
 func writeRecorderFleetError(w http.ResponseWriter, request *http.Request, logger *slog.Logger, operation string, err error) {
 	switch {
 	case errors.Is(err, recorderfleet.ErrInventoryNotReady):
+		logRecorderFleetConflict(request, logger, operation, recorderfleet.InventoryNotReadyCode, err)
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusConflict, recorderfleet.InventoryNotReadyCode, "Recorder provider inventory is not ready")
 	case errors.Is(err, recorderfleet.ErrBootstrapPending):
+		logRecorderFleetConflict(request, logger, operation, recorderfleet.BootstrapPendingCode, err)
 		w.Header().Set("Retry-After", "1")
 		if diagnostic, ok := recorderfleet.BootstrapDiagnosticFromError(err); ok {
 			writeJSON(w, http.StatusConflict, struct {
@@ -312,6 +314,7 @@ func writeRecorderFleetError(w http.ResponseWriter, request *http.Request, logge
 	case errors.Is(err, recorderfleet.ErrNodeNotFound):
 		writeError(w, http.StatusNotFound, "recorder_fleet.node_not_found", "Recorder fleet node not found")
 	case errors.Is(err, recorderfleet.ErrAdmissionClosed):
+		logRecorderFleetConflict(request, logger, operation, "recorder_fleet.admission_closed", err)
 		writeError(w, http.StatusConflict, "recorder_fleet.admission_closed", "Recorder fleet admission is closed")
 	case errors.Is(err, recorderfleet.ErrRoleFence), errors.Is(err, recorderfleet.ErrInventoryDrift), errors.Is(err, recorderfleet.ErrInvalidConfig), errors.Is(err, recorderfleet.ErrInvalidDemand):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder fleet request")
@@ -320,6 +323,17 @@ func writeRecorderFleetError(w http.ResponseWriter, request *http.Request, logge
 			"operation", operation, "provider_node_id", chi.URLParam(request, "providerID"), "error", err)
 		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder fleet service is unavailable")
 	}
+}
+
+func logRecorderFleetConflict(request *http.Request, logger *slog.Logger, operation, code string, err error) {
+	attrs := []any{
+		"event", "recorder_fleet.operation_failed", "operation", operation,
+		"error_code", code, "http_status", http.StatusConflict,
+	}
+	if diagnostic, ok := recorderfleet.BootstrapDiagnosticFromError(err); ok {
+		attrs = append(attrs, "stage", diagnostic.Step)
+	}
+	logger.InfoContext(request.Context(), "recorder fleet operation refused", attrs...)
 }
 
 type recorderFleetDemandResponse struct {

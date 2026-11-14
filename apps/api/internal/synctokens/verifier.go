@@ -1,22 +1,26 @@
 package synctokens
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/edjwt"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-const maxCredentialBytes = 8 * 1024
-
 var ErrInvalidCredential = errors.New("invalid sync participant credential")
+
+var credentialErrors = edjwt.Errors{
+	Malformed:  ErrInvalidCredential,
+	Header:     ErrInvalidCredential,
+	UnknownKey: ErrInvalidCredential,
+	Signature:  ErrInvalidCredential,
+}
 
 type VerifierConfig struct {
 	Issuer           string
@@ -36,14 +40,8 @@ type Subject struct {
 type Verifier struct {
 	issuer   string
 	audience string
-	keys     map[string]ed25519.PublicKey
+	keys     edjwt.Keys
 	now      func() time.Time
-}
-
-type verifierHeader struct {
-	Algorithm string `json:"alg"`
-	KeyID     string `json:"kid"`
-	Type      string `json:"typ"`
 }
 
 type verifierClaims struct {
@@ -68,15 +66,9 @@ type verifierClaims struct {
 func NewVerifier(config VerifierConfig) (Verifier, error) {
 	issuer := strings.TrimSpace(config.Issuer)
 	audience := strings.TrimSpace(config.Audience)
-	if issuer == "" || audience == "" || len(config.VerificationKeys) == 0 {
+	keys, ok := edjwt.NewKeys(config.VerificationKeys)
+	if issuer == "" || audience == "" || !ok {
 		return Verifier{}, ErrInvalidInput
-	}
-	keys := make(map[string]ed25519.PublicKey, len(config.VerificationKeys))
-	for keyID, key := range config.VerificationKeys {
-		if keyID == "" || keyID != strings.TrimSpace(keyID) || len(key) != ed25519.PublicKeySize {
-			return Verifier{}, ErrInvalidInput
-		}
-		keys[keyID] = append(ed25519.PublicKey(nil), key...)
 	}
 	if config.Now == nil {
 		config.Now = time.Now
@@ -85,25 +77,18 @@ func NewVerifier(config VerifierConfig) (Verifier, error) {
 }
 
 func (v Verifier) Verify(_ context.Context, credential string) (Subject, error) {
-	parts := strings.Split(credential, ".")
-	if credential == "" || len(credential) > maxCredentialBytes || len(parts) != 3 {
-		return Subject{}, ErrInvalidCredential
-	}
-	var header verifierHeader
-	if decodeVerifierPart(parts[0], &header) != nil || header.Algorithm != "EdDSA" || header.Type != "JWT" {
-		return Subject{}, ErrInvalidCredential
-	}
-	key, ok := v.keys[header.KeyID]
-	signature, signatureErr := base64.RawURLEncoding.DecodeString(parts[2])
-	if !ok || signatureErr != nil || len(signature) != ed25519.SignatureSize ||
-		!ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), signature) {
-		return Subject{}, ErrInvalidCredential
-	}
 	var claims verifierClaims
-	if decodeVerifierPart(parts[1], &claims) != nil || !v.validClaims(claims) {
+	if err := v.keys.Verify(credential, credentialErrors, &claims); err != nil || !v.validClaims(claims) {
 		return Subject{}, ErrInvalidCredential
 	}
 	return syncSubject(claims)
+}
+
+// VerifyParticipant reports whether the credential names a Participant. A credential that fails
+// verification is not a Participant, so it returns false with no error.
+func (v Verifier) VerifyParticipant(ctx context.Context, credential string) (Subject, bool, error) {
+	subject, err := v.Verify(ctx, credential)
+	return subject, err == nil, nil
 }
 
 func (v Verifier) validClaims(claims verifierClaims) bool {
@@ -140,18 +125,8 @@ func syncSubject(claims verifierClaims) (Subject, error) {
 	}, nil
 }
 
-func decodeVerifierPart(part string, target any) error {
-	encoded, err := base64.RawURLEncoding.DecodeString(part)
-	if err != nil {
-		return err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return ErrInvalidCredential
-	}
-	return nil
+// IsComplete reports whether every identifier is set and the generation is positive.
+func (s Subject) IsComplete() bool {
+	return !s.TenantID.IsZero() && !s.SpaceID.IsZero() && !s.EpisodeID.IsZero() &&
+		!s.ParticipantID.IsZero() && s.ParticipantGeneration > 0
 }

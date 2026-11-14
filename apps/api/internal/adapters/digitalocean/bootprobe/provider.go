@@ -277,9 +277,15 @@ func Run(ctx context.Context, input Input, token string) (Output, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	defer transport.CloseIdleConnections()
+	// The release job passes the fleet's three archive CDN settings when its environment has them, so the boot check
+	// downloads through CloudFront like the fleet does; without them it presigns S3 links.
+	cdn, err := recorderarchive.OptionalCDN(os.Getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_URL"), os.Getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_KEY_PAIR_ID"), os.Getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64"))
+	if err != nil {
+		return Output{}, err
+	}
 	adapter, err := digitalocean.NewRecorderFleet(digitalocean.RecorderFleetConfig{
 		PresignArchive: func(ctx context.Context, archive recorderfleet.ArchiveSpec) (string, error) {
-			return recorderarchive.Presign(ctx, archive, time.Until(input.MutationDeadline))
+			return recorderarchive.Link(ctx, cdn, archive, time.Until(input.MutationDeadline))
 		},
 		Token: token, Environment: input.Environment, Role: input.Role, OwnerTag: input.OwnerTag,
 		ProjectID: input.ProjectID, VPCUUID: input.VPCUUID, SSHKeyIDs: input.SSHKeyIDs,

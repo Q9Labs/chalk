@@ -4,8 +4,10 @@ package media
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/netip"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,8 +53,12 @@ func TestControlMessageSpaceMatchesQueueStorage(t *testing.T) {
 }
 
 // Each peer receives every datagram, in the order they were written, whether or not
-// the writer sends them as segmented trains.
+// the writer sends them as segmented trains. Each peer reads while the writer sends, and
+// each burst of frames waits until the one before it has arrived, so neither the host's
+// socket buffer ceiling (net.core.rmem_max, 208 KiB by default) nor a slow scheduler
+// decides whether a datagram is lost.
 func TestBatchConnDeliversEveryDatagramInOrderPerPeer(t *testing.T) {
+	const frames, framesPerBurst = 300, 30
 	for _, segmentation := range []bool{false, true} {
 		name := "plain"
 		if segmentation {
@@ -63,44 +69,87 @@ func TestBatchConnDeliversEveryDatagramInOrderPerPeer(t *testing.T) {
 			peers := make([]*net.UDPConn, 3)
 			for i := range peers {
 				peers[i] = listenLoopback(t)
-				_ = peers[i].SetReadBuffer(4 << 20)
 			}
+			// A frame is equal-size packets and a shorter last one; some frames are one packet.
 			sent := make([][]int, len(peers)) // sizes per peer in order
-			var seq [3]uint32
-			for frame := range 300 {
+			for frame := range frames {
 				peer := frame % len(peers)
-				// A frame is equal-size packets and a shorter last one; some frames are one packet.
 				packets := 1 + frame%9
 				for p := range packets {
 					size := 1100
 					if p == packets-1 && packets > 1 {
 						size = 200 + frame%700
 					}
+					sent[peer] = append(sent[peer], size)
+				}
+			}
+			received := make(chan error, len(peers))
+			var delivered atomic.Int64
+			for i, peer := range peers {
+				go func() {
+					buf := make([]byte, 2048)
+					for want, size := range sent[i] {
+						_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
+						n, _, err := peer.ReadFromUDPAddrPort(buf)
+						if err != nil {
+							received <- fmt.Errorf("peer %d datagram %d of %d: %w", i, want, len(sent[i]), err)
+							return
+						}
+						if n != size || binary.BigEndian.Uint32(buf[0:]) != uint32(i) || binary.BigEndian.Uint32(buf[4:]) != uint32(want) {
+							received <- fmt.Errorf("peer %d datagram %d: got %d bytes peer %d seq %d, want %d bytes seq %d", i, want, n,
+								binary.BigEndian.Uint32(buf[0:]), binary.BigEndian.Uint32(buf[4:]), size, want)
+							return
+						}
+						delivered.Add(1)
+					}
+					received <- nil
+				}()
+			}
+			var seq [3]uint32
+			written := 0
+			for frame := range frames {
+				if frame%framesPerBurst == 0 {
+					waitForDelivery(t, &delivered, written, received)
+				}
+				peer := frame % len(peers)
+				for _, size := range sent[peer][seq[peer]:][:1+frame%9] {
 					if _, err := conn.WriteToAddrPort(datagram(uint32(peer), seq[peer], size), peers[peer].LocalAddr().(*net.UDPAddr).AddrPort()); err != nil {
 						t.Fatal(err)
 					}
-					sent[peer] = append(sent[peer], size)
 					seq[peer]++
+					written++
 				}
 			}
-			buf := make([]byte, 2048)
-			for i, peer := range peers {
-				for want, size := range sent[i] {
-					_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
-					n, _, err := peer.ReadFromUDPAddrPort(buf)
-					if err != nil {
-						t.Fatalf("peer %d datagram %d of %d: %v", i, want, len(sent[i]), err)
-					}
-					if n != size || binary.BigEndian.Uint32(buf[0:]) != uint32(i) || binary.BigEndian.Uint32(buf[4:]) != uint32(want) {
-						t.Fatalf("peer %d datagram %d: got %d bytes peer %d seq %d, want %d bytes seq %d", i, want, n,
-							binary.BigEndian.Uint32(buf[0:]), binary.BigEndian.Uint32(buf[4:]), size, want)
-					}
+			for range peers {
+				if err := <-received; err != nil {
+					t.Fatal(err)
 				}
 			}
-			if conn.refused.Load() != 0 {
-				t.Fatalf("the kernel refused %d datagrams", conn.refused.Load())
+			if refused, _, droppedAudio, droppedVideo := conn.counters(); refused+droppedAudio+droppedVideo != 0 {
+				t.Fatalf("the kernel refused %d datagrams and the queue dropped %d audio and %d video", refused, droppedAudio, droppedVideo)
 			}
 		})
+	}
+}
+
+// waitForDelivery waits until the peers have read every datagram written so far, or one
+// of them has failed.
+func waitForDelivery(t testing.TB, delivered *atomic.Int64, written int, received chan error) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for delivered.Load() < int64(written) {
+		select {
+		case err := <-received:
+			if err != nil {
+				t.Fatal(err)
+			}
+			received <- nil
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the peers read %d of %d datagrams in 5 s", delivered.Load(), written)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
