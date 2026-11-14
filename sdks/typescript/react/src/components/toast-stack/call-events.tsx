@@ -7,7 +7,9 @@ import type { Toast } from "./ToastStack";
 export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource, action?: MediaCommandAction, onRetry?: () => void): Omit<Toast, "id"> | null {
   if (!failure) return null;
   const presentation = commandFailurePresentation(failure, source, action, onRetry !== undefined);
-  return { icon: <CallEventIcon kind={source ?? "microphone"} error />, type: "error", message: presentation.message, action: presentation.retry && onRetry ? { label: "Try again", onClick: onRetry } : undefined };
+  const retry = presentation.retry && onRetry ? { label: "Try again", onClick: onRetry } : undefined;
+  // A notice with nothing to act on leaves on the normal timer instead of staying until it is dismissed.
+  return { icon: <CallEventIcon kind={source ?? "alert"} error />, type: "error", message: presentation.message, action: retry, duration: retry || source ? undefined : 8000 };
 }
 
 const name = (participant: Participant) => (

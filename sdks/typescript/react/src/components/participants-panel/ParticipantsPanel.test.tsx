@@ -76,3 +76,22 @@ it("gives a guest only the volume control for someone else, and no host actions"
   expect(element.textContent).not.toMatch(/Mute|Remove|camera/);
   await unmount();
 });
+
+it("puts who can join beside mute everyone for a host, changes it from the menu, and shows neither to a guest", async () => {
+  const people = [person("Me", { isLocal: true }), person("Nora")];
+  const changes: string[] = [];
+  const onAdmissionPolicyChange = async (policy: string) => void changes.push(policy);
+  const host = await mount(<ParticipantsPanelSurface participants={people} canManageAdmission admissionPolicy="open" onAdmissionPolicyChange={onAdmissionPolicyChange} onMuteEveryone={async () => undefined} />);
+  const controls = host.element.querySelector(".call-host-controls");
+  expect([...(controls?.querySelectorAll("button") ?? [])].map((button) => button.textContent)).toEqual(["Anyone with the link", "Mute everyone"]);
+  expect(controls?.querySelector("button")?.getAttribute("aria-label")).toBe("Who can join: Anyone with the link");
+  await click(controls?.querySelector("button"));
+  const items = [...document.querySelectorAll('[role="menuitemcheckbox"], [role="menuitemradio"], [role="menuitem"]')];
+  expect(items.map((item) => item.textContent)).toEqual(["Anyone with the linkPeople join right away", "Ask to joinYou let each person in"]);
+  await click(items[1]);
+  expect(changes).toEqual(["knock"]);
+  await host.unmount();
+  const guest = await mount(<ParticipantsPanelSurface participants={people} admissionPolicy="open" />);
+  expect(guest.element.querySelector(".call-host-controls")).toBeNull();
+  await guest.unmount();
+});

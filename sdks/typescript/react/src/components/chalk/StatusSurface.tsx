@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
+import { getConnectionFailureDetail, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
 export type StatusSurfacePhase = "entering" | "left" | "timed-out" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
@@ -49,19 +49,10 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
         {copy.title}
       </h1>
       {reason || copy.detail ? <p className="text-(length:--type-body) text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
-      {phase === "failed" && errorCode ? (
-        <p className="text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">
-          Reference:{" "}
-          <code dir="ltr" className="break-all">
-            {errorCode}
-            {sync ? ` ${formatSyncConnectDiagnostic(sync)}` : ""}
-          </code>
-        </p>
-      ) : null}
       <div data-part="status-actions" className="mt-5 flex gap-7">
-        {phase === "episode-ended" && episodeEndReason === "maximum_duration" && endAction ? <StatusAction icon={<StatusIcon retry />} label={endAction.label} onClick={endAction.onClick} /> : null}
-        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" || phase === "timed-out" || connectionLost ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
-        {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
+        {phase === "episode-ended" && episodeEndReason === "maximum_duration" && endAction ? <StatusAction icon={<StatusIcon kind="forward" />} label={endAction.label} onClick={endAction.onClick} /> : null}
+        {canRetry && retry ? <StatusAction icon={<StatusIcon kind="retry" />} label={phase === "elsewhere" ? "Use here" : phase === "left" || phase === "timed-out" || connectionLost ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
+        {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon kind="home" />} label="Home" onClick={onHome} /> : null}
       </div>
       {onReportProblem && phase !== "entering" ? (
         <button type="button" onClick={onReportProblem} className="mt-(--space-4) px-2.5 py-2 text-(length:--type-body-sm) text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
@@ -72,17 +63,21 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
   );
 }
 
-function StatusIcon({ retry = false }: { readonly retry?: boolean }) {
+const STATUS_ICON = {
+  retry: (
+    <>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </>
+  ),
+  forward: <path d="M5 12h14M13 6l6 6-6 6" />,
+  home: <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
+};
+
+function StatusIcon({ kind }: { readonly kind: keyof typeof STATUS_ICON }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      {retry ? (
-        <>
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-          <path d="M3 3v5h5" />
-        </>
-      ) : (
-        <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
-      )}
+      {STATUS_ICON[kind]}
     </svg>
   );
 }

@@ -9,6 +9,8 @@ export type {
   AccessGrantSource,
   AccessReason,
   ActiveReaction,
+  AdmissionPolicy,
+  AdmissionPolicyTarget,
   AdmissionRequest,
   Capability,
   CameraPreview,

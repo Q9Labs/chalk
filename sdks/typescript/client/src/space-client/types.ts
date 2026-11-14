@@ -2,7 +2,7 @@ import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
 import type { AccessGrant } from "../access/grant";
-import type { V1Capability } from "../sync/v1-types";
+import type { V1AdmissionPolicy, V1AdmissionTarget, V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
 import type { CallEvent } from "./call-events";
 import type { MediaControllerEffects } from "./media-controller";
@@ -144,9 +144,15 @@ export type AdmissionRequest = {
   readonly eligibleRoles: readonly string[];
   readonly expiresAt: string;
 };
+/** Who can join without a host: "open" lets anyone with the link in, "knock" asks a host first, and "members_only" is set by the Space and cannot be changed from the call. */
+export type AdmissionPolicy = V1AdmissionPolicy;
+/** The policies a host can set from the call. */
+export type AdmissionPolicyTarget = V1AdmissionTarget;
 export type ParticipantsSlice = {
   readonly roster: readonly Participant[];
   readonly admissionQueue: readonly AdmissionRequest[];
+  /** Null until Sync has sent the call's control state. */
+  readonly admissionPolicy: AdmissionPolicy | null;
 };
 export type MediaDevice = {
   readonly deviceId: string;

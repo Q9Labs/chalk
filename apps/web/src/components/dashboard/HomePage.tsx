@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, type CallDTO, type HomeCallDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
@@ -9,6 +8,7 @@ import { MoreButton, SkeletonRows, useToast } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./language-choice";
 import { inviteLink, type Row, type Home, merge, capped, shown, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
+import { useJoinCall } from "./join-call";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
 type HomeDialog = null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO };
@@ -128,7 +128,7 @@ export function HomePage() {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
   const [dialog, setDialog] = useState<HomeDialog>(null);
-  const navigate = useNavigate();
+  const joinCall = useJoinCall(dialog?.kind === "ready" ? dialog.call.id : state.kind === "ready" ? shown(state.data)[0]?.id : undefined);
   const { starting, startCall, archive } = useCallActions(update, (next) => setDialog(next));
 
   return (
@@ -145,13 +145,7 @@ export function HomePage() {
       </div>
       <HomeBody state={state} reload={reload} update={update} onRename={(call) => setDialog({ kind: "rename", call })} onArchive={(call) => void archive(call)} />
       {dialog?.kind === "ready" ? (
-        <CallReadyDialog
-          call={dialog.call}
-          link={dialog.link}
-          onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))}
-          onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })}
-          onClose={() => setDialog(null)}
-        />
+        <CallReadyDialog call={dialog.call} link={dialog.link} onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))} onJoin={() => joinCall(dialog.call)} onClose={() => setDialog(null)} />
       ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>

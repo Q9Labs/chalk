@@ -49,6 +49,8 @@ export type LiveOptions = {
   readonly capabilities?: readonly Capability[];
   readonly status?: SpaceSnapshot["connection"]["status"];
   readonly board?: boolean;
+  /** Who leads the board; a viewer follows them until they pick someone else. */
+  readonly presenter?: string;
   readonly recording?: boolean;
   readonly chat?: readonly ChatMessage[];
   /** How many people are waiting to be let in; `true` is one. */
@@ -110,10 +112,10 @@ function pendingOffline(now: number) {
   };
 }
 
-function whiteboardState(board: boolean, capabilities: readonly Capability[]): SpaceSnapshot["whiteboard"] {
+function whiteboardState(board: boolean, presenter: string | null, capabilities: readonly Capability[]): SpaceSnapshot["whiteboard"] {
   return {
     open: board,
-    engine: { status: board ? "ready" : "unsubscribed", sceneId: board ? "scene-1" : null, revision: board ? "1" : null, presenting: board, error: null },
+    engine: { status: board ? "ready" : "unsubscribed", sceneId: board ? "scene-1" : null, revision: board ? "1" : null, presenting: board, presenterId: presenter, error: null },
     access: { canDraw: capabilities.includes("drawWhiteboard"), policy: "everyone", permissions: [] },
   };
 }
@@ -149,13 +151,14 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
     participants: {
       roster,
       admissionQueue: admissionQueue(options.admission, now),
+      admissionPolicy: options.admission ? "knock" : "open",
     },
     media: liveMedia(base.media, options, self, now),
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },
     reactions: options.reactions ? { active: [{ eventId: "r1", participantId: "nora", displayName: "Nora Patel", reaction: "🎉", occurredAt: new Date(now).toISOString(), expiresAt: new Date(now + 60_000).toISOString() }] } : base.reactions,
     recording: { current: options.recording ? { recordingId: "rec-1", status: "recording", failureCode: null } : null },
     offline: options.offlinePending ? pendingOffline(now) : base.offline,
-    whiteboard: whiteboardState(Boolean(options.board), capabilities),
+    whiteboard: whiteboardState(Boolean(options.board), options.presenter ?? null, capabilities),
   };
 }
 

@@ -1,9 +1,10 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { CallLimboContext } from "../../internal/call-limbo-context";
 import { useSheetDrag } from "./useSheetDrag";
 export interface ChalkSheetProps {
   /** `reactions` has no scrim, so what floats over the call stays bright. */
-  readonly variant?: "default" | "details" | "panel" | "reactions" | "ready" | "stage";
+  readonly variant?: "default" | "details" | "panel" | "reactions" | "stage";
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
@@ -15,7 +16,8 @@ export interface ChalkSheetProps {
  * A drag that starts on the grabber or the heading closes the sheet, past 30% of its height or on a flick.
  * The details sheet can open on its own at call start, so it focuses itself, not its close button: no ring shows, and Tab reaches the first control.
  */
-export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
+export function ChalkSheet({ open: requested, onOpenChange, title, accessibleLabel, children, variant = "default" }: ChalkSheetProps) {
+  const open = requested && !useContext(CallLimboContext);
   const [container, setContainer] = useState<HTMLElement | null>(null);
   const popup = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
@@ -48,16 +50,7 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
         {container ? (
           <Dialog.Portal container={container}>
             {variant === "reactions" ? null : <Dialog.Backdrop ref={scrim} data-part="sheet-scrim" className="chalk-sheet-scrim" />}
-            <Dialog.Popup
-              ref={popup}
-              {...(accessibleLabel ? { "aria-label": accessibleLabel, "aria-labelledby": undefined } : {})}
-              initialFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-part=ready-title]") : variant === "details" ? popup : undefined}
-              finalFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-call-link-trigger]") : undefined}
-              data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
-              data-variant={variant}
-              className={variant === "ready" ? "chalk-sheet data-[starting-style]:!translate-y-8 data-[ending-style]:!translate-y-8" : "chalk-sheet"}
-              style={variant === "ready" ? { padding: "0 var(--space-5) var(--space-12)", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
-            >
+            <Dialog.Popup ref={popup} {...(accessibleLabel ? { "aria-label": accessibleLabel, "aria-labelledby": undefined } : {})} initialFocus={variant === "details" ? popup : undefined} data-part={variant === "panel" ? "panel-card" : "sheet"} data-variant={variant} className="chalk-sheet">
               <div data-part="sheet-handle" data-sheet-drag className="chalk-sheet-handle" {...drag} />
               {variant !== "details" ? (
                 <Dialog.Title className="sr-only">{title}</Dialog.Title>

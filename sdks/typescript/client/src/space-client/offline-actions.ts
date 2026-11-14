@@ -25,9 +25,9 @@ export type OfflineActionsHold = {
   readonly hold: <A, E>(input: HeldAction, run: () => Effect.Effect<A, E>) => Effect.Effect<A, E | SpaceClientError> | null;
 };
 
-const NOTICE_SCOPE_CHANGED = "Your offline actions were not sent because the Episode or participant changed.";
-const NOTICE_CONNECTION_ENDED = "Your offline actions were not sent because the Episode ended or the connection closed.";
-const NOTICE_EXPIRED = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+const NOTICE_SCOPE_CHANGED = "Changes you made offline weren’t sent because the call changed.";
+const NOTICE_CONNECTION_ENDED = "Changes you made offline weren’t sent because the call ended.";
+const NOTICE_EXPIRED = "Some changes you made offline were too old to send.";
 const sameSubject = (current: AccessSubject | null, saved: AccessSubject | null): boolean =>
   !!current && !!saved && current.tenantId === saved.tenantId && current.spaceId === saved.spaceId && current.episodeId === saved.episodeId && current.participantId === saved.participantId && current.participantGeneration === saved.participantGeneration;
 
@@ -138,7 +138,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     }
     // Retire before dispatch: a crash after dispatch must never cause a replay.
     if (!this.#clearStorage() && this.#storage) {
-      this.#notice = "Your offline actions could not be sent safely. Try again when storage is available.";
+      this.#notice = "Changes you made offline couldn’t be sent safely. Try them again.";
       this.#publish();
       return;
     }
@@ -178,7 +178,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       if (this.#waiters.length === 0) this.#storage.removeItem(this.#storageKey);
       else this.#storage.setItem(this.#storageKey, JSON.stringify({ version: 1, subject: this.#subject, actions: this.#waiters.map(({ action }) => action) }));
     } catch {
-      this.#notice = "Your offline actions are held, but could not be saved. Keep this page open.";
+      this.#notice = "Changes you made offline are waiting but couldn’t be saved. Keep this page open.";
     }
   }
 
@@ -219,7 +219,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
               Effect.suspend(() => (sameSubject(this.#connection.getSnapshot().subject, restoredSubject) ? command : Effect.fail(discardedError()))).pipe(
                 Effect.tapError(() =>
                   Effect.sync(() => {
-                    this.#notice = "An offline action was not sent. Please try it again.";
+                    this.#notice = "A change you made offline wasn’t sent. Try it again.";
                     this.#publish();
                   }),
                 ),
@@ -245,7 +245,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       this.#notice = NOTICE_CONNECTION_ENDED;
       this.#clearStorage();
     } catch {
-      this.#notice = "Saved offline actions could not be read. They will not be sent.";
+      this.#notice = "Saved offline changes couldn’t be read, so they won’t be sent.";
     }
     this.#publish();
   }

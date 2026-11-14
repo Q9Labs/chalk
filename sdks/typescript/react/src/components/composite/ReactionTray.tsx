@@ -23,13 +23,15 @@ export interface ReactionTrayProps {
   readonly onClose: () => void;
   readonly position?: "top" | "bottom";
   readonly className?: string;
+  /** The emoji are disabled while the call reconnects; the hand still works. */
+  readonly emojiPaused?: boolean;
 }
 
 /**
  * One row of large emoji buttons that pops up over the control bar. Arrow keys move between
  * emojis, Home/End jump, Escape and clicking outside close. Focus lands on the first emoji.
  */
-export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className }: ReactionTrayProps): React.JSX.Element {
+export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, position = "top", className, emojiPaused = false }: ReactionTrayProps): React.JSX.Element {
   const [more, setMore] = useState(false);
   const returnFocus = useRef<Element | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -61,7 +63,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     const resize = new ResizeObserver(place);
     if (tray) resize.observe(tray);
     window.addEventListener("resize", place);
-    listRef.current?.querySelector("button")?.focus();
+    listRef.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
     return () => {
       window.removeEventListener("resize", place);
       resize.disconnect();
@@ -70,13 +72,24 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     };
   }, [position]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Close the mounted reaction tray on Escape; remove the document listener on cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Close the mounted reaction tray on Escape or on a press anywhere else (the dock, header and panels sit above the backdrop, which keeps its click so a press on the stage doesn't fall through); remove the document listeners on cleanup.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    // A click, not a pointerdown: closing the tray moves the notices down, so closing it on pointerdown would move a notice's Dismiss away before its click lands.
+    // The reactions button toggles the tray itself, so a click on it is left to its own handler.
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || listRef.current?.contains(target) || target.closest(".chalk-shell-reactions-button, [data-reactions-backdrop]")) return;
+      onClose();
+    };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("click", handleClick, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("click", handleClick, true);
+    };
   }, [onClose]);
 
   const handleSelect = useCallback(
@@ -88,7 +101,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   );
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const buttons = listRef.current ? [...listRef.current.querySelectorAll("button")] : [];
+    const buttons = listRef.current ? [...listRef.current.querySelectorAll("button:not(:disabled)")].filter((button) => button instanceof HTMLElement) : [];
     if (buttons.length === 0) return;
     const index = buttons.findIndex((button) => button === document.activeElement);
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -99,7 +112,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   };
 
   const buttons = (more ? reactions : reactions.slice(0, 6)).map((emoji) => (
-    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" data-move={EMOJI_MOVE.get(emoji) ?? "pop"} aria-label={`React with ${emoji}`}>
+    <button key={emoji} type="button" disabled={emojiPaused} onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" data-move={EMOJI_MOVE.get(emoji) ?? "pop"} aria-label={`React with ${emoji}`}>
       <span aria-hidden="true">{emoji}</span>
     </button>
   ));
@@ -109,7 +122,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   return (
     <>
       <ShellStyles />
-      <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" data-reactions-backdrop onClick={onClose} aria-hidden="true" />
       {
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
           {onToggleHandRaise ? (
@@ -131,7 +144,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
           ) : null}
           {buttons}
           {!more && reactions.length > 6 ? (
-            <button type="button" className="chalk-shell-emoji" aria-label="More emoji" onClick={() => setMore(true)}>
+            <button type="button" className="chalk-shell-emoji" disabled={emojiPaused} aria-label="More emoji" onClick={() => setMore(true)}>
               …
             </button>
           ) : null}

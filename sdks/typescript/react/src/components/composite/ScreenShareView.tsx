@@ -95,14 +95,17 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       hidden={hidden}
       style={style}
       className={cn("h-full w-full", className)}
+      // The own-share bar already names a big local share, so its tag would only repeat it and crowd Stop sharing.
       chip={
-        <>
-          <StageIcon name="share" size={14} className="shrink-0" />
-          <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
-            {name}
-          </span>
-          {!isLocal && hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
-        </>
+        isLocal && primary ? null : (
+          <>
+            <StageIcon name="share" size={14} className="shrink-0" />
+            <span dir="auto" className="min-w-0 truncate [unicode-bidi:plaintext]">
+              {name}
+            </span>
+            {!isLocal && hasAudio ? <StageIcon name="volume" size={14} aria-label="With share audio" className="shrink-0" /> : null}
+          </>
+        )
       }
     >
       <div
@@ -151,9 +154,14 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
         ) : null}
         {primary ? switcher : null}
         {isLocal && primary ? (
-          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-(--corner-xl) bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:flex-wrap">
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
+          <div
+            data-part="share-local-overlay"
+            role="group"
+            aria-label="Your share"
+            className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-(--corner-xl) bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:top-auto max-[640px]:bottom-2.5 max-[640px]:flex-wrap"
+          >
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 max-[640px]:basis-full">
+              <b className="truncate font-semibold max-[640px]:line-clamp-2 max-[640px]:whitespace-normal">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
               {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-(length:--type-caption) text-[var(--chalk-on-overlay)]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
             </div>
             {onChangeShare ? (

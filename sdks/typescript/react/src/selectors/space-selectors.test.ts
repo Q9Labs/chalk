@@ -29,3 +29,34 @@ it("marks a guest whose presence dropped as reconnecting", () => {
   expect(tileOf({ state: "disconnected" })?.isReconnecting).toBe(true);
   expect(tileOf({})?.isReconnecting).toBeUndefined();
 });
+
+it("keeps your own picture and microphone on while Sync recovers a source it had confirmed", () => {
+  const track = (kind: string, enabled = true) => ({ kind, enabled, readyState: "live" }) as MediaStreamTrack;
+  const own = (camera: ReturnType<typeof off> | { source: "camera"; state: "requesting"; track: MediaStreamTrack }, microphone: ReturnType<typeof off> | { source: "microphone"; state: "requesting"; track: MediaStreamTrack }) =>
+    toVideoParticipants([], [], "you", "Alex", { ...localMedia, camera, microphone }).find((tile) => tile.id === "you");
+  const recovering = own({ source: "camera", state: "requesting", track: track("video") }, { source: "microphone", state: "requesting", track: track("audio") });
+  expect(recovering?.isVideoEnabled).toBe(true);
+  expect(recovering?.isMuted).toBe(false);
+  const stopped = own({ source: "camera", state: "requesting", track: track("video", false) }, off("microphone"));
+  expect(stopped?.isVideoEnabled).toBe(false);
+  expect(stopped?.isMuted).toBe(true);
+});
+
+it("keeps another person's picture and microphone while Sync recovers and the SFU still delivers their tracks", () => {
+  const live = (kind: string, readyState = "live") => ({ kind, enabled: true, readyState }) as MediaStreamTrack;
+  const unknown = { ...guest({}), media: { microphone: "unknown", camera: "unknown", screenShare: "unknown" } } satisfies Participant;
+  const remote = (camera: MediaStreamTrack) => [
+    { participantId: "nora", source: "camera" as const, publicationId: "cam", track: camera },
+    { participantId: "nora", source: "microphone" as const, publicationId: "mic", track: live("audio") },
+  ];
+  const recovering = toVideoParticipants([unknown], remote(live("video")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(recovering?.isVideoEnabled).toBe(true);
+  expect(recovering?.isMuted).toBe(false);
+  const ended = toVideoParticipants([unknown], remote(live("video", "ended")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(ended?.isVideoEnabled).toBe(false);
+  const off = toVideoParticipants([guest({})], remote(live("video")), "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(off?.isVideoEnabled).toBe(false);
+  const withoutTracks = toVideoParticipants([unknown], [], "you", "Alex", localMedia).find((tile) => tile.id === "nora");
+  expect(withoutTracks?.isVideoEnabled).toBe(false);
+  expect(withoutTracks?.isMuted).toBe(true);
+});

@@ -9,7 +9,11 @@ const CLOSE_DELAY_MS = 120;
 const FIRST_ROW = 6;
 const NOTICE_GAP = 12;
 
-const REACTION_SHEET_CSS = `.chalk-sheet-center {
+const REACTION_SHEET_CSS = `.chalk-sheet-emoji button:disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.chalk-sheet-center {
   justify-content: center;
   font-weight: 600;
 }
@@ -54,7 +58,7 @@ const REACTION_SHEET_CSS = `.chalk-sheet-center {
 }`;
 
 /** The reactions tray on a phone: a bottom sheet with no scrim, so the emoji floating up over the tiles stay bright. */
-export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose"> & { readonly open: boolean }) {
+export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose, emojiPaused = false }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose" | "emojiPaused"> & { readonly open: boolean }) {
   const [more, setMore] = useState(false);
   if (!open && more) setMore(false);
   const [frame, setFrame] = useState<HTMLElement | null>(null);
@@ -122,12 +126,12 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
         ) : null}
         <div ref={findSheet} className="chalk-sheet-emoji" data-expanded={more || undefined} role="toolbar" aria-label="Reactions">
           {(more ? reactions : reactions.slice(0, FIRST_ROW)).map((emoji) => (
-            <button key={emoji} type="button" aria-label={`React with ${emoji}`} onClick={() => send(emoji)}>
+            <button key={emoji} type="button" disabled={emojiPaused} aria-label={`React with ${emoji}`} onClick={() => send(emoji)}>
               <span aria-hidden="true">{emoji}</span>
             </button>
           ))}
           {!more && reactions.length > FIRST_ROW ? (
-            <button type="button" aria-label="More emoji" onClick={() => setMore(true)}>
+            <button type="button" disabled={emojiPaused} aria-label="More emoji" onClick={() => setMore(true)}>
               …
             </button>
           ) : null}
