@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // scorecard build: adapters turn existing measurement output into one validated scorecard file.
-// scorecard diff:  compares a scorecard with a baseline and prints the delta table.
+// scorecard diff:  compares a scorecard with a baseline and prints the delta table. --expect-gated also lists every gated action metric of the plane.
+// scorecard merge: joins the cards of one run (the Leave proof and the latency run of a Promote) into one card.
 // scorecard append: adds scorecards to the nightly history. scorecard baseline: the median of the last seven nightly runs.
 // scorecard comment: creates or updates one section of the pull request's single scorecard comment.
 // scorecard evidence: prints "yes" or "no" for whether a scorecard file counts as evidence (see countsAsEvidence).
@@ -9,13 +10,13 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
-import { planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { MIN_GATED_SAMPLES, gatedActionIds, planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { deviceMetrics } from "./adapters/device.mjs";
 import { leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
 import { webMetrics } from "./adapters/web.mjs";
 import { sectionComment, sectionMarker } from "./comment.mjs";
-import { diffMetrics, renderTable } from "./diff.mjs";
+import { diffMetrics, expectedMetricRows, renderExpectedMetrics, renderTable } from "./diff.mjs";
 import { contentionMarkdown } from "./contention.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
@@ -79,7 +80,15 @@ function build(argv) {
 async function diff(argv) {
   const { values } = parseArgs({
     args: argv,
-    options: { baseline: { type: "string" }, current: { type: "string" }, title: { type: "string", default: "Performance scorecard" }, "baseline-label": { type: "string", default: "the latest master run" }, markdown: { type: "string" }, "fail-on-gate": { type: "boolean" } },
+    options: {
+      baseline: { type: "string" },
+      current: { type: "string" },
+      title: { type: "string", default: "Performance scorecard" },
+      "baseline-label": { type: "string", default: "the latest master run" },
+      markdown: { type: "string" },
+      "fail-on-gate": { type: "boolean" },
+      "expect-gated": { type: "boolean" },
+    },
   });
   const current = parseScorecard(readJson(values.current));
   const candidate = values.baseline ? parseScorecard(withoutRetiredMetrics(readJson(values.baseline))) : undefined;
@@ -92,13 +101,45 @@ async function diff(argv) {
     for (const row of result.rows) row.gate = false;
   }
   const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
-  const output = planeNoteMarkdown(current.mediaPlane) + table;
+  // Every gated action metric of the plane must be there with enough samples; the table shows each one, so a missing metric is a row.
+  const expected = values["expect-gated"] ? expectedMetricRows(gatedActionIds(budgets, current.mediaPlane), current.metrics, planeBudgets(budgets, current.mediaPlane), MIN_GATED_SAMPLES, baseline?.metrics) : [];
+  const lacking = expected.filter((row) => row.verdict === "missing" || row.verdict === "too few samples");
+  const output = planeNoteMarkdown(current.mediaPlane) + table + (values["expect-gated"] ? `\n${renderExpectedMetrics(expected, `Gated action metrics on ${current.mediaPlane}`)}` : "");
   if (values.markdown) writeFileSync(values.markdown, output);
   console.log(output);
   if (values["fail-on-gate"] && countsAsEvidence(current) && result.failures.length > 0) {
     console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
     process.exitCode = 1;
   }
+  if (values["fail-on-gate"] && lacking.length > 0) {
+    console.error(`${lacking.length} gated metric(s) have no samples or too few: ${lacking.map((row) => `${row.id} (${row.samples} of ${row.floor})`).join(", ")}`);
+    process.exitCode = 1;
+  }
+}
+
+// merge joins the cards one run produced on one plane and revision into a single card, so the gate scores them together.
+function merge(argv) {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { out: { type: "string" } } });
+  const [first, ...others] = positionals.map((path) => parseScorecard(readJson(path)));
+  if (!first || others.length === 0) throw new Error("merge needs at least two cards");
+  const ids = new Set(first.metrics.map((metric) => metric.id));
+  for (const card of others) {
+    if (card.mediaPlane !== first.mediaPlane || card.run.commit !== first.run.commit) throw new Error("merge: the cards are not of one plane and revision");
+    for (const metric of card.metrics) {
+      if (ids.has(metric.id)) throw new Error(`merge: metric ${metric.id} is in two cards`);
+      ids.add(metric.id);
+    }
+  }
+  const cards = [first, ...others];
+  const merged = parseScorecard({
+    ...first,
+    metrics: cards.flatMap((card) => card.metrics),
+    dropped: cards.flatMap((card) => card.dropped),
+    series: cards.find((card) => card.series)?.series,
+    contention: cards.find((card) => card.contention)?.contention,
+  });
+  writeFileSync(values.out, `${JSON.stringify(merged, null, 2)}\n`);
+  console.log(`Wrote ${values.out}: ${merged.metrics.length} metrics from ${cards.length} cards.`);
 }
 
 async function comment(argv) {
@@ -146,9 +187,10 @@ async function goOutput() {
 const [command, ...rest] = process.argv.slice(2);
 if (command === "build") build(rest);
 else if (command === "diff") await diff(rest);
+else if (command === "merge") merge(rest);
 else if (command === "comment") comment(rest);
 else if (command === "append") await append(rest);
 else if (command === "baseline") baseline(rest);
 else if (command === "evidence") evidence(rest);
 else if (command === "go-output") await goOutput();
-else throw new Error("Usage: scorecard.mjs build|diff|comment|append|baseline|evidence|go-output");
+else throw new Error("Usage: scorecard.mjs build|diff|merge|comment|append|baseline|evidence|go-output");

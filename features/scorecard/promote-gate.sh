@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # The Promote tier of the scorecard: score the production proof of this Promote run against the median of the last seven
 # nightly runs. The gate never changes the deploy: it only fails the Promote run, after the rollback decision is made.
-# Usage: promote-gate.sh first|final <scorecard.json>   (run from the repository root)
+# Usage: promote-gate.sh first|final <scorecard.json> [<latency-scorecard.json>]   (run from the repository root)
 #   first: score the first proof. A gated metric over budget writes over=true to GITHUB_OUTPUT, so the workflow reruns the proof once.
 #          A non-blank SCORECARD_OVERRIDE records its reason and never blocks.
 #   SCORECARD_EXPECTED=false marks a revision that predates the scorecard; its missing card is skipped on the first pass.
 #   final: score the rerun. A gated metric still over budget fails the run and opens or updates the regression issue.
+#   LATENCY_EXPECTED=true: the revision's latency kit ran beside the proofs, so its card joins the Leave card and every gated action
+#          metric of the plane must be there with enough samples (the table lists each one). A missing latency card, a missing
+#          metric or one with too few samples counts as over budget: the first pass reruns both measurements, the final pass fails.
 # Needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, GITHUB_RUN_ID, GITHUB_SERVER_URL.
 set -euo pipefail
 
 mode="${1:?usage: promote-gate.sh first|final <scorecard.json>}"
-card="${2:?usage: promote-gate.sh first|final <scorecard.json>}"
+card="${2:?usage: promote-gate.sh first|final <scorecard.json> [<latency-scorecard.json>]}"
+latency="${3:-}"
 override="$(python3 scripts/releases/scorecard_override.py)"
 scorecard="node features/scorecard/scorecard.mjs"
 run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -41,8 +45,20 @@ if git ls-remote --exit-code --heads "${remote}" scorecard-history > /dev/null 2
   fi
 fi
 
+current="${card}"
+expect=()
 over=0
-${scorecard} diff --current "${card}" "${baseline[@]}" --title "Promote scorecard (${mode})" --markdown "${work}/table.md" --fail-on-gate || over=1
+if [[ "${LATENCY_EXPECTED:-false}" == true ]]; then
+  if [[ -n "${latency}" && -f "${latency}" ]]; then
+    ${scorecard} merge --out "${work}/merged.json" "${card}" "${latency}"
+    current="${work}/merged.json"
+    expect=(--expect-gated)
+  else
+    echo "The ${mode} latency run produced no scorecard, so the gated action metrics of the production proof are missing." >> "${GITHUB_STEP_SUMMARY}"
+    over=1
+  fi
+fi
+${scorecard} diff --current "${current}" "${baseline[@]}" "${expect[@]}" --title "Promote scorecard (${mode})" --markdown "${work}/table.md" --fail-on-gate || over=1
 cat "${work}/table.md" >> "${GITHUB_STEP_SUMMARY}"
 
 open_issue() {
