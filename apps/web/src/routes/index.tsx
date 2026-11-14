@@ -66,7 +66,7 @@ export const Route = createFileRoute("/")({
 function LandingPage() {
   return (
     <SiteRoot>
-      <SiteNav />
+      <SiteNav pageCta />
       <main>
         <Hero />
         <LinkSection />

@@ -73,7 +73,7 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Foundation toast announcement",
     render: () => (
       <main data-chalk className="h-dvh">
-        <ToastStack toasts={[{ id: "join", message: "Nora joined", duration: Infinity }]} onDismiss={() => undefined} />
+        <ToastStack toasts={[{ id: "join", message: "Nora joined" }]} onDismiss={() => undefined} />
       </main>
     ),
   },

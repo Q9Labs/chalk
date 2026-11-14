@@ -1,12 +1,12 @@
-## Chalk makes live work durable
+## Video calls inside your product
 
-Chalk gives your product a durable **Space** and a bounded **Episode** instead of a one-off live surface. The Space keeps identity, membership, chat, and whiteboard content. Each Episode records who was present and what happened, then freezes its artifacts.
+Chalk puts video calls in your app, with chat and a shared whiteboard that are still there after the call ends. Start with the [quickstart](/docs/quickstart): it puts a working call on screen in a few minutes.
 
-That split keeps the product model simple: people join a Space, and Chalk creates an Episode when live activity starts. `join()` always targets the Space. A Space has at most one live Episode, so links and history stay unambiguous.
+### Spaces and Episodes
 
-<Callout tone="tip" title="Start with a working surface">
-  Put your first Space on screen with the [TypeScript quickstart](/docs/quickstart), then choose a UI path for your product.
-</Callout>
+Take a team's weekly standup. The standup itself is a **Space**: one link that keeps the same members, chat and whiteboard from week to week. Each Monday's call is an **Episode**: it starts when the first person joins, records who was there and what happened, and freezes when the call ends.
+
+People always join the Space, and Chalk starts the Episode for them. A Space has at most one live Episode, so a link always leads to the call that is happening now, and its history stays in order.
 
 ### One client, several UI choices
 
