@@ -46,7 +46,7 @@ def plan_prune(versions, children_of, now, keep_releases=KEEP_RELEASES, min_age_
         reverse=True,
     )
     cutoff = now - timedelta(days=min_age_days)
-    kept = [r for n, r in enumerate(releases) if n < keep_releases or r["created_at"] >= cutoff]
+    kept = releases[:keep_releases] + [v for v in versions if v["created_at"] >= cutoff]
     protected = set()
     for release in kept:
         protected.add(release["digest"])

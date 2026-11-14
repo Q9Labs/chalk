@@ -51,6 +51,12 @@ class PrunePlanTest(unittest.TestCase):
         children = {digest("d"): [digest("e")], digest("f"): [digest("1")]}
         self.assertEqual(self.plan(versions, children, keep=3), set())
 
+    def test_an_untagged_index_kept_by_age_keeps_its_older_children(self):
+        newest = [version(str(n), 1, f"managed-episode-{n}") for n in "abc"]
+        versions = newest + [version("d", 9), version("e", 11), version("f", 11, "sha256-" + "d" * 64), version("1", 11)]
+        children = {digest("d"): [digest("e")], digest("f"): [digest("1")]}
+        self.assertEqual(self.plan(versions, children, keep=3), set())
+
     def test_nothing_younger_than_the_minimum_age_is_deleted(self):
         versions = [version("a", 1, "managed-episode-new"), version("b", 2, "managed-episode-new-2"), version("c", 3)]
         self.assertEqual(self.plan(versions, {}), set())
