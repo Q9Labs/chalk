@@ -10,6 +10,7 @@
         ".github/workflows/real-call-proof.yml",
         ".github/workflows/web-call-proof.yml",
         "apps/api/internal/httpapi/call_stats.go",
+        "apps/api/internal/httpapi/episode_end_idempotent_test.go",
         "apps/api/internal/httpapi/episode_lifecycle.go",
         "apps/api/internal/httpapi/episode_lifecycle_transport.go",
         "apps/api/internal/httpapi/episode_live.go",
