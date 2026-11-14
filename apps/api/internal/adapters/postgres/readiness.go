@@ -44,9 +44,6 @@ const liveParticipantsQuery = `select count(*) from participant_presence_leases 
 // LiveParticipants counts the participants whose presence lease has not expired. Sync renews a lease
 // every few seconds for a connected participant and lets it lapse 120 seconds after the last renewal.
 func (r Readiness) LiveParticipants(ctx context.Context) (int64, error) {
-	if r.Pool == nil {
-		return 0, fmt.Errorf("postgres pool is not configured")
-	}
 	var count int64
 	if err := r.Pool.QueryRow(ctx, liveParticipantsQuery).Scan(&count); err != nil {
 		return 0, fmt.Errorf("count live participants: %w", err)
