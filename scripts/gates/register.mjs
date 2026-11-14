@@ -15,6 +15,11 @@ export function gateTaskIds() {
     .map((entry) => entry.id.slice("gate:".length));
 }
 
+/** demotion returns the demoted record of a Gate task (reason, failing run ids, issue), or null while the task blocks. */
+export function demotion(taskId) {
+  return readRegister().find((entry) => entry.id === `gate:${taskId}`)?.demoted ?? null;
+}
+
 /** RegisterError means the register and the planner disagree. Running every job cannot fix it, so CI fails the selection job and stops. */
 export class RegisterError extends Error {
   name = "RegisterError";
