@@ -119,6 +119,7 @@ type Model = {
   syncBindingCleanup: (() => void) | null;
   mediaBindingCleanup: (() => void) | null;
   refreshFiber: Fiber.Fiber<void, unknown> | null;
+  recoveryFiber: Fiber.Fiber<void, unknown> | null;
   refreshFailures: number;
   refreshInFlight: boolean;
   recoveryQueued: RecoveryKind | null;
@@ -223,6 +224,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         syncBindingCleanup: null,
         mediaBindingCleanup: null,
         refreshFiber: null,
+        recoveryFiber: null,
         refreshFailures: 0,
         refreshInFlight: false,
         recoveryQueued: null,
@@ -304,6 +306,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.refreshFiber = null;
           return fiber ? Fiber.interrupt(fiber) : Effect.void;
         });
+      const stopRecovery = (): Effect.Effect<void> =>
+        Effect.suspend(() => {
+          const fiber = model.recoveryFiber;
+          model.recoveryFiber = null;
+          model.recoveryQueued = null;
+          return fiber ? Fiber.interrupt(fiber) : Effect.void;
+        });
       const scheduleRefresh = (delay?: number): Effect.Effect<void> =>
         Effect.gen(function* () {
           yield* stopRefresh();
@@ -331,7 +340,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: failure.code === "access.invalid" ? "invalid_access" : "access_unavailable" });
                       if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure));
                       model.refreshFailures = Math.min(model.refreshFailures + 1, 5);
-                      yield* scheduleRefresh(Math.min(BACKGROUND_RETRY_MAX_MS, REFRESH_RETRY_MS * 2 ** (model.refreshFailures - 1)));
+                      const expiresIn = yield* access.millisecondsUntilExpiry;
+                      if (expiresIn !== null && expiresIn <= 0) return yield* failForSnapshot(lifecycleFailure("access_unavailable", true, "Your access expired before it could be renewed. Check your network and rejoin.", failure));
+                      const retryIn = Math.min(BACKGROUND_RETRY_MAX_MS, REFRESH_RETRY_MS * 2 ** (model.refreshFailures - 1));
+                      yield* scheduleRefresh(expiresIn === null ? retryIn : Math.min(retryIn, expiresIn));
                       return;
                     }
                     model.refreshFailures = 0;
@@ -360,6 +372,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           model.syncNoticeUnresponsive = false;
           model.mediaSnapshot = null;
           model.recoveryQueued = null;
+          model.recoveryFiber = null;
           yield* publish();
           if (scope) yield* Scope.close(scope, Exit.void);
           yield* access.clear;
@@ -610,6 +623,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           yield* releaseLocalTracks(platform.mediaDevices, localTracksOf(model));
           yield* transition("leaving");
+          yield* stopRecovery();
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
           model.failure = confirmed ? null : toFailure(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));
@@ -686,7 +700,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const scope = model.activeScope;
           if (!active(model) || !scope) return;
           if (model.recoveryQueued !== null) {
-            model.recoveryQueued = kind;
+            if (kind === "sync") model.recoveryQueued = kind;
             yield* publish();
             return;
           }
@@ -694,7 +708,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const phase = kind === "sync" ? model.sync?.getSnapshot().connection.phase : model.media?.getSnapshot().connection.phase;
           if (phase === "terminal" || phase === "failed") yield* transition("reconnecting");
           const epoch = model.epoch;
-          yield* Effect.forkIn(
+          model.recoveryFiber = yield* Effect.forkIn(
             Effect.gen(function* () {
               yield* Effect.sleep(RECONNECT_GRACE_MS);
               const phase = kind === "sync" ? model.sync?.getSnapshot().connection.phase : model.media?.getSnapshot().connection.phase;

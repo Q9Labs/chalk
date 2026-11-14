@@ -27,17 +27,17 @@ while IFS=$'\t' read -r action path fragment; do
 done <"$here/anchors"
 ((failures == 0)) && echo "ok   every fragment in anchors is present"
 
-# tlc NAME "SYNC MEDIA TERMINAL REFRESH LEAVES" DIE RQ LEAVE BREAK RULE prints TLC's verdict line and keeps the full log.
+# tlc NAME "SYNC MEDIA TERMINAL REFRESH LEAVES" DIE RQ LEAVE GRANT BREAK RULE prints TLC's verdict line and keeps the full log.
 tlc() {
-  local dir="$out/$1" faults rule="$7"
+  local dir="$out/$1" faults rule="$8"
   read -ra faults <<<"$2"
   mkdir -p "$dir"
   cp "$here/ClientRecovery.tla" "$dir/"
   sed -e "s/MaxSyncFaults = [0-9]*/MaxSyncFaults = ${faults[0]}/" -e "s/MaxMediaFaults = [0-9]*/MaxMediaFaults = ${faults[1]}/" \
     -e "s/MaxTerminal = [0-9]*/MaxTerminal = ${faults[2]}/" -e "s/MaxRefreshFaults = [0-9]*/MaxRefreshFaults = ${faults[3]}/" \
     -e "s/MaxLeaves = [0-9]*/MaxLeaves = ${faults[4]}/" -e "s/SyncMayDie = [A-Z]*/SyncMayDie = $3/" \
-    -e "s/RqRule = \"[a-zA-Z]*\"/RqRule = \"$4\"/" -e "s/LeaveRule = \"[a-zA-Z]*\"/LeaveRule = \"$5\"/" \
-    -e "s/Break = \"[a-z_]*\"/Break = \"$6\"/" "$here/ClientRecovery.cfg" >"$dir/ClientRecovery.cfg"
+    -e "s/RqRule = \"[a-zA-Z]*\"/RqRule = \"$4\"/" -e "s/LeaveRule = \"[a-zA-Z]*\"/LeaveRule = \"$5\"/" -e "s/GrantRule = \"[a-zA-Z]*\"/GrantRule = \"$6\"/" \
+    -e "s/Break = \"[a-z_]*\"/Break = \"$7\"/" "$here/ClientRecovery.cfg" >"$dir/ClientRecovery.cfg"
   if [[ "$rule" != safety ]]; then
     sed -i.all -e '/^INVARIANTS/,$d' "$dir/ClientRecovery.cfg"
     if [[ "$rule" == RecoveryEnds ]]; then
@@ -54,7 +54,7 @@ tlc() {
 }
 
 echo "== Runs"
-while IFS='|' read -r name faults die rq leave break rule expect; do
+while IFS='|' read -r name faults die rq leave grant break rule expect; do
   name="$(echo "$name" | xargs)"
   [[ -z "$name" || "$name" == \#* ]] && continue
   if (($# > 0)); then printf '%s\n' "$@" | grep -qx -- "$name" || continue; fi
@@ -62,10 +62,11 @@ while IFS='|' read -r name faults die rq leave break rule expect; do
   die="$(echo "$die" | xargs)"
   rq="$(echo "$rq" | xargs)"
   leave="$(echo "$leave" | xargs)"
+  grant="$(echo "$grant" | xargs)"
   break="$(echo "$break" | xargs)"
   rule="$(echo "$rule" | xargs)"
   expect="$(echo "$expect" | xargs)"
-  verdict="$(tlc "$name" "$faults" "$die" "$rq" "$leave" "$break" "$rule")"
+  verdict="$(tlc "$name" "$faults" "$die" "$rq" "$leave" "$grant" "$break" "$rule")"
   if [[ "$expect" == pass ]]; then
     want="No error has been found"
   elif [[ "$rule" == RecoveryEnds ]]; then

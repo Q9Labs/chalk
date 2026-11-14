@@ -7,8 +7,8 @@ import type { ConnectionAccessRequest } from "./dependencies";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 
 // Replays of the paths that tools/formal/client-recovery/ClientRecovery.tla finds or rules out, against the real
-// lifecycle. Each test names its rule from that model. `it.fails` marks a finding: the code breaks the rule today,
-// so the test passes while the bug exists and fails (telling you to remove `.fails`) when someone fixes it.
+// lifecycle. Each test names its rule from that model. The tests marked "finding" replay a bug the model found;
+// they fail on the code from before the fix.
 
 vi.setConfig({ testTimeout: 30000 });
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
@@ -141,9 +141,9 @@ describe("A recovery cycle never abandons a pending recovery (NoAbandonedRecover
   });
 
   // Finding F1. The model finds it as RecoveryEnds failing when Sync dies for good (SyncMayDie).
-  // Steps: Sync goes down and never returns; a media blip is reported after it. `recover` overwrites
-  // `recoveryQueued` with "media", so the cycle uses a media plan, which never fails the Connection.
-  // The same two events in the other order give a sync plan, which fails with sync_recovery_exhausted.
+  // Steps: Sync goes down and never returns; a media blip is reported after it. `recover` used to overwrite
+  // `recoveryQueued` with "media", so the cycle used a media plan, which never fails the Connection.
+  // A queued sync recovery now stays sync, so both orders fail with sync_recovery_exhausted.
   it("fails the Connection when Sync is gone for good and media blips after it, as it does in the other order", async () => {
     const test = fixture();
     await test.run((lifecycle) =>
@@ -161,7 +161,7 @@ describe("A recovery cycle never abandons a pending recovery (NoAbandonedRecover
     );
   });
 
-  it.fails("fails the Connection when media blips after Sync is gone for good (finding F1)", async () => {
+  it("fails the Connection when media blips after Sync is gone for good (finding F1)", async () => {
     const test = fixture();
     await test.run((lifecycle) =>
       Effect.gen(function* () {
@@ -181,9 +181,9 @@ describe("A recovery cycle never abandons a pending recovery (NoAbandonedRecover
 
 describe("Leave stops recovery before it reaches for new connections (NoRestartWhileLeaving)", () => {
   // Finding F2. Steps: media is recovering, so a recovery attempt is waiting. You press Leave
-  // and the Leave acknowledgement is slow. Media fails. The waiting attempt does not look at the Connection
-  // state, so its next round refreshes access and restarts media while the Connection is leaving.
-  it.fails("does not restart media while Leave waits for its acknowledgement (finding F2)", async () => {
+  // and the Leave acknowledgement is slow. Media fails. The waiting attempt used to go on, so its next round
+  // refreshed access and restarted media while the Connection was leaving. Leave now ends the recovery.
+  it("does not restart media while Leave waits for its acknowledgement (finding F2)", async () => {
     const test = fixture();
     test.holdLeave();
     await test.run((lifecycle) =>
@@ -241,14 +241,14 @@ describe("A refresh failure never leaves the client live on a dead grant (Revoke
     );
   });
 
-  // Finding F3, which may be intended. Steps: the refresh keeps failing with "unavailable" until the grant has
-  // run out. The refresh retries with a back-off and the Connection stays live and shows no failure.
-  it.fails("does not stay live once the grant has run out and the refresh keeps failing (finding F3)", async () => {
+  // Finding F3. Steps: the refresh keeps failing with "unavailable" until the grant has run out. The refresh
+  // used to retry with a back-off for ever while the Connection stayed live and showed no failure.
+  it("fails the Connection with a reason once the grant has run out and the refresh keeps failing (finding F3)", async () => {
     const test = fixture({ grantLifetimeMs: 120000, refresh: "unavailable" });
     await test.run((lifecycle) =>
       Effect.gen(function* () {
         yield* wait(test.advance(300000));
-        expect(lifecycle.getSnapshot()).not.toMatchObject({ state: "live", failure: null });
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "access_unavailable", recoverable: true } });
       }),
     );
   });

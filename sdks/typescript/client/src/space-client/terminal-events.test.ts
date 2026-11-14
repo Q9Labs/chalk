@@ -205,7 +205,72 @@ describe("SpaceClient terminal callbacks", () => {
     }
   });
 
-  it("keeps retrying an expired Access grant through an outage and recovers without errors", async () => {
+  it("keeps retrying a refresh through an outage while the Access grant is still valid and recovers without errors", async () => {
+    const platform = terminalTestPlatform();
+    let now = Date.now();
+    const timers = new Map<() => void, number>();
+    platform.dependencies.clock.now = () => now;
+    platform.dependencies.clock.setTimeout = (callback, delay) => {
+      timers.set(callback, delay);
+      return callback;
+    };
+    platform.dependencies.clock.clearTimeout = (callback) => {
+      timers.delete(callback as () => void);
+    };
+    let foreground = () => undefined;
+    const access = vi.fn(async () => {
+      if (access.mock.calls.length === 2 || access.mock.calls.length === 3) throw new Error("Access unavailable");
+      const grant = opaqueAccessGrant(1);
+      const expiresAt = new Date(now + 300_000).toISOString();
+      return { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt, client_payload: { connectionId: access.mock.calls.length > 1 ? "connection-2" : "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } } };
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess: access },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          subscribeForeground: (listener) => {
+            foreground = listener;
+            return () => undefined;
+          },
+        },
+      },
+    );
+    const error = vi.fn();
+    const ended = vi.fn();
+    client.on("error", error);
+    client.on("episodeEnded", ended);
+    const retry = async (calls: number, delay: number) => {
+      await vi.waitFor(() => expect([...timers.values()]).toContain(delay));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(error).not.toHaveBeenCalled();
+      const timer = [...timers].find(([, scheduled]) => scheduled === delay)?.[0];
+      if (!timer) throw new Error("Expected the refresh retry timer");
+      timers.delete(timer);
+      now += delay;
+      timer();
+      await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(calls));
+    };
+    try {
+      await client.join({ microphone: false, camera: false });
+      now += 241_000;
+      foreground();
+      await retry(3, 5_000);
+      await retry(4, 10_000);
+      await vi.waitFor(() => expect([...timers.values()]).toContain(240_000));
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().connection.lastError).toBeNull();
+      expect(error).not.toHaveBeenCalled();
+      expect(ended).not.toHaveBeenCalled();
+      expect(platform.stopped).not.toHaveBeenCalled();
+      expect(platform.syncStopped).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("fails the Connection when the Access grant expires before it can be renewed", async () => {
     const platform = terminalTestPlatform();
     let now = Date.now();
     const timers = new Map<() => void, number>();
@@ -256,15 +321,10 @@ describe("SpaceClient terminal callbacks", () => {
       await client.join({ microphone: false, camera: false });
       now += 301_000;
       foreground();
-      await retry(3, 5_000);
-      await retry(4, 10_000);
-      await vi.waitFor(() => expect([...timers.values()]).toContain(240_000));
-      expect(client.getSnapshot().connection.status).toBe("live");
-      expect(client.getSnapshot().connection.lastError).toBeNull();
-      expect(error).not.toHaveBeenCalled();
-      expect(ended).not.toHaveBeenCalled();
-      expect(platform.stopped).not.toHaveBeenCalled();
-      expect(platform.syncStopped).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
+      expect(client.getSnapshot().connection.lastError?.code).toBe("access.unavailable");
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(access).toHaveBeenCalledTimes(2);
     } finally {
       client.dispose();
     }

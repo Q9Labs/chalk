@@ -16,8 +16,9 @@ CONSTANTS
     MaxRefreshFaults,  \* access refreshes that fail
     MaxLeaves,         \* Leave calls
     SyncMayDie,        \* TRUE lets Sync go down and never come back
-    RqRule,            \* "overwrite" = lifecycle.ts:688 today, "syncWins" = a sync recovery is never downgraded
-    LeaveRule,         \* "current" = recovery keeps running while Leave waits, "stops" = Leave ends it first
+    RqRule,            \* "syncWins" = a queued sync recovery is never downgraded (the code), "overwrite" = the newest kind wins (finding F1)
+    LeaveRule,         \* "stops" = Leave ends the recovery first (the code), "keepsRunning" = it runs on while Leave waits (finding F2)
+    GrantRule,         \* "failsOnExpiry" = a refresh that fails after the grant ran out fails the Connection (the code), "staysLive" = it retries for ever (finding F3)
     Break              \* "none", or a variant of the code that must break one rule
 
 VARIABLES
@@ -236,14 +237,17 @@ ProcessLeave ==
     /\ IF conn \in {"idle", "left"}
        THEN UNCHANGED <<conn, busy, recV, leaveRan>>
        ELSE /\ conn' = "leaving" /\ busy' = "leave" /\ leaveRan' = TRUE
-            /\ IF LeaveRule = "stops" THEN (rq' = "none" /\ FibIdle) ELSE UNCHANGED recV
+            /\ IF LeaveRule = "stops" THEN (rq' = "none" /\ FibIdle) ELSE UNCHANGED recV   \* stopRecovery
 
 LeaveEnds ==
     /\ busy = "leave"
     /\ conn' = "left" /\ busy' = "none" /\ StopPorts
     /\ UNCHANGED <<epoch, q, budV, histV>>
 
-\* The refresh result (lifecycle.ts:326): invalid access fails the Connection; unavailable retries with backoff.
+\* The refresh result (lifecycle.ts:326): invalid access fails the Connection; unavailable retries with backoff,
+\* timed to land when the grant runs out. A refresh that fails once the grant has run out fails the Connection with
+\* access_unavailable (GrantRule "failsOnExpiry"). The lifecycle only learns that the grant ran out from that
+\* failed refresh, so under "failsOnExpiry" the model has no separate expired state to sit live on.
 ProcessRefr ==
     /\ CanTake("refr")
     /\ q' = Tail(q)
@@ -252,7 +256,9 @@ ProcessRefr ==
        THEN IF q[1].o = "ok"
             THEN /\ grant' = "fresh" /\ rf' = "sleep" /\ UNCHANGED <<conn, worldV, recV>>
             ELSE IF q[1].o = "unavailable"
-            THEN /\ rf' = "sleep" /\ UNCHANGED <<conn, worldV, recV, grant>>
+            THEN \/ /\ rf' = "sleep" /\ UNCHANGED <<conn, worldV, recV, grant>>
+                 \/ /\ GrantRule = "failsOnExpiry" /\ grant = "stale"
+                    /\ conn' = "failed" /\ StopPorts
             ELSE IF Break = "refresh_invalid_retries"
             THEN /\ grant' = "revoked" /\ rf' = "sleep" /\ UNCHANGED <<conn, worldV, recV>>
             ELSE /\ conn' = "failed" /\ StopPorts
@@ -342,7 +348,7 @@ BackoffWakes ==
 
 \* The refresh fiber wakes before the grant runs out, so a grant only expires after a refresh has failed.
 GrantAges ==
-    /\ Active /\ grant \in {"fresh", "stale"} /\ (grant = "fresh" \/ rfault > 0)
+    /\ Active /\ grant \in {"fresh", "stale"} /\ (grant = "fresh" \/ (rfault > 0 /\ GrantRule = "staysLive"))
     /\ grant' = (IF grant = "fresh" THEN "stale" ELSE "expired")
     /\ UNCHANGED <<coreV, worldV, recV, rf, budV, histV>>
 
