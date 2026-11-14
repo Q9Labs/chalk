@@ -882,5 +882,40 @@ class TranscribeOncePerDayTests(unittest.TestCase):
         self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))
 
 
+class PromoteReusesCutTests(unittest.TestCase):
+    """Promote deploys the images, media and web bundles that the cut built and proved; it builds nothing again."""
+
+    def job(self, workflow, name):
+        text = (release.ROOT / '.github/workflows' / workflow).read_text()
+        start = text.index(f'\n  {name}:\n')
+        following = re.search(r'\n  [A-Za-z0-9_-]+:\n', text[start + 1:])
+        return text[start:start + 1 + following.start() if following else len(text)]
+
+    def test_promote_hands_the_cut_run_to_release(self):
+        selection = 'fromJSON(needs.select.outputs.selection)'
+        inputs = {
+            'manifest_run_id': f'{selection}.selection.run_id',
+            'manifest_artifact_id': f'{selection}.selection.manifest_artifact_id',
+            'manifest_sha256': f'{selection}.selection.manifest_sha256',
+            'reuse_release_id': f'{selection}.selection.release_id',
+            'media_sha256': f'{selection}.selection.media_sha256',
+            'web_artifact': f'toJSON({selection}.selection.web.production)',
+        }
+        block = self.job('promote.yml', 'release')
+        for key, expression in inputs.items():
+            self.assertIn(f'\n      {key}: ${{{{ {expression} }}}}\n', block, key)
+
+    def test_every_build_root_skips_when_a_cut_run_is_reused(self):
+        # build-managed-images and build-media need plan-managed's outputs, so they skip with it.
+        for name in ('plan-managed', 'build-web'):
+            self.assertIn("inputs.manifest_run_id == ''", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
+        for name in ('build-managed-images', 'build-media'):
+            self.assertIn("needs.plan-managed.outputs.should_publish == 'true'", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
+
+    def test_reuse_skips_the_gate_wait(self):
+        with patch.dict(os.environ, {'MANIFEST_RUN_ID': RUN, 'DEPLOY_MANAGED': 'true', 'DEPLOY_WEB': 'true'}):
+            self.assertFalse(release.builds_fresh_artifacts())
+
+
 if __name__ == '__main__':
     unittest.main()
