@@ -163,7 +163,7 @@ func (r Registry) PayRetirements(ctx context.Context) {
 //   - The sessions. A session closes when the retire is acknowledged, when the node restarts, or
 //     when its own peer connection fails or its client closes it. A node that stays silent for good
 //     keeps its connected sessions until it restarts, with no time limit.
-//   - The media. Forwarding and publication stop within the source lease TTL (15 seconds by
+//   - The media. Forwarding and publication stop within the source lease TTL (60 seconds by
 //     default, 2 minutes at the most), because the API stops renewing a lease once the Episode
 //     moves or ends and the node checks the lease on every write.
 //

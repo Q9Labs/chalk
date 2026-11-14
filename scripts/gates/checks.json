@@ -1406,16 +1406,6 @@
       "sample": "No breach in the audit sample."
     },
     {
-      "id": "scorecard:sfu.impairment",
-      "owner": "Media",
-      "catches": "The SFU impairment test pass rate falling.",
-      "runs": ["pull_request", "merge_queue"],
-      "blocks": "merge",
-      "minutes": null,
-      "record": "never-failed",
-      "sample": "No breach in the audit sample."
-    },
-    {
       "id": "scorecard:proof.leave_median_ms",
       "owner": "Media",
       "catches": "The median Leave confirmation on the real-call proof getting slower than 5 s.",

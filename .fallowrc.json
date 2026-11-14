@@ -53,7 +53,6 @@
     "scripts/ensure-playwright-browsers.mjs",
     "scripts/prod-proof/integrator.mjs",
     "scripts/deploy/deploy-web-release.mjs",
-    "features/media/sfu/tests/browser/chromium-check.mjs",
     "features/media/sfu/tests/browser/capture-offer.mjs",
     "scripts/gates/doclint.mjs",
     "scripts/gates/mock-calls.mjs",

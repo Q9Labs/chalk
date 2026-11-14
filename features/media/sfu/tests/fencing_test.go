@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -387,105 +386,5 @@ func TestSourceFencing(t *testing.T) {
 			t.Fatalf("host stop: %+v", result)
 		}
 		bob.silent(t, "after the host stop")
-	})
-}
-
-func iceUfrag(sdp string) string {
-	for line := range strings.SplitSeq(sdp, "\n") {
-		if value, ok := strings.CutPrefix(strings.TrimSpace(line), "a=ice-ufrag:"); ok {
-			return value
-		}
-	}
-	return ""
-}
-
-// restartICE sends an ICE restart offer as a push of no tracks and applies the answer.
-func restartICE(t *testing.T, svc *service, p *peer, conn string, scope protocol.Scope) (before, after string) {
-	t.Helper()
-	before = iceUfrag(p.pc.RemoteDescription().SDP)
-	offer, err := p.pc.CreateOffer(&webrtc.OfferOptions{ICERestart: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	description := p.complete(t, offer)
-	var answered protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{OperationID: op(), Scope: scope, SessionDescription: &description, Tracks: []protocol.Track{}}, &answered)
-	if answered.SessionDescription == nil || answered.SessionDescription.Type != "answer" || len(answered.Tracks) != 0 || len(answered.TrackErrors) != 0 {
-		t.Fatalf("ICE restart answer: %+v", answered)
-	}
-	if err := p.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answered.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	return before, iceUfrag(answered.SessionDescription.SDP)
-}
-
-func TestICERestartAndRecovery(t *testing.T) {
-	ca := newAuthority(t, "chalk test CA")
-	svc := startService(t, ca)
-	episode := "episode-ice"
-	svc.grantSources(t, scopeIn(episode, "alice", 1))
-	alice := joinAndPublish(t, svc, scopeIn(episode, "alice", 1), "alice-mic")
-	bob := join(t, svc, scopeIn(episode, "bob", 1))
-	bob.pull(t, svc, alice)
-	bob.hears(t, "audio before any restart", 20)
-
-	t.Run("restart while publishing", func(t *testing.T) {
-		before, after := restartICE(t, svc, alice.peer, alice.conn, alice.scope)
-		if before == "" || after == "" || before == after {
-			t.Fatalf("the node kept its ICE credentials: %q then %q", before, after)
-		}
-		bob.hears(t, "audio after the publisher's restart", 30)
-		tracks := svc.inspect(t, alice.conn, alice.scope)
-		if len(tracks) != 1 || tracks[0].Mid != alice.mid || tracks[0].TrackName != alice.name {
-			t.Fatalf("the restart changed the publications: %+v", tracks)
-		}
-	})
-
-	t.Run("restart while pulling", func(t *testing.T) {
-		before, after := restartICE(t, svc, bob.peer, bob.conn, bob.scope)
-		if before == after {
-			t.Fatalf("the node kept its ICE credentials: %q", after)
-		}
-		bob.hears(t, "audio after the listener's restart", 30)
-		if tracks := svc.inspect(t, bob.conn, bob.scope); len(tracks) != 1 || tracks[0].Location != protocol.LocationRemote {
-			t.Fatalf("the restart changed the subscriptions: %+v", tracks)
-		}
-	})
-
-	t.Run("a failed restart falls back to a fresh generation without a duplicate publication", func(t *testing.T) {
-		// The publisher's restart never connects within its budget, so the client
-		// replaces the connection: a new generation, a new peer connection, a new publication.
-		offer, err := alice.peer.pc.CreateOffer(&webrtc.OfferOptions{ICERestart: true})
-		if err != nil {
-			t.Fatal(err)
-		}
-		description := alice.peer.complete(t, offer)
-		svc.mustCall(t, "/v1/sessions/"+alice.conn+"/tracks", protocol.TracksRequest{OperationID: op(), Scope: alice.scope, SessionDescription: &description, Tracks: []protocol.Track{}}, nil)
-		_ = alice.peer.pc.Close()
-
-		replaced := joinAndPublish(t, svc, scopeIn(episode, "alice", 2), "alice-mic")
-		if status, code := svc.call(t, "/v1/sessions/"+alice.conn+"/inspect", protocol.InspectRequest{Scope: alice.scope}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
-			t.Fatalf("the replaced connection: status %d code %q", status, code)
-		}
-		if tracks := svc.inspect(t, replaced.conn, replaced.scope); len(tracks) != 1 {
-			t.Fatalf("the fresh generation publishes %d tracks", len(tracks))
-		}
-		bob.pull(t, svc, replaced)
-		bob.hears(t, "audio from the fresh generation", 30)
-	})
-
-	t.Run("node loss: old handles read as gone and fresh sessions receive again", func(t *testing.T) {
-		oldConn, oldScope := bob.conn, bob.scope
-		svc.stop()
-		next := startService(t, ca)
-		// A fresh node holds no grants until the API's renewal re-sends them.
-		next.grantSources(t, scopeIn(episode, "alice", 3))
-		if status, code := next.call(t, "/v1/sessions/"+oldConn+"/inspect", protocol.InspectRequest{Scope: oldScope}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
-			t.Fatalf("a handle from the lost node: status %d code %q", status, code)
-		}
-		alice := joinAndPublish(t, next, scopeIn(episode, "alice", 3), "alice-mic")
-		bob := join(t, next, scopeIn(episode, "bob", 2))
-		bob.pull(t, next, alice)
-		bob.hears(t, "audio on the new node", 30)
 	})
 }

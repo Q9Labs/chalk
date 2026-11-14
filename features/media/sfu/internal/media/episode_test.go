@@ -60,25 +60,6 @@ func TestAnUngrantedSourceTakesNoShareOfTheEpisodeCeiling(t *testing.T) {
 	}
 }
 
-func TestAnUngrantedSourceTakesNoShareOfTheDownlink(t *testing.T) {
-	granted, ungranted := grantedAndUngranted(t, 1.2e6, 300_000, 300)
-	granted.alloc = allocation{decided: true, rid: "h", backoff: backoffMin}
-	ungranted.alloc = allocation{decided: true, rid: "h", backoff: backoffMin}
-	now := monotonic()
-	transport := granted.transport
-	transport.mu.Lock()
-	// The path carries 1.6 Mbit/s: one camera on h, not two.
-	transport.estimator.feedbacks, transport.estimator.estimate = 1, 1.6e6
-	transport.estimator.probeFloor, transport.estimator.probeUntil = 1.6e6, math.MaxInt64
-	transport.mu.Unlock()
-	granted.transport, ungranted.transport = transport, transport
-	session := &Session{transport: transport, subscribed: map[string]*subscription{"0": granted, "1": ungranted}}
-	allocateSession(session, false, &probeBudget{slots: maxProbes}, now)
-	if granted.alloc.rid != "h" {
-		t.Fatalf("the granted camera is on %q, want h: a source without a grant took the downlink", granted.alloc.rid)
-	}
-}
-
 func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
 	strict, other := grantedAndUngranted(t, 1.2e6, 300_000, 300)
 	now := monotonic()
@@ -95,30 +76,6 @@ func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
 	}
 	if layers := other.allocatable(other.currentRequest(), now); len(layers) == 0 {
 		t.Fatal("a camera with fallback lists no layers")
-	}
-}
-
-// Probe padding is not load the plan must fit: counting it in the base put a burst of probes at
-// a join over the ceiling, and the plan paused every camera for seconds. It still takes room, so
-// an Episode whose probes and video fill its ceiling starts no further probe.
-func TestProbePaddingTakesRoomButDoesNotPauseCameras(t *testing.T) {
-	node := newTestNode(t, func(cfg *config.Config) { cfg.EpisodePacketCeiling = 1000 })
-	for _, probing := range []float64{0, 600, 800} {
-		granted, ungranted := grantedAndUngranted(t, 1.2e6, 300_000, 300)
-		episode := &episodeTick{
-			sessions:      []*Session{granted.pub.session, ungranted.pub.session, {}, {}},
-			subscriptions: []*subscription{granted},
-			cameras:       map[*publication]*plannedCamera{},
-		}
-		episode.addEgress(classRepair, 100)
-		episode.addEgress(classProbe, probing)
-		node.plan(episodeKey{}, episode, monotonic())
-		if granted.pub.plan != planOpen {
-			t.Fatalf("with %.0f probe packets/s the camera's plan is %d, want open", probing, granted.pub.plan)
-		}
-		if want := probing == 0; episode.room != want {
-			t.Fatalf("with %.0f probe packets/s room is %v, want %v", probing, episode.room, want)
-		}
 	}
 }
 

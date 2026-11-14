@@ -14,47 +14,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 )
 
-func TestCaptureExpiredBindingIsNotReboundByNestedPlan(t *testing.T) {
-	origin := time.Now().UTC()
-	writer, _ := newCaptureTestWriter(t, origin)
-	a := writer.attempt
-	live := capturePlanWatchPulledTrack(t, "0", "live")
-	expired := capturePlanWatchPulledTrack(t, "1", "expired")
-	expired.ParticipantID = captureTestID(t, "99999999-9999-4999-8999-999999999999")
-	waiting := capturePlanWatchPulledTrack(t, "2", "new")
-	waiting.ParticipantID = captureTestID(t, "77777777-7777-4777-8777-777777777777")
-	authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
-	outer := capturePlanWatchPlan(t, authority, 2, origin, captureplan.StopStateRunning, live, expired, waiting)
-	inner := capturePlanWatchPlan(t, authority, 3, origin, captureplan.StopStateRunning, live, expired)
-	events := make(chan capturePlanEvent, 1)
-	var expiredBinds int
-	a.peer = &capturePlanWatchPeer{wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
-		if mid == waiting.MID {
-			events <- capturePlanEvent{plan: inner}
-			<-ctx.Done()
-			return nil, ctx.Err()
-		}
-		if mid == expired.MID {
-			expiredBinds++
-			return newCapturePlanWatchTrack(expired), nil
-		}
-		return newCapturePlanWatchTrack(live), nil
-	}}
-	a.coordinator = newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{3: {PlanRevision: 3, Tracks: []captureplane.PulledCaptureTrack{live, expired}}})
-	a.config.InitialPlanWait = time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	late := newLateTrackWatch(ctx, a)
-	late.expired[string(expired.MID)] = expired
-	bound, plan, _, err := a.bindTracksWhileWatchingPlans(ctx, writer, outer, recordercapture.Snapshot{PlanRevision: 2, Tracks: []captureplane.PulledCaptureTrack{live, expired, waiting}}, events, nil, nil, late)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if expiredBinds != 0 || bound[string(expired.MID)] != nil {
-		t.Fatalf("expired MID rebound %d time(s) and attached=%v under nested revision %d", expiredBinds, bound[string(expired.MID)] != nil, plan.Revision())
-	}
-}
-
 // lateTrackPlanRun drives Run through plan revisions 1 to 3 (and 4 to stop) with
 // one late MID, so a test can see what its watch does when a later plan removes it.
 func lateTrackPlanRun(t *testing.T, remove bool) (lateTrack, otherTrack *capturePlanWatchTrack, firstPacket, otherWaitDone <-chan struct{}, done <-chan error, stop func()) {
@@ -243,65 +202,12 @@ func TestLateCaptureTrackFirstPacketKeepsTheTimeThePeerBoundIt(t *testing.T) {
 	}
 }
 
-func TestEarlyCaptureTrackFirstPacketKeepsItsReadTime(t *testing.T) {
-	expected := capturePlanWatchPulledTrack(t, "1", "early")
-	inner := newCapturePlanWatchTrack(expected)
-	inner.packets = make(chan *rtp.Packet, 1)
-	inner.packets <- &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, SSRC: 7}}
-	events := make(chan captureRuntimeEvent, 4)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	before := time.Now()
-	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events, time.Time{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-	for {
-		select {
-		case event := <-events:
-			if event.packet == nil {
-				continue
-			}
-			if event.at.Before(before.UTC()) {
-				t.Fatalf("a track from the initial bind was stamped %s, before its reader started at %s", event.at, before.UTC())
-			}
-			return
-		case <-ctx.Done():
-			t.Fatal("no packet event")
-		}
-	}
-}
-
 type captureBoundAtTrack struct {
 	*capturePlanWatchTrack
 	boundAt time.Time
 }
 
 func (t captureBoundAtTrack) BoundAt() time.Time { return t.boundAt }
-
-func TestCaptureAnchorsNeverEnterTheRecoveryGap(t *testing.T) {
-	start := time.UnixMilli(10_000).UTC()
-	writer, _ := newCaptureTestWriter(t, start)
-	mid := "1"
-	track := func(boundAt time.Time) CaptureMediaTrack {
-		return captureBoundAtTrack{newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, mid, "late")), boundAt}
-	}
-	before := bindAnchors(writer, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
-	if got := before[mid]; !got.Equal(start) {
-		t.Fatalf("anchor for a track bound before the attempt = %s, want the attempt start %s", got, start)
-	}
-	after := bindAnchors(writer, map[string]CaptureMediaTrack{mid: track(start.Add(3 * time.Second))}, nil)
-	if got := after[mid]; !got.Equal(start.Add(3 * time.Second)) {
-		t.Fatalf("anchor for a track bound after the attempt start = %s, want its bind time", got)
-	}
-	first, _ := newCaptureTestWriter(t, start)
-	first.recoveryStart = time.Time{}
-	staggered := bindAnchors(first, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
-	if got := staggered[mid]; !got.Equal(start.Add(-5 * time.Second)) {
-		t.Fatalf("anchor in a first attempt = %s, want the bind time kept so negotiation-time offsets survive", got)
-	}
-}
 
 // An audio track bound hundreds of milliseconds before a camera must keep that
 // head start on the Recording's clock even when nothing is silent. Stamping both

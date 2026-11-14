@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -66,6 +70,7 @@ type Fleet struct {
 type sighting struct {
 	at          time.Time
 	incarnation string
+	revision    string
 }
 
 // verdict is whether a node can take this API's requests, learned from the protocol in its last
@@ -145,7 +150,40 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 			fleet.standbys[node.ID] = true
 		}
 	}
+	if err := fleet.observeReadiness(otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu")); err != nil {
+		return nil, err
+	}
 	return fleet, nil
+}
+
+// observeReadiness reports chalk.api.sfu.node.ready for each configured node: 1 while the API
+// counts the node as in placement, else 0. The labels carry the incarnation and revision of the
+// node's last answer, so one query shows which build the API sees on which node.
+func (f *Fleet) observeReadiness(meter metric.Meter) error {
+	_, err := meter.Int64ObservableGauge(
+		"chalk.api.sfu.node.ready",
+		metric.WithDescription("1 while the API counts an own-SFU node as in placement (fresh answer, compatible protocol, not draining), else 0"),
+		metric.WithUnit("{node}"),
+		metric.WithInt64Callback(func(_ context.Context, observer metric.Int64Observer) error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			now := time.Now()
+			for _, node := range f.nodes {
+				var value int64
+				if load, known := f.loads[node.node]; known && f.readyFor(node.node, load, now) {
+					value = 1
+				}
+				last := f.seen[node.node]
+				observer.Observe(value, metric.WithAttributes(
+					attribute.String("chalk.sfu.node", node.node),
+					attribute.String("chalk.sfu.incarnation", last.incarnation),
+					attribute.String("chalk.sfu.revision", last.revision),
+				))
+			}
+			return nil
+		}),
+	)
+	return err
 }
 
 // ApplicationID names the SFU pool for the Episode binding. It stays the same
@@ -329,21 +367,37 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 		}
 		return
 	}
+	f.record(ctx, node.node, ready, time.Now())
+}
+
+// record takes a node's answered probe at the time it was read. It holds f.mu.
+func (f *Fleet) record(ctx context.Context, node string, ready protocol.ReadyResponse, now time.Time) {
+	before, known := f.loads[node]
+	load := f.loadOf(node, ready, now)
+	wasReady := known && f.readyFor(node, before, now) && f.seen[node].incarnation == load.incarnation
 	switch {
 	case ready.Draining && !(known && before.Draining):
-		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
 	case !ready.Draining && known && before.Draining:
-		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node)
 	}
-	now := time.Now()
-	load := f.loadOf(node.node, ready, now)
 	seen := verdictOf(ready.Protocol)
-	if seen == verdictTooOld && f.verdicts[node.node] != verdictTooOld {
-		f.logTransition(ctx, slog.LevelWarn, "chalk sfu node is out of placement", node.node, "reason", NodeProtocolTooOld, "protocol", ready.Protocol, "minProtocol", minNodeProtocol, "revision", boundedRevision(ready.Revision))
+	if seen == verdictTooOld && f.verdicts[node] != verdictTooOld {
+		f.logTransition(ctx, slog.LevelWarn, "chalk sfu node is out of placement", node, "reason", NodeProtocolTooOld, "protocol", ready.Protocol, "minProtocol", minNodeProtocol, "revision", boundedRevision(ready.Revision))
 	}
-	f.verdicts[node.node] = seen
-	f.loads[node.node] = load
-	f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
+	f.verdicts[node] = seen
+	f.loads[node] = load
+	f.seen[node] = sighting{at: now, incarnation: load.incarnation, revision: boundedRevision(ready.Revision)}
+	if !wasReady && f.readyFor(node, load, now) {
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node is ready for placement", node, "incarnation", load.incarnation, "revision", f.seen[node].revision)
+	}
+}
+
+// readyFor reports whether the API counts a node as in placement as of now: its last answer is
+// fresh, it speaks a protocol this API can send to, and it is not draining. A full node is still
+// ready. It holds f.mu.
+func (f *Fleet) readyFor(node string, load nodeLoad, now time.Time) bool {
+	return f.verdicts[node] == verdictCompatible && now.Sub(load.at) <= probeFreshness && !load.Draining
 }
 
 // loadOf turns a node's ready answer into its load record, with no placed
