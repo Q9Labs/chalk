@@ -941,11 +941,11 @@
       "id": "workflow:mcp-production-check.yml#mcp",
       "owner": "Monitoring",
       "catches": "The hosted MCP server rejecting sign-in or tool calls the way a client sees them.",
-      "runs": ["daily", "promote"],
+      "runs": ["promote", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "4 of 21 runs failed on 7 and 8 November; the causes were not reviewed."
+      "sample": "4 of 23 completed runs failed on 7 and 8 November, while it ran every six hours; the causes were not reviewed. It no longer has a timer and runs after each Promote."
     },
     {
       "id": "workflow:mobile-ci.yml#fingerprint",
