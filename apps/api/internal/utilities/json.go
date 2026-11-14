@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -98,58 +99,24 @@ func RedactSecrets(value any) any {
 	}
 }
 
+var (
+	secretNames          = []string{"secret", "token", "auth"}
+	secretNameSuffixes   = []string{"_secret", "_token", "_auth"}
+	secretCompactParts   = []string{"credential", "authorization", "privatekey"}
+	secretCompactSuffix  = []string{"apikey", "apitoken", "authtoken", "authheader", "password", "secretkey", "secretaccesskey"}
+	secretCompactMatches = []string{"appsecret", "clientsecret"}
+)
+
+// SecretFieldName reports whether a JSON field name holds a secret, ignoring case, dashes, spaces
+// and underscores.
 func SecretFieldName(name string) bool {
 	normalized := secretFieldName(name)
 	compact := strings.ReplaceAll(normalized, "_", "")
-	return normalized == "secret" ||
-		normalized == "token" ||
-		normalized == "private_key" ||
-		normalized == "api_key" ||
-		normalized == "api_token" ||
-		normalized == "app_secret" ||
-		normalized == "client_secret" ||
-		normalized == "credential" ||
-		normalized == "credentials" ||
-		normalized == "secret_key" ||
-		normalized == "auth" ||
-		normalized == "authorization" ||
-		normalized == "auth_header" ||
-		normalized == "authorization_header" ||
-		normalized == "access_token" ||
-		normalized == "refresh_token" ||
-		normalized == "bearer_token" ||
-		normalized == "secret_access_key" ||
-		normalized == "password" ||
-		strings.HasSuffix(normalized, "_password") ||
-		strings.Contains(compact, "credential") ||
-		strings.Contains(compact, "authorization") ||
-		strings.HasSuffix(normalized, "_secret") ||
-		strings.HasSuffix(normalized, "_token") ||
-		strings.HasSuffix(normalized, "_api_key") ||
-		strings.HasSuffix(normalized, "_api_token") ||
-		strings.HasSuffix(normalized, "_auth") ||
-		strings.HasSuffix(normalized, "_auth_header") ||
-		strings.HasSuffix(normalized, "_secret_key") ||
-		strings.HasSuffix(normalized, "_secret_access_key") ||
-		strings.HasSuffix(normalized, "_private_key") ||
-		compact == "apikey" ||
-		compact == "apitoken" ||
-		compact == "authheader" ||
-		compact == "authorizationheader" ||
-		compact == "appsecret" ||
-		compact == "clientsecret" ||
-		compact == "secretkey" ||
-		compact == "privatekey" ||
-		compact == "secretaccesskey" ||
-		compact == "password" ||
-		strings.Contains(compact, "privatekey") ||
-		strings.HasSuffix(compact, "apikey") ||
-		strings.HasSuffix(compact, "apitoken") ||
-		strings.HasSuffix(compact, "authtoken") ||
-		strings.HasSuffix(compact, "password") ||
-		strings.HasSuffix(compact, "secretkey") ||
-		strings.HasSuffix(compact, "secretaccesskey") ||
-		strings.HasSuffix(compact, "authheader")
+	return slices.Contains(secretNames, normalized) ||
+		slices.Contains(secretCompactMatches, compact) ||
+		slices.ContainsFunc(secretNameSuffixes, func(s string) bool { return strings.HasSuffix(normalized, s) }) ||
+		slices.ContainsFunc(secretCompactParts, func(s string) bool { return strings.Contains(compact, s) }) ||
+		slices.ContainsFunc(secretCompactSuffix, func(s string) bool { return strings.HasSuffix(compact, s) })
 }
 
 func secretFieldName(name string) string {

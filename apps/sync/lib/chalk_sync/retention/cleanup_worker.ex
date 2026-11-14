@@ -6,6 +6,11 @@ defmodule ChalkSync.Retention.CleanupWorker do
   `SKIP LOCKED` lets concurrent workers make progress without waiting. Every
   claimed control row remains locked while its event log is independently
   folded in bounded pages, checkpointed, and deleted in foreign-key order.
+
+  Each Episode is cleaned inside its own savepoint. An Episode whose history
+  fails verification rolls back alone, is reported in `Result.held`, and leaves
+  the rest of the batch to commit. The caller passes held Episodes back as
+  `:excluded_episode_ids`, so one bad history cannot stop the queue behind it.
   """
 
   alias ChalkSync.Database.TransactionSettings
@@ -28,7 +33,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defmodule Result do
     @moduledoc "Cleanup counters for one committed worker batch."
 
-    defstruct episodes: 0,
+    defstruct held: [],
+              episodes: 0,
               event_rows: 0,
               event_bytes: 0,
               receipt_rows: 0,
@@ -49,6 +55,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
               publication_grant_reservation_bytes: 0
 
     @type t :: %__MODULE__{
+            held: [{binary(), term()}],
             episodes: non_neg_integer(),
             event_rows: non_neg_integer(),
             event_bytes: non_neg_integer(),
@@ -75,53 +82,74 @@ defmodule ChalkSync.Retention.CleanupWorker do
   def run_once(connection, options \\ []) do
     batch_size = Keyword.get(options, :batch_size, @default_batch_size)
     clock = Keyword.get(options, :clock, &DateTime.utc_now/0)
+    excluded_episode_ids = Keyword.get(options, :excluded_episode_ids, [])
 
     with :ok <- validate_batch_size(batch_size),
          %DateTime{} = now <- clock.() do
-      cleanup_batch(connection, batch_size, now)
+      cleanup_batch(connection, batch_size, excluded_episode_ids, now)
     else
       _ -> {:error, :invalid_options}
     end
   end
 
-  defp cleanup_batch(connection, batch_size, now) do
+  defp cleanup_batch(connection, batch_size, excluded_episode_ids, now) do
     cutoff = DateTime.add(now, -@retention_seconds, :second)
 
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(transaction, TransactionSettings.sql(:retention), [])
 
-      Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [cutoff, now, batch_size])
+      Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [
+        cutoff,
+        now,
+        batch_size,
+        excluded_episode_ids
+      ])
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
-        cleanup_candidate(transaction, candidate(row), now, result)
+        cleanup_in_savepoint(transaction, candidate(row), now, result)
       end)
     end)
+  end
+
+  defp cleanup_in_savepoint(transaction, candidate, now, result) do
+    Postgrex.query!(transaction, "savepoint retention_candidate", [])
+
+    case cleanup_candidate(transaction, candidate, now, result) do
+      {:ok, next} ->
+        Postgrex.query!(transaction, "release savepoint retention_candidate", [])
+        next
+
+      {:error, reason} ->
+        Postgrex.query!(transaction, "rollback to savepoint retention_candidate", [])
+        %{result | held: [{candidate.episode_id, reason} | result.held]}
+    end
   end
 
   defp cleanup_candidate(transaction, candidate, now, result) do
     case History.verify_history(transaction, candidate) do
       {:ok, event_count, event_bytes} ->
-        deleted = Deletion.delete_episode(transaction, candidate, event_count)
+        with {:ok, deleted} <- Deletion.delete_episode(transaction, candidate, event_count) do
+          Deletion.write_checkpoint(
+            transaction,
+            candidate,
+            now,
+            event_count,
+            event_bytes,
+            Map.take(deleted, @measured)
+          )
 
-        Deletion.write_checkpoint(
-          transaction,
-          candidate,
-          now,
-          event_count,
-          event_bytes,
-          Map.take(deleted, @measured)
-        )
-
-        tally(result, candidate, event_bytes, deleted)
+          {:ok, tally(result, candidate, event_bytes, deleted)}
+        end
 
       {:error, reason} ->
-        Postgrex.rollback(transaction, {:invalid_history, reason})
+        {:error, {:invalid_history, reason}}
     end
   end
 
   defp tally(result, candidate, event_bytes, deleted) do
     %Result{
-      episodes: result.episodes + 1,
+      result
+      | episodes: result.episodes + 1,
       event_rows: result.event_rows + deleted.event_rows,
       event_bytes: result.event_bytes + event_bytes,
       receipt_rows: result.receipt_rows + deleted.receipt_rows,

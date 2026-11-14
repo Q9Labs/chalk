@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { reportAssignmentFailure } from "../src/dispatcher.js";
+import { reportAssignmentFailure } from "../src/transcriber.js";
 import { AssignmentError, ProviderError } from "../src/errors.js";
-import { classifyProviderStatus, openRouterReason } from "../src/provider-utils.js";
+import { classifyProviderStatus, openRouterReason } from "../src/provider-failure.js";
 import type { DispatcherLogger, RetryInput } from "../src/types.js";
 
 const lease = { jobId: "job-1", attempt: 1, leaseToken: "lease-token" };

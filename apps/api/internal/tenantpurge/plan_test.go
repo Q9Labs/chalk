@@ -1,6 +1,7 @@
 package tenantpurge
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -112,5 +113,16 @@ func TestFrozenBackupAllowsOnlyExistingCleanupJobValues(t *testing.T) {
 	current.Tables[1].Rows = []Row{{Key: []byte(`{"id":"other-job"}`)}}
 	if SameRowsForFrozenBackup(before, current) == nil {
 		t.Fatal("different cleanup-job key accepted")
+	}
+}
+
+func TestDeleteOrderListsChildrenBeforeParents(t *testing.T) {
+	parents := map[string][]string{"messages": {"threads"}, "threads": {"tenants"}, "files": {"tenants"}, "self": {"self"}}
+	order, err := DeleteOrder([]string{"tenants", "threads", "messages", "files", "self"}, parents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(order, ","); got != "files,messages,self,threads,tenants" {
+		t.Fatalf("order = %s", got)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var journeyColumns = []string{"journey_id", "root_journey_id", "submission_journey_id"}
+
 // CarryDeferredSeeds accepts authenticated live before-images, never a raw
 // user/journey allowlist. Current retained references still veto final erase.
 func CarryDeferredSeeds(plan *Plan, before Plan) error {
@@ -18,51 +20,66 @@ func CarryDeferredSeeds(plan *Plan, before Plan) error {
 		plan.DeferredSeeds = &DeferredSeeds{}
 	}
 	seeds := plan.DeferredSeeds
-	if before.DeferredSeeds != nil {
-		seeds.Users = append(seeds.Users, before.DeferredSeeds.Users...)
-		seeds.Journeys = append(seeds.Journeys, before.DeferredSeeds.Journeys...)
-		seeds.Events = append(seeds.Events, before.DeferredSeeds.Events...)
+	if carried := before.DeferredSeeds; carried != nil {
+		seeds.Users = append(seeds.Users, carried.Users...)
+		seeds.Journeys = append(seeds.Journeys, carried.Journeys...)
+		seeds.Events = append(seeds.Events, carried.Events...)
 	}
-	approved := map[string]bool{}
-	for _, t := range plan.Scope.Delete {
-		approved[t.ID] = true
+	approved := make(map[string]bool, len(plan.Scope.Delete))
+	for _, tenant := range plan.Scope.Delete {
+		approved[tenant.ID] = true
 	}
 	for _, table := range before.Tables {
 		for _, row := range table.Rows {
-			if len(row.Value) == 0 {
-				continue
-			}
-			var value map[string]json.RawMessage
-			if err := json.Unmarshal(row.Value, &value); err != nil {
+			if err := seeds.addRow(table.Name, row, approved); err != nil {
 				return err
-			}
-			text := func(name string) string { var s string; _ = json.Unmarshal(value[name], &s); return s }
-			if owner := text("tenant_id"); owner != "" && !approved[owner] {
-				return errors.New("before-image contains a retained Tenant row")
-			}
-			if table.Name == "memberships" {
-				if !approved[text("tenant_id")] {
-					return errors.New("membership seed not approved")
-				}
-				seeds.Users = append(seeds.Users, text("user_id"))
-			}
-			for name := range value {
-				if slices.Contains([]string{"journey_id", "root_journey_id", "submission_journey_id"}, name) {
-					if id := text(name); id != "" {
-						seeds.Journeys = append(seeds.Journeys, id)
-					}
-				}
-				if strings.HasSuffix(name, "journey_event_id") {
-					if id := text(name); id != "" {
-						seeds.Events = append(seeds.Events, id)
-					}
-				}
 			}
 		}
 	}
-	unique := func(ids []string) []string { slices.Sort(ids); return slices.Compact(ids) }
-	seeds.Users = unique(seeds.Users)
-	seeds.Journeys = unique(seeds.Journeys)
-	seeds.Events = unique(seeds.Events)
+	seeds.Users = sortedUnique(seeds.Users)
+	seeds.Journeys = sortedUnique(seeds.Journeys)
+	seeds.Events = sortedUnique(seeds.Events)
 	return nil
+}
+
+// addRow records the users, journeys and journey events that one before-image row references.
+func (s *DeferredSeeds) addRow(table string, row Row, approved map[string]bool) error {
+	if len(row.Value) == 0 {
+		return nil
+	}
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal(row.Value, &value); err != nil {
+		return err
+	}
+	text := func(name string) string {
+		var s string
+		_ = json.Unmarshal(value[name], &s)
+		return s
+	}
+	owner := text("tenant_id")
+	if owner != "" && !approved[owner] {
+		return errors.New("before-image contains a retained Tenant row")
+	}
+	if table == "memberships" {
+		if !approved[owner] {
+			return errors.New("membership seed not approved")
+		}
+		s.Users = append(s.Users, text("user_id"))
+	}
+	for name := range value {
+		id := text(name)
+		switch {
+		case id == "":
+		case slices.Contains(journeyColumns, name):
+			s.Journeys = append(s.Journeys, id)
+		case strings.HasSuffix(name, "journey_event_id"):
+			s.Events = append(s.Events, id)
+		}
+	}
+	return nil
+}
+
+func sortedUnique(ids []string) []string {
+	slices.Sort(ids)
+	return slices.Compact(ids)
 }

@@ -1,22 +1,27 @@
 package accessgrants
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/q9labs/chalk/apps/api/internal/edjwt"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-const maxCredentialLength = 8 * 1024
 const maxConnectionIDLength = 512
+
+var credentialErrors = edjwt.Errors{
+	Malformed:  ErrMalformedCredential,
+	Header:     ErrInvalidHeader,
+	UnknownKey: ErrUnknownKey,
+	Signature:  ErrInvalidSignature,
+}
 
 type VerifierConfig struct {
 	Issuer           string
@@ -26,7 +31,7 @@ type VerifierConfig struct {
 
 type Verifier struct {
 	issuer string
-	keys   map[string]ed25519.PublicKey
+	keys   edjwt.Keys
 	now    func() time.Time
 }
 
@@ -57,15 +62,9 @@ type jwtClaims struct {
 
 func NewVerifier(config VerifierConfig) (Verifier, error) {
 	issuer := strings.TrimSpace(config.Issuer)
-	if issuer == "" || len(config.VerificationKeys) == 0 {
+	keys, ok := edjwt.NewKeys(config.VerificationKeys)
+	if issuer == "" || !ok {
 		return Verifier{}, ErrInvalidConfig
-	}
-	keys := make(map[string]ed25519.PublicKey, len(config.VerificationKeys))
-	for keyID, publicKey := range config.VerificationKeys {
-		if keyID == "" || keyID != strings.TrimSpace(keyID) || len(publicKey) != ed25519.PublicKeySize {
-			return Verifier{}, ErrInvalidConfig
-		}
-		keys[keyID] = append(ed25519.PublicKey(nil), publicKey...)
 	}
 	if config.Now == nil {
 		config.Now = time.Now
@@ -87,30 +86,9 @@ func (v Verifier) VerifyForRecovery(_ context.Context, credential string) (Subje
 }
 
 func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
-	parts := strings.Split(credential, ".")
-	if len(credential) == 0 || len(credential) > maxCredentialLength || len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		return Subject{}, ErrMalformedCredential
-	}
-
-	var header jwtHeader
-	if err := decodeJWTPart(parts[0], &header); err != nil {
-		return Subject{}, ErrInvalidHeader
-	}
-	if header.Algorithm != "EdDSA" || header.Type != "JWT" || header.KeyID == "" {
-		return Subject{}, ErrInvalidHeader
-	}
-	publicKey, ok := v.keys[header.KeyID]
-	if !ok {
-		return Subject{}, ErrUnknownKey
-	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || len(signature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, []byte(parts[0]+"."+parts[1]), signature) {
-		return Subject{}, ErrInvalidSignature
-	}
-
 	var claims jwtClaims
-	if err := decodeJWTPart(parts[1], &claims); err != nil {
-		return Subject{}, ErrMalformedCredential
+	if err := v.keys.Verify(credential, credentialErrors, &claims); err != nil {
+		return Subject{}, err
 	}
 	if claims.Issuer != v.issuer {
 		return Subject{}, ErrInvalidIssuer
@@ -118,17 +96,15 @@ func (v Verifier) verify(credential string, recovery bool) (Subject, error) {
 	if !hasExactAudience(claims.Audience) {
 		return Subject{}, ErrInvalidAudience
 	}
-	if err := v.verifyTimeClaims(claims, recovery); err != nil {
-		if err == ErrExpired {
-			subject, subjectErr := subjectFromClaims(claims)
-			if subjectErr != nil {
-				return Subject{}, subjectErr
-			}
-			return subject, err
-		}
+	timeErr := v.verifyTimeClaims(claims, recovery)
+	if timeErr != nil && timeErr != ErrExpired {
+		return Subject{}, timeErr
+	}
+	subject, err := subjectFromClaims(claims)
+	if err != nil {
 		return Subject{}, err
 	}
-	return subjectFromClaims(claims)
+	return subject, timeErr
 }
 
 func hasExactAudience(encoded json.RawMessage) bool {
@@ -161,62 +137,40 @@ func subjectFromClaims(claims jwtClaims) (Subject, error) {
 	if claims.Subject == "" || claims.Subject != claims.ParticipantID || claims.ParticipantGeneration <= 0 || !validTokenID(claims.TokenID) {
 		return Subject{}, ErrInvalidSubject
 	}
-	tenantID, ok := canonicalID(claims.TenantID)
+	var ids [4]utilities.ID
+	for index, value := range []string{claims.TenantID, claims.SpaceID, claims.EpisodeID, claims.ParticipantID} {
+		id, ok := canonicalID(value)
+		if !ok {
+			return Subject{}, ErrInvalidSubject
+		}
+		ids[index] = id
+	}
+	connectionID, ok := providerConnectionID(claims)
 	if !ok {
 		return Subject{}, ErrInvalidSubject
 	}
-	spaceID, ok := canonicalID(claims.SpaceID)
-	if !ok {
-		return Subject{}, ErrInvalidSubject
-	}
-	episodeID, ok := canonicalID(claims.EpisodeID)
-	if !ok {
-		return Subject{}, ErrInvalidSubject
-	}
-	participantID, ok := canonicalID(claims.ParticipantID)
-	if !ok {
-		return Subject{}, ErrInvalidSubject
-	}
-	subject := Subject{
-		TenantID:              tenantID,
-		SpaceID:               spaceID,
-		EpisodeID:             episodeID,
-		ParticipantID:         participantID,
+	return Subject{
+		TenantID:              ids[0],
+		SpaceID:               ids[1],
+		EpisodeID:             ids[2],
+		ParticipantID:         ids[3],
 		ParticipantGeneration: claims.ParticipantGeneration,
 		Provider:              claims.MediaProvider,
-	}
-	switch claims.MediaProvider {
-	case ProviderCloudflareSFU:
-		if claims.ConnectionID != "" || !validConnectionID(claims.CloudflareConnectionID) {
-			return Subject{}, ErrInvalidSubject
-		}
-		subject.ConnectionID = claims.CloudflareConnectionID
-	case ProviderChalkSFU:
-		if claims.CloudflareConnectionID != "" || !validConnectionID(claims.ConnectionID) {
-			return Subject{}, ErrInvalidSubject
-		}
-		subject.ConnectionID = claims.ConnectionID
-
-	default:
-		return Subject{}, ErrInvalidSubject
-	}
-	return subject, nil
+		ConnectionID:          connectionID,
+	}, nil
 }
 
-func decodeJWTPart(part string, target any) error {
-	encoded, err := base64.RawURLEncoding.DecodeString(part)
-	if err != nil {
-		return err
+// providerConnectionID returns the connection ID from the claim the provider owns. The claim
+// of the other provider must be empty.
+func providerConnectionID(claims jwtClaims) (string, bool) {
+	switch claims.MediaProvider {
+	case ProviderCloudflareSFU:
+		return claims.CloudflareConnectionID, claims.ConnectionID == "" && validConnectionID(claims.CloudflareConnectionID)
+	case ProviderChalkSFU:
+		return claims.ConnectionID, claims.CloudflareConnectionID == "" && validConnectionID(claims.ConnectionID)
+	default:
+		return "", false
 	}
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return ErrMalformedCredential
-	}
-	return nil
 }
 
 func validSubject(subject Subject) bool {

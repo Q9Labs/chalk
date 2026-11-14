@@ -63,3 +63,16 @@ test("allows real loopback HTTP, but blocks a redirect to a remote host", () => 
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /Unit test blocked a real network connection to example.com/);
 });
+
+test("loading the guard a second time, as a vitest setup file does, keeps one guard", () => {
+  const guard = fileURLToPath(new URL("./no-network.mjs", import.meta.url));
+  const request = `
+    import assert from "node:assert/strict";
+    import { Socket } from "node:net";
+    const installed = Socket.prototype.connect;
+    await import(${JSON.stringify(`${guard}?again`)});
+    assert.equal(Socket.prototype.connect, installed);
+  `;
+  const result = spawnSync(process.execPath, [runner, process.execPath, "--input-type=module", "--eval", request], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(result.status, 0, result.stderr);
+});

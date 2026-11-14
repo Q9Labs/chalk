@@ -516,42 +516,6 @@ where tenant_id = sqlc.arg(tenant_id)
   and id = sqlc.arg(id)
 returning *;
 
--- name: CreateSpaceMember :one
-insert into space_members (
-    id,
-    tenant_id,
-    space_id,
-    identity_id,
-    role_id
-) values (
-    sqlc.arg(id),
-    sqlc.arg(tenant_id),
-    sqlc.arg(space_id),
-    sqlc.arg(identity_id),
-    sqlc.arg(role_id)
-)
-returning *;
-
--- name: GetSpaceMember :one
-select *
-from space_members
-where tenant_id = sqlc.arg(tenant_id)
-  and space_id = sqlc.arg(space_id)
-  and identity_id = sqlc.arg(identity_id);
-
--- name: ListSpaceMembers :many
-select *
-from space_members
-where tenant_id = sqlc.arg(tenant_id)
-  and space_id = sqlc.arg(space_id)
-order by created_at, id;
-
--- name: DeleteSpaceMember :exec
-delete from space_members
-where tenant_id = sqlc.arg(tenant_id)
-  and space_id = sqlc.arg(space_id)
-  and identity_id = sqlc.arg(identity_id);
-
 -- name: GetTenantEpisode :one
 select
     id,

@@ -43,20 +43,21 @@ defmodule ChalkSync.Retention.CleanupWorker.Deletion do
          lifecycle_intent_rows != candidate.lifecycle_intent_count or
          event_rows != event_count or
          external_operation_rows != elem(external_operations, 0) do
-      Postgrex.rollback(transaction, {:invalid_history, :cleanup_counter_mismatch})
+      {:error, {:invalid_history, :cleanup_counter_mismatch}}
+    else
+      {:ok,
+       %{
+         receipt_rows: receipt_rows,
+         lifecycle_intent_rows: lifecycle_intent_rows,
+         event_rows: event_rows,
+         external_operations: external_operations,
+         admission_requests: admission_requests,
+         recordings: recordings,
+         screen_share_leases: screen_share_leases,
+         publication_fences: publication_fences,
+         grant_reservations: grant_reservations
+       }}
     end
-
-    %{
-      receipt_rows: receipt_rows,
-      lifecycle_intent_rows: lifecycle_intent_rows,
-      event_rows: event_rows,
-      external_operations: external_operations,
-      admission_requests: admission_requests,
-      recordings: recordings,
-      screen_share_leases: screen_share_leases,
-      publication_fences: publication_fences,
-      grant_reservations: grant_reservations
-    }
   end
 
   def write_checkpoint(transaction, candidate, now, event_count, event_bytes, measurements) do

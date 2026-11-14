@@ -31,6 +31,17 @@ func requestTenantID(ctx context.Context) string {
 	return tenantID.String()
 }
 
+// requestRoute returns the matched route pattern, or "unmatched" when none matched.
+// The pattern is a fixed set of registered routes, so it is safe as a metric attribute.
+func requestRoute(ctx context.Context) string {
+	if routeContext := chi.RouteContext(ctx); routeContext != nil {
+		if route := routeContext.RoutePattern(); route != "" {
+			return route
+		}
+	}
+	return "unmatched"
+}
+
 // tagRequestSpans puts the matched route pattern and the tenant on the server
 // span and on the journey span, so route latency can be queried. The route is
 // known only after dispatch; an unmatched request gets no route, as the OpenTelemetry

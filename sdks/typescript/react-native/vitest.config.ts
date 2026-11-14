@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 export default defineConfig({
+  test: { setupFiles: [fileURLToPath(new URL("../../../scripts/test/no-network.mjs", import.meta.url))] },
   resolve: {
     alias: [
       { find: "@q9labsai/chalk-client/effect", replacement: fileURLToPath(new URL("../client/src/effect.ts", import.meta.url)) },

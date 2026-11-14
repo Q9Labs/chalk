@@ -211,6 +211,13 @@ type episodeControlResponse struct {
 	Operation externalOperationResponse `json:"external_operation"`
 }
 
+// episodeEndResponse omits the operation when the Episode was already ending or had ended, because no operation was needed.
+type episodeEndResponse struct {
+	EpisodeID string                     `json:"episode_id"`
+	Status    string                     `json:"status"`
+	Operation *externalOperationResponse `json:"external_operation,omitempty"`
+}
+
 type externalOperationResponse struct {
 	ID                          string  `json:"id"`
 	RequestKey                  string  `json:"request_key"`
@@ -396,16 +403,21 @@ func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer Tenan
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotFound, apiErrorParticipantNotActive, apiErrorParticipantGenerationMismatch, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
 }
 
-func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[endEpisodeEndpointRequest, episodeControlResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end", "endEpisode", decodeEndEpisodeRequest, func(ctx context.Context, request endEpisodeEndpointRequest) (episodeControlResponse, error) {
+func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[endEpisodeEndpointRequest, episodeEndResponse] {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end", "endEpisode", decodeEndEpisodeRequest, func(ctx context.Context, request endEpisodeEndpointRequest) (episodeEndResponse, error) {
 		end, err := service.RequestEpisodeEnd(ctx, episodes.RequestEpisodeEndInput{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, Request: episodes.Request{Key: request.RequestKey}})
 		if err != nil {
-			return episodeControlResponse{}, err
+			return episodeEndResponse{}, err
 		}
-		return episodeControlResponse{EpisodeID: end.Episode.ID.String(), Status: end.Episode.Status, Operation: newExternalOperationResponseFromIntent(end.Intent)}, nil
+		response := episodeEndResponse{EpisodeID: end.Episode.ID.String(), Status: end.Episode.Status}
+		if !end.Intent.ID.IsZero() {
+			operation := newExternalOperationResponseFromIntent(end.Intent)
+			response.Operation = &operation
+		}
+		return response, nil
 	}).Permission(authorizer, writeEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).Responds(http.StatusAccepted, "EpisodeEnd", episodeControlResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
+		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).Responds(http.StatusAccepted, "EpisodeEnd", episodeEndResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
 }
 
 func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[setDeadlineEndpointRequest, episodeControlResponse] {

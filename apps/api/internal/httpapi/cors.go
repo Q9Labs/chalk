@@ -236,7 +236,7 @@ func chatAttachmentCORSOrigin(r *http.Request, origin string, allowed map[string
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
 	defer cancel()
-	subject, valid, err := options.ChatParticipants.VerifyChatParticipant(ctx, token)
+	subject, valid, err := options.ChatParticipants.VerifyParticipant(ctx, token)
 	if err != nil {
 		return "", "tenant", err
 	}

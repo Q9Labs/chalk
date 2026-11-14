@@ -3,7 +3,7 @@ import { addClipboardListener, getStringAsync, hasStringAsync, hasUrlAsync } fro
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, Keyframe } from "react-native-reanimated";
-import { displayLink, parseSpaceLink, type SpaceRoute } from "../lib/spaces";
+import { displayLink, parseSpaceLink, type SpaceRoute } from "../lib/space-link";
 import { PasteButton } from "./PasteButton";
 import { space, corners } from "@q9labsai/chalk-react-native";
 

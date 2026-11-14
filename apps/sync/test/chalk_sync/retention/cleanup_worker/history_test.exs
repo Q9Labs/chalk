@@ -4,6 +4,7 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
   alias ChalkSync.Retention.CleanupWorker.Result
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.UUID
 
   @retention_seconds 7 * 24 * 60 * 60
 
@@ -26,7 +27,7 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
     assert attendance_http_probe(fixture) == before_http
   end
 
-  test "rolls back when the independent fold detects corruption", %{
+  test "holds an Episode whose independent fold detects corruption and cleans the rest", %{
     connections: connections
   } do
     connection = hd(connections)
@@ -39,11 +40,43 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
       episode_ids(fixture)
     )
 
-    assert {:error, {:invalid_history, :event_digest_mismatch}} = run_cleanup(connection)
+    held_id = UUID.dump!(fixture.episode.episode_id)
+
+    assert {:ok,
+            %Result{episodes: 0, held: [{^held_id, {:invalid_history, :event_digest_mismatch}}]}} =
+             run_cleanup(connection)
+
     assert [events, intents] = history_counts(connection, fixture)
     assert events > 0
     assert intents > 0
     refute checkpointed?(connection, fixture)
+
+    assert {:ok, %Result{held: []}} = run_cleanup(connection, excluded_episode_ids: [held_id])
+    refute checkpointed?(connection, fixture)
+  end
+
+  test "a held Episode does not block a healthy Episode in the same batch", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    corrupt = seed_ended_episode(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, corrupt)
+    healthy = seed_ended_episode(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, healthy)
+
+    Postgrex.query!(
+      connection,
+      "update sync_control_events set resulting_state_digest = decode(repeat('01', 32), 'hex') where tenant_id = $1 and episode_id = $2 and revision = 1",
+      episode_ids(corrupt)
+    )
+
+    corrupt_id = UUID.dump!(corrupt.episode.episode_id)
+
+    assert {:ok, %Result{episodes: 1, held: [{^corrupt_id, _reason}]}} =
+             run_cleanup(connection, batch_size: 16)
+
+    assert checkpointed?(connection, healthy)
+    refute checkpointed?(connection, corrupt)
   end
 
   test "verifies history using the millisecond deadline from a microsecond timestamp", %{
@@ -71,8 +104,29 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
       episode_ids(fixture)
     )
 
-    assert {:error, {:invalid_history, :event_digest_mismatch}} = run_cleanup(connection)
+    assert {:ok, %Result{episodes: 0, held: [{_id, {:invalid_history, :event_digest_mismatch}}]}} =
+             run_cleanup(connection)
+
     assert [2, 1] = history_counts(connection, fixture)
+    refute checkpointed?(connection, fixture)
+  end
+
+  test "holds an Episode with a deadline change instead of crashing the batch", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_episode_with_deadline(connection, ~U[2026-07-03 00:00:00.123090Z])
+    cleanup_fixture(connection, fixture)
+
+    Postgrex.query!(
+      connection,
+      "update sync_control_events set event_name = 'deadline_changed' where tenant_id = $1 and episode_id = $2 and revision = 1",
+      episode_ids(fixture)
+    )
+
+    assert {:ok, %Result{episodes: 0, held: [{_id, {:invalid_history, _reason}}]}} =
+             run_cleanup(connection)
+
     refute checkpointed?(connection, fixture)
   end
 
