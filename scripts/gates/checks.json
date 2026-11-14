@@ -1261,17 +1261,6 @@
       "sample": "0 failures in the audit sample."
     },
     {
-      "id": "workflow:real-call-proof.yml#recent-promote",
-      "owner": "Real-call proofs",
-      "catches": "Nothing: it finds a passed Promote from the last 24 hours, so the daily production call is skipped on days a Promote already proved production.",
-      "runs": ["daily"],
-      "blocks": "action",
-      "minutes": 0.3,
-      "record": "unmeasured",
-      "sample": "New job; no runs yet.",
-      "reason": "A lookup, not a check. When it fails, the daily call runs anyway."
-    },
-    {
       "id": "workflow:real-call-proof.yml#smoke",
       "owner": "Real-call proofs",
       "catches": "A real call failing on the nightly or production Spaces; the daily production run pages Discord.",
