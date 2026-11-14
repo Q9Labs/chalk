@@ -48,7 +48,13 @@ Production R2 adoption is fail-closed: a plan must name the existing bucket, giv
 
 The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. The managed CORS rule allows any origin for `GET` and `PUT` with the fixed headers in `whiteboard_cors_allowed_headers` (`locals.tf`). There is no origin list to maintain: the API authenticates the participant before it issues a URL, and the URL's signature is the access control, so an origin list adds nothing against a caller who holds the URL. A new tenant or portal origin needs no bucket change. The rule does not make the bucket public; keep its r2.dev and custom domains off.
 
-The production chat-files rule is not managed by this tofu root. It lives on the bucket `chalk-miscellaneous` (rule id `chalk-production-chat-files`) beside an unrelated rule, and a change to `cloudflare_r2_bucket_cors.whiteboard` in `main.tf` does not reach it. Update it by hand: read the live rules with `cf r2 buckets cors get chalk-miscellaneous` and save them as the undo, edit only that rule, then replace the rule set with `cf r2 buckets cors update chalk-miscellaneous --rules @<file> --force`, which keeps only the rules in the file. Prove it with `pnpm prod:proof chat-upload`, which sends a preflight from an origin on no list.
+Today the production chat-files rule is updated by hand, not by this root. It is the rule with the production chat-files rule ID on the production file bucket, and it sits beside an unrelated rule. Both names are in the private operator inventory, not in this repository. A change to `cloudflare_r2_bucket_cors.whiteboard` in `main.tf` does not reach that rule unless an operator adopts it and applies the root with the approved plan. To update it by hand:
+
+1. Save the live rules, as the bare JSON array that `update` reads: `cf r2 buckets cors get <production bucket> | jq .rules > <undo file>`. The `get` command wraps the array in a `rules` key, and `update` rejects the wrapped form.
+2. Copy the file, and edit only the chat-files rule. Keep every other rule exactly as it is.
+3. Replace the rule set: `cf r2 buckets cors update <production bucket> --rules @<edited file> --force`. This command replaces all rules, so a rule that is not in the file is deleted.
+4. Run `pnpm prod:proof chat-upload`. It sends a preflight from an origin on no list.
+5. To undo, run the same `update` command with the undo file.
 
 No bootstrap assertion or reusable credential may enter OpenTofu state, cloud-init, logs or a tracked file.
 
