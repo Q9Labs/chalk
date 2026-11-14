@@ -97,6 +97,9 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 	t.Run("expired pending arrival retry", func(t *testing.T) {
 		proveExpiredPendingArrivalRetry(t, ctx, pool, repository, invite, tenantID, space.ID)
 	})
+	t.Run("open admission fence", func(t *testing.T) {
+		proveOpenAdmissionFence(t, ctx, pool, service, invite, tenantID, space.ID)
+	})
 	t.Run("mixed version arrival lock", func(t *testing.T) { proveAdmissionRolloutLockOrder(t, ctx, pool, arrival.Arrival.ArrivalHandle) })
 	t.Run("control before Episode", func(t *testing.T) {
 		controlArrival, err := service.CreateArrival(ctx, publicinvites.CreateArrivalInput{TenantID: tenantID, SpaceID: space.ID, Invite: publicinvites.Token{Handle: invite.Handle, Generation: invite.Generation}, InviteStateEpoch: invite.StateEpoch, IdentityMode: publicinvites.IdentityGuest, DisplayName: "Control guest", GuestCredential: []byte("control-lock-test-credential"), IdempotencyKey: accountTenantIntegrationID(t).String()})

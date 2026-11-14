@@ -2,20 +2,20 @@
 # fragment is gone, so a change to these guards forces a fresh look at the model.
 # Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
 # the file and the fragment compare as one space.
-Provenance	apps/api/internal/adapters/postgres/public_invites.go	return episode.Status == episodes.EpisodeStatusActive && !space.ArchivedAt.Valid && mode == "knock" && invite.Enabled &&
+Provenance	apps/api/internal/adapters/postgres/public_invites.go	return episode.Status == episodes.EpisodeStatusActive && !space.ArchivedAt.Valid && mode == requiredMode && invite.Enabled &&
 Provenance	apps/api/internal/adapters/postgres/public_invites.go	arrival.State == string(publicinvites.ArrivalPending) && arrival.ExpiresAt.Time.After(now) &&
 Provenance	apps/api/internal/adapters/postgres/public_invites.go	invite.Generation == arrival.InviteGeneration &&
 Allowed	apps/api/internal/adapters/postgres/public_invites.go	return next == publicinvites.ArrivalAdmitted || next == publicinvites.ArrivalRejected || next == publicinvites.ArrivalLeft || next == publicinvites.ArrivalUnavailable
 Allowed	apps/api/internal/adapters/postgres/public_invites.go	return current == publicinvites.ArrivalAdmitted && (next == publicinvites.ArrivalLeft || next == publicinvites.ArrivalUnavailable)
 CollectCommit	apps/api/internal/adapters/postgres/public_invites.go	if input.RequirePending && current.State != string(publicinvites.ArrivalPending) {
-CollectCommit	apps/api/internal/adapters/postgres/public_invites.go	valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
+CollectCommit	apps/api/internal/adapters/postgres/public_invites.go	valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, string(input.RequireAdmission), time.Now())
 CollectCommit	apps/api/internal/adapters/postgres/public_invites.go	if participant.Status != episodes.ParticipantStatusActive || participant.Generation != input.ParticipantGeneration {
 CollectCommit	apps/api/internal/adapters/postgres/public_invites.go	if !arrivalTransitionAllowed(publicinvites.ArrivalState(current.State), input.State) {
 Knock	apps/api/internal/adapters/postgres/public_episode_admission.go	if space.ArchivedAt.Valid {
-Knock	apps/api/internal/adapters/postgres/public_episode_admission.go	valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
+Knock	apps/api/internal/adapters/postgres/public_episode_admission.go	valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, "knock", time.Now())
 Knock	apps/api/internal/adapters/postgres/public_episode_admission.go	if episode.Status != episodes.EpisodeStatusActive {
 Decide	apps/api/internal/adapters/postgres/public_episode_admission.go	if name != operationName {
-Decide	apps/api/internal/adapters/postgres/public_episode_admission.go	valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, time.Now())
+Decide	apps/api/internal/adapters/postgres/public_episode_admission.go	valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, "knock", time.Now())
 OpenGrant	apps/api/internal/adapters/postgres/episode_public_join.go	if space.ArchivedAt.Valid {
 OpenGrant	apps/api/internal/adapters/postgres/episode_public_join.go	if episode.Status != episodes.EpisodeStatusActive {
 OpenGrant	apps/api/db/queries/episode_live.sql	and status in ('active', 'ending')
@@ -23,5 +23,8 @@ Issue	apps/api/db/queries/sync_lifecycle.sql	and episodes.status = 'active'
 Issue	apps/api/db/queries/sync_lifecycle.sql	(participants.status = 'active' and sync_lifecycle_intents.status = 'applied'
 LifecycleEnd	apps/api/internal/publicinvites/lifecycle_worker.go	if err := w.actions.EndEpisode(ctx, input); err != nil {
 LifecycleArchive	apps/api/internal/publicinvites/lifecycle_worker.go	if err := w.actions.ArchiveSpace(ctx, input); err != nil {
+LifecycleEndAfterArchive	apps/api/internal/publicinvites/lifecycle_worker.go	lifecycleActionRequestKey(claimed, "end-after-archive")
 LifecycleEnd	apps/api/internal/publicinviteapp/lifecycle_actions.go	_, err := a.episodes.RequestEpisodeEnd(ctx, episodes.RequestEpisodeEndInput{
 LifecycleArchive	apps/api/internal/publicinviteapp/lifecycle_actions.go	if _, err := a.spaces.ArchiveSpace(ctx, input.TenantID, input.SpaceID); err != nil {
+Opened	apps/api/internal/publicinvites/service.go	space.AdmissionMode != AdmissionKnock && space.AdmissionMode != AdmissionOpen
+Opened	apps/api/internal/publicinvites/service.go	return r.admitPendingArrival(ctx, space, arrival, input.MediaClients)

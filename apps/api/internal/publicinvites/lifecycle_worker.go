@@ -202,6 +202,13 @@ func (w LifecycleWorker) process(ctx context.Context, now time.Time, lifecycle A
 		status, retryErr := w.retry(ctx, now, claimed, "space_archive_failed", err)
 		return status, true, retryErr
 	}
+	// A guest can start an Episode between the first EndEpisode and the archive. The archived Space takes
+	// no new guest, so this second pass leaves no Episode active behind it.
+	input.RequestKey = lifecycleActionRequestKey(claimed, "end-after-archive")
+	if err := w.actions.EndEpisode(ctx, input); err != nil {
+		status, retryErr := w.retry(ctx, now, claimed, "episode_end_failed", err)
+		return status, true, retryErr
+	}
 	if _, err := w.lifecycle.MarkAutoLifecycleArchived(ctx, claimed.TenantID, claimed.SpaceID); err != nil {
 		status, retryErr := w.retry(ctx, now, claimed, "lifecycle_archive_failed", err)
 		return status, true, retryErr

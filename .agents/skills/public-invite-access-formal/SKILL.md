@@ -9,29 +9,23 @@ A public invite lets a stranger into a Space. This is a security boundary, so th
 
 `tools/formal/public-invite-access/PublicInviteAccess.tla` models those steps and checks these rules, in both modes:
 
-| Rule                           | Plain sentence                                                                                                     | Harm when it breaks                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AdmittedOnlyOnValidInvite`    | A knock guest is admitted only while the invite, Space, Episode and arrival they knocked on are all still valid.   | A guest who knocked on an invite that was rotated or disabled, or in a Space that ended, still gets in and holds a Sync participant.            |
-| `NoApprovalOfStaleRequest`     | A host approval is accepted only for a request whose invite, Space, Episode and arrival are still valid.           | A host approves a stale request, so Sync admits a guest the host never meant to let in.                                                         |
-| `DecisionOnce`                 | A request has one decision: it is never both approved and denied.                                                  | A guest is denied and admitted at once, so the host's screen and the guest's access disagree.                                                   |
-| `NoGrantToInactiveParticipant` | A refresh token goes only to an active participant of an active Episode.                                           | A guest who left, or whose call ended, gets a token that can still reach the call.                                                              |
-| `NoNewAccessInArchivedSpace`   | An archived Space takes no new knock and no new open-Space join.                                                   | A closed Space keeps admitting strangers and starts new calls in it.                                                                            |
-| `TerminalStays`                | A rejected, left or unavailable arrival never changes, and an admitted one never goes back to pending.             | A turned-away or departed guest becomes admitted again through a stale write.                                                                   |
-| `ArchiveLeavesNoActiveEpisode` | An auto Space that the lifecycle worker archived has no Episode that is still active. Ending ("ending") is enough. | The Space is archived, so it disappears from the dashboard, while a call in it keeps running. **This rule breaks on the real code.** See below. |
+| Rule                           | Plain sentence                                                                                                     | Harm when it breaks                                                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `AdmittedOnlyOnValidInvite`    | A knock guest is admitted only while the invite, Space, Episode and arrival they knocked on are all still valid.   | A guest who knocked on an invite that was rotated or disabled, or in a Space that ended, still gets in and holds a Sync participant. |
+| `NoApprovalOfStaleRequest`     | A host approval is accepted only for a request whose invite, Space, Episode and arrival are still valid.           | A host approves a stale request, so Sync admits a guest the host never meant to let in.                                              |
+| `DecisionOnce`                 | A request has one decision: it is never both approved and denied.                                                  | A guest is denied and admitted at once, so the host's screen and the guest's access disagree.                                        |
+| `NoGrantToInactiveParticipant` | A refresh token goes only to an active participant of an active Episode.                                           | A guest who left, or whose call ended, gets a token that can still reach the call.                                                   |
+| `NoNewAccessInArchivedSpace`   | An archived Space takes no new knock and no new open-Space join.                                                   | A closed Space keeps admitting strangers and starts new calls in it.                                                                 |
+| `TerminalStays`                | A rejected, left or unavailable arrival never changes, and an admitted one never goes back to pending.             | A turned-away or departed guest becomes admitted again through a stale write.                                                        |
+| `ArchiveLeavesNoActiveEpisode` | An auto Space that the lifecycle worker archived has no Episode that is still active. Ending ("ending") is enough. | The Space is archived, so it disappears from the dashboard, while a call in it keeps running.                                        |
+| `OpenedRoomTurnsNoOneAway`     | A guest who waits at a knock Space is not turned away when the host opens the Space.                               | The host opens the room to let people in, and every waiting guest is told the invite is unavailable.                                 |
 
-The first six hold on the real code at the bounds below, in both modes. The last one is a finding.
+All seven hold on the real code at the bounds below. Two fixes keep them true:
 
-## Finding: the cleanup worker can archive a Space with an active call
+- **Archive then end again.** A guest can start an Episode between the worker's first `EndEpisode` and `ArchiveSpace`. An archived Space takes no new guest, so `LifecycleWorker.process` calls `EndEpisode` once more after the archive (request key `end-after-archive`) and only then marks the lifecycle archived. `TestLifecycleWorkerLeavesNoActiveEpisodeInArchivedSpace` and the Postgres replay `TestArchiveLeavesNoActiveEpisode` cover it. The model step is `LifecycleEndAfterArchive`; the variant `archive_without_second_end` drops it.
+- **Open admits the waiting.** When the host changes a knock Space to open, `pendingGuestArrivalValid` accepts open mode and `ArrivalStatus` calls `admitPendingArrival`, the same grant and admit that `Arrive` does for an open Space. The model steps are `HostOpensSpace` and `OpenedAdmit`; the variant `open_turns_away` brings the old turn-away back. `TestStatusAdmitsWaitingGuestWhenHostOpensSpace` covers it. The host's pending request is not decided any more, because its provenance needs mode knock.
 
-Path, in Chalk's words, as `/statechart` gives it (the chart is in the pull request):
-
-1. A public Space has no call running, and the cleanup worker picks it up: `process` calls `lifecycleActions.EndEpisode`, which lists the Episodes, finds none that is active, and does nothing.
-2. A guest opens the invite and joins (a knock, or an open-Space join). `JoinPublic` and `CreateAdmissionRequest` refuse an archived Space, but the Space is not archived yet, so a new Episode starts.
-3. The worker calls `lifecycleActions.ArchiveSpace`, which calls `spaces.ArchiveSpace` and never looks at Episodes. The Space is archived while the new Episode is `active`.
-
-Replay against the real code and a real Postgres: `TestFormalFindingArchiveLeavesActiveEpisode` in `apps/api/internal/adapters/postgres/public_invite_formal_integration_test.go`. It drives `EndEpisode`, a public join and `ArchiveSpace` in that order through the real services and reads the rows: the Space has `archived_at` set and its Episode is `active`. The test makes the interleaving by calling the steps in order, so it shows that the code allows the order, not how likely a real run hits it. The window is the time between the worker's two calls. The call then runs until the host ends it or the Episode's own deadline ends it.
-
-`tools/formal/public-invite-access/findings` records the rule. `tools/formal/public-invite-access/run.sh` checks that it still breaks on the real code, so a fix makes the check fail until you move the rule into `PublicInviteAccess.cfg` and delete the line in `findings` and the pinned test.
+`tools/formal/public-invite-access/findings` lists rules that break on the real code and is empty now. `tools/formal/public-invite-access/run.sh` checks every listed rule still breaks, so a new finding goes there until it is fixed.
 
 ## What the code promises, and what it does not
 
@@ -45,14 +39,14 @@ Replay against the real code and a real Postgres: `TestFormalFindingArchiveLeave
 Run this, with the commit from the coverage record below:
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- apps/api/internal/publicinvites apps/api/internal/publicinviteapp apps/api/internal/adapters/postgres/public_invites.go apps/api/internal/adapters/postgres/public_episode_admission.go apps/api/internal/adapters/postgres/episode_public_join.go apps/api/db/queries/sync_lifecycle.sql apps/api/db/queries/episode_live.sql
+git diff --stat e1814ad6e012e33d3966b6da6a2fadafbb18a25b -- apps/api/internal/publicinvites apps/api/internal/publicinviteapp apps/api/internal/adapters/postgres/public_invites.go apps/api/internal/adapters/postgres/public_episode_admission.go apps/api/internal/adapters/postgres/episode_public_join.go apps/api/db/queries/sync_lifecycle.sql apps/api/db/queries/episode_live.sql
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
+Commit: `e1814ad6e012e33d3966b6da6a2fadafbb18a25b`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
 - `Rotate`, `SetInviteEnabled`: `Runtime.RotateInvite` and `Runtime.UpdateInvite` in `apps/api/internal/publicinvites/service.go`. Arrival creation checks the current generation of an enabled invite.
 - `Arrive`: `Runtime.Arrive` and `Service.CreateArrival` (`apps/api/internal/publicinvites/service.go`).
@@ -63,7 +57,8 @@ Commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was
 - `OpenRead`, `OpenGrant`, `OpenCommit`: `Runtime.Arrive`, `EpisodeLifecycleRepository.JoinPublic` (`apps/api/internal/adapters/postgres/episode_public_join.go`) and `UpdateArrivalState` without `RequirePending`.
 - `LeavePending`, `LeaveRevoke`, `LeaveFinish`: `Runtime.Leave`, `accessPort.RevokePublicAccess` and `EpisodeLifecycleRepository.LeavePublic`.
 - `RefreshRead`, `RefreshIssue`, `RefreshFails`: `Runtime.RefreshAccess` and `accessPort.RefreshPublicAccess`, with the `GetSyncTokenSubject` query in `apps/api/db/queries/sync_lifecycle.sql`.
-- `LifecycleEnd`, `LifecycleArchive`: `LifecycleWorker.process` (`apps/api/internal/publicinvites/lifecycle_worker.go`) and `lifecycleActions.EndEpisode` and `ArchiveSpace` (`apps/api/internal/publicinviteapp/lifecycle_actions.go`).
+- `HostOpensSpace`, `OpenedAdmit`, `OpenedTurnsAway`: `Runtime.ArrivalStatus`, `Runtime.admitPendingArrival` and `Runtime.pendingGuestArrivalValid` (`apps/api/internal/publicinvites/service.go`). `OpenedTurnsAway` exists only in the variant `open_turns_away`.
+- `LifecycleEnd`, `LifecycleEndAfterArchive`, `LifecycleArchive`: `LifecycleWorker.process` (`apps/api/internal/publicinvites/lifecycle_worker.go`) and `lifecycleActions.EndEpisode` and `ArchiveSpace` (`apps/api/internal/publicinviteapp/lifecycle_actions.go`).
 - `HostEndsEpisode`, `ArrivalExpires`: the host ending a call, and the arrival's `expires_at` passing.
 
 Each repository action is one Postgres transaction. The guest's own calls (a collection, a refresh, a Leave) are modeled as separate steps with a read and a later write, because the code reads in one transaction and writes in another. If a change merges or splits transactions, the model's steps are wrong and must change too.
