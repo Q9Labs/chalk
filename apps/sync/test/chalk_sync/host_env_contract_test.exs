@@ -11,7 +11,11 @@ defmodule ChalkSync.HostEnvContractTest do
   # The loader must see only the contract: a variable the CI job exports would hide one the contract lacks.
   setup do
     original = System.get_env()
-    original |> Map.keys() |> Enum.filter(&String.starts_with?(&1, "CHALK_")) |> Enum.each(&System.delete_env/1)
+    original
+    |> Map.keys()
+    |> Enum.filter(&String.starts_with?(&1, "CHALK_"))
+    |> Enum.each(&System.delete_env/1)
+
 
     # The contract also sets variables outside the CHALK_ prefix, so the whole environment is restored.
     on_exit(fn ->
