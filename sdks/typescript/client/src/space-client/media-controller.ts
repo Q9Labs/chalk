@@ -477,7 +477,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (track) track.enabled = false;
     for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) publication.track.enabled = false;
     if (source === "screen" && this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
-    if (source !== "screen") this.#scheduleIdleRelease(source);
+    if (source !== "screen" && this.#holdsCapture(source)) this.#scheduleIdleRelease(source);
+  }
+  /** An idle release has nothing to do for a source that holds no live capture, such as one whose connection has already failed and released it. */
+  #holdsCapture(source: "microphone" | "camera"): boolean {
+    return this.#track(source)?.readyState === "live" || (this.#ports?.media.getSnapshot().localTracks ?? []).some((publication) => publication.source === source && publication.track.readyState === "live");
   }
   #retainPause(state: SourceWorker, next: Promise<void>): void {
     const previous = state.pause;
@@ -1453,6 +1457,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!ports) {
       this.#resetObservations();
       this.#cancelCaptures();
+      this.#cancelIdleReleases();
       this.#clearTracks();
       this.#clearRequests();
       this.#publish();

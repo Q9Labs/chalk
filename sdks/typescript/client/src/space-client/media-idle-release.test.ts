@@ -23,6 +23,7 @@ function captureTrack(kind: "audio" | "video"): MediaStreamTrack {
 
 async function rig(source: Source) {
   const clock = new ManualClock();
+  const timers = new Map<unknown, number>();
   const base = createCoreTestPlatform();
   const kind = source === "microphone" ? "audio" : "video";
   const captured: MediaStreamTrack[] = [];
@@ -40,7 +41,21 @@ async function rig(source: Source) {
       ...base,
       dependencies: {
         ...base.dependencies,
-        clock: { now: () => clock.now(), setTimeout: (callback, ms) => clock.setTimeout(callback, ms), clearTimeout: (handle) => clock.clearTimeout(handle) },
+        clock: {
+          now: () => clock.now(),
+          setTimeout: (callback, ms) => {
+            const handle = clock.setTimeout(() => {
+              timers.delete(handle);
+              callback();
+            }, ms);
+            timers.set(handle, ms);
+            return handle;
+          },
+          clearTimeout: (handle) => {
+            timers.delete(handle);
+            clock.clearTimeout(handle);
+          },
+        },
         mediaDevices: { getUserMedia, getDisplayMedia: getUserMedia, enumerateDevices: async () => [], releaseTrack },
         createMediaClient: (input) => ({ ...base.dependencies.createMediaClient(input), prepareLocalTrack, clearPreparedLocalTrack }),
       },
@@ -49,7 +64,7 @@ async function rig(source: Source) {
   const set = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
   await client.join({ microphone: false, camera: false });
   await set(true);
-  return { clock, client, set, captured, getUserMedia, releaseTrack, prepareLocalTrack, base };
+  return { clock, client, set, captured, getUserMedia, releaseTrack, prepareLocalTrack, base, timers };
 }
 
 describe.each(["microphone", "camera"] as const)("a muted %s", (source) => {
@@ -61,6 +76,30 @@ describe.each(["microphone", "camera"] as const)("a muted %s", (source) => {
       expect(releaseTrack).not.toHaveBeenCalled();
       clock.advance(1);
       expect(releaseTrack).toHaveBeenCalledExactlyOnceWith(captured[0]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("schedules no release once its capture is already gone", async () => {
+    const { client, set, captured, timers } = await rig(source);
+    try {
+      captured[0]?.stop();
+      timers.clear();
+      await set(false);
+      expect([...timers.values()].filter((ms) => ms === IDLE_MS)).toEqual([]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("schedules no release once the connection has dropped it", async () => {
+    const { client, set, timers } = await rig(source);
+    try {
+      await set(false);
+      expect([...timers.values()]).toContain(IDLE_MS);
+      await client.leave();
+      expect([...timers.values()].filter((ms) => ms === IDLE_MS)).toEqual([]);
     } finally {
       client.dispose();
     }
