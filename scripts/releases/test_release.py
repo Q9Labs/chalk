@@ -888,13 +888,22 @@ class PromoteReusesCutTests(unittest.TestCase):
     def job(self, workflow, name):
         text = (release.ROOT / '.github/workflows' / workflow).read_text()
         start = text.index(f'\n  {name}:\n')
-        end = text.find('\n\n  ', start + 1)
-        return text[start:end if end != -1 else len(text)]
+        following = re.search(r'\n  [A-Za-z0-9_-]+:\n', text[start + 1:])
+        return text[start:start + 1 + following.start() if following else len(text)]
 
     def test_promote_hands_the_cut_run_to_release(self):
+        selection = 'fromJSON(needs.select.outputs.selection)'
+        inputs = {
+            'manifest_run_id': f'{selection}.selection.run_id',
+            'manifest_artifact_id': f'{selection}.selection.manifest_artifact_id',
+            'manifest_sha256': f'{selection}.selection.manifest_sha256',
+            'reuse_release_id': f'{selection}.selection.release_id',
+            'media_sha256': f'{selection}.selection.media_sha256',
+            'web_artifact': f'toJSON({selection}.selection.web.production)',
+        }
         block = self.job('promote.yml', 'release')
-        for key in ('manifest_run_id', 'manifest_artifact_id', 'manifest_sha256', 'reuse_release_id', 'media_sha256', 'web_artifact'):
-            self.assertRegex(block, rf'\n      {key}: \$\{{\{{ .*needs\.select\.outputs\.selection.*\}}\}}\n')
+        for key, expression in inputs.items():
+            self.assertIn(f'\n      {key}: ${{{{ {expression} }}}}\n', block, key)
 
     def test_every_build_root_skips_when_a_cut_run_is_reused(self):
         # build-managed-images and build-media need plan-managed's outputs, so they skip with it.
