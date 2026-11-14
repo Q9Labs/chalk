@@ -45,6 +45,7 @@
     "scripts/web-proof/connection-lost.mjs",
     "scripts/web-proof/student-first.mjs",
     "scripts/web-proof/direct-path.mjs",
+    "scripts/web-proof/board-local.mjs",
     "apps/api/scripts/smoke-lifecycle.mjs",
     "apps/api/tests/recording-sdk-compatibility/published-clients.mjs",
     "packages/whiteboard/src/embedded/renderer-entry.ts",
