@@ -1,5 +1,5 @@
 name: Auto-promote
-run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a manual check' }}
+run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a manual or scheduled check' }}
 # Production follows a healthy nightly with no human step, behind one repository variable.
 #
 # Switch: CHALK_AUTO_PROMOTE. Set it to "true" to turn this on (gh variable set CHALK_AUTO_PROMOTE --body true);
@@ -14,12 +14,17 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # It dispatches Promote, which already retains the live Pages deployment and media pins, deploys the held release,
 # proves a real call on production, and rolls back to the retained release when that call does not pass. This run
 # then follows Promote to its end, so it turns red when production was rolled back or Promote failed.
+# It promotes only from 21:00 to 01:00 UTC (01:00 to 05:00 in Dubai) and only while no participant is in a call. A
+# verdict that lands outside the window, or while calls run, promotes nothing; a tick at 21:05, 22:05, 23:05 and 00:05
+# UTC picks up the held cut instead.
 # A SHA is tried automatically once: a second attempt is a person's call, because Promote is named by its SHA and a
 # rolled-back SHA would otherwise be tried again after every latency run.
 on:
   workflow_run:
     workflows: [Staging SFU latency]
     types: [completed]
+  schedule:
+    - cron: "5 21,22,23,0 * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,8 +37,9 @@ jobs:
   promote:
     if: >-
       vars.CHALK_AUTO_PROMOTE == 'true' &&
-      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
+    environment: production # Holds the API URL secret the live-call read needs.
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 120
@@ -49,6 +55,7 @@ jobs:
         id: decide
         env:
           GH_TOKEN: ${{ github.token }}
+          LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
         run: python3 scripts/releases/release.py auto_promote
       - name: Skip a SHA that Promote already ran for
         id: tried

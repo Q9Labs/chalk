@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -40,6 +41,35 @@ func TestReadyzReportsTheRetirementBacklogWithoutFailingReadiness(t *testing.T) 
 	unobserved.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if recorder.Code != http.StatusOK || json.Valid(recorder.Body.Bytes()) && containsKey(recorder.Body.Bytes(), "sfu_retirement_debts") {
 		t.Fatalf("/readyz before the worker's first pass: %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// The live participant count is what a release waits on before it restarts production. An unreadable
+// count is left out of /readyz, so the reader sees "unknown" and never a made-up zero.
+func TestReadyzReportsTheLiveParticipantCountAndLeavesItOutWhenUnreadable(t *testing.T) {
+	read := func(live func(context.Context) (int64, error)) (int, map[string]json.RawMessage) {
+		recorder := httptest.NewRecorder()
+		NewRouter(Options{Readiness: readyChecker{}, LiveParticipants: live}).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		var body map[string]json.RawMessage
+		_ = json.Unmarshal(recorder.Body.Bytes(), &body)
+		return recorder.Code, body
+	}
+
+	code, body := read(func(context.Context) (int64, error) { return 4, nil })
+	if code != http.StatusOK || string(body["live_participants"]) != "4" {
+		t.Fatalf("/readyz with 4 live participants: %d %s", code, body["live_participants"])
+	}
+	code, body = read(func(context.Context) (int64, error) { return 0, nil })
+	if code != http.StatusOK || string(body["live_participants"]) != "0" {
+		t.Fatalf("/readyz with no live participants: %d %s", code, body["live_participants"])
+	}
+	code, body = read(func(context.Context) (int64, error) { return 0, errors.New("database is slow") })
+	if _, found := body["live_participants"]; code != http.StatusOK || found {
+		t.Fatalf("/readyz with an unreadable count: %d, field present %v", code, found)
+	}
+	code, body = read(nil)
+	if _, found := body["live_participants"]; code != http.StatusOK || found {
+		t.Fatalf("/readyz with no count reader: %d, field present %v", code, found)
 	}
 }
 
