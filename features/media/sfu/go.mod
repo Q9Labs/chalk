@@ -1,6 +1,6 @@
 module github.com/q9labs/chalk/features/media/sfu
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/pion/ice/v4 v4.4.8
@@ -10,6 +10,7 @@ require (
 	github.com/pion/sdp/v3 v3.0.20
 	github.com/pion/transport/v5 v5.1.4
 	github.com/pion/webrtc/v4 v4.2.26
+	github.com/q9labs/chalk/features/media/sfu/protocol v0.0.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.0
 	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.21.0
@@ -51,3 +52,5 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/q9labs/chalk/features/media/sfu/protocol => ./protocol

@@ -60,3 +60,22 @@ test("a cycle whose selected pair is the relay is dropped when the requested pat
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+// The receiver arms the watch and the sender acts, so a silence that began before the action must measure zero, never a negative time.
+test("a microphone already silent when the sender turns it off measures zero, not a negative time", () => {
+  const directory = mkdtempSync(join(tmpdir(), "latency-entry-"));
+  try {
+    const result = spawnSync(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(preload)}`, join(here, "latency.mjs"), "--samples", "1", "--planes", "chalk_sfu", "--environment", "ci", "--tier", "manual"], {
+      cwd: directory,
+      encoding: "utf8",
+      env: { ...process.env, CHALK_PROOF_RUN_ID: "silence-test", FAKE_SILENCE_BEFORE_ACTION: "1" },
+    });
+    assert.doesNotMatch(result.stderr, /Error/, result.stderr);
+    const card = JSON.parse(readFileSync(join(directory, ".private", "prod-proof", "silence-test", "scorecard-chalk_sfu.json"), "utf8"));
+    const values = JSON.stringify(card).match(/"action\.unpublish\.audio_removed_ms":[^]{0,200}/)?.[0] ?? "";
+    assert.ok(values.length > 0, "the card holds the microphone-off metric");
+    assert.doesNotMatch(values, /-\d/, values);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

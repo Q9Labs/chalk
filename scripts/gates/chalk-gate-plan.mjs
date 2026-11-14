@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { requireRegistered } from "./register.mjs";
+import { RegisterError, requireRegistered } from "./register.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
@@ -23,7 +23,14 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
 export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
-export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs"];
+export const workflowGraphNodeTests = [
+  "features/scorecard/promote-graph.test.mjs",
+  "features/scorecard/nightly-graph.test.mjs",
+  "features/scorecard/deployment-records.test.mjs",
+  "features/scorecard/lease-arguments.test.mjs",
+  "scripts/gates/gate-runner-label.test.mjs",
+  "scripts/gates/stale-merge-group.test.mjs",
+];
 // The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including own-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
@@ -43,6 +50,27 @@ const proofTestRoots = [
   "sdks/typescript/client/tsconfig.json",
   "pnpm-lock.yaml",
 ];
+// What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
+// the transcription configuration that check_configuration fingerprints, the two workflows that GateCheckedTests read, and the API module files and migrations that the manifest and component planning read.
+const releaseContractRoots = [
+  "scripts/releases",
+  "scripts/recorder/release.py",
+  "scripts/recorder/archive.py",
+  "scripts/recorder/release_core.py",
+  "scripts/recorder/release_io.py",
+  "scripts/recorder/dispatcher_binding.py",
+  "infrastructure/managed-episode",
+  "infrastructure/nightly/transcription",
+  "features/scorecard",
+  "perf/budgets.json",
+  ".github/workflows/ci.yml",
+  ".github/workflows/nightly.yml",
+  "apps/api/go.mod",
+  "apps/api/go.sum",
+  "apps/api/db/migrations",
+];
+// plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
+const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -438,6 +466,7 @@ export function createGatePlan(files, options = {}) {
         "apps/web/call-states.html",
         "perf/budgets.json",
         "features/scorecard/budgets.mjs",
+        "features/scorecard/call-budgets.mjs",
         "apps/web/vite.aliases.ts",
         "apps/web/vite.call-states.config.ts",
         "apps/web/vite.call-performance.config.ts",
@@ -470,6 +499,7 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
@@ -495,6 +525,7 @@ export function createGatePlan(files, options = {}) {
       "-c",
       `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
+    task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
@@ -691,14 +722,16 @@ export function shareProvenGroups(jobs, proof, drift) {
 }
 
 // A selection that cannot be planned runs every job in full rather than skipping lanes. full tells the jobs to pass
-// --full, because the base that broke the plan would break their own diff too.
-function selectCiJobs(base) {
-  if (base === "--full") return { ...ciJobs([], { full: true }), full: true };
+// --full, because the base that broke the plan would break their own diff too. A register error is the exception:
+// every lane would fail on the same throw, so it propagates and CI stops after this one job.
+export function selectCiJobs(base, plan = ciJobs) {
+  if (base === "--full") return { ...plan([], { full: true }), full: true };
   try {
-    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" }, event: process.env.GATE_EVENT }), full: false };
+    return { ...plan(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" }, event: process.env.GATE_EVENT }), full: false };
   } catch (error) {
+    if (error instanceof RegisterError) throw error;
     console.error(`::warning title=Gate job selection failed::Running every gate job in full. Selection against ${base} failed: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
-    return { ...ciJobs([], { full: true }), full: true };
+    return { ...plan([], { full: true }), full: true };
   }
 }
 
@@ -727,7 +760,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full> [--proof <file>]");
     process.exit(2);
   }
-  const selected = selectCiJobs(base);
+  let selected;
+  try {
+    selected = selectCiJobs(base);
+  } catch (error) {
+    if (!(error instanceof RegisterError)) throw error;
+    // fatal=true tells the other Gate jobs not to run; the job still fails, so the Gate is red.
+    console.error(`::error title=Gate task is not registered::${error.message}`);
+    console.log("fatal=true");
+    process.exit(1);
+  }
   const jobs = proofPath && !selected.full ? applyProof(selected, base, proofPath) : selected;
   console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
 }

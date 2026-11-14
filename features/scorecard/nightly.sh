@@ -29,7 +29,7 @@ clone_history
 regressions=0
 inconclusive=0
 for card in "$@"; do
-  if node -e 'const c=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).contention; process.exit(c?.contended || c?.unobservable ? 0 : 1)' "${card}"; then
+  if [[ "$(${scorecard} evidence "${card}")" == no ]]; then
     inconclusive=1
   fi
   plane="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).mediaPlane)' "${card}")"

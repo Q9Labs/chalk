@@ -26,29 +26,26 @@
 # Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
 # for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
 # control, and BENCH_SSH_ADDRESSES also reaches SSH (a jump host that survives this machine's address changing).
-# BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets (32000 and
-# 16000), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings; `capacity` uses them to
-# measure each size at the budget `deploy` renders for it. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
+# BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets, which default to the node
+# table's (internal/config/node.json), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings.
+# SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
 set -euo pipefail
 
 tag=chalk-sfu-bench
 region=sgp1
 name_prefix=chalk-sfu-bench-fleet
 firewall=chalk-sfu-bench # `deploy` looks for chalk-sfu-<environment>
-control_port=8443
-media_port=50000
 default_reap_hours=3
-# role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first.
-nodes=(
-  "primary sgp1-a s-2vcpu-2gb ${BENCH_PRIMARY_BUDGET:-32000}"
-  "standby sgp1-b s-1vcpu-1gb ${BENCH_STANDBY_BUDGET:-16000}"
-)
 
-bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-sfu_root="$(cd "${bench_dir}/../.." && pwd)"
-export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
-export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
+# shellcheck source=../../../../../infrastructure/sfu/lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../../../../infrastructure/sfu/lib.sh"
 dir="${CHALK_SFU_PRIVATE_DIR}/bench"
+# role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first. A size's
+# budget is the one the node table gives it, so a bench node admits what production would.
+nodes=(
+  "primary sgp1-a s-2vcpu-2gb ${BENCH_PRIMARY_BUDGET:-$(node_table '.sizes["s-2vcpu-2gb"].packetBudget')}"
+  "standby sgp1-b s-1vcpu-1gb ${BENCH_STANDBY_BUDGET:-$(node_table '.sizes["s-1vcpu-1gb"].packetBudget')}"
+)
 
 die() {
   echo "bench: $*" >&2
@@ -125,24 +122,21 @@ host_cidr() {
   echo "${address}/32"
 }
 
-# render_cloud_init renders ../../infra/cloud-init.yaml.tftpl the way OpenTofu does, for the two
-# loops it has: one rule line per address in control_addresses and ssh_addresses.
+# render_cloud_init renders infrastructure/sfu/node/cloud-init.yaml.tftpl the way OpenTofu does, for the two
+# loops it has: one rule line per address in control_addresses and ssh_addresses. The ports and the UDP buffer come from the node table.
 render_cloud_init() {
-  awk -v control="$1" -v ssh="$2" -v media_port="$media_port" '
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
     /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
     /^%\{ endfor ~\}$/ {
       count = split(list, addresses, ",")
       for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
       looping = 0; next
     }
-    { gsub(/\$\{media_port\}/, media_port); if (looping) body = body $0 "\n"; else print }
-  ' "${sfu_root}/infra/cloud-init.yaml.tftpl"
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
+  ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
-read_ready() {
-  curl --silent --fail --max-time 5 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
-    --resolve "chalk-sfu:${control_port}:$1" "https://chalk-sfu:${control_port}/readyz"
-}
+read_ready() { sfu_curl "$dir" "$1" "$control_port" --fail --max-time 5 "https://chalk-sfu:${control_port}/readyz"; }
 
 create_node() {
   local role="$1" slug="$2" key_id="$3" user_data="$4"
@@ -191,9 +185,9 @@ up() {
   chmod 700 "$dir"
 
   echo "==> issuing a throwaway CA, server and client identity"
-  "${sfu_root}/deploy/certs" bench ca
-  "${sfu_root}/deploy/certs" bench server
-  "${sfu_root}/deploy/certs" bench operator >/dev/null
+  "${node_dir}/certs" bench ca
+  "${node_dir}/certs" bench server
+  "${node_dir}/certs" bench operator >/dev/null
 
   echo "==> creating Droplets in ${region}"
   render_cloud_init "$control_addresses" "$ssh_addresses" >"${dir}/cloud-init.yaml"
@@ -223,7 +217,7 @@ up() {
     read -r role id slug budget <<<"$spec"
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
-    SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
+    SFU_PACKET_BUDGET="$budget" "${node_dir}/deploy" bench "$address" | sed "s/^/[${role}] /"
     prefix=""
     if [[ "$role" == standby ]]; then prefix="standby:"; fi
     nodes_value+="${nodes_value:+,}${prefix}${id}=https://${address}:${control_port}"

@@ -255,6 +255,8 @@ type persistedCapturePlanPublication struct {
 	Source        string  `json:"source"`
 	Enabled       bool    `json:"enabled"`
 	PublicationID *string `json:"publication_id"`
+	// Held marks a microphone its owner muted in place. The observation lists it until Sync's pause removes it from the capture query.
+	Held bool `json:"held"`
 }
 
 func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, input captureplan.WaitInput, revision int64, now time.Time) (captureplan.Plan, error) {
