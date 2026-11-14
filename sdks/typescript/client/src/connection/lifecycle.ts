@@ -263,9 +263,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             }),
           ),
           Effect.asVoid,
-          Effect.tap(() =>
-            Effect.sync(() => notifyObservers(listeners)),
-          ),
+          Effect.tap(() => Effect.sync(() => notifyObservers(listeners))),
         );
       const transition = (state: ConnectionState): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -475,8 +473,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
         return media;
       };
-      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient =>
-        platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent });
+      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent });
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
         const confirmEntered = sync.confirmEntered?.bind(sync);
         return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
@@ -855,8 +852,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           ),
         );
       /** A foreground return extends a recovery window; a hidden page restarts it from now. */
-      const recoveryExpiry = (expiresAt: number, now: number): number =>
-        typeof document !== "undefined" && document.visibilityState === "hidden" ? now + MEDIA_RECOVERY_TIMEOUT_MS : Math.max(expiresAt, foregroundRecoveryDeadline);
+      const recoveryExpiry = (expiresAt: number, now: number): number => (typeof document !== "undefined" && document.visibilityState === "hidden" ? now + MEDIA_RECOVERY_TIMEOUT_MS : Math.max(expiresAt, foregroundRecoveryDeadline));
       const syncAttemptExpired = (attempt: SyncRecoveryAttempt, sync: ConnectionSyncClient, now: number): boolean => {
         if (attempt.client !== sync) {
           attempt.client = sync;
@@ -1310,7 +1306,11 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     state: model.state,
     subject: subjectFor(access),
     episode: episodeFor(access, control),
-    connection: Object.freeze({ syncHealth: model.syncSnapshot?.connection.health, sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : transportPhase(model.syncSnapshot?.connection.phase), media: transportPhase(model.mediaSnapshot?.connection.phase) }),
+    connection: Object.freeze({
+      syncHealth: model.syncSnapshot?.connection.health,
+      sync: model.syncSnapshot?.connection.phase === "live" && model.syncNoticeUnresponsive ? "unresponsive" : transportPhase(model.syncSnapshot?.connection.phase),
+      media: transportPhase(model.mediaSnapshot?.connection.phase),
+    }),
     failure: model.failure ? Object.freeze({ ...model.failure }) : null,
     episodeEnded: model.episodeEndConfirmed,
     episodeEndReason: model.episodeEndReason,

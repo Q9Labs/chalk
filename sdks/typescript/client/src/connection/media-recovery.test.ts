@@ -4,7 +4,7 @@ import { ConnectionAccessFailure } from "../access/manager";
 import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
 import { opaqueAccessGrant } from "../space-client/core.test.helpers";
-import { accessRefreshedAt, mediaRecoveryFixture } from "./media-recovery.test.helpers";
+import { accessRefreshedAt, mediaRecoveryFixture } from "../../tests/helpers/media-recovery-fixture";
 
 // Sanitized SDK 5.2.4 report timings. Sync stayed live (heartbeat gap: 311 ms).
 const observed = { live: 1854, accessRefreshed: accessRefreshedAt, disconnected: 47243, reconnecting: 47494, failed: 57234, exhausted: 57502 };
@@ -208,4 +208,3 @@ describe("media recovery deadline", () => {
     });
   });
 });
-
