@@ -64,14 +64,11 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
     for (const who of both) await shot(who, "in-call");
   });
 
-  await step("the starter has the owner menu, and the guest does not", async () => {
+  await step("the starter has the owner menu", async () => {
     await control(starter, "Leave call");
     await starter.page.getByRole("menuitem", { name: "End call for everyone", exact: true }).waitFor({ timeout: 10_000 });
     await shot(starter, "owner-menu");
     await starter.page.keyboard.press("Escape");
-    await control(guest, "Leave call").catch(() => undefined);
-    if ((await guest.page.getByRole("menuitem", { name: "End call for everyone", exact: true }).count()) > 0) throw new Error("the guest was offered End call for everyone");
-    await guest.page.keyboard.press("Escape");
   });
 
   await step("the starter leaves and the guest stays in the call", async () => {
@@ -93,6 +90,15 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
     await control(starter, "Leave call");
     await starter.page.getByRole("menuitem", { name: "End call for everyone", exact: true }).waitFor({ timeout: 10_000 });
     await shot(starter, "owner-menu-after-rejoin");
+    await starter.page.keyboard.press("Escape");
+  });
+
+  await step("the guest has no owner menu: Leave call leaves at once, and Rejoin brings them back", async () => {
+    await control(guest, "Leave call");
+    await guest.page.getByRole("button", { name: "Rejoin", exact: true }).waitFor({ timeout: 30_000 });
+    await guest.page.getByRole("button", { name: "Rejoin", exact: true }).click();
+    await tile(guest, guest.name).waitFor({ timeout: waitMs });
+    await tile(starter, guest.name).waitFor({ timeout: waitMs });
   });
 
   await step("the API lists both people in the call's attendance", async () => {
@@ -105,6 +111,7 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
   });
 
   await step("the starter ends the call for everyone and both are told", async () => {
+    await control(starter, "Leave call");
     await starter.page.getByRole("menuitem", { name: "End call for everyone", exact: true }).click();
     for (const who of both) await who.page.getByRole("heading", { name: "The call ended", exact: true }).waitFor({ timeout: 30_000 });
     await shot(guest, "ended");
