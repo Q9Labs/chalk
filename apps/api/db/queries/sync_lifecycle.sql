@@ -853,19 +853,22 @@ where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_hand
 select sync_admission_expiry_due(sqlc.arg(expires_at)::timestamptz, sqlc.narg(arrival_state)::text, now())::boolean as due;
 
 -- name: ClaimExpiredParticipantPresence :many
--- Lock control before Episode/participant, as entry and heartbeat renewal do.
+-- Lock control before Episode/participant, as entry and heartbeat renewal do. The scan starts from
+-- the active Episodes, which are few, and checks only their seats; starting from every control row
+-- would walk every ended Episode too.
 select control.tenant_id, control.space_id, control.episode_id
-from sync_episode_control control
-where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
+from episodes e
+join sync_episode_control control on control.tenant_id=e.tenant_id and control.space_id=e.space_id
+    and control.episode_id=e.id
+where e.status='active'
+    and sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
     and exists (
         select 1 from participants p
-        join episodes e on e.tenant_id=p.tenant_id and e.space_id=p.space_id and e.id=p.episode_id
         left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
             and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
-        where p.tenant_id=control.tenant_id and p.space_id=control.space_id
-            and p.episode_id=control.episode_id
+        where p.tenant_id=e.tenant_id and p.space_id=e.space_id and p.episode_id=e.id
             and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
-            and p.status='active' and e.status='active'
+            and p.status='active'
     )
     and control.episode_id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by control.episode_id
