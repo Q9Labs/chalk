@@ -168,6 +168,7 @@
         "apps/api/internal/capturesignaling",
         "apps/api/internal/httpapi/recorder_export_quality.go",
         "apps/api/internal/httpapi/recorder_fleet_controller.go",
+        "apps/api/internal/httpapi/recorder_fleet_controller_diagnostics_test.go",
         "apps/api/internal/httpapi/recorder_worker.go",
         "apps/api/internal/httpapi/recorder_worker_auth.go",
         "apps/api/internal/httpapi/recorder_worker_capture_signaling.go",

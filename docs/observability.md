@@ -140,3 +140,7 @@ Transcript failures carry a bounded `provider_*` reason (see `apps/transcription
 ## Recording maintenance events
 
 The API emits `recording.job_recovered` for each job that committed recovery returns, and `recording.reservation_expired` for each expired reservation. "Recovered" means the job row moved to a retry or a terminal failure, not that media was recovered. The `reason` is the committed row's code, not proof of which recovery predicate matched. The reservation event has no job ID, so join it to jobs by Recording ID. Events appear only after the enclosing transaction commits, and they never carry free text, payloads, leases, worker identity or storage paths.
+
+## Recorder fleet conflicts
+
+Expected recorder fleet 409 responses emit `recorder_fleet.operation_failed` at info level with `operation`, `error_code` and `http_status`. The codes distinguish inventory that is not ready, pending bootstrap and closed admission. A pending bootstrap with a validated diagnostic also carries its allowlisted `stage`; invalid or missing diagnostics omit it. These events carry no error text, request fields or node IDs. A conflict records a refusal or retry, not proof that a recording failed.
