@@ -1087,7 +1087,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
+			grant, refreshErr := r.grantArrival(ctx, space, input, arrivalResult.Arrival)
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}
@@ -1102,7 +1102,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		if arrivalResult.Arrival.State != ArrivalPending {
 			return PublicSpaceArrival{}, ErrArrivalUnavailable
 		}
-		grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
+		grant, grantErr := r.grantArrival(ctx, space, input, arrivalResult.Arrival)
 		if grantErr != nil {
 			return PublicSpaceArrival{}, grantErr
 		}

@@ -495,6 +495,8 @@
       "paths": [
         "apps/api/internal/httpapi/mcp_spaces.go",
         "apps/api/internal/httpapi/public_invites.go",
+        "apps/api/internal/httpapi/public_starter.go",
+        "apps/api/internal/httpapi/public_starter_test.go",
         "apps/api/internal/httpapi/recording_entrance.go",
         "apps/api/internal/publicinviteapp",
         "apps/api/internal/publicinvites",
