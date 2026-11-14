@@ -49,6 +49,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_web:
+        description: Build and keep the web archives without deploying them (Nightly proves the cut and records them for Promote)
+        required: true
+        default: false
+        type: boolean
       web_artifact:
         description: JSON artifact_id and sha256 of the prebuilt target web archive
         type: string
@@ -108,6 +113,11 @@ on:
         required: false
         type: string
       deploy_web:
+        required: false
+        default: false
+        type: boolean
+      build_web:
+        description: Build and keep the web archives without deploying them (Nightly proves the cut and records them for Promote)
         required: false
         default: false
         type: boolean
@@ -903,9 +913,6 @@ jobs:
             python3 scripts/releases/release.py verify_images --manifest "$manifest"
           fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}" --dry-run > "$RUNNER_TEMP/managed-preflight.json"
-          if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
-            python3 scripts/releases/release.py invalidate
-          fi
           media="${manifest%.json}.media.json"
           if [[ -f "$media" ]]; then
             python3 scripts/releases/media.py pin_archives --manifest "$manifest" --output "$media"
@@ -985,7 +992,7 @@ jobs:
     name: Build web-${{ matrix.target }} once
     needs: require-gate
     if: >-
-      !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) && inputs.deploy_web && inputs.manifest_run_id == ''
+      !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) && (inputs.deploy_web || inputs.build_web) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -1128,12 +1135,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
-      - name: Record the current nightly write before any web mutation
-        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'nightly'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_BACKEND_RELEASE_ID: ${{ needs.deploy-managed.outputs.release_id }}
-        run: python3 scripts/releases/release.py invalidate
       - name: Upload verified prebuilt archive without rebuilding
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
         env:

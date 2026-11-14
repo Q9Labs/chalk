@@ -129,6 +129,9 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         self.previous = dict(target_sha=OTHER_SHA)
         self.enterContext(patch.object(release, 'previous_production', return_value=self.previous))
         self.enterContext(patch.object(release, 'ancestor'))
+        # The fixtures' SHAs are not in this checkout: a latency record covers its own SHA, and the changed-paths answer is set per test.
+        self.enterContext(patch.object(release, 'descends', side_effect=lambda sha, target: sha == target))
+        self.changed = self.enterContext(patch.object(release, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
 
     def github(self, item, latency='passed', scorecard='passed'):
         api = Mock(spec=GitHub)
@@ -176,10 +179,27 @@ class ChalkSfuPromotionTests(unittest.TestCase):
                         else:
                             self.assert_blocked(action, result)
 
-    def test_promote_needs_a_passing_staging_latency_verdict_for_the_selected_sha(self):
+    def test_promote_needs_a_passing_latency_record_when_production_differs_in_latency_paths(self):
         self.assert_blocked(lambda: release.select(self.github(held(), latency=None), None), 'latency-missing')
         self.assert_blocked(lambda: release.select(self.github(held(), latency='failed'), None), 'failed')
         release.select(self.github(held()), None)
+
+    def test_promote_needs_no_latency_record_when_production_differs_in_no_latency_path(self):
+        self.changed.side_effect = None
+        self.changed.return_value = False
+        release.select(self.github(held(), latency=None), None)
+        self.assertEqual(self.promoted_sha(self.github(held(), latency=None)), SHA)
+
+    def test_an_older_passed_latency_record_covers_a_cut_with_no_latency_path_changed_since(self):
+        self.changed.side_effect = lambda previous, target, prefixes: previous == OTHER_SHA
+        api = self.github(held())
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
+            [dict(id=9, payload=dict(channel='nightly-latency', target_sha='c' * 40, result='passed', scorecard_result='passed'))]
+            if task == 'nightly-latency' else [held()])
+        with patch.object(release, 'descends', return_value=True):
+            self.assertEqual(release.covering_latency(api, SHA)['target_sha'], 'c' * 40)
+            self.changed.side_effect = lambda previous, target, prefixes: True
+            self.assertIsNone(release.covering_latency(api, SHA))
 
     def promoted_sha(self, github):
         release.auto_promote(github, None)
@@ -213,43 +233,24 @@ class ChalkSfuPromotionTests(unittest.TestCase):
     def test_the_newest_latency_verdict_is_looked_up_for_the_selected_sha(self):
         api = self.github(held())
         release.select(api, None)
-        api.deployments.assert_any_call('nightly', 'nightly-latency', sha=SHA)
+        api.deployments.assert_any_call('nightly', 'nightly-latency')
 
-    def staging(self, cut=None, sha=OTHER_SHA):
-        """A GitHub whose newest nightly write is run RUN, release 'release', at `sha`, and whose newest cut record (any
-        proof result) is `cut`."""
-        api = Mock(spec=GitHub)
-        write = dict(id=10, sha=sha, payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
-            [write] if task == 'nightly-write' else [] if cut is None else [cut])
-        return api
-
-    def cut(self, sha=OTHER_SHA, id=11, **changes):
-        return dict(id=id, payload={**held(None)['payload'], 'deploy_result': 'success', 'target_sha': sha, **changes})
-
-    def test_latency_target_is_the_cut_staging_runs_even_when_that_cut_failed_its_proofs(self):
-        release.latency_target(self.staging(self.cut(proof_result='failed')), None)
-        self.assertIn(f'sha={OTHER_SHA}\n', self.output.read_text())
-
-    def test_latency_target_is_empty_when_the_newest_write_never_finished_deploying(self):
-        cuts = (None, self.cut(deploy_result='failure'), self.cut(run_id='122'),
-                self.cut(applied_release_id='an-earlier-attempt-of-this-run'), self.cut(SHA),
-                self.cut(id=9))
-        for cut in cuts:
-            with self.subTest(cut=cut):
+    def test_latency_target_is_the_newest_held_cut_that_no_latency_record_covers(self):
+        for latency, expected in ((None, SHA), ('failed', SHA), ('passed', '')):
+            with self.subTest(latency=latency):
                 self.output.write_text('')
-                release.latency_target(self.staging(cut), None)
-                self.assertEqual(self.output.read_text(), 'sha=\n')
+                release.latency_target(self.github(held(), latency=latency), None)
+                self.assertEqual(self.output.read_text(), f'sha={expected}\n')
 
-    def test_latency_target_is_empty_when_staging_has_no_nightly_write(self):
+    def test_latency_target_is_empty_without_a_held_cut(self):
         api = Mock(spec=GitHub)
         api.deployments.return_value = []
         release.latency_target(api, None)
-        self.assertIn('sha=\n', self.output.read_text())
+        self.assertEqual(self.output.read_text(), 'sha=\n')
 
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
-        api = self.staging(self.cut(SHA), SHA)
+        api = Mock(spec=GitHub)
         api.record_latency.return_value = 5
         environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
         with patch.dict(os.environ, environment):
@@ -267,11 +268,24 @@ class ChalkSfuPromotionTests(unittest.TestCase):
             release.record_latency(api, None)
             self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
 
-    def test_record_latency_refuses_a_sha_staging_no_longer_runs(self):
-        api = self.staging(self.cut(OTHER_SHA), OTHER_SHA)
-        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
+    def test_record_latency_refuses_a_run_with_fewer_than_the_full_samples(self):
+        api = Mock(spec=GitHub)
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='', LATENCY_SAMPLES='3')):
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
+        api.record_latency.assert_not_called()
+
+    def test_every_input_of_the_latency_measurement_decides_whether_a_record_still_covers(self):
+        paths = release.latency_paths()
+        for changed in ('scripts/prod-proof/latency.mjs', 'perf/budgets.json', '.github/workflows/nightly-proofs.yml', 'features/scorecard/evaluate.mjs'):
+            self.assertTrue(any(changed == prefix or changed.startswith(prefix + '/') for prefix in paths), changed)
+
+    def test_record_latency_refuses_a_sha_that_is_not_on_master(self):
+        api = Mock(spec=GitHub)
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
+            with patch.object(release, 'ancestor', side_effect=subprocess.CalledProcessError(1, 'git')):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    release.record_latency(api, None)
         api.record_latency.assert_not_called()
 
     def test_select_never_uses_a_passed_proof_from_another_sha(self):
@@ -402,26 +416,23 @@ class ChalkSfuPromotionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'selected nightly changed or is no longer held'):
                         release.recheck(self.github(item), None)
 
-    def test_record_binds_all_chalk_sfu_outcomes_to_cut_sha_and_run_with_the_chalk_sfu_proof_as_the_gate(self):
-        for result in ('passed', 'failed', 'skipped'):
-            for gate_result in ('passed', 'failed'):
-                with self.subTest(result=result, gate_result=gate_result):
-                    info = dict(run_id=RUN, release_id='release', applied_release_id='release')
+    def test_record_binds_the_proof_and_release_outcomes_to_cut_sha_and_run_with_the_proof_as_the_gate(self):
+        for release_result in ('success', 'failure'):
+            for proof in ('passed', 'failed'):
+                with self.subTest(release_result=release_result, proof=proof):
+                    info = dict(run_id=RUN, release_id='release')
                     api = Mock(spec=GitHub)
-                    api.deployments.return_value = [dict(id=1, created_at='2026-11-08T02:00:00Z',
-                                                        payload=dict(channel='nightly-write', **info))]
                     api.record.return_value = 2
                     with patch.dict(os.environ, RELEASE=json.dumps(info), TARGET_SHA=SHA, GITHUB_RUN_ID=RUN,
-                                    CHALK_SFU_RESULT=result, DEPLOY_RESULT='success', PROOF_RESULT=gate_result,
-                                    WEB_E2E_RESULT='passed'):
+                                    RELEASE_RESULT=release_result, PROOF_RESULT=proof):
                         release.record(api, None)
                     target, saved, passed = api.record.call_args.args
                     self.assertEqual((target, saved['target_sha'], saved['proof_run_id']), (SHA, SHA, RUN))
-                    self.assertEqual(saved['chalk_sfu_proof_result'], result)
-                    self.assertEqual(saved['real_call_proof_result'], gate_result)
-                    self.assertEqual(saved['proof_result'], gate_result)
-                    self.assertEqual(saved['deploy_result'], 'success')
-                    self.assertEqual(passed, gate_result == 'passed')
+                    self.assertEqual(saved['chalk_sfu_proof_result'], proof)
+                    self.assertEqual(saved['release_result'], release_result)
+                    self.assertEqual(saved['applied_release_id'], 'release')
+                    self.assertEqual(saved['proof_result'], 'passed' if passed else 'failed')
+                    self.assertEqual(passed, release_result == 'success' and proof == 'passed')
 
     def test_real_nightly_breaches_and_passing_cards_flow_through_record_to_promotion(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/chalk_sfu_over_budget.json').read_text())
@@ -445,12 +456,10 @@ class ChalkSfuPromotionTests(unittest.TestCase):
                 self.assertEqual(json.loads(verdict_output.read_text().split('result=', 1)[1]), verdict)
                 item = held()
                 api = self.github(item)
-                api.deployments.return_value = [dict(id=1, created_at=item['created_at'],
-                                                    payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))]
                 api.record.return_value = 2
-                with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release', applied_release_id='release')),
-                                TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, CHALK_SFU_RESULT='passed', DEPLOY_RESULT='success',
-                                PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SCORECARD_RESULT=json.dumps(verdict)):
+                with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release')),
+                                TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, RELEASE_RESULT='success',
+                                PROOF_RESULT='passed', SCORECARD_RESULT=json.dumps(verdict)):
                     release.record(api, None)
                 item['payload'] = api.record.call_args.args[1]
                 self.assertEqual(item['payload']['scorecard_result'], verdict['result'])
@@ -527,12 +536,10 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         """Record a nightly whose Chalk SFU card never arrived; return the API and the held item carrying that record."""
         item = held()
         api = self.github(item)
-        api.deployments.return_value = [dict(id=1, created_at=item['created_at'],
-                                            payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))]
         api.record.return_value = 2
-        with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release', applied_release_id='release')),
-                        TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, CHALK_SFU_RESULT='passed', DEPLOY_RESULT='success',
-                        PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SCORECARD_RESULT=json.dumps(self.evaluate())):
+        with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release')),
+                        TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, RELEASE_RESULT='success',
+                        PROOF_RESULT='passed', SCORECARD_RESULT=json.dumps(self.evaluate())):
             release.record(api, None)
         item['payload'] = api.record.call_args.args[1]
         api.deployments.return_value = [item]
@@ -819,6 +826,28 @@ class PlanTests(unittest.TestCase):
         github.is_on_master = Mock(return_value=True)
         github.has_green_gate = Mock(return_value=True)
         self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
+
+
+class ManifestTrustTests(unittest.TestCase):
+    """A cut's manifest is read from its run only when a master workflow of this repository produced it."""
+    INFO = dict(run_id=1, release_id='r1', target_sha=SHA, manifest_artifact_id=2)
+
+    def read(self, **run):
+        fields = dict(head_branch='master', head_repository=dict(full_name='Q9Labs/chalk'), path='.github/workflows/nightly.yml@refs/heads/master', event='push')
+        github = Mock(spec=GitHub, repository='Q9Labs/chalk')
+        github.request.return_value = {**fields, **run}
+        github.artifact.return_value = json.dumps(dict(release_id='r1', source_revision=SHA)).encode()
+        with patch.object(release, 'ancestor'):
+            return release.manifest_bytes(github, self.INFO)
+
+    def test_a_push_started_nightly_cut_is_trusted(self):
+        self.assertIn(b'r1', self.read())
+
+    def test_a_run_from_another_branch_event_or_workflow_is_refused(self):
+        for run in (dict(head_branch='feature'), dict(event='pull_request'), dict(path='.github/workflows/other.yml@refs/heads/master'),
+                    dict(head_repository=dict(full_name='fork/chalk'))):
+            with self.subTest(run=run), self.assertRaisesRegex(ValueError, 'untrusted artifact-producing run'):
+                self.read(**run)
 
 
 class RecordingChangedTests(unittest.TestCase):

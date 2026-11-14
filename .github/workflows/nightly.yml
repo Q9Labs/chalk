@@ -1,5 +1,9 @@
 name: Cut nightly
 on:
+  # The merge queue lands a commit on master only after its Gate passed, so a push to master starts a cut at once (the plan
+  # reads the landed Gate). The hourly run is the safety net for a cut the cooldown deferred.
+  push:
+    branches: [master]
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -11,7 +15,6 @@ permissions:
 concurrency:
   group: chalk-environment-nightly
   cancel-in-progress: false
-  queue: max
 jobs:
   plan:
     permissions:
@@ -52,8 +55,10 @@ jobs:
           if [[ "$MANUAL" == true ]]; then args+=(--manual); fi
           python3 scripts/releases/release.py plan "${args[@]}"
   release:
+    # Builds the cut once: the API and Sync images, the media archives and both web archives. Nothing is deployed; the proof
+    # lanes run these images on a throwaway stack, and Promote ships the same bytes.
     permissions:
-      contents: write # The managed deploy takes the shared staging-SFU lease.
+      contents: write # ci.yml's deploy job asks for it, and a caller must grant what a called workflow declares.
       actions: read
       deployments: write
       id-token: write
@@ -64,8 +69,8 @@ jobs:
       target_sha: ${{ needs.plan.outputs.target_sha }}
       managed_environment: nightly
       release_managed: true
-      deploy_managed: true
-      deploy_web: true
+      deploy_managed: false
+      build_web: true
       orchestrated: true
       # `plan` above required the target's green master Gate; the release does not wait for a runner to repeat it.
       gate_checked: true
@@ -74,36 +79,22 @@ jobs:
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
-    # The gate. It proves a real call on the Chalk SFU (chalk_sfu) for the cut's revision: the call, its Recording,
-    # export and Transcript, and a long call across media-access refreshes. The staging lease serializes it with
-    # every other lane that drives the staging SFU, and a lease that stays busy fails the gate by name
-    # (staging-sfu-lease-timeout, shown on the run and again by `record`).
+    # The gate. Each proof is a lane on its own runner with its own throwaway stack (scripts/nightly-stack), so the lanes
+    # run side by side and the first failed lane cancels the rest. The web call proof is one of them.
     permissions:
-      contents: write # Shared staging-SFU Git-ref lease.
+      actions: read
+      contents: read
+      id-token: write
     needs: [plan, release]
-    uses: ./.github/workflows/real-call-proof.yml
+    uses: ./.github/workflows/nightly-proofs.yml
     with:
-      environment: nightly
-      # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
-      # call-artifacts boots recorder droplets, so it runs only on a cut that changed a recording path; Promote runs it every time.
-      proofs: ${{ needs.plan.outputs.recording_changed == 'true' && 'camera-share call-artifacts long-call chat-upload' || 'camera-share long-call chat-upload' }}
-      media_plane: chalk_sfu
-      # Only the first cut of a UTC day pays for a Transcript (the plan decides); every cut still records and checks the call.
-      transcribe: ${{ needs.plan.outputs.transcribe == 'true' }}
       release_sha: ${{ needs.plan.outputs.target_sha }}
-      scorecard_label: proof
-    secrets: inherit
-  web-e2e:
-    needs: [release, proof]
-    permissions:
-      contents: write # Shared staging-SFU Git-ref lease.
-    uses: ./.github/workflows/web-call-proof.yml
-    with:
-      environment: nightly
-      media_plane: chalk_sfu
+      release_id: ${{ needs.release.outputs.release_id }}
+      proofs: camera-share long-call chat-upload leave-chalk-sfu latency-smoke web-call
+      image_source: manifest
     secrets: inherit
   record:
-    needs: [plan, release, proof, web-e2e, scorecard]
+    needs: [plan, release, proof, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     env:
@@ -112,28 +103,25 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Record held or failed cut without rolling nightly back
+      - name: Record the held or failed cut
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
           TRANSCRIBE: ${{ needs.plan.outputs.transcribe }}
           RELEASE: ${{ toJSON(needs.release.outputs) }}
-          DEPLOY_RESULT: ${{ needs.release.result }}
-          # The gate is the chalk_sfu proof job; a lease timeout is named in PROOF_FAILURE.
+          RELEASE_RESULT: ${{ needs.release.result }}
+          # The gate is the proof job: every lane, the web call included.
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           PROOF_FAILURE: ${{ needs.proof.outputs.failure }}
           PROOF_RESULTS: ${{ needs.proof.outputs.results }}
-          WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
-          # Nightly latency runs in staging-sfu-latency.yml; Promote reads its verdict for this SHA next to this one.
-          CHALK_SFU_RESULT: ${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
           SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |
           python3 scripts/releases/release.py record
-          if [ "$DEPLOY_RESULT" = success ] && [ "$PROOF_RESULT" != passed ]; then
-            echo "::error title=Nightly gate failed: chalk_sfu proof::The chalk_sfu proof did not pass (${PROOF_FAILURE:-proof-failed}), so this cut is held. Results: ${PROOF_RESULTS:-none recorded}"
+          if [ "$RELEASE_RESULT" = success ] && [ "$PROOF_RESULT" != passed ]; then
+            echo "::error title=Nightly gate failed::A proof lane did not pass (${PROOF_FAILURE:-proof-failed}), so this cut is held. Results: ${PROOF_RESULTS:-none recorded}"
             echo "Proof results: ${PROOF_RESULTS:-none recorded}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed
+          test "$RELEASE_RESULT" = success && test "$PROOF_RESULT" = passed
   github-release:
     needs: [plan, record]
     if: needs.plan.outputs.should_cut == 'true' && needs.record.result == 'success'

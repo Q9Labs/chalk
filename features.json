@@ -76,7 +76,7 @@
         ".github/workflows/cloudflare-egress-check.yml",
         ".github/workflows/listener-audio-check.yml",
         ".github/workflows/sfu-bench-reaper.yml",
-        ".github/workflows/staging-sfu-latency.yml",
+        ".github/workflows/nightly-latency.yml",
         "apps/api/internal/adapters/chalksfu",
         "apps/api/internal/adapters/cloudflare/sfu",
         "apps/api/internal/adapters/cloudflare/turn",
@@ -451,6 +451,7 @@
         ".github/workflows/hotfix.yml",
         ".github/workflows/nightly-cf-latency.yml",
         ".github/workflows/nightly.yml",
+        ".github/workflows/nightly-proofs.yml",
         ".github/workflows/npm-publish.yml",
         ".github/workflows/osv-daily.yml",
         ".github/workflows/promote.yml",
@@ -463,6 +464,7 @@
         "infrastructure/README.md",
         "scripts/deploy",
         "scripts/gates",
+        "scripts/nightly-stack",
         "scripts/releases"
       ]
     },
@@ -742,6 +744,7 @@
         "infrastructure/nightly/direct-sync-trial.md",
         "infrastructure/nightly/env",
         "infrastructure/nightly/host-cloud-init.yaml",
+        "infrastructure/nightly/host-proof",
         "packages/assets",
         "packages/facehash",
         "packages/ui",

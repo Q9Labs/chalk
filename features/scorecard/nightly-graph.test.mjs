@@ -30,54 +30,82 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
   for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
 });
 
-// The gate of the cut is the Chalk SFU (chalk_sfu): the proof job holds the cut, and the staging latency workflow holds only Promote.
-test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => {
-  const { proof: gate, "web-e2e": web, record, scorecard } = nightly.jobs;
-  assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
-  assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
-  assert.equal(gate.with.media_plane, "chalk_sfu");
-  // call-artifacts boots recorder droplets, so the cut runs it only when `plan` saw a recording path change.
-  const [, recordingProofs, otherProofs] = gate.with.proofs.match(/&& '([^']+)' \|\| '([^']+)' \}\}$/);
-  assert.match(gate.with.proofs, /needs\.plan\.outputs\.recording_changed == 'true'/);
-  assert.deepEqual(recordingProofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
-  assert.deepEqual(otherProofs.split(" "), ["camera-share", "long-call", "chat-upload"]);
-  assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
-  assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
+// The cut builds once and proves the built images on throwaway stacks: the proof job holds the cut, nothing is deployed, and the
+// latency run holds only Promote.
+test("Cut nightly builds the cut, proves it on throwaway stacks and carries no latency run", () => {
+  const { release, proof: gate, record, scorecard } = nightly.jobs;
+  assert.equal(nightly.jobs.latency, undefined, "latency runs off the cut");
+  assert.equal(nightly.jobs["web-e2e"], undefined, "the web call proof is a lane of the proof job");
+  assert.equal(release.with.deploy_managed, false, "the cut deploys nothing");
+  assert.equal(release.with.build_web, true, "the cut keeps the production web archive");
+  assert.equal(gate.uses, "./.github/workflows/nightly-proofs.yml");
+  assert.equal(gate.with.image_source, "manifest");
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "latency-smoke", "web-call"]);
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
-  assert.equal(web.with.media_plane, "chalk_sfu");
-  assert.equal(web.permissions.contents, "write", "the staging lease is a Git ref");
-  for (const name of ["proof", "web-e2e", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
+  for (const name of ["release", "proof", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
   assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);
   const evaluate = scorecard.steps.find((item) => item.id === "evaluate").run;
   assert.match(evaluate, /evaluate\.mjs --latency-deferred /, "the cut's cards hold no latency run");
   const env = record.steps.find((item) => item.env?.PROOF_RESULT).env;
   assert.match(env.PROOF_RESULT, /needs\.proof\.result == 'success' && needs\.proof\.outputs\.result/);
   assert.match(env.PROOF_FAILURE, /needs\.proof\.outputs\.failure/);
-  assert.equal(env.CHALK_SFU_RESULT, "${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}");
+  assert.equal(env.RELEASE_RESULT, "${{ needs.release.result }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
-  assert.match(run, /test "\$DEPLOY_RESULT" = success && test "\$PROOF_RESULT" = passed && test "\$WEB_E2E_RESULT" = passed/);
+  assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
 });
 
-test("the staging latency workflow measures the newest held nightly and records its verdict for Promote", () => {
-  const latencyWorkflow = workflow("staging-sfu-latency.yml");
-  assert.ok(latencyWorkflow.on.schedule?.length === 1, "daily schedule");
-  assert.ok("workflow_dispatch" in latencyWorkflow.on);
+test("Cut nightly starts on a push to master, because the merge queue lands a commit only after its Gate passed", () => {
+  assert.deepEqual(nightly.on.push, { branches: ["master"] });
+  assert.equal(nightly.on.workflow_run, undefined);
+});
+
+test("The proof lanes can read the cut's manifest artifact, and a trial latency run records nothing", () => {
+  for (const [name, job] of [
+    ["nightly-proofs.yml", workflow("nightly-proofs.yml")],
+    ["nightly.yml proof", nightly.jobs.proof],
+    ["nightly-latency.yml latency", workflow("nightly-latency.yml").jobs.latency],
+  ])
+    assert.equal(job.permissions.actions, "read", `${name} needs actions: read for the REST artifact download`);
+  const record = workflow("nightly-latency.yml").jobs.record.steps.find((step) => step.name === "Record the verdict for Promote");
+  assert.match(record.if, /inputs\.samples \|\| '60'\) == '60'/);
+});
+
+test("The SFU bench reaper deletes the SSH key of a finished latency run", () => {
+  const reaper = workflow("sfu-bench-reaper.yml");
+  const step = reaper.jobs.reap.steps.find((item) => item.name === "Delete SSH keys of finished latency runs");
+  assert.match(step.run, /chalk-sfu-bench-latency-/);
+  assert.equal(reaper.permissions.actions, "read");
+});
+
+test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
+  const latencyWorkflow = workflow("nightly-latency.yml");
   assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");
+  assert.ok("workflow_dispatch" in latencyWorkflow.on);
   const { target, latency, record } = latencyWorkflow.jobs;
-  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
+  assert.equal(latency.uses, "./.github/workflows/nightly-proofs.yml");
   assert.deepEqual(needsOf(latency), ["target"]);
   assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
   assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
-  assert.equal(latency.with.media_plane, "chalk_sfu");
-  assert.equal(latency.with.latency_only, true);
-  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
+  assert.equal(latency.with.proofs, "latency");
+  assert.equal(latency.with.image_source, "build", "the lane runs on x86 beside its x86 host, so it builds the images");
   assert.match(target.steps.at(-1).run, /release\.py latency_target/);
   assert.deepEqual(needsOf(record), ["target", "latency"]);
   assert.equal(record.permissions.deployments, "write");
   assert.match(record.steps.at(-1).run, /release\.py record_latency/);
   const evaluate = record.steps.find((item) => item.id === "evaluate").run;
   assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
-  assert.equal(latencyWorkflow.concurrency.group, "chalk-staging-sfu-latency-run", "a caller cannot share the callee's group");
+  assert.notEqual(latencyWorkflow.concurrency.group, nightly.concurrency.group, "a latency run does not hold up a cut");
+});
+
+test("the latency lane makes its Chalk SFU host, tags it for the reaper and always deletes it", () => {
+  const lane = workflow("nightly-proofs.yml").jobs.lane;
+  const create = lane.steps.find((item) => item.id === "host");
+  assert.match(create.run, /--tag-name chalk-sfu-bench/);
+  assert.match(create.run, /--size s-2vcpu-2gb/);
+  const remove = lane.steps.find((item) => item.name === "Delete the Chalk SFU host");
+  assert.equal(remove.if, "always() && matrix.proof == 'latency'");
+  assert.match(remove.run, /droplet delete "\$HOST_ID" --force/);
+  assert.match(remove.run, /ssh-key delete "\$KEY_ID" --force/);
 });
 
 test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {
@@ -328,10 +356,10 @@ test("a run that is not the nightly gate stops at the first failed proof", () =>
 });
 
 test("Cut nightly prints every proof's result when it holds the cut", () => {
-  const recordStep = nightly.jobs.record.steps.find((item) => item.name === "Record held or failed cut without rolling nightly back");
+  const recordStep = nightly.jobs.record.steps.find((item) => item.name === "Record the held or failed cut");
   assert.equal(recordStep.env.PROOF_RESULTS, "${{ needs.proof.outputs.results }}");
   assert.match(recordStep.run, /Results: \$\{PROOF_RESULTS:-none recorded\}/);
-  assert.equal(proof.on.workflow_call.outputs.results.value, "${{ jobs.smoke.outputs.results }}");
+  assert.equal(workflow("nightly-proofs.yml").on.workflow_call.outputs.results.value, "${{ jobs.proof.outputs.results }}");
 });
 
 // A cut must outwait the warn-only Cloudflare run: that run cannot yield the lease, so the cut's wait has to cover all of it.

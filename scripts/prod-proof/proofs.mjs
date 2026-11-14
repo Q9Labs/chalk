@@ -132,6 +132,13 @@ export async function trackEpisode(run, space, episode) {
   run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
   await saveOwnership(run);
 }
+// Starts an Episode in the Space and records it for cleanup; path is the Space's Episode collection.
+export async function startTrackedEpisode(run, space) {
+  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
+  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
+  await trackEpisode(run, space, episode);
+  return { path, episode };
+}
 // A Space holds one live Episode, and a proof Space is shared with the run before it. The run holds the staging lease, so a live
 // Episode that carries another run's proof_run_id was left by a proof whose cleanup did not finish: end it. An Episode with no
 // proof_run_id belongs to someone else and is never ended; it only gets the wait below.

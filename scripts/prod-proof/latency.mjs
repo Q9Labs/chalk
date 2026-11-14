@@ -3,6 +3,7 @@
 //
 //   pnpm prod:latency                                  # 20 cycles on each plane, chalk_sfu and cf_sfu interleaved
 //   pnpm prod:latency --samples 3 --planes chalk_sfu
+//   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # on loopback: no p95 budget and any ICE pair, still fails when a gated metric is missing
 //   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
@@ -12,13 +13,12 @@
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
 // public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
 // of samples makes the exit code non-zero.
-import { appendFile, mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { cleanupRun, disposeResource, startRun, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
@@ -49,6 +49,7 @@ function options() {
       size: { type: "string", default: "unknown" },
       "lobby-dwell-ms": { type: "string", default: "0" },
       path: { type: "string", default: "direct" },
+      smoke: { type: "boolean", default: false },
     },
   });
   const samples = Number(values.samples);
@@ -61,7 +62,7 @@ function options() {
   check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");
   const { tier, region, size, headed } = values;
   const environment = normalizeEnvironment(values.environment);
-  return { samples, planes, headed, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
+  return { samples, planes, headed, smoke: values.smoke, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
 }
 
 // measure arms the receiver's watches, runs the action on the sender, and returns each watch's delay in ms.
@@ -131,7 +132,7 @@ async function shareSteps(pages, participantId, sample, stages) {
   Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
-async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) {
+async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath) {
   const space = await createSpace(run, plane);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const createdAt = clock();
@@ -176,7 +177,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) 
     },
     { stages: {}, ice: null },
   );
-  const mismatch = pathMismatch(icePath, joined.ice);
+  const mismatch = checkPath ? pathMismatch(icePath, joined.ice) : null;
   if (mismatch) throw new Error(mismatch);
   const stages = joined.stages;
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
@@ -257,13 +258,13 @@ async function endEpisode(run, ending) {
   }
 }
 
-async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath) {
+async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath, checkPath) {
   const mark = run.resources.length;
   const ending = { current: null };
   const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath)) };
   } catch (error) {
     // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
     if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
@@ -279,7 +280,7 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath) {
 }
 
 // Planes take turns, so a slow minute on the network or the host lands on both.
-async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path }, report) {
+async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path, smoke }, report) {
   const kept = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const tries = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const limit = samples + 10;
@@ -288,20 +289,22 @@ async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, 
     if (!open.length) return;
     const plane = open[turn % open.length];
     tries[plane]++;
-    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path);
+    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path, !smoke);
     report.cycles.push(outcome);
     if (!outcome.dropped) kept[plane]++;
     console.log(`${plane} cycle ${tries[plane]}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);
   }
 }
 
-async function conclude(report, { samples, planes }) {
+async function conclude(report, { samples, planes, smoke }) {
   const { budgets } = await readBudgets();
   report.planes = {};
   for (const plane of planes) {
     const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
     const summary = summarize(kept.map((outcome) => outcome.sample));
-    const limits = planeLimits(budgets, plane);
+    // A smoke run measures on a shared runner with few cycles, so its p95 proves nothing about speed. It still fails when a
+    // gated action metric is missing, short of samples or timed out, which proves the kit emits every metric the budgets expect.
+    const limits = smoke ? Object.fromEntries(Object.entries(planeLimits(budgets, plane)).map(([metric, limit]) => [metric, { ...limit, warnOnly: true }])) : planeLimits(budgets, plane);
     const failures = budgetFailures(summary, limits, samples);
     const warnings = budgetWarnings(summary, limits);
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
@@ -321,14 +324,11 @@ function table(report) {
 
 async function main() {
   const settings = options();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const { runId, directory } = await startRun();
   const report = { startedAt: new Date().toISOString(), settings, cycles: [] };
   let run;
   try {
-    const config = await loadConfig({ readiness: false });
+    const config = await loadConfig({ capabilities: false });
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
     const receiver = await prepareIntegration(run, false);

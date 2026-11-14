@@ -19,12 +19,12 @@ import { createProofKey, prepareIntegration, recordProof, exportProof, transcrip
 const plans = {
   leave: { media: false, webhooks: false, proofs: ["leave"] },
   // The current client's Leave on the Chalk SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
-  "leave-chalk-sfu": { media: false, webhooks: false, proofs: ["leave-chalk-sfu"] },
+  "leave-chalk-sfu": { media: false, webhooks: false, recorderFleet: false, proofs: ["leave-chalk-sfu"] },
   // Finds or creates Promote's two Chalk SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
   "chalk-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["chalk-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   // A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket. No browser or media.
-  "chat-upload": { media: false, webhooks: false, proofs: ["chat-upload"] },
+  "chat-upload": { media: false, webhooks: false, recorderFleet: false, proofs: ["chat-upload"] },
   all: {
     media: true,
     cameraShare: true,
@@ -41,6 +41,7 @@ const plans = {
     media: true,
     cameraShare: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["camera-share"],
   },
   "recording-rejoin": {
@@ -74,6 +75,7 @@ const plans = {
     media: false,
     longCall: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["long-call"],
   },
   // Three calls of three guests held open while an operator deploys the API host (DEPLOY_HOLD_STARTED_FILE, DEPLOY_HOLD_DONE_FILE). Opt-in: nightly only.
@@ -88,6 +90,7 @@ const plans = {
     media: false,
     longCall: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["toggle-offers"],
   },
 };
@@ -210,7 +213,7 @@ async function main(mode, forceLayerSwitch) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   try {
-    const config = await loadConfig();
+    const config = await loadConfig({ capabilities: plans[mode].recorderFleet !== false });
     await sweepStaleRuns(config);
     run = await createRun(config, directory, interruption.signal, runId);
     await runProofs(run, plans[mode], report, forceLayerSwitch);

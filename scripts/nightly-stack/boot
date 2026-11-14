@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# Boots a throwaway Chalk stack for one Nightly run: Postgres, Redis, S3-compatible storage, the migrator, API, Sync and one Chalk SFU, all on the
+# host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
+#
+#   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> --migration-target <version> [--dir <state dir>] [--announce-ip <ip>]
+#        [--web-root <built web app>] [--sfu-ssh <user@host> --sfu-ssh-key <file>]
+#
+# With --sfu-ssh the Chalk SFU runs on that host instead (--announce-ip is its public address): boot copies the image and the SFU's
+# identity there over SSH, starts it, and the API reaches it over mutual TLS. The latency run measures on such a host.
+#
+# It writes <dir>/proof.env (the CHALK_PROOF_* values a proof run reads) and prints how long each phase took. The images
+# come from the caller: Nightly passes the digests that the release build just published. `down` removes the containers.
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+dir="${RUNNER_TEMP:-/tmp}/chalk-nightly-stack"
+announce_ip=127.0.0.1
+api_image="" sync_image="" sfu_image="" migration_target="" web_root="" sfu_ssh="" sfu_ssh_key=""
+postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
+redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
+proxy_image="${CHALK_STACK_PROXY_IMAGE:-caddy:2.10}"
+storage_image="${CHALK_STACK_STORAGE_IMAGE:-ghcr.io/versity/versitygw:v1.11.0}"
+
+if [ "${1:-}" = down ]; then
+  docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front chalk-stack-storage > /dev/null 2>&1 || true
+  exit 0
+fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --api-image) api_image=$2 ;;
+    --sync-image) sync_image=$2 ;;
+    --sfu-image) sfu_image=$2 ;;
+    --migration-target) migration_target=$2 ;;
+    --dir) dir=$2 ;;
+    --announce-ip) announce_ip=$2 ;;
+    --web-root) web_root=$2 ;;
+    --sfu-ssh) sfu_ssh=$2 ;;
+    --sfu-ssh-key) sfu_ssh_key=$2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift 2
+done
+: "${api_image:?--api-image is required}" "${sync_image:?--sync-image is required}" "${sfu_image:?--sfu-image is required}" "${migration_target:?--migration-target is required}"
+
+mkdir -p "$dir"
+chmod 700 "$dir"
+timings="$dir/timings.tsv"
+: > "$timings"
+phase_start=$(date +%s.%N)
+tick() {
+  local now
+  now=$(date +%s.%N)
+  awk -v name="$1" -v start="$phase_start" -v now="$now" 'BEGIN { printf "%s\t%.1f\n", name, now - start }' >> "$timings"
+  awk -v name="$1" -v start="$phase_start" -v now="$now" 'BEGIN { printf "boot %-12s %6.1fs\n", name, now - start }'
+  phase_start=$now
+}
+boot_start=$phase_start
+
+port_front=8000 port_storage=9000 port_api=8080 port_sync=4100 port_bridge=8444 port_sfu_control=8443 port_sfu_media=50000
+# The proof harness serves its pages here; the API must allow the origin.
+proof_origin=http://127.0.0.1:4310
+storage_secret=$(openssl rand -hex 16)
+db_url="postgres://postgres:$(openssl rand -hex 16)@127.0.0.1:5432/chalk?sslmode=disable"
+
+# Pull everything at once; the pulls are the slowest step on a cold machine.
+for image in "$postgres_image" "$redis_image" "$proxy_image" "$storage_image" "$api_image" "$sync_image" "$sfu_image"; do
+  docker image inspect "$image" > /dev/null 2>&1 || docker pull --quiet "$image" > /dev/null &
+done
+wait
+tick pull
+
+# Keys, certificates and tokens. Nothing here is a stored secret; the machine and these files go away after the run.
+node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin" "$port_storage" "$storage_secret" "$port_front"
+tick identity
+
+docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front chalk-stack-storage > /dev/null 2>&1 || true
+pg_password="${db_url#postgres://postgres:}"
+pg_password="${pg_password%%@*}"
+docker run -d --name chalk-stack-postgres --network host \
+  -e POSTGRES_DB=chalk -e POSTGRES_PASSWORD="$pg_password" -e POSTGRES_INITDB_ARGS=--data-checksums \
+  "$postgres_image" > /dev/null
+docker run -d --name chalk-stack-redis --network host "$redis_image" --save "" --appendonly no > /dev/null
+# S3-compatible storage for chat attachments, which the proofs upload to through presigned URLs.
+# It answers any Origin and the signature is the only access control, like the production bucket's CORS rule.
+mkdir -p "$dir/storage"
+chmod 777 "$dir/storage"
+docker run -d --name chalk-stack-storage --network host -e ROOT_ACCESS_KEY=chalk-stack -e ROOT_SECRET_KEY="$storage_secret" \
+  -e VGW_REGION=auto -e VGW_CORS_ALLOW_ORIGIN='*' -v "$dir/storage:/data" "$storage_image" --port "127.0.0.1:$port_storage" posix /data > /dev/null
+# The image starts a temporary server on its socket during initdb, so readiness is asked over TCP.
+until docker exec chalk-stack-postgres pg_isready -h 127.0.0.1 -U postgres -d chalk -q 2> /dev/null; do sleep 0.2; done
+until docker exec chalk-stack-redis redis-cli ping 2> /dev/null | grep -q PONG; do sleep 0.2; done
+until curl -sS -o /dev/null "http://127.0.0.1:$port_storage/" 2> /dev/null; do sleep 0.2; done
+curl -fsS -o /dev/null -X PUT --aws-sigv4 "aws:amz:auto:s3" --user "chalk-stack:$storage_secret" \
+  --data '<CreateBucketConfiguration><LocationConstraint>auto</LocationConstraint></CreateBucketConfiguration>' "http://127.0.0.1:$port_storage/chalk-chat"
+tick datastores
+
+# The migrator runs as uid 65532, so its input sits in a directory of its own that any user can read.
+mkdir -p "$dir/migrate"
+printf '%s' "$db_url" > "$dir/migrate/database-url"
+chmod 755 "$dir/migrate"
+chmod 644 "$dir/migrate/database-url"
+docker run --rm --network host -v "$dir/migrate:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
+  "$api_image" --database-url-file /run/chalk/stack/database-url --target "$migration_target" > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
+# The public Space page creates its Space in this Tenant (CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID in identity.mjs).
+docker exec chalk-stack-postgres psql -h 127.0.0.1 -U postgres -d chalk -v ON_ERROR_STOP=1 -qAtc \
+  "insert into tenants (id, name) values ('00000000-0000-4000-8000-000000000001', 'Managed public Tenant'); insert into tenant_artifact_policies (tenant_id) values ('00000000-0000-4000-8000-000000000001')" > /dev/null
+tick migrate
+
+if [ -n "$sfu_ssh" ]; then
+  : "${sfu_ssh_key:?--sfu-ssh-key is required with --sfu-ssh}"
+  remote=(ssh -i "$sfu_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$sfu_ssh")
+  docker save "$sfu_image" | "${remote[@]}" docker load > /dev/null
+  tar -C "$dir" -cf - sfu sfu.env | "${remote[@]}" 'mkdir -p chalk-sfu && tar -C chalk-sfu -xf -'
+  # shellcheck disable=SC2016
+  "${remote[@]}" "docker run -d --name chalk-stack-sfu --network host --env-file chalk-sfu/sfu.env -v \$PWD/chalk-sfu/sfu:/run/chalk-sfu:ro --user 65532:65532 $sfu_image" > /dev/null
+  sfu_host=$announce_ip
+else
+  docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \
+    -v "$dir/sfu:/run/chalk-sfu:ro" --user 65532:65532 "$sfu_image" > /dev/null
+  sfu_host=127.0.0.1
+fi
+docker run -d --name chalk-stack-api --network host --env-file "$dir/api.env" \
+  -v "$dir/api:/run/chalk/provider-bridge:ro" --user 65532:65532 "$api_image" > /dev/null
+# wait_http <url> <service> [curl argument...]
+wait_http() {
+  local url=$1 name=$2 deadline=$((SECONDS + 120))
+  shift 2
+  until curl -fsS -o /dev/null "$@" "$url" 2> /dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "$name did not answer $url in 120s" >&2
+      docker logs --tail 30 "chalk-stack-$name" >&2 || true
+      exit 1
+    fi
+    sleep 0.3
+  done
+}
+wait_http "http://127.0.0.1:$port_api/readyz" api
+# Sync checks the provider bridge once while it boots, so it starts after the API listens.
+docker run -d --name chalk-stack-sync --network host --env-file "$dir/sync.env" \
+  -v "$dir/sync:/run/chalk/sync:ro" "$sync_image" > /dev/null
+wait_http "http://127.0.0.1:$port_sync/readyz" sync
+# The Chalk SFU answers only over mutual TLS, with the API's identity, so this checks the same path the API uses.
+wait_http "https://chalk-sfu:$port_sfu_control/readyz" sfu --resolve "chalk-sfu:$port_sfu_control:$sfu_host" \
+  --cacert "$dir/ca.crt" --cert "$dir/api.crt" --key "$dir/api.key"
+tick services
+
+# The SDK finds Sync on the API's own origin, as it does behind the real ingress, so one proxy serves both. With a web root it
+# also serves the built web app on that origin, so a browser proof needs no second host.
+web_site=""
+web_mount=()
+if [ -n "$web_root" ]; then
+  web_site='	@app not path /v1/* /healthz /readyz
+	handle @app {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+'
+  web_mount=(-v "$web_root:/srv/web:ro")
+fi
+cat > "$dir/Caddyfile" <<CADDY
+{
+	admin off
+}
+:$port_front {
+	bind 127.0.0.1
+	@sync path /v1/sync /v1/sync/* /v1/whiteboard /v1/whiteboard/*
+	handle @sync {
+		reverse_proxy 127.0.0.1:$port_sync
+	}
+$web_site	handle {
+		reverse_proxy 127.0.0.1:$port_api
+	}
+}
+CADDY
+docker run -d --name chalk-stack-front --network host -v "$dir/Caddyfile:/etc/caddy/Caddyfile:ro" "${web_mount[@]}" "$proxy_image" > /dev/null
+wait_http "http://127.0.0.1:$port_front/readyz" front
+node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api" "$proof_origin" "http://127.0.0.1:$port_front"
+tick seed
+
+awk -v start="$boot_start" -v now="$(date +%s.%N)" 'BEGIN { printf "boot %-12s %6.1fs\n", "total", now - start }'

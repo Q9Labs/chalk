@@ -62,7 +62,7 @@ const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "pro
 export function environmentConfig(environment) {
   return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
 }
-export function checkCapabilities(readiness) {
+function checkCapabilities(readiness) {
   check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled", "capability-disabled");
   check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled", "capability-disabled");
 }
@@ -70,7 +70,8 @@ async function configurationFields(source) {
   if (source === "env") return environmentConfig(process.env);
   return Object.fromEntries(JSON.parse(await command("op", ["item", "get", "Chalk production proof Tenant", "--vault", "dev", "--format", "json"])).fields.map((field) => [field.label, field.value]));
 }
-export async function loadConfig({ readiness = true } = {}) {
+// capabilities: false skips the Recording and Transcription check, for a proof that runs against a stack without the recorder fleet.
+export async function loadConfig({ readiness = true, capabilities = true } = {}) {
   const source = process.env.CHALK_PROOF_CONFIG_SOURCE ?? "1password";
   check(["env", "1password"].includes(source), "CHALK_PROOF_CONFIG_SOURCE must be env or 1password", "configuration");
   const fields = await configurationFields(source);
@@ -78,7 +79,12 @@ export async function loadConfig({ readiness = true } = {}) {
     check(fields[name], `Proof configuration is missing ${name}`, "configuration");
   }
   check(fields.api_key.startsWith("chalk_sk_"), "Proof API key must use the chalk_sk_ namespace", "configuration");
-  if (readiness) checkCapabilities(await request(fields, "GET", "/readyz"));
+  if (readiness) {
+    const ready = await request(fields, "GET", "/readyz");
+    if (capabilities) checkCapabilities(ready);
+    // A stack without Transcription answers 503 to the Transcript list, so cleanup has no Transcripts to look for.
+    else if (ready?.capabilities?.transcription !== "enabled") return { ...fields, transcription_disabled: true };
+  }
   return fields;
 }
 // The proof's browser SDK runs both media providers, so an Episode in a Space
