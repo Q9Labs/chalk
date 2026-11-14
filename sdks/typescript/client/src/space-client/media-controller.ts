@@ -473,15 +473,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     releaseTracks(this.#selection, tracks);
   }
   #pauseTracks(source: MediaSource): void {
-    const track = this.#track(source);
-    if (track) track.enabled = false;
-    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) publication.track.enabled = false;
+    const tracks = [this.#track(source), ...(this.#ports?.media.getSnapshot().localTracks ?? []).filter((publication) => publication.source === source).map((publication) => publication.track)];
+    for (const track of tracks) if (track) track.enabled = false;
     if (source === "screen" && this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
-    if (source !== "screen" && this.#holdsCapture(source)) this.#scheduleIdleRelease(source);
-  }
-  /** An idle release has nothing to do for a source that holds no live capture, such as one whose connection has already failed and released it. */
-  #holdsCapture(source: "microphone" | "camera"): boolean {
-    return this.#track(source)?.readyState === "live" || (this.#ports?.media.getSnapshot().localTracks ?? []).some((publication) => publication.source === source && publication.track.readyState === "live");
+    if (source !== "screen" && tracks.some((track) => track?.readyState === "live")) this.#scheduleIdleRelease(source);
   }
   #retainPause(state: SourceWorker, next: Promise<void>): void {
     const previous = state.pause;
