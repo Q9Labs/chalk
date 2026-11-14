@@ -146,6 +146,7 @@ jobs:
       - name: Wait for live calls to end
         env:
           LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          LIVE_CALLS_API_TOKEN: ${{ secrets.CHALK_OPERATOR_READ_TOKEN }}
           ALLOW_LIVE_CALLS: ${{ inputs.allow_live_calls }}
           DEPLOY_BEFORE: ${{ inputs.deploy_before }}
         run: python3 scripts/releases/live_calls.py

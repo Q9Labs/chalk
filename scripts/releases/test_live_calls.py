@@ -16,7 +16,7 @@ def at(hour, minute=0, second=0, day=15):
 
 class LiveCallsTests(unittest.TestCase):
     def read(self, body):
-        return live_calls.read_live_calls('https://api.example/', lambda url: body if url.endswith('/readyz') else b'')
+        return live_calls.read_live_calls('https://api.example/', 'secret-token', lambda url, token: body if url.endswith('/readyz') and token == 'secret-token' else b'')
 
     def test_the_count_is_read_from_the_readiness_body_and_never_defaults_to_zero(self):
         self.assertEqual(self.read(b'{"live_participants": 0}'), live_calls.Quiet())
@@ -25,11 +25,19 @@ class LiveCallsTests(unittest.TestCase):
             with self.subTest(body=body):
                 self.assertIsInstance(self.read(body), live_calls.Unknown)
 
-        def refuse(url):
+        def refuse(url, token):
             raise OSError('connection refused')
-        self.assertIsInstance(live_calls.read_live_calls('https://api.example', refuse), live_calls.Unknown)
-        for url in ('', 'http://api.example'):
-            self.assertIsInstance(live_calls.read_live_calls(url, lambda url: b'{"live_participants": 0}'), live_calls.Unknown)
+        self.assertIsInstance(live_calls.read_live_calls('https://api.example', 'secret-token', refuse), live_calls.Unknown)
+        for url, token in (('', 'secret-token'), ('http://api.example', 'secret-token'), ('https://api.example', '')):
+            with self.subTest(url=url, token=bool(token)):
+                self.assertIsInstance(live_calls.read_live_calls(url, token, lambda url, token: b'{"live_participants": 0}'), live_calls.Unknown)
+
+    def test_the_unknown_reason_never_carries_the_token_or_the_url(self):
+        def refuse(url, token):
+            raise OSError(f'cannot reach {url} with {token}')
+        reason = live_calls.read_live_calls('https://api.example', 'secret-token', refuse).reason
+        self.assertNotIn('secret-token', reason)
+        self.assertNotIn('api.example', reason)
 
     def await_quiet(self, readings, **options):
         remaining, naps, said = list(readings), [], []
@@ -65,7 +73,19 @@ class LiveCallsTests(unittest.TestCase):
         with self.assertRaises(ValueError) as error:
             live_calls.await_quiet(lambda: live_calls.Busy(1), naps.append, deadline=at(1, day=16), now=lambda: next(clock), say=lambda line: None)
         self.assertEqual(naps, [60])
-        self.assertIn('quiet window closed', str(error.exception))
+        self.assertIn('too late to deploy inside the quiet window', str(error.exception))
+
+    def test_the_guard_refuses_from_fifteen_minutes_before_the_end_of_the_window(self):
+        limit = live_calls.last_start('2026-11-16T01:00:00+00:00')
+        self.assertEqual(limit, at(0, 45, day=16))
+        for now, passes in ((at(0, 44, 59, day=16), True), (at(0, 45, day=16), False), (at(0, 59, day=16), False)):
+            with self.subTest(now=f'{now:%H:%M:%S}'):
+                try:
+                    live_calls.await_quiet(lambda: live_calls.Quiet(), lambda seconds: None, now=lambda: now, say=lambda line: None, deadline=limit)
+                except ValueError:
+                    self.assertFalse(passes)
+                else:
+                    self.assertTrue(passes)
 
     def test_a_quiet_read_that_ends_after_the_window_closed_does_not_approve(self):
         clock = iter([at(0, 59, 59, day=16), at(1, 0, 1, day=16)])
