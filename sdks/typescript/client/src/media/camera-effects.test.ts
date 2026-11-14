@@ -142,15 +142,16 @@ describe("camera effects ownership", () => {
   it("applies a background whose load overlaps a slow-frame fallback", async () => {
     const { source, output } = browser();
     let complete = (_: { close: () => void }) => {};
-    model.create.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          complete = resolve;
-        }),
-    );
+    let loadStarted = false;
+    model.create.mockImplementationOnce(() => {
+      loadStarted = true;
+      return new Promise((resolve) => {
+        complete = resolve;
+      });
+    });
     const session = await createCameraEffectsTrack(source, files, () => model.create());
     const preparing = session.prepare("blur");
-    await vi.waitFor(() => expect(model.create).toHaveBeenCalled());
+    await vi.waitFor(() => expect(loadStarted).toBe(true));
     session.usePlainCamera();
     complete({ close: model.close });
     (await preparing)();
