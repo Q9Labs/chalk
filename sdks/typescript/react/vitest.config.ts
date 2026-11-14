@@ -5,6 +5,7 @@ const source = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 // Tests resolve the workspace packages from source, so they run without a build first.
 export default defineConfig({
+  test: { setupFiles: [source("../../../scripts/test/no-network.mjs")] },
   resolve: {
     alias: [
       { find: "@q9labsai/chalk-client", replacement: source("../client/src/index.ts") },

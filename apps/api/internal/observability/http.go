@@ -148,13 +148,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 			next.ServeHTTP(recorder, r)
 			duration := time.Since(startedAt)
 
-			route := ""
-			if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
-				route = routeContext.RoutePattern()
-			}
-			if route == "" {
-				route = "unmatched"
-			}
+			route := requestRoute(r.Context())
 
 			tagRequestSpans(r.Context(), route)
 
