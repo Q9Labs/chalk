@@ -5,7 +5,7 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin] = process.argv.slice(2);
+const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret] = process.argv.slice(2);
 const kid = "nightly-stack";
 const issuer = `http://127.0.0.1:${apiPort}`;
 const trustDomain = "chalk.local";
@@ -70,6 +70,10 @@ env("api.env", {
   CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${apiPort},${proofOrigin}`,
   CHALK_DATABASE_URL: databaseUrl,
   CHALK_REDIS_URL: "redis://127.0.0.1:6379/0",
+  CHALK_R2_ENDPOINT: `http://127.0.0.1:${storagePort}`,
+  CHALK_R2_BUCKET: "chalk-chat",
+  CHALK_R2_ACCESS_KEY_ID: "chalk-stack",
+  CHALK_R2_SECRET_ACCESS_KEY: storageSecret,
   CHALK_SYNC_TOKEN_ISSUER: issuer,
   CHALK_SYNC_TOKEN_AUDIENCE: "chalk-sync",
   CHALK_SYNC_TOKEN_KEY_ID: kid,

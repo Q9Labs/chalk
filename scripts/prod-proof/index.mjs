@@ -24,7 +24,7 @@ const plans = {
   "chalk-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["chalk-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   // A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket. No browser or media.
-  "chat-upload": { media: false, webhooks: false, proofs: ["chat-upload"] },
+  "chat-upload": { media: false, webhooks: false, recorderFleet: false, proofs: ["chat-upload"] },
   all: {
     media: true,
     cameraShare: true,

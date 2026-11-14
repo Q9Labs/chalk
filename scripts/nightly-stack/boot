@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boots a throwaway Chalk stack for one Nightly run: Postgres, Redis, the migrator, API, Sync and one Chalk SFU, all on the
+# Boots a throwaway Chalk stack for one Nightly run: Postgres, Redis, S3-compatible storage, the migrator, API, Sync and one Chalk SFU, all on the
 # host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
 #
 #   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> --migration-target <version> [--dir <state dir>] [--announce-ip <ip>]
@@ -15,9 +15,10 @@ api_image="" sync_image="" sfu_image="" migration_target=""
 postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
 redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
 proxy_image="${CHALK_STACK_PROXY_IMAGE:-caddy:2.10}"
+storage_image="${CHALK_STACK_STORAGE_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}"
 
 if [ "${1:-}" = down ]; then
-  docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front > /dev/null 2>&1 || true
+  docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front chalk-stack-storage > /dev/null 2>&1 || true
   exit 0
 fi
 while [ "$#" -gt 0 ]; do
@@ -48,32 +49,38 @@ tick() {
 }
 boot_start=$phase_start
 
-port_front=8000 port_api=8080 port_sync=4100 port_bridge=8444 port_sfu_control=8443 port_sfu_media=50000
+port_front=8000 port_storage=9000 port_api=8080 port_sync=4100 port_bridge=8444 port_sfu_control=8443 port_sfu_media=50000
 # The proof harness serves its pages here; the API must allow the origin.
 proof_origin=http://127.0.0.1:4310
+storage_secret=$(openssl rand -hex 16)
 db_url="postgres://postgres:$(openssl rand -hex 16)@127.0.0.1:5432/chalk?sslmode=disable"
 
 # Pull everything at once; the pulls are the slowest step on a cold machine.
-for image in "$postgres_image" "$redis_image" "$proxy_image" "$api_image" "$sync_image" "$sfu_image"; do
+for image in "$postgres_image" "$redis_image" "$proxy_image" "$storage_image" "$api_image" "$sync_image" "$sfu_image"; do
   docker image inspect "$image" > /dev/null 2>&1 || docker pull --quiet "$image" > /dev/null &
 done
 wait
 tick pull
 
 # Keys, certificates and tokens. Nothing here is a stored secret; the machine and these files go away after the run.
-node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin"
+node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin" "$port_storage" "$storage_secret"
 tick identity
 
-docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front > /dev/null 2>&1 || true
+docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front chalk-stack-storage > /dev/null 2>&1 || true
 pg_password="${db_url#postgres://postgres:}"
 pg_password="${pg_password%%@*}"
 docker run -d --name chalk-stack-postgres --network host \
   -e POSTGRES_DB=chalk -e POSTGRES_PASSWORD="$pg_password" -e POSTGRES_INITDB_ARGS=--data-checksums \
   "$postgres_image" > /dev/null
 docker run -d --name chalk-stack-redis --network host "$redis_image" --save "" --appendonly no > /dev/null
+# S3-compatible storage for chat attachments, which the proofs upload to through presigned URLs.
+docker run -d --name chalk-stack-storage --network host -e MINIO_ROOT_USER=chalk-stack -e MINIO_ROOT_PASSWORD="$storage_secret" \
+  -v "$dir/storage:/data" "$storage_image" server /data --address "127.0.0.1:$port_storage" > /dev/null
 # The image starts a temporary server on its socket during initdb, so readiness is asked over TCP.
 until docker exec chalk-stack-postgres pg_isready -h 127.0.0.1 -U postgres -d chalk -q 2> /dev/null; do sleep 0.2; done
 until docker exec chalk-stack-redis redis-cli ping 2> /dev/null | grep -q PONG; do sleep 0.2; done
+until curl -fsS -o /dev/null "http://127.0.0.1:$port_storage/minio/health/ready" 2> /dev/null; do sleep 0.2; done
+curl -fsS -o /dev/null -X PUT --aws-sigv4 "aws:amz:auto:s3" --user "chalk-stack:$storage_secret" "http://127.0.0.1:$port_storage/chalk-chat"
 tick datastores
 
 # The migrator runs as uid 65532, so its input sits in a directory of its own that any user can read.
