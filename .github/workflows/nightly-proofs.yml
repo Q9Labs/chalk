@@ -216,6 +216,8 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
           until ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 "root@$ip" 'docker info > /dev/null 2>&1'; do sleep 5; done
+          # The image ships a firewall that lets only SSH through; the Chalk SFU's control and media ports must be reachable.
+          ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$ip" 'ufw --force disable'
       - name: Boot the stack
         env:
           API_IMAGE: ${{ steps.images.outputs.api }}
@@ -263,8 +265,14 @@ jobs:
           exit "$status"
       - name: Say what the stack did when the proof failed
         if: failure()
+        env:
+          HOST_IP: ${{ steps.host.outputs.ip }}
         run: |
           for name in api sync sfu; do echo "== $name"; docker logs --tail 60 "chalk-stack-$name" 2>&1 | grep -v '"/v1/sync"' | cut -c1-1500; done
+          if [ "$PROOF" = latency ] && [ -f "$RUNNER_TEMP/host-key" ]; then
+            echo "== sfu host"
+            ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10 "root@$HOST_IP" 'docker ps -a --format "{{.Names}} {{.Status}}"; docker logs --tail 60 chalk-stack-sfu 2>&1 | cut -c1-1500' || true
+          fi
       - name: Collect the latency card
         if: always() && matrix.proof == 'latency'
         run: |
