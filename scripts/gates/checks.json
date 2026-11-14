@@ -962,7 +962,7 @@
       "id": "workflow:mcp-production-check.yml#mcp",
       "owner": "Monitoring",
       "catches": "The hosted MCP server rejecting sign-in or tool calls the way a client sees them.",
-      "runs": ["promote", "manual"],
+      "runs": ["promote"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
@@ -1340,6 +1340,26 @@
       "minutes": null,
       "record": "unmeasured",
       "sample": "Runs only after a breach."
+    },
+    {
+      "id": "workflow:promote.yml#mcp-change",
+      "owner": "Monitoring",
+      "catches": "A release change to MCP, its sign-in, API-key or Space code that the production check would miss; it compares with the production release being replaced.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": 0.3,
+      "record": "unmeasured",
+      "sample": "Not run in production yet."
+    },
+    {
+      "id": "workflow:promote.yml#mcp",
+      "owner": "Monitoring",
+      "catches": "The hosted MCP server rejecting sign-in or tool calls after a release that changes it.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Not run in production yet."
     },
     {
       "id": "workflow:promote.yml#scorecard-final",
