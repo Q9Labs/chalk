@@ -129,8 +129,11 @@ export function installLeakObservers() {
     const keys = new Set();
     for (const reference of rosterMaps) {
       const map = reference.deref();
-      if (!map) rosterMaps.delete(reference);
-      else for (const key of map.keys()) if (typeof key === "string" && key.startsWith("perf-join-")) keys.add(key);
+      if (!map) {
+        rosterMaps.delete(reference);
+        continue;
+      }
+      for (const key of map.keys()) if (typeof key === "string" && key.startsWith("perf-join-")) keys.add(key);
     }
     return keys.size;
   };

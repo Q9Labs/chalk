@@ -1,4 +1,4 @@
-/** The B2 chalk stick with its dust falling away. The same drawing as `apps/mobile/src/brand/mark.ts`. */
+/** The same drawing as `apps/mobile/src/brand/mark.ts`. */
 export const MARK = {
   viewBox: 48,
   rotation: 28,

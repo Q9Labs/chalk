@@ -5,68 +5,49 @@ import { Chalk, ChalkProvider, ControlBar, SpaceHeader } from "@q9labsai/chalk-r
 import { createCallStateClient, HOST, PEOPLE, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
-function ShellCall({
-  browserCameras = false,
-  cameraOn = false,
-  privatePermission = false,
-  host = false,
-  report = false,
-  network,
-  blocked = false,
-  paged = false,
-  singleCamera = false,
-  initialColorScheme,
-}: {
-  readonly browserCameras?: boolean;
-  readonly cameraOn?: boolean;
-  readonly privatePermission?: boolean;
-  readonly host?: boolean;
-  readonly report?: boolean;
-  readonly network?: "steady" | "unstable";
-  readonly blocked?: boolean;
-  readonly paged?: boolean;
-  readonly singleCamera?: boolean;
-  readonly initialColorScheme?: ThemePreference;
-}) {
-  const [command, setCommand] = useState("");
-  const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
-  const [client] = useState(() => {
-    const snapshot = liveSnapshot({ self: browserCameras ? { camera: cameraOn } : undefined, others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined, network, recording: network !== undefined });
-    const instance = createCallStateClient({
-      ...snapshot,
-      media: {
-        ...snapshot.media,
-        devices: {
-          microphones: [
-            { deviceId: "mic-1", label: "Built-in Microphone" },
-            { deviceId: "mic-2", label: "Headset Microphone" },
-          ],
-          cameras: browserCameras ? [] : [{ deviceId: "cam-1", label: "Built-in Camera" }, ...(singleCamera ? [] : [{ deviceId: "cam-2", label: "External Camera" }])],
-          speakers: [{ deviceId: "speaker-1", label: "Built-in Speakers" }],
-        },
-        selection: { microphone: "mic-1", camera: browserCameras ? null : "cam-1", speaker: "speaker-1" },
-        local: blocked ? { ...snapshot.media.local, microphone: { ...snapshot.media.local.microphone, state: "failed" }, camera: { ...snapshot.media.local.camera, state: "unavailable" } } : snapshot.media.local,
+type ShellOptions = { readonly browserCameras: boolean; readonly cameraOn: boolean; readonly privatePermission: boolean; readonly host: boolean; readonly network?: "steady" | "unstable"; readonly blocked: boolean; readonly paged: boolean; readonly singleCamera: boolean };
+
+/** The fixture client for the shell checks. Its commands write what they did to the page through `setCommand`. */
+function createShellClient({ browserCameras, cameraOn, host, network, blocked, paged, singleCamera }: ShellOptions, setCommand: (command: string) => void) {
+  const snapshot = liveSnapshot({ self: browserCameras ? { camera: cameraOn } : undefined, others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined, network, recording: network !== undefined });
+  const instance = createCallStateClient({
+    ...snapshot,
+    media: {
+      ...snapshot.media,
+      devices: {
+        microphones: [
+          { deviceId: "mic-1", label: "Built-in Microphone" },
+          { deviceId: "mic-2", label: "Headset Microphone" },
+        ],
+        cameras: browserCameras ? [] : [{ deviceId: "cam-1", label: "Built-in Camera" }, ...(singleCamera ? [] : [{ deviceId: "cam-2", label: "External Camera" }])],
+        speakers: [{ deviceId: "speaker-1", label: "Built-in Speakers" }],
       },
-    });
-    return {
-      ...instance,
-      media: {
-        ...instance.media,
-        selectCamera: async (deviceId: string) => {
-          await instance.media.selectCamera(deviceId);
-          setCommand(`Selected camera: ${deviceId}`);
-        },
-        setScreenShareEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
-          setCommand(JSON.stringify({ enabled, ...options }));
-          await instance.media.setScreenShareEnabled(enabled, options);
-        },
-      },
-      endEpisode: async () => {
-        setCommand("Ended call");
-        await instance.endEpisode();
-      },
-    };
+      selection: { microphone: "mic-1", camera: browserCameras ? null : "cam-1", speaker: "speaker-1" },
+      local: blocked ? { ...snapshot.media.local, microphone: { ...snapshot.media.local.microphone, state: "failed" }, camera: { ...snapshot.media.local.camera, state: "unavailable" } } : snapshot.media.local,
+    },
   });
+  return {
+    ...instance,
+    media: {
+      ...instance.media,
+      selectCamera: async (deviceId: string) => {
+        await instance.media.selectCamera(deviceId);
+        setCommand(`Selected camera: ${deviceId}`);
+      },
+      setScreenShareEnabled: async (enabled: boolean, options?: ScreenShareOptions) => {
+        setCommand(JSON.stringify({ enabled, ...options }));
+        await instance.media.setScreenShareEnabled(enabled, options);
+      },
+    },
+    endEpisode: async () => {
+      setCommand("Ended call");
+      await instance.endEpisode();
+    },
+  };
+}
+
+/** Real cameras for the browser-camera check: reads them, or only lists them when permission is private, and stops the stream on unmount. */
+function useBrowserCameras(client: ReturnType<typeof createShellClient>, { browserCameras, cameraOn, privatePermission }: Pick<ShellOptions, "browserCameras" | "cameraOn" | "privatePermission">) {
   useEffect(() => {
     if (!browserCameras) return;
     let cancelled = false;
@@ -104,6 +85,36 @@ function ShellCall({
       stream?.getTracks().forEach((track) => track.stop());
     };
   }, [browserCameras, cameraOn, privatePermission, client]);
+}
+
+function ShellCall({
+  browserCameras = false,
+  cameraOn = false,
+  privatePermission = false,
+  host = false,
+  report = false,
+  network,
+  blocked = false,
+  paged = false,
+  singleCamera = false,
+  initialColorScheme,
+}: {
+  readonly browserCameras?: boolean;
+  readonly cameraOn?: boolean;
+  readonly privatePermission?: boolean;
+  readonly host?: boolean;
+  readonly report?: boolean;
+  readonly network?: "steady" | "unstable";
+  readonly blocked?: boolean;
+  readonly paged?: boolean;
+  readonly singleCamera?: boolean;
+  readonly initialColorScheme?: ThemePreference;
+}) {
+  const [command, setCommand] = useState("");
+  const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
+  const options = { browserCameras, cameraOn, privatePermission, host, network, blocked, paged, singleCamera };
+  const [client] = useState(() => createShellClient(options, setCommand));
+  useBrowserCameras(client, options);
   return (
     <main className="h-dvh min-h-0 w-full overflow-hidden">
       <Chalk

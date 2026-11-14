@@ -3,7 +3,8 @@ import { relative, resolve, sep } from "node:path";
 import { execSync } from "node:child_process";
 
 import { DOCS_PAGES } from "../src/docs/manifest.ts";
-import { BRAND_DIR, FAVICON_ICO, IS_NIGHTLY, SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
+import { BRAND_DIR, FAVICON_ICO, IS_NIGHTLY, SOCIAL_IMAGE_URL } from "../src/lib/site-head.ts";
+import { SITE_ORIGIN } from "../src/lib/site-origin.ts";
 
 const clientDir = resolve(process.cwd(), "dist", "client");
 const shellPath = resolve(clientDir, "_shell.html");

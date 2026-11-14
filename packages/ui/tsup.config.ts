@@ -1,0 +1,32 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: [
+    "./src/index.ts",
+    "./src/assets.ts",
+    "./src/badge.tsx",
+    "./src/button.tsx",
+    "./src/card.tsx",
+    "./src/input.tsx",
+    "./src/menu.tsx",
+    "./src/select.tsx",
+    "./src/sidebar.tsx",
+    "./src/textarea.tsx",
+    "./src/spinner.tsx",
+    "./src/skeleton.tsx",
+    "./src/icon-button.tsx",
+    "./src/progress-bar.tsx",
+    "./src/lib/utils.ts",
+    "./src/reactions.ts",
+    "./src/status-badge.tsx",
+    "./src/toast.tsx",
+    "./src/toggle.tsx",
+    "./src/toggle-group.tsx",
+    "./src/tooltip.tsx",
+  ],
+  format: "esm",
+  outDir: "./dist",
+  platform: "node",
+  splitting: false,
+  external: ["react", "@base-ui/react", "@q9labsai/chalk-assets", "class-variance-authority", "clsx", "tailwind-merge"],
+});

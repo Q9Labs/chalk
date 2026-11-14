@@ -2,7 +2,8 @@ import { useId, useState } from "react";
 
 import { Icon } from "../site/Icon";
 import { AppLogo, AppPair } from "./AppLogo";
-import { CopyAction, Dialog, Seg } from "./kit";
+import { Dialog } from "./Dialog";
+import { CopyAction, Seg } from "./kit";
 
 type Category = "chat" | "agent";
 

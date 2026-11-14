@@ -1,14 +1,10 @@
-import { Fragment } from "react";
 import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
+import { CookieTable, LegalEntries, LegalSections, type CookieRow, type LegalEntry, type LegalSection } from "./legal-parts";
 import { PRIVACY_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
+import { THEME_COOKIE_NAME } from "../../lib/theme";
 import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";
-
-type LegalSection = {
-  heading: string;
-  content: string;
-};
 
 const PRIVACY_SECTIONS: readonly LegalSection[] = [
   {
@@ -79,15 +75,6 @@ const TERMS_SECTIONS: readonly LegalSection[] = [
   },
 ];
 
-function LegalSections({ sections }: { sections: readonly LegalSection[] }) {
-  return sections.map(({ heading, content }) => (
-    <Fragment key={heading}>
-      <h2>{heading}</h2>
-      <p>{content}</p>
-    </Fragment>
-  ));
-}
-
 export function LegalPage({ kind }: { kind: LegalPageKind }) {
   return (
     <div className="legal-page">
@@ -112,6 +99,69 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
   );
 }
 
+const DATA_TYPES: readonly LegalEntry[] = [
+  {
+    label: "Account data.",
+    text: "The web dashboard offers Google and Apple sign-in through Chalk's own server. We receive your provider user ID, name, email address, and, from Google when available, profile picture URL. We keep these details in an encrypted sign-in cookie for up to 30 days and store a tenant record tied to your provider user ID and display name. Older account records, including password hashes, tenant memberships, and roles, remain stored. The mobile app does not offer accounts or sign-in; you join as a guest with a display name.",
+  },
+  {
+    label: "Sign-in and security data.",
+    text: "We use guest arrival credentials, participant IDs, and web session IDs to keep access working. We process IP addresses to rate-limit abusive traffic. For tenant API keys, we retain the most recent use's IP address and timestamp for security and audit purposes. Older sign-in records can include IP addresses, browser user agents, and device names.",
+  },
+  {
+    label: "Spaces, Episodes, and participation.",
+    text: "Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: participant ID, display name, role, capabilities, and join and leave times. We also process in-app actions such as reactions and read receipts to keep participants in sync.",
+  },
+  {
+    label: "Chat and files.",
+    text: "Messages you send in an Episode are stored with your display name and timestamps. Photos and documents you attach are stored as private objects with their filename, type, and size. Chat attachments are scheduled for deletion seven days after the Episode ends.",
+  },
+  {
+    label: "Audio and video.",
+    text: "Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. Media travels over encrypted connections. We do not store media streams unless recording is turned on for the Episode, and the product shows when that is the case.",
+  },
+  {
+    label: "Recordings and transcripts.",
+    text: "Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Audio retained as a source for transcription follows the Episode's configured source window, which can be up to 30 days. Temporary transcription chunks and orphan files have a 24-hour expiration rule.",
+  },
+  {
+    label: "Whiteboards.",
+    text: "We store whiteboard scenes and changes, including text, drawings, and images, so participants can collaborate. Whiteboard image files are scheduled for deletion seven days after the Episode ends.",
+  },
+  {
+    label: "Integrations and webhooks.",
+    text: "If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.",
+  },
+  {
+    label: "Operational data.",
+    text: "We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (request path, route, outcome, duration, journey and trace IDs). These diagnostics can be linked to participation records through identifiers in request paths and trace context. We use these to run and secure the service, and we do not use them for advertising.",
+  },
+];
+
+const COOKIES: readonly CookieRow[] = [
+  { cookie: <code>{THEME_COOKIE_NAME}</code>, purpose: "Remembers your light or dark theme preference (Client-readable)", lifetime: "1 year" },
+  {
+    cookie: (
+      <>
+        <code>__Host-chalk_session</code>, <code>__Host-chalk_binding</code>
+      </>
+    ),
+    purpose: "Keeps your dashboard sign-in and binds requests to your session (HttpOnly, Secure)",
+    lifetime: "Up to 30 days, or until sign-out",
+  },
+  {
+    cookie: (
+      <>
+        <code>__Host-chalk_login_google</code>, <code>__Host-chalk_login_apple</code>
+      </>
+    ),
+    purpose: "Protects the sign-in exchange (HttpOnly, Secure)",
+    lifetime: "10 minutes, cleared after the callback",
+  },
+  { cookie: <code>{"__Host-chalk_seat_{spaceId}"}</code>, purpose: "Keeps your dashboard Space access (HttpOnly, Secure)", lifetime: "24 hours; access also requires your signed-in session" },
+  { cookie: <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>, purpose: "Keeps your public Space arrival available in this browser (HttpOnly, Secure)", lifetime: "Until you leave or close your browser" },
+];
+
 function PrivacyPolicy() {
   return (
     <>
@@ -127,88 +177,11 @@ function PrivacyPolicy() {
       <p>Chalk is a real-time collaboration platform operated by Q9 Labs ("we", "us"). This policy explains what personal data Chalk collects, why, and what your rights are. It covers the Chalk web app at chalkmeet.com, the Chalk mobile app, and the APIs behind them.</p>
 
       <h2>What we collect</h2>
-      <p>
-        <strong>Account data.</strong> The web dashboard offers Google and Apple sign-in through Chalk's own server. We receive your provider user ID, name, email address, and, from Google when available, profile picture URL. We keep these details in an encrypted sign-in cookie for up to 30 days and
-        store a tenant record tied to your provider user ID and display name. Older account records, including password hashes, tenant memberships, and roles, remain stored. The mobile app does not offer accounts or sign-in; you join as a guest with a display name.
-      </p>
-      <p>
-        <strong>Sign-in and security data.</strong> We use guest arrival credentials, participant IDs, and web session IDs to keep access working. We process IP addresses to rate-limit abusive traffic. For tenant API keys, we retain the most recent use's IP address and timestamp for security and
-        audit purposes. Older sign-in records can include IP addresses, browser user agents, and device names.
-      </p>
-      <p>
-        <strong>Spaces, Episodes, and participation.</strong> Chalk stores the Spaces you create (names, settings, admission rules), the Episodes that run in them (timing and configuration), and participant records for each Episode: participant ID, display name, role, capabilities, and join and
-        leave times. We also process in-app actions such as reactions and read receipts to keep participants in sync.
-      </p>
-      <p>
-        <strong>Chat and files.</strong> Messages you send in an Episode are stored with your display name and timestamps. Photos and documents you attach are stored as private objects with their filename, type, and size. Chat attachments are scheduled for deletion seven days after the Episode ends.
-      </p>
-      <p>
-        <strong>Audio and video.</strong> Your microphone, camera, and screen-share streams are processed in real time to deliver them to other participants. Media travels over encrypted connections. We do not store media streams unless recording is turned on for the Episode, and the product shows
-        when that is the case.
-      </p>
-      <p>
-        <strong>Recordings and transcripts.</strong> Where recording or transcription is enabled, we store the recording files, transcript text, and processing metadata as private objects. Audio retained as a source for transcription follows the Episode's configured source window, which can be up to
-        30 days. Temporary transcription chunks and orphan files have a 24-hour expiration rule.
-      </p>
-      <p>
-        <strong>Whiteboards.</strong> We store whiteboard scenes and changes, including text, drawings, and images, so participants can collaborate. Whiteboard image files are scheduled for deletion seven days after the Episode ends.
-      </p>
-      <p>
-        <strong>Integrations and webhooks.</strong> If your tenant connects an external integration or configures webhooks, we store the connection metadata and deliver event payloads to the endpoints your tenant chose. Webhook target URLs, signing secrets, and payloads are encrypted at rest.
-      </p>
-      <p>
-        <strong>Operational data.</strong> We keep audit logs of administrative actions, structured request logs, and bounded diagnostic events (request path, route, outcome, duration, journey and trace IDs). These diagnostics can be linked to participation records through identifiers in request
-        paths and trace context. We use these to run and secure the service, and we do not use them for advertising.
-      </p>
+      <LegalEntries entries={DATA_TYPES} />
 
       <h2>Cookies</h2>
       <p>Chalk uses only functional cookies. We do not use advertising or cross-site tracking cookies.</p>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Cookie</th>
-            <th scope="col">Purpose</th>
-            <th scope="col">Lifetime</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <code>chalk_theme</code>
-            </td>
-            <td>Remembers your light or dark theme preference (Client-readable)</td>
-            <td>1 year</td>
-          </tr>
-          <tr>
-            <td>
-              <code>__Host-chalk_session</code>, <code>__Host-chalk_binding</code>
-            </td>
-            <td>Keeps your dashboard sign-in and binds requests to your session (HttpOnly, Secure)</td>
-            <td>Up to 30 days, or until sign-out</td>
-          </tr>
-          <tr>
-            <td>
-              <code>__Host-chalk_login_google</code>, <code>__Host-chalk_login_apple</code>
-            </td>
-            <td>Protects the sign-in exchange (HttpOnly, Secure)</td>
-            <td>10 minutes, cleared after the callback</td>
-          </tr>
-          <tr>
-            <td>
-              <code>{"__Host-chalk_seat_{spaceId}"}</code>
-            </td>
-            <td>Keeps your dashboard Space access (HttpOnly, Secure)</td>
-            <td>24 hours; access also requires your signed-in session</td>
-          </tr>
-          <tr>
-            <td>
-              <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>
-            </td>
-            <td>Keeps your public Space arrival available in this browser (HttpOnly, Secure)</td>
-            <td>Until you leave or close your browser</td>
-          </tr>
-        </tbody>
-      </table>
+      <CookieTable rows={COOKIES} />
 
       <h2>Who processes your data</h2>
       <p>We use these service providers and third-party services to run Chalk:</p>

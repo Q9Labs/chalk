@@ -5,9 +5,9 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
-import { useLoad, useSession } from "./AppShell";
+import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./transcript-languages";
+import { createCallAction, readNewCallLanguage } from "./language-choice";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";

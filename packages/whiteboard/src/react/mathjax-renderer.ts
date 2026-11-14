@@ -1,8 +1,8 @@
 import { getWhiteboardAssets } from "../assets";
+import { MATHJAX_CDN_SCRIPT } from "../pins";
 const MATHJAX_INPUT_EM = 16;
 const MATHJAX_INPUT_EX = 8;
 const MATHJAX_CONTAINER_WIDTH = 80 * MATHJAX_INPUT_EM;
-const DEFAULT_MATHJAX_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-svg-nofont.js";
 
 export interface RenderedMathSvg {
   svg: string;
@@ -79,7 +79,7 @@ function loadMathJaxScript(): Promise<void> {
 
     const script = document.createElement("script");
     const basePath = getWhiteboardAssets()?.mathJaxBasePath;
-    script.src = basePath ? `${basePath.replace(/\/$/, "")}/tex-svg.js` : DEFAULT_MATHJAX_SCRIPT_URL;
+    script.src = basePath ? `${basePath.replace(/\/$/, "")}/tex-svg.js` : MATHJAX_CDN_SCRIPT;
     script.async = true;
     script.dataset.chalkMathjax = "true";
     script.onload = () => resolve();

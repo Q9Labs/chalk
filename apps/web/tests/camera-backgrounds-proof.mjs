@@ -16,6 +16,27 @@ const browser = await chromium.launch({
 const localOnly = process.env.CAMERA_EFFECTS_LOCAL_ONLY === "1";
 const measurements = [];
 const errors = [];
+/** Alternates the effects, five rounds when measuring; decoded remote frames prove work reached the receiver. */
+async function alternateEffects(page, width, pauseForFrames) {
+  const rounds = process.env.CAMERA_EFFECTS_MEASURE === "1" ? 5 : 1;
+  for (const run of Array.from({ length: rounds }, (_, index) => index)) {
+    for (const background of ["none", "blur", "modern-acoustic-office"]) {
+      await page.evaluate((background) => window.cameraBackgroundProof.background(background), background);
+      await pauseForFrames();
+      const sample = await page.evaluate(async () => {
+        const start = performance.now();
+        const frames = window.cameraBackgroundProof.frames();
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const end = window.cameraBackgroundProof.frames();
+        return { seconds: (performance.now() - start) / 1000, localFrames: end.local - frames.local, remoteFrames: end.remote - frames.remote, stats: await window.cameraBackgroundProof.stats() };
+      });
+      measurements.push({ width, run, background, fps: (localOnly ? sample.localFrames : sample.remoteFrames) / sample.seconds, localFps: sample.localFrames / sample.seconds, ...sample });
+      await writeFile(resolve(artifacts, "measurements.json"), JSON.stringify({ measurements, errors }, null, 2));
+      assert((localOnly ? sample.localFrames : sample.remoteFrames) > 0, "Remote video must continue advancing");
+    }
+  }
+}
+
 try {
   for (const viewport of [
     { width: 1440, height: 900 },
@@ -144,22 +165,7 @@ try {
       await page.bringToFront();
       await page.waitForFunction(() => !document.hidden);
     }
-    // Alternate effects five times; decoded remote frames prove work reached the receiver.
-    for (let run = 0; run < (process.env.CAMERA_EFFECTS_MEASURE === "1" ? 5 : 1); run++)
-      for (const background of ["none", "blur", "modern-acoustic-office"]) {
-        await page.evaluate((background) => window.cameraBackgroundProof.background(background), background);
-        await pauseForFrames();
-        const sample = await page.evaluate(async () => {
-          const start = performance.now();
-          const frames = window.cameraBackgroundProof.frames();
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-          const end = window.cameraBackgroundProof.frames();
-          return { seconds: (performance.now() - start) / 1000, localFrames: end.local - frames.local, remoteFrames: end.remote - frames.remote, stats: await window.cameraBackgroundProof.stats() };
-        });
-        measurements.push({ width: viewport.width, run, background, fps: (localOnly ? sample.localFrames : sample.remoteFrames) / sample.seconds, localFps: sample.localFrames / sample.seconds, ...sample });
-        await writeFile(resolve(artifacts, "measurements.json"), JSON.stringify({ measurements, errors }, null, 2));
-        assert((localOnly ? sample.localFrames : sample.remoteFrames) > 0, "Remote video must continue advancing");
-      }
+    await alternateEffects(page, viewport.width, pauseForFrames);
     assert.equal(await page.evaluate(() => window.cameraBackgroundProof.publication().trackState), "live");
     assert(
       requests.some((url) => url.includes("selfie-segmenter-landscape") && url.startsWith(origin)),

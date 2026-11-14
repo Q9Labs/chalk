@@ -150,7 +150,7 @@ export const CALL_STATES: readonly CallState[] = [
             initialColorScheme={scheme}
             snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })}
             board={{ scene: true, people: [nora, malik] }}
-            then={(client) => {
+            step={(client) => {
               if (params.get("raise") !== "event") return raiseNotices(client, kind, count);
               document.addEventListener("raise-notices", () => raiseNotices(client, kind, count), { once: true });
               document.documentElement.dataset.noticesReady = "";
@@ -225,21 +225,21 @@ export const CALL_STATES: readonly CallState[] = [
     render: () => (
       <Live
         snapshot={liveSnapshot({ self: { handRaised: true }, others: [nora] })}
-        then={(client) => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((person) => (person.participantId === nora.id ? { ...person, handRaised: true } : person)) } }))}
+        step={(client) => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((person) => (person.participantId === nora.id ? { ...person, handRaised: true } : person)) } }))}
       />
     ),
   },
-  { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
-  { id: "media-failed", title: "Media could not connect", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed", "connection.media_start_failed"))} /> },
+  { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
+  { id: "media-failed", title: "Media could not connect", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "failed", "connection.media_start_failed"))} /> },
   { id: "leaving", title: "Leaving", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "leaving" })} /> },
-  { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
+  { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
   {
     id: "episode-ended",
     title: "Call ended for everyone",
     render: () => (
       <Live
         snapshot={liveSnapshot({ others: [nora] })}
-        then={(client) => {
+        step={(client) => {
           client.emit("episodeEnded", { episode: client.getSnapshot().connection.episode });
           client.updateSnapshot((current) => withStatus(current, "left"));
         }}

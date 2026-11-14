@@ -5,6 +5,7 @@ import { chalkEmbeddedWhiteboardSupportedElementTypes } from "./manifest";
 import {
   CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION,
   CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES,
+  CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS,
   CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID,
   decodeEmbeddedWhiteboardRendererMessage,
   encodeEmbeddedWhiteboardMessage,
@@ -17,7 +18,6 @@ import {
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 16_384;
 const MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024;
-const MAX_RECENT_MESSAGE_IDS = 2_048;
 const permittedMimeTypes = new Set(["application/octet-stream", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp"]);
 const permittedRendererMetrics = new Set(["whiteboard.bridge.backlog", "whiteboard.file.failure", "whiteboard.frame.delay_ms", "whiteboard.input.delay_ms", "whiteboard.recovery.count", "whiteboard.renderer.memory_bytes", "whiteboard.renderer.termination"]);
 const permittedRendererErrorCodes = new Set(["export_failed", "invalid_file_result", "invalid_host_message", "invalid_operation_result", "renderer_load_failed", "submission_failed"]);
@@ -947,7 +947,7 @@ function createMessageId(): string {
 function recordMessageId(messageIds: Set<string>, messageId: string): boolean {
   if (messageIds.has(messageId)) return false;
   messageIds.add(messageId);
-  if (messageIds.size > MAX_RECENT_MESSAGE_IDS) {
+  if (messageIds.size > CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS) {
     const oldest = messageIds.values().next().value;
     if (oldest) messageIds.delete(oldest);
   }

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { ConnectMissing, ConnectPage } from "../components/dashboard/ConnectPage";
+import { ConnectPage } from "../components/dashboard/ConnectPage";
+import { ConnectMissing } from "../components/dashboard/ConnectStates";
 
 type Search = { readonly request?: string };
 

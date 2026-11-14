@@ -10,6 +10,7 @@ export type LegacyListSearch = { readonly spaceId?: string | undefined };
 
 export const parseLegacyListSearch = (search: Record<string, unknown>): LegacyListSearch => ({ spaceId: typeof search.spaceId === "string" && UUID.test(search.spaceId) ? search.spaceId : undefined });
 
+// Owner: web. Remove both list routes on 15 Jan 2027, once bookmarks to them have stopped arriving.
 /** The old list routes: a link filtered to one call opens that call, where its sessions, recordings and transcripts live. Others open Home.
  * A new object per route: the router writes each route's id into its options, so a shared object gives two routes one id. */
 export const legacyListRoute = () => ({

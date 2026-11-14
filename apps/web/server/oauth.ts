@@ -5,7 +5,7 @@ import { DashboardError } from "./http";
 import { authenticate, SESSION_SECONDS } from "./session";
 
 const encoder = new TextEncoder();
-export function base64url(bytes: Uint8Array): string {
+function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
@@ -126,7 +126,13 @@ async function signingKey(url: string, kid: string) {
   if (!key) throw new DashboardError(401, "id_token_rejected");
   return key;
 }
-export async function verifyIdToken(input: { token: string; clientId: string; nonce: string; issuers: string[]; jwks: string }): Promise<z.infer<typeof claimsSchema>> {
+function claimsAccepted(claims: z.infer<typeof claimsSchema>, expected: { clientId: string; nonce: string; issuers: string[] }): boolean {
+  const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
+  const now = Date.now() / 1000;
+  const authorizedParty = claims.azp === undefined ? audiences.length === 1 : claims.azp === expected.clientId;
+  return expected.issuers.includes(claims.iss) && audiences.includes(expected.clientId) && authorizedParty && claims.exp > now && claims.iat <= now + 60 && claims.iat <= claims.exp && claims.nonce === expected.nonce;
+}
+async function verifyIdToken(input: { token: string; clientId: string; nonce: string; issuers: string[]; jwks: string }): Promise<z.infer<typeof claimsSchema>> {
   const [headerPart, payload, signature, extra] = input.token.split(".");
   if (!headerPart || !payload || !signature || extra || input.token.length > 16384) throw new DashboardError(401, "id_token_rejected");
   const header = headerSchema.parse(JSON.parse(new TextDecoder().decode(decode(headerPart))));
@@ -134,21 +140,10 @@ export async function verifyIdToken(input: { token: string; clientId: string; no
   const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
   if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, decode(signature), encoder.encode(`${headerPart}.${payload}`)))) throw new DashboardError(401, "id_token_rejected");
   const claims = claimsSchema.parse(JSON.parse(new TextDecoder().decode(decode(payload))));
-  const audiences = typeof claims.aud === "string" ? [claims.aud] : claims.aud;
-  if (
-    !input.issuers.includes(claims.iss) ||
-    !audiences.includes(input.clientId) ||
-    (audiences.length > 1 && claims.azp !== input.clientId) ||
-    (claims.azp !== undefined && claims.azp !== input.clientId) ||
-    claims.exp <= Date.now() / 1000 ||
-    claims.iat > Date.now() / 1000 + 60 ||
-    claims.iat > claims.exp ||
-    claims.nonce !== input.nonce
-  )
-    throw new DashboardError(401, "id_token_rejected");
+  if (!claimsAccepted(claims, input)) throw new DashboardError(401, "id_token_rejected");
   return claims;
 }
-export async function appleClientSecret(env: Pick<DashboardEnvironment, "APPLE_TEAM_ID" | "APPLE_SERVICES_ID" | "APPLE_KEY_ID" | "APPLE_PRIVATE_KEY">): Promise<string> {
+async function appleClientSecret(env: Pick<DashboardEnvironment, "APPLE_TEAM_ID" | "APPLE_SERVICES_ID" | "APPLE_KEY_ID" | "APPLE_PRIVATE_KEY">): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(encoder.encode(JSON.stringify({ alg: "ES256", kid: env.APPLE_KEY_ID, typ: "JWT" })));
   // Short-lived secrets avoid a stored JWT and stay below Apple's six-month limit.

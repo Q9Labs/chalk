@@ -1,6 +1,8 @@
+import type { DrawPerson, DrawPolicy } from "../../collab/draw-policy";
+
 export type WhoCanDraw = {
-  readonly policy: "everyone" | "hosts" | "picked";
-  readonly people: readonly { readonly id: string; readonly name: string; readonly picked: boolean }[];
-  readonly onPolicy: (policy: WhoCanDraw["policy"]) => void;
+  readonly policy: DrawPolicy;
+  readonly people: readonly DrawPerson[];
+  readonly onPolicy: (policy: DrawPolicy) => void;
   readonly onPick: (id: string, picked: boolean) => void;
 };
