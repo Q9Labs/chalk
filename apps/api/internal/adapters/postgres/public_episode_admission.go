@@ -77,7 +77,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
+		valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, "knock", time.Now())
 		if err != nil {
 			return err
 		}
@@ -215,7 +215,7 @@ func (r PublicInviteRepository) DecideAdmissionRequest(ctx context.Context, inpu
 		if err != nil {
 			return err
 		}
-		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, time.Now())
+		valid, err := publicAdmissionProvenanceValid(space, invite, currentArrival, episode, "knock", time.Now())
 		if err != nil {
 			return err
 		}

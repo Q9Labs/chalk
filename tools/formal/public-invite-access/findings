@@ -1,2 +1,1 @@
 # rule	modes	what the code does
-ArchiveLeavesNoActiveEpisode	knock open	The lifecycle worker asks to end the Episode, then archives the Space. A guest who arrives in between starts a new Episode, and the Space is archived with that Episode active.
