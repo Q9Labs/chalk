@@ -29,6 +29,27 @@ def ancestor(sha, target='origin/master'):
     subprocess.run(['git', 'merge-base', '--is-ancestor', sha, target], check=True)
 
 
+# Release tooling that builds or ships the recorder, beside the `recording` paths in features.json.
+RECORDING_EXTRA_PATHS = ('scripts/releases/media.py', '.github/workflows/real-call-proof.yml')
+
+
+def recording_paths():
+    features = json.loads((ROOT / 'features.json').read_text())['features']
+    return tuple(next(item for item in features if item['name'] == 'recording')['paths']) + RECORDING_EXTRA_PATHS
+
+
+def recording_changed(previous, target):
+    # The call-artifacts proof boots recorder droplets, which fetch the recorder archives from S3 and cost real money,
+    # so a cut runs it when it changed a recording path. With no baseline or an unreadable diff the answer is yes.
+    if not previous:
+        return True
+    diff = subprocess.run(['git', 'diff', '--name-only', f'{previous}..{target}'], capture_output=True, text=True)
+    if diff.returncode != 0:
+        return True
+    prefixes = recording_paths()
+    return any(path == prefix or path.startswith(prefix + '/') for path in diff.stdout.splitlines() for prefix in prefixes)
+
+
 def manifest_bytes(github, info, trusted=True):
     data = None
     if trusted and info.get('manifest_sha256'):
@@ -202,6 +223,7 @@ def plan(github, args):
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
         result['previous_nightly_sha'] = payload(held[0])['target_sha'] if held else ''
+        result['recording_changed'] = recording_changed(result['previous_nightly_sha'], target)
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']

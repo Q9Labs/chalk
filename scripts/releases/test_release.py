@@ -782,6 +782,31 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
 
 
+class RecordingChangedTests(unittest.TestCase):
+    """A nightly cut runs the recorder proof only when it changed a recording path."""
+    def changed(self, *paths, returncode=0):
+        diff = SimpleNamespace(returncode=returncode, stdout='\n'.join(paths))
+        with patch.object(release.subprocess, 'run', return_value=diff):
+            return release.recording_changed('a' * 40, 'b' * 40)
+
+    def test_a_cut_with_no_baseline_or_no_readable_diff_runs_the_recorder_proof(self):
+        self.assertTrue(release.recording_changed('', 'b' * 40))
+        self.assertTrue(self.changed(returncode=128))
+
+    def test_a_cut_that_touches_recording_paths_runs_the_recorder_proof(self):
+        self.assertTrue(self.changed('apps/web/src/routes/index.tsx', 'infrastructure/recorder/main.tf'))
+        self.assertTrue(self.changed('apps/api/internal/recorderfleet/pool.go'))
+        self.assertTrue(self.changed('scripts/releases/media.py'))
+
+    def test_a_cut_that_touches_nothing_recorded_skips_it(self):
+        self.assertFalse(self.changed('apps/web/src/routes/index.tsx', 'apps/api/internal/recorderfleetx/x.go', 'docs/recording-notes.md'))
+        self.assertFalse(self.changed())
+
+    def test_every_recording_path_exists(self):
+        for path in release.recording_paths():
+            self.assertTrue((release.ROOT / path).exists(), path)
+
+
 class GateCheckedTests(unittest.TestCase):
     """The release skips its own Gate check only when nightly `plan` already made it for the same target."""
     WORKFLOWS = Path(release.ROOT) / '.github/workflows'
