@@ -93,8 +93,8 @@ wait_http() {
     sleep 0.3
   done
 }
-wait_http "http://127.0.0.1:$port_api/healthz" api
-wait_http "http://127.0.0.1:$port_sync/healthz" sync
+wait_http "http://127.0.0.1:$port_api/readyz" api
+wait_http "http://127.0.0.1:$port_sync/readyz" sync
 tick services
 
 node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api"
