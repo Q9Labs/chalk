@@ -1,4 +1,3 @@
-
 const GIB = 1024 ** 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // GitHub keeps 10 GiB of caches per repository and evicts the least recently used ones past that, master's included.
