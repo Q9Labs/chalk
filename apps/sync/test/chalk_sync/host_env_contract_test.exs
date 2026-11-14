@@ -8,23 +8,30 @@ defmodule ChalkSync.HostEnvContractTest do
   @contracts Path.expand("../../../../infrastructure/managed-episode/env", __DIR__)
   @runtime Path.expand("../../config/runtime.exs", __DIR__)
 
+  # The loader must see only the contract: a variable the CI job exports would hide one the contract lacks.
+  setup do
+    inherited = chalk_env()
+    Enum.each(Map.keys(inherited), &System.delete_env/1)
+
+    on_exit(fn ->
+      Enum.each(Map.keys(chalk_env()), &System.delete_env/1)
+      Enum.each(inherited, fn {key, value} -> System.put_env(key, value) end)
+    end)
+  end
+
   for name <- ["sync.nightly.env.example", "sync.env.example"] do
     test "#{name} passes the production runtime configuration" do
-      values = read_contract(unquote(name))
-      previous = Map.new(values, fn {key, _value} -> {key, System.get_env(key)} end)
+      unquote(name)
+      |> read_contract()
+      |> Enum.each(fn {key, value} -> System.put_env(key, stand_in(key, value)) end)
 
-      try do
-        Enum.each(values, fn {key, value} -> System.put_env(key, stand_in(key, value)) end)
-
-        assert Config.Reader.read!(@runtime, env: :prod, target: :host)
-               |> Keyword.has_key?(:chalk_sync)
-      after
-        Enum.each(previous, fn
-          {key, nil} -> System.delete_env(key)
-          {key, value} -> System.put_env(key, value)
-        end)
-      end
+      assert Config.Reader.read!(@runtime, env: :prod, target: :host)
+             |> Keyword.has_key?(:chalk_sync)
     end
+  end
+
+  defp chalk_env do
+    for {key, value} <- System.get_env(), String.starts_with?(key, "CHALK_"), into: %{}, do: {key, value}
   end
 
   defp read_contract(name) do

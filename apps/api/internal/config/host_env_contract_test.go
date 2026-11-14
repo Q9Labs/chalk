@@ -23,6 +23,7 @@ func TestHostEnvironmentContractsLoad(t *testing.T) {
 				values["CHALK_RECORDER_FLEET_ISSUER_CLIENT_KEY"] = "/run/chalk/recorder-issuer.key"
 				values["CHALK_RECORDER_FLEET_ISSUER_SERVER_CA"] = "/run/chalk/recorder-issuer-ca.crt"
 			}
+			isolateChalkEnvironment(t)
 			keys := standInKeys(t)
 			for key, value := range values {
 				t.Setenv(key, keys.standIn(key, value))
@@ -31,6 +32,22 @@ func TestHostEnvironmentContractsLoad(t *testing.T) {
 				t.Fatalf("%s does not load: %v", name, err)
 			}
 		})
+	}
+}
+
+// isolateChalkEnvironment unsets every CHALK_ variable the test process inherited, so Load() sees only the contract: a
+// variable the CI job exports would hide one the contract lacks.
+func isolateChalkEnvironment(t *testing.T) {
+	t.Helper()
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if !strings.HasPrefix(key, "CHALK_") {
+			continue
+		}
+		t.Setenv(key, "") // registers the restore
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
