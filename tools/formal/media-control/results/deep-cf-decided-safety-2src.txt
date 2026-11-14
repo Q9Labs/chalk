@@ -1,0 +1,12 @@
+TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-10-31 14:19:55.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 1.3E-5
+  based on the actual fingerprints:  val = 7.4E-7
+46590684 states generated, 5644562 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 40.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 13 and the 95th percentile is 3).
+Finished in 04min 00s at (2026-10-31 14:23:54)

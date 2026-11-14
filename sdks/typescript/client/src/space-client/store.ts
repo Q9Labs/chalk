@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { connectionErrorCode } from "./errors";
+import { structurallyEqual } from "./structural-equal";
 import type { ConnectionLifecycleSnapshot } from "../connection";
 import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
 
@@ -54,12 +55,11 @@ export class SpaceStore {
       status: connectionStatus(snapshot),
       syncHealth: snapshot.connection.syncHealth,
       episode: snapshot.episode,
-      lastError: sameError(current.lastError, error) ? current.lastError : error,
+      lastError: structurallyEqual(current.lastError, error) ? current.lastError : error,
       episodeEnded: snapshot.episodeEnded ?? false,
       episodeEndReason: snapshot.episodeEndReason,
       removedByHost: snapshot.removedByHost ?? false,
     };
-    if (sameConnection(current, next)) return;
     this.#replace("connection", empty(next));
   }
   updateSelf(value: SelfSlice): void {
@@ -92,14 +92,17 @@ export class SpaceStore {
   }
   #replace<TSlice extends keyof SpaceSnapshot>(key: TSlice, value: SpaceSnapshot[TSlice]): void {
     const current = this.getSnapshot();
-    if (current[key] === value) return;
+    if (structurallyEqual(current[key], value)) return;
     const next = empty({ ...current, [key]: value });
     Effect.runSync(SubscriptionRef.set(this.#ref, next));
     for (const listener of this.#listeners) {
       try {
         listener();
-      } catch {
-        /* state observers cannot interrupt the connection */
+      } catch (cause) {
+        // A failing observer must not interrupt the connection, but it must not vanish either.
+        queueMicrotask(() => {
+          throw cause;
+        });
       }
     }
   }
@@ -118,21 +121,4 @@ function connectionError(failure: ConnectionLifecycleSnapshot["failure"]): Conne
 function connectionStatus(snapshot: ConnectionLifecycleSnapshot): ConnectionSlice["status"] {
   const interrupted = INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.sync) || INTERRUPTED_CONNECTION_PHASES.has(snapshot.connection.media);
   return snapshot.state === "live" && interrupted ? "reconnecting" : snapshot.state;
-}
-
-function sameConnection(left: ConnectionSlice, right: ConnectionSlice): boolean {
-  return (
-    left.status === right.status && left.syncHealth === right.syncHealth && sameEpisode(left.episode, right.episode) && left.lastError === right.lastError && left.episodeEnded === right.episodeEnded && left.episodeEndReason === right.episodeEndReason && left.removedByHost === right.removedByHost
-  );
-}
-
-function sameEpisode(left: ConnectionSlice["episode"], right: ConnectionSlice["episode"]): boolean {
-  if (left === right) return true;
-  if (!left || !right) return false;
-  return left.id === right.id && left.startedAt === right.startedAt && left.deadline === right.deadline;
-}
-function sameError(left: ConnectionSlice["lastError"], right: ConnectionSlice["lastError"]): boolean {
-  if (left === right) return true;
-  if (!left || !right) return false;
-  return left.code === right.code && left.recoverable === right.recoverable && left.message === right.message;
 }

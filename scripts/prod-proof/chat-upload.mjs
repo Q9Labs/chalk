@@ -60,7 +60,7 @@ async function admitAndConnect(run, path, clients) {
   const admission = await run.apiRequest("POST", `${path}/participants`, { name: "Proof uploader", role: "owner" });
   const token = admission.access.sync.token;
   const sdk = await loadSdk(run, "chat-upload", fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)));
-  const { defaultSyncUrl } = await loadSdk(run, "chat-upload-urls", fileURLToPath(new URL("../../sdks/typescript/client/src/space-client/urls.ts", import.meta.url)));
+  const { defaultSyncUrl } = await loadSdk(run, "chat-upload-urls", fileURLToPath(new URL("../../sdks/typescript/client/src/urls.ts", import.meta.url)));
   await connect(run, clients, sdk, defaultSyncUrl(run.config.api_url), token);
   return token;
 }

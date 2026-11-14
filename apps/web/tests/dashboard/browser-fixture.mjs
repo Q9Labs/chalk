@@ -203,6 +203,12 @@ Process.sleep(:infinity)
       syncLog,
       pagesLog,
       cleanup,
+      // Runs a command in its own process group that cleanup, the deadline and the owner-loss watcher also reap; its output goes to this process's stdout.
+      runOwned: async (command, args, cwd, env = {}) => {
+        const child = start(command, args, cwd, env, { push: (text) => process.stdout.write(text) });
+        const [code] = await once(child, "exit");
+        return code;
+      },
       recordPage: (page) => {
         recording = page.video();
       },

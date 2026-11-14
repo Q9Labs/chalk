@@ -15,7 +15,7 @@ import {
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
-import { createSpaceClientForPlatform, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import { createSpaceClientForPlatform, DEFAULT_API_BASE_URL, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
@@ -55,7 +55,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const session = installNativeSession();
   const { storage } = options;
   const syncDialTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
-  const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
+  const apiBaseURL = options.baseUrl ?? DEFAULT_API_BASE_URL;
   const syncURL = options.syncUrl ?? defaultSyncUrl(apiBaseURL);
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
@@ -132,7 +132,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       fetch,
     }),
-    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       return connection as unknown as globalThis.RTCPeerConnection;
@@ -147,6 +147,7 @@ export function createSFUConnectionMediaClient(client: CloudflareSFUClient): Nat
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    cancelPreparedLocalPublicationTarget: client.cancelPreparedLocalPublicationTarget.bind(client),
     pauseLocalCapture: client.pauseLocalCapture.bind(client),
     setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
     closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),

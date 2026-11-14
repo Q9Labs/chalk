@@ -5,10 +5,12 @@
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { planeBudgets, readBudgets } from "./budgets.mjs";
-import { WHOLE_CYCLE, parseScorecard } from "./schema.mjs";
+import { WHOLE_CYCLE, countsAsEvidence, parseScorecard } from "./schema.mjs";
 import { contentionMarkdown } from "./contention.mjs";
 import { diagnosticsFileName, diagnosticsReport } from "./diagnostics.mjs";
+import { overBudget } from "./diff.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
+import { limitText } from "./stats.mjs";
 
 const [evidence, plane, revision, artifacts] = process.argv.slice(2);
 if (!artifacts) throw new Error("usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
@@ -31,25 +33,10 @@ function findCard(directory) {
   return undefined;
 }
 
-function limitText(budget) {
-  if (!budget) return "none";
-  const limits = [
-    ["p50 ≤", budget.max_p50],
-    ["p95 ≤", budget.max_p95],
-    ["p50 ≥", budget.min_p50],
-  ];
-  return limits
-    .filter(([, value]) => value !== undefined)
-    .map(([label, value]) => `${label} ${value}`)
-    .join(", ");
-}
-
-const over = (metric, budget) => budget !== undefined && ((budget.max_p50 !== undefined && metric.p50 > budget.max_p50) || (budget.max_p95 !== undefined && metric.p95 > budget.max_p95) || (budget.min_p50 !== undefined && metric.p50 < budget.min_p50));
-
 const path = findCard(evidence);
 if (!path) fail("The latency run wrote no scorecard.");
 const card = parseScorecard(JSON.parse(readFileSync(path, "utf8")));
-if (card.metrics.length === 0 && !card.contention?.contended && !card.contention?.unobservable) fail("The scorecard has no metrics.");
+if (card.metrics.length === 0 && countsAsEvidence(card)) fail("The scorecard has no metrics.");
 
 mkdirSync(artifacts, { recursive: true });
 copyFileSync(path, join(artifacts, `scorecard-${plane}.json`));
@@ -61,7 +48,7 @@ const { budgets } = await readBudgets();
 const own = planeBudgets(budgets, card.mediaPlane);
 const rows = card.metrics.map((metric) => {
   const budget = own[metric.id];
-  const status = card.contention?.unobservable ? "⚠️ unavailable" : card.contention?.contended ? "⚠️ diagnostic" : over(metric, budget) ? (budget.gate ? "❌ blocks" : "⚠️ warns") : "✅";
+  const status = card.contention?.unobservable ? "⚠️ unavailable" : card.contention?.contended ? "⚠️ diagnostic" : overBudget(metric, budget) ? (budget.gate ? "❌ blocks" : "⚠️ warns") : "✅";
   return `| \`${metric.id}\` | ${metric.n} | ${metric.p50} | ${metric.p95} ${metric.unit} | ${limitText(budget)} | ${status} |`;
 });
 const drops = card.dropped.map((drop) => `${drop.metric === WHOLE_CYCLE ? "whole cycle" : drop.metric}: ${drop.reason} ×${drop.count}`);
@@ -76,4 +63,4 @@ try {
 } catch (error) {
   summarize(`Action latency diagnostics: unreadable, not shown (${error instanceof Error ? error.message : String(error)}).\n`);
 }
-if (card.contention?.contended || card.contention?.unobservable) process.exitCode = 1;
+if (!countsAsEvidence(card)) process.exitCode = 1;

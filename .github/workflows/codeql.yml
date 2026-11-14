@@ -1,22 +1,19 @@
 name: CodeQL
 
-# Pull requests analyse only the languages whose files changed. The weekly run analyses every language, so anything a
-# pull request skips is analysed within a week of merging. Master pushes do not run it: the pull request already
-# analysed the same code.
+# A push to master analyses only the languages whose files changed in it, so alerts land on the default branch, where code
+# scanning tracks them. The weekly run analyses every language, so anything a push skips is analysed within a week. Pull
+# requests and merge groups do not run it: the push analyses the same code that landed, a merge-queue ref is deleted after
+# its group, and alerts on it would not show on master. It is not a required check, so an alert never blocks a merge.
+# Run it by hand on a branch with `workflow_dispatch`.
 on:
-  pull_request:
+  push:
+    branches: [master]
   schedule:
     - cron: "27 4 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-# A pull request's new push cancels its older run, because the newest commit's scan covers everything the older one
-# did. Scheduled and manual runs get their own group.
-concurrency:
-  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: true
 
 jobs:
   languages:
@@ -35,10 +32,10 @@ jobs:
       - name: Select languages
         id: select
         env:
-          BASE_REF: ${{ github.base_ref }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            node scripts/gates/codeql-languages.mjs "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            node scripts/gates/codeql-languages.mjs "${PUSH_BEFORE_SHA}" >> "${GITHUB_OUTPUT}"
           else
             node scripts/gates/codeql-languages.mjs --full >> "${GITHUB_OUTPUT}"
           fi

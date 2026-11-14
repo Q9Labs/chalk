@@ -1,3 +1,5 @@
+import { percentile } from "../../../features/scorecard/stats.mjs";
+
 export const METRICS = ["videoDroppedFramePercent", "layoutShift", "frameP95Ms", "droppedFramePercent", "longTasks", "blockingMs", "interactionMs", "heapMiB", "domNodes", "firstCallMs", "jsGzipKiB", "cssGzipKiB"];
 export const BUNDLE_METRICS = ["jsGzipKiB", "cssGzipKiB"];
 
@@ -40,10 +42,10 @@ export function validateScenarioBudgets(budgets, scenarios) {
   }
 }
 
-export function percentile(values, p) {
+/** measuredPercentile is the nearest-rank percentile of a measurement, which must exist and be finite. */
+export function measuredPercentile(values, p) {
   if (!values.length || values.some((value) => !Number.isFinite(value))) throw new Error("Missing or invalid measurement");
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.ceil(sorted.length * p) - 1];
+  return percentile(values, p);
 }
 
 export function summarize(samples) {
@@ -52,7 +54,7 @@ export function summarize(samples) {
       .filter((key) => typeof samples[0][key] === "number")
       .map((key) => {
         const values = samples.map((sample) => sample[key]);
-        return [key, { median: percentile(values, 0.5), min: Math.min(...values), max: Math.max(...values) }];
+        return [key, { median: measuredPercentile(values, 0.5), min: Math.min(...values), max: Math.max(...values) }];
       }),
   );
 }

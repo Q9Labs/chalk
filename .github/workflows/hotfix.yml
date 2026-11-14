@@ -53,7 +53,9 @@ jobs:
     # What Promote's approve job retains before the first change: the live Pages deployment, and the live media pins of a legacy baseline.
     needs: plan
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false
     outputs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
       rollback_media: ${{ steps.media.outputs.members }}

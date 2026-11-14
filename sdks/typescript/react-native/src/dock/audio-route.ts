@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { NativeEventEmitter, NativeModules, Platform } from "react-native";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import type { IconName } from "../icons/Icon";
 
 export type AudioRouteKind = "earpiece" | "speaker" | "bluetooth" | "wired";

@@ -129,12 +129,15 @@ jobs:
   smoke:
     name: Real-call proofs
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.environment || 'production' }}
+    # The proof only needs the environment's secrets and variables. A deployment record would mark the held nightly cut inactive (features/scorecard/deployment-records.test.mjs).
+    environment:
+      name: ${{ inputs.environment || 'production' }}
+      deployment: false
     outputs:
       result: ${{ steps.result.outputs.result }}
       failure: ${{ steps.prove.outputs.failure }}
       results: ${{ steps.prove.outputs.results }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 165 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -288,7 +291,7 @@ jobs:
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 90 || 25 }}
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || 25 }}
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}

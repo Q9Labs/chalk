@@ -1,0 +1,51 @@
+---
+title: "A recorded class ends"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Class running
+    lg1: Recording being built
+    lg2: Done
+    lg3: Recording trouble
+  }
+  class lg0 teal
+  class lg1 yellow
+  class lg2 blue
+  class lg3 orange
+  s0: Class running, recording
+  s1: Ending the class, recording
+  s2: Class running, recording failed
+  s3: Class ended, recording is being built
+  s4: Ending the class, recording failed
+  s5: Class ended, recording failed
+  s6: Class ended, recording ready
+  s7: Class ended, building failed 1 of 3 times
+  s8: Class ended, building failed 2 of 3 times
+  s9: Class ended, building failed 3 of 3 times
+  [*] --> s0
+  s0 --> s1: the host ends the call, or the time limit arrives
+  s0 --> s2: the recorder fails
+  s1 --> s0: the call cannot be ended after 100 tries, it runs on
+  s1 --> s3: everyone is removed and the call ends
+  s1 --> s4: the recorder fails
+  s2 --> s0: the host starts the recording again
+  s2 --> s4: the host ends the call, or the time limit arrives
+  s3 --> s6: the recording is ready
+  s3 --> s7: building the recording fails
+  s4 --> s2: the call cannot be ended after 100 tries, it runs on
+  s4 --> s5: everyone is removed and the call ends
+  s7 --> s3: building starts again
+  s3 --> s8: building the recording fails
+  s8 --> s3: building starts again
+  s3 --> s9: building the recording fails
+  s9 --> s5: the third try fails
+  class s0 teal
+  class s1 teal
+  class s2 orange
+  class s3 yellow
+  class s4 orange
+  class s5 orange
+  class s6 blue
+  class s7 yellow
+  class s8 yellow
+  class s9 yellow

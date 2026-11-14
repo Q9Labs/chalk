@@ -105,7 +105,7 @@ func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTr
 		clockRate = 48000
 	}
 	return &subscription{
-		owner: owner, capture: owner.kind == kindCapture, lease: lease, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		owner: owner, capture: !owner.kind.participant, lease: lease, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
 		order: serials.Add(1),
 	}
@@ -555,6 +555,6 @@ func (s *subscription) close() {
 		return
 	}
 	if err := s.transceiver.Stop(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-		s.pub.session.node.log.Warn("stop subscription", "connectionId", s.pub.session.id, "error", err)
+		s.pub.session.node.log.Warn("stop subscription", "connection_id", s.pub.session.id, "error", err)
 	}
 }

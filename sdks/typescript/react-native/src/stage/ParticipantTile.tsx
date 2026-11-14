@@ -6,7 +6,7 @@ import { FaceAvatar } from "../avatar/FaceAvatar";
 import { tileAvatarSize } from "../avatar/tile-avatar-size";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon } from "../icons/Icon";
 import { createNativeMediaStream } from "../media/native-webrtc";

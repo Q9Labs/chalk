@@ -1,13 +1,14 @@
 // Compares a run's metrics with a baseline and the budgets, and renders the delta table.
 // ❌ over budget, ⚠️ more than tolerancePct worse than the baseline but within budget, ✅ more than 5% better.
 import { WHOLE_CYCLE } from "./schema.mjs";
+import { formatNumber, limitText } from "./stats.mjs";
 
 const BETTER_PCT = 5;
 const DEFAULT_TOLERANCE_PCT = 10;
 
 const primary = (metric, budget) => (budget?.max_p95 !== undefined ? metric.p95 : metric.p50);
 
-function overBudget(metric, budget) {
+export function overBudget(metric, budget) {
   if (!budget || metric.n === 0) return false;
   return (budget.max_p50 !== undefined && metric.p50 > budget.max_p50) || (budget.max_p95 !== undefined && metric.p95 > budget.max_p95) || (budget.min_p50 !== undefined && metric.p50 < budget.min_p50);
 }
@@ -48,20 +49,6 @@ export function diffMetrics(baseline, current, budgets) {
 const MARK = { over: "❌", worse: "⚠️", better: "✅" };
 const ORDER = ["over", "worse", "better"];
 
-function number(value) {
-  if (value === undefined || value === null) return "–";
-  return String(Math.abs(value) >= 100 ? Math.round(value) : Number(value.toPrecision(3)));
-}
-
-function limitText(budget) {
-  if (!budget) return "none";
-  const parts = [];
-  if (budget.max_p50 !== undefined) parts.push(`p50 ≤ ${number(budget.max_p50)}`);
-  if (budget.max_p95 !== undefined) parts.push(`p95 ≤ ${number(budget.max_p95)}`);
-  if (budget.min_p50 !== undefined) parts.push(`p50 ≥ ${number(budget.min_p50)}`);
-  return parts.join(", ");
-}
-
 /** dropSummary lists what the run dropped, as "reason ×count" per metric. */
 function dropSummary(dropped) {
   return dropped.map((drop) => `${drop.metric === WHOLE_CYCLE ? "whole cycle" : drop.metric}: ${drop.reason} ×${drop.count}`);
@@ -82,8 +69,8 @@ export function renderTable(diff, { title, baselineLabel, dropped = [] }) {
   if (shown.length > 0) {
     lines.push("| | Metric | Baseline | Now | Change | Budget | Gate |", "|---|---|---|---|---|---|---|");
     for (const row of shown) {
-      const change = row.changePct === null ? "" : `${row.changePct > 0 ? "+" : ""}${number(row.changePct)}%`;
-      lines.push(`| ${MARK[row.status]} | \`${row.id}\` | ${number(row.baseline)} | ${number(row.now)} ${row.unit} | ${change} | ${limitText(row.budget)} | ${row.gate ? "blocks" : "warns"} |`);
+      const change = row.changePct === null ? "" : `${row.changePct > 0 ? "+" : ""}${formatNumber(row.changePct)}%`;
+      lines.push(`| ${MARK[row.status]} | \`${row.id}\` | ${formatNumber(row.baseline)} | ${formatNumber(row.now)} ${row.unit} | ${change} | ${limitText(row.budget)} | ${row.gate ? "blocks" : "warns"} |`);
     }
     lines.push("");
   }

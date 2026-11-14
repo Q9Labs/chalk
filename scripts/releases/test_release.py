@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -762,6 +763,14 @@ class PlanTests(unittest.TestCase):
         github.dispatch_nightly.assert_called_once_with()
         self.assertIn('requeued on master as a new run', summary)
 
+    def test_a_manual_cut_refuses_a_revision_without_a_green_gate_before_the_release_starts(self):
+        # Nightly passes gate_checked to the release, so this refusal is the only Gate check a manual cut gets.
+        github = self.github()
+        github.has_green_gate.return_value = False
+        with self.assertRaisesRegex(ValueError, 'is not successful'):
+            self.plan(manual=True, github=github)
+        github.has_green_gate.assert_called_with(self.REVISION)
+
     def test_the_green_commit_search_skips_commits_newer_than_the_revision(self):
         with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
             github = GitHub()
@@ -771,6 +780,55 @@ class PlanTests(unittest.TestCase):
         github.is_on_master = Mock(return_value=True)
         github.has_green_gate = Mock(return_value=True)
         self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
+
+
+class GateCheckedTests(unittest.TestCase):
+    """The release skips its own Gate check only when nightly `plan` already made it for the same target."""
+    WORKFLOWS = Path(release.ROOT) / '.github/workflows'
+
+    def test_only_nightly_sets_gate_checked_and_a_dispatch_cannot(self):
+        users = sorted(path.name for path in self.WORKFLOWS.glob('*.yml') if 'gate_checked' in path.read_text())
+        self.assertEqual(users, ['ci.yml', 'nightly.yml'])
+        self.assertRegex((self.WORKFLOWS / 'nightly.yml').read_text(), r'(?m)^      gate_checked: true$')
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        self.assertEqual(ci.count('gate_checked:'), 1)
+        self.assertGreater(ci.index('gate_checked:'), ci.index('\n  workflow_call:'))
+
+    def test_the_release_job_that_repeats_the_check_is_the_only_one_skipped(self):
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        job = ci[ci.index('\n  require-gate:'):ci.index('\n  plan-managed:')]
+        self.assertIn('if: ${{ !inputs.gate_checked }}', job)
+        for name in ('plan-managed', 'build-web'):
+            start = ci.index(f'\n  {name}:')
+            block = ci[start:ci.index('\n    runs-on:', start)]
+            self.assertIn('needs: require-gate', block)
+            self.assertIn("""contains(fromJSON('["success","skipped"]'), needs.require-gate.result)""", block)
+
+    def test_every_job_below_the_skipped_check_runs_on_a_status_function(self):
+        # Without always() or !cancelled(), a skipped ancestor skips a job even when the job's direct needs succeeded.
+        ci = (self.WORKFLOWS / 'ci.yml').read_text()
+        jobs = ci[ci.index('\njobs:\n'):]
+        bodies = dict(re.findall(r'(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)', jobs))
+        needs = {}
+        for name, body in bodies.items():
+            found = re.search(r'(?m)^    needs: (.+)$', body)
+            needs[name] = re.findall(r'[a-z][a-z0-9-]*', found.group(1)) if found else []
+        below, frontier = set(), {'require-gate'}
+        while frontier:
+            frontier = {name for name, parents in needs.items() if name not in below and frontier & set(parents)}
+            below |= frontier
+        self.assertTrue({'plan-managed', 'check-managed-contracts', 'build-media', 'publish-managed-manifest', 'build-web', 'deploy-web'} <= below)
+        for name in sorted(below):
+            condition = re.search(r'(?m)^    if: .*(?:\n {6,}.*)*', bodies[name])
+            self.assertIsNotNone(condition, name)
+            self.assertRegex(condition.group(0), r'always\(\)|!cancelled\(\)', name)
+
+    def test_nightly_releases_exactly_the_target_its_plan_checked(self):
+        nightly = (self.WORKFLOWS / 'nightly.yml').read_text()
+        job = nightly[nightly.index('\n  release:'):nightly.index('\n  proof:')]
+        self.assertIn('needs: plan', job)
+        self.assertIn('target_sha: ${{ needs.plan.outputs.target_sha }}', job)
+        self.assertIn('release.py plan', nightly)
 
 
 class TranscribeOncePerDayTests(unittest.TestCase):
@@ -822,6 +880,41 @@ class TranscribeOncePerDayTests(unittest.TestCase):
 
     def test_a_manual_cut_always_transcribes(self):
         self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))
+
+
+class PromoteReusesCutTests(unittest.TestCase):
+    """Promote deploys the images, media and web bundles that the cut built and proved; it builds nothing again."""
+
+    def job(self, workflow, name):
+        text = (release.ROOT / '.github/workflows' / workflow).read_text()
+        start = text.index(f'\n  {name}:\n')
+        following = re.search(r'\n  [A-Za-z0-9_-]+:\n', text[start + 1:])
+        return text[start:start + 1 + following.start() if following else len(text)]
+
+    def test_promote_hands_the_cut_run_to_release(self):
+        selection = 'fromJSON(needs.select.outputs.selection)'
+        inputs = {
+            'manifest_run_id': f'{selection}.selection.run_id',
+            'manifest_artifact_id': f'{selection}.selection.manifest_artifact_id',
+            'manifest_sha256': f'{selection}.selection.manifest_sha256',
+            'reuse_release_id': f'{selection}.selection.release_id',
+            'media_sha256': f'{selection}.selection.media_sha256',
+            'web_artifact': f'toJSON({selection}.selection.web.production)',
+        }
+        block = self.job('promote.yml', 'release')
+        for key, expression in inputs.items():
+            self.assertIn(f'\n      {key}: ${{{{ {expression} }}}}\n', block, key)
+
+    def test_every_build_root_skips_when_a_cut_run_is_reused(self):
+        # build-managed-images and build-media need plan-managed's outputs, so they skip with it.
+        for name in ('plan-managed', 'build-web'):
+            self.assertIn("inputs.manifest_run_id == ''", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
+        for name in ('build-managed-images', 'build-media'):
+            self.assertIn("needs.plan-managed.outputs.should_publish == 'true'", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
+
+    def test_reuse_skips_the_gate_wait(self):
+        with patch.dict(os.environ, {'MANIFEST_RUN_ID': RUN, 'DEPLOY_MANAGED': 'true', 'DEPLOY_WEB': 'true'}):
+            self.assertFalse(release.builds_fresh_artifacts())
 
 
 if __name__ == '__main__':

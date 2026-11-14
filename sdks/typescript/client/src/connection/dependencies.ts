@@ -7,17 +7,10 @@ import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSna
 import type { LinkJudge } from "../sync/link-watch";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult, V1MediaPause } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
+import type { ParsedAccessGrant, ParticipantMediaAccess } from "../access/grant";
+import type { ConnectionAccessReason, ConnectionAccessRequest } from "../access/context";
 import { Context, Layer } from "effect";
-export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
-export type ConnectionAccessRequest = {
-  readonly reason: ConnectionAccessReason;
-  readonly replaceMediaConnection: boolean;
-  readonly signal?: AbortSignal;
-  readonly currentMediaToken?: ParticipantMediaCredential;
-  readonly expectedParticipantGeneration?: number;
-  readonly expectedMediaConnectionId?: string;
-};
+export type { ConnectionAccessReason, ConnectionAccessRequest };
 export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 export type ConnectionClock = {
   readonly now: () => number;
@@ -96,7 +89,7 @@ export type ConnectionMediaFactoryInput = {
   readonly credential: () => Promise<string>;
   /** A fresh grant for the current media connection (no replacement); resolves to its media token. */
   readonly refreshCredential?: () => Promise<string>;
-  readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
+  readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly onTransportPath?: (path: TransportPath) => void;

@@ -64,6 +64,8 @@ jobs:
       deploy_managed: true
       deploy_web: true
       orchestrated: true
+      # `plan` above required the target's green master Gate; the release does not wait for a runner to repeat it.
+      gate_checked: true
       stable_manifest_run_id: ${{ needs.plan.outputs.baseline_run_id }}
       stable_manifest_artifact_id: ${{ needs.plan.outputs.baseline_artifact_id }}
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}

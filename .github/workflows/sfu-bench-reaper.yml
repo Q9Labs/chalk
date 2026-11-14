@@ -17,7 +17,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Reuse the DO token already used by the managed nightly deploy workflow.
-    environment: nightly
+    environment:
+      name: nightly
+      deployment: false
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
