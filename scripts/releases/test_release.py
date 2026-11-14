@@ -204,6 +204,21 @@ class OwnSfuPromotionTests(unittest.TestCase):
             with self.subTest(now=f'{now:%H:%M}'):
                 self.assertEqual(self.promoted_sha(self.github(held()), now=now), SHA if promotes else '')
 
+    def test_automatic_promotion_hands_promote_the_end_of_the_window(self):
+        for now, end in ((datetime(2026, 11, 15, 22, 5, tzinfo=timezone.utc), '2026-11-16T01:00:00+00:00'),
+                         (datetime(2026, 11, 16, 0, 5, tzinfo=timezone.utc), '2026-11-16T01:00:00+00:00')):
+            self.promoted_sha(self.github(held()), now=now)
+            self.assertIn(f'until={end}', self.output.read_text().splitlines())
+
+    def test_promote_refuses_once_the_quiet_window_has_closed(self):
+        clock = iter([datetime(2026, 11, 16, 0, 59, tzinfo=timezone.utc), datetime(2026, 11, 16, 1, 5, tzinfo=timezone.utc)])
+        deadline = datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc)
+        naps = []
+        with self.assertRaises(ValueError) as error:
+            release.await_quiet(lambda: release.Busy(1), naps.append, deadline=deadline, now=lambda: next(clock), say=lambda line: None)
+        self.assertEqual(naps, [60])
+        self.assertIn('quiet window closed', str(error.exception))
+
     def test_automatic_promotion_holds_while_calls_run_or_the_count_is_unknown(self):
         for calls in (release.Busy(2), release.Unknown('no answer')):
             with self.subTest(calls=calls):

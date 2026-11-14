@@ -11,7 +11,7 @@ import tempfile
 import time
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import seal
@@ -433,9 +433,13 @@ def describe(result):
     return f'live calls unknown: {result.reason}'
 
 
-def await_quiet(read, sleep, *, wait_minutes=LIVE_CALL_WAIT_MINUTES, allow_live_calls=False, say=print):
-    """Return when no live call runs. Raise when calls last past the wait or the count cannot be read, unless a person allowed it."""
+def await_quiet(read, sleep, *, wait_minutes=LIVE_CALL_WAIT_MINUTES, allow_live_calls=False, say=print,
+                deadline=None, now=lambda: datetime.now(timezone.utc)):
+    """Return when no live call runs. Raise when calls last past the wait, the count cannot be read (unless a person
+    allowed it) or the deadline, the end of an automatic release's quiet window, has passed."""
     for minute in range(wait_minutes + 1):
+        if deadline and now() >= deadline:
+            raise ValueError(f'the quiet window closed at {deadline:%H:%M}Z; the next quiet-window tick tries again')
         result = read()
         if isinstance(result, Quiet):
             say('No live calls. Continuing.')
@@ -454,7 +458,9 @@ def await_quiet(read, sleep, *, wait_minutes=LIVE_CALL_WAIT_MINUTES, allow_live_
 def live_calls(github, args):
     allow = os.environ.get('ALLOW_LIVE_CALLS') == 'true'
     api_url = os.environ.get('LIVE_CALLS_API_URL', '')
-    await_quiet(lambda: read_live_calls(api_url), time.sleep, allow_live_calls=allow)
+    deadline = os.environ.get('DEPLOY_BEFORE')
+    await_quiet(lambda: read_live_calls(api_url), time.sleep, allow_live_calls=allow,
+                deadline=datetime.fromisoformat(deadline) if deadline else None)
 
 
 # Auto-promote deploys only while few people call: 21:00 to 01:00 UTC is 01:00 to 05:00 in Dubai.
@@ -464,6 +470,11 @@ QUIET_UNTIL_HOUR_UTC = 1
 
 def in_quiet_window(now):
     return now.hour >= QUIET_FROM_HOUR_UTC or now.hour < QUIET_UNTIL_HOUR_UTC
+
+
+def quiet_window_end(now):
+    end = now.replace(hour=QUIET_UNTIL_HOUR_UTC, minute=0, second=0, microsecond=0)
+    return end if now.hour < QUIET_UNTIL_HOUR_UTC else end + timedelta(days=1)
 
 
 def auto_promote(github, args, now=None, read=None):
@@ -483,7 +494,7 @@ def auto_promote(github, args, now=None, read=None):
         reason = f'promoting {sha}'
     except ValueError as error:
         sha, reason = '', str(error)
-    outputs({'sha': sha})
+    outputs({'sha': sha, 'until': quiet_window_end(now).isoformat()})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write(f'## Automatic promotion\n\n{"Promoting" if sha else "Not promoting"}: {reason}\n')
 

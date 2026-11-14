@@ -39,7 +39,9 @@ jobs:
       vars.CHALK_AUTO_PROMOTE == 'true' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
-    environment: production # Holds the API URL secret the live-call read needs.
+    environment: # Holds the API URL secret the live-call read needs; a record would mark the held cut inactive.
+      name: production
+      deployment: false
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 120
@@ -64,7 +66,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.decide.outputs.sha }}
         run: |
-          tried="$(gh run list --workflow promote.yml --limit 100 --json displayTitle --jq "[.[] | select(.displayTitle | endswith(\"${SHA}\"))] | length")"
+          # A run that the live-call guard refused deployed nothing, so it does not use up the attempt.
+          tried=0
+          for id in $(gh run list --workflow promote.yml --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId"); do
+            refused="$(gh run view "${id}" --json jobs --jq '[.jobs[] | select(.name == "live-calls" and .conclusion == "failure")] | length')"
+            [[ "${refused}" == 0 ]] && tried=$((tried + 1))
+          done
           echo "tried=${tried}" >> "$GITHUB_OUTPUT"
           if [[ "${tried}" != 0 ]]; then
             echo "Promote already ran ${tried} time(s) for ${SHA}. Not promoting it again automatically." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -74,14 +81,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.decide.outputs.sha }}
+          UNTIL: ${{ steps.decide.outputs.until }}
         run: |
-          gh workflow run promote.yml --ref master -f expected_sha="${SHA}"
+          runs_for_sha() { gh run list --workflow promote.yml --event workflow_dispatch --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId"; }
+          before="$(runs_for_sha)"
+          gh workflow run promote.yml --ref master -f expected_sha="${SHA}" -f deploy_before="${UNTIL}"
           run_id=""
           for _ in $(seq 24); do
-            run_id="$(gh run list --workflow promote.yml --event workflow_dispatch --limit 10 --json databaseId,displayTitle --jq "[.[] | select(.displayTitle | endswith(\"${SHA}\"))][0].databaseId // empty")"
+            run_id="$(comm -13 <(sort <<< "${before}") <(runs_for_sha | sort) | head -n 1)"
             [[ -n "${run_id}" ]] && break
             sleep 5
           done
-          [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
+          [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No new Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
           gh run watch "${run_id}" --exit-status --compact --interval 30
