@@ -17,6 +17,7 @@ export const dependencyPaths = [
   "apps/api/internal/spaces",
   "apps/api/internal/httpapi/api_keys.go",
   "apps/api/internal/httpapi/authorization.go",
+  "apps/api/internal/httpapi/middleware.go",
   "apps/api/internal/httpapi/request_credentials.go",
   "apps/api/internal/httpapi/spaces.go",
 ];
