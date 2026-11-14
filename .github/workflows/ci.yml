@@ -169,7 +169,8 @@ env:
   TARGET_SHA: ${{ inputs.target_sha }}
 
 concurrency:
-  group: ${{ inputs.orchestrated && format('chalk-release-child-{0}', github.run_id) || format('chalk-environment-{0}', inputs.managed_environment) }}
+  # A run that deploys nothing takes the environment lock for nobody, so it gets a group of its own.
+  group: ${{ inputs.orchestrated && format('chalk-release-child-{0}', github.run_id) || ((inputs.deploy_managed || inputs.deploy_web) && format('chalk-environment-{0}', inputs.managed_environment) || format('chalk-publish-{0}', github.run_id)) }}
   cancel-in-progress: false
 
 jobs:
