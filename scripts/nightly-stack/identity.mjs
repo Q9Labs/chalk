@@ -80,6 +80,9 @@ const cloudflareReal = cloudflareNames.map((name) => process.env[`CHALK_STACK_CL
 if (cloudflareReal.some(Boolean) && !cloudflareReal.every(Boolean)) throw new Error("identity: pass all of CHALK_STACK_CLOUDFLARE_* or none");
 const cloudflare = cloudflareReal.every(Boolean) ? Object.fromEntries(cloudflareNames.map((name, index) => [`CHALK_CLOUDFLARE_${name}`, cloudflareReal[index]])) : { CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused" };
 
+// New Spaces land on the plane the stack proves: Cloudflare when it has real credentials, the Chalk SFU otherwise.
+const mediaPlane = cloudflareReal.every(Boolean) ? "cf_sfu" : "chalk_sfu";
+
 env("api.env", {
   CHALK_API_ADDR: `127.0.0.1:${apiPort}`,
   CHALK_API_ENV: "local",
