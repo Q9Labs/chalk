@@ -92,6 +92,25 @@ defmodule ChalkSync.Live.ScreenShareLeaseEpisodeTest do
     assert DateTime.compare(row.renewed_until, old.hard_expires_at) == :gt
   end
 
+  # The grant lets the sharer publish before the media plane lists the screen, and the coordinator looks again
+  # at once. An unchanged observation without the screen is no sign that the share ended: the lease stays, or a
+  # guest could take it while the sharer still may publish.
+  test "a look at an unchanged observation keeps the lease of a share that has not appeared yet",
+       %{connections: [connection | _], fixture: fixture, host: host} do
+    use_adapter(observation(7, []))
+    live = LiveEpisode.new(fixture.episode)
+    assert {:ok, live, _} = LiveEpisode.reconcile(live, now: DateTime.utc_now())
+
+    {live, result} = enable_screen(live, host)
+    assert result["outcome"] in ["confirmed", "satisfied"]
+    old = lease_row(connection, fixture)
+
+    assert {:ok, live, _} = LiveEpisode.reconcile(live, now: DateTime.utc_now())
+
+    assert lease_row(connection, fixture).lease_id == old.lease_id
+    assert Map.has_key?(live.screen_leases, host.participant_id)
+  end
+
   # The release of an ended share failed, so the row stays. The same person's next share starts a new lease with a
   # full hard cap and does not inherit the old id and cap.
   test "a share that follows a failed release gets a fresh lease",
