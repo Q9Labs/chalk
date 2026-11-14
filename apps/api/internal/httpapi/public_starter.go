@@ -8,10 +8,7 @@ import (
 
 // The starter cookie outlives the starter's arrival: a Leave clears the guest cookie, but a rejoin is a new arrival and
 // still has to show who started the call. It is named by the arrival that started it and lasts as long as the call can.
-const (
-	publicStarterCookiePrefix = "__Host-chalk_space_starter_"
-	maxStarterCookies         = 16
-)
+const publicStarterCookiePrefix = "__Host-chalk_space_starter_"
 
 func setGuestCookie(w http.ResponseWriter, arrivalHandle, credential string) {
 	if arrivalHandle == "" || credential == "" {
@@ -38,7 +35,7 @@ func starterCredentialsFromRequest(r *http.Request) map[string]string {
 	starters := map[string]string{}
 	for _, cookie := range requestCredentialCookies(r) {
 		handle, ok := strings.CutPrefix(cookie.Name, publicStarterCookiePrefix)
-		if ok && len(starters) < maxStarterCookies {
+		if ok {
 			starters[handle] = strings.TrimSpace(cookie.Value)
 		}
 	}
