@@ -55,7 +55,7 @@ const turnOff = (id, title, metrics) => ({
     syncFanout,
     rosterApply,
     listPublications,
-    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track (the receiver drops the track locally and makes no SFU call)" },
+    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track (the receiver drops the track locally and makes no SFU call); for a microphone, which stays published when muted, until its track is disabled and no audio packet arrives" },
     syncAck,
     { id: "sfu_close", from: "call", description: "call until the sender's tracks/close reply" },
   ],

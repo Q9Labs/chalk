@@ -4,7 +4,7 @@
 #   docker buildx build --file Dockerfile.capture --build-context api=apps/api \
 #     --build-context protocol=features/media/sfu/protocol infrastructure/sfu
 
-ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:ee3901c61e423732605a51f1b8157c849ec01194ea0a274213b5202b2c11e7bf
+ARG GO_IMAGE=golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG TARGETARCH

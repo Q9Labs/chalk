@@ -58,3 +58,25 @@ test("a purpose must be one sentence, and a merge block must run before a merge"
   assert.equal(shapeProblems({ runs: ["daily"] }).length, 1);
   assert.equal(shapeProblems({ blocks: "release", runs: ["pull_request"] }).length, 1);
 });
+
+const demoted = { reason: "The proof fails under xvfb.", runs: ["43240593018", "43323563158"], issue: "https://github.com/Q9Labs/chalk/issues/1336" };
+
+test("a demoted check that is still listed as required is a problem", () => {
+  assert.equal(shapeProblems({ blocks: "advisory", reason: "Demoted until the flake is fixed.", demoted }).length, 0);
+  assert.ok(shapeProblems({ blocks: "merge", demoted }).some((problem) => problem.includes("is demoted but still listed as required")));
+  assert.ok(shapeProblems({ blocks: "release", runs: ["cut"], demoted }).some((problem) => problem.includes("is demoted but still listed as required")));
+});
+
+test("a demotion needs two different failing runs and an issue", () => {
+  const advisory = { blocks: "advisory", reason: "Demoted until the flake is fixed." };
+  assert.equal(shapeProblems({ ...advisory, demoted: { ...demoted, runs: ["43240593018"] } }).length, 1);
+  assert.equal(shapeProblems({ ...advisory, demoted: { ...demoted, runs: ["43240593018", "43240593018"] } }).length, 1);
+  assert.equal(shapeProblems({ ...advisory, demoted: { ...demoted, issue: "https://example.com/1" } }).length, 1);
+  assert.equal(shapeProblems({ ...advisory, demoted: { ...demoted, reason: "" } }).length, 1);
+});
+
+test("the repository demotes the camera proof, and it is not required", () => {
+  const camera = readRegister().find((candidate) => candidate.id === "gate:camera-proof");
+  assert.equal(camera.blocks, "advisory");
+  assert.ok(camera.demoted.runs.length >= 2);
+});

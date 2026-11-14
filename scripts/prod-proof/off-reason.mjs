@@ -98,7 +98,7 @@ export async function offReasonProof(run) {
   const baselineSdk = await loadSdk(run, "baseline", await baselineEntry(run));
   await prepareIntegration(run, false);
   const { path, ending } = await openEpisode(run);
-  const { defaultSyncUrl } = await loadSdk(run, "urls", fileURLToPath(new URL("../../sdks/typescript/client/src/space-client/urls.ts", import.meta.url)));
+  const { defaultSyncUrl } = await loadSdk(run, "urls", fileURLToPath(new URL("../../sdks/typescript/client/src/urls.ts", import.meta.url)));
   const url = defaultSyncUrl(run.config.api_url);
   const clients = [];
   try {

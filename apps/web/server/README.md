@@ -61,7 +61,7 @@ First sign-in provisions the Tenant with the permanent `https://chalkmeet.com` a
 
 ## Verification
 
-The Gate's `dashboard-engine` lane runs `apps/web/tests/dashboard/check-engine.sh http` for dashboard, SDK dependency and API changes, and the `dashboard-refresh` lane runs `check-engine.sh refresh`, the owner call across the real five-minute media-access lifetime. A pull request runs the refresh lane only for the inputs it exercises; the merge queue runs it for every change. It drives the real API and named Pages Functions in workerd with an isolated database; only the engine transport injects 429s. Heavy checks run on the M4, not a paid timing box:
+The Gate's `dashboard-engine` lane runs `apps/web/tests/dashboard/check-engine.sh http` for dashboard, SDK dependency and API changes, and the `dashboard-refresh` lane runs `check-engine.sh refresh`, the owner call across the real five-minute media-access lifetime. A pull request runs the refresh lane only for the inputs it exercises; the merge queue runs it for every change. The `board-local` lane (`check-engine.sh board`, group `dashboard-board`) runs the two board proofs of `tests/board.e2e.ts` that need no proof API key in a browser against the same stack, for web and board proof inputs; the third board proof, which joins an SDK guest, needs a deployed target and runs in the nightly cut. It drives the real API and named Pages Functions in workerd with an isolated database; only the engine transport injects 429s. Heavy checks run on the M4, not a paid timing box:
 
 ```sh
 CHALK_REMOTE_NEEDS_BROWSER=1 bash scripts/gates/remote.sh -- bash apps/web/tests/dashboard/check.sh

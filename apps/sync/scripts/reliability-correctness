@@ -18,6 +18,8 @@ if [[ "$part" != server ]]; then
   # The client proofs start the Sync fixture with mix, which needs the locked dependencies; the server part fetches them in its own gate.
   if [[ "$part" == clients ]]; then
     apps/sync/scripts/gate.sh deps
+    # The browser proof gives the fixture 30 seconds to start, which a cold build cache does not allow: compile first.
+    (cd apps/sync && MIX_ENV=test mix compile)
   fi
   pnpm --dir sdks/typescript/client run test
   pnpm --dir packages/whiteboard run test
