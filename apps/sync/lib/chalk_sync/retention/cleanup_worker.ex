@@ -99,20 +99,23 @@ defmodule ChalkSync.Retention.CleanupWorker do
       ])
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
-        candidate = candidate(row)
-        Postgrex.query!(transaction, "savepoint retention_candidate", [])
-
-        case cleanup_candidate(transaction, candidate, now, result) do
-          {:ok, next} ->
-            Postgrex.query!(transaction, "release savepoint retention_candidate", [])
-            next
-
-          {:error, reason} ->
-            Postgrex.query!(transaction, "rollback to savepoint retention_candidate", [])
-            %{result | held: [{candidate.episode_id, reason} | result.held]}
-        end
+        cleanup_in_savepoint(transaction, candidate(row), now, result)
       end)
     end)
+  end
+
+  defp cleanup_in_savepoint(transaction, candidate, now, result) do
+    Postgrex.query!(transaction, "savepoint retention_candidate", [])
+
+    case cleanup_candidate(transaction, candidate, now, result) do
+      {:ok, next} ->
+        Postgrex.query!(transaction, "release savepoint retention_candidate", [])
+        next
+
+      {:error, reason} ->
+        Postgrex.query!(transaction, "rollback to savepoint retention_candidate", [])
+        %{result | held: [{candidate.episode_id, reason} | result.held]}
+    end
   end
 
   defp cleanup_candidate(transaction, candidate, now, result) do
