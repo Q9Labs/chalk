@@ -90,6 +90,7 @@ instance=$(aws ec2 run-instances --image-id "$ami" --instance-type t4g.small --i
   --user-data "$user_data" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=chalk-purpose,Value=nightly-host-proof},{Key=Name,Value=chalk-nightly-host-proof-$run_id}]" \
                        "ResourceType=volume,Tags=[{Key=chalk-purpose,Value=nightly-host-proof}]" \
+                       "ResourceType=network-interface,Tags=[{Key=chalk-purpose,Value=nightly-host-proof}]" \
   --query 'Instances[0].InstanceId' --output text)
 step "Host launched"
 wait_online
