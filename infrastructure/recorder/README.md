@@ -46,21 +46,13 @@ Production plans require `capture_capacity_inputs_migrated = true` after `reserv
 
 Production R2 adoption is fail-closed: a plan must name the existing bucket, give its private inventory import ID and carry the digest of the approved no-delete, no-replacement plan. Nightly can use its generated name. Backend configuration and credentials live outside this tree, and `scripts/recorder/gate.sh` initializes with the backend disabled and never applies a provider.
 
-The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. Every apply must set `whiteboard_allowed_origins` to the exact web origins (no wildcards, paths or trailing slashes). The CORS rule permits only `GET`, `PUT` and the headers those uploads sign, and does not make the bucket public.
+The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. The managed CORS rule allows any origin for `GET` and `PUT` with the fixed headers in `whiteboard_cors_allowed_headers` (`locals.tf`). There is no origin list to maintain: the API authenticates the participant before it issues a URL, and the URL's signature is the access control, so an origin list adds nothing against a caller who holds the URL. A new tenant or portal origin needs no bucket change. The rule does not make the bucket public; keep its r2.dev and custom domains off.
+
+The production chat-files rule is not managed by this tofu root. It lives on the bucket `chalk-miscellaneous` (rule id `chalk-production-chat-files`) beside an unrelated rule, and a change to `cloudflare_r2_bucket_cors.whiteboard` in `main.tf` does not reach it. Update it by hand: read the live rules with `cf r2 buckets cors get chalk-miscellaneous` and save them as the undo, edit only that rule, then replace the rule set with `cf r2 buckets cors update chalk-miscellaneous --rules @<file> --force`, which keeps only the rules in the file. Prove it with `pnpm prod:proof chat-upload`, which sends a preflight from an origin on no list.
 
 No bootstrap assertion or reusable credential may enter OpenTofu state, cloud-init, logs or a tracked file.
 
 ## Retained boot diagnostics and cold qualification
-
-The private bucket also serves browser-authorized chat and whiteboard files
-through short-lived presigned URLs. The managed CORS rule allows any origin for
-`GET` and `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
-checksum and attachment identity headers used by chat uploads. There is no
-origin list to maintain: the API authenticates the participant before it issues
-a URL, and the URL's signature is the access control, so an origin list adds
-nothing against a caller who holds the URL. The rule does not make the bucket
-public; keep its r2.dev and custom domains off. A new tenant or portal origin
-needs no bucket change.
 
 Failed-bootstrap fleet nodes retain a `<name>-bootstrap-evidence` snapshot (the newest three are kept). To inspect one, create a Droplet from it with the diagnostic SSH key and read `/var/log/cloud-init-output.log` and `journalctl -u chalk-recorder-*`. The snapshot may hold the node's one-time bootstrap environment, so delete it after use.
 
