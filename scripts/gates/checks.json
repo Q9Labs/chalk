@@ -695,7 +695,7 @@
       "blocks": "alert",
       "minutes": 0.5,
       "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#deploy-current",
@@ -705,7 +705,7 @@
       "blocks": "alert",
       "minutes": 13.5,
       "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. It is skipped when nightly already runs the current cut."
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28. It is skipped when nightly already runs the current cut."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-back",
@@ -715,7 +715,7 @@
       "blocks": "alert",
       "minutes": 7.5,
       "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-forward",
@@ -723,9 +723,9 @@
       "catches": "Rolling forward again after a rollback failing.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": 7.5,
+      "minutes": 28,
       "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#result",
@@ -735,7 +735,7 @@
       "blocks": "alert",
       "minutes": 0.5,
       "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:gate.yml#sync",
