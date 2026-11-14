@@ -14,7 +14,9 @@ defmodule ChalkSync.HostEnvContractTest do
 
       try do
         Enum.each(values, fn {key, value} -> System.put_env(key, stand_in(key, value)) end)
-        assert Config.Reader.read!(@runtime, env: :prod, target: :host) |> Keyword.has_key?(:chalk_sync)
+
+        assert Config.Reader.read!(@runtime, env: :prod, target: :host)
+               |> Keyword.has_key?(:chalk_sync)
       after
         Enum.each(previous, fn
           {key, nil} -> System.delete_env(key)
@@ -38,10 +40,19 @@ defmodule ChalkSync.HostEnvContractTest do
 
   defp stand_in(key, value) do
     cond do
-      not String.contains?(value, "__") -> value
-      key == "CHALK_DATABASE_URL" -> "postgres://contract:contract@db.invalid:5432/chalk?sslmode=verify-full"
-      key == "CHALK_SYNC_TOKEN_PUBLIC_KEYS" -> JSON.encode!(%{"contract-value" => Base.url_encode64(:binary.copy(<<1>>, 32), padding: false)})
-      true -> "contract-value"
+      not String.contains?(value, "__") ->
+        value
+
+      key == "CHALK_DATABASE_URL" ->
+        "postgres://contract:contract@db.invalid:5432/chalk?sslmode=verify-full"
+
+      key == "CHALK_SYNC_TOKEN_PUBLIC_KEYS" ->
+        JSON.encode!(%{
+          "contract-value" => Base.url_encode64(:binary.copy(<<1>>, 32), padding: false)
+        })
+
+      true ->
+        "contract-value"
     end
   end
 end
