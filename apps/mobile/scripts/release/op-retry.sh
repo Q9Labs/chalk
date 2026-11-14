@@ -4,7 +4,7 @@
 op_retry() {
   local attempt err
   err=$(mktemp)
-  for attempt in $(seq 1 15); do
+  for attempt in $(seq 1 16); do
     if op "$@" 2>"$err"; then
       rm -f "$err"
       return 0
@@ -14,7 +14,8 @@ op_retry() {
       rm -f "$err"
       return 1
     fi
-    echo "1Password rate limit; try $attempt of 15, waiting 4 minutes." >&2
+    [[ $attempt -lt 16 ]] || break
+    echo "1Password rate limit; try $attempt of 16, waiting 4 minutes." >&2
     sleep 240
   done
   rm -f "$err"
