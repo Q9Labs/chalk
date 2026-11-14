@@ -2,8 +2,8 @@
 // Save a cut-scoped budget verdict before history publishing or issue updates can fail.
 import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { gatedActionIds, planeBudgets, validateBudgetEntries } from "./budgets.mjs";
-import { diffMetrics } from "./diff.mjs";
+import { gatedActionIds, MIN_GATED_SAMPLES, planeBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { diffMetrics, expectedMetricRows, renderExpectedMetrics } from "./diff.mjs";
 import { parseScorecard } from "./schema.mjs";
 
 // --latency-deferred: the cut's cards carry no latency kit run; the staging latency workflow scores that one against the same budgets.
@@ -15,7 +15,7 @@ const { budgets } = JSON.parse(execFileSync("git", ["show", `${revision}:perf/bu
 validateBudgetEntries(budgets);
 const metrics = new Set();
 const planes = new Set();
-const measured = new Set();
+const chalkSfuMetrics = [];
 const missing = new Set();
 for (const path of paths) {
   const card = parseScorecard(JSON.parse(readFileSync(path, "utf8")));
@@ -29,14 +29,21 @@ for (const path of paths) {
   planes.add(card.mediaPlane);
   // Only the Chalk SFU plane holds the cut. The Cloudflare plane gates in its own history job.
   if (card.mediaPlane !== "chalk_sfu") continue;
-  for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
+  chalkSfuMetrics.push(...card.metrics);
   for (const row of diffMetrics([], card.metrics, planeBudgets(budgets, card.mediaPlane)).failures) metrics.add(`${card.mediaPlane}.${row.id}`);
 }
 // A standalone latency evaluation needs the Chalk SFU card: a Cloudflare card cannot replace its measurements, and the latency kit
 // records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
 // A deferred cut has no latency card to show: the cut's proofs write none, and Promote adds the staging latency verdict of the same SHA.
 if (planes.has("chalk_sfu")) {
-  if (!latencyDeferred) for (const id of gatedActionIds(budgets, "chalk_sfu")) if (!measured.has(id)) missing.add(`chalk_sfu.${id}`);
+  if (!latencyDeferred) {
+    // Every gated action metric must be there with enough samples; the table lists them all, so a missing one is a row.
+    const rows = expectedMetricRows(gatedActionIds(budgets, "chalk_sfu"), chalkSfuMetrics, planeBudgets(budgets, "chalk_sfu"), MIN_GATED_SAMPLES);
+    const table = renderExpectedMetrics(rows, `Gated action metrics of ${revision.slice(0, 8)} on chalk_sfu`);
+    process.stderr.write(`${table}\n`);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table}\n`);
+    for (const row of rows) if (row.verdict === "missing" || row.verdict === "too few samples") missing.add(`chalk_sfu.${row.id} (${row.verdict}: ${row.samples} of ${row.floor})`);
+  }
 } else if (!latencyDeferred && ![...missing].some((item) => item.startsWith("chalk_sfu scorecard"))) {
   missing.add("chalk_sfu scorecard");
 }

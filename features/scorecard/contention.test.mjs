@@ -20,7 +20,7 @@ function card(evidence, value = 300, id = "nightly-1") {
     schema: SCORECARD_SCHEMA,
     run: { id, commit: "a".repeat(40), tier: "nightly", environment: "nightly", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
-    metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: value, p95: value, source: "latency-kit" }],
+    metrics: [{ id: "action.leave_ms", unit: "ms", n: 60, p50: value, p95: value, source: "latency-kit" }],
     dropped: [],
     contention: evidence,
   });
@@ -185,7 +185,7 @@ test("the cut-scoped promotion evaluator fails closed on valid contended cards",
   ]) {
     const current = card(isolation, value);
     current.run.commit = revision;
-    current.metrics.push(...others.map((id) => ({ id, unit: "ms", n: 20, p50: 100, p95: 100, source: "latency-kit" })));
+    current.metrics.push(...others.map((id) => ({ id, unit: "ms", n: 60, p50: 100, p95: 100, source: "latency-kit" })));
     writeFileSync(path, JSON.stringify(current));
     writeFileSync(output, "");
     const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "evaluate.mjs"), revision, "123", path], { cwd: root, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: output } });
