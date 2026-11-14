@@ -93,6 +93,27 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
     await starter.page.keyboard.press("Escape");
   });
 
+  await step("media works again after the rejoin: the starter publishes and the guest sees the video advance", async () => {
+    // A rejoin starts a new seat and a new media connection, so camera and microphone may come back off.
+    await starter.page.getByRole("region", { name: "Space stage", exact: true }).hover();
+    for (const [off, on] of [
+      ["Unmute microphone", "Mute microphone"],
+      ["Turn on camera", "Turn off camera"],
+    ]) {
+      const button = starter.page.getByRole("button", { name: off, exact: true });
+      if (await button.isVisible()) await button.click();
+      await starter.page.getByRole("button", { name: on, exact: true }).waitFor({ timeout: enableMs });
+    }
+    const own = await measureFirstFrame(starter.page, starter.name, { timeoutMs: waitMs });
+    if (own.firstFrameMs === null) throw new Error(senderNeverPublished(starter.name, own, waitMs));
+    const received = await measureFirstFrame(guest.page, starter.name, { timeoutMs: waitMs });
+    if (received.firstFrameMs === null) throw new Error(receiverTimedOut(guest.name, starter.name, received, waitMs));
+    const advance = await measureAdvance(guest.page, starter.name, { timeoutMs: waitMs });
+    if (advance.advancedAfterMs === null) throw new Error(videoNotAdvancing(guest.name, starter.name, advance, waitMs));
+    const back = await measureAdvance(starter.page, guest.name, { timeoutMs: waitMs });
+    if (back.advancedAfterMs === null) throw new Error(videoNotAdvancing(starter.name, guest.name, back, waitMs));
+  });
+
   await step("the guest has no owner menu: Leave call leaves at once, and Rejoin brings them back", async () => {
     await control(guest, "Leave call");
     await guest.page.getByRole("button", { name: "Rejoin", exact: true }).waitFor({ timeout: 30_000 });

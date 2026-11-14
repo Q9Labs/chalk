@@ -39,10 +39,6 @@ const (
 	publicInviteFormatHeader = "X-Chalk-Invite-Format"
 	publicGuestScheme        = "ChalkGuest"
 	publicGuestCookiePrefix  = "__Host-chalk_space_guest_"
-	// The starter cookie outlives the starter's arrival: a Leave clears the guest cookie, but a rejoin still has to
-	// show who started the call. It is named by the arrival that started it and lasts as long as the call can.
-	publicStarterCookiePrefix = "__Host-chalk_space_starter_"
-	maxStarterCookies         = 16
 )
 
 type PublicInviteService interface {
@@ -717,20 +713,6 @@ func guestCredentialFromRequest(r *http.Request, arrivalHandle string) string {
 	return ""
 }
 
-func starterCredentialsFromRequest(r *http.Request) map[string]string {
-	if isNativePublicRequest(r) {
-		return nil
-	}
-	starters := map[string]string{}
-	for _, cookie := range requestCredentialCookies(r) {
-		handle, ok := strings.CutPrefix(cookie.Name, publicStarterCookiePrefix)
-		if ok && len(starters) < maxStarterCookies {
-			starters[handle] = strings.TrimSpace(cookie.Value)
-		}
-	}
-	return starters
-}
-
 func rejectNativePublicCookies(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isNativePublicRequest(r) && strings.TrimSpace(r.Header.Get("Cookie")) != "" {
@@ -792,8 +774,7 @@ func writePublicSpaceCreated(w http.ResponseWriter, r *http.Request, status int,
 	if credential == "" {
 		credential = response.Arrival.GuestCredential
 	}
-	setGuestCookie(w, response.Arrival.ArrivalHandle, credential)
-	setStarterCookie(w, response.Arrival.ArrivalHandle, credential, response.LifecycleUntil)
+	setCreatorCookies(w, response.Arrival.ArrivalHandle, credential, response.LifecycleUntil)
 	response.GuestCredential = ""
 	response.Arrival.GuestCredential = ""
 	writeJSON(w, status, response)
@@ -816,21 +797,6 @@ func writePublicLeave(w http.ResponseWriter, r *http.Request, status int, _ stru
 		}
 	}
 	w.WriteHeader(status)
-}
-
-func setGuestCookie(w http.ResponseWriter, arrivalHandle, credential string) {
-	if arrivalHandle == "" || credential == "" {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: publicGuestCookiePrefix + arrivalHandle, Value: credential, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
-}
-
-func setStarterCookie(w http.ResponseWriter, arrivalHandle, credential string, until time.Time) {
-	maxAge := int(time.Until(until).Seconds())
-	if arrivalHandle == "" || credential == "" || maxAge <= 0 {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: publicStarterCookiePrefix + arrivalHandle, Value: credential, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: maxAge})
 }
 
 func requestHandleParameter() APIParameterContract {
