@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -92,6 +93,33 @@ func TestBuildRecordingCapturePlanIgnoresPausedPublicationWithCloudflareIdentity
 	}
 	if len(plan.Tracks()) != 0 {
 		t.Fatalf("paused publication became capture track: %#v", plan.Tracks())
+	}
+}
+
+// The capture plan reads the exact bytes the provider-operation writer stores, so every shape the writer can store must decode.
+func TestBuildRecordingCapturePlanDecodesEveryStoredPublicationShape(t *testing.T) {
+	source, input, deadline := capturePlanSourceFixture(t)
+	admittedID := capturePlanID(t, "77777777-7777-4777-8777-777777777777")
+	reference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher","m":"0","t":"camera","g":7}`))
+	mutedReference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher","m":"1","t":"microphone","g":7}`))
+	_, _, payload, err := provideroperations.CanonicalizeObservation(provideroperations.ObservationInput{
+		TenantID: input.TenantID, EpisodeID: input.EpisodeID,
+		Publications: []provideroperations.Publication{
+			{ParticipantID: admittedID, Source: "camera", Enabled: true, PublicationID: reference},
+			{ParticipantID: admittedID, Source: "microphone", Enabled: false, PublicationID: mutedReference, Held: true},
+			{ParticipantID: admittedID, Source: "screen", Enabled: false},
+		},
+	})
+	if err != nil {
+		t.Fatalf("canonicalize observation: %v", err)
+	}
+	source.ProviderPublications = payload
+	plan, err := buildRecordingCapturePlan(source, input, 1, deadline.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("a muted-in-place microphone, seen before Sync's pause, must not fail the plan: %v", err)
+	}
+	if len(plan.Tracks()) != 1 || plan.Tracks()[0].Source != captureplane.TrackSourceCamera {
+		t.Fatalf("capture must keep the enabled camera and drop the held microphone and the closed screen: %#v", plan.Tracks())
 	}
 }
 

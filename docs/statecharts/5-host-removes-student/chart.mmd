@@ -1,0 +1,44 @@
+---
+title: "A host removes or demotes a student"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: In the class
+    lg1: Working
+    lg2: Done
+    lg3: Failed
+    lg4: Breaks FailedMeansNothingChanged or ObserverHasNoCamera
+    lg5: Path to the FailedMeansNothingChanged or ObserverHasNoCamera bug
+  }
+  class lg0 teal
+  class lg1 yellow
+  class lg2 blue
+  class lg3 orange
+  class lg4 breaks
+  class lg5 bugPath
+  s0: Student is in the class
+  s1: Removing the student
+  s2: Making the student an observer, camera still on
+  s3: Student removed
+  s4: Student is an observer, camera stopped
+  s5: Could not remove, student is still in
+  s6: Host told it failed, but the student is an observer with the camera on
+  [*] --> s0
+  s0 --> s1: the host presses Remove
+  s0 --> s2: the host makes the student an observer
+  s1 --> s3: the student is disconnected
+  s1 --> s5: the removal fails after 100 tries
+  s2 --> s4: the camera is stopped
+  s2 --> s6: stopping the camera fails
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 teal
+  class s0 bugPath
+  class s1 yellow
+  class s2 yellow
+  class s2 bugPath
+  class s3 blue
+  class s4 blue
+  class s5 orange
+  class s6 orange
+  class s6 breaks
+  class s6 bugPath

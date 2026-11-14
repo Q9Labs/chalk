@@ -132,7 +132,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       fetch,
     }),
-    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       return connection as unknown as globalThis.RTCPeerConnection;
@@ -147,6 +147,7 @@ export function createSFUConnectionMediaClient(client: CloudflareSFUClient): Nat
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    cancelPreparedLocalPublicationTarget: client.cancelPreparedLocalPublicationTarget.bind(client),
     pauseLocalCapture: client.pauseLocalCapture.bind(client),
     setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
     closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),

@@ -17,6 +17,12 @@ export type ConnectionAccessEffectService = {
   readonly ensureFresh: (reason?: ConnectionAccessReason) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
   readonly refresh: (reason: Exclude<ConnectionAccessReason, "join">, replaceMediaConnection: boolean) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
   readonly refreshAfterRejection: () => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
+  /**
+   * Replaces the media binding the caller runs on: `observedConnectionId`, or the binding in place when it is left out.
+   * When another caller already replaced it, the binding in place is returned with `created: false`, and the caller
+   * that created it adopts it.
+   */
+  readonly replaceMedia: (observedConnectionId?: string) => Effect.Effect<{ readonly access: ParsedAccessGrant; readonly created: boolean }, ConnectionAccessFailure>;
   readonly getSyncToken: (reason?: ConnectionAccessReason) => Effect.Effect<ParticipantSyncCredential, ConnectionAccessFailure>;
   readonly getMediaToken: () => Effect.Effect<ParticipantMediaCredential, ConnectionAccessFailure>;
   readonly subscribeAutomaticMediaReplacement: (listener: AutomaticMediaReplacementListener) => Effect.Effect<() => void>;
@@ -32,6 +38,7 @@ type AccessState = {
 type FetchResult = {
   readonly access: ParsedAccessGrant;
   readonly automaticMediaReplacement: boolean;
+  readonly created: boolean;
 };
 type FetchInput = {
   readonly current: AccessState;
@@ -39,6 +46,8 @@ type FetchInput = {
   readonly replaceMediaConnection: boolean;
   readonly force: boolean;
   readonly refreshWindowMs: number;
+  /** The media binding the caller saw when it asked for a replacement. A binding that has changed since is already replaced. */
+  readonly observedBinding: string | undefined;
   readonly replacementGate: () => Deferred.Deferred<void, ConnectionAccessFailure> | undefined;
 };
 /**
@@ -67,17 +76,17 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
           });
         });
       const automaticMediaReplacementListeners = new Set<AutomaticMediaReplacementListener>();
-      const fetch = (reason: ConnectionAccessReason, replaceMediaConnection: boolean, force: boolean): Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure> =>
-        SynchronizedRef.modifyEffect(state, (current) => fetchAccessGrant(provider, { current, reason, replaceMediaConnection, force, refreshWindowMs, replacementGate })).pipe(
+      const fetchResult = (reason: ConnectionAccessReason, replaceMediaConnection: boolean, force: boolean, observedBinding?: string): Effect.Effect<FetchResult, ConnectionAccessFailure> =>
+        SynchronizedRef.modifyEffect(state, (current) => fetchAccessGrant(provider, { current, reason, replaceMediaConnection, force, refreshWindowMs, observedBinding, replacementGate })).pipe(
           Effect.catchTag("MediaReplacementPending", ({ done }) =>
             Deferred.await(done).pipe(
-              Effect.flatMap(() => fetch(reason, replaceMediaConnection, force)),
-              Effect.map((access) => ({ access, automaticMediaReplacement: false })),
+              Effect.flatMap(() => fetchResult(reason, replaceMediaConnection, force, observedBinding)),
+              Effect.map((result) => ({ ...result, automaticMediaReplacement: false })),
             ),
           ),
           Effect.tap((result: FetchResult) => Effect.sync(() => notifyAutomaticMediaReplacement(automaticMediaReplacementListeners, result))),
-          Effect.map((result: FetchResult) => result.access),
         );
+      const fetch = (reason: ConnectionAccessReason, replaceMediaConnection: boolean, force: boolean) => fetchResult(reason, replaceMediaConnection, force).pipe(Effect.map((result) => result.access));
       const initialize = (reason: "join" | "access_retry" = "join") =>
         fetch(reason, false, false).pipe(Effect.catchTag("ConnectionAccessFailure", (failure) => (failure.code === "access.invalid" && SynchronizedRef.getUnsafe(state).access === null ? fetch(reason, false, true) : Effect.fail(failure))));
       const millisecondsUntilRefresh = Effect.gen(function* () {
@@ -93,6 +102,7 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
         ensureFresh,
         refresh: (reason, replaceMediaConnection) => fetch(reason, replaceMediaConnection, true),
         refreshAfterRejection: () => fetch("access_retry", true, true),
+        replaceMedia: (observedConnectionId) => Effect.suspend(() => fetchResult("media_recovery", true, true, observedConnectionId ?? SynchronizedRef.getUnsafe(state).access?.media.clientPayload.connectionId)).pipe(Effect.map(({ access, created }) => ({ access, created }))),
         getSyncToken: (reason = "sync_recovery") => ensureFresh(reason).pipe(Effect.map((access) => access.sync.token)),
         getMediaToken: () => ensureFresh("scheduled_refresh").pipe(Effect.map((access) => access.media.token)),
         subscribeAutomaticMediaReplacement: (listener) =>
@@ -117,8 +127,9 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
     const now = yield* Clock.currentTimeMillis;
     const currentAccess = input.current.access;
     if (canReuseAccess(input, now) && currentAccess) {
-      return [{ access: currentAccess, automaticMediaReplacement: false }, input.current] as const;
+      return [unchanged(currentAccess), input.current] as const;
     }
+    if (currentAccess && replacedSinceObserved(input, currentAccess)) return [unchanged(currentAccess), input.current] as const;
     const gate = input.replacementGate();
     const shouldReplaceMediaConnection = mediaReplacementRequested(input, now, Boolean(gate));
     if (shouldReplaceMediaConnection && gate) return yield* Effect.fail(new MediaReplacementPending({ done: gate }));
@@ -133,8 +144,15 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
       },
       catch: (cause) => new ConnectionAccessFailure({ code: "access.invalid", cause }),
     });
-    return [{ access: next, automaticMediaReplacement: currentAccess !== null && !input.replaceMediaConnection && !hasSameMediaConnection(currentAccess, next) }, { access: next }] as const;
+    return [{ access: next, automaticMediaReplacement: currentAccess !== null && !input.replaceMediaConnection && !hasSameMediaConnection(currentAccess, next), created: true }, { access: next }] as const;
   });
+}
+// Callers queue on the state, so one that asked to replace a binding another has since replaced would replace the new one.
+function replacedSinceObserved(input: FetchInput, current: ParsedAccessGrant): boolean {
+  return input.observedBinding !== undefined && mediaBinding(current) !== input.observedBinding;
+}
+function unchanged(access: ParsedAccessGrant): FetchResult {
+  return { access, automaticMediaReplacement: false, created: false };
 }
 function connectionAccessRequest(input: FetchInput, replaceMediaConnection: boolean): Readonly<ConnectionAccessRequest> {
   return Object.freeze({
