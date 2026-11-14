@@ -41,6 +41,7 @@ const plans = {
     media: true,
     cameraShare: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["camera-share"],
   },
   "recording-rejoin": {
@@ -210,7 +211,7 @@ async function main(mode, forceLayerSwitch) {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   try {
-    const config = await loadConfig();
+    const config = await loadConfig({ capabilities: plans[mode].recorderFleet !== false });
     await sweepStaleRuns(config);
     run = await createRun(config, directory, interruption.signal, runId);
     await runProofs(run, plans[mode], report, forceLayerSwitch);

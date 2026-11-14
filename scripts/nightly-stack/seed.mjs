@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, apiOrigin] = process.argv.slice(2);
+const [dir, apiOrigin, proofOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 
 async function call(method, path, body) {
@@ -25,7 +25,14 @@ const scopes = [...resources.flatMap((resource) => ["read", "write", "delete"].m
 const key = await call("POST", `/v1/tenants/${tenant.id}/api-keys`, { name: "Nightly proofs", scopes, expires_at: new Date(Date.now() + 86400000).toISOString() });
 
 const values = {
+  CHALK_PROOF_CONFIG_SOURCE: "env",
   CHALK_PROOF_API_URL: apiOrigin,
+  CHALK_PROOF_WEB_URL: apiOrigin,
+  CHALK_PROOF_PROOF_ORIGIN: proofOrigin,
+  // The proofs that run on this stack send no webhooks; the harness still requires both values.
+  CHALK_PROOF_WEBHOOK_SERVICE_URL: proofOrigin,
+  CHALK_PROOF_WEBHOOK_ENDPOINT_ID: "unused",
+  CHALK_PROOF_MEDIA_PLANE: "chalk_sfu",
   CHALK_PROOF_API_KEY: key.secret ?? key.api_key ?? key.key,
   CHALK_PROOF_TENANT_ID: tenant.id,
   CHALK_PROOF_SPACE_ID_CHALK_SFU: space.id,

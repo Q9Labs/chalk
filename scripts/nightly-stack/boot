@@ -48,6 +48,8 @@ tick() {
 boot_start=$phase_start
 
 port_api=8080 port_sync=4100 port_bridge=8444 port_sfu_control=8443 port_sfu_media=50000
+# The proof harness serves its pages here; the API must allow the origin.
+proof_origin=http://127.0.0.1:4310
 db_url="postgres://postgres:$(openssl rand -hex 16)@127.0.0.1:5432/chalk?sslmode=disable"
 
 # Pull everything at once; the pulls are the slowest step on a cold machine.
@@ -58,7 +60,7 @@ wait
 tick pull
 
 # Keys, certificates and tokens. Nothing here is a stored secret; the machine and these files go away after the run.
-node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media"
+node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin"
 tick identity
 
 docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu > /dev/null 2>&1 || true
@@ -109,7 +111,7 @@ wait_http "https://chalk-sfu:$port_sfu_control/readyz" sfu --resolve "chalk-sfu:
   --cacert "$dir/ca.crt" --cert "$dir/api.crt" --key "$dir/api.key"
 tick services
 
-node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api"
+node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api" "$proof_origin"
 tick seed
 
 awk -v start="$boot_start" -v now="$(date +%s.%N)" 'BEGIN { printf "boot %-12s %6.1fs\n", "total", now - start }'
