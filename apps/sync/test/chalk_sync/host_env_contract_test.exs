@@ -1,7 +1,8 @@
 defmodule ChalkSync.HostEnvContractTest do
-  # The host environment contracts (infrastructure/managed-episode/env) document every variable the controller renders into the
-  # host. A release that makes a new variable required would otherwise first fail on the host, so each contract must pass
-  # config/runtime.exs as it stands. A value an operator supplies from the secret store is replaced by a well-formed stand-in.
+  # The host environment contracts (infrastructure/managed-episode/env) document every variable the controller
+  # renders into the host. A release that makes a new variable required would otherwise first fail on the host, so
+  # each contract must pass config/runtime.exs as it stands. A value an operator supplies from the secret store is
+  # replaced by a well-formed stand-in.
   use ExUnit.Case, async: false
 
   @contracts Path.expand("../../../../infrastructure/managed-episode/env", __DIR__)
