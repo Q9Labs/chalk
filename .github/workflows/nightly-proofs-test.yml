@@ -18,6 +18,7 @@ jobs:
     uses: ./.github/workflows/nightly-proofs.yml
     with:
       release_sha: ${{ github.sha }}
-      proofs: latency-smoke
+      proofs: latency-smoke latency
       image_source: build
+      latency_samples: "3"
     secrets: inherit

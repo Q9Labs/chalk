@@ -7,6 +7,8 @@ import { join } from "node:path";
 
 const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret, frontPort] = process.argv.slice(2);
 const kid = "nightly-stack";
+// An announce address other than loopback means the Chalk SFU runs on another host, which the API reaches over the network.
+const sfuRemote = announceIp !== "127.0.0.1";
 const managedTenantId = "00000000-0000-4000-8000-000000000001";
 const issuer = `http://127.0.0.1:${apiPort}`;
 const trustDomain = "chalk.local";
@@ -97,6 +99,8 @@ env("api.env", {
   // Recording and transcription need the recorder fleet, which this stack does not start.
   CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
   CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
+  // The latency kit creates a Space every cycle from one address, which the production limits would answer with 429.
+  CHALK_API_RATE_LIMITS: "off",
   CHALK_SFU_ENABLED: "true",
   CHALK_SFU_ALLOWED_SPACES: "*",
   CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
@@ -105,7 +109,7 @@ env("api.env", {
   CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused",
   CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused",
   CHALK_SFU_APPLICATION_ID: "nightly-stack",
-  CHALK_SFU_NODES: `local=https://127.0.0.1:${sfuControlPort}`,
+  CHALK_SFU_NODES: `local=https://${announceIp}:${sfuControlPort}`,
   CHALK_SFU_SERVER_NAME: "chalk-sfu",
   CHALK_SFU_CA_FILE: "/run/chalk/provider-bridge/client-ca.crt",
   CHALK_SFU_CLIENT_CERT_FILE: "/run/chalk/provider-bridge/server.crt",
@@ -128,11 +132,11 @@ env("sync.env", {
 });
 
 env("sfu.env", {
-  SFU_CONTROL_ADDR: `127.0.0.1:${sfuControlPort}`,
+  SFU_CONTROL_ADDR: `${sfuRemote ? "" : "127.0.0.1"}:${sfuControlPort}`,
   SFU_UDP_ADDR: `:${sfuMediaPort}`,
   SFU_TCP_ADDR: `:${sfuMediaPort}`,
   SFU_ANNOUNCE_IPS: announceIp,
-  SFU_ICE_LOOPBACK: "true",
+  SFU_ICE_LOOPBACK: String(!sfuRemote),
   SFU_TLS_CERT_FILE: "/run/chalk-sfu/server.crt",
   SFU_TLS_KEY_FILE: "/run/chalk-sfu/server.key",
   SFU_CLIENT_CA_FILE: "/run/chalk-sfu/client-ca.crt",

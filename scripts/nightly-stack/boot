@@ -3,7 +3,10 @@
 # host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
 #
 #   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> --migration-target <version> [--dir <state dir>] [--announce-ip <ip>]
-#        [--web-root <built web app>]
+#        [--web-root <built web app>] [--sfu-ssh <user@host> --sfu-ssh-key <file>]
+#
+# With --sfu-ssh the Chalk SFU runs on that host instead (--announce-ip is its public address): boot copies the image and the SFU's
+# identity there over SSH, starts it, and the API reaches it over mutual TLS. The latency run measures on such a host.
 #
 # It writes <dir>/proof.env (the CHALK_PROOF_* values a proof run reads) and prints how long each phase took. The images
 # come from the caller: Nightly passes the digests that the release build just published. `down` removes the containers.
@@ -12,7 +15,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="${RUNNER_TEMP:-/tmp}/chalk-nightly-stack"
 announce_ip=127.0.0.1
-api_image="" sync_image="" sfu_image="" migration_target="" web_root=""
+api_image="" sync_image="" sfu_image="" migration_target="" web_root="" sfu_ssh="" sfu_ssh_key=""
 postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
 redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
 proxy_image="${CHALK_STACK_PROXY_IMAGE:-caddy:2.10}"
@@ -31,6 +34,8 @@ while [ "$#" -gt 0 ]; do
     --dir) dir=$2 ;;
     --announce-ip) announce_ip=$2 ;;
     --web-root) web_root=$2 ;;
+    --sfu-ssh) sfu_ssh=$2 ;;
+    --sfu-ssh-key) sfu_ssh_key=$2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift 2
@@ -101,8 +106,19 @@ docker exec chalk-stack-postgres psql -h 127.0.0.1 -U postgres -d chalk -v ON_ER
   "insert into tenants (id, name) values ('00000000-0000-4000-8000-000000000001', 'Managed public Tenant'); insert into tenant_artifact_policies (tenant_id) values ('00000000-0000-4000-8000-000000000001')" > /dev/null
 tick migrate
 
-docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \
-  -v "$dir/sfu:/run/chalk-sfu:ro" --user 65532:65532 "$sfu_image" > /dev/null
+if [ -n "$sfu_ssh" ]; then
+  : "${sfu_ssh_key:?--sfu-ssh-key is required with --sfu-ssh}"
+  remote=(ssh -i "$sfu_ssh_key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$sfu_ssh")
+  docker save "$sfu_image" | "${remote[@]}" docker load > /dev/null
+  tar -C "$dir" -cf - sfu sfu.env | "${remote[@]}" 'mkdir -p chalk-sfu && tar -C chalk-sfu -xf -'
+  # shellcheck disable=SC2016
+  "${remote[@]}" "docker run -d --name chalk-stack-sfu --network host --env-file chalk-sfu/sfu.env -v \$PWD/chalk-sfu/sfu:/run/chalk-sfu:ro --user 65532:65532 $sfu_image" > /dev/null
+  sfu_host=$announce_ip
+else
+  docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \
+    -v "$dir/sfu:/run/chalk-sfu:ro" --user 65532:65532 "$sfu_image" > /dev/null
+  sfu_host=127.0.0.1
+fi
 docker run -d --name chalk-stack-api --network host --env-file "$dir/api.env" \
   -v "$dir/api:/run/chalk/provider-bridge:ro" --user 65532:65532 "$api_image" > /dev/null
 # wait_http <url> <service> [curl argument...]
@@ -124,7 +140,7 @@ docker run -d --name chalk-stack-sync --network host --env-file "$dir/sync.env" 
   -v "$dir/sync:/run/chalk/sync:ro" "$sync_image" > /dev/null
 wait_http "http://127.0.0.1:$port_sync/readyz" sync
 # The Chalk SFU answers only over mutual TLS, with the API's identity, so this checks the same path the API uses.
-wait_http "https://chalk-sfu:$port_sfu_control/readyz" sfu --resolve "chalk-sfu:$port_sfu_control:127.0.0.1" \
+wait_http "https://chalk-sfu:$port_sfu_control/readyz" sfu --resolve "chalk-sfu:$port_sfu_control:$sfu_host" \
   --cacert "$dir/ca.crt" --cert "$dir/api.crt" --key "$dir/api.key"
 tick services
 

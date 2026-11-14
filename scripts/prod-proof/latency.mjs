@@ -3,7 +3,7 @@
 //
 //   pnpm prod:latency                                  # 20 cycles on each plane, chalk_sfu and cf_sfu interleaved
 //   pnpm prod:latency --samples 3 --planes chalk_sfu
-//   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # no p95 budget, still fails when a gated metric is missing
+//   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # on loopback: no p95 budget and any ICE pair, still fails when a gated metric is missing
 //   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
@@ -133,7 +133,7 @@ async function shareSteps(pages, participantId, sample, stages) {
   Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
-async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) {
+async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath) {
   const space = await createSpace(run, plane);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const createdAt = clock();
@@ -178,7 +178,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) 
     },
     { stages: {}, ice: null },
   );
-  const mismatch = pathMismatch(icePath, joined.ice);
+  const mismatch = checkPath ? pathMismatch(icePath, joined.ice) : null;
   if (mismatch) throw new Error(mismatch);
   const stages = joined.stages;
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
@@ -259,13 +259,13 @@ async function endEpisode(run, ending) {
   }
 }
 
-async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath) {
+async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath, checkPath) {
   const mark = run.resources.length;
   const ending = { current: null };
   const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath)) };
   } catch (error) {
     // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
     if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
@@ -281,7 +281,7 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath) {
 }
 
 // Planes take turns, so a slow minute on the network or the host lands on both.
-async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path }, report) {
+async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path, smoke }, report) {
   const kept = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const tries = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const limit = samples + 10;
@@ -290,7 +290,7 @@ async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, 
     if (!open.length) return;
     const plane = open[turn % open.length];
     tries[plane]++;
-    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path);
+    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path, !smoke);
     report.cycles.push(outcome);
     if (!outcome.dropped) kept[plane]++;
     console.log(`${plane} cycle ${tries[plane]}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);
