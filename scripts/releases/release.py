@@ -394,10 +394,10 @@ def auto_promote(github, args):
         result = choose(github)
         sha = result['selection']['target_sha']
         require(result['previous']['target_sha'] != sha, f'production already runs {sha}')
-        live_calls.require_quiet_window()
+        until = live_calls.require_quiet_window().isoformat()
     except ValueError as error:
-        sha, reason = '', str(error)
-    outputs({'sha': sha, 'until': live_calls.window_end().isoformat()})
+        sha, reason, until = '', str(error), ''
+    outputs({'sha': sha, 'until': until})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write(f'## Automatic promotion\n\n{"Promoting " + sha if sha else "Not promoting: " + reason}\n')
 
