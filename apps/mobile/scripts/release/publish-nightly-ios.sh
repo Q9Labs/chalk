@@ -8,6 +8,8 @@ mode=${1:?usage: publish-nightly-ios.sh decide|publish}
 bundle=ai.q9labs.chalk.mobile
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)
 manifest="$repo_root/release/manifest.json"
+# shellcheck source=op-retry.sh
+source "$(dirname "${BASH_SOURCE[0]}")/op-retry.sh"
 # A change under these paths can change the app. Everything else is web, API, sync or docs only.
 app_paths=(apps/mobile packages sdks/typescript/client sdks/typescript/react-native release/manifest.json pnpm-lock.yaml .tool-versions .github/workflows/mobile-nightly-ios.yml)
 
@@ -32,11 +34,11 @@ export PATH="$work:$PATH"
 
 vault=$(jq -er '.vault' "$manifest")
 key_item=${ASC_CREDENTIAL_ITEM_ID:?The production-signing variable ASC_CREDENTIAL_ITEM_ID is missing.}
-ASC_KEY_ID=$(op item get "$key_item" --vault "$vault" --fields label=key_id)
-ASC_ISSUER_ID=$(op item get "$key_item" --vault "$vault" --fields label=issuer_id)
+ASC_KEY_ID=$(op_retry item get "$key_item" --vault "$vault" --fields label=key_id)
+ASC_ISSUER_ID=$(op_retry item get "$key_item" --vault "$vault" --fields label=issuer_id)
 echo "::add-mask::$ASC_KEY_ID"
 echo "::add-mask::$ASC_ISSUER_ID"
-op read "op://$vault/$key_item/private_key" --out-file "$work/asc-key.p8" --force >/dev/null
+op_retry read "op://$vault/$key_item/private_key" --out-file "$work/asc-key.p8" --force >/dev/null
 chmod 600 "$work/asc-key.p8"
 export ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY_PATH="$work/asc-key.p8" ASC_BYPASS_KEYCHAIN=1 ASC_CONFIG_PATH="$work/asc-config.json"
 
