@@ -100,14 +100,16 @@ defmodule ChalkSync.Retention.CleanupWorker do
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
         candidate = candidate(row)
+        Postgrex.query!(transaction, "savepoint retention_candidate", [])
 
-        case Postgrex.transaction(
-               transaction,
-               &cleanup_candidate(&1, candidate, now, result),
-               mode: :savepoint
-             ) do
-          {:ok, next} -> next
-          {:error, reason} -> %{result | held: [{candidate.episode_id, reason} | result.held]}
+        case cleanup_candidate(transaction, candidate, now, result) do
+          {:ok, next} ->
+            Postgrex.query!(transaction, "release savepoint retention_candidate", [])
+            next
+
+          {:error, reason} ->
+            Postgrex.query!(transaction, "rollback to savepoint retention_candidate", [])
+            %{result | held: [{candidate.episode_id, reason} | result.held]}
         end
       end)
     end)
@@ -153,57 +155,91 @@ defmodule ChalkSync.Retention.CleanupWorker do
              lifecycle_intent_rows != candidate.lifecycle_intent_count or
              event_rows != event_count or
              external_operation_rows != elem(external_operations, 0) do
-          Postgrex.rollback(transaction, {:invalid_history, :cleanup_counter_mismatch})
+          {:error, {:invalid_history, :cleanup_counter_mismatch}}
+        else
+          {:ok,
+           record_cleanup(
+             transaction,
+             candidate,
+             now,
+             result,
+             %{
+               event_count: event_count,
+               event_bytes: event_bytes,
+               receipt_rows: receipt_rows,
+               lifecycle_intent_rows: lifecycle_intent_rows,
+               event_rows: event_rows,
+               external_operations: external_operations,
+               admission_requests: admission_requests,
+               recordings: recordings,
+               screen_share_leases: screen_share_leases,
+               publication_fences: publication_fences,
+               grant_reservations: grant_reservations
+             }
+           )}
         end
 
-        measurements = %{
-          external_operations: external_operations,
-          admission_requests: admission_requests,
-          recordings: recordings,
-          screen_share_leases: screen_share_leases,
-          publication_fences: publication_fences,
-          grant_reservations: grant_reservations
-        }
-
-        write_checkpoint(
-          transaction,
-          candidate,
-          now,
-          event_count,
-          event_bytes,
-          measurements
-        )
-
-        %Result{
-          episodes: result.episodes + 1,
-          event_rows: result.event_rows + event_rows,
-          event_bytes: result.event_bytes + event_bytes,
-          receipt_rows: result.receipt_rows + receipt_rows,
-          receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
-          lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
-          lifecycle_intent_bytes:
-            result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
-          external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
-          external_operation_bytes:
-            result.external_operation_bytes + elem(external_operations, 1),
-          admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
-          admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
-          recording_rows: result.recording_rows + elem(recordings, 0),
-          recording_bytes: result.recording_bytes + elem(recordings, 1),
-          screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
-          screen_share_lease_bytes:
-            result.screen_share_lease_bytes + elem(screen_share_leases, 1),
-          publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
-          publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
-          publication_grant_reservation_rows:
-            result.publication_grant_reservation_rows + elem(grant_reservations, 0),
-          publication_grant_reservation_bytes:
-            result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
-        }
-
       {:error, reason} ->
-        Postgrex.rollback(transaction, {:invalid_history, reason})
+        {:error, {:invalid_history, reason}}
     end
+  end
+
+  defp record_cleanup(transaction, candidate, now, result, deleted) do
+    %{
+      event_count: event_count,
+      event_bytes: event_bytes,
+      receipt_rows: receipt_rows,
+      lifecycle_intent_rows: lifecycle_intent_rows,
+      event_rows: event_rows,
+      external_operations: external_operations,
+      admission_requests: admission_requests,
+      recordings: recordings,
+      screen_share_leases: screen_share_leases,
+      publication_fences: publication_fences,
+      grant_reservations: grant_reservations
+    } = deleted
+
+    measurements = %{
+      external_operations: external_operations,
+      admission_requests: admission_requests,
+      recordings: recordings,
+      screen_share_leases: screen_share_leases,
+      publication_fences: publication_fences,
+      grant_reservations: grant_reservations
+    }
+
+    write_checkpoint(
+      transaction,
+      candidate,
+      now,
+      event_count,
+      event_bytes,
+      measurements
+    )
+
+    %Result{
+      episodes: result.episodes + 1,
+      event_rows: result.event_rows + event_rows,
+      event_bytes: result.event_bytes + event_bytes,
+      receipt_rows: result.receipt_rows + receipt_rows,
+      receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
+      lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
+      lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
+      external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
+      external_operation_bytes: result.external_operation_bytes + elem(external_operations, 1),
+      admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
+      admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
+      recording_rows: result.recording_rows + elem(recordings, 0),
+      recording_bytes: result.recording_bytes + elem(recordings, 1),
+      screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
+      screen_share_lease_bytes: result.screen_share_lease_bytes + elem(screen_share_leases, 1),
+      publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
+      publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
+      publication_grant_reservation_rows:
+        result.publication_grant_reservation_rows + elem(grant_reservations, 0),
+      publication_grant_reservation_bytes:
+        result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
+    }
   end
 
   defp verify_history(transaction, candidate) do
