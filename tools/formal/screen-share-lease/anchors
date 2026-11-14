@@ -20,6 +20,6 @@ Handle	apps/sync/lib/chalk_sync/live/episode.ex	{:ok, %{generation: generation}}
 Handle	apps/sync/lib/chalk_sync/live/episode.ex	{:error, :lease_expired} -> rotate_screen_lease(state, participant_id, lease, options)
 Observed	apps/sync/lib/chalk_sync/live/episode.ex	:error -> acquire_observed_screen_lease(state, participant_id, options)
 EnableScreen	apps/sync/lib/chalk_sync/live/episode.ex	case acquire_screen_lease(state, authority, target.operation_id) do
-Observe	apps/sync/lib/chalk_sync/live/episode.ex	with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do reconcile_observed_media(next, projection)
+Observe	apps/sync/lib/chalk_sync/live/episode.ex	with {:ok, next} <- reconcile_screen_leases(state, media_items, options, :keep_absent) do reconcile_observed_media(next, projection)
 EnableScreen	apps/sync/lib/chalk_sync/live/episode.ex	{:replace_own, not Map.has_key?(state.screen_leases, authority.participant_id)}
 Handle	apps/sync/lib/chalk_sync/live/episode.ex	if ScreenShareLease.outlasts_renewal?(lease, options) do

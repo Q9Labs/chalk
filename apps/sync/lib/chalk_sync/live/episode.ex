@@ -240,7 +240,7 @@ defmodule ChalkSync.Live.Episode do
 
       # Every look renews the lease of a share that still runs, even when nothing changed. An unchanged
       # observation is no evidence that a share ended, so a lease whose share has not appeared yet stays.
-      with {:ok, next} <- settle_screen_leases(state, media_items, options, :keep_absent) do
+      with {:ok, next} <- reconcile_screen_leases(state, media_items, options, :keep_absent) do
         reconcile_observed_media(next, projection)
       end
     else
@@ -254,7 +254,7 @@ defmodule ChalkSync.Live.Episode do
     {_pauses, media_items} =
       projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
 
-    with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
+    with {:ok, next} <- reconcile_screen_leases(state, media_items, options, :release_absent) do
       next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
       reconcile_observed_media(next, projection)
     end
@@ -667,25 +667,22 @@ defmodule ChalkSync.Live.Episode do
 
   defp maybe_release_screen_lease(state, _authority, _source, _enabled, _outcome), do: state
 
-  defp reconcile_screen_leases(state, media_items, options) do
+  defp reconcile_screen_leases(state, media_items, options, absent) do
     case observed_screen_participants(media_items) do
-      [] -> release_absent_screen_leases(state, media_items, options)
-      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options)
+      [] -> settle_screen_leases(state, media_items, options, absent)
+      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options, absent)
       _conflicting -> {:error, :conflicting_screen_publications}
     end
   end
 
-  defp reconcile_single_screen(state, media_items, participant_id, options) do
-    with {:ok, state} <- release_absent_screen_leases(state, media_items, options) do
+  defp reconcile_single_screen(state, media_items, participant_id, options, absent) do
+    with {:ok, state} <- settle_screen_leases(state, media_items, options, absent) do
       case Map.fetch(state.screen_leases, participant_id) do
         {:ok, _lease} -> {:ok, state}
         :error -> acquire_observed_screen_lease(state, participant_id, options)
       end
     end
   end
-
-  defp release_absent_screen_leases(state, media_items, options),
-    do: settle_screen_leases(state, media_items, options, :release_absent)
 
   defp settle_screen_leases(state, media_items, options, absent) do
     Enum.reduce_while(state.screen_leases, {:ok, state}, fn

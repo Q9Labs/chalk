@@ -240,13 +240,15 @@ StopCommand(p, relOk) ==
 (* renewed (ScreenShareLease.renew), and any other one, a lapsed lease or  *)
 (* one the hard cap ends before the next look, is replaced with a fresh    *)
 (* acquire (:replace_own). A person the observation no longer shows  *)
-(* releases the lease. An error halts the whole pass.                      *)
-Handle(st, p, items, rf) ==
+(* releases the lease, except at an equal cursor: an unchanged look is no *)
+(* evidence that a share ended, so a lease whose share has not appeared   *)
+(* yet stays. An error halts the whole pass.                              *)
+Handle(st, p, items, rf, keep) ==
     LET m == st.mem[p]
         r == st.db
         renewable == r.held /\ r.owner = p /\ r.gen = m.gen /\ r.lid = m.lid /\ Live(r)
     IN IF st.err \/ m.lid = 0 THEN st
-       ELSE IF p \notin items THEN Rel(st, p, rf)
+       ELSE IF p \notin items THEN (IF keep THEN st ELSE Rel(st, p, rf))
        ELSE IF auth[p] # m.gen /\ Break # "renew_skips_authority" THEN Rel(st, p, rf)
        ELSE IF renewable /\ (r.hu >= now + RenewBy \/ Break = "hard_cap_lapses")
             THEN [st EXCEPT !.db.ru = Min(r.hu, now + RenewBy), !.authBad = st.authBad \/ auth[p] # m.gen]
@@ -267,7 +269,7 @@ Observed(st, items) ==
 (* cursor change; the row and the history flags stay changed.              *)
 Pass(c, rf) ==
     LET items == hist[c]
-    IN Observed(Handle(Handle(S0, Ord[1], items, rf), Ord[2], items, rf), items)
+    IN Observed(Handle(Handle(S0, Ord[1], items, rf, c = mc), Ord[2], items, rf, c = mc), items)
 
 (* apply_media_observation compares {incarnation, sequence}: an older      *)
 (* cursor is ignored, and an equal or newer one reconciles the leases (an  *)
