@@ -20,8 +20,11 @@ async function call(method, path, body) {
 
 const tenant = await call("POST", "/v1/tenants", { name: "Nightly stack", default_media_plane: "chalk_sfu" });
 const space = await call("POST", `/v1/tenants/${tenant.id}/spaces`, { name: "Nightly proofs", slug: "nightly-proofs", media_plane: "chalk_sfu" });
-const resources = ["spaces", "episodes", "recordings", "transcriptions", "signing_keys", "webhooks"];
-const scopes = [...resources.flatMap((resource) => ["read", "write", "delete"].map((action) => `${resource}:${action}`))];
+// The scopes scripts/prod-proof/README.md lists for the bootstrap key: each proof run mints its own narrower key from it.
+const scopes = [
+  "api_keys:write", "api_keys:delete", "spaces:read", "spaces:write", "episodes:read", "episodes:write",
+  "recordings:read", "transcriptions:read", "transcriptions:write", "transcriptions:delete", "webhooks:write",
+];
 const key = await call("POST", `/v1/tenants/${tenant.id}/api-keys`, { name: "Nightly proofs", scopes, expires_at: new Date(Date.now() + 86400000).toISOString() });
 
 const values = {
