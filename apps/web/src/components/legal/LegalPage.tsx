@@ -160,6 +160,7 @@ const COOKIES: readonly CookieRow[] = [
   },
   { cookie: <code>{"__Host-chalk_seat_{spaceId}"}</code>, purpose: "Keeps your dashboard Space access (HttpOnly, Secure)", lifetime: "24 hours; access also requires your signed-in session" },
   { cookie: <code>{"__Host-chalk_space_guest_{arrival_handle}"}</code>, purpose: "Keeps your public Space arrival available in this browser (HttpOnly, Secure)", lifetime: "Until you leave or close your browser" },
+  { cookie: <code>{"__Host-chalk_space_starter_{arrival_handle}"}</code>, purpose: "Lets you end a call you started if you leave it and rejoin (HttpOnly, Secure)", lifetime: "Until the call you started is archived, one hour after it began" },
 ];
 
 function PrivacyPolicy() {
