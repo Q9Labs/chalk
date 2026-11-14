@@ -918,6 +918,16 @@
       "sample": "1 real catch in 17 Promote runs: a stale service worker."
     },
     {
+      "id": "workflow:ci.yml#stage-web",
+      "owner": "Release chain",
+      "catches": "A web archive that Pages cannot take (a failed upload or vendor check), found while the API deploys instead of after it.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": 2,
+      "record": "unmeasured",
+      "sample": "New: no Promote has run it yet."
+    },
+    {
       "id": "workflow:cloudflare-egress-check.yml#check",
       "owner": "Monitoring",
       "catches": "SFU or TURN egress nearing its Cloudflare limit before calls degrade.",
