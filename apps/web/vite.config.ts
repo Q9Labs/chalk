@@ -68,7 +68,8 @@ const config = defineConfig({
         changeOrigin: true,
       },
       // The whiteboard socket is Sync's too; without this it falls through to the API, which never upgrades it, so the board never opens.
-      "/v1/whiteboard": {
+      // Only the socket itself: the API serves the file downloads under /v1/whiteboard/files.
+      "^/v1/whiteboard(\\?.*)?$": {
         target: localSyncOrigin,
         ws: true,
         changeOrigin: true,
