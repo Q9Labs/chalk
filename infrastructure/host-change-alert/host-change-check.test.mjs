@@ -61,10 +61,12 @@ test("the check posts to Oncall and fails the run when something paged", async (
   assert.equal(posts[0].incidents[0].app, "chalk");
 });
 
-test("a refused Axiom query reports why, so a wrong dataset name is visible in the run", async () => {
-  const fetchImpl = async (url) => (url.includes("axiom") ? { ok: false, status: 400, text: async () => "unable to find dataset 'wrong'" } : { ok: true, json: async () => [] });
+test("a refused Axiom query reports its error code and never the provider's text", async () => {
+  const fetchImpl = async (url) => (url.includes("axiom") ? { ok: false, status: 400, json: async () => ({ code: "bad_request", message: "unable to find dataset 'private-name'" }) } : { ok: true, json: async () => [] });
   const env = { ONCALL_WEBHOOK_URL: "https://oncall.test", CHALK_AXIOM_QUERY_TOKEN: "t", CHALK_AXIOM_LOG_DATASET: "d", PRODUCTION_INSTANCE_ID: instance, GITHUB_TOKEN: "g", GITHUB_REPOSITORY: "o/r" };
-  await assert.rejects(check({ env, fetchImpl, awsImpl: async () => JSON.stringify({ Events: [] }), now: at(60), log: () => {} }), /HTTP 400: unable to find dataset/);
+  const failure = await check({ env, fetchImpl, awsImpl: async () => JSON.stringify({ Events: [] }), now: at(60), log: () => {} }).catch((error) => error);
+  assert.match(failure.message, /HTTP 400: bad_request$/);
+  assert.doesNotMatch(failure.message, /private-name/);
 });
 
 test("a start from seven hours ago still pages, because GitHub can leave that long between runs", async () => {

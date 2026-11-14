@@ -56,9 +56,11 @@ export function oncallPayload(incidents, { drill }) {
   return { source: "oncall-poller", ...(drill ? { drill: true } : {}), incidents: incidents.map((incident) => ({ app: "chalk", kind: "new", ...incident })) };
 }
 
-// The service says why it refused (a wrong dataset name, a bad window), and that text carries no secret.
-async function bodyExcerpt(response) {
-  return (await response.text().catch(() => "")).slice(0, 300);
+// Provider error text can echo private names such as the dataset, so only a short machine code from a JSON body reaches the public run log.
+async function errorCode(response) {
+  const body = await response.json().catch(() => null);
+  const code = typeof body?.code === "string" ? body.code : typeof body?.error === "string" ? body.error : "";
+  return /^[a-z0-9_.:-]{1,40}$/i.test(code) ? code : "no error code";
 }
 
 async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
@@ -69,7 +71,7 @@ async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
   }).catch(() => {
     throw new Error("Axiom query request failed");
   });
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
+  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}: ${await errorCode(response)}`);
   return parseStarts(await response.json());
 }
 
@@ -79,7 +81,7 @@ async function githubJson({ fetchImpl, token, path }) {
   }).catch(() => {
     throw new Error("GitHub request failed");
   });
-  if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
+  if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}: ${await errorCode(response)}`);
   return response.json();
 }
 
@@ -128,7 +130,7 @@ export async function check({ env, fetchImpl = fetch, awsImpl = aws, now = new D
   const response = await fetchImpl(env.ONCALL_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(oncallPayload(incidents, { drill })) }).catch(() => {
     throw new Error("Oncall webhook request failed");
   });
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
+  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}: ${await errorCode(response)}`);
   // A fired alert fails the run so GitHub also emails the failure.
   return drill ? 0 : 1;
 }
