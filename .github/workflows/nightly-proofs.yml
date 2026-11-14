@@ -104,8 +104,8 @@ jobs:
       LATENCY_SAMPLES: ${{ inputs.latency_samples }}
       PROOF: ${{ matrix.proof }}
     steps:
-      - name: Refuse a pull of published images outside master
-        if: env.IMAGE_SOURCE == 'manifest'
+      - name: Refuse a pull of published images, or the real Cloudflare credentials, outside master
+        if: env.IMAGE_SOURCE == 'manifest' || matrix.proof == 'cloudflare-plane'
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
@@ -115,7 +115,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Require the revision to be merged before dependency installation
-        if: env.IMAGE_SOURCE == 'manifest'
+        if: env.IMAGE_SOURCE == 'manifest' || matrix.proof == 'cloudflare-plane'
         run: git merge-base --is-ancestor HEAD origin/master
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -235,6 +235,13 @@ jobs:
           CHALK_STACK_CLOUDFLARE_TURN_KEY_ID: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_TURN_KEY_ID || '' }}
           CHALK_STACK_CLOUDFLARE_TURN_API_TOKEN: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_TURN_API_TOKEN || '' }}
         run: |
+          if [ "$PROOF" = cloudflare-plane ]; then
+            # Without all five the stack would quietly prove the Chalk SFU again.
+            for name in ACCOUNT_ID REALTIME_APP_ID REALTIME_APP_SECRET TURN_KEY_ID TURN_API_TOKEN; do
+              var="CHALK_STACK_CLOUDFLARE_$name"
+              [ -n "${!var}" ] || { echo "Missing the Nightly Cloudflare credential $name" >&2; exit 1; }
+            done
+          fi
           web=()
           if [ "$PROOF" = web-call ]; then web=(--web-root "$GITHUB_WORKSPACE/apps/web/dist/client"); fi
           if [ "$PROOF" = latency ]; then
@@ -266,6 +273,7 @@ jobs:
             pnpm prod:latency --samples "$LATENCY_SAMPLES" --planes chalk_sfu --environment nightly --tier nightly --region github-hosted --size ubuntu-24-04 || status=$?
           elif [ "$PROOF" = cloudflare-plane ]; then
             # The default plane of production Spaces: the camera-share proof on a Cloudflare Space, through the real Cloudflare services.
+            test "$CHALK_PROOF_MEDIA_PLANE" = cf_sfu
             # The stack has no recorder fleet, so this proves the call; Recording is proved by the host proof and Promote.
             CHALK_PROOF_RECORDING=off pnpm prod:proof camera-share || status=$?
           elif [ "$PROOF" = latency-smoke ]; then
