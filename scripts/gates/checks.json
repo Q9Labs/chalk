@@ -1322,6 +1322,26 @@
       "sample": "Runs only after a breach."
     },
     {
+      "id": "workflow:promote.yml#latency",
+      "owner": "Scorecard",
+      "catches": "A production action (camera, screen share, chat) that is slow or missing, over 60 cycles on the proof Space after the proofs.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Not run in production yet."
+    },
+    {
+      "id": "workflow:promote.yml#latency-rerun",
+      "owner": "Scorecard",
+      "catches": "A one-time latency breach that a rerun clears.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs only after a breach."
+    },
+    {
       "id": "workflow:promote.yml#scorecard-final",
       "owner": "Scorecard",
       "catches": "A Leave breach that survives a rerun; opens the regression issue.",
