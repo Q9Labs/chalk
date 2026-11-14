@@ -81,6 +81,9 @@ env("api.env", {
   CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN: trustDomain,
   CHALK_DEFAULT_MEDIA_PLANE: "chalk_sfu",
   CHALK_NEW_SPACE_MEDIA_PLANE: "chalk_sfu",
+  // Recording and transcription need the recorder fleet, which this stack does not start.
+  CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
+  CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",
   CHALK_SFU_ENABLED: "true",
   CHALK_SFU_ALLOWED_SPACES: "*",
   CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
