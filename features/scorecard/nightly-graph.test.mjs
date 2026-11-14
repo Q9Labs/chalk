@@ -64,6 +64,12 @@ test("Only the Cloudflare plane lane receives the real Cloudflare credentials", 
   assert.doesNotMatch(others, /secrets\.CHALK_CLOUDFLARE_/);
 });
 
+test("The Nightly gate holds no Axiom token: its stack has nothing to query", () => {
+  for (const name of ["nightly.yml", "nightly-proofs.yml", "nightly-host-proof.yml"]) {
+    assert.doesNotMatch(readFileSync(resolve(root, ".github/workflows", name), "utf8"), /AXIOM/, `${name} reads no Axiom secret`);
+  }
+});
+
 test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
   const latencyWorkflow = workflow("nightly-latency.yml");
   assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");
