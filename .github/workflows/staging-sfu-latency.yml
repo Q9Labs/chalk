@@ -4,6 +4,8 @@ name: Staging SFU latency
 # never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 50 minutes later; the daily run and
 # a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
 # selects, and refuses a SHA with no verdict (own_sfu_proof_result=latency-missing).
+# A SHA that already has a passed verdict is measured again only by a manual dispatch, because Promote reads the newest
+# verdict and a repeat run on a busy staging would turn the pass into a failure.
 on:
   schedule:
     - cron: "43 2 * * *"

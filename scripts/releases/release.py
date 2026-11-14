@@ -395,7 +395,13 @@ def deployed_cut(github):
 
 def latency_target(github, args):
     try:
-        outputs({'sha': deployed_cut(github)})
+        sha = deployed_cut(github)
+        # Promote reads the newest verdict of a SHA, so a repeat measurement that runs into a busy staging would turn a
+        # pass into a failure. Every Cut nightly run triggers this workflow, including one that deployed nothing new.
+        records = github.deployments('nightly', 'nightly-latency', sha=sha)
+        require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' or not records or payload(records[0]).get('result') != 'passed',
+                f'{sha} already has a passed staging latency verdict, and only a manual dispatch measures it again')
+        outputs({'sha': sha})
     except ValueError as error:
         outputs({'sha': ''})
         with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:

@@ -210,6 +210,19 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 release.latency_target(self.staging(cut), None)
                 self.assertEqual(self.output.read_text(), 'sha=\n')
 
+    def test_latency_target_keeps_a_passed_verdict_unless_a_person_dispatches_a_measurement(self):
+        api = self.staging(self.cut(), OTHER_SHA)
+        passed = [dict(id=12, payload=dict(channel='nightly-latency', target_sha=OTHER_SHA, result='passed'))]
+        failed = [dict(id=12, payload=dict(channel='nightly-latency', target_sha=OTHER_SHA, result='failed'))]
+        deployments = api.deployments.side_effect
+        for records, event, measured in ((passed, 'workflow_run', False), (passed, 'schedule', False), (passed, 'workflow_dispatch', True), (failed, 'workflow_run', True), ([], 'workflow_run', True)):
+            with self.subTest(records=records, event=event):
+                api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: records if task == 'nightly-latency' else deployments(environment, task, **kwargs)
+                self.output.write_text('')
+                with patch.dict(os.environ, {'GITHUB_EVENT_NAME': event}):
+                    release.latency_target(api, None)
+                self.assertEqual(self.output.read_text(), f'sha={OTHER_SHA if measured else ""}\n')
+
     def test_latency_target_is_empty_when_staging_has_no_nightly_write(self):
         api = Mock(spec=GitHub)
         api.deployments.return_value = []
