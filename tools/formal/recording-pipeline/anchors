@@ -1,0 +1,21 @@
+# Code that each RecordingPipeline step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+ClaimGuard	apps/api/db/queries/recording_pipeline.sql	(recording_jobs.kind = 'capture' and recording_pipelines.state in ('reserved', 'retryable_failure'))
+ClaimGuard	apps/api/db/queries/recording_pipeline.sql	(recording_reservations.state = 'reserved' and recording_reservations.ends_at > now())
+ClaimGuard	apps/api/db/queries/recording_pipeline.sql	recording_jobs.kind <> 'capture' or recording_pipelines.stop_operation_id is null or
+ClaimGuard	apps/api/db/queries/recording_pipeline.sql	recording_jobs.attempt_count < recording_jobs.attempt_limit or
+Write	apps/api/db/queries/recording_pipeline.sql	and state = 'leased' and recording_jobs.attempt_count = sqlc.arg(attempt_count) and recording_jobs.fencing_generation = sqlc.arg(fencing_generation) and recording_jobs.lease_token = sqlc.arg(lease_token) and recording_jobs.lease_owner = sqlc.arg(lease_owner) and recording_jobs.lease_expires_at > now()
+Write	apps/api/db/queries/recording_key_object_authority.sql	and jobs.lease_expires_at > clock_timestamp()
+NodeComplete	apps/api/db/queries/recording_pipeline.sql	'recording.capture.salvaged'
+NodeComplete	apps/api/db/queries/recording_pipeline.sql	and recording_jobs.lease_expires_at > clock_timestamp()
+Recover	apps/api/db/queries/recording_pipeline.sql	or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null
+Recover	apps/api/db/queries/recording_pipeline.sql	(expired.capture_stopped and (not expired.completion_only or expired.completion_attempts >= 3))
+ExpireReservation	apps/api/db/queries/recording_pipeline.sql	and recording_jobs.state = 'pending' and recording_jobs.attempt_count = 0
+DispatchEndStop	apps/sync/lib/chalk_sync/external_operation_consumer.ex	end_recording_call(recording_plane, episode, operation)
+DispatchEndStop	apps/api/internal/providerbridge/sfu_executor.go	errors.Is(err, recordingpipeline.ErrPipelineNotFound),
+FinalizeEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	SQL.complete_external_episode_recordings(),
+FinalizeEnd	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex	update sync_recordings set status = 'stopped', completed_at = now(), updated_at = now() where tenant_id = $1 and space_id = $2 and episode_id = $3 and status in ('starting', 'recording', 'stopping')
+CaptureReadyFact	apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex	def capture_source_pending?(connection, episode, %{name: name, payload: payload})
+ApplyCaptureStopped	apps/sync/lib/chalk_sync/episodes/reducer.ex	defp valid_recording_transition(nil, %{"status" => "starting"}), do: :ok

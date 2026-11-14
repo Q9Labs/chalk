@@ -2024,7 +2024,7 @@ create table sync_screen_share_leases (
         references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (owner_generation > 0 and lease_generation > 0),
-    check (status in ('acquiring', 'active')),
+    check (status = 'active'),
     check (acquired_at < renewed_until and renewed_until <= hard_expires_at)
 );
 create index sync_screen_share_leases_expiry_idx

@@ -148,7 +148,7 @@ jobs:
           git -C "${dest}" config user.email "noreply@github.com"
           git -C "${dest}" commit -m "UI check evidence for pull request ${PR}" --allow-empty
           # Pull requests run at the same time and share this branch, so a rejected push is retried on the new tip.
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             git -C "${dest}" push origin ui-check-evidence && exit 0
             git -C "${dest}" pull --rebase origin ui-check-evidence
           done

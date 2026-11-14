@@ -1,0 +1,9 @@
+# Each broken variant must break the rule it names; `run.sh` fails otherwise.
+# Format: <Break value><TAB><rule><TAB><code edit the variant mirrors>
+end_keeps_pending_joins	EndClearsPending	drop the supersede_pending_lifecycle_intents call in complete_external_episode
+end_keeps_pending_admissions	EndClearsPending	drop the complete_external_episode_admissions call
+end_keeps_participants	NoPersonLiveAfterEnd	drop the complete_episode_participants call
+admit_ignores_episode_status	NoPersonLiveAfterEnd	drop the episode.Status != active check in AdmitParticipant
+decision_ignores_status	AdmissionDecidedOnce	drop the pending and reservation checks from the admission decision SQL
+deadline_race_unfenced	StaleDeadlineCannotEnd	drop the stale-generation check and let a deadline change finalize during an end
+failed_end_blocks_claim	PastDeadlineGetsEnd	restore the old not-exists in ClaimDueEpisodeDeadlines that skips a deadline generation with an operation of any status

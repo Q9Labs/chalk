@@ -1,0 +1,3 @@
+# A rule the real code breaks today. `run.sh` reports it and stays green; it
+# fails once the rule holds, so the finding then moves into EpisodeLifecycle.cfg.
+# Format: <rule><TAB><finding>
