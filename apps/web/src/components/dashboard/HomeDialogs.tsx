@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
+import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { Dialog } from "./Dialog";
 import { LinkField, useToast } from "./kit";

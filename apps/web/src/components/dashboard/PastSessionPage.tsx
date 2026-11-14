@@ -12,7 +12,8 @@ import { Page } from "./Page";
 import { DownloadMenu, SessionViewer, type Parts } from "./SessionViewer";
 import { usePastSession, type Ids, type Page as Loaded } from "./session-reads";
 import { TalkTime } from "./TalkTime";
-import { CopyAction, Dialog, ErrorPanel, Sk, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { CopyAction, ErrorPanel, Sk, useToast } from "./kit";
 
 const sessionLink = (ids: Ids) => `${window.location.origin}/dashboard/call/${ids.spaceId}/session/${ids.episodeId}`;
 

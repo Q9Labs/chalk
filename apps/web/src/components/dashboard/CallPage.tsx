@@ -8,6 +8,7 @@ import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import { RenameDialog } from "./HomeDialogs";
+import { RecordingSettingsLink } from "./ListParts";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
