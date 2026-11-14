@@ -1,10 +1,12 @@
 name: Nightly stack prototype
 
 on:
+  workflow_dispatch:
   push:
     branches: [ci/nightly-stack-boot]
     paths:
       - scripts/nightly-stack/**
+      - scripts/prod-proof/**
       - .github/workflows/nightly-stack-prototype.yml
 
 permissions:
