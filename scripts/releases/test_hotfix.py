@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import hotfix
 import rehearsal
 import release
+from github_release import GitHub
 
 SHA = 'a' * 40
 BASE = 'b' * 40
@@ -137,13 +138,23 @@ class Rehearsal(Files):
         with patch.dict(os.environ, variables):
             rehearsal.verdict(Mock(), None)
 
-    def test_the_first_leg_runs_unless_staging_already_runs_the_current_cut(self):
-        with patch.object(rehearsal, 'deployed_cut', return_value='x' * 40):
-            self.assertFalse(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
-        with patch.object(rehearsal, 'deployed_cut', return_value='z' * 40):
-            self.assertTrue(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
-        with patch.object(rehearsal, 'deployed_cut', side_effect=ValueError('staging has no nightly write')):
-            self.assertTrue(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
+    def staging(self, write_sha, **cut_changes):
+        """A fake GitHub whose newest nightly write is at `write_sha` and whose newest cut record is the current cut's deploy, as
+        `deployed_cut` reads them; `None` for the write means staging has none."""
+        current = self.cut('x-new')
+        write = dict(id=10, sha=write_sha, payload=dict(channel='nightly-write', run_id='1', release_id='x-new'))
+        cut = dict(id=11, payload={**current, 'deploy_result': 'success', 'applied_release_id': 'x-new', **cut_changes})
+        github = Mock(spec=GitHub)
+        github.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [write] if task == 'nightly-write' and write_sha else [] if task == 'nightly-write' else [cut]
+        return github
+
+    def test_the_first_leg_is_skipped_only_when_staging_runs_a_finished_deploy_of_the_current_cut(self):
+        current = self.cut('x-new')
+        self.assertFalse(rehearsal.baseline_needed(self.staging('x' * 40), current))
+        for name, github in (('another cut', self.staging('z' * 40)), ('unfinished deploy', self.staging('x' * 40, deploy_result='failure')),
+                             ('another run', self.staging('x' * 40, run_id='2')), ('no write', self.staging(None))):
+            with self.subTest(name):
+                self.assertTrue(rehearsal.baseline_needed(github, current))
 
     def test_a_skipped_first_leg_is_not_judged_but_a_failed_one_is(self):
         self.judge('z-old', baseline=None, baseline_needed='false')
