@@ -9,7 +9,7 @@ import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
-import { writeJsonAtomic } from "./ownership.mjs";
+import { writeJsonAtomic } from "./json-file.mjs";
 import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {

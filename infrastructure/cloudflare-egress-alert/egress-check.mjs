@@ -2,6 +2,8 @@
 // to the Oncall webhook when a limit is crossed. Cloudflare's own usage alert
 // cannot watch these products, and they share one monthly free allowance.
 
+import { postToOncall } from "../oncall-alert.mjs";
+
 const GB = 1e9;
 export const DAILY_LIMIT_GB = 100;
 export const MONTHLY_THRESHOLDS_GB = [500, 800];
@@ -86,14 +88,6 @@ export function evaluate({ dayBytes, monthBytes, priorBytes }) {
   return incidents;
 }
 
-export function oncallPayload(incidents, { drill }) {
-  return {
-    source: "oncall-poller",
-    ...(drill ? { drill: true } : {}),
-    incidents: incidents.map((incident) => ({ app: "chalk", kind: "new", ...incident })),
-  };
-}
-
 export async function run({ env, fetchImpl = fetch, now = new Date(), log = console.log }) {
   const { CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ANALYTICS_TOKEN, ONCALL_WEBHOOK_URL, EGRESS_CHECK_DRILL } = env;
   // A drill tests the Oncall webhook alone, so it never reads Cloudflare.
@@ -110,16 +104,11 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   if (incidents.length === 0) return 0;
 
   for (const incident of incidents) log(incident.detail);
-  const response = await fetchImpl(ONCALL_WEBHOOK_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(oncallPayload(incidents, { drill })),
-  });
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  await postToOncall({ fetchImpl, url: ONCALL_WEBHOOK_URL, incidents, drill });
   // A crossed limit fails the run on purpose so GitHub also emails the failure.
   return drill ? 0 : 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   process.exitCode = await run({ env: process.env });
 }

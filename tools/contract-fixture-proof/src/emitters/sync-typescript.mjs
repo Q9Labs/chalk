@@ -4,12 +4,11 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { codegenPath, loadSyncContract, pascalCase, stableJson, syncProtocolVersion } from "./sync-contract.mjs";
+import { codegenPath, loadSyncContract, pascalCase, stableJson } from "./sync-contract.mjs";
 
 const execute = promisify(execFile);
-const protocolVersion = syncProtocolVersion();
 const outputPath = codegenPath("CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH", "sdks/typescript/client/src/generated/sync.ts");
-const contract = await loadSyncContract(undefined, protocolVersion);
+const contract = await loadSyncContract();
 const source = renderTypeScript(contract);
 
 await mkdir(path.dirname(outputPath), { recursive: true });
@@ -571,25 +570,6 @@ function renderSnapshotSchema(modes) {
     control_revision: schemaForField(snapshot.controlRevision),
     participants: "Schema.Array(ParticipantSchema)",
   });
-}
-
-/**
- * @param {Record<string, any>} hello
- * @param {number} protocolVersion
- */
-function renderHelloSchema(hello, protocolVersion, correlationFields) {
-  const cursor = schemaForField(hello.cursor);
-  return renderStruct(
-    withCorrelationFields(
-      {
-        type: `Schema.Literal(${JSON.stringify(hello.type)})`,
-        protocol: `Schema.Literal(${protocolVersion})`,
-        token: schemaForField(hello.token),
-        streams: `Schema.optional(${renderStruct({ control: `Schema.optional(${renderStruct({ cursor })})` })})`,
-      },
-      correlationFields,
-    ),
-  );
 }
 
 /**

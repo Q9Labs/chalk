@@ -4,7 +4,6 @@
 // With a base report, exits 1 only when the head has a finding that the base lacks, so a pull request
 // fails for the package versions it changes and not for new advisories against packages it left alone.
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
 // Each finding is keyed by advisory and exact package version.
 export function osvFindings(report) {
@@ -39,7 +38,7 @@ export function newFindings(head, base) {
   return [...head].filter((finding) => !base.has(finding)).sort();
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const [format, headFile, baseFile] = process.argv.slice(2);
   const read = readers[format];
   if (!read || !headFile) {

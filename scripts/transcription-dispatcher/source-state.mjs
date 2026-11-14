@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
+import { sha256 } from "../lib/hash.mjs";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -11,10 +11,6 @@ if (scopes.length === 0) throw new Error("source scopes are required");
 
 function git(args) {
   return execFileSync("git", ["-C", root, ...args], { encoding: "buffer" });
-}
-
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 const status = git(["status", "--porcelain=v1", "--untracked-files=all", "--", ...scopes]).toString("utf8");

@@ -7,8 +7,9 @@ crons = ["*/5 * * * *"]
 
 [vars]
 API_BASE_URL = "https://api.chalkmeet.com"
+SYNC_BASE_URL = "https://sync.chalkmeet.com"
 
-# Optional HTTPS target overrides: API_MONITOR_BASE_URL, SYNC_BASE_URL.
+# Optional HTTPS target override: API_MONITOR_BASE_URL.
 # Required Worker secret: DISCORD_WEBHOOK_URL.
 # Reuse the existing Axiom monitor provisioner's Discord alert channel webhook;
 # binding it to this Worker is deployment configuration, not a new channel/secret.

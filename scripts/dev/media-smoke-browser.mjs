@@ -1,12 +1,11 @@
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 
 import { createMediaSmokeInitScript } from "./media-smoke-page.mjs";
-import { MediaProofError, UNSUPPORTED_ASSERTIONS, aggregateRtcStats, assertPositiveRtcDeltas, deltaRtcStats, isRecord, unsupported, waitFor } from "./media-smoke-core.mjs";
+import { MediaProofError, UNSUPPORTED_ASSERTIONS, aggregateRtcStats, assertPositiveRtcDeltas, deltaRtcStats, unsupported, waitFor } from "./media-smoke-core.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const requireFromClient = createRequire(join(repositoryRoot, "sdks/typescript/client/package.json"));
 
 function browserModule(options) {

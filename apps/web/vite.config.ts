@@ -8,15 +8,16 @@ import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import pkg from "./package.json";
+import ports from "../../scripts/dev/ports.json";
 import { sourceAliases } from "./vite.aliases";
 import { selfHostedExcalidraw } from "./scripts/self-hosted-excalidraw";
 import { syncPublicAssetsPlugin } from "./scripts/sync-public-assets";
 
 const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
-const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
+const localWebPort = configuredWebPort ? Number(configuredWebPort) : ports.web;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
-const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || "http://127.0.0.1:8080";
-const localSyncOrigin = process.env.CHALK_DEV_SYNC_ORIGIN?.trim() || "http://127.0.0.1:4100";
+const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || `http://127.0.0.1:${ports.api}`;
+const localSyncOrigin = process.env.CHALK_DEV_SYNC_ORIGIN?.trim() || `http://127.0.0.1:${ports.sync}`;
 const publicHost = process.env.PUBLIC_ORIGIN?.trim() ? new URL(process.env.PUBLIC_ORIGIN).hostname : undefined;
 // Docs code takes the site's code colors from CSS variables, so one highlight serves both themes.
 const docsCodeTheme = {

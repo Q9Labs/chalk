@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { pnpmVersion } from "../../../scripts/lib/repository.mjs";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryDirectory = resolve(fixtureDirectory, "../..");
@@ -38,7 +39,7 @@ try {
 
   const supportingArchives = [requiredArchive(archives, "chalk-assets"), requiredArchive(archives, "facehash"), requiredArchive(archives, "recording-presentation"), requiredArchive(archives, "chalk-ui"), requiredArchive(archives, "chalk-whiteboard")];
 
-  await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: "pnpm@12.8.1" }, null, 2)}\n`);
+  await writeFile(join(consumerDirectory, "package.json"), `${JSON.stringify({ name: "chalk-packed-web-consumer", private: true, type: "module", packageManager: `pnpm@${pnpmVersion}` }, null, 2)}\n`);
   await writeFile(join(consumerDirectory, "pnpm-workspace.yaml"), workspacePolicy(archiveDirectory, { clientArchive, reactArchive, supportingArchives }));
   await run(
     "pnpm",

@@ -4,6 +4,7 @@ import { access } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
 import { identityPaths } from "./identity.mjs";
+import ports from "./ports.json" with { type: "json" };
 
 export const DevCommand = Object.freeze({
   START: "start",
@@ -17,14 +18,8 @@ export const DevCommand = Object.freeze({
 });
 
 const commands = new Set(Object.values(DevCommand));
-const defaultPorts = Object.freeze({
-  api: 8080,
-  sync: 4100,
-  web: 3070,
-  postgres: 5432,
-  redis: 6380,
-  providerBridge: 8444,
-});
+const { metro: metroPort, ...localPorts } = ports;
+const defaultPorts = Object.freeze(localPorts);
 const toolByProfile = Object.freeze({
   core: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl", "op"],
   mobile: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl", "op", "xcrun"],
@@ -187,7 +182,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
       volume: env.CHALK_REDIS_VOLUME || "chalk-dev-redis",
     },
     // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
-    metro: { port: numberFromEnv(env, "RCT_METRO_PORT", 8081) },
+    metro: { port: numberFromEnv(env, "RCT_METRO_PORT", metroPort) },
     ports,
     publicOrigin,
     urls: {

@@ -1,6 +1,8 @@
 // The scripted three-guest call that call-artifacts plays, and the checks that find that script again in the Recording.
 // Every expectation (marker times, silence bound, mute and stop windows) derives from the one `script` object that the run records.
 
+import { median } from "../lib/stats.mjs";
+
 export const slotSeconds = 8;
 export const guestCount = 3;
 export const cycleSeconds = slotSeconds * guestCount;
@@ -122,11 +124,6 @@ export function analyzeAudio(samples, rate, frequencies) {
     silences: intervalsOf(silent, hopSeconds, 0).filter((interval) => interval.end - interval.start >= 0.5),
     tones: Object.fromEntries(frequencies.map((hz, position) => [hz, intervalsOf(tonalFlags[position], hopSeconds, 0.3).filter((interval) => interval.end - interval.start >= 0.2)])),
   };
-}
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
 }
 
 /** Start times (s) of the bright flashes: runs of frames far above the median brightness around them. */

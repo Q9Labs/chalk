@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { runLabel } from "./cleanup.mjs";
+import { proofNames } from "./registry.mjs";
 
 const execute = promisify(execFile);
 const workflow = readFileSync(resolve(import.meta.dirname, "../../.github/workflows/real-call-proof.yml"), "utf8");
@@ -16,8 +17,7 @@ const indexPath = resolve(import.meta.dirname, "index.mjs");
 // The real-call-proof workflow names each invocation <32-character suffix>-<proof>.
 // Run its own shell line for every proof it accepts, then the same validation the script runs first.
 test("the run ID the workflow builds is valid for every proof it accepts", async () => {
-  const names = /^\s*(all\|[a-z|-]+)\) ;;$/m.exec(workflow)?.[1].split("|");
-  assert.ok(names?.includes("own-sfu-spaces") && names.includes("leave-own-sfu"));
+  const names = proofNames;
   const line = /^\s*(run_id="\$\{RUN_PREFIX\}-\$\{proof\}")$/m.exec(workflow)?.[1];
   assert.ok(line, "the workflow no longer builds run_id from RUN_PREFIX and proof");
   const suffix = "0123456789abcdef0123456789abcdef";

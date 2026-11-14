@@ -44,7 +44,7 @@ jobs:
           else
             echo "Run $SOURCE_RUN is not the current passing nightly cut; nothing to upload."
           fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.cut.outputs.verified == 'true'
         with:
           ref: ${{ steps.cut.outputs.sha }}
@@ -58,7 +58,7 @@ jobs:
           else
             echo "Cut ${{ steps.cut.outputs.sha }} predates the iOS publish script; the next cut uploads."
           fi
-      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
+      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb # v2.0.2
         if: steps.tool.outputs.present == 'true'
       - name: Skip when nothing in the app changed since the last upload
         id: decide
@@ -70,11 +70,11 @@ jobs:
           SOURCE_RUN: ${{ github.event.workflow_run.id || inputs.source_run }}
           SOURCE_SHA: ${{ steps.cut.outputs.sha }}
         run: bash apps/mobile/scripts/release/publish-nightly-ios.sh decide
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         if: steps.decide.outputs.build == 'true'
         with:
           version: 12.8.1
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: steps.decide.outputs.build == 'true'
         with:
           node-version-file: .tool-versions
@@ -101,7 +101,7 @@ jobs:
         run: bash apps/mobile/scripts/release/publish-nightly-ios.sh publish
       - name: Keep the dSYMs
         if: steps.decide.outputs.build == 'true' && always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: chalk-ios-nightly-dsyms-${{ github.run_id }}
           path: ${{ runner.temp }}/chalk-ios-dsyms/*.zip

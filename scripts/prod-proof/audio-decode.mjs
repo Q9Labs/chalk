@@ -8,6 +8,7 @@
 //
 // This file holds the pure rules (tested with a fake analyser in audio-decode.test.mjs) and the page probe they feed.
 // The bytes-advancing check stays where it is; callers add this one as a further condition.
+import { median } from "../lib/stats.mjs";
 import { check } from "./runtime.mjs";
 
 export const toneHz = (guest) => 440 * (guest + 1); // The frequency fixture.mjs publishes for a guest.
@@ -24,15 +25,14 @@ export const decodeCriteria = {
 };
 
 /**
- * Reads one spectrum, as dB per bin from AnalyserNode.getFloatFrequencyData. Runs in Node and, serialised, in the page,
- * so it must stay free of outer references.
+ * Reads one spectrum, as dB per bin from AnalyserNode.getFloatFrequencyData. Runs in Node and, serialised as
+ * spectrumReadingSource, in the page, so every helper it calls must be carried by that source.
  * @returns {{ bin: number, toneDb: number|null, floorDb: number, marginDb: number|null, bandDb: number }}
  */
 export function spectrumReading(spectrum, { hz, sampleRate }) {
   const empty = -140;
   const db = Array.from(spectrum, (value) => (Number.isFinite(value) ? Math.max(value, empty) : empty));
   const binOf = (frequency) => Math.round((frequency * 2 * db.length) / sampleRate);
-  const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
   const band = db.slice(binOf(100), binOf(4000) + 1);
   const bandDb = band.length ? Math.max(...band) : empty;
   if (hz == null) return { bin: -1, toneDb: null, floorDb: median(db), marginDb: null, bandDb };
@@ -41,6 +41,9 @@ export function spectrumReading(spectrum, { hz, sampleRate }) {
   const floorDb = median(db.filter((_, index) => Math.abs(index - bin) > 3));
   return { bin, toneDb, floorDb, marginDb: toneDb - floorDb, bandDb };
 }
+
+/** An expression that evaluates to spectrumReading in a page, with the `median` helper it calls. */
+export const spectrumReadingSource = `(() => { const median = ${median}; return ${spectrumReading}; })()`;
 
 const longestRun = (readings, test) => readings.reduce((state, reading) => (test(reading) ? { run: state.run + 1, best: Math.max(state.best, state.run + 1) } : { run: 0, best: state.best }), { run: 0, best: 0 }).best;
 
@@ -114,7 +117,7 @@ function startToneProbe({ hzOf, fftSize, intervalMs, keep }, reading) {
 /** Starts the probe on a page for the given speakers (`hzOf`: participant id to tone, or an empty object for speech). */
 async function startProbe(page, hzOf, criteria = decodeCriteria) {
   const options = { hzOf, fftSize: criteria.fftSize, intervalMs: criteria.intervalMs, keep: 300 };
-  await page.evaluate(`(${startToneProbe})(${JSON.stringify(options)}, ${spectrumReading})`);
+  await page.evaluate(`(${startToneProbe})(${JSON.stringify(options)}, ${spectrumReadingSource})`);
 }
 
 /** The readings of one speaker taken since `sinceMs` (epoch). */

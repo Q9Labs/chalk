@@ -1,8 +1,8 @@
-function median(values) {
+import { median } from "../lib/stats.mjs";
+
+function checkedMedian(values) {
   if (values.length === 0 || values.some((value) => !Number.isFinite(value) || value < 0)) throw new Error("Leave timings must be finite, nonnegative, and nonempty");
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return median(values);
 }
 
 function validateCapturedMedian(value) {
@@ -12,7 +12,7 @@ function validateCapturedMedian(value) {
 function summarize(samples) {
   const values = samples.filter((sample) => sample.confirmed).map((sample) => sample.ms);
   if (!values.length) return { median: null, max: null };
-  return { median: median(values), max: Math.max(...values) };
+  return { median: checkedMedian(values), max: Math.max(...values) };
 }
 function confirmed(sample) {
   return sample.confirmed && !sample.deadlineFallback;

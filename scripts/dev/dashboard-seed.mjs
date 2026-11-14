@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { writeJsonAtomic } from "./ownership.mjs";
+import { writeJsonAtomic } from "./json-file.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 
 export const dashboardServiceScopes =

@@ -5,7 +5,3 @@ export function parseJson(value, context) {
     throw new Error(`${context}: ${errorMessage(error)}`);
   }
 }
-
-export function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}

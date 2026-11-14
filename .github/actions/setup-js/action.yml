@@ -1,0 +1,46 @@
+name: Set up JavaScript
+description: Install the pnpm release that package.json packageManager names and the Node release that .tool-versions names, then install the workspace from the frozen lockfile. Check out the repository first.
+
+inputs:
+  working-directory:
+    description: Directory that holds package.json and pnpm-lock.yaml.
+    default: .
+  install:
+    description: Set to "false" to skip the dependency install.
+    default: "true"
+  install-args:
+    description: Arguments that follow `pnpm install --frozen-lockfile`.
+    default: ""
+  cache:
+    description: Set to "false" to skip the pnpm store cache.
+    default: "true"
+  registry-url:
+    description: npm registry for setup-node to write an .npmrc for.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      with:
+        package_json_file: ${{ inputs.working-directory }}/package.json
+
+    - name: Set up Node
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+      with:
+        node-version-file: ${{ inputs.working-directory }}/.tool-versions
+        cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+        package-manager-cache: ${{ inputs.cache == 'true' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install JavaScript dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INSTALL_ARGS: ${{ inputs.install-args }}
+      run: |
+        # shellcheck disable=SC2086
+        pnpm install --frozen-lockfile ${INSTALL_ARGS}

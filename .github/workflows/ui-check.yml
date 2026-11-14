@@ -30,7 +30,7 @@ jobs:
     outputs:
       ui: ${{ steps.select.outputs.ui }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -45,9 +45,9 @@ jobs:
           fi
           cat "${GITHUB_OUTPUT}"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         if: steps.select.outputs.ui == 'true'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: steps.select.outputs.ui == 'true'
         with:
           node-version-file: .tool-versions
@@ -72,7 +72,7 @@ jobs:
       - name: Restore the base walk
         id: base-walk
         if: steps.select.outputs.ui == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ui-check-base
           # The run's own key is never found; the prefix finds the newest walk, and run.mjs reuses it only if its commit and check code match.
@@ -91,14 +91,14 @@ jobs:
 
       - name: Save the base walk
         if: always() && steps.select.outputs.ui == 'true' && steps.base-walk.outputs.cache-hit != 'true' && hashFiles('ui-check-base/key.txt') != ''
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ui-check-base
           key: ui-check-base-${{ github.run_id }}
 
       - name: Keep the report
         if: always() && steps.select.outputs.ui == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ui-check-report
           path: ui-check-report
@@ -118,7 +118,7 @@ jobs:
       pull-requests: write
     steps:
       # A job that failed before it walked anything uploads no report; the comment below then says the walk did not finish.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
         with:
           name: ui-check-report
@@ -148,7 +148,7 @@ jobs:
           git -C "${dest}" config user.email "noreply@github.com"
           git -C "${dest}" commit -m "UI check evidence for pull request ${PR}" --allow-empty
           # Pull requests run at the same time and share this branch, so a rejected push is retried on the new tip.
-          for attempt in 1 2 3 4 5; do
+          for _ in 1 2 3 4 5; do
             git -C "${dest}" push origin ui-check-evidence && exit 0
             git -C "${dest}" pull --rebase origin ui-check-evidence
           done

@@ -1,10 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { publicErrorCodes } from "./effect-error-compatibility.mjs";
+import { codegenPath, pascalCase } from "./sync-contract.mjs";
 
-const root = new URL(".", import.meta.url);
-const repoRoot = new URL("../../../../", root);
 const inputPath = codegenPath("CODEGEN_OPENAPI_PATH", "contract/generated/openapi.json");
 const outputPath = codegenPath("CODEGEN_HTTP_API_OUTPUT_PATH", "sdks/typescript/client/src/generated/http-api.ts");
 const publicOutputPath = codegenPath("CODEGEN_PUBLIC_HTTP_API_OUTPUT_PATH", "sdks/typescript/client/src/generated/public-http-api.ts");
@@ -55,18 +53,9 @@ for (const group of groups) {
 }
 lines.push("{}");
 
-await mkdir(path.dirname(fileURLToPath(outputPath)), { recursive: true });
+await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${lines.join("\n")}\n`);
 await writeFile(publicOutputPath, `${publicLines.join("\n")}\n`);
-
-function codegenPath(envName, fallback) {
-  const value = process.env[envName];
-  if (value) {
-    return pathToFileURL(path.resolve(value));
-  }
-
-  return new URL(fallback, repoRoot);
-}
 
 function collectOperations(document) {
   const operations = [];
@@ -262,14 +251,6 @@ function errorClassName(code) {
     }[code] ?? pascalCase(code);
 
   return name.endsWith("Error") ? name : `${name}Error`;
-}
-
-function pascalCase(value) {
-  return value
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join("");
 }
 
 function camelCase(value) {

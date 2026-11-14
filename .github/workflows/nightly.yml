@@ -35,10 +35,10 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
@@ -109,7 +109,7 @@ jobs:
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Record held or failed cut without rolling nightly back
@@ -143,7 +143,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Publish verified nightly release
@@ -164,14 +164,14 @@ jobs:
       contents: write
       issues: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
       - name: Download the nightly scorecards
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: scorecard-nightly-*
           path: artifacts/nightly
@@ -185,14 +185,8 @@ jobs:
           node features/scorecard/evaluate.mjs --latency-deferred "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
       - name: Score the nightly run and add it to the history
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SCORECARD_KEEP_ISSUE: "true"
-        run: |
-          cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
-          if [ -z "$cards" ]; then
-            echo "No nightly scorecard in this run."
-            exit 0
-          fi
-          # shellcheck disable=SC2086
-          features/scorecard/nightly.sh $cards
+        uses: ./.github/actions/scorecard-history
+        with:
+          cards-dir: artifacts/nightly
+          none-message: No nightly scorecard in this run.
+          keep-issue: "true"

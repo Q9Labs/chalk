@@ -3,6 +3,7 @@ import { test } from "@e2e-dev/web";
 import { withProofCall } from "../scripts/web-proof/guest.mjs";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { mkdir } from "node:fs/promises";
+import ports from "../scripts/dev/ports.json";
 
 const boardBox = () => {
   const box = document.querySelector(".chalk-board")?.getBoundingClientRect();
@@ -80,7 +81,7 @@ async function trackStageMotion(context: BrowserContext) {
 async function joinBoardParticipants(contexts: BrowserContext[]) {
   await routeLocalBoardBuild(contexts);
   const [a, b] = await Promise.all(contexts.map((context) => context.newPage()));
-  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000").href);
+  await a.goto(new URL("/space/", process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}`).href);
   await a.getByLabel("Your name", { exact: true }).fill("BoardA");
   const created = a.waitForResponse((response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/v1/public/spaces");
   await a.getByRole("button", { name: "Join call", exact: true }).click();

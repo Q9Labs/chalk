@@ -7,8 +7,8 @@ export function summarize(trials, limitMs) {
     trials: trials.length,
     withinLimit: trials.filter((trial) => trial.ms !== undefined && trial.ms <= limitMs).length,
     failed: trials.filter((trial) => trial.error).length,
-    p50Ms: percentile(times, 0.5),
-    p95Ms: percentile(times, 0.95),
+    p50Ms: percentile(times, 0.5) ?? null,
+    p95Ms: percentile(times, 0.95) ?? null,
     maxMs: times.length ? Math.max(...times) : null,
   };
 }

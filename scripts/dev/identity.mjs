@@ -2,7 +2,7 @@ import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
-import { writeJsonAtomic } from "./ownership.mjs";
+import { writeJsonAtomic } from "./json-file.mjs";
 
 export function identityPaths(config) {
   const root = join(config.runtimeRoot, "identity");

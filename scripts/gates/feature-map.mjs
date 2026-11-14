@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
+export { repositoryRoot };
 
-export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs", "features"];
+export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/actions", ".github/workflows", "contract", "docs", "features", "perf", "release", "scripts", "tests", "tools"];
 
 // This directory contains data-only snapshots, not source packages; its generated identifier stays out of the map.
 const dataOnlySubtrees = ["apps/sync/test/fixtures"];
@@ -27,6 +27,13 @@ function ignoredPaths(root, paths) {
   if (result.error) throw result.error;
   if (result.status !== 0 && result.status !== 1) throw new Error(`git check-ignore failed: ${result.stderr.trim()}`);
   return new Set(result.stdout.split("\0").filter(Boolean));
+}
+
+function trackedRootFiles(root) {
+  if (!fs.existsSync(path.join(root, ".git"))) return [];
+  const result = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+  if (result.error) throw result.error;
+  return result.stdout.split("\0").filter((file) => file && !file.includes("/"));
 }
 
 function listDirectories(root, scanRoots, excludedSubtrees) {
@@ -151,6 +158,10 @@ export function validateFeatureMap(featureMap, options = {}) {
   for (const file of scan.files) {
     if (ownersFor(file).size === 0) errors.push(`Unclaimed source file: ${file}. Add this file to features.json.`);
   }
+  for (const file of trackedRootFiles(root)) {
+    const owners = ownersFor(file);
+    if (owners.size !== 1) errors.push(`Root file ${file} needs exactly one owner in features.json, found ${owners.size}.`);
+  }
 
   return { errors, directoryCount: scan.directories.length };
 }
@@ -216,4 +227,4 @@ function main(args) {
   process.exitCode = 2;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2));
+if (import.meta.main) main(process.argv.slice(2));
