@@ -2,7 +2,7 @@
 -- Both tables are empty in production and no code reads or writes them. Participant tokens do not
 -- use tenant_signing_keys, and Space access runs through space_roles and participants, not
 -- space_members. The running release never names either table, so the drop is safe while it is live.
--- chalk:removed-in #1386
+-- chalk:removed-in #1387
 drop table if exists tenant_signing_keys;
 drop table if exists space_members;
 

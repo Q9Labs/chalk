@@ -4,7 +4,7 @@
 -- query: its table is read by another index, or only written. The running release keeps writing
 -- these tables while this applies, so every statement is concurrent and commits on its own, and a
 -- run that stops early runs again safely.
--- chalk:removed-in #1386
+-- chalk:removed-in #1387
 drop index concurrently if exists api_key_mutation_requests_resource_idx;
 drop index concurrently if exists identities_tenant_created_at_id_idx;
 drop index concurrently if exists participants_dashboard_account_space_idx;
