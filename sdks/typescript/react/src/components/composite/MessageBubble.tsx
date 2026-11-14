@@ -63,6 +63,8 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
     className,
   }) => {
     const { resolvedUrls, failedAttachmentIds, markFailed, retry } = useChatAttachmentPreviews(attachments, onResolveAttachmentUrl);
+    // A plain sent message needs no label; only waiting, sending and read are news.
+    const statusLabel = status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" || readBy.length > 0 ? "Read" : null;
     const [reactionError, setReactionError] = useState<string | null>(null);
     const [reacting, setReacting] = useState(false);
     const [reactionBarOpen, setReactionBarOpen] = useState(false);
@@ -248,12 +250,13 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
                         </span>
                         <button
                           type="button"
+                          aria-label={`Load ${file.fileName} again`}
                           onClick={() => {
                             retry(file.attachmentId);
                             if (!image) void openFile(file);
                           }}
                         >
-                          Retry
+                          Try again
                         </button>
                       </div>
                     );
@@ -333,7 +336,7 @@ export const MessageBubble = React.memo<MessageBubbleProps>(
               {reactionError}
             </p>
           ) : null}
-          {isLocal && isLastInGroup ? <span className="call-message-status">{status === "queued" ? "Queued · sends when you’re back online" : status === "pending" ? "Sending…" : status === "read" || readBy.length > 0 ? "Read" : "Sent"}</span> : null}
+          {isLocal && isLastInGroup && statusLabel ? <span className="call-message-status">{statusLabel}</span> : null}
         </div>
         <dialog
           ref={viewer}

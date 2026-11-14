@@ -13,6 +13,7 @@ import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { callInterval, keptByRow, loadCallPage, newCallRefresh, readCallTick, type CallRefresh } from "./call-refresh";
 import { CallSettings } from "./call-settings";
+import { rememberJoiningCall, usePendingJoin } from "./join-call";
 import { ErrorPanel, MoreButton, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 import { Menu, RenameArchiveItems } from "./menu";
 
@@ -96,6 +97,7 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
 }
 
 function CallHeader({ spaceId, name, onRename, onArchive }: { readonly spaceId: string; readonly name: string; readonly onRename: () => void; readonly onArchive: () => void }) {
+  const joining = usePendingJoin() === spaceId;
   return (
     <div className="pgh">
       <h1>
@@ -108,8 +110,8 @@ function CallHeader({ spaceId, name, onRename, onArchive }: { readonly spaceId: 
           )}
         </Menu>
       </h1>
-      <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }}>
-        <Icon name="cam" />
+      <Link className="btn pri" to="/dashboard/call/$spaceId/join" params={{ spaceId }} preload="intent" aria-busy={joining || undefined} onClick={() => rememberJoiningCall({ id: spaceId, name })}>
+        {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
         Join call
       </Link>
     </div>

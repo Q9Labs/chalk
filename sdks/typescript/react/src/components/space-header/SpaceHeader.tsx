@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { preloadable } from "../../internal/preloadable";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
 import { useNarrowCall } from "../../internal/call-width";
@@ -9,35 +10,42 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
-import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
-import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
-// The menu body loads when the menu first opens, so a call that never opens it never downloads it.
-const CallDetails = lazy(() => import("./CallDetails").then((module) => ({ default: module.CallDetails })));
+// The menu body downloads on the first hover, focus or press of the trigger, so it opens with its content on the first frame and a call that never reaches for it never downloads it.
+const { Component: CallDetails, preload: preloadDetails } = preloadable(() => import("./CallDetails").then((module) => module.CallDetails));
 // The chip loads the first time the link turns weak, so a call on a good link never downloads it.
 const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
-  const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
+  const { spaceName, duration = 0, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
-  const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
+  // Recording shows only here: the call menu trigger's elapsed time turns red, at every width, and the menu opens on the Recording row.
+  const recording = props.isRecording === true;
+  const timerStyle = recording || (remaining !== null && remaining <= 60) ? { color: "var(--chalk-danger-text)" } : remaining === null ? undefined : { color: "var(--chalk-warning)" };
+  const triggerLabel = recording ? "Call details, recording" : "Call details";
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // A host alone at call start sees the menu open with the QR code expanded; it closes when someone joins or the host closes it.
+  const inviteOpen = props.callLinkOpen ?? false;
+  const open = menuOpen || inviteOpen;
   // The chip opens the menu with the connection charts showing; the plain trigger opens it closed.
   const [revealConnection, setRevealConnection] = useState(false);
-  const [dismissed, setDismissed] = useState<NoticeTier | null>(null);
   const link = props.network?.live ? props.network.link : undefined;
-  if (dismissed !== null && (link === undefined || link.tier === "good")) setDismissed(null);
-  const notice = shownNotice(link, dismissed);
-  const changeOpen = useCallback((next: boolean) => {
-    setOpen(next);
-    setRevealConnection(false);
-  }, []);
+  const notice = link && (link.tier === "weak" || link.tier === "poor") ? { tier: link.tier, reason: link.reason } : null;
+  const { onCallLinkToggle } = props;
+  const changeOpen = useCallback(
+    (next: boolean) => {
+      setMenuOpen(next);
+      setRevealConnection(false);
+      if (!next && inviteOpen) onCallLinkToggle?.();
+    },
+    [inviteOpen, onCallLinkToggle],
+  );
   const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
@@ -49,27 +57,27 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </svg>
   );
   const trigger = (
-    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name">
+    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label={triggerLabel} className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
       <span dir="auto">{spaceName}</span>
-      <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
+      <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
         {timer}
       </span>
       {chevron}
     </button>
   );
-  const content = (hideShortcuts: boolean) => (
+  const content = (
     <Suspense fallback={null}>
       <CallDetails
         {...props}
-        hideShortcuts={hideShortcuts}
         onClose={() => changeOpen(false)}
         revealConnection={revealConnection}
+        revealQr={inviteOpen && !revealConnection}
         sounds={sounds}
         onSoundsChange={setSounds}
-        onDialog={(kind) => {
+        onReport={() => {
           changeOpen(false);
-          if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
-          else setDialog({ kind, open: true });
+          if (props.onOpenReportProblem) props.onOpenReportProblem();
+          else setDialog({ kind: "report", open: true });
         }}
       />
     </Suspense>
@@ -83,10 +91,9 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
           videoOn={props.videoOn === true}
           onOpenDetails={() => {
             setRevealConnection(true);
-            setOpen(true);
+            setMenuOpen(true);
           }}
           onTurnOffVideo={() => props.onTurnOffVideo?.()}
-          onDismiss={() => setDismissed(notice.tier)}
         />
       </Suspense>
     </div>
@@ -97,43 +104,35 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
           <>
-            <button ref={triggerRef} type="button" data-call-link-trigger data-part="call-name" title={spaceName} className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => changeOpen(true)}>
+            <button
+              ref={triggerRef}
+              type="button"
+              data-call-link-trigger
+              data-part="call-name"
+              title={spaceName}
+              className="chalk-call-name chalk-call-name-phone"
+              aria-label={triggerLabel}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              onPointerDown={() => void preloadDetails()}
+              onClick={() => changeOpen(true)}
+            >
               <span dir="auto">{spaceName}</span>
+              <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
+                {timer}
+              </span>
               {chevron}
             </button>
-            <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
-              {timer}
-            </span>
-            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={spaceName} accessibleLabel="Call details">
-              {props.onCallLinkToggle ? (
-                <button
-                  type="button"
-                  className="chalk-sheet-row"
-                  aria-pressed={props.callLinkOpen ?? false}
-                  onClick={() => {
-                    changeOpen(false);
-                    props.onCallLinkToggle?.();
-                  }}
-                >
-                  <CallLinkIcon />
-                  <span>{props.callLinkOpen ? "Hide call link" : "Show call link"}</span>
-                </button>
-              ) : null}
-              {content(true)}
+            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={inviteOpen ? "Your call is ready" : spaceName} accessibleLabel="Call details">
+              {content}
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
-            {content(false)}
+          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip={recording ? "Recording" : "Call details"} trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
+            {content}
           </ChalkPopover>
         )}
         {phone ? null : noticeSlot}
-        {isRecording ? (
-          <span className="chalk-shell-recording">
-            <i />
-            Rec
-          </span>
-        ) : null}
       </div>
       {phone ? noticeSlot : null}
       {props.notices}

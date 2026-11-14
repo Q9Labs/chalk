@@ -9,8 +9,9 @@ const styles = `.chalk-knock-notice {
   position: absolute;
   z-index: 46;
   top: 60px;
-  right: var(--space-3);
-  width: 348px;
+  left: 50%;
+  translate: -50% 0;
+  width: 380px;
   display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
@@ -36,10 +37,12 @@ const styles = `.chalk-knock-notice {
   font-size: var(--type-body-lg);
   font-weight: 600;
 }
+/* Names take a second line before they are cut, so "and 1 more" always shows. */
 .chalk-knock-text span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: var(--type-body-sm);
   color: var(--chalk-muted-text);
 }
@@ -54,6 +57,7 @@ const styles = `.chalk-knock-notice {
   /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: 0 0 0 2px var(--chalk-popover);
 }
+/* The close button belongs to the title row, at its top end, so it never reads as a third answer. */
 .chalk-knock-hide {
   align-self: start;
   display: grid;
@@ -61,6 +65,7 @@ const styles = `.chalk-knock-notice {
   width: 28px;
   height: 28px;
   flex: none;
+  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1) 0 0;
   border-radius: 50%;
   color: var(--chalk-muted-text);
 }
@@ -78,20 +83,24 @@ const styles = `.chalk-knock-notice {
 }
 .chalk-knock-actions {
   display: flex;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 .chalk-knock-actions .chalk-pill-button {
-  flex: 1;
-  height: 36px;
+  height: 32px;
+  padding-inline: var(--space-4);
 }
+/* On a phone the notice spans the call under the header and its answers share the row at full touch height. */
 @media (max-width: 767px) {
   .chalk-knock-notice {
     left: var(--space-3);
     right: var(--space-3);
+    translate: none;
     width: auto;
     top: 64px;
   }
   .chalk-knock-actions .chalk-pill-button {
+    flex: 1;
     height: 44px;
   }
 }
@@ -109,7 +118,14 @@ export function summarizeKnocks(requests: readonly KnockRequest[]): KnockSummary
   const [first] = requests;
   if (!first) return null;
   if (requests.length === 1) return { kind: "one", request: first };
-  return { kind: "several", count: requests.length, faces: requests.slice(0, 3), names: requests.map((request) => request.displayName).join(", ") };
+  return { kind: "several", count: requests.length, faces: requests.slice(0, 3), names: knockNames(requests) };
+}
+
+/** Two names at most, so no name is cut mid-word: "Rania and Omar", "Rania, Omar and 2 more". */
+function knockNames(requests: readonly KnockRequest[]): string {
+  const names = requests.slice(0, 2).map((request) => request.displayName);
+  const rest = requests.length - names.length;
+  return rest > 0 ? `${names.join(", ")} and ${rest} more` : names.join(" and ");
 }
 
 export interface KnockNoticeSurfaceProps {

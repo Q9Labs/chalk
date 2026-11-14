@@ -6,12 +6,14 @@ import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { Dialog } from "./Dialog";
 import { CopyAction, useToast } from "./kit";
+import { usePendingJoin } from "./join-call";
 import { LanguagePicker } from "./LanguagePicker";
 import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
 
 export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
   const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());
+  const joining = usePendingJoin() === call.id;
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
@@ -37,8 +39,8 @@ export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { r
       description="Share this link with the people you want in the call. It keeps working after the call ends."
       onClose={onClose}
       actions={
-        <button type="button" className="btn pri" onClick={onJoin}>
-          <Icon name="cam" />
+        <button type="button" className="btn pri" aria-busy={joining || undefined} onClick={onJoin}>
+          {joining ? <span className="spin" aria-hidden="true" /> : <Icon name="cam" />}
           Join call
         </button>
       }

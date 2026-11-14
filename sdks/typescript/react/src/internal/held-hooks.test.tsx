@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { useHeldWhile } from "./useHeldWhile";
+import { useRecordingSeconds } from "./useRecordingSeconds";
 import { useSeenConnected } from "./useSeenConnected";
 
 afterEach(() => document.body.replaceChildren());
@@ -33,4 +34,20 @@ it("remembers who was connected, so a seat that never connected is not a reconne
   view.update({ roster: [seat("nora", "disconnected"), seat("kai", "disconnected")] });
   expect(view.latest().has("nora")).toBe(true);
   expect(view.latest().has("kai")).toBe(false);
+});
+
+it("counts recording time from the moment it was seen to start, and knows none for someone who joined mid-recording", () => {
+  type Props = { status: Parameters<typeof useRecordingSeconds>[0]; episode: number };
+  const joinedLate = probe(({ status, episode }: Props) => useRecordingSeconds(status, episode), { status: "recording", episode: 300 });
+  expect(joinedLate.latest()).toBeNull();
+
+  const host = probe(({ status, episode }: Props) => useRecordingSeconds(status, episode), { status: undefined, episode: 100 });
+  host.update({ status: "starting", episode: 101 });
+  host.update({ status: "recording", episode: 102 });
+  host.update({ status: "recording", episode: 167 });
+  expect(host.latest()).toBe(65);
+  host.update({ status: "stopping", episode: 170 });
+  expect(host.latest()).toBe(68);
+  host.update({ status: "stopped", episode: 171 });
+  expect(host.latest()).toBeNull();
 });
