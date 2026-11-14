@@ -5,7 +5,7 @@ defmodule ChalkSync.ExternalOperationsFindingsTest do
   """
   use ExUnit.Case, async: false
 
-  alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.ExternalOperationConsumer.Execution
   alias ChalkSync.ProviderBridge.Client
   alias ChalkSync.ProviderBridge.MediaPlane
   alias ChalkSync.Stateholder.Command
@@ -198,7 +198,7 @@ defmodule ChalkSync.ExternalOperationsFindingsTest do
     assert {^episode, stop} =
              Enum.find(operations, fn {_, op} -> op.external_operation_id == child_id end)
 
-    ExternalOperationConsumer.execute_operation(
+    Execution.execute_operation(
       episode,
       stop,
       {MediaPlane, adapter},
