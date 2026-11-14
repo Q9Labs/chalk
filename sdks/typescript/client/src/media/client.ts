@@ -2187,12 +2187,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       expired = true;
       if (generation === this.#generation && !this.#stopped) this.#expireNegotiation(timeout);
       return timeout;
-    }).catch((error: unknown) => {
-      if (error instanceof CloudflareSFUError && error.code === "signaling_timeout" && generation === this.#generation && !this.#stopped) this.#expireNegotiation(error);
-      throw error;
-    }).finally(() => {
-      this.#sdpPending -= 1;
-    });
+    })
+      .catch((error: unknown) => {
+        if (error instanceof CloudflareSFUError && error.code === "signaling_timeout" && generation === this.#generation && !this.#stopped) this.#expireNegotiation(error);
+        throw error;
+      })
+      .finally(() => {
+        this.#sdpPending -= 1;
+      });
     this.#sdpTail = result.then(
       () => undefined,
       () => undefined,
