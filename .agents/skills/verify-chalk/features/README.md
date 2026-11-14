@@ -4,6 +4,7 @@ This directory is the maintained source for verifying the user-facing behavior o
 
 ## Baseline preconditions
 
+- The shared harness for the two-person journeys is `scripts/journey.mjs`: the host starts a call from `/space/` and the guest opens the host's link.
 - Launch with `pnpm dev` as described in [SKILL.md](../SKILL.md) and require `pnpm dev:doctor` to report `"ok": true`.
 - The seed has one tenant and one Space with the `cf_sfu` media plane and an enabled public invite (`invite.path` in .private/chalk-dev/seed.json). The user is a guest: arrive through the invite, type a name, join.
 - Give each participant its own browser context and fake camera and microphone fixture number from `scripts/web-proof/media.mjs` (`webMediaFixture(<n>)` as a context init script).
@@ -30,7 +31,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 ## Features
 
 - [Join a call by invite](./join-call.md) covers arriving through the invite link, the entrance screen, publishing and receiving video through the SFU, attendance and leaving. Proven by `.agents/skills/verify-chalk/scripts/join-call.mjs`.
-- [Call controls](./call-controls.md) covers microphone, camera, leave and rejoin on the stage.
-- [Whiteboard](./whiteboard.md) covers opening the board in a call, drawing and fitting to content.
+- [Call controls](./call-controls.md) covers microphone, camera, leave and rejoin on the stage. `two-person-media.mjs` proves two people see and hear each other, and `knock-admit.mjs` proves the waiting room.
+- [Whiteboard](./whiteboard.md) covers opening the board in a call, drawing and fitting to content. Proven by `board-draw.mjs`.
 - [Start a Space as a guest](./start-space.md) covers the `/space/` entry that creates a new Space without an account.
 - [Call state previews](./call-states.md) covers the `apps/web/call-states.html` fixture for layout checks without an API or SFU.
