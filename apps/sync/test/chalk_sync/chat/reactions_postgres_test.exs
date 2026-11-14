@@ -2,6 +2,8 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Chat
+  alias ChalkSync.Chat.Negotiation
+  alias ChalkSync.Chat.Pagination
   alias ChalkSync.Chat.Repository.Postgres, as: Repository
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Fanout.Collaboration
@@ -49,7 +51,7 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
     peer =
       spawn_link(fn ->
         {:ok, _welcome} =
-          Chat.negotiate(
+          Negotiation.negotiate(
             second,
             %{extension: "collaboration_v2", after_sequence: nil, retained_floor_sequence: nil},
             self(),
@@ -89,7 +91,7 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
     assert {:ok, %{"state" => ^state}} = Chat.react(first, input, fanout: fanout)
 
     assert {:ok, %{"messages" => [restored]}} =
-             Chat.read_chat_page(second, %{
+             Pagination.read_chat_page(second, %{
                request_id: "chat-history-request-0001",
                direction: "older",
                cursor_sequence: nil,
@@ -137,7 +139,7 @@ defmodule ChalkSync.Chat.ReactionsPostgresTest do
       })
 
     {:ok, page} =
-      Chat.read_chat_page(
+      Pagination.read_chat_page(
         second,
         %{
           request_id: "chat-compatibility-request-0001",

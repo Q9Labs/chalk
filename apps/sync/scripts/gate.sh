@@ -23,6 +23,7 @@ Checks:
   - mix format --check-formatted, non-mutating
   - mix compile --warnings-as-errors (test env, compiles test support too)
   - mix xref graph --format cycles --fail-above 0 (no module cycle under lib/)
+  - scripts/check-file-size (no hand-written file over 300 lines without a reason in size-baseline.txt)
   - mix credo --strict
   - PostgreSQL-backed mix test with zero skipped cases
   - Real API bridge readiness while Cloudflare cleanup is blocked
@@ -73,6 +74,7 @@ run "Dependencies" fetch_dependencies
 run "Format check" mix format --check-formatted
 run "Compile (warnings as errors)" env MIX_ENV=test mix compile --warnings-as-errors
 run "Module cycles" env MIX_ENV=test mix xref graph --format cycles --fail-above 0
+run "File size" scripts/check-file-size
 
 if [[ "$command" == "basic" ]]; then
   printf '\nSync server basic gate passed.\n'

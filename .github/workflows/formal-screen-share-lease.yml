@@ -6,9 +6,11 @@ name: Screen-share lease model
 on:
   pull_request:
     paths:
-      - apps/sync/lib/chalk_sync/live/screen_share_lease.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex
       - apps/sync/lib/chalk_sync/live/episode.ex
+      - apps/sync/lib/chalk_sync/live/episode/**
       - apps/sync/lib/chalk_sync/episodes/coordinator.ex
+      - apps/sync/lib/chalk_sync/episodes/coordinator/**
       - tools/formal/screen-share-lease/**
       - tools/formal/tla2tools.sh
       - .github/workflows/formal-screen-share-lease.yml

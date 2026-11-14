@@ -11,12 +11,16 @@ on:
       - apps/api/internal/adapters/postgres/public_episode_admission.go
       - apps/api/db/queries/sync_lifecycle.sql
       - apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex
       - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer/**
       - tools/formal/episode-lifecycle/**
       - tools/formal/tla2tools.sh
       - .github/workflows/formal-episode-lifecycle.yml

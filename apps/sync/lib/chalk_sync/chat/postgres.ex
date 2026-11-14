@@ -9,28 +9,22 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   @behaviour ChalkSync.Chat.Repository
 
-  alias ChalkSync.Chat.Repository.Message
+  alias ChalkSync.Chat.Postgres.Append
+  alias ChalkSync.Chat.Postgres.Input
+  alias ChalkSync.Chat.Postgres.Marks
+  alias ChalkSync.Chat.Postgres.Store
   alias ChalkSync.Chat.Repository.Postgres.Page
-  alias ChalkSync.Chat.Repository.Reactions
   alias ChalkSync.Chat.Repository.SQL
-  alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
   alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.UUID
 
   @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
+
   # One person may send 30 messages in 10 seconds and hold at most 4% of a Space stream's
   # 250,000 messages and 2 GiB, however many times they rejoin.
-  @person_limits %{
-    window_messages: 30,
-    window_ms: 10_000,
-    messages: 10_000,
-    bytes: 64 * 1024 * 1024
-  }
-  @capabilities ["sendReaction", "sendChat"]
 
   @impl true
   def authorize(%Identity{} = identity, capability)
@@ -43,7 +37,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
           timeout: @transaction_timeout_ms,
           commit_comment: "chalk sync space action authorization"
         )
-        |> transaction_result()
+        |> Store.transaction_result()
       end,
       {:error, :dependency_unavailable}
     )
@@ -59,7 +53,7 @@ defmodule ChalkSync.Chat.Repository.Postgres do
           timeout: @transaction_timeout_ms,
           commit_comment: "chalk sync space action capabilities"
         )
-        |> transaction_result()
+        |> Store.transaction_result()
       end,
       {:error, :dependency_unavailable}
     )
@@ -75,10 +69,10 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         } = input
       )
       when is_binary(client_message_id) and is_binary(text) and is_list(attachment_ids) do
-    with :ok <- validate_input(input) do
-      fingerprint = request_fingerprint(text, attachment_ids)
+    with :ok <- Input.validate_input(input) do
+      fingerprint = Input.request_fingerprint(text, attachment_ids)
 
-      case append_transaction(identity, input, fingerprint) do
+      case Append.append_transaction(identity, input, fingerprint) do
         {:ok, result} ->
           {:ok, result}
 
@@ -86,22 +80,22 @@ defmodule ChalkSync.Chat.Repository.Postgres do
           {:error, reason}
 
         {:error, _reason} ->
-          resolve_uncertain_append(identity, client_message_id, fingerprint)
+          Append.resolve_uncertain_append(identity, client_message_id, fingerprint)
       end
     end
   rescue
     _exception ->
-      resolve_uncertain_append(
+      Append.resolve_uncertain_append(
         identity,
         client_message_id,
-        request_fingerprint(text, attachment_ids)
+        Input.request_fingerprint(text, attachment_ids)
       )
   catch
     :exit, _reason ->
-      resolve_uncertain_append(
+      Append.resolve_uncertain_append(
         identity,
         client_message_id,
-        request_fingerprint(text, attachment_ids)
+        Input.request_fingerprint(text, attachment_ids)
       )
   end
 
@@ -114,16 +108,26 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         case Postgrex.query(
                Database.connection(episode),
                SQL.read_head(),
-               episode_params(episode),
+               Store.episode_params(episode),
                timeout: 1_000
              ) do
-          {:ok, %{rows: []}} -> {:ok, empty_head()}
+          {:ok, %{rows: []}} -> {:ok, Store.empty_head()}
           {:ok, %{rows: [[head, floor]]}} -> {:ok, head(head, floor)}
           {:error, _reason} -> {:error, :dependency_unavailable}
         end
       end,
       {:error, :dependency_unavailable}
     )
+  end
+
+  defp head(nil, nil), do: Store.empty_head()
+  defp head(0, nil), do: Store.empty_head()
+
+  defp head(head_sequence, retained_floor) do
+    %{
+      head_sequence: Integer.to_string(head_sequence),
+      retained_floor_sequence: Integer.to_string(retained_floor)
+    }
   end
 
   @impl true
@@ -133,10 +137,10 @@ defmodule ChalkSync.Chat.Repository.Postgres do
         case Postgrex.query(
                Database.connection(episode),
                SQL.list_read_receipts(),
-               episode_params(episode),
+               Store.episode_params(episode),
                timeout: 1_000
              ) do
-          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &receipt/1)}
+          {:ok, %{rows: rows}} -> {:ok, Enum.map(rows, &Store.receipt/1)}
           {:error, _reason} -> {:error, :dependency_unavailable}
         end
       end,
@@ -146,121 +150,29 @@ defmodule ChalkSync.Chat.Repository.Postgres do
 
   @impl true
   def mark_read(%Identity{} = identity, sequence) when is_binary(sequence) do
-    Database.guard(fn -> record_read(identity, sequence) end, {:error, :dependency_unavailable})
+    Database.guard(
+      fn -> Marks.record_read(identity, sequence) end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   def mark_read(%Identity{}, _sequence), do: {:error, :invalid_payload}
 
-  defp record_read(identity, sequence) do
-    case Integer.parse(sequence) do
-      {parsed, ""} when parsed > 0 ->
-        Postgrex.transaction(
-          Database.connection(identity.episode),
-          fn connection -> mark_read_transaction(connection, identity, parsed) end,
-          timeout: @transaction_timeout_ms,
-          commit_comment: "chalk sync chat read receipt"
-        )
-        |> transaction_result()
-
-      _ ->
-        {:error, :invalid_payload}
-    end
-  end
-
   @impl true
   def react(%Identity{} = identity, input) do
-    Database.guard(fn -> set_reaction(identity, input) end, {:error, :dependency_unavailable})
-  end
-
-  defp set_reaction(identity, input) do
-    case GeneratedV1.decode_client_frame(%{
-           "type" => "chat_reaction_set",
-           "request_id" => input.request_id,
-           "message_id" => input.message_id,
-           "emoji" => input.emoji,
-           "on" => input.on
-         }) do
-      {:ok, _decoded} ->
-        Postgrex.transaction(
-          Database.connection(identity.episode),
-          fn connection -> react_transaction(connection, identity, input) end,
-          timeout: @transaction_timeout_ms,
-          commit_comment: "chalk sync chat reaction"
-        )
-        |> transaction_result()
-
-      _ ->
-        {:error, :invalid_payload}
-    end
-  end
-
-  defp react_transaction(connection, identity, input) do
-    configure_transaction(connection)
-
-    with {:ok, profile} <- lock_authority(connection, identity),
-         :ok <- require_capability(profile, "sendChat") do
-      Postgrex.query!(connection, SQL.lock_stream(), space_params(identity.episode))
-      Reactions.set(connection, identity, input)
-    else
-      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
-    end
+    Database.guard(
+      fn -> Marks.set_reaction(identity, input) end,
+      {:error, :dependency_unavailable}
+    )
   end
 
   @impl true
   defdelegate read_page(episode, request), to: Page, as: :read
 
-  defp mark_read_transaction(connection, identity, sequence) do
-    configure_transaction(connection)
-
-    case lock_authority(connection, identity) do
-      {:ok, _profile} ->
-        case Postgrex.query!(
-               connection,
-               SQL.lock_stream_for_read(),
-               space_params(identity.episode)
-             ).rows do
-          [[head, _floor]] when sequence <= head ->
-            upsert_receipt(connection, identity, sequence)
-
-          _ ->
-            Postgrex.rollback(connection, {:error, :invalid_payload})
-        end
-
-      {:error, reason} ->
-        Postgrex.rollback(connection, {:error, reason})
-    end
-  end
-
-  defp upsert_receipt(connection, identity, sequence) do
-    now = DateTime.utc_now() |> DateTime.truncate(:millisecond)
-
-    params =
-      episode_params(identity.episode) ++
-        [
-          uuid(identity.participant_id),
-          identity.participant_generation,
-          sequence,
-          now
-        ]
-
-    case Postgrex.query!(connection, SQL.upsert_read_receipt(), params).rows do
-      [row] ->
-        %{outcome: :advanced, receipt: receipt(row)}
-
-      [] ->
-        existing_params =
-          episode_params(identity.episode) ++
-            [uuid(identity.participant_id), identity.participant_generation]
-
-        [row] = Postgrex.query!(connection, SQL.read_participant_receipt(), existing_params).rows
-        %{outcome: :unchanged, receipt: receipt(row)}
-    end
-  end
-
   defp authorize_transaction(connection, identity, capability) do
-    configure_transaction(connection)
+    Store.configure_transaction(connection)
 
-    case lock_authority(connection, identity) do
+    case Store.lock_authority(connection, identity) do
       {:ok, profile} ->
         if is_nil(capability) or capability in profile.capabilities,
           do: %{display_name: profile.display_name},
@@ -272,9 +184,9 @@ defmodule ChalkSync.Chat.Repository.Postgres do
   end
 
   defp participant_capabilities_transaction(connection, identity) do
-    configure_transaction(connection)
+    Store.configure_transaction(connection)
 
-    case lock_authority(connection, identity, true) do
+    case Store.lock_authority(connection, identity, true) do
       {:ok, profile} -> capability_state(connection, identity, profile)
       {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
     end
@@ -285,465 +197,16 @@ defmodule ChalkSync.Chat.Repository.Postgres do
       connection
       |> Postgrex.query!(
         SQL.list_participant_capabilities(),
-        episode_params(identity.episode)
+        Store.episode_params(identity.episode)
       )
       |> Map.fetch!(:rows)
       |> Map.new(fn [participant_id, _role, capabilities] ->
-        {UUID.load!(participant_id), ordered_capabilities(capabilities)}
+        {UUID.load!(participant_id), Store.ordered_capabilities(capabilities)}
       end)
 
     %{
-      capabilities: ordered_capabilities(profile.capabilities),
+      capabilities: Store.ordered_capabilities(profile.capabilities),
       participant_capabilities: participants
     }
   end
-
-  defp append_transaction(identity, input, fingerprint) do
-    Postgrex.transaction(
-      Database.connection(identity.episode),
-      fn connection -> append_in_transaction(connection, identity, input, fingerprint) end,
-      timeout: @transaction_timeout_ms,
-      commit_comment: "chalk sync chat append"
-    )
-  end
-
-  defp append_in_transaction(connection, identity, input, fingerprint) do
-    configure_transaction(connection)
-
-    case select_idempotent(connection, identity, input.client_message_id) do
-      nil ->
-        append_after_authorization(connection, identity, input, fingerprint)
-
-      existing ->
-        idempotent_result(connection, existing, fingerprint)
-    end
-  end
-
-  defp append_after_authorization(connection, identity, input, fingerprint) do
-    with {:ok, profile} <- lock_authority(connection, identity),
-         :ok <- require_capability(profile, "sendChat"),
-         :ok <- early_checks(connection, identity, input) do
-      params = space_params(identity.episode)
-      Postgrex.query!(connection, SQL.insert_stream(), params)
-
-      [[head_sequence, _floor, _count, _bytes]] =
-        Postgrex.query!(connection, SQL.lock_stream(), params).rows
-
-      append_after_stream_lock(
-        connection,
-        identity,
-        profile.display_name,
-        input,
-        fingerprint,
-        head_sequence
-      )
-    else
-      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
-    end
-  end
-
-  defp append_after_stream_lock(
-         connection,
-         identity,
-         display_name,
-         input,
-         fingerprint,
-         head_sequence
-       ) do
-    case select_idempotent(connection, identity, input.client_message_id) do
-      nil ->
-        observe(input, :attachment_commit_observer)
-
-        case attachments(connection, identity, input.attachment_ids, SQL.lock_attachments()) do
-          {:ok, attachments} ->
-            append_new_message(
-              connection,
-              identity,
-              display_name,
-              input,
-              attachments,
-              fingerprint,
-              head_sequence + 1
-            )
-
-          {:error, reason} ->
-            Postgrex.rollback(connection, {:error, reason})
-        end
-
-      existing ->
-        idempotent_result(connection, existing, fingerprint)
-    end
-  end
-
-  defp idempotent_result(_connection, {message, fingerprint}, fingerprint) do
-    %{outcome: :duplicate, message: message}
-  end
-
-  defp idempotent_result(connection, {_message, _other_fingerprint}, _fingerprint) do
-    Postgrex.rollback(connection, {:error, :client_message_id_conflict})
-  end
-
-  defp append_new_message(
-         connection,
-         identity,
-         display_name,
-         input,
-         attachments,
-         fingerprint,
-         sequence
-       ) do
-    [[now]] = Postgrex.query!(connection, SQL.database_now(), []).rows
-
-    message = %{
-      message_id: UUID.generate(),
-      client_message_id: input.client_message_id,
-      sequence: Integer.to_string(sequence),
-      participant_id: identity.participant_id,
-      display_name: display_name,
-      text: input.text,
-      attachments: attachments,
-      created_at: now |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-    }
-
-    encoded_bytes = Message.encoded_bytes(message)
-    params = space_params(identity.episode)
-
-    with :ok <- within_person_caps(connection, identity, encoded_bytes),
-         [[^sequence]] <-
-           Postgrex.query!(connection, SQL.reserve_message(), params ++ [sequence, encoded_bytes]).rows do
-      insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence)
-      attach_files(connection, identity, message, sequence)
-      %{outcome: :committed, message: message}
-    else
-      {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
-      [] -> Postgrex.rollback(connection, {:error, :overloaded})
-    end
-  end
-
-  defp within_person_rate(connection, identity) do
-    limits = person_limits()
-
-    if person_count(connection, identity, SQL.person_recent_messages(), [limits.window_ms]) <
-         limits.window_messages,
-       do: :ok,
-       else: {:error, :rate_limited}
-  end
-
-  # The Space stream lock is held here, so two sends from one person, even on two Sync nodes,
-  # cannot both pass the window or the caps.
-  defp within_person_caps(connection, identity, encoded_bytes) do
-    limits = person_limits()
-
-    [[count, bytes, recent]] =
-      Postgrex.query!(
-        connection,
-        SQL.person_usage(),
-        person_params(identity) ++ [limits.window_ms]
-      ).rows
-
-    if recent < limits.window_messages and count < limits.messages and
-         bytes + encoded_bytes <= limits.bytes,
-       do: :ok,
-       else: {:error, :rate_limited}
-  end
-
-  defp person_count(connection, identity, sql, params) do
-    [[count]] = Postgrex.query!(connection, sql, person_params(identity) ++ params).rows
-    count
-  end
-
-  defp person_params(identity),
-    do: space_params(identity.episode) ++ [uuid(identity.participant_id)]
-
-  defp person_limits,
-    do: Map.merge(@person_limits, Application.get_env(:chalk_sync, :chat_person_limits, %{}))
-
-  defp insert_message(connection, identity, message, fingerprint, encoded_bytes, sequence) do
-    Postgrex.query!(
-      connection,
-      SQL.insert_message(),
-      episode_params(identity.episode) ++
-        [
-          sequence,
-          uuid(message.message_id),
-          uuid(identity.participant_id),
-          identity.participant_generation,
-          message.client_message_id,
-          fingerprint,
-          message.display_name,
-          message.text,
-          encoded_bytes,
-          Message.iso_datetime(message.created_at)
-        ]
-    )
-  end
-
-  defp attachments(_connection, _identity, [], _query), do: {:ok, []}
-
-  defp attachments(connection, identity, attachment_ids, query) do
-    dumped_ids = Enum.map(attachment_ids, &uuid/1)
-
-    rows =
-      Postgrex.query!(connection, query, episode_params(identity.episode) ++ [dumped_ids]).rows
-
-    cond do
-      length(rows) != length(attachment_ids) ->
-        {:error, :attachment_not_found}
-
-      Enum.any?(rows, fn [_id, _name, _mime, _bytes, status, owner_id, generation] ->
-        status != "ready" or UUID.load!(owner_id) != identity.participant_id or
-            generation != identity.participant_generation
-      end) ->
-        attachment_state_error(rows)
-
-      true ->
-        {:ok,
-         Enum.map(rows, fn [id, name, mime_type, byte_length, _status, _owner, _generation] ->
-           %{
-             attachment_id: UUID.load!(id),
-             file_name: name,
-             mime_type: mime_type,
-             byte_length: byte_length
-           }
-         end)}
-    end
-  end
-
-  # Cheap checks before the Space stream lock, so a refused flood or a missing file never holds
-  # it. A retry whose original committed after the first duplicate lookup can fail them, because
-  # the original now fills the window and holds its files, so it goes on to the duplicate lookup
-  # under the lock instead.
-  defp early_checks(connection, identity, input) do
-    observe(input, :early_check_observer)
-
-    with :ok <- within_person_rate(connection, identity),
-         {:ok, _attachments} <-
-           attachments(connection, identity, input.attachment_ids, SQL.read_attachments()) do
-      :ok
-    else
-      {:error, reason} ->
-        if select_idempotent(connection, identity, input.client_message_id),
-          do: :ok,
-          else: {:error, reason}
-    end
-  end
-
-  defp observe(input, key) do
-    case Map.get(input, key) do
-      observer when is_function(observer, 0) -> observer.()
-      _other -> :ok
-    end
-  end
-
-  defp attachment_state_error(rows) do
-    if Enum.any?(rows, fn [_id, _name, _mime, _bytes, status, _owner, _generation] ->
-         status == "attached"
-       end),
-       do: {:error, :attachment_already_claimed},
-       else: {:error, :attachment_not_ready}
-  end
-
-  defp attach_files(connection, identity, message, sequence) do
-    message.attachments
-    |> Enum.with_index()
-    |> Enum.each(fn {attachment, ordinal} ->
-      rows =
-        Postgrex.query!(
-          connection,
-          SQL.attach_message_files(),
-          episode_params(identity.episode) ++
-            [
-              sequence,
-              ordinal,
-              Message.iso_datetime(message.created_at),
-              uuid(attachment.attachment_id),
-              uuid(identity.participant_id),
-              identity.participant_generation
-            ]
-        ).rows
-
-      if rows == [], do: Postgrex.rollback(connection, {:error, :attachment_not_ready})
-    end)
-  end
-
-  defp select_idempotent(connection, identity, client_message_id) do
-    params =
-      space_params(identity.episode) ++
-        [
-          uuid(identity.participant_id),
-          identity.participant_generation,
-          client_message_id
-        ]
-
-    case Postgrex.query!(connection, SQL.select_idempotent_message(), params).rows do
-      [] -> nil
-      [row] -> {Message.from_row(Enum.take(row, 8)), List.last(row)}
-    end
-  end
-
-  defp resolve_uncertain_append(identity, client_message_id, fingerprint) do
-    Database.guard(
-      fn ->
-        connection = Database.alternate_connection(identity.episode)
-
-        case select_idempotent(connection, identity, client_message_id) do
-          {message, ^fingerprint} -> {:ok, %{outcome: :duplicate, message: message}}
-          {_message, _other_fingerprint} -> {:error, :client_message_id_conflict}
-          nil -> {:error, :dependency_unavailable}
-        end
-      end,
-      {:error, :dependency_unavailable}
-    )
-  end
-
-  defp lock_authority(connection, identity, allow_pending \\ false) do
-    params =
-      episode_params(identity.episode) ++ [uuid(identity.participant_id)]
-
-    case Postgrex.query!(connection, SQL.lock_authority(), params).rows do
-      [["active", generation, status, display_name, _role, capabilities]]
-      when generation == identity.participant_generation and is_binary(display_name) ->
-        if participant_available?(connection, identity, status, allow_pending) do
-          {:ok,
-           %{
-             display_name: display_name,
-             capabilities: ordered_capabilities(capabilities)
-           }}
-        else
-          {:error, :participant_stale}
-        end
-
-      [[episode_status, _generation, _participant_status, _display_name, _role, _capabilities]]
-      when episode_status != "active" ->
-        {:error, :episode_ended}
-
-      [_participant] ->
-        {:error, :participant_stale}
-
-      [] ->
-        {:error, :participant_stale}
-    end
-  end
-
-  defp participant_available?(_connection, _identity, "active", _allow_pending), do: true
-  defp participant_available?(_connection, _identity, "joining", true), do: true
-
-  defp participant_available?(connection, identity, "leaving", true),
-    do: JoinSeats.awaiting_entry?(connection, identity)
-
-  defp participant_available?(_connection, _identity, _status, _allow_pending), do: false
-
-  defp require_capability(profile, capability) do
-    if capability in profile.capabilities, do: :ok, else: {:error, :capability_denied}
-  end
-
-  defp validate_input(%{
-         client_message_id: client_message_id,
-         text: text,
-         attachment_ids: attachment_ids
-       }) do
-    with :ok <- validate_client_message_id(client_message_id),
-         :ok <- validate_text(text),
-         :ok <- validate_attachment_ids(attachment_ids) do
-      validate_content(text, attachment_ids)
-    end
-  end
-
-  defp validate_client_message_id(client_message_id) do
-    if byte_size(client_message_id) in 16..64, do: :ok, else: {:error, :invalid_payload}
-  end
-
-  defp validate_text(text) do
-    cond do
-      byte_size(text) > 16_384 -> {:error, :invalid_payload}
-      String.length(text) > 4_000 -> {:error, :invalid_payload}
-      true -> :ok
-    end
-  end
-
-  defp validate_attachment_ids(attachment_ids) do
-    cond do
-      length(attachment_ids) > 5 -> {:error, :invalid_payload}
-      Enum.uniq(attachment_ids) != attachment_ids -> {:error, :invalid_payload}
-      not Enum.all?(attachment_ids, &valid_uuid?/1) -> {:error, :invalid_payload}
-      true -> :ok
-    end
-  end
-
-  defp validate_content("", []), do: {:error, :invalid_payload}
-  defp validate_content(_text, _attachment_ids), do: :ok
-
-  defp request_fingerprint(text, attachment_ids) do
-    if attachment_ids == [] do
-      :crypto.hash(:sha256, text)
-    else
-      composite_fingerprint(text, attachment_ids)
-    end
-  end
-
-  defp composite_fingerprint(text, attachment_ids) do
-    :crypto.hash(
-      :sha256,
-      JSON.encode!(%{"version" => 2, "text" => text, "attachment_ids" => attachment_ids})
-    )
-  end
-
-  defp valid_uuid?(value) when is_binary(value) do
-    case UUID.dump(value) do
-      {:ok, _uuid} -> true
-      _error -> false
-    end
-  end
-
-  defp valid_uuid?(_value), do: false
-
-  defp transaction_result({:ok, result}), do: {:ok, result}
-  defp transaction_result({:error, {:error, reason}}), do: {:error, reason}
-  defp transaction_result({:error, _reason}), do: {:error, :dependency_unavailable}
-
-  defp ordered_capabilities(capabilities) do
-    Enum.filter(@capabilities, &(&1 in capabilities))
-  end
-
-  defp configure_transaction(connection) do
-    Postgrex.query!(connection, TransactionSettings.sql(:default), [])
-  end
-
-  defp head(nil, nil), do: empty_head()
-  defp head(0, nil), do: empty_head()
-
-  defp head(head_sequence, retained_floor) do
-    %{
-      head_sequence: Integer.to_string(head_sequence),
-      retained_floor_sequence: Integer.to_string(retained_floor)
-    }
-  end
-
-  defp empty_head, do: %{head_sequence: nil, retained_floor_sequence: nil}
-
-  defp receipt([participant_id, generation, sequence, %DateTime{} = read_at]) do
-    %{
-      participant_id: UUID.load!(participant_id),
-      participant_generation: generation,
-      sequence: Integer.to_string(sequence),
-      read_at: read_at |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
-    }
-  end
-
-  defp receipt([participant_id, generation, sequence, %NaiveDateTime{} = read_at]) do
-    receipt([
-      participant_id,
-      generation,
-      sequence,
-      DateTime.from_naive!(read_at, "Etc/UTC")
-    ])
-  end
-
-  defp episode_params(episode) do
-    [uuid(episode.tenant_id), uuid(episode.space_id), uuid(episode.episode_id)]
-  end
-
-  defp space_params(episode), do: [uuid(episode.tenant_id), uuid(episode.space_id)]
-
-  defp uuid(value), do: UUID.dump!(value)
 end
