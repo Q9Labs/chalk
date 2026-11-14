@@ -235,11 +235,11 @@ jobs:
       - name: Name the revision's proofs
         # A Promote or latency run can check out a cut made before the Chalk SFU rename, whose CLI and scorecard code use the old names.
         run: |
-          legacy=$(ls features/scorecard | grep -m1 '^own-sfu\.mjs$' || true)
-          if [ -n "$legacy" ]; then
+          for legacy in features/scorecard/own-sfu.m?s; do
+            [ -f "$legacy" ] || continue
             echo "PROOF_NAMES_BEFORE_RENAME=true" >> "$GITHUB_ENV"
-            echo "LEGACY_COLLECTOR=features/scorecard/$legacy" >> "$GITHUB_ENV"
-          fi
+            echo "LEGACY_COLLECTOR=$legacy" >> "$GITHUB_ENV"
+          done
       - name: Keep private proof files in memory
         run: |
           mkdir -p .private /dev/shm/chalk-proof-private /dev/shm/chalk-proof-tmp
@@ -415,7 +415,11 @@ jobs:
           fi
           evidence=.private/prod-proof
           [[ "$STAGING_LATENCY" != true ]] || evidence=.private/latency-scorecard
-          node "$collector" "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
+          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then
+            node "$collector" "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
+          else
+            node features/scorecard/chalk-sfu.mjs "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
+          fi
       - name: Clean proof runs
         if: always()
         # Deleting this run's resources must never wait on another lane's measurement lease.
