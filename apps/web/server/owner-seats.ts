@@ -23,6 +23,7 @@ async function findSeat(request: Request, env: DashboardEnvironment, input: Seat
   if (input.ownerSeat) return seatSchema.parse(await unseal(input.ownerSeat, env.SESSION_SECRET, "owner-seat"));
   const cached = (await cachedSeats(request, env)).find((entry) => entry.spaceId === input.spaceId && (input.joinKey === undefined || entry.joinKey === input.joinKey));
   if (cached) return cached;
+  // Owner: web. Remove on 15 Jan 2027 with clearLegacySeatCookies in cookies.ts.
   const legacy = readCookie(request, env, input.joinKey ? `seat_${input.spaceId}_${input.joinKey}` : `seat_${input.spaceId}`);
   if (!legacy) return undefined;
   return { ...seatSchema.parse(await unseal(legacy, env.SESSION_SECRET, "owner-seat")), ...(input.joinKey ? { joinKey: input.joinKey } : {}) };

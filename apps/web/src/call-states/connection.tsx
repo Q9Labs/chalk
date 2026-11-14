@@ -17,16 +17,16 @@ function OfflineDevice({ children }: { readonly children: ReactNode }) {
   return children;
 }
 
-type Spec = { readonly id: string; readonly title: string; readonly options: LiveOptions; readonly actions?: readonly Action[]; readonly then?: (client: CallStateClient) => void; readonly offline?: boolean };
+type Spec = { readonly id: string; readonly title: string; readonly options: LiveOptions; readonly actions?: readonly Action[]; readonly step?: (client: CallStateClient) => void; readonly offline?: boolean };
 
 /** Every state ships in dark and light, so the captures pair up. */
-const both = ({ id, title, options, actions, then, offline }: Spec): CallState[] =>
+const both = ({ id, title, options, actions, step, offline }: Spec): CallState[] =>
   (["dark", "light"] as const).map((scheme) => ({
     id: scheme === "dark" ? id : `${id}-light`,
     title: scheme === "dark" ? title : `${title}, Light`,
     ...(actions ? { actions } : {}),
     render: () => {
-      const call = <Live snapshot={liveSnapshot(options)} initialColorScheme={scheme} then={then} />;
+      const call = <Live snapshot={liveSnapshot(options)} initialColorScheme={scheme} step={step} />;
       return offline ? <OfflineDevice>{call}</OfflineDevice> : call;
     },
   }));
@@ -56,12 +56,12 @@ export const CONNECTION_STATES: readonly CallState[] = [
   ...both({ id: "conn-reconnecting", title: "Reconnecting, after 4 seconds", options: { others: [nora, akash], status: "reconnecting" }, actions: [wait(2_700)] }),
   ...both({ id: "conn-reconnecting-long", title: "Still reconnecting, after 20 seconds", options: { others: [nora, akash], status: "reconnecting" }, actions: [wait(20_500)] }),
   ...both({ id: "conn-offline", title: "Offline with unsent actions", options: { others: [nora, akash], status: "reconnecting", offlinePending: true }, actions: [wait(2_700)], offline: true }),
-  ...both({ id: "conn-recovered", title: "Back in the call", options: { others: [nora, akash], status: "reconnecting" }, then: (client) => backLive(client, 2_500), actions: [wait(1_700)] }),
+  ...both({ id: "conn-recovered", title: "Back in the call", options: { others: [nora, akash], status: "reconnecting" }, step: (client) => backLive(client, 2_500), actions: [wait(1_700)] }),
   ...both({
     id: "conn-failed",
     title: "Connection lost: the call stays, dimmed, with a way back",
     options: { others: [nora, akash] },
-    then: (client) => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "failed", lastError: { code: "connection.sync_recovery_exhausted", recoverable: false, message: "Chalk could not reconnect to this Space." } } })),
+    step: (client) => client.updateSnapshot((current) => ({ ...current, connection: { ...current.connection, status: "failed", lastError: { code: "connection.sync_recovery_exhausted", recoverable: false, message: "Chalk could not reconnect to this Space." } } })),
   }),
   ...both({ id: "conn-guest-reconnecting", title: "A guest is reconnecting", options: { others: [{ ...nora, reconnecting: true }, akash] }, actions: [wait(2_700)] }),
   ...both({

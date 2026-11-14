@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, expiresSoon } from "../../lib/dashboard/format";
@@ -187,18 +187,21 @@ export function Summary({
 /** The first pages of keys can all be expired while a live key sits on a later page, so the Connect card keeps loading pages until it has one. */
 export function LiveKeySearch({ cursor, onPage }: { readonly cursor: string; readonly onPage: (page: DeveloperDTO) => void }) {
   const toast = useToast();
+  const latest = useRef({ onPage, toast });
+  useEffect(() => {
+    latest.current = { onPage, toast };
+  });
   useEffect(() => {
     let current = true;
     readPage("developer", { keyCursor: cursor }).then(
       (page) => {
-        if (current) onPage(page);
+        if (current) latest.current.onPage(page);
       },
-      (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+      (error: unknown) => latest.current.toast(errorMessage(error), { icon: "alert" }),
     );
     return () => {
       current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the cursor alone names the page to fetch; onPage and toast are new on every render
   }, [cursor]);
   return null;
 }

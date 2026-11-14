@@ -23,13 +23,34 @@ type Props = {
   readonly showSecret: (secret: Secret, fallbackId: string | null) => void;
 };
 
+type Update = (change: (value: DeveloperDTO) => DeveloperDTO) => void;
+type Close = () => void;
+type KeyOpen = Extract<OpenDialog, { kind: "create-key" | "rotate-key" | "revoke-key" }>;
+type EndpointOpen = Extract<OpenDialog, { kind: "add-endpoint" | "edit-endpoint" | "rotate-webhook" }>;
+type WebsiteOpen = Extract<OpenDialog, { kind: "add-website" | "remove-website" }>;
+
 /** The one dialog the developer page has open, if any. */
 export function DeveloperDialogs({ open, origins, onOpen, update, onExpandWebhook, showSecret }: Props) {
-  const toast = useToast();
   const close = () => onOpen(null);
-  const setWebsites = (allowedWebsites: readonly string[]) => update((value) => ({ ...value, allowedWebsites }));
-  const showWebhookSecret = (secret: Secret) => onOpen({ kind: "secret", secret });
   if (!open) return null;
+  switch (open.kind) {
+    case "create-key":
+    case "rotate-key":
+    case "revoke-key":
+      return <KeyDialog open={open} update={update} close={close} showSecret={showSecret} />;
+    case "add-endpoint":
+    case "edit-endpoint":
+    case "rotate-webhook":
+      return <EndpointDialogs open={open} update={update} close={close} onOpen={onOpen} onExpandWebhook={onExpandWebhook} />;
+    case "add-website":
+    case "remove-website":
+      return <WebsiteDialog open={open} origins={origins} update={update} close={close} />;
+    case "secret":
+      return <SecretDialog secret={open.secret} onClose={close} />;
+  }
+}
+
+function KeyDialog({ open, update, close, showSecret }: { readonly open: KeyOpen; readonly update: Update; readonly close: Close; readonly showSecret: Props["showSecret"] }) {
   switch (open.kind) {
     case "create-key":
       return <CreateKeyDialog onClose={close} onCreated={(secret) => showSecret({ kind: "key", secret }, null)} />;
@@ -46,6 +67,13 @@ export function DeveloperDialogs({ open, origins, onOpen, update, onExpandWebhoo
           }}
         />
       );
+  }
+}
+
+function EndpointDialogs({ open, update, close, onOpen, onExpandWebhook }: { readonly open: EndpointOpen; readonly update: Update; readonly close: Close; readonly onOpen: Props["onOpen"]; readonly onExpandWebhook: Props["onExpandWebhook"] }) {
+  const toast = useToast();
+  const showWebhookSecret = (secret: Secret) => onOpen({ kind: "secret", secret });
+  switch (open.kind) {
     case "add-endpoint":
       return (
         <EndpointDialog
@@ -72,6 +100,13 @@ export function DeveloperDialogs({ open, origins, onOpen, update, onExpandWebhoo
       );
     case "rotate-webhook":
       return <RotateWebhookDialog webhook={open.webhook} onClose={close} onRotated={(secret, stoppedOld) => showWebhookSecret({ kind: "webhook", secret, rotated: { name: open.webhook.name, stoppedOld } })} />;
+  }
+}
+
+function WebsiteDialog({ open, origins, update, close }: { readonly open: WebsiteOpen; readonly origins: readonly string[]; readonly update: Update; readonly close: Close }) {
+  const toast = useToast();
+  const setWebsites = (allowedWebsites: readonly string[]) => update((value) => ({ ...value, allowedWebsites }));
+  switch (open.kind) {
     case "add-website":
       return (
         <AddWebsiteDialog
@@ -96,7 +131,5 @@ export function DeveloperDialogs({ open, origins, onOpen, update, onExpandWebhoo
           }}
         />
       );
-    case "secret":
-      return <SecretDialog secret={open.secret} onClose={close} />;
   }
 }

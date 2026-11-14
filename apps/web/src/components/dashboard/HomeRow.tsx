@@ -2,7 +2,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
-import { CopyAction, Menu, MenuItem, usePhone, useToast } from "./kit";
+import { CopyAction, usePhone, useToast } from "./kit";
+import { Menu, MenuItem, RenameArchiveItems } from "./menu";
 import { inviteLink } from "./home-rows";
 
 export function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
@@ -39,44 +40,31 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
           </button>
         ) : null}
         {phone ? null : <CopyAction text={() => inviteLink(call)} />}
-        <Menu label={`More actions for ${call.name}`}>
-          {(close) => (
-            <>
-              <MenuItem
-                icon="cam"
-                onSelect={() => {
-                  close();
-                  join();
-                }}
-              >
-                Join call
-              </MenuItem>
-              <CopyMenuItem call={call} onDone={close} />
-              <MenuItem
-                icon="edit"
-                onSelect={() => {
-                  close();
-                  onRename();
-                }}
-              >
-                Rename
-              </MenuItem>
-              <div className="msep" />
-              <MenuItem
-                icon="trash"
-                danger
-                onSelect={() => {
-                  close();
-                  onArchive();
-                }}
-              >
-                Archive call
-              </MenuItem>
-            </>
-          )}
-        </Menu>
+        <RowMenu call={call} onJoin={join} onRename={onRename} onArchive={onArchive} />
       </span>
     </div>
+  );
+}
+
+function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCallDTO; readonly onJoin: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+  return (
+    <Menu label={`More actions for ${call.name}`}>
+      {(close) => (
+        <>
+          <MenuItem
+            icon="cam"
+            onSelect={() => {
+              close();
+              onJoin();
+            }}
+          >
+            Join call
+          </MenuItem>
+          <CopyMenuItem call={call} onDone={close} />
+          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} />
+        </>
+      )}
+    </Menu>
   );
 }
 

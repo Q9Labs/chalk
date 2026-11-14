@@ -83,6 +83,8 @@ export function clearSeatCookies(response: Response, request: Request, env: Dash
   writeCookie(response, env, "seats", "", 0);
   clearLegacySeatCookies(response, request, env);
 }
+// Owner: web. Per-Space `seat_*` cookies predate the sealed `seats` cookie (29 Oct 2026). Remove with the read in
+// owner-seats.ts on 15 Jan 2027, when every session that could hold one has expired.
 export function clearLegacySeatCookies(response: Response, request: Request, env: DashboardEnvironment): void {
   const prefix = cookieName(env, "seat_");
   for (const pair of request.headers.get("Cookie")?.split(";") ?? []) {
