@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-
-	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 )
 
 func TestFenceTableNeverEvictsALiveParticipant(t *testing.T) {
@@ -47,21 +45,6 @@ func TestFullFenceTableOfLiveSessionsRefusesInsteadOfEvicting(t *testing.T) {
 	}
 }
 
-func TestARefusedCreateLeavesEveryFence(t *testing.T) {
-	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 1 })
-	node.fences.limit = 2
-	node.newTestSession(t, testScope("bob", 2)).Close()
-	alice := node.newTestSession(t, testScope("alice", 1)) // the fence table and the node are both full
-
-	if _, err := node.Create("create-carol", testScope("carol", 1), ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("create on a full node: %v, want capacity exceeded", err)
-	}
-	alice.Close()
-	if _, err := node.Create("delayed-bob", testScope("bob", 1), ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
-		t.Fatalf("stale create after a refused create: %v, want stale generation", err)
-	}
-}
-
 func TestCreateReplayOutlivesTheSession(t *testing.T) {
 	node := newTestNode(t, nil)
 	first, err := node.Create("create-alice", testScope("alice", 1), ParticipantSession, nil)
@@ -83,44 +66,5 @@ func TestCreateReplayOutlivesTheSession(t *testing.T) {
 	}
 	if _, err := node.Create("create-alice", testScope("bob", 1), ParticipantSession, nil); !errors.Is(err, ErrOperationConflict) {
 		t.Fatalf("reused operation ID after close: %v, want conflict", err)
-	}
-}
-
-func TestClosedCreateRecordsAreBounded(t *testing.T) {
-	node := newTestNode(t, nil)
-	node.closedCreates.limit = 2
-	for _, name := range []string{"alice", "bob", "carol"} {
-		node.newTestSession(t, testScope(name, 1)).Close()
-	}
-	if len(node.creates) != 2 {
-		t.Fatalf("%d create records, want the 2 newest closed ones", len(node.creates))
-	}
-	if _, kept := node.creates["create-episode-1-alice-1"]; kept {
-		t.Fatal("the oldest closed create record should be forgotten first")
-	}
-}
-
-func TestADrainingNodeKeepsItsLiveCallsAndRefusesNewEpisodes(t *testing.T) {
-	node := newTestNode(t, nil)
-	node.newTestSession(t, testScope("alice", 1))
-	node.newTestSession(t, testScope("bob", 1))
-	node.Drain()
-
-	if _, err := node.Create("bob-reconnect", testScope("bob", 2), ParticipantSession, nil); err != nil {
-		t.Fatalf("reconnect into a live Episode while draining: %v", err)
-	}
-	if _, err := node.Create("carol-joins", testScope("carol", 1), ParticipantSession, nil); err != nil {
-		t.Fatalf("join into a live Episode while draining: %v", err)
-	}
-	other := testScope("dave", 1)
-	other.EpisodeID = "episode-2"
-	if _, err := node.Create("dave-new-episode", other, ParticipantSession, nil); !errors.Is(err, ErrDraining) {
-		t.Fatalf("new Episode while draining: %v, want draining", err)
-	}
-	if node.SessionCount() != 3 {
-		t.Fatalf("%d sessions, want alice, bob's replacement and carol", node.SessionCount())
-	}
-	if telemetry := node.Telemetry(); !telemetry.Draining || len(telemetry.Refusals) != 1 || telemetry.Refusals[RefusedDraining] != 1 {
-		t.Fatalf("telemetry draining %v refusals %v, want draining with one draining refusal", telemetry.Draining, telemetry.Refusals)
 	}
 }

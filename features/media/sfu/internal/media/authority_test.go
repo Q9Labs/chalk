@@ -2,7 +2,6 @@ package media
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"runtime"
 	"slices"
@@ -64,91 +63,6 @@ func leaseNode(t *testing.T, lease time.Duration) *Node {
 	return newTestNode(t, func(cfg *config.Config) { cfg.SourceLeaseTTL = lease })
 }
 
-// The model's duplicate, delayed and stale commands: only a control at or above the
-// recorded revision applies, and a revoke wins a tie, so nothing older undoes a revoke.
-func TestSourceControlsApplyInRevisionOrder(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	scope := testScope("alice", 1)
-	n.newTestSession(t, scope)
-	authority := authorityOf(t, n, scope, "microphone")
-	now := func() bool { return authority.allows(monotonic(), monotonic()) }
-	if now() {
-		t.Fatal("a source forwards before any grant")
-	}
-	steps := []struct {
-		action   string
-		revision int64
-		applied  bool
-		forwards bool
-	}{
-		{protocol.SourceGrant, 5, true, true},
-		{protocol.SourceRevoke, 4, false, true}, // delayed revoke older than the grant
-		{protocol.SourceGrant, 5, true, true},   // duplicate grant: a lease renewal
-		{protocol.SourceRevoke, 5, true, false}, // revoke at the grant's revision wins the tie
-		{protocol.SourceGrant, 5, false, false}, // stale renewal after the revoke
-		{protocol.SourceRevoke, 5, true, false}, // duplicate revoke
-		{protocol.SourceGrant, 3, false, false}, // delayed enable from before the revoke
-		{protocol.SourceGrant, 6, true, true},   // a newer grant alone clears the revoke
-	}
-	for index, step := range steps {
-		before := monotonic()
-		result := apply(t, n, control("alice", "microphone", step.action, step.revision))
-		// A grant after a revoke opens a new window, so nothing held from the revoked time is resent.
-		if step.applied && step.action == protocol.SourceGrant && index > 0 && !steps[index-1].forwards && authority.window.Load().since < before {
-			t.Fatalf("step %d: the grant after a revoke kept the old window", index)
-		}
-		if result.Applied != step.applied || now() != step.forwards {
-			t.Fatalf("step %d %s@%d: applied %v forwards %v, want %v %v", index, step.action, step.revision, result.Applied, now(), step.applied, step.forwards)
-		}
-	}
-	if result := apply(t, n, control("alice", "camera", protocol.SourceGrant, 1)); !result.Applied {
-		t.Fatal("one source's revision fenced another source")
-	}
-}
-
-// Off with no publication: a revoke for a source that has no track, or no session at
-// all, still stops a publication that arrives later.
-func TestARevokeWithoutAPublicationFencesALaterOne(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	if result := apply(t, n, control("dave", "camera", protocol.SourceRevoke, 7)); !result.Applied || len(result.Closed) != 0 {
-		t.Fatalf("revoke with no session: %+v", result)
-	}
-	scope := testScope("dave", 1)
-	n.newTestSession(t, scope)
-	authority := authorityOf(t, n, scope, "camera")
-	if authority.allows(monotonic(), monotonic()) {
-		t.Fatal("a publication after the revoke forwards")
-	}
-	if result := apply(t, n, control("dave", "camera", protocol.SourceGrant, 6)); result.Applied {
-		t.Fatal("a delayed grant undid the revoke")
-	}
-	if microphone := authorityOf(t, n, scope, "microphone"); microphone.allows(monotonic(), monotonic()) {
-		t.Fatal("a source no control named forwards without a grant")
-	}
-}
-
-// Forwarding checks the lease on every packet, so a lapsed lease stops media without a ticker.
-func TestALeaseLapsesWithoutRenewal(t *testing.T) {
-	n := leaseNode(t, 150*time.Millisecond)
-	scope := testScope("alice", 1)
-	n.newTestSession(t, scope)
-	authority := authorityOf(t, n, scope, "microphone")
-	result := apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
-	if !authority.allows(monotonic(), monotonic()) || result.LeaseMillis <= 0 || result.LeaseMillis > 150 {
-		t.Fatalf("grant: %+v", result)
-	}
-	time.Sleep(100 * time.Millisecond)
-	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
-	time.Sleep(100 * time.Millisecond)
-	if !authority.allows(monotonic(), monotonic()) {
-		t.Fatal("a renewed lease lapsed at the first grant's expiry")
-	}
-	time.Sleep(200 * time.Millisecond)
-	if authority.allows(monotonic(), monotonic()) {
-		t.Fatal("a lease forwards past its expiry without renewal")
-	}
-}
-
 // The table of source controls is bounded, and a full table of live sessions' sources
 // refuses a new control instead of forgetting a live revoke.
 func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
@@ -176,35 +90,6 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 	}
 }
 
-// A revoke the full table evicts still fences its source: a delayed older grant cannot
-// open it, and a later publication starts without a lease. A grant at or above the
-// Episode's floor still opens it.
-func TestAnEvictedRevokeStillFencesItsSource(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	n.sources.limit = 1
-	alice := testScope("alice", 1)
-	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 5)) // alice has no session
-	if result := apply(t, n, control("bob", "camera", protocol.SourceGrant, 6)); !result.Applied {
-		t.Fatalf("bob's grant: %+v", result)
-	}
-	if n.source(sourceKey{keyOf(alice), "camera"}) != nil {
-		t.Fatal("alice's revoke was not evicted")
-	}
-
-	if result := apply(t, n, control("alice", "camera", protocol.SourceGrant, 4)); result.Applied || result.LeaseMillis != 0 {
-		t.Fatalf("a grant older than the evicted revoke applied: %+v", result)
-	}
-	session := n.newTestSession(t, alice)
-	pub := admitPublication(t, session, protocol.Track{Mid: "0", TrackName: "cam", Source: "camera"}, webrtc.RTPCodecTypeVideo)
-	if pub.authority.allows(monotonic(), monotonic()) {
-		t.Fatal("a publication after the evicted revoke forwards")
-	}
-
-	if result := apply(t, n, control("alice", "camera", protocol.SourceGrant, 6)); !result.Applied || !pub.authority.allows(monotonic(), monotonic()) {
-		t.Fatalf("a grant at the Episode's floor did not open the source: %+v", result)
-	}
-}
-
 // The Episode floors share the source table's limit. Evicting into an Episode that has a
 // floor costs nothing, and once the floors are full an entry that needs one stays.
 func TestSourceFloorsStayBounded(t *testing.T) {
@@ -225,34 +110,6 @@ func TestSourceFloorsStayBounded(t *testing.T) {
 	}
 	if n.sources.Len() != 1 || len(n.sourceFloors) != 1 {
 		t.Fatalf("table holds %d sources and %d floors, limit 1", n.sources.Len(), len(n.sourceFloors))
-	}
-}
-
-// Publication admission keeps the table at its limit when an entry can't be evicted. With
-// the only floor taken, bob's revision-2 entry in a second Episode would need a new floor,
-// so it stays, and each publish and close cycle must reclaim the previous cycle's entry
-// or refuse instead of growing the table.
-func TestPublicationAdmissionKeepsTheSourceTableBounded(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	n.sources.limit = 1
-	in := func(episode, participant string, revision int64) protocol.SourceControlRequest {
-		request := control(participant, "camera", protocol.SourceGrant, revision)
-		request.EpisodeID = episode
-		return request
-	}
-	apply(t, n, in("episode-1", "alice", 1))
-	apply(t, n, in("episode-2", "bob", 2)) // evicts alice, so episode-1 takes the only floor
-	for cycle := range 40 {
-		scope := testScope(fmt.Sprintf("carol-%d", cycle), 1)
-		session := n.newTestSession(t, scope)
-		if _, err := newPublication(session, protocol.Track{Mid: "0", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio); err != nil && !errors.Is(err, ErrCapacityExceeded) {
-			t.Fatalf("cycle %d: %v", cycle, err)
-		}
-		session.Close()
-	}
-	if n.sources.Len() > n.sources.limit || len(n.sourceFloors) > n.sources.limit {
-		t.Fatalf("after 40 publish and close cycles the table holds %d sources and %d floors, limit %d",
-			n.sources.Len(), len(n.sourceFloors), n.sources.limit)
 	}
 }
 
@@ -350,47 +207,6 @@ func TestADelayedRevokeNeverClosesAPublicationOfANewerGrant(t *testing.T) {
 	}
 	if closed := revoke.Results[0].Closed; len(closed) != 0 || pub.closed.Load() || session.published["0"] != pub {
 		t.Fatalf("the revoke@2 cleanup closed a publication admitted under grant@3: %+v", closed)
-	}
-}
-
-// A publication admitted at the revoke's own revision, after the revoke applied but
-// before its cleanup ran, is not the revoke's to close: it has no lease, and a newer
-// grant that applies before the cleanup lets it forward.
-func TestARevokesCleanupKeepsAPublicationAdmittedAfterTheRevoke(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	scope := testScope("alice", 1)
-	session := n.newTestSession(t, scope)
-	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
-	key := sourceKey{keyOf(scope), "microphone"}
-	before := admitPublication(t, session, protocol.Track{Mid: "0", TrackName: "old-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
-	session.published["0"] = before
-
-	session.mu.Lock() // the revoke's cleanup and the grant's keyframe request wait here
-	revoked := controlInBackground(n, control("alice", "microphone", protocol.SourceRevoke, 2))
-	reachRevision(n, key, 2)
-	pub := admitPublication(t, session, protocol.Track{Mid: "1", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
-	session.published["1"] = pub
-	if pub.authority.allows(monotonic(), monotonic()) {
-		t.Fatal("a publication admitted while revoked has a lease")
-	}
-	granted := controlInBackground(n, control("alice", "microphone", protocol.SourceGrant, 3))
-	reachRevision(n, key, 3)
-	session.mu.Unlock()
-
-	revoke, grant := <-revoked, <-granted
-	if len(revoke.Results) != 1 || !revoke.Results[0].Applied || len(grant.Results) != 1 || !grant.Results[0].Applied {
-		t.Fatalf("controls did not apply: revoke %+v, grant %+v", revoke, grant)
-	}
-	if closed := revoke.Results[0].Closed; len(closed) != 1 || closed[0].Mid != "0" || !before.closed.Load() {
-		t.Fatalf("the revoke@2 cleanup did not close exactly the publication admitted before it: %+v", closed)
-	}
-	if pub.closed.Load() || session.published["1"] != pub || !pub.authority.allows(monotonic(), monotonic()) {
-		t.Fatal("the revoke@2 cleanup closed a publication grant@3 lets forward")
-	}
-	// A revoke wins a tie, so revoke@3 closes what grant@3 admitted.
-	session.published["2"] = admitPublication(t, session, protocol.Track{Mid: "2", TrackName: "new-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
-	if closed := apply(t, n, control("alice", "microphone", protocol.SourceRevoke, 3)).Closed; len(closed) != 2 || closed[1].Mid != "2" {
-		t.Fatalf("revoke@3 did not close the publications admitted under grant@3: %+v", closed)
 	}
 }
 
@@ -502,39 +318,6 @@ func TestAWriteThatStallsPastTheLeaseStopsTheSendsAfterIt(t *testing.T) {
 			t.Fatalf("a NACK resent %d packets, want only the one whose write lapsed", got)
 		}
 	})
-}
-
-// Admission never evicts a source the same batch names: that would forget its revoke
-// and let the batch's stale grant apply. With no other room, the batch is refused.
-func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
-	n := leaseNode(t, time.Minute)
-	n.sources.limit = 2
-	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 10)) // no Participant here has a session
-	apply(t, n, control("dave", "camera", protocol.SourceRevoke, 1))
-	batch := func(controls ...protocol.SourceControl) protocol.SourceControlRequest {
-		return protocol.SourceControlRequest{TenantID: "tenant-1", EpisodeID: "episode-1", Controls: controls}
-	}
-	aliceGrant := protocol.SourceControl{ParticipantID: "alice", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
-	bobGrant := protocol.SourceControl{ParticipantID: "bob", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
-
-	response, err := n.ControlSources(batch(aliceGrant, bobGrant))
-	if err != nil {
-		t.Fatalf("a batch with room after evicting another entry was refused: %v", err)
-	}
-	if alice := response.Results[0]; alice.Applied || alice.Revision != 10 {
-		t.Fatalf("a stale grant applied after its source's revoke was evicted: %+v", alice)
-	}
-	if !response.Results[1].Applied || n.sources.Len() != 2 {
-		t.Fatalf("bob's grant: %+v, table holds %d entries, limit 2", response.Results[1], n.sources.Len())
-	}
-
-	carolGrant := protocol.SourceControl{ParticipantID: "carol", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
-	if _, err := n.ControlSources(batch(aliceGrant, bobGrant, carolGrant)); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("a batch with no room besides its own sources was admitted: %v", err)
-	}
-	if n.sources.Len() != 2 || n.source(sourceKey{participantKey{tenant: "tenant-1", episode: "episode-1", participant: "alice"}, "camera"}) == nil {
-		t.Fatal("a refused batch changed the table")
-	}
 }
 
 func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) {

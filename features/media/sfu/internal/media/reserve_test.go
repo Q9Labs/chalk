@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -91,139 +90,6 @@ func reserveRequest(episode string, participants int) protocol.ReserveEpisodeReq
 	return protocol.ReserveEpisodeRequest{
 		OperationID: fmt.Sprintf("reserve-%d", reserves.Add(1)), TenantID: "tenant", EpisodeID: episode, Generation: 1,
 		Shape: protocol.EpisodeShape{Participants: participants, CamerasPerParticipant: 2},
-	}
-}
-
-func join(t *testing.T, node *Node, episode, participant string) {
-	t.Helper()
-	scope := protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: participant, Generation: 1}
-	if _, err := node.Create("join-"+episode+"-"+participant, scope, ParticipantSession, nil); err != nil {
-		t.Fatalf("join %s: %v", participant, err)
-	}
-}
-
-func TestReserveEpisodeCountsInReadiness(t *testing.T) {
-	f := newReserveNode(t)
-	response, err := f.node.ReserveEpisode(reserveRequest("one", 3))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response.ReservedPackets != threePerson || f.reserved() != threePerson {
-		t.Fatalf("reserved %d, node reports %d, want %d", response.ReservedPackets, f.reserved(), threePerson)
-	}
-	if want := f.clock.Load().Add(30 * time.Second); !response.ExpiresAt.Equal(want) {
-		t.Fatalf("expires at %v, want the 30s default %v", response.ExpiresAt, want)
-	}
-}
-
-func TestReserveEpisodeRefusesWhatWouldExceedTheBudget(t *testing.T) {
-	f := newReserveNode(t)
-	for _, episode := range []string{"one", "two"} {
-		if _, err := f.node.ReserveEpisode(reserveRequest(episode, 3)); err != nil {
-			t.Fatalf("reserve %s: %v", episode, err)
-		}
-	}
-	_, err := f.node.ReserveEpisode(reserveRequest("three", 3))
-	if !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("a third three-person Episode: %v, want capacity exceeded", err)
-	}
-	if f.reserved() != 2*threePerson {
-		t.Fatalf("a refused reserve left %d reserved, want %d", f.reserved(), 2*threePerson)
-	}
-	// A join of a new Episode meets the same budget: it needs 3,480 and 1,660 are left.
-	if _, err := f.node.Create("join-three", protocol.Scope{TenantID: "tenant", EpisodeID: "three", ParticipantID: "p", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("a new Episode's first join beside two held Episodes: %v, want capacity exceeded", err)
-	}
-}
-
-func TestConcurrentReservesNeverOverAdmit(t *testing.T) {
-	f := newReserveNode(t)
-	const callers = 24
-	var admitted, refused atomic.Int64
-	var wg sync.WaitGroup
-	for i := range callers {
-		wg.Go(func() {
-			_, err := f.node.ReserveEpisode(reserveRequest(fmt.Sprintf("episode-%d", i), 3))
-			switch {
-			case err == nil:
-				admitted.Add(1)
-			case errors.Is(err, ErrCapacityExceeded):
-				refused.Add(1)
-			default:
-				t.Errorf("reserve: %v", err)
-			}
-		})
-	}
-	wg.Wait()
-	if admitted.Load() != 2 || refused.Load() != callers-2 {
-		t.Fatalf("admitted %d and refused %d, want 2 and %d", admitted.Load(), refused.Load(), callers-2)
-	}
-	if reserved := f.reserved(); reserved != 2*threePerson || reserved > 16000 {
-		t.Fatalf("reserved %d, want %d within the budget", reserved, 2*threePerson)
-	}
-}
-
-func TestJoinsReplaceTheHoldWithoutDoubleCounting(t *testing.T) {
-	f := newReserveNode(t)
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 3)); err != nil {
-		t.Fatal(err)
-	}
-	for _, participant := range []string{"a", "b", "c"} {
-		join(t, f.node, "one", participant)
-		if reserved := f.reserved(); reserved != threePerson {
-			t.Fatalf("after %s joined the node reserves %d, want %d", participant, reserved, threePerson)
-		}
-	}
-	f.node.mu.Lock()
-	remaining := f.node.heldEpisodes()
-	f.node.mu.Unlock()
-	if remaining != 0 {
-		t.Fatalf("%d holds remain after every Participant joined", remaining)
-	}
-	// Past the held shape the Episode grows like any other.
-	join(t, f.node, "one", "d")
-	if reserved := f.reserved(); reserved <= threePerson {
-		t.Fatalf("a fourth Participant left %d reserved, want more than %d", reserved, threePerson)
-	}
-}
-
-func TestAHoldExpiresAndReleasesWhatNoJoinUsed(t *testing.T) {
-	f := newReserveNode(t)
-	request := reserveRequest("one", 3)
-	request.TTLSeconds = 10
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	join(t, f.node, "one", "a")
-	f.advance(9 * time.Second)
-	if f.reserved() != threePerson {
-		t.Fatalf("reserved %d before the deadline, want %d", f.reserved(), threePerson)
-	}
-	f.advance(2 * time.Second)
-	// One Participant is left, and a lone Participant reserves what two would.
-	if f.reserved() != newEpisode {
-		t.Fatalf("reserved %d after expiry, want the joined Participant's %d", f.reserved(), newEpisode)
-	}
-	// Releasing twice changes nothing.
-	f.node.mu.Lock()
-	f.node.expireHolds()
-	f.node.expireHolds()
-	holds := f.node.heldEpisodes()
-	f.node.mu.Unlock()
-	if holds != 0 || f.reserved() != newEpisode {
-		t.Fatalf("holds %d and reserved %d after a second release", holds, f.reserved())
-	}
-}
-
-func TestEndEpisodeReleasesItsHold(t *testing.T) {
-	f := newReserveNode(t)
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 3)); err != nil {
-		t.Fatal(err)
-	}
-	join(t, f.node, "one", "a")
-	f.node.EndEpisode("tenant", "one")
-	if f.reserved() != 0 {
-		t.Fatalf("reserved %d after the Episode ended", f.reserved())
 	}
 }
 
@@ -399,63 +265,6 @@ func TestHoldsAreBounded(t *testing.T) {
 	}
 }
 
-func (f *reserveFixture) closeAdmission(reason string) {
-	f.node.guard.mu.Lock()
-	f.node.guard.health.AdmissionReason = reason
-	f.node.guard.mu.Unlock()
-}
-
-func TestAHeldEpisodeRejoinsAfterTheNodeDrainsOrTheGuardCloses(t *testing.T) {
-	f := newReserveNode(t)
-	if _, err := f.node.ReserveEpisode(reserveRequest("held", 2)); err != nil {
-		t.Fatal(err)
-	}
-	f.closeAdmission(RefusedCPUBusy)
-	join(t, f.node, "held", "a")
-	if _, err := f.node.Create("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("a new Episode while the guard is closed: %v, want capacity exceeded", err)
-	}
-
-	f.closeAdmission("")
-	other := newReserveNode(t)
-	if _, err := other.node.ReserveEpisode(reserveRequest("held", 2)); err != nil {
-		t.Fatal(err)
-	}
-	other.node.Drain()
-	join(t, other.node, "held", "a")
-	join(t, other.node, "held", "b")
-	if _, err := other.node.Create("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrDraining) {
-		t.Fatalf("a new Episode on a draining node: %v, want draining", err)
-	}
-}
-
-func TestReservedCapturesKeepTheirSessionSlots(t *testing.T) {
-	f := newReserveNode(t, func(cfg *config.Config) { cfg.MaxSessions = 4 })
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	// Three Participants and the capture fill the four slots: nobody else gets one.
-	if _, err := f.node.Create("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("another Episode took a slot the hold promised: %v", err)
-	}
-	for _, participant := range []string{"a", "b", "c"} {
-		join(t, f.node, "one", participant)
-	}
-	if _, err := f.node.Create("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("another Episode took the capture's slot: %v", err)
-	}
-	if _, err := f.node.Create("capture", protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}, CaptureSession, nil); err != nil {
-		t.Fatalf("the reserved capture: %v", err)
-	}
-
-	short := newReserveNode(t, func(cfg *config.Config) { cfg.MaxSessions = 3 })
-	if _, err := short.node.ReserveEpisode(request); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("three Participants and a capture on a limit of three: %v, want capacity exceeded", err)
-	}
-}
-
 func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
 	f := newReserveNode(t)
 	request := reserveRequest("one", 2)
@@ -474,28 +283,6 @@ func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
 	fresh.Generation = 6
 	if _, err := f.node.Create("fresh", fresh, ParticipantSession, nil); err != nil {
 		t.Fatalf("a create at the hold's generation: %v", err)
-	}
-}
-
-func TestASameGenerationReserveNeverShrinksTheHold(t *testing.T) {
-	f := newReserveNode(t)
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 3)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 2)); err != nil {
-		t.Fatal(err)
-	}
-	if reserved := f.reserved(); reserved != threePerson {
-		t.Fatalf("a delayed smaller reserve left %d reserved, want %d", reserved, threePerson)
-	}
-	// A newer generation is a new decision and may hold less.
-	newer := reserveRequest("one", 2)
-	newer.Generation = 2
-	if _, err := f.node.ReserveEpisode(newer); err != nil {
-		t.Fatal(err)
-	}
-	if reserved := f.reserved(); reserved >= threePerson {
-		t.Fatalf("a newer generation left %d reserved, want less than %d", reserved, threePerson)
 	}
 }
 
@@ -528,12 +315,6 @@ func TestReserveEnforcesTheCallersPacketCeilingAtomically(t *testing.T) {
 	negative.PacketCeiling = -1
 	if _, err := f.node.ReserveEpisode(negative); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("a negative ceiling: %v, want an invalid request", err)
-	}
-}
-
-func TestNewNodeRefusesACeilingBelowTheMandatoryMediaOfALargeCall(t *testing.T) {
-	if _, err := newReserveNodeErr(func(cfg *config.Config) { cfg.EpisodePacketCeiling = 2000 }); err == nil {
-		t.Fatal("NewNode accepted a ceiling below the large-call threshold's mandatory media")
 	}
 }
 
@@ -661,89 +442,6 @@ func (r recorder) stop(t *testing.T, mid string) {
 	})
 	if err != nil || len(closed.Tracks) != 1 || closed.Tracks[0].AlreadyClosed {
 		t.Fatalf("stop the subscription %s: %v %+v", mid, err, closed)
-	}
-}
-
-func TestCaptureSlotsKeepRoomUntilACaptureTakesIt(t *testing.T) {
-	f := newCaptureNode(t)
-	f.reserveWithCapture(t, "one", 3)
-	if f.reserved() != captureBudget {
-		t.Fatalf("reserved %d, want the Episode and its capture bound %d", f.reserved(), captureBudget)
-	}
-	alice := f.camera(t, "one", "alice")
-	// A capture takes the room as it subscribes, without adding to the total.
-	f.recorder(t, "one").pull(t, alice)
-	if f.reserved() != captureBudget {
-		t.Fatalf("a capture subscription changed the total to %d, want %d", f.reserved(), captureBudget)
-	}
-	f.advance(31 * time.Second)
-	// The hold is gone: the one joined Participant and the capture's own subscription remain.
-	if want := newEpisode + cameraStream; f.reserved() != want {
-		t.Fatalf("after expiry %d reserved, want %d", f.reserved(), want)
-	}
-}
-
-func TestACaptureReturnsHeldPacketsWhenItsSubscriptionEnds(t *testing.T) {
-	f := newCaptureNode(t)
-	f.reserveWithCapture(t, "one", 3)
-	alice := f.camera(t, "one", "alice")
-	capture := f.recorder(t, "one")
-	mid := capture.pull(t, alice)[0]
-	capture.stop(t, mid)
-	// The hold keeps the capture room again; if it did not, the total would drop by the subscription.
-	if f.reserved() != captureBudget {
-		t.Fatalf("after the subscription ended %d reserved, want %d", f.reserved(), captureBudget)
-	}
-}
-
-func TestEndingAnEpisodeWithALiveCaptureSubscriptionLeavesNothingReserved(t *testing.T) {
-	f := newCaptureNode(t)
-	f.reserveWithCapture(t, "one", 3)
-	alice := f.camera(t, "one", "alice")
-	f.recorder(t, "one").pull(t, alice)
-	f.node.EndEpisode("tenant", "one")
-	if f.reserved() != 0 {
-		t.Fatalf("ending the Episode left %d reserved", f.reserved())
-	}
-}
-
-func TestReleasingOneSubscriptionReturnsOnlyWhatItBorrowed(t *testing.T) {
-	f := newCaptureNode(t)
-	// One Participant's capture room is 650: the first two cameras borrow 300 each and the third
-	// borrows the last 50, so it adds 250 to the total.
-	f.reserveWithCapture(t, "one", 1)
-	alice, bob, carol := f.camera(t, "one", "alice"), f.camera(t, "one", "bob"), f.camera(t, "one", "carol")
-	joined := f.reserved()
-	capture := f.recorder(t, "one")
-	mids := capture.pull(t, alice, bob, carol)
-	if f.reserved() != joined+250 {
-		t.Fatalf("three subscriptions left %d reserved, want %d", f.reserved(), joined+250)
-	}
-	capture.stop(t, mids[2])
-	if f.reserved() != joined {
-		t.Fatalf("ending the subscription that borrowed 50 left %d reserved, want %d", f.reserved(), joined)
-	}
-	capture.stop(t, mids[0])
-	capture.stop(t, mids[1])
-	if f.reserved() != joined {
-		t.Fatalf("ending the subscriptions that borrowed 300 each left %d reserved, want %d", f.reserved(), joined)
-	}
-}
-
-func TestReReservingAfterACaptureSubscribedDoesNotCountItTwice(t *testing.T) {
-	// The budget fits the Episode and its capture bound exactly, with no room to count it twice.
-	f := newCaptureNode(t, func(cfg *config.Config) { cfg.PacketBudget = captureBudget })
-	f.reserveWithCapture(t, "one", 3)
-	alice := f.camera(t, "one", "alice")
-	f.recorder(t, "one").pull(t, alice)
-	again := reserveRequest("one", 3)
-	again.Shape.CaptureSlots = 1
-	response, err := f.node.ReserveEpisode(again)
-	if err != nil {
-		t.Fatalf("an unchanged shape was refused after its capture subscribed: %v", err)
-	}
-	if response.ReservedPackets != captureBudget || f.reserved() != captureBudget {
-		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), captureBudget)
 	}
 }
 

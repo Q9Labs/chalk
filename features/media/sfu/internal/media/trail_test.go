@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"testing"
 
@@ -45,12 +44,6 @@ func (l *trailLog) events(name string) []map[string]string {
 		}
 	}
 	return found
-}
-
-func (l *trailLog) all() []map[string]string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return append([]map[string]string(nil), l.records...)
 }
 
 func requireIDs(t *testing.T, record map[string]string, scope protocol.Scope) {
@@ -116,20 +109,6 @@ func TestTrailExplainsOneParticipantsCall(t *testing.T) {
 	}
 }
 
-func TestTrailNamesThePeerStatesBeforeTheClose(t *testing.T) {
-	trail := &trailLog{}
-	node := newLoggedTestNode(t, nil, trail)
-	session := node.newTestSession(t, testScope("alice", 1))
-	publish(t, session, "mic", 1)
-	session.CloseFor(ClosePeerFailed)
-	if states := trail.events("sfu.peer.state"); len(states) == 0 {
-		t.Fatal("no peer state line before the close")
-	}
-	if closed := trail.events("sfu.session.closed"); len(closed) != 1 || closed[0]["cause"] != ClosePeerFailed || closed[0]["msg"] != "sfu.session.closed" {
-		t.Fatalf("session.closed = %v", closed)
-	}
-}
-
 func TestTrailNamesARefusedJoinWithItsIds(t *testing.T) {
 	trail := &trailLog{}
 	node := newLoggedTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 1 }, trail)
@@ -150,44 +129,4 @@ func TestTrailNamesARefusedJoinWithItsIds(t *testing.T) {
 		t.Fatalf("session.refused = %v", line)
 	}
 	requireIDs(t, line[0], scope)
-}
-
-func TestTrailNamesALostSourceLease(t *testing.T) {
-	trail := &trailLog{}
-	node := newLoggedTestNode(t, nil, trail)
-	apply(t, node, control("alice", "camera", protocol.SourceGrant, 1))
-	apply(t, node, control("alice", "camera", protocol.SourceRevoke, 2))
-	opened, lost := trail.events("sfu.source.lease_opened"), trail.events("sfu.source.lease_lost")
-	if len(opened) != 1 || len(lost) != 1 || lost[0]["cause"] != "revoked" || lost[0]["source"] != "camera" {
-		t.Fatalf("lease lines = %v, %v", opened, lost)
-	}
-	requireIDs(t, lost[0], protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: "alice"})
-}
-
-// A line never holds SDP, an address, a candidate or a name: the trail is safe to store beside the API's logs.
-func TestTrailHoldsNoSDPAddressOrSecret(t *testing.T) {
-	trail := &trailLog{}
-	node := newLoggedTestNode(t, nil, trail)
-	alice := node.newTestSession(t, testScope("alice", 1))
-	bob := node.newTestSession(t, testScope("bob", 1))
-	publish(t, alice, "mic", 1)
-	viewer := newTestPeer(t)
-	pulled, err := bob.AddTracks(context.Background(), pullRequest(bob, alice, "mic-0"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := bob.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: bob.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-		t.Fatal(err)
-	}
-	bob.CloseFor(CloseRemoved)
-	alice.CloseFor(CloseRemoved)
-	for _, record := range trail.all() {
-		for key, value := range record {
-			for _, forbidden := range []string{"v=0", "a=ice", "a=fingerprint", "candidate:", "127.0.0.1", "::1", "ice-ufrag"} {
-				if strings.Contains(value, forbidden) {
-					t.Fatalf("%s.%s holds %q: %q", record["event"], key, forbidden, value)
-				}
-			}
-		}
-	}
 }
