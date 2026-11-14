@@ -48,6 +48,8 @@ jobs:
   approve:
     needs: select
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     environment: production
     outputs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}

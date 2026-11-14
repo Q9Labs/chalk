@@ -54,16 +54,16 @@ def unseal_text(text):
 
 
 def expand(patterns):
-    """Resolve each argument to existing paths; an argument with wildcards matches like a shell glob."""
-    return [Path(match) for pattern in patterns for match in (sorted(glob.glob(str(pattern))) or ([] if glob.has_magic(str(pattern)) else [str(pattern)]))]
+    """Resolve each argument like upload-artifact: wildcards match like a shell glob, and a path that matches nothing is skipped."""
+    return [Path(match) for pattern in patterns for match in sorted(glob.glob(str(pattern))) or [str(pattern)]]
 
 
 def seal_files(paths, out, allow_empty=False):
-    """Write a sealed copy of each file, or of each file under a directory, into `out`; originals stay as they are."""
+    """Write a sealed copy of each file, or of each file under a directory, into `out`; originals stay as they are. Fails only when no path yields a file, unless `allow_empty`."""
     out.mkdir(parents=True, exist_ok=True)
     count = 0
     for path in expand(paths):
-        if allow_empty and not path.exists():
+        if not path.exists():
             continue
         files = sorted(item for item in path.rglob('*') if item.is_file()) if path.is_dir() else [path]
         for item in files:

@@ -203,6 +203,8 @@ jobs:
       !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) &&
       (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
       release_id: ${{ steps.plan.outputs.release_id }}
@@ -214,6 +216,13 @@ jobs:
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
+
+      - name: Require a target that seals its release files
+        run: |
+          if [[ ! -f scripts/releases/seal.py || ! -d .github/actions/upload-sealed ]]; then
+            echo "::error::Target $TARGET_SHA predates sealed release files. Rebase it on master and release again."
+            exit 1
+          fi
 
       - name: Set up Go for recorder dependency planning
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -342,6 +351,8 @@ jobs:
     # Without a status function a skipped require-gate (a cut) would skip this job through plan-managed, so it names plan-managed itself.
     if: ${{ !cancelled() && needs.plan-managed.result == 'success' }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - name: Checkout exact release
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -375,6 +386,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       AWS_REGION: ap-southeast-1
       ECR_REGISTRY: ${{ secrets.CHALK_ECR_REGISTRY }}
       COMPONENT: ${{ matrix.component }}
@@ -509,6 +521,7 @@ jobs:
       name: nightly
       deployment: false
     env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ secrets.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
@@ -609,6 +622,8 @@ jobs:
       (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && (inputs.managed_environment != 'nightly' || needs.plan-managed.outputs.recorder_control != 'true'))) &&
       (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - name: Checkout exact release
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -713,6 +728,8 @@ jobs:
       release_id: ${{ steps.result.outputs.release_id }}
       restored_source_release_id: ${{ steps.result.outputs.restored_source_release_id }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     # The nightly deploy first waits up to 30 minutes for the staging-SFU lease; host polling is bounded to 30 minutes, with time for guarded dispatcher plans.
     timeout-minutes: 90
     environment: ${{ inputs.managed_environment }}
@@ -1026,6 +1043,8 @@ jobs:
       always() && (!cancelled() || inputs.pages_rollback_id != '') &&
       (inputs.manifest_run_id != '' || needs.publish-managed-manifest.result == 'success')
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       release_id: ${{ steps.prepare.outputs.release_id }}
       manifest_artifact_id: ${{ steps.upload.outputs.artifact-id || needs.publish-managed-manifest.outputs.artifact_id }}

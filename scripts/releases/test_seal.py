@@ -64,6 +64,8 @@ class Sealed(unittest.TestCase):
         with self.assertRaises(ValueError):
             seal.seal_files([self.directory / 'none*.json'], self.directory / 'empty')
         seal.seal_files([self.directory / 'none*.json', self.directory / 'missing.json'], self.directory / 'empty', allow_empty=True)
+        seal.seal_files([self.directory / 'other.json', self.directory / 'missing.json'], self.directory / 'partial')
+        self.assertEqual([path.name for path in (self.directory / 'partial').iterdir()], ['other.json.sealed'])
 
     def test_files_that_were_never_sealed_pass_through_opening_without_a_key(self):
         (self.directory / 'old.json').write_bytes(MANIFEST)
