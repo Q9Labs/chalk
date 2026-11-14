@@ -581,6 +581,7 @@ func run() error {
 	if reportAdapter != nil {
 		reportSender = reportAdapter
 	}
+	readiness := postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion}
 	routerOptions := httpapi.Options{
 		RecorderWorkerLogger: logger,
 		Capabilities: httpapi.CapabilityStatus{
@@ -595,7 +596,8 @@ func run() error {
 		ServicePrincipal: cfg.API.ServicePrincipal,
 
 		RateLimit: rateLimitOptions,
-		Readiness: postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		Readiness:        readiness,
+		LiveParticipants: readiness.LiveParticipants,
 		RetirementBacklog: func() (int, time.Duration, bool) {
 			backlog, observed := mediaPlaneRegistry.RetirementBacklog()
 			return backlog.Count, backlog.Oldest, observed
