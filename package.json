@@ -24,7 +24,6 @@
     "dev:down": "node scripts/dev/cli.mjs down",
     "dev:reset": "node scripts/dev/cli.mjs reset",
     "dev:smoke": "node scripts/dev/media-smoke-runner.mjs .private/chalk-dev/manifest.json",
-    "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash scripts/dev/android-logs.sh",
     "transcription:infra:check": "bash scripts/transcription-dispatcher/validate-contract.sh",
