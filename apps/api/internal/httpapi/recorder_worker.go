@@ -16,6 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -38,8 +39,6 @@ type RecorderWorkerService interface {
 	Complete(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	RelinquishCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	Fail(context.Context, recordingpipeline.FailureInput) (recordingpipeline.Job, error)
-	InsertBundle(context.Context, recordingpipeline.BundleInput) (recordingpipeline.Bundle, error)
-	CommitArtifact(context.Context, recordingpipeline.ArtifactInput) (recordingpipeline.Artifact, error)
 	UpsertPoolHealth(context.Context, recordingpipeline.PoolHealth) (recordingpipeline.PoolHealth, error)
 }
 
@@ -90,15 +89,15 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 	}
 	r.Route("/internal/v1/recorder", func(r chi.Router) {
 		r.Use(func(next http.Handler) http.Handler { return requireRecorderWorker(verifier, next) })
-		r.Post("/jobs/claim", recorderWorkerClaimHandler(service))
-		r.Post("/jobs/heartbeat", recorderWorkerHeartbeatHandler(service))
-		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
-		r.Post("/jobs/fail", recorderWorkerFailHandler(service, controls.Logger))
-		r.Post("/jobs/capture/relinquish", recorderWorkerRelinquishCaptureHandler(service))
-		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service, controls.Logger))
-		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
+		r.Post(string(recorderprotocol.RouteJobsClaim), recorderWorkerClaimHandler(service))
+		r.Post(string(recorderprotocol.RouteJobsHeartbeat), recorderWorkerHeartbeatHandler(service))
+		r.Post(string(recorderprotocol.RouteJobsProgress), recorderWorkerProgressHandler(service))
+		r.Post(string(recorderprotocol.RouteJobsFail), recorderWorkerFailHandler(service, controls.Logger))
+		r.Post(string(recorderprotocol.RouteJobsRelinquish), recorderWorkerRelinquishCaptureHandler(service))
+		r.Post(string(recorderprotocol.RouteJobsComplete), recorderWorkerCompleteHandler(service, controls.Logger))
+		r.Post(string(recorderprotocol.RoutePoolHealth), recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
 		if controls.CapturePlans != nil {
-			r.Post("/plans/wait", recorderWorkerCapturePlanWaitHandler(controls.CapturePlans, controls.Logger))
+			r.Post(string(recorderprotocol.RoutePlansWait), recorderWorkerCapturePlanWaitHandler(controls.CapturePlans, controls.Logger))
 		}
 		mountRecorderCaptureSignalingRoutes(r, controls.CaptureSignaling)
 		mountRecorderRecordingAuthorityRoutes(r, controls.RecordingKeys, controls.RecordingObjects)
@@ -107,142 +106,13 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 	})
 }
 
-type recorderWorkerClaimBody struct {
-	ClaimRequestID         string `json:"claim_request_id"`
-	LeaseForSeconds        int    `json:"lease_for_seconds"`
-	SupportsCompletionOnly bool   `json:"supports_completion_only"`
-}
-
-type recorderWorkerCapturePlanWaitBody struct {
-	PlanHandle        string `json:"plan_handle"`
-	TenantID          string `json:"tenant_id"`
-	SpaceID           string `json:"space_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-	AfterRevision     int64  `json:"after_revision"`
-	WaitMilliseconds  int64  `json:"wait_milliseconds"`
-}
-
-type recorderWorkerLeaseBody struct {
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseForSeconds   int    `json:"lease_for_seconds"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-}
-
-type recorderWorkerProgressBody struct {
-	recorderWorkerLeaseBody
-	Stage     string `json:"stage"`
-	Completed int64  `json:"completed"`
-	Total     int64  `json:"total"`
-	Bytes     int64  `json:"bytes"`
-	ObjectKey string `json:"object_key"`
-}
-
-type recorderWorkerFailBody struct {
-	recorderWorkerLeaseBody
-	AvailableAt string `json:"available_at"`
-	ErrorCode   string `json:"error_code"`
-	ErrorDetail string `json:"error_detail"`
-}
-
-type recorderWorkerCompleteBody struct {
-	recorderWorkerLeaseBody
-}
-
-type recorderWorkerPoolHealthBody struct {
-	AdmissionOpen bool                    `json:"admission_open"`
-	ReadyCapacity int                     `json:"ready_capacity"`
-	Reason        string                  `json:"reason"`
-	ObservedAt    string                  `json:"observed_at"`
-	Resources     *workerresources.Sample `json:"resources,omitempty"`
-}
-
-type recorderWorkerJobResponse struct {
-	JobID             string  `json:"job_id"`
-	TenantID          string  `json:"tenant_id"`
-	EpisodeID         string  `json:"episode_id"`
-	RecordingID       string  `json:"recording_id"`
-	Kind              string  `json:"kind"`
-	State             string  `json:"state"`
-	AttemptCount      int     `json:"attempt_count"`
-	AttemptLimit      int     `json:"attempt_limit"`
-	LeaseToken        string  `json:"lease_token,omitempty"`
-	LeaseOwner        string  `json:"lease_owner,omitempty"`
-	LeaseExpiresAt    *string `json:"lease_expires_at,omitempty"`
-	FencingGeneration int64   `json:"fencing_generation"`
-	CaptureEpoch      int64   `json:"capture_epoch"`
-	EnvelopeDigest    string  `json:"envelope_digest"`
-	AvailableAt       string  `json:"available_at"`
-	ErrorCode         string  `json:"error_code,omitempty"`
-	ErrorDetail       string  `json:"error_detail,omitempty"`
-	TerminalAt        *string `json:"terminal_at,omitempty"`
-	UpdatedAt         string  `json:"updated_at"`
-	CreatedAt         string  `json:"created_at"`
-}
-
-type recorderWorkerClaimResponse struct {
-	ClaimRequestID string                                `json:"claim_request_id"`
-	Envelope       recordingpipeline.RecorderJobEnvelope `json:"envelope"`
-	EnvelopeDigest string                                `json:"envelope_digest"`
-	LeaseToken     string                                `json:"lease_token"`
-	LeaseOwner     string                                `json:"lease_owner"`
-	LeaseExpiresAt string                                `json:"lease_expires_at"`
-}
-
-type recorderWorkerCapturePlanResponse struct {
-	Plan        captureplan.Plan `json:"plan"`
-	Fingerprint string           `json:"fingerprint"`
-}
-
-type recorderWorkerProgressResponse struct {
-	Job       recorderWorkerJobResponse `json:"job"`
-	Stage     string                    `json:"stage"`
-	Complete  int64                     `json:"completed"`
-	Total     int64                     `json:"total"`
-	Bytes     int64                     `json:"bytes"`
-	ObjectKey string                    `json:"object_key,omitempty"`
-}
-
-type recorderWorkerArtifactResponse struct {
-	RecordingID    string `json:"recording_id"`
-	TenantID       string `json:"tenant_id"`
-	RenderJobID    string `json:"render_job_id"`
-	ObjectKey      string `json:"object_key"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	Checksum       string `json:"checksum"`
-	DurationMillis int64  `json:"duration_millis"`
-	CommittedAt    string `json:"committed_at"`
-	CreatedAt      string `json:"created_at"`
-}
-
-type recorderWorkerPoolHealthResponse struct {
-	Role          string `json:"role"`
-	AdmissionOpen bool   `json:"admission_open"`
-	ReadyCapacity int    `json:"ready_capacity"`
-	Reason        string `json:"reason"`
-	ObservedAt    string `json:"observed_at"`
-	UpdatedAt     string `json:"updated_at"`
-}
-
 func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerClaimBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.ClaimRequest](w, request)
 		if !ok {
 			return
 		}
@@ -287,7 +157,7 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			return
 		}
 		leaseExpiresAt := utilities.FormatTimestamp(job.Authority.LeaseExpiresAt)
-		writeJSON(w, http.StatusOK, recorderWorkerClaimResponse{
+		writeJSON(w, http.StatusOK, recorderprotocol.ClaimResponse{
 			ClaimRequestID: claimRequestID.String(), Envelope: job.Authority.Envelope,
 			EnvelopeDigest: recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest),
 			LeaseToken:     job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner,
@@ -306,10 +176,10 @@ func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService, lo
 			return
 		}
 		if identity.Role != workeridentity.RoleCapture {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may wait for capture plans")
+			writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Only capture workers may wait for capture plans")
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerCapturePlanWaitBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.CapturePlanWaitRequest](w, request)
 		if !ok {
 			return
 		}
@@ -334,7 +204,7 @@ func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService, lo
 					detail = detail[:256]
 				}
 				logger.ErrorContext(request.Context(), "recorder capture plan wait failed", "event", "http.failure",
-					"operation", "capture_plan.wait", "method", request.Method, "route", "/internal/v1/recorder/plans/wait",
+					"operation", "capture_plan.wait", "method", request.Method, "route", recorderprotocol.RoutePlansWait.Path(),
 					"code", apiErr.Code, "error", detail, "tenant_id", input.TenantID.String(),
 					"space_id", input.SpaceID.String(), "episode_id", input.EpisodeID.String(),
 					"recording_id", input.RecordingID.String(), "job_id", input.JobID.String(),
@@ -345,7 +215,12 @@ func recorderWorkerCapturePlanWaitHandler(service RecorderCapturePlanService, lo
 			writeAPIError(w, apiErr)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderWorkerCapturePlanResponse{Plan: plan, Fingerprint: plan.FingerprintHex()})
+		response, err := recorderprotocol.NewCapturePlanResponse(plan)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal.error", "Capture plan could not be encoded")
+			return
+		}
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -355,7 +230,7 @@ func recorderWorkerHeartbeatHandler(service RecorderWorkerService) http.HandlerF
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerLeaseBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.LeaseRequest](w, request)
 		if !ok {
 			return
 		}
@@ -383,7 +258,7 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerProgressBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.ProgressRequest](w, request)
 		if !ok {
 			return
 		}
@@ -391,7 +266,7 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker progress")
 			return
 		}
-		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
+		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
@@ -405,7 +280,7 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 			writeRecorderWorkerError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderWorkerProgressResponse{Job: recorderWorkerJobResponseValue(job), Stage: body.Stage, Complete: body.Completed, Total: body.Total, Bytes: body.Bytes, ObjectKey: body.ObjectKey})
+		writeJSON(w, http.StatusOK, recorderprotocol.ProgressResponse{Job: recorderWorkerJobResponseValue(job), Stage: body.Stage, Completed: body.Completed, Total: body.Total, Bytes: body.Bytes, ObjectKey: body.ObjectKey})
 	}
 }
 
@@ -418,11 +293,11 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerFailBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.FailRequest](w, request)
 		if !ok {
 			return
 		}
-		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
+		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok || strings.TrimSpace(body.ErrorCode) == "" || len(body.ErrorCode) > 128 || len(body.ErrorDetail) > 2048 {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker failure")
 			return
@@ -467,10 +342,10 @@ func recorderWorkerRelinquishCaptureHandler(service RecorderWorkerService) http.
 			return
 		}
 		if identity.Role != workeridentity.RoleCapture {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers can relinquish capture jobs")
+			writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Only capture workers can relinquish capture jobs")
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerLeaseBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.LeaseRequest](w, request)
 		if !ok {
 			return
 		}
@@ -502,14 +377,14 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 			return
 		}
 		if identity.Role == workeridentity.RoleRender {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Render jobs complete through the fenced render commit")
+			writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Render jobs complete through the fenced render commit")
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerCompleteBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.CompleteRequest](w, request)
 		if !ok {
 			return
 		}
-		lease, ok := recorderWorkerLeaseInput(identity, body.recorderWorkerLeaseBody)
+		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
@@ -535,7 +410,7 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 					detail = detail[:256]
 				}
 				logger.ErrorContext(request.Context(), "recorder completion failed", "event", "http.failure",
-					"method", request.Method, "route", "/internal/v1/recorder/jobs/complete", "code", apiErr.Code, "error", detail)
+					"method", request.Method, "route", recorderprotocol.RouteJobsComplete.Path(), "code", apiErr.Code, "error", detail)
 			}
 			writeAPIError(w, apiErr)
 			return
@@ -553,7 +428,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderWorkerPoolHealthBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.PoolHealthRequest](w, request)
 		if !ok {
 			return
 		}
@@ -585,7 +460,7 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 				return
 			}
 			logRecorderWorkerResources(request.Context(), logger, identity, observation.NodeName, observation.CurrentJobID, body.Resources)
-			writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponse{
+			writeJSON(w, http.StatusOK, recorderprotocol.PoolHealthResponse{
 				Role: string(identity.Role), AdmissionOpen: observation.AdmissionOpen,
 				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
 				ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
@@ -620,7 +495,7 @@ func logRecorderWorkerResources(ctx context.Context, logger *slog.Logger, identi
 func recorderWorkerRequestIdentity(w http.ResponseWriter, request *http.Request) (workeridentity.Identity, bool) {
 	identity, ok := recorderWorkerIdentity(request.Context())
 	if !ok || identity.WorkerID.IsZero() || (identity.Role != workeridentity.RoleCapture && identity.Role != workeridentity.RoleRender) {
-		writeError(w, http.StatusUnauthorized, "worker.unauthorized", "Worker authentication required")
+		writeError(w, http.StatusUnauthorized, recorderprotocol.CodeWorkerUnauthorized, "Worker authentication required")
 		return workeridentity.Identity{}, false
 	}
 	return identity, true
@@ -655,7 +530,7 @@ func recorderWorkerLeaseDuration(seconds int) (time.Duration, bool) {
 	return duration, duration <= recorderWorkerMaxLease
 }
 
-func recorderWorkerLeaseInput(identity workeridentity.Identity, body recorderWorkerLeaseBody) (recordingpipeline.LeaseInput, bool) {
+func recorderWorkerLeaseInput(identity workeridentity.Identity, body recorderprotocol.LeaseRequest) (recordingpipeline.LeaseInput, bool) {
 	jobID, err := utilities.ParseID(body.JobID)
 	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
 	if err != nil || digestErr != nil || body.AttemptCount < 1 || body.FencingGeneration < 1 || body.CaptureEpoch < 1 || strings.TrimSpace(body.LeaseToken) == "" {
@@ -668,7 +543,7 @@ func recorderWorkerLeaseInput(identity workeridentity.Identity, body recorderWor
 	return recordingpipeline.LeaseInput{JobID: jobID, AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration, LeaseToken: body.LeaseToken, LeaseOwner: recorderWorkerLeaseOwner(identity), LeaseFor: leaseFor, CaptureEpoch: body.CaptureEpoch, EnvelopeDigest: digest}, true
 }
 
-func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body recorderWorkerCapturePlanWaitBody) (captureplan.WaitInput, bool) {
+func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body recorderprotocol.CapturePlanWaitRequest) (captureplan.WaitInput, bool) {
 	planHandle, planErr := utilities.ParseID(body.PlanHandle)
 	tenantID, tenantErr := utilities.ParseID(body.TenantID)
 	spaceID, spaceErr := utilities.ParseID(body.SpaceID)
@@ -725,8 +600,8 @@ func decodeRecorderWorkerBodyWithLimit[T any](w http.ResponseWriter, request *ht
 	return body, true
 }
 
-func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderWorkerJobResponse {
-	response := recorderWorkerJobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, CaptureEpoch: job.CaptureEpoch, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
+func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderprotocol.JobResponse {
+	response := recorderprotocol.JobResponse{JobID: job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(), Kind: string(job.Kind), State: string(job.State), AttemptCount: job.AttemptCount, AttemptLimit: job.AttemptLimit, FencingGeneration: job.FencingGeneration, CaptureEpoch: job.CaptureEpoch, AvailableAt: utilities.FormatTimestamp(job.AvailableAt), UpdatedAt: utilities.FormatTimestamp(job.UpdatedAt), CreatedAt: utilities.FormatTimestamp(job.CreatedAt)}
 	if job.Authority != nil {
 		response.EnvelopeDigest = recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest)
 	}
@@ -753,12 +628,12 @@ func recorderWorkerJobResponseValue(job recordingpipeline.Job) recorderWorkerJob
 	return response
 }
 
-func recorderWorkerArtifactResponseValue(artifact recordingpipeline.Artifact) recorderWorkerArtifactResponse {
-	return recorderWorkerArtifactResponse{RecordingID: artifact.RecordingID.String(), TenantID: artifact.TenantID.String(), RenderJobID: artifact.RenderJobID.String(), ObjectKey: artifact.ObjectKey, ContentType: artifact.ContentType, ByteSize: artifact.ByteSize, Checksum: checksumString(artifact.Checksum), DurationMillis: artifact.Duration.Milliseconds(), CommittedAt: utilities.FormatTimestamp(artifact.CommittedAt), CreatedAt: utilities.FormatTimestamp(artifact.CreatedAt)}
+func recorderWorkerArtifactResponseValue(artifact recordingpipeline.Artifact) recorderprotocol.ArtifactResponse {
+	return recorderprotocol.ArtifactResponse{RecordingID: artifact.RecordingID.String(), TenantID: artifact.TenantID.String(), RenderJobID: artifact.RenderJobID.String(), ObjectKey: artifact.ObjectKey, ContentType: artifact.ContentType, ByteSize: artifact.ByteSize, Checksum: checksumString(artifact.Checksum), DurationMillis: artifact.Duration.Milliseconds(), CommittedAt: utilities.FormatTimestamp(artifact.CommittedAt), CreatedAt: utilities.FormatTimestamp(artifact.CreatedAt)}
 }
 
-func recorderWorkerPoolHealthResponseValue(health recordingpipeline.PoolHealth) recorderWorkerPoolHealthResponse {
-	return recorderWorkerPoolHealthResponse{Role: string(health.Role), AdmissionOpen: health.AdmissionOpen, ReadyCapacity: health.ReadyCapacity, Reason: health.Reason, ObservedAt: utilities.FormatTimestamp(health.ObservedAt), UpdatedAt: utilities.FormatTimestamp(health.UpdatedAt)}
+func recorderWorkerPoolHealthResponseValue(health recordingpipeline.PoolHealth) recorderprotocol.PoolHealthResponse {
+	return recorderprotocol.PoolHealthResponse{Role: string(health.Role), AdmissionOpen: health.AdmissionOpen, ReadyCapacity: health.ReadyCapacity, Reason: health.Reason, ObservedAt: utilities.FormatTimestamp(health.ObservedAt), UpdatedAt: utilities.FormatTimestamp(health.UpdatedAt)}
 }
 
 func checksumString(value []byte) string {
@@ -778,7 +653,7 @@ func writeRecorderWorkerError(w http.ResponseWriter, err error) {
 func recorderWorkerAPIError(err error) APIError {
 	switch {
 	case errors.Is(err, recordingpipeline.ErrCaptureStopPublication):
-		return APIError{Status: http.StatusServiceUnavailable, Code: "recording.capture_stop_publication_failed", Message: "Capture stopped publication is temporarily unavailable"}
+		return APIError{Status: http.StatusServiceUnavailable, Code: recorderprotocol.CodeCaptureStopPublicationFailed, Message: "Capture stopped publication is temporarily unavailable"}
 	case errors.Is(err, recordingpresentation.ErrInvalidCompletionSource):
 		// Repeating a deterministic build with the same authority cannot repair
 		// its source. Let the worker report capture_completion_failed so the
@@ -793,7 +668,7 @@ func recorderWorkerAPIError(err error) APIError {
 	case errors.Is(err, recordingpipeline.ErrArtifactConflict):
 		return APIError{Status: http.StatusConflict, Code: "artifact.conflict", Message: "Recording artifact conflicts with an existing commit"}
 	case errors.Is(err, recordingpipeline.ErrArtifactNotFound), errors.Is(err, recordingpipeline.ErrPoolHealthNotFound):
-		return APIError{Status: http.StatusNotFound, Code: "worker.not_found", Message: "Recorder resource was not found"}
+		return APIError{Status: http.StatusNotFound, Code: recorderprotocol.CodeWorkerNotFound, Message: "Recorder resource was not found"}
 	default:
 		return APIError{Status: http.StatusInternalServerError, Code: "internal.error", Message: "Recorder worker operation failed"}
 	}

@@ -6,6 +6,11 @@ defmodule ChalkSync.Retention.CleanupWorker do
   `SKIP LOCKED` lets concurrent workers make progress without waiting. Every
   claimed control row remains locked while its event log is independently
   folded in bounded pages, checkpointed, and deleted in foreign-key order.
+
+  Each Episode is cleaned inside its own savepoint. An Episode whose history
+  fails verification rolls back alone, is reported in `Result.held`, and leaves
+  the rest of the batch to commit. The caller passes held Episodes back as
+  `:excluded_episode_ids`, so one bad history cannot stop the queue behind it.
   """
 
   alias ChalkSync.Database.TransactionSettings
@@ -21,7 +26,8 @@ defmodule ChalkSync.Retention.CleanupWorker do
   defmodule Result do
     @moduledoc "Cleanup counters for one committed worker batch."
 
-    defstruct episodes: 0,
+    defstruct held: [],
+              episodes: 0,
               event_rows: 0,
               event_bytes: 0,
               receipt_rows: 0,
@@ -42,6 +48,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
               publication_grant_reservation_bytes: 0
 
     @type t :: %__MODULE__{
+            held: [{binary(), term()}],
             episodes: non_neg_integer(),
             event_rows: non_neg_integer(),
             event_bytes: non_neg_integer(),
@@ -68,27 +75,47 @@ defmodule ChalkSync.Retention.CleanupWorker do
   def run_once(connection, options \\ []) do
     batch_size = Keyword.get(options, :batch_size, @default_batch_size)
     clock = Keyword.get(options, :clock, &DateTime.utc_now/0)
+    excluded_episode_ids = Keyword.get(options, :excluded_episode_ids, [])
 
     with :ok <- validate_batch_size(batch_size),
          %DateTime{} = now <- clock.() do
-      cleanup_batch(connection, batch_size, now)
+      cleanup_batch(connection, batch_size, excluded_episode_ids, now)
     else
       _ -> {:error, :invalid_options}
     end
   end
 
-  defp cleanup_batch(connection, batch_size, now) do
+  defp cleanup_batch(connection, batch_size, excluded_episode_ids, now) do
     cutoff = DateTime.add(now, -@retention_seconds, :second)
 
     Postgrex.transaction(connection, fn transaction ->
       Postgrex.query!(transaction, TransactionSettings.sql(:retention), [])
 
-      Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [cutoff, now, batch_size])
+      Postgrex.query!(transaction, SQL.claim_eligible_episodes(), [
+        cutoff,
+        now,
+        batch_size,
+        excluded_episode_ids
+      ])
       |> Map.fetch!(:rows)
       |> Enum.reduce(%Result{}, fn row, result ->
-        cleanup_candidate(transaction, candidate(row), now, result)
+        cleanup_in_savepoint(transaction, candidate(row), now, result)
       end)
     end)
+  end
+
+  defp cleanup_in_savepoint(transaction, candidate, now, result) do
+    Postgrex.query!(transaction, "savepoint retention_candidate", [])
+
+    case cleanup_candidate(transaction, candidate, now, result) do
+      {:ok, next} ->
+        Postgrex.query!(transaction, "release savepoint retention_candidate", [])
+        next
+
+      {:error, reason} ->
+        Postgrex.query!(transaction, "rollback to savepoint retention_candidate", [])
+        %{result | held: [{candidate.episode_id, reason} | result.held]}
+    end
   end
 
   defp cleanup_candidate(transaction, candidate, now, result) do
@@ -131,57 +158,92 @@ defmodule ChalkSync.Retention.CleanupWorker do
              lifecycle_intent_rows != candidate.lifecycle_intent_count or
              event_rows != event_count or
              external_operation_rows != elem(external_operations, 0) do
-          Postgrex.rollback(transaction, {:invalid_history, :cleanup_counter_mismatch})
+          {:error, {:invalid_history, :cleanup_counter_mismatch}}
+        else
+          {:ok,
+           record_cleanup(
+             transaction,
+             candidate,
+             now,
+             result,
+             %{
+               event_count: event_count,
+               event_bytes: event_bytes,
+               receipt_rows: receipt_rows,
+               lifecycle_intent_rows: lifecycle_intent_rows,
+               event_rows: event_rows,
+               external_operations: external_operations,
+               admission_requests: admission_requests,
+               recordings: recordings,
+               screen_share_leases: screen_share_leases,
+               publication_fences: publication_fences,
+               grant_reservations: grant_reservations
+             }
+           )}
         end
 
-        measurements = %{
-          external_operations: external_operations,
-          admission_requests: admission_requests,
-          recordings: recordings,
-          screen_share_leases: screen_share_leases,
-          publication_fences: publication_fences,
-          grant_reservations: grant_reservations
-        }
-
-        write_checkpoint(
-          transaction,
-          candidate,
-          now,
-          event_count,
-          event_bytes,
-          measurements
-        )
-
-        %Result{
-          episodes: result.episodes + 1,
-          event_rows: result.event_rows + event_rows,
-          event_bytes: result.event_bytes + event_bytes,
-          receipt_rows: result.receipt_rows + receipt_rows,
-          receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
-          lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
-          lifecycle_intent_bytes:
-            result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
-          external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
-          external_operation_bytes:
-            result.external_operation_bytes + elem(external_operations, 1),
-          admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
-          admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
-          recording_rows: result.recording_rows + elem(recordings, 0),
-          recording_bytes: result.recording_bytes + elem(recordings, 1),
-          screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
-          screen_share_lease_bytes:
-            result.screen_share_lease_bytes + elem(screen_share_leases, 1),
-          publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
-          publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
-          publication_grant_reservation_rows:
-            result.publication_grant_reservation_rows + elem(grant_reservations, 0),
-          publication_grant_reservation_bytes:
-            result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
-        }
-
       {:error, reason} ->
-        Postgrex.rollback(transaction, {:invalid_history, reason})
+        {:error, {:invalid_history, reason}}
     end
+  end
+
+  defp record_cleanup(transaction, candidate, now, %Result{} = result, deleted) do
+    %{
+      event_count: event_count,
+      event_bytes: event_bytes,
+      receipt_rows: receipt_rows,
+      lifecycle_intent_rows: lifecycle_intent_rows,
+      event_rows: event_rows,
+      external_operations: external_operations,
+      admission_requests: admission_requests,
+      recordings: recordings,
+      screen_share_leases: screen_share_leases,
+      publication_fences: publication_fences,
+      grant_reservations: grant_reservations
+    } = deleted
+
+    measurements = %{
+      external_operations: external_operations,
+      admission_requests: admission_requests,
+      recordings: recordings,
+      screen_share_leases: screen_share_leases,
+      publication_fences: publication_fences,
+      grant_reservations: grant_reservations
+    }
+
+    write_checkpoint(
+      transaction,
+      candidate,
+      now,
+      event_count,
+      event_bytes,
+      measurements
+    )
+
+    %Result{
+      result
+      | episodes: result.episodes + 1,
+        event_rows: result.event_rows + event_rows,
+        event_bytes: result.event_bytes + event_bytes,
+        receipt_rows: result.receipt_rows + receipt_rows,
+        receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
+        lifecycle_intent_rows: result.lifecycle_intent_rows + lifecycle_intent_rows,
+        lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
+        external_operation_rows: result.external_operation_rows + elem(external_operations, 0),
+        external_operation_bytes: result.external_operation_bytes + elem(external_operations, 1),
+        admission_request_rows: result.admission_request_rows + elem(admission_requests, 0),
+        admission_request_bytes: result.admission_request_bytes + elem(admission_requests, 1),
+        recording_rows: result.recording_rows + elem(recordings, 0),
+        recording_bytes: result.recording_bytes + elem(recordings, 1),
+        screen_share_lease_rows: result.screen_share_lease_rows + elem(screen_share_leases, 0),
+        screen_share_lease_bytes: result.screen_share_lease_bytes + elem(screen_share_leases, 1),
+        publication_fence_rows: result.publication_fence_rows + elem(publication_fences, 0),
+        publication_fence_bytes: result.publication_fence_bytes + elem(publication_fences, 1),
+        publication_grant_reservation_rows:
+          result.publication_grant_reservation_rows + elem(grant_reservations, 0),
+        publication_grant_reservation_bytes:
+          result.publication_grant_reservation_bytes + elem(grant_reservations, 1)
+    }
   end
 
   defp verify_history(transaction, candidate) do
@@ -216,6 +278,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     else
       :not_usable -> {:ok, config_policy}
       false -> {:ok, config_policy}
+      true -> {:ok, config_policy}
     end
   end
 

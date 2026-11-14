@@ -1,7 +1,8 @@
 import { ConfigError } from "./errors.js";
 import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { DispatcherSecrets, SecretParameterNames } from "./secrets.js";
-import type { ProviderPolicy, ReleaseConfig } from "./types.js";
+import type { ProviderPolicy } from "./provider-types.js";
+import type { ReleaseConfig } from "./types.js";
 
 export function required(value: string | undefined, key: string): string {
   if (!value) throw new ConfigError(`missing required configuration: ${key}`);
@@ -54,27 +55,23 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
   };
 }
 
+const CORPUS_DIGEST = /^[a-f0-9]{32,128}$/i;
+const DEEPINFRA_ADAPTER_CONTRACT = "deepinfra-native-whisper-turbo.v1";
+
+/** What the field readers above cannot check: values that must agree with each other or match a pinned release fact. */
 function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
-  if (config.codeswitchProvider === "mai" && !config.openRouterToken) throw new ConfigError("OpenRouter token is required for MAI");
   if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
     throw new ConfigError("nightly requires its own control API URL and audience");
   }
   if (!config.privacyGateAccepted) throw new ConfigError("transcription privacy gate is not accepted");
-  if (!config.controlApiBaseUrl.startsWith("https://")) throw new ConfigError("control API must use HTTPS");
-  if (config.maxBatch < 3 || config.maxBatch > 50) throw new ConfigError("max batch must be between 3 and 50 so reconciliation cannot starve a durable queue");
-  if (config.concurrency < 3 || config.concurrency > 50) throw new ConfigError("concurrency must be between 3 and 50 so reconciliation can service every durable queue");
-  if (config.timeoutReserveMs < 60_000) throw new ConfigError("timeout reserve must be at least 60 seconds");
   if (!config.deepInfra.enabled && !config.cloudflare.enabled) throw new ConfigError("at least one transcription provider must be enabled");
   if (config.cloudflare.enabled) {
-    if (!config.cloudflare.adapterContractVersion || !/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) {
-      throw new ConfigError("Cloudflare adapter contract version is required");
-    }
-    if (!/^[a-f0-9]{32,128}$/i.test(config.cloudflare.corpusDigest)) throw new ConfigError("Cloudflare corpus digest is required");
+    if (!/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) throw new ConfigError("Cloudflare adapter contract version is required");
+    if (!CORPUS_DIGEST.test(config.cloudflare.corpusDigest)) throw new ConfigError("Cloudflare corpus digest is required");
   }
   if (config.deepInfra.enabled) {
-    if (!config.deepInfra.token) throw new ConfigError("DeepInfra token is required when enabled");
-    if (config.deepInfra.adapterContractVersion !== "deepinfra-native-whisper-turbo.v1") throw new ConfigError("DeepInfra adapter contract is not supported");
-    if (!config.deepInfra.corpusDigest || !/^[a-f0-9]{32,128}$/i.test(config.deepInfra.corpusDigest)) throw new ConfigError("DeepInfra corpus digest is required when enabled");
+    if (config.deepInfra.adapterContractVersion !== DEEPINFRA_ADAPTER_CONTRACT) throw new ConfigError("DeepInfra adapter contract is not supported");
+    if (!config.deepInfra.corpusDigest || !CORPUS_DIGEST.test(config.deepInfra.corpusDigest)) throw new ConfigError("DeepInfra corpus digest is required when enabled");
   }
   return config;
 }
@@ -95,6 +92,7 @@ export function secretParameterNames(env: NodeJS.ProcessEnv): SecretParameterNam
   };
 }
 
+/** Reads only the variables named in this file (`env` defaults to `process.env` so tests can pass their own). */
 export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?: DispatcherSecrets): ReleaseConfig {
   const deepInfraEnabled = boolean(env, "DEEPINFRA_ENABLED");
   const cloudflareEnabled = boolean(env, "CLOUDFLARE_AI_ENABLED");

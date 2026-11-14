@@ -19,58 +19,13 @@ type RecordingRepository struct {
 }
 
 type recordingQuerier interface {
-	CreateRecording(ctx context.Context, arg sqlc.CreateRecordingParams) (sqlc.Recording, error)
-	MaterializeRecording(ctx context.Context, arg sqlc.MaterializeRecordingParams) (sqlc.Recording, error)
 	GetTenantRecording(ctx context.Context, arg sqlc.GetTenantRecordingParams) (sqlc.Recording, error)
 	ListTenantRecordings(ctx context.Context, arg sqlc.ListTenantRecordingsParams) ([]sqlc.Recording, error)
 	ListTenantSpaceRecordings(ctx context.Context, arg sqlc.ListTenantSpaceRecordingsParams) ([]sqlc.Recording, error)
-	UpdateTenantRecording(ctx context.Context, arg sqlc.UpdateTenantRecordingParams) (sqlc.Recording, error)
 }
 
 func NewRecordingRepository(queries recordingQuerier) RecordingRepository {
 	return RecordingRepository{queries: queries}
-}
-
-func (r RecordingRepository) Create(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error) {
-	recording, err := r.queries.CreateRecording(ctx, sqlc.CreateRecordingParams{
-		ID:              uuid(input.ID),
-		TenantID:        uuid(input.TenantID),
-		SpaceID:         uuid(input.SpaceID),
-		EpisodeID:       uuid(input.EpisodeID),
-		Status:          input.Status,
-		StorageProvider: input.StorageProvider,
-		StorageKey:      text(input.StorageKey),
-		Metadata:        jsonBytes(input.Metadata),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return recordings.Recording{}, recordings.ErrEpisodeNotFound
-	}
-	if err != nil {
-		return recordings.Recording{}, fmt.Errorf("create recording: %w", err)
-	}
-
-	return mapRecording(recording), nil
-}
-
-func (r RecordingRepository) Materialize(ctx context.Context, input recordings.CreateInput) (recordings.Recording, error) {
-	recording, err := r.queries.MaterializeRecording(ctx, sqlc.MaterializeRecordingParams{
-		ID:        uuid(input.ID),
-		TenantID:  uuid(input.TenantID),
-		SpaceID:   uuid(input.SpaceID),
-		EpisodeID: uuid(input.EpisodeID),
-		Metadata:  jsonBytes(input.Metadata),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return recordings.Recording{}, recordings.ErrRecordingConflict
-	}
-	if uniqueViolation(err) {
-		return recordings.Recording{}, recordings.ErrRecordingConflict
-	}
-	if err != nil {
-		return recordings.Recording{}, fmt.Errorf("materialize recording: %w", err)
-	}
-
-	return mapRecording(recording), nil
 }
 
 func (r RecordingRepository) Get(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID) (recordings.Recording, error) {
@@ -119,29 +74,6 @@ func (r RecordingRepository) List(ctx context.Context, tenantID utilities.ID, sp
 	}
 
 	return list, nil
-}
-
-func (r RecordingRepository) Update(ctx context.Context, tenantID utilities.ID, recordingID utilities.ID, input recordings.UpdateInput) (recordings.Recording, error) {
-	recording, err := r.queries.UpdateTenantRecording(ctx, sqlc.UpdateTenantRecordingParams{
-		TenantID:           uuid(tenantID),
-		ID:                 uuid(recordingID),
-		StatusSet:          input.Status.Set,
-		Status:             requiredText(input.Status),
-		StorageProviderSet: input.StorageProvider.Set,
-		StorageProvider:    requiredText(input.StorageProvider),
-		StorageKeySet:      input.StorageKey.Set,
-		StorageKey:         text(input.StorageKey.Value),
-		MetadataSet:        input.Metadata.Set,
-		Metadata:           jsonBytes(input.Metadata.Value),
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return recordings.Recording{}, recordings.ErrRecordingNotFound
-	}
-	if err != nil {
-		return recordings.Recording{}, fmt.Errorf("update recording: %w", err)
-	}
-
-	return mapRecording(recording), nil
 }
 
 func listTenantRecordingsParams(tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID, page pagination.PageRequest) sqlc.ListTenantRecordingsParams {

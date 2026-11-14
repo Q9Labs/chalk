@@ -167,12 +167,12 @@
       "apps/transcription-dispatcher/**"
     ]
   },
-  "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs"],
   "health": {
     "ignore": [
       "features/scorecard/**",
       "scripts/prod-proof/**",
       "scripts/ui-check/**",
+      "scripts/staging-sfu/**",
       "**/dist/**",
       "**/*.test.ts",
       "scripts/gates/**",

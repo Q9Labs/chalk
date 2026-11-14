@@ -61,7 +61,7 @@ func join(t *testing.T, service mediaplane.Service, scope mediaplane.Scope) (str
 }
 
 // publish pushes one track from a fresh peer and returns the peer, its track and the SFU's answer.
-func publish(t *testing.T, service mediaplane.Service, connection string, scope mediaplane.Scope, name, source string) (*peer, string, mediaplane.TracksResponse) {
+func publish(t *testing.T, service mediaplane.Service, connection string, scope mediaplane.Scope, name string, source mediaplane.PublicationSource) (*peer, string, mediaplane.TracksResponse) {
 	t.Helper()
 	publisher := newPeer(t)
 	track := publisher.addAudio(t, name)
@@ -503,16 +503,16 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	adapter := box.fleet(t)
 	adapter.Probe(context.Background())
 	process := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
-	cloudflareSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
+	cloudflareSpace := spaces.Space{MediaPlane: mediaplane.ProviderCloudflareSFU.SettingName()}
 	registry := func(live *mediaplane.Binding) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: adapter, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
+			ProcessConfig: process, DefaultProvider: mediaplane.ProviderCloudflareSFU, ChalkSFU: adapter, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace}, Episodes: episodeBindings{live},
 		})
 	}
 
 	started, err := registry(nil).ResolveBinding(context.Background(), tenants.Tenant{}, cloudflareSpace, mediaplane.ClientProviders{})
-	if err != nil || started.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+	if err != nil || started.Provider != mediaplane.ProviderCloudflareSFU.SettingName() {
 		t.Fatalf("Episode started under Cloudflare: %+v, %v", started, err)
 	}
 	live, err := registry(started).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{})
@@ -521,11 +521,11 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	}
 
 	oldSDK, err := registry(started).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, mediaplane.ClientProviders{})
-	if err != nil || oldSDK.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+	if err != nil || oldSDK.Provider != mediaplane.ProviderCloudflareSFU.SettingName() {
 		t.Fatalf("an SDK that cannot run the own SFU got %+v, %v, want Cloudflare", oldSDK, err)
 	}
 	next, err := registry(started).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"))
-	if err != nil || next.Provider != string(spaces.MediaPlaneProviderChalkSFU) || next.Node != "sfu-a" {
+	if err != nil || next.Provider != mediaplane.ProviderChalkSFU.SettingName() || next.Node != "sfu-a" {
 		t.Fatalf("next Episode binding: %+v, %v, want chalk_sfu on sfu-a", next, err)
 	}
 	if started.Node != "" {
@@ -550,12 +550,12 @@ func TestConformanceSettingFlipsNeverMoveALiveEpisode(t *testing.T) {
 	adapter := box.fleet(t)
 	adapter.Probe(context.Background())
 	process := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
-	own, cloudflare := spaces.MediaPlaneProviderChalkSFU, spaces.MediaPlaneProviderCloudflareSFU
-	ownText, cloudflareText := string(own), string(cloudflare)
+	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
+	ownText, cloudflareText := own.SettingName(), cloudflare.SettingName()
 	registry := func(live *mediaplane.Binding, paused bool) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-			ProcessConfig: process, DefaultProvider: cloudflare, ChalkSFU: adapter, ChalkSFUSpaces: everySpace,
-			ChalkSFUNewEpisodesPaused: paused, Episodes: episodeBindings{live},
+			ProcessConfig: process, DefaultProvider: cloudflare, ChalkSFU: adapter, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace, NewEpisodesPaused: paused},
+			Episodes: episodeBindings{live},
 		})
 	}
 	ownSpace := spaces.Space{MediaPlane: ownText, MediaPlaneSetting: &own}
@@ -607,11 +607,11 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 	fleet.Probe(context.Background())
 	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
 		ProcessConfig:   runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second},
-		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, ChalkSFUSpaces: everySpace,
+		DefaultProvider: mediaplane.ProviderCloudflareSFU, ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace},
 	})
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
-	binding, err := registry.ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, ownSFUClients)
-	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
+	binding, err := registry.ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}, ownSFUClients)
+	if err != nil || binding == nil || binding.Provider != mediaplane.ProviderChalkSFU.SettingName() {
 		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
 	}
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { shareLink } from "../lib/share";
-import { displayLink } from "../lib/spaces";
+import { displayLink } from "../lib/space-link";
 import { space, corners } from "@q9labsai/chalk-react-native";
 
 type ReadySheetProps = {

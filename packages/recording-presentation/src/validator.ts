@@ -14,30 +14,14 @@ import {
   type RecordingPresentationTimelineV1,
   type RecordingSharedContentV1,
 } from "./types.js";
+import { ASSET_KINDS, REACTIONS, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
 
-const REACTIONS = new Set(["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"]);
-const ASSET_KINDS = new Set(["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"]);
 const MEDIA_SOURCE_KINDS = new Set(["microphone", "camera", "screen_share"]);
-const THEME_SKINS = new Set(["classic", "chalk"]);
-const THEME_TEXTURES = new Set(["none", "paper", "slate"]);
-const THEME_PALETTES = new Set([
-  "light",
-  "warm-porcelain",
-  "cool-mist",
-  "paper-and-ink",
-  "cream-and-clay",
-  "studio-canvas",
-  "prism-daylight",
-  "signal-white",
-  "warm-charcoal",
-  "cool-graphite",
-  "high-contrast-ink",
-  "espresso-night",
-  "chalkboard-atelier",
-  "prism-nocturne",
-  "cosmic-chalk",
-  "oled-signal",
-]);
+const REACTION_SET = new Set<string>(REACTIONS);
+const ASSET_KIND_SET = new Set<string>(ASSET_KINDS);
+const THEME_SKIN_SET = new Set<string>(THEME_SKINS);
+const THEME_TEXTURE_SET = new Set<string>(THEME_TEXTURES);
+const THEME_PALETTE_SET = new Set<string>(THEME_PALETTES);
 
 const isObject = (value: unknown): value is object => typeof value === "object" && value !== null && !Array.isArray(value);
 const property = (value: object, key: string): unknown => Reflect.get(value, key);
@@ -137,9 +121,9 @@ const THEME_SCHEMA: ObjectSchema = {
   keys: ["colorScheme", "skin", "palette", "texture", "stageBackground", "generatedAvatars"],
   checks: [
     checkField("colorScheme", knownString(new Set(["light", "dark"]))),
-    checkField("skin", knownString(THEME_SKINS)),
-    checkField("palette", knownString(THEME_PALETTES)),
-    checkField("texture", knownString(THEME_TEXTURES)),
+    checkField("skin", knownString(THEME_SKIN_SET)),
+    checkField("palette", knownString(THEME_PALETTE_SET)),
+    checkField("texture", knownString(THEME_TEXTURE_SET)),
     checkField("stageBackground", isBoolean),
     checkField("generatedAvatars", isBoolean),
   ],
@@ -213,7 +197,7 @@ const isChatMessage = (value: unknown): value is RecordingPresentationChatMessag
 const reactionWindowIsValid: ObjectCheck = (value) => Number(property(value, "expiresAtMs")) > Number(property(value, "occurredAtMs"));
 const REACTION_SCHEMA: ObjectSchema = {
   keys: ["id", "participantId", "displayName", "value", "occurredAtMs", "expiresAtMs"],
-  checks: [checkField("id", boundedString()), checkField("participantId", boundedString()), checkField("displayName", boundedString(256)), checkField("value", knownString(REACTIONS)), checkField("occurredAtMs", integer()), checkField("expiresAtMs", integer(1)), reactionWindowIsValid],
+  checks: [checkField("id", boundedString()), checkField("participantId", boundedString()), checkField("displayName", boundedString(256)), checkField("value", knownString(REACTION_SET)), checkField("occurredAtMs", integer()), checkField("expiresAtMs", integer(1)), reactionWindowIsValid],
 };
 
 const isReaction = (value: unknown): value is RecordingPresentationReactionV1 => isExactObject(value, REACTION_SCHEMA);
@@ -299,7 +283,7 @@ const isSnapshot = (value: unknown): value is RecordingPresentationSnapshotV1 =>
 
 const ASSET_SCHEMA: ObjectSchema = {
   keys: ["id", "kind", "objectKey", "contentType", "byteSize", "sha256"],
-  checks: [checkField("id", boundedString()), checkField("kind", knownString(ASSET_KINDS)), checkField("objectKey", boundedString(1_024)), checkField("contentType", boundedString(255)), checkField("byteSize", integer(1)), checkField("sha256", isSHA256)],
+  checks: [checkField("id", boundedString()), checkField("kind", knownString(ASSET_KIND_SET)), checkField("objectKey", boundedString(1_024)), checkField("contentType", boundedString(255)), checkField("byteSize", integer(1)), checkField("sha256", isSHA256)],
 };
 
 const isAsset = (value: unknown): value is RecordingPresentationAssetV1 => isExactObject(value, ASSET_SCHEMA);

@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -251,10 +252,10 @@ type persistedCapturePlanParticipant struct {
 }
 
 type persistedCapturePlanPublication struct {
-	ParticipantID string  `json:"participant_id"`
-	Source        string  `json:"source"`
-	Enabled       bool    `json:"enabled"`
-	PublicationID *string `json:"publication_id"`
+	ParticipantID string                       `json:"participant_id"`
+	Source        mediaplane.PublicationSource `json:"source"`
+	Enabled       bool                         `json:"enabled"`
+	PublicationID *string                      `json:"publication_id"`
 	// Held marks a microphone its owner muted in place. The observation lists it until Sync's pause removes it from the capture query.
 	Held bool `json:"held"`
 }
@@ -377,7 +378,7 @@ func capturePlanTracks(publications []persistedCapturePlanPublication, participa
 	tracks := make([]captureplan.TrackSnapshot, 0, len(publications))
 	for _, publication := range publications {
 		// Shared tab audio is not part of the recording format yet.
-		if publication.Source == "screen_audio" {
+		if publication.Source == mediaplane.SourceScreenAudio {
 			continue
 		}
 		if publication.Enabled && publication.PublicationID == nil {
@@ -403,7 +404,7 @@ func capturePlanTracks(publications []persistedCapturePlanPublication, participa
 		ownerReference, ownerErr := captureplane.NewProviderReference(reference.ConnectionID)
 		trackReference, trackErr := captureplane.NewProviderReference(reference.TrackName)
 		ownerMID, midErr := captureplane.NewProviderReference(reference.MID)
-		kind, kindErr := capturePlanTrackKind(publication.Source)
+		kind, kindErr := capturePlanTrackKind(string(publication.Source))
 		if ownerErr != nil || trackErr != nil || midErr != nil || kindErr != nil {
 			return nil, fmt.Errorf("invalid capture provider track: %w", captureplan.ErrInvalidTrack)
 		}

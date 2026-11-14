@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/propagation"
@@ -108,9 +109,6 @@ type ControlPlaneClient struct {
 	uploader *http.Client
 }
 
-// Client is a short alias for callers that use the generic client name.
-type Client = ControlPlaneClient
-
 func NewControlPlaneClient(baseURL string, client *http.Client) (*ControlPlaneClient, error) {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
@@ -121,14 +119,6 @@ func NewControlPlaneClient(baseURL string, client *http.Client) (*ControlPlaneCl
 
 func NewControlPlaneClientWithURL(baseURL *url.URL, client *http.Client) (*ControlPlaneClient, error) {
 	return NewControlPlaneClientWithURLAndUploader(baseURL, client, &http.Client{Timeout: 30 * time.Second})
-}
-
-func NewControlPlaneClientWithUploader(baseURL string, client, uploader *http.Client) (*ControlPlaneClient, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("%w: base URL: %v", ErrInvalidControlPlaneClient, err)
-	}
-	return NewControlPlaneClientWithURLAndUploader(parsed, client, uploader)
 }
 
 func NewControlPlaneClientWithURLAndUploader(baseURL *url.URL, client, uploader *http.Client) (*ControlPlaneClient, error) {
@@ -150,10 +140,6 @@ func NewControlPlaneClientWithURLAndUploader(baseURL *url.URL, client, uploader 
 		return http.ErrUseLastResponse
 	}
 	return &ControlPlaneClient{baseURL: &clone, client: &httpClient, uploader: &uploadClient}, nil
-}
-
-func NewClient(baseURL string, client *http.Client) (*ControlPlaneClient, error) {
-	return NewControlPlaneClient(baseURL, client)
 }
 
 type ClaimResult struct {
@@ -183,158 +169,21 @@ type ProgressResult struct {
 	ObjectKey string
 }
 
-type recorderWorkerClaimRequest struct {
-	ClaimRequestID         string `json:"claim_request_id"`
-	LeaseForSeconds        int    `json:"lease_for_seconds"`
-	SupportsCompletionOnly bool   `json:"supports_completion_only,omitempty"`
-}
-
-type recorderWorkerLeaseRequest struct {
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseForSeconds   int    `json:"lease_for_seconds"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-}
-
-type recorderWorkerProgressRequest struct {
-	recorderWorkerLeaseRequest
-	Stage     string `json:"stage"`
-	Completed int64  `json:"completed"`
-	Total     int64  `json:"total"`
-	Bytes     int64  `json:"bytes"`
-	ObjectKey string `json:"object_key"`
-}
-
-type recorderWorkerFailRequest struct {
-	recorderWorkerLeaseRequest
-	AvailableAt string `json:"available_at"`
-	ErrorCode   string `json:"error_code"`
-	ErrorDetail string `json:"error_detail"`
-}
-
-type recorderWorkerPlanRequest struct {
-	PlanHandle        string `json:"plan_handle"`
-	TenantID          string `json:"tenant_id"`
-	SpaceID           string `json:"space_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-	AfterRevision     int64  `json:"after_revision"`
-	WaitMilliseconds  int64  `json:"wait_milliseconds"`
-}
-
-type recorderWorkerBundleRequest struct {
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	AttemptCount         int     `json:"attempt_count"`
-	LeaseToken           string  `json:"lease_token"`
-	CaptureEpoch         int64   `json:"capture_epoch"`
-	EnvelopeDigest       string  `json:"envelope_digest"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-}
-
-type recorderWorkerClaimResponse struct {
-	ClaimRequestID string                                `json:"claim_request_id"`
-	Envelope       recordingpipeline.RecorderJobEnvelope `json:"envelope"`
-	EnvelopeDigest string                                `json:"envelope_digest"`
-	LeaseToken     string                                `json:"lease_token"`
-	LeaseOwner     string                                `json:"lease_owner"`
-	LeaseExpiresAt string                                `json:"lease_expires_at"`
-}
-
-type recorderWorkerJobResponse struct {
-	JobID             string  `json:"job_id"`
-	TenantID          string  `json:"tenant_id"`
-	EpisodeID         string  `json:"episode_id"`
-	RecordingID       string  `json:"recording_id"`
-	Kind              string  `json:"kind"`
-	State             string  `json:"state"`
-	AttemptCount      int     `json:"attempt_count"`
-	AttemptLimit      int     `json:"attempt_limit"`
-	LeaseToken        string  `json:"lease_token,omitempty"`
-	LeaseOwner        string  `json:"lease_owner,omitempty"`
-	LeaseExpiresAt    *string `json:"lease_expires_at,omitempty"`
-	FencingGeneration int64   `json:"fencing_generation"`
-	CaptureEpoch      int64   `json:"capture_epoch"`
-	EnvelopeDigest    string  `json:"envelope_digest"`
-	AvailableAt       string  `json:"available_at"`
-	ErrorCode         string  `json:"error_code,omitempty"`
-	ErrorDetail       string  `json:"error_detail,omitempty"`
-	TerminalAt        *string `json:"terminal_at,omitempty"`
-	UpdatedAt         string  `json:"updated_at"`
-	CreatedAt         string  `json:"created_at"`
-}
-
-type recorderWorkerProgressResponse struct {
-	Job       recorderWorkerJobResponse `json:"job"`
-	Completed int64                     `json:"completed"`
-	Stage     string                    `json:"stage"`
-	Total     int64                     `json:"total"`
-	Bytes     int64                     `json:"bytes"`
-	ObjectKey string                    `json:"object_key,omitempty"`
-}
-
-type recorderWorkerBundleResponse struct {
-	ID                   string  `json:"id"`
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer,omitempty"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-	CreatedAt            string  `json:"created_at"`
-}
-
-type recorderWorkerCapturePlanResponse struct {
-	Plan        json.RawMessage `json:"plan"`
-	Fingerprint string          `json:"fingerprint"`
-}
-
 func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.ClaimInput) (ClaimResult, error) {
 	leaseSeconds, err := durationSeconds(input.LeaseFor)
 	if err != nil || input.ClaimRequestID.IsZero() {
 		return ClaimResult{}, fmt.Errorf("%w: claim input", ErrInvalidControlPlaneRequest)
 	}
-	payload := recorderWorkerClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true}
-	body, status, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/claim", payload, ControlPlaneResponseLimit)
+	payload := recorderprotocol.ClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true}
+	body, status, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	var httpErr HTTPError
 	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
 		// Older APIs reject the new field; the same claim may still take
 		// ordinary Capture work, but cannot receive completion-only work.
 		payload.SupportsCompletionOnly = false
-		body, status, err = c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/claim", payload, ControlPlaneResponseLimit)
+		body, status, err = c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	}
-	if errors.As(err, &httpErr) && httpErr.Status == http.StatusLocked && httpErr.Code == "worker.admission_closed" {
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusLocked && httpErr.Code == recorderprotocol.CodeWorkerAdmissionClosed {
 		return ClaimResult{}, ErrWorkerDraining
 	}
 	if err != nil {
@@ -343,7 +192,7 @@ func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.
 	if status == http.StatusNoContent {
 		return ClaimResult{}, NoWorkError{}
 	}
-	var response recorderWorkerClaimResponse
+	var response recorderprotocol.ClaimResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return ClaimResult{}, ProtocolError{Err: err}
 	}
@@ -359,11 +208,11 @@ func (c *ControlPlaneClient) Heartbeat(ctx context.Context, input recordingpipel
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/heartbeat", payload, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsHeartbeat.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	var response recorderWorkerJobResponse
+	var response recorderprotocol.JobResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: err}
 	}
@@ -382,12 +231,12 @@ func (c *ControlPlaneClient) Progress(ctx context.Context, input ProgressInput) 
 	if err != nil {
 		return ProgressResult{}, err
 	}
-	payload := recorderWorkerProgressRequest{recorderWorkerLeaseRequest: lease, Stage: input.Stage, Completed: input.Completed, Total: input.Total, Bytes: input.Bytes, ObjectKey: input.ObjectKey}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/progress", payload, ControlPlaneResponseLimit)
+	payload := recorderprotocol.ProgressRequest{LeaseRequest: lease, Stage: input.Stage, Completed: input.Completed, Total: input.Total, Bytes: input.Bytes, ObjectKey: input.ObjectKey}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsProgress.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return ProgressResult{}, err
 	}
-	var response recorderWorkerProgressResponse
+	var response recorderprotocol.ProgressResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return ProgressResult{}, ProtocolError{Err: err}
 	}
@@ -406,15 +255,15 @@ func (c *ControlPlaneClient) Fail(ctx context.Context, input recordingpipeline.F
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	payload := recorderWorkerFailRequest{recorderWorkerLeaseRequest: lease, ErrorCode: input.ErrorCode, ErrorDetail: input.ErrorDetail}
+	payload := recorderprotocol.FailRequest{LeaseRequest: lease, ErrorCode: input.ErrorCode, ErrorDetail: input.ErrorDetail}
 	if !input.AvailableAt.IsZero() {
 		payload.AvailableAt = input.AvailableAt.UTC().Format(time.RFC3339Nano)
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/fail", payload, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsFail.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	var response recorderWorkerJobResponse
+	var response recorderprotocol.JobResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: err}
 	}
@@ -433,11 +282,11 @@ func (c *ControlPlaneClient) RelinquishCapture(ctx context.Context, input record
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/capture/relinquish", payload, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsRelinquish.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	var response recorderWorkerJobResponse
+	var response recorderprotocol.JobResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: err}
 	}
@@ -456,11 +305,11 @@ func (c *ControlPlaneClient) Complete(ctx context.Context, input recordingpipeli
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/jobs/complete", payload, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsComplete.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	var response recorderWorkerJobResponse
+	var response recorderprotocol.JobResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: err}
 	}
@@ -474,11 +323,11 @@ func (c *ControlPlaneClient) Complete(ctx context.Context, input recordingpipeli
 	return job, nil
 }
 
-func (c *ControlPlaneClient) Wait(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {
+func (c *ControlPlaneClient) WaitForPlan(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {
 	if err := input.Validate(time.Now().UTC()); err != nil {
 		return captureplan.Plan{}, fmt.Errorf("%w: plan wait: %v", ErrInvalidControlPlaneRequest, err)
 	}
-	payload := recorderWorkerPlanRequest{
+	payload := recorderprotocol.CapturePlanWaitRequest{
 		PlanHandle: string(input.PlanHandle), TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(),
 		EpisodeID: input.EpisodeID.String(), RecordingID: input.RecordingID.String(), JobID: input.JobID.String(),
 		AttemptCount: input.AttemptCount, FencingGeneration: input.FencingGeneration,
@@ -486,14 +335,14 @@ func (c *ControlPlaneClient) Wait(ctx context.Context, input captureplan.WaitInp
 		LeaseToken: input.LeaseToken, LeaseExpiresAt: input.LeaseExpiresAt.UTC().Format(time.RFC3339Nano),
 		AfterRevision: int64(input.AfterRevision), WaitMilliseconds: input.MaxWait.Milliseconds(),
 	}
-	body, status, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/plans/wait", payload, ControlPlaneResponseLimit)
+	body, status, err := c.do(ctx, http.MethodPost, recorderprotocol.RoutePlansWait.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return captureplan.Plan{}, err
 	}
 	if status == http.StatusNoContent {
 		return captureplan.Plan{}, NoChangeError{}
 	}
-	var response recorderWorkerCapturePlanResponse
+	var response recorderprotocol.CapturePlanResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return captureplan.Plan{}, ProtocolError{Err: err}
 	}
@@ -505,37 +354,6 @@ func (c *ControlPlaneClient) Wait(ctx context.Context, input captureplan.WaitInp
 		return captureplan.Plan{}, err
 	}
 	return plan, nil
-}
-
-func (c *ControlPlaneClient) WaitForPlan(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {
-	return c.Wait(ctx, input)
-}
-
-func (c *ControlPlaneClient) CommitBundle(ctx context.Context, input recordingpipeline.BundleInput) (recordingpipeline.Bundle, error) {
-	payload, err := bundleRequest(input)
-	if err != nil {
-		return recordingpipeline.Bundle{}, err
-	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/bundles", payload, ControlPlaneResponseLimit)
-	if err != nil {
-		return recordingpipeline.Bundle{}, err
-	}
-	var response recorderWorkerBundleResponse
-	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: err}
-	}
-	bundle, err := decodeBundle(response)
-	if err != nil {
-		return recordingpipeline.Bundle{}, err
-	}
-	if err := verifyBundleAuthority(bundle, input); err != nil {
-		return recordingpipeline.Bundle{}, err
-	}
-	return bundle, nil
-}
-
-func (c *ControlPlaneClient) InsertBundle(ctx context.Context, input recordingpipeline.BundleInput) (recordingpipeline.Bundle, error) {
-	return c.CommitBundle(ctx, input)
 }
 
 // Execute sends one typed CapturePlane command through one of the six private
@@ -550,23 +368,16 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	if err != nil {
 		return capturesignaling.Execution{}, err
 	}
-	path := map[captureplane.OperationKind]string{
-		captureplane.OperationCreateCaptureConnection:      "/internal/v1/recorder/capture/create",
-		captureplane.OperationPullCaptureTracks:            "/internal/v1/recorder/capture/pull",
-		captureplane.OperationRenegotiateCaptureConnection: "/internal/v1/recorder/capture/renegotiate",
-		captureplane.OperationInspectCaptureConnection:     "/internal/v1/recorder/capture/inspect",
-		captureplane.OperationCloseCaptureTracks:           "/internal/v1/recorder/capture/close-tracks",
-		captureplane.OperationCloseCaptureConnection:       "/internal/v1/recorder/capture/close-connection",
-	}[operation]
+	path := recorderprotocol.CaptureSignalingRoutes[operation].Path()
 	body, _, err := c.do(ctx, http.MethodPost, path, requestBody, ControlPlaneResponseLimit)
 	if err != nil {
 		var responseError HTTPError
-		if errors.As(err, &responseError) && responseError.Status == http.StatusConflict && responseError.Code == "recording.capture_media_stopped" {
+		if errors.As(err, &responseError) && responseError.Status == http.StatusConflict && responseError.Code == recorderprotocol.CodeCaptureMediaStopped {
 			return capturesignaling.Execution{}, capturesignaling.ErrMediaStopped
 		}
 		return capturesignaling.Execution{}, err
 	}
-	var response recorderCaptureSignalingResponse
+	var response recorderprotocol.CaptureSignalingResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return capturesignaling.Execution{}, ProtocolError{Err: err}
 	}
@@ -588,87 +399,11 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	}, nil
 }
 
-type recorderCaptureAuthorityRequest struct {
-	SignalingHandle   string `json:"signaling_handle"`
-	TenantID          string `json:"tenant_id"`
-	SpaceID           string `json:"space_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-	PlanRevision      int64  `json:"plan_revision"`
-	IdempotencyKey    string `json:"idempotency_key"`
-}
-
-type recorderCapturePullRequest struct {
-	recorderCaptureAuthorityRequest
-	Connection       string                        `json:"connection"`
-	Tracks           []recorderCaptureTrackRequest `json:"tracks"`
-	LocalDescription *captureplane.Description     `json:"local_description,omitempty"`
-}
-
-type recorderCaptureRenegotiateRequest struct {
-	recorderCaptureAuthorityRequest
-	Connection    string                   `json:"connection"`
-	NegotiationID string                   `json:"negotiation_id"`
-	Description   captureplane.Description `json:"description"`
-}
-
-type recorderCaptureInspectRequest struct {
-	recorderCaptureAuthorityRequest
-	Connection string                              `json:"connection"`
-	Tracks     []recorderCapturePulledTrackRequest `json:"tracks,omitempty"`
-}
-
-type recorderCaptureCloseTracksRequest struct {
-	recorderCaptureAuthorityRequest
-	Connection string                              `json:"connection"`
-	Tracks     []recorderCapturePulledTrackRequest `json:"tracks"`
-}
-
-type recorderCaptureCloseConnectionRequest struct {
-	recorderCaptureAuthorityRequest
-	Connection string                              `json:"connection"`
-	Tracks     []recorderCapturePulledTrackRequest `json:"tracks,omitempty"`
-	Force      bool                                `json:"force"`
-}
-
-type recorderCaptureTrackRequest struct {
-	OwnerReference        string `json:"owner_reference"`
-	TrackReference        string `json:"track_reference"`
-	ParticipantID         string `json:"participant_id"`
-	ParticipantGeneration int64  `json:"participant_generation"`
-	Source                string `json:"source"`
-	Kind                  string `json:"kind"`
-	RequestedLayer        string `json:"requested_layer"`
-}
-
-type recorderCapturePulledTrackRequest struct {
-	OwnerReference        string `json:"owner_reference"`
-	TrackReference        string `json:"track_reference"`
-	ParticipantID         string `json:"participant_id"`
-	ParticipantGeneration int64  `json:"participant_generation"`
-	Source                string `json:"source"`
-	Kind                  string `json:"kind"`
-	RequestedLayer        string `json:"requested_layer"`
-	MID                   string `json:"mid"`
-}
-
-type recorderCaptureSignalingResponse struct {
-	Replayed bool                           `json:"replayed"`
-	Result   capturesignaling.CommandResult `json:"result"`
-}
-
 func signalingRequest(command capturesignaling.Command) (any, captureplane.OperationKind, error) {
 	if _, _, err := capturesignaling.CanonicalRequest(command); err != nil {
 		return nil, "", fmt.Errorf("%w: capture signaling: %v", ErrInvalidControlPlaneRequest, err)
 	}
-	base := recorderCaptureAuthorityRequest{
+	base := recorderprotocol.CaptureAuthority{
 		SignalingHandle: command.SignalingHandle.String(), TenantID: command.Authority.TenantID.String(), SpaceID: command.Authority.SpaceID.String(),
 		EpisodeID: command.Authority.EpisodeID.String(), RecordingID: command.Authority.RecordingID.String(), JobID: command.Authority.JobID.String(),
 		AttemptCount: command.Authority.AttemptCount, FencingGeneration: command.Authority.FencingGeneration,
@@ -687,68 +422,61 @@ func signalingRequest(command capturesignaling.Command) (any, captureplane.Opera
 		if value == nil {
 			return nil, "", fmt.Errorf("%w: pull input", ErrInvalidControlPlaneRequest)
 		}
-		return recorderCapturePullRequest{recorderCaptureAuthorityRequest: base, Connection: value.Connection.String(), Tracks: captureTrackRequests(value.Tracks), LocalDescription: value.LocalDescription}, command.Identity.Operation, nil
+		return recorderprotocol.CapturePullRequest{CaptureAuthority: base, Connection: value.Connection.String(), Tracks: captureTrackRequests(value.Tracks), LocalDescription: value.LocalDescription}, command.Identity.Operation, nil
 	case captureplane.OperationRenegotiateCaptureConnection:
 		value := command.Input.RenegotiateCaptureConnection
 		if value == nil {
 			return nil, "", fmt.Errorf("%w: renegotiate input", ErrInvalidControlPlaneRequest)
 		}
-		return recorderCaptureRenegotiateRequest{recorderCaptureAuthorityRequest: base, Connection: value.Connection.String(), NegotiationID: value.NegotiationID.String(), Description: value.Description}, command.Identity.Operation, nil
+		return recorderprotocol.CaptureRenegotiateRequest{CaptureAuthority: base, Connection: value.Connection.String(), NegotiationID: value.NegotiationID.String(), Description: value.Description}, command.Identity.Operation, nil
 	case captureplane.OperationInspectCaptureConnection:
 		value := command.Input.InspectCaptureConnection
 		if value == nil {
 			return nil, "", fmt.Errorf("%w: inspect input", ErrInvalidControlPlaneRequest)
 		}
-		return recorderCaptureInspectRequest{recorderCaptureAuthorityRequest: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks)}, command.Identity.Operation, nil
+		return recorderprotocol.CaptureInspectRequest{CaptureAuthority: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks)}, command.Identity.Operation, nil
 	case captureplane.OperationCloseCaptureTracks:
 		value := command.Input.CloseCaptureTracks
 		if value == nil {
 			return nil, "", fmt.Errorf("%w: close tracks input", ErrInvalidControlPlaneRequest)
 		}
-		return recorderCaptureCloseTracksRequest{recorderCaptureAuthorityRequest: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks)}, command.Identity.Operation, nil
+		return recorderprotocol.CaptureCloseTracksRequest{CaptureAuthority: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks)}, command.Identity.Operation, nil
 	case captureplane.OperationCloseCaptureConnection:
 		value := command.Input.CloseCaptureConnection
 		if value == nil {
 			return nil, "", fmt.Errorf("%w: close connection input", ErrInvalidControlPlaneRequest)
 		}
-		return recorderCaptureCloseConnectionRequest{recorderCaptureAuthorityRequest: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks), Force: value.Force}, command.Identity.Operation, nil
+		return recorderprotocol.CaptureCloseConnectionRequest{CaptureAuthority: base, Connection: value.Connection.String(), Tracks: pulledTrackRequests(value.Tracks), Force: value.Force}, command.Identity.Operation, nil
 	default:
 		return nil, "", fmt.Errorf("%w: operation", ErrInvalidControlPlaneRequest)
 	}
 }
 
-func captureTrackRequests(values []captureplane.CaptureTrack) []recorderCaptureTrackRequest {
-	result := make([]recorderCaptureTrackRequest, len(values))
+func captureTrackRequests(values []captureplane.CaptureTrack) []recorderprotocol.CaptureTrack {
+	result := make([]recorderprotocol.CaptureTrack, len(values))
 	for index, value := range values {
-		result[index] = recorderCaptureTrackRequest{OwnerReference: value.OwnerReference.String(), TrackReference: value.TrackReference.String(), ParticipantID: value.ParticipantID.String(), ParticipantGeneration: value.ParticipantGeneration, Source: value.Source.String(), Kind: value.Kind.String(), RequestedLayer: value.RequestedLayer.String()}
+		result[index] = recorderprotocol.CaptureTrack{OwnerReference: value.OwnerReference.String(), TrackReference: value.TrackReference.String(), ParticipantID: value.ParticipantID.String(), ParticipantGeneration: value.ParticipantGeneration, Source: value.Source.String(), Kind: value.Kind.String(), RequestedLayer: value.RequestedLayer.String()}
 	}
 	return result
 }
 
-func pulledTrackRequests(values []captureplane.PulledCaptureTrack) []recorderCapturePulledTrackRequest {
-	result := make([]recorderCapturePulledTrackRequest, len(values))
+func pulledTrackRequests(values []captureplane.PulledCaptureTrack) []recorderprotocol.CapturePulledTrack {
+	result := make([]recorderprotocol.CapturePulledTrack, len(values))
 	for index, value := range values {
-		result[index] = recorderCapturePulledTrackRequest{OwnerReference: value.OwnerReference.String(), TrackReference: value.TrackReference.String(), ParticipantID: value.ParticipantID.String(), ParticipantGeneration: value.ParticipantGeneration, Source: value.Source.String(), Kind: value.Kind.String(), RequestedLayer: value.RequestedLayer.String(), MID: value.MID.String()}
+		result[index] = recorderprotocol.CapturePulledTrack{OwnerReference: value.OwnerReference.String(), TrackReference: value.TrackReference.String(), ParticipantID: value.ParticipantID.String(), ParticipantGeneration: value.ParticipantGeneration, Source: value.Source.String(), Kind: value.Kind.String(), RequestedLayer: value.RequestedLayer.String(), MID: value.MID.String()}
 	}
 	return result
 }
 
-func leaseRequest(input recordingpipeline.LeaseInput) (recorderWorkerLeaseRequest, error) {
+func leaseRequest(input recordingpipeline.LeaseInput) (recorderprotocol.LeaseRequest, error) {
 	seconds, err := durationSeconds(input.LeaseFor)
 	if err != nil || input.JobID.IsZero() || input.AttemptCount < 1 || input.FencingGeneration < 1 || input.CaptureEpoch < 1 || strings.TrimSpace(input.LeaseToken) == "" || len(input.EnvelopeDigest) != 32 {
-		return recorderWorkerLeaseRequest{}, fmt.Errorf("%w: lease input", ErrInvalidControlPlaneRequest)
+		return recorderprotocol.LeaseRequest{}, fmt.Errorf("%w: lease input", ErrInvalidControlPlaneRequest)
 	}
-	return recorderWorkerLeaseRequest{JobID: input.JobID.String(), AttemptCount: input.AttemptCount, FencingGeneration: input.FencingGeneration, LeaseToken: input.LeaseToken, LeaseForSeconds: seconds, CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(input.EnvelopeDigest)}, nil
+	return recorderprotocol.LeaseRequest{JobID: input.JobID.String(), AttemptCount: input.AttemptCount, FencingGeneration: input.FencingGeneration, LeaseToken: input.LeaseToken, LeaseForSeconds: seconds, CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(input.EnvelopeDigest)}, nil
 }
 
-func bundleRequest(input recordingpipeline.BundleInput) (recorderWorkerBundleRequest, error) {
-	if input.TenantID.IsZero() || input.RecordingID.IsZero() || input.CaptureJobID.IsZero() || input.AttemptCount < 1 || input.FencingGeneration < 1 || input.CaptureEpoch < 1 || strings.TrimSpace(input.LeaseToken) == "" || len(input.EnvelopeDigest) != 32 {
-		return recorderWorkerBundleRequest{}, fmt.Errorf("%w: bundle input", ErrInvalidControlPlaneRequest)
-	}
-	return recorderWorkerBundleRequest{TenantID: input.TenantID.String(), RecordingID: input.RecordingID.String(), CaptureJobID: input.CaptureJobID.String(), SequenceNumber: input.SequenceNumber, FencingGeneration: input.FencingGeneration, AttemptCount: input.AttemptCount, LeaseToken: input.LeaseToken, CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(input.EnvelopeDigest), ObjectKey: input.ObjectKey, ContentType: input.ContentType, Codec: input.Codec, Layer: input.Layer, ByteSize: input.ByteSize, Checksum: hex.EncodeToString(input.Checksum), MonotonicStartMillis: input.MonotonicStartMillis, MonotonicEndMillis: input.MonotonicEndMillis, MediaStartMillis: input.MediaStartMillis, MediaEndMillis: input.MediaEndMillis}, nil
-}
-
-func decodeClaimResult(requestID utilities.ID, response recorderWorkerClaimResponse) (ClaimResult, error) {
+func decodeClaimResult(requestID utilities.ID, response recorderprotocol.ClaimResponse) (ClaimResult, error) {
 	claimID, err := utilities.ParseID(response.ClaimRequestID)
 	if err != nil || claimID != requestID || strings.TrimSpace(response.LeaseToken) == "" || strings.TrimSpace(response.LeaseOwner) == "" {
 		return ClaimResult{}, ProtocolError{Err: errors.New("claim response identity")}
@@ -772,7 +500,7 @@ func decodeClaimResult(requestID utilities.ID, response recorderWorkerClaimRespo
 	return ClaimResult{ClaimRequestID: claimID, Envelope: envelope, EnvelopeDigest: digest, LeaseToken: response.LeaseToken, LeaseOwner: response.LeaseOwner, LeaseExpiresAt: leaseExpiresAt}, nil
 }
 
-func decodeJob(response recorderWorkerJobResponse) (recordingpipeline.Job, error) {
+func decodeJob(response recorderprotocol.JobResponse) (recordingpipeline.Job, error) {
 	jobID, err := utilities.ParseID(response.JobID)
 	if err != nil {
 		return recordingpipeline.Job{}, ProtocolError{Err: errors.New("job response identity")}
@@ -848,41 +576,6 @@ func decodeJob(response recorderWorkerJobResponse) (recordingpipeline.Job, error
 func verifyJobAuthority(job recordingpipeline.Job, input recordingpipeline.LeaseInput) error {
 	if job.ID != input.JobID || job.AttemptCount != input.AttemptCount || job.FencingGeneration != input.FencingGeneration || job.CaptureEpoch != input.CaptureEpoch {
 		return ProtocolError{Err: errors.New("job response authority mismatch")}
-	}
-	return nil
-}
-
-func decodeBundle(response recorderWorkerBundleResponse) (recordingpipeline.Bundle, error) {
-	id, err := utilities.ParseID(response.ID)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response id")}
-	}
-	tenantID, err := utilities.ParseID(response.TenantID)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response tenant")}
-	}
-	recordingID, err := utilities.ParseID(response.RecordingID)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response recording")}
-	}
-	captureJobID, err := utilities.ParseID(response.CaptureJobID)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response capture job")}
-	}
-	checksum, err := decodeHex(response.Checksum, -1)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response checksum")}
-	}
-	createdAt, err := parseRequiredTime(response.CreatedAt)
-	if err != nil {
-		return recordingpipeline.Bundle{}, ProtocolError{Err: errors.New("bundle response create time")}
-	}
-	return recordingpipeline.Bundle{ID: id, TenantID: tenantID, RecordingID: recordingID, CaptureJobID: captureJobID, SequenceNumber: response.SequenceNumber, FencingGeneration: response.FencingGeneration, ObjectKey: response.ObjectKey, ContentType: response.ContentType, Codec: response.Codec, Layer: response.Layer, ByteSize: response.ByteSize, Checksum: checksum, MonotonicStartMillis: response.MonotonicStartMillis, MonotonicEndMillis: response.MonotonicEndMillis, MediaStartMillis: response.MediaStartMillis, MediaEndMillis: response.MediaEndMillis, CreatedAt: createdAt}, nil
-}
-
-func verifyBundleAuthority(bundle recordingpipeline.Bundle, input recordingpipeline.BundleInput) error {
-	if bundle.TenantID != input.TenantID || bundle.RecordingID != input.RecordingID || bundle.CaptureJobID != input.CaptureJobID || bundle.SequenceNumber != input.SequenceNumber || bundle.FencingGeneration != input.FencingGeneration {
-		return ProtocolError{Err: errors.New("bundle response authority mismatch")}
 	}
 	return nil
 }

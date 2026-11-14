@@ -14,210 +14,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-type renderAuthorityRequest struct {
-	TenantID          string `json:"tenant_id"`
-	SpaceID           string `json:"space_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	RenderInputHandle string `json:"render_input_handle"`
-	KeyHandle         string `json:"key_handle"`
-	ObjectHandle      string `json:"object_handle"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseOwner        string `json:"lease_owner"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-}
-
-type renderKeyAccessRequest struct {
-	renderAuthorityRequest
-	RequestedCaptureEpoch int64 `json:"requested_capture_epoch"`
-}
-
-type renderDownloadResponse struct {
-	Method        string              `json:"method"`
-	URL           string              `json:"url"`
-	ExpiresAt     string              `json:"expires_at"`
-	SignedHeaders map[string][]string `json:"signed_headers"`
-}
-
-type renderObjectResponse struct {
-	ObjectKey     string                 `json:"object_key"`
-	ObjectVersion string                 `json:"object_version"`
-	ObjectETag    string                 `json:"object_etag"`
-	ContentType   string                 `json:"content_type"`
-	ByteSize      int64                  `json:"byte_size"`
-	SHA256        string                 `json:"sha256"`
-	Download      renderDownloadResponse `json:"download"`
-}
-
-type renderCaptureResponse struct {
-	renderObjectResponse
-	CaptureEpoch         int64   `json:"capture_epoch"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	KeyHandle            string  `json:"key_handle"`
-	EnvelopeDigest       string  `json:"envelope_digest"`
-	BundleSchema         string  `json:"bundle_schema"`
-	SequenceNumber       int64   `json:"sequence"`
-	MonotonicStartMillis int64   `json:"monotonic_start_ms"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_ms"`
-	MediaStartMillis     int64   `json:"media_start_ms"`
-	MediaEndMillis       int64   `json:"media_end_ms"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-}
-
-type renderInputResponse struct {
-	SchemaVersion     string                           `json:"schema_version"`
-	TranscriptionMode artifactpolicy.TranscriptionMode `json:"transcription_mode"`
-	TenantID          string                           `json:"tenant_id"`
-	SpaceID           string                           `json:"space_id"`
-	EpisodeID         string                           `json:"episode_id"`
-	RecordingID       string                           `json:"recording_id"`
-	CaptureEpoch      int64                            `json:"capture_epoch"`
-	CaptureReadyAt    string                           `json:"capture_ready_at"`
-	DurationMillis    int64                            `json:"duration_ms"`
-	Capture           []renderCaptureResponse          `json:"capture"`
-	Presentation      struct {
-		Handle         string               `json:"handle"`
-		SchemaVersion  string               `json:"schema_version"`
-		ProfileVersion string               `json:"profile_version"`
-		DurationMillis int64                `json:"duration_ms"`
-		SHA256         string               `json:"sha256"`
-		Object         renderObjectResponse `json:"object"`
-	} `json:"presentation"`
-	AssetManifest renderObjectResponse   `json:"asset_manifest"`
-	Assets        []renderObjectResponse `json:"assets"`
-}
-
-type renderReserveResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	Purpose           string `json:"purpose"`
-	AllocationVersion int64  `json:"allocation_version"`
-}
-
-type renderFinalizeResponse struct {
-	renderReserveResponse
-	UploadToken string `json:"upload_token"`
-	Upload      struct {
-		Method        string              `json:"method"`
-		URL           string              `json:"url"`
-		ExpiresAt     string              `json:"expires_at"`
-		SignedHeaders map[string][]string `json:"signed_headers"`
-	} `json:"upload"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-type renderCommitObjectResponse struct {
-	renderReserveResponse
-	ObjectVersion  string `json:"object_version"`
-	ObjectETag     string `json:"object_etag"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	SHA256         string `json:"sha256"`
-	DurationMillis *int64 `json:"duration_ms"`
-	CommittedAt    string `json:"committed_at"`
-}
-
-type renderObjectReferenceRequest struct {
-	AllocationID   string `json:"allocation_id"`
-	Purpose        string `json:"purpose"`
-	ObjectKey      string `json:"object_key"`
-	ObjectVersion  string `json:"object_version"`
-	ObjectETag     string `json:"object_etag"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	SHA256         string `json:"sha256"`
-	DurationMillis *int64 `json:"duration_ms"`
-}
-
-type renderTranscriptionChunkRequest struct {
-	ChunkID               string                       `json:"chunk_id"`
-	Index                 int                          `json:"index"`
-	Generation            int64                        `json:"generation"`
-	StartMillis           int64                        `json:"start_ms"`
-	EndMillis             int64                        `json:"end_ms"`
-	SourceStartMillis     int64                        `json:"source_start_ms"`
-	SourceEndMillis       int64                        `json:"source_end_ms"`
-	ParticipantRef        string                       `json:"participant_ref"`
-	ParticipantGeneration int64                        `json:"participant_generation"`
-	DisplayNameSnapshot   string                       `json:"display_name_snapshot"`
-	TrackID               string                       `json:"track_id"`
-	TrackEpoch            string                       `json:"track_epoch"`
-	IdentityKind          string                       `json:"identity_kind"`
-	TrackClass            string                       `json:"track_class"`
-	Overlap               bool                         `json:"overlap"`
-	Object                renderObjectReferenceRequest `json:"object"`
-}
-
-type renderTranscriptionSourceRequest struct {
-	SchemaVersion      string                            `json:"schema_version"`
-	PresentationSHA256 string                            `json:"presentation_sha256"`
-	Manifest           renderObjectReferenceRequest      `json:"manifest"`
-	Chunks             []renderTranscriptionChunkRequest `json:"chunks"`
-}
-
-type renderCommitRequest struct {
-	VideoDegradation []recordingpipeline.VideoDegradation `json:"video_degradation,omitempty"`
-	renderAuthorityRequest
-	CommitDigest        string                            `json:"commit_digest"`
-	PresentationSHA256  string                            `json:"presentation_sha256"`
-	DurationMillis      int64                             `json:"duration_ms"`
-	Video               renderObjectReferenceRequest      `json:"video"`
-	FFprobeFactsDigest  string                            `json:"ffprobe_facts_digest"`
-	TranscriptionSource *renderTranscriptionSourceRequest `json:"transcription_source"`
-}
-
-type renderCommitResponse struct {
-	Artifact struct {
-		RecordingID    string `json:"recording_id"`
-		TenantID       string `json:"tenant_id"`
-		RenderJobID    string `json:"render_job_id"`
-		ObjectKey      string `json:"object_key"`
-		ContentType    string `json:"content_type"`
-		ByteSize       int64  `json:"byte_size"`
-		Checksum       string `json:"checksum"`
-		DurationMillis int64  `json:"duration_millis"`
-		CommittedAt    string `json:"committed_at"`
-		CreatedAt      string `json:"created_at"`
-	} `json:"artifact"`
-	TranscriptionSourceID *string  `json:"transcription_source_id"`
-	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
-}
-
-type renderTranscriptionCommitRequest struct {
-	renderAuthorityRequest
-	CommitDigest        string                            `json:"commit_digest"`
-	PresentationSHA256  string                            `json:"presentation_sha256"`
-	DurationMillis      int64                             `json:"duration_ms"`
-	TranscriptionSource *renderTranscriptionSourceRequest `json:"transcription_source,omitempty"`
-}
-
-type renderTranscriptionCommitResponse struct {
-	TranscriptionSourceID *string  `json:"transcription_source_id"`
-	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
-}
-
 func (c *ControlPlaneClient) ResolveRenderInput(ctx context.Context, authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
 	if err := authority.Validate(); err != nil {
 		return recordingrender.ResolvedInput{}, ErrInvalidControlPlaneRequest
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/render-inputs/resolve", renderAuthorityBody(authority), ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteRenderInputsResolve.Path(), renderAuthorityBody(authority), ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingrender.ResolvedInput{}, err
 	}
-	var response renderInputResponse
+	var response recorderprotocol.RenderInputResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingrender.ResolvedInput{}, ProtocolError{Err: err}
 	}
@@ -228,7 +40,7 @@ func (c *ControlPlaneClient) AccessRenderKey(ctx context.Context, input recordin
 	if err := input.Validate(); err != nil {
 		return recordingrender.DataKey{}, ErrInvalidControlPlaneRequest
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/render-keys/access", renderKeyAccessRequest{renderAuthorityRequest: renderAuthorityBody(input.Authority), RequestedCaptureEpoch: input.CaptureEpoch}, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteRenderKeysAccess.Path(), recorderprotocol.RenderKeyAccessRequest{RenderAuthority: renderAuthorityBody(input.Authority), RequestedCaptureEpoch: input.CaptureEpoch}, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingrender.DataKey{}, err
 	}
@@ -254,15 +66,15 @@ func (c *ControlPlaneClient) ReserveRenderObject(ctx context.Context, input reco
 		return recordingrender.ReservedObject{}, ErrInvalidControlPlaneRequest
 	}
 	payload := struct {
-		renderAuthorityRequest
+		recorderprotocol.RenderAuthority
 		Purpose              string `json:"purpose"`
 		ReservationRequestID string `json:"reservation_request_id"`
-	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), Purpose: string(input.Purpose), ReservationRequestID: input.ReservationRequestID.String()}
-	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/reserve", payload)
+	}{RenderAuthority: renderAuthorityBody(input.Authority), Purpose: string(input.Purpose), ReservationRequestID: input.ReservationRequestID.String()}
+	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsReserve.Path(), payload)
 	if err != nil {
 		return recordingrender.ReservedObject{}, err
 	}
-	var response renderReserveResponse
+	var response recorderprotocol.RenderObjectReserveResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingrender.ReservedObject{}, ProtocolError{Err: err}
 	}
@@ -278,19 +90,19 @@ func (c *ControlPlaneClient) FinalizeRenderObject(ctx context.Context, input rec
 		return recordingrender.FinalizedObject{}, ErrInvalidControlPlaneRequest
 	}
 	payload := struct {
-		renderAuthorityRequest
+		recorderprotocol.RenderAuthority
 		AllocationID   string `json:"allocation_id"`
 		Purpose        string `json:"purpose"`
 		ContentType    string `json:"content_type"`
 		ByteSize       int64  `json:"byte_size"`
 		SHA256         string `json:"sha256"`
 		DurationMillis *int64 `json:"duration_ms"`
-	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), Purpose: string(input.Purpose), ContentType: input.ContentType, ByteSize: input.ByteSize, SHA256: hex.EncodeToString(input.SHA256), DurationMillis: input.DurationMillis}
-	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/finalize", payload)
+	}{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), Purpose: string(input.Purpose), ContentType: input.ContentType, ByteSize: input.ByteSize, SHA256: hex.EncodeToString(input.SHA256), DurationMillis: input.DurationMillis}
+	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsFinalize.Path(), payload)
 	if err != nil {
 		return recordingrender.FinalizedObject{}, err
 	}
-	var response renderFinalizeResponse
+	var response recorderprotocol.RenderObjectFinalizeResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingrender.FinalizedObject{}, ProtocolError{Err: err}
 	}
@@ -302,15 +114,15 @@ func (c *ControlPlaneClient) CommitRenderObject(ctx context.Context, input recor
 		return recordingrender.CommittedObject{}, ErrInvalidControlPlaneRequest
 	}
 	payload := struct {
-		renderAuthorityRequest
+		recorderprotocol.RenderAuthority
 		AllocationID string `json:"allocation_id"`
 		UploadToken  string `json:"upload_token"`
-	}{renderAuthorityRequest: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), UploadToken: input.UploadToken}
-	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/render-objects/commit", payload)
+	}{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), UploadToken: input.UploadToken}
+	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsCommit.Path(), payload)
 	if err != nil {
 		return recordingrender.CommittedObject{}, err
 	}
-	var response renderCommitObjectResponse
+	var response recorderprotocol.RenderObjectCommitResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingrender.CommittedObject{}, ProtocolError{Err: err}
 	}
@@ -321,21 +133,21 @@ func (c *ControlPlaneClient) CommitRender(ctx context.Context, input recordingre
 	if err := input.Validate(); err != nil {
 		return recordingrender.CommitResult{}, ErrInvalidControlPlaneRequest
 	}
-	payload := renderCommitRequest{
-		VideoDegradation:       input.VideoDegradation,
-		renderAuthorityRequest: renderAuthorityBody(input.Authority),
-		CommitDigest:           hex.EncodeToString(input.CommitDigest),
-		PresentationSHA256:     hex.EncodeToString(input.PresentationSHA256),
-		DurationMillis:         input.DurationMillis,
-		Video:                  renderObjectReferenceBody(input.Video),
-		FFprobeFactsDigest:     hex.EncodeToString(input.FFprobeFactsDigest),
+	payload := recorderprotocol.RenderCommitRequest{
+		VideoDegradation:   input.VideoDegradation,
+		RenderAuthority:    renderAuthorityBody(input.Authority),
+		CommitDigest:       hex.EncodeToString(input.CommitDigest),
+		PresentationSHA256: hex.EncodeToString(input.PresentationSHA256),
+		DurationMillis:     input.DurationMillis,
+		Video:              renderObjectReferenceBody(input.Video),
+		FFprobeFactsDigest: hex.EncodeToString(input.FFprobeFactsDigest),
 	}
 	payload.TranscriptionSource = renderTranscriptionSourceBody(input.TranscriptionSource)
-	body, _, err := c.doRenderFinish(ctx, "/internal/v1/recorder/renders/commit", payload)
+	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRendersCommit.Path(), payload)
 	if err != nil {
 		return recordingrender.CommitResult{}, err
 	}
-	var response renderCommitResponse
+	var response recorderprotocol.RenderCommitResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingrender.CommitResult{}, ProtocolError{Err: err}
 	}
@@ -346,18 +158,18 @@ func (c *ControlPlaneClient) CommitTranscriptionPreparation(ctx context.Context,
 	if err := input.Validate(); err != nil {
 		return nil, ErrInvalidControlPlaneRequest
 	}
-	payload := renderTranscriptionCommitRequest{
-		renderAuthorityRequest: renderAuthorityBody(input.Authority),
-		CommitDigest:           hex.EncodeToString(input.CommitDigest),
-		PresentationSHA256:     hex.EncodeToString(input.PresentationSHA256),
-		DurationMillis:         input.DurationMillis,
-		TranscriptionSource:    renderTranscriptionSourceBody(input.TranscriptionSource),
+	payload := recorderprotocol.TranscriptionCommitRequest{
+		RenderAuthority:     renderAuthorityBody(input.Authority),
+		CommitDigest:        hex.EncodeToString(input.CommitDigest),
+		PresentationSHA256:  hex.EncodeToString(input.PresentationSHA256),
+		DurationMillis:      input.DurationMillis,
+		TranscriptionSource: renderTranscriptionSourceBody(input.TranscriptionSource),
 	}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/renders/transcription-commit", payload, ControlPlaneResponseLimit)
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteRendersTranscriptionDone.Path(), payload, ControlPlaneResponseLimit)
 	if err != nil {
 		return nil, err
 	}
-	var response renderTranscriptionCommitResponse
+	var response recorderprotocol.TranscriptionCommitResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return nil, ProtocolError{Err: err}
 	}
@@ -442,17 +254,19 @@ func (c *ControlPlaneClient) DownloadRenderObject(ctx context.Context, object re
 	return nil
 }
 
-func renderAuthorityBody(authority recordingrender.Authority) renderAuthorityRequest {
-	return renderAuthorityRequest{
-		TenantID: authority.TenantID.String(), SpaceID: authority.SpaceID.String(), EpisodeID: authority.EpisodeID.String(), RecordingID: authority.RecordingID.String(), JobID: authority.JobID.String(),
-		RenderInputHandle: authority.RenderInputHandle.String(), KeyHandle: authority.KeyHandle.String(), ObjectHandle: authority.ObjectHandle.String(),
-		AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: authority.CaptureEpoch,
-		EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano),
+func renderAuthorityBody(authority recordingrender.Authority) recorderprotocol.RenderAuthority {
+	return recorderprotocol.RenderAuthority{
+		RecordingAuthority: recorderprotocol.RecordingAuthority{
+			TenantID: authority.TenantID.String(), EpisodeID: authority.EpisodeID.String(), RecordingID: authority.RecordingID.String(), JobID: authority.JobID.String(),
+			AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: int64(authority.CaptureEpoch),
+			EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano),
+		},
+		SpaceID: authority.SpaceID.String(), RenderInputHandle: authority.RenderInputHandle.String(), KeyHandle: authority.KeyHandle.String(), ObjectHandle: authority.ObjectHandle.String(),
 	}
 }
 
-func renderObjectReferenceBody(reference recordingrender.CommitObjectReference) renderObjectReferenceRequest {
-	return renderObjectReferenceRequest{
+func renderObjectReferenceBody(reference recordingrender.CommitObjectReference) recorderprotocol.RenderObjectReference {
+	return recorderprotocol.RenderObjectReference{
 		AllocationID: reference.AllocationID.String(), Purpose: string(reference.Purpose),
 		ObjectKey: reference.Object.ObjectKey, ObjectVersion: reference.Object.ObjectVersion, ObjectETag: reference.Object.ObjectETag,
 		ContentType: reference.Object.ContentType, ByteSize: reference.Object.ByteSize, SHA256: hex.EncodeToString(reference.Object.SHA256),
@@ -460,16 +274,16 @@ func renderObjectReferenceBody(reference recordingrender.CommitObjectReference) 
 	}
 }
 
-func renderTranscriptionSourceBody(source *recordingrender.TranscriptionSource) *renderTranscriptionSourceRequest {
+func renderTranscriptionSourceBody(source *recordingrender.TranscriptionSource) *recorderprotocol.RenderTranscriptionSource {
 	if source == nil {
 		return nil
 	}
-	result := &renderTranscriptionSourceRequest{
+	result := &recorderprotocol.RenderTranscriptionSource{
 		SchemaVersion: source.SchemaVersion, PresentationSHA256: hex.EncodeToString(source.PresentationSHA256),
-		Manifest: renderObjectReferenceBody(source.Manifest), Chunks: make([]renderTranscriptionChunkRequest, 0, len(source.Chunks)),
+		Manifest: renderObjectReferenceBody(source.Manifest), Chunks: make([]recorderprotocol.RenderTranscriptionChunk, 0, len(source.Chunks)),
 	}
 	for _, chunk := range source.Chunks {
-		result.Chunks = append(result.Chunks, renderTranscriptionChunkRequest{
+		result.Chunks = append(result.Chunks, recorderprotocol.RenderTranscriptionChunk{
 			ChunkID: chunk.ChunkID.String(), Index: chunk.Index, Generation: chunk.Generation,
 			StartMillis: chunk.StartMillis, EndMillis: chunk.EndMillis, SourceStartMillis: chunk.SourceStartMillis, SourceEndMillis: chunk.SourceEndMillis,
 			ParticipantRef: chunk.ParticipantRef, ParticipantGeneration: chunk.ParticipantGeneration, DisplayNameSnapshot: chunk.DisplayNameSnapshot,
@@ -492,7 +306,7 @@ func applySignedObjectHeaders(request *http.Request, headers map[string][]string
 	return nil
 }
 
-func decodeResolvedRenderInput(authority recordingrender.Authority, response renderInputResponse) (recordingrender.ResolvedInput, error) {
+func decodeResolvedRenderInput(authority recordingrender.Authority, response recorderprotocol.RenderInputResponse) (recordingrender.ResolvedInput, error) {
 	if response.TranscriptionMode.Validate() != nil {
 		return recordingrender.ResolvedInput{}, ProtocolError{Err: errors.New("recording render transcription policy is missing or invalid")}
 	}
@@ -519,7 +333,7 @@ func decodeResolvedRenderInput(authority recordingrender.Authority, response ren
 	}
 	result := recordingrender.ResolvedInput{SchemaVersion: response.SchemaVersion, TranscriptionMode: response.TranscriptionMode, TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RecordingID: recordingID, CaptureEpoch: response.CaptureEpoch, CaptureReadyAt: captureReadyAt, DurationMillis: response.DurationMillis, Presentation: presentation, PresentationHandle: presentationHandle, PresentationSchemaVersion: response.Presentation.SchemaVersion, PresentationProfileVersion: response.Presentation.ProfileVersion, PresentationSHA256: presentationSHA256, AssetManifest: assetManifest, Capture: make([]recordingrender.DownloadableCaptureObject, 0, len(response.Capture)), Assets: make([]recordingrender.DownloadableObject, 0, len(response.Assets))}
 	for _, capture := range response.Capture {
-		object, err := decodeDownloadableRenderObject(capture.renderObjectResponse)
+		object, err := decodeDownloadableRenderObject(capture.RenderObject)
 		if err != nil {
 			return recordingrender.ResolvedInput{}, err
 		}
@@ -541,7 +355,7 @@ func decodeResolvedRenderInput(authority recordingrender.Authority, response ren
 	return result, nil
 }
 
-func decodeDownloadableRenderObject(response renderObjectResponse) (recordingrender.DownloadableObject, error) {
+func decodeDownloadableRenderObject(response recorderprotocol.RenderObject) (recordingrender.DownloadableObject, error) {
 	checksum, checksumErr := decodeExactLowerHex(response.SHA256)
 	expiresAt, expiryErr := parseRequiredTime(response.Download.ExpiresAt)
 	endpoint, urlErr := validateRecordingUploadURL(response.Download.URL)
@@ -552,7 +366,7 @@ func decodeDownloadableRenderObject(response renderObjectResponse) (recordingren
 	return recordingrender.DownloadableObject{ObjectFacts: recordingrender.ObjectFacts{ObjectKey: response.ObjectKey, ObjectVersion: response.ObjectVersion, ObjectETag: response.ObjectETag, ContentType: response.ContentType, ByteSize: response.ByteSize, SHA256: checksum}, Download: recordingrender.DownloadGrant{Method: response.Download.Method, URL: endpoint.String(), ExpiresAt: expiresAt, SignedHeaders: cloneUploadHeaders(response.Download.SignedHeaders)}}, nil
 }
 
-func decodeFinalizedRenderObject(input recordingrender.FinalizeObjectInput, response renderFinalizeResponse) (recordingrender.FinalizedObject, error) {
+func decodeFinalizedRenderObject(input recordingrender.FinalizeObjectInput, response recorderprotocol.RenderObjectFinalizeResponse) (recordingrender.FinalizedObject, error) {
 	allocationID, idErr := utilities.ParseID(response.AllocationID)
 	expiresAt, expiryErr := parseRequiredTime(response.ExpiresAt)
 	uploadExpiresAt, uploadExpiryErr := parseRequiredTime(response.Upload.ExpiresAt)
@@ -568,7 +382,7 @@ func decodeFinalizedRenderObject(input recordingrender.FinalizeObjectInput, resp
 	return recordingrender.FinalizedObject{ReservedObject: recordingrender.ReservedObject{AllocationID: allocationID, ObjectKey: response.ObjectKey, Purpose: input.Purpose, AllocationVersion: response.AllocationVersion}, UploadToken: response.UploadToken, Upload: objectstorage.SignedURL{Method: response.Upload.Method, URL: endpoint.String(), ExpiresAt: uploadExpiresAt, SignedHeader: cloneUploadHeaders(response.Upload.SignedHeaders)}, ExpiresAt: expiresAt}, nil
 }
 
-func decodeCommittedRenderObject(allocationID utilities.ID, response renderCommitObjectResponse) (recordingrender.CommittedObject, error) {
+func decodeCommittedRenderObject(allocationID utilities.ID, response recorderprotocol.RenderObjectCommitResponse) (recordingrender.CommittedObject, error) {
 	responseID, idErr := utilities.ParseID(response.AllocationID)
 	checksum, checksumErr := decodeExactLowerHex(response.SHA256)
 	committedAt, timeErr := parseRequiredTime(response.CommittedAt)
@@ -578,7 +392,7 @@ func decodeCommittedRenderObject(allocationID utilities.ID, response renderCommi
 	return recordingrender.CommittedObject{ReservedObject: recordingrender.ReservedObject{AllocationID: responseID, ObjectKey: response.ObjectKey, Purpose: recordingrender.ObjectPurpose(response.Purpose), AllocationVersion: response.AllocationVersion}, Object: recordingrender.ObjectFacts{ObjectKey: response.ObjectKey, ObjectVersion: response.ObjectVersion, ObjectETag: response.ObjectETag, ContentType: response.ContentType, ByteSize: response.ByteSize, SHA256: checksum}, DurationMillis: response.DurationMillis, CommittedAt: committedAt}, nil
 }
 
-func decodeTranscriptionPreparationCommit(input recordingrender.TranscriptionPreparationInput, response renderTranscriptionCommitResponse) (*recordingrender.TranscriptionResult, error) {
+func decodeTranscriptionPreparationCommit(input recordingrender.TranscriptionPreparationInput, response recorderprotocol.TranscriptionCommitResponse) (*recordingrender.TranscriptionResult, error) {
 	if input.TranscriptionSource == nil {
 		if response.TranscriptionSourceID != nil || len(response.TranscriptionJobIDs) != 0 {
 			return nil, ProtocolError{Err: errors.New("unexpected recording transcription preparation response")}
@@ -603,7 +417,7 @@ func decodeTranscriptionPreparationCommit(input recordingrender.TranscriptionPre
 	return &recordingrender.TranscriptionResult{SourceID: sourceID, JobIDs: jobIDs}, nil
 }
 
-func decodeRenderCommit(input recordingrender.CommitInput, response renderCommitResponse) (recordingrender.CommitResult, error) {
+func decodeRenderCommit(input recordingrender.CommitInput, response recorderprotocol.RenderCommitResponse) (recordingrender.CommitResult, error) {
 	recordingID, recordingErr := utilities.ParseID(response.Artifact.RecordingID)
 	tenantID, tenantErr := utilities.ParseID(response.Artifact.TenantID)
 	jobID, jobErr := utilities.ParseID(response.Artifact.RenderJobID)

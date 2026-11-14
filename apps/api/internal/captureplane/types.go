@@ -267,6 +267,25 @@ func (k TrackKind) String() string { return string(k) }
 
 func (l TrackLayer) String() string { return string(l) }
 
+// RID is the simulcast restriction id providers use for the layer, or empty for Auto.
+func (l TrackLayer) RID() string {
+	switch l {
+	case TrackLayerHigh:
+		return "h"
+	case TrackLayerMedium:
+		return "m"
+	case TrackLayerLow:
+		return "l"
+	default:
+		return ""
+	}
+}
+
+// Connection names the capture connection that an operation with this metadata acts on.
+func (m OperationMetadata) Connection(reference ProviderReference) CaptureConnection {
+	return CaptureConnection{ConnectionReference: reference, CaptureEpoch: m.CaptureEpoch, PlanRevision: m.PlanRevision}
+}
+
 func (r NegotiationRequirement) String() string { return string(r) }
 
 func (i CaptureIdentity) String() string {

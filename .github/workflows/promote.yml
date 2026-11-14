@@ -26,6 +26,8 @@ concurrency:
 jobs:
   select:
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       selection: ${{ steps.select.outputs.selection }}
     steps:
@@ -46,6 +48,8 @@ jobs:
   approve:
     needs: select
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     environment: production
     outputs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
@@ -66,7 +70,7 @@ jobs:
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
       - name: Retain the live media pins before the first promotion changes them
         id: media
@@ -76,12 +80,12 @@ jobs:
         run: |
           if [[ -z "$PREVIOUS_MEDIA_SHA256" ]]; then
             python3 scripts/releases/media.py retain_runtime --environment production --output previous-media.json
-            echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
+            echo "members=$(python3 scripts/releases/seal.py text previous-media.json)" >> "$GITHUB_OUTPUT"
           fi
       - name: Save the live production Pages deployment before any upload
         id: pages
         env:
-          CLOUDFLARE_ACCOUNT_ID: "5281943bd26d5bdcf4c3915606cd6bfb"
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           python3 scripts/releases/web.py current
@@ -100,9 +104,10 @@ jobs:
           PAGES_ID: ${{ steps.pages.outputs.pages_deployment_id }}
         run: |
           jq -n --argjson source "$SELECTION" --arg pages "$PAGES_ID" --argjson npm "$(cat previous-npm.json)" '{source:$source, pages_deployment_id:$pages, npm_latest:$npm}' > rollback.json
-          cat rollback.json >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          echo "Rollback source and Pages identity retained in the sealed promotion-rollback artifact." >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: promotion-rollback-${{ github.run_attempt }}
           path: |
             rollback.json
@@ -263,6 +268,8 @@ jobs:
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
       (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -340,6 +347,8 @@ jobs:
     needs: [select, result, scorecard, scorecard-rerun, scorecard-final]
     if: ${{ !cancelled() && needs.result.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     permissions:
       contents: write
     steps:

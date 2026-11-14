@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -41,9 +40,9 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -64,7 +63,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 
-	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
@@ -165,7 +164,10 @@ func run() error {
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	planePolicy := spaces.PlanePolicy{Platform: cfg.DefaultMediaPlane, Allowed: cfg.ChalkSFU.AllowedSpaces, NewSpace: cfg.NewSpace.MediaPlane, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused}
-	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool { return planePolicy.PublicWriteAllowed(spaces.MediaPlaneProvider(plane)) }, spaces.KnownMediaPlaneProvider)
+	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool {
+		provider, err := mediaplane.ParseSettingName(plane)
+		return err == nil && planePolicy.PublicWriteAllowed(provider)
+	}, mediaplane.KnownSettingName)
 	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
 	if err != nil {
 		return fmt.Errorf("configure public invite defaults: %w", err)
@@ -195,7 +197,7 @@ func run() error {
 	}
 	ownCapture := chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled
 	mediaPlaneTelemetry := observability.NewMediaPlaneResolutionTelemetry(logger)
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces, ChalkSFUNewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused, NewEpisodeSwitch: killSwitch, ChalkSFUClientSunset: cfg.ChalkSFU.ClientSunset})
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, Rollout: mediaplaneprovideradapter.Rollout{Spaces: cfg.ChalkSFU.AllowedSpaces, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused, Switch: killSwitch, ClientSunset: cfg.ChalkSFU.ClientSunset}})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -272,6 +274,14 @@ func run() error {
 			return fmt.Errorf("configure Cloudflare SFU adapter: %w", err)
 		}
 	}
+	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
+		ProcessConfig:   cfg.CloudflareRealtime,
+		DefaultProvider: cfg.DefaultMediaPlane,
+		Telemetry:       mediaPlaneTelemetry,
+		ChalkSFU:        chalkSFU,
+		Episodes:        episodeService,
+		Recovery:        postgres.NewEpisodeRecovery(pool),
+	})
 	var recorderWorkerVerifier httpapi.RecorderWorkerVerifier
 	var recorderFleetController httpapi.RecorderFleetControllerService
 	var recorderFleetWorker httpapi.RecorderFleetWorkerService
@@ -309,21 +319,17 @@ func run() error {
 		recorderFleetController = fleet.service
 		recorderFleetWorker = fleet.service
 		recorderFleetVerifier = fleet.controllerVerifier
-		managedBinding, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, cfg.CloudflareRealtime.RealtimeAppID)
+		managedBinding, err := mediaPlaneRegistry.DeploymentBinding(mediaplane.ProviderCloudflareSFU)
 		if err != nil {
 			return fmt.Errorf("configure recording application identity: %w", err)
 		}
-		captureRegistrations := []captureproviders.Registration{{
-			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
-		}}
+		captureRegistrations := []captureproviders.Registration{{Binding: managedBinding, Plane: managedSFU}}
 		if ownCapture {
-			ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, chalkSFU.ApplicationID())
+			ownBinding, err := mediaPlaneRegistry.DeploymentBinding(mediaplane.ProviderChalkSFU)
 			if err != nil {
 				return fmt.Errorf("configure own SFU recording identity: %w", err)
 			}
-			captureRegistrations = append(captureRegistrations, captureproviders.Registration{
-				Provider: ownBinding.Provider, AdapterFingerprint: ownBinding.AdapterFingerprint, Nodes: chalkSFU,
-			})
+			captureRegistrations = append(captureRegistrations, captureproviders.Registration{Binding: ownBinding, Nodes: chalkSFU})
 		}
 		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureRegistrations...)
 		if err != nil {
@@ -346,14 +352,6 @@ func run() error {
 	}
 	var transcriptService transcripts.Service
 
-	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
-		ProcessConfig:   cfg.CloudflareRealtime,
-		DefaultProvider: cfg.DefaultMediaPlane,
-		Telemetry:       mediaPlaneTelemetry,
-		ChalkSFU:        chalkSFU,
-		Episodes:        episodeService,
-		Recovery:        postgres.NewEpisodeRecovery(pool),
-	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
 	var providerBridgeServer *providerbridgeserver.Server
@@ -363,11 +361,11 @@ func run() error {
 	var transcriptionStorage *objectstorage.Service
 	var chatAttachmentService httpapi.ChatAttachmentService
 	var chatParticipantVerifier httpapi.ChatParticipantVerifier
-	var chatCleanupScheduler *chatattachments.CleanupScheduler
+	var chatCleanupScheduler *objectcleanup.Scheduler
 	var recordingSourceCleanupScheduler *transcripts.LocalCleanupScheduler
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
-	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
+	var whiteboardCleanupScheduler *objectcleanup.Scheduler
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -380,22 +378,20 @@ func run() error {
 		transcriptionStorage = &storage
 		chatRepository := postgres.NewChatAttachmentRepository(pool)
 		chatCleanupWorker := chatattachments.NewCleanupWorker(chatRepository, storage)
-		chatCleanupScheduler = chatattachments.NewCleanupScheduler(chatCleanupWorker, 0, logger)
+		chatCleanupScheduler = objectcleanup.NewScheduler(chatCleanupWorker, 0, logger)
 		if syncParticipantVerifierConfigured {
 			chatService := chatattachments.NewService(chatRepository, storage)
-			chatVerifier := chatattachments.NewParticipantVerifier(syncParticipantVerifier)
 			chatAttachmentService = chatService
-			chatParticipantVerifier = chatVerifier
+			chatParticipantVerifier = syncParticipantVerifier
 		}
 		if cfg.Capabilities.WhiteboardFiles {
 			whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
 			whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, storage)
-			whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
+			whiteboardCleanupScheduler = objectcleanup.NewScheduler(whiteboardCleanupWorker, 0, logger)
 			if syncParticipantVerifierConfigured {
 				service := whiteboardfiles.NewService(whiteboardRepository, storage)
-				verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
 				whiteboardFileService = service
-				whiteboardParticipantVerifier = verifier
+				whiteboardParticipantVerifier = syncParticipantVerifier
 			}
 		}
 	}
@@ -684,11 +680,11 @@ func run() error {
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
 		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
-		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
+		verifier, err := spiffe.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
 			return fmt.Errorf("configure provider bridge Sync identity: %w", err)
 		}
-		providerBridgeHandler := httpapi.NewProviderBridgeHandler(providerBridgeService, verifier)
+		providerBridgeHandler := httpapi.NewProviderBridgeHandler(providerBridgeService, verifier.ForRole(spiffe.RoleSync))
 		privateWorkerHandler := diagnostics.WrapHTTP(httpapi.NewPrivateWorkerRouter(providerBridgeHandler, routerOptions))
 		providerBridgeServer, err = providerbridgeserver.New(cfg.ProviderBridge, privateWorkerHandler)
 		if err != nil {
@@ -954,7 +950,7 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 	return config.PublicInviteConfig{
 		Enabled:               true,
 		ManagedTenantID:       managedTenant.ID.String(),
-		DefaultMediaPlane:     mediaplaneproviders.SpaceProviderCloudflareSFU,
+		DefaultMediaPlane:     mediaplane.ProviderCloudflareSFU,
 		WebOrigin:             webOrigin,
 		KeyID:                 localPublicInviteKeyID,
 		PrivateKey:            privateKey,
@@ -997,11 +993,15 @@ func ensureLocalPublicInviteTenant(ctx context.Context, tenantService localPubli
 		cursor = list.Page.NextCursor
 	}
 
-	defaultMediaPlane := mediaplaneproviders.SpaceProviderCloudflareSFU
+	mediaConfig, err := mediaplane.ChalkManagedTenantConfig(mediaplane.ProviderCloudflareSFU)
+	if err != nil {
+		return tenants.Tenant{}, fmt.Errorf("encode local public invite Tenant media config: %w", err)
+	}
+	defaultMediaPlane := mediaplane.ProviderCloudflareSFU.SettingName()
 	created, err := tenantService.CreateTenant(ctx, tenants.CreateTenantInput{
 		Name:                     localPublicInviteTenantName,
 		DefaultMediaPlane:        &defaultMediaPlane,
-		MediaPlaneProviderConfig: json.RawMessage(`{"enabled":true,"provider":"cf_sfu","mode":"chalk_managed"}`),
+		MediaPlaneProviderConfig: mediaConfig,
 	})
 	if err != nil {
 		return tenants.Tenant{}, fmt.Errorf("create local public invite Tenant: %w", err)

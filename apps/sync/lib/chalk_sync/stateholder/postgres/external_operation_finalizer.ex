@@ -457,7 +457,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
            "reason" => reason
          }) do
       {:change, event, _next_state} ->
-        {:ok, String.to_existing_atom(event.name), event.payload}
+        {:ok, :participant_left, event.payload}
 
       {:error, reason} ->
         {:error, reason}
@@ -662,7 +662,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
            "reason" => reason
          }) do
       {:change, event, next_state} ->
-        if name == String.to_existing_atom(event.name) and payload == event.payload,
+        if name == :participant_left and payload == event.payload,
           do: {:ok, event, next_state},
           else: {:error, :invalid_operation_outcome}
 

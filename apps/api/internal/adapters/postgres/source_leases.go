@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -24,7 +25,7 @@ func (s SourceGrants) ListRenewableSourceGrants(ctx context.Context, after provi
 		AfterTenantID:      uuidOrZero(after.TenantID),
 		AfterEpisodeID:     uuidOrZero(after.EpisodeID),
 		AfterParticipantID: uuidOrZero(after.ParticipantID),
-		AfterSource:        after.Source,
+		AfterSource:        string(after.Source),
 		PageSize:           int32(min(limit, 10_000)),
 	})
 	if err != nil {
@@ -38,7 +39,7 @@ func (s SourceGrants) ListRenewableSourceGrants(ctx context.Context, after provi
 			Node:          row.Node,
 			Generation:    row.Generation,
 			ParticipantID: nullableID(row.ParticipantID),
-			Source:        row.Source,
+			Source:        mediaplane.PublicationSource(row.Source),
 			Revision:      row.ControlRevision,
 		})
 	}

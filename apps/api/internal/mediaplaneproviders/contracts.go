@@ -12,12 +12,6 @@ import (
 )
 
 const (
-	SpaceProviderCloudflareSFU = string(spaces.MediaPlaneProviderCloudflareSFU)
-	ModeChalkManaged           = "chalk_managed"
-	ModeTenantManaged          = "tenant_managed"
-	ModeDisabled               = "disabled"
-	ModeUnknown                = "unknown"
-
 	ConfigurationSourceDeploymentDefault   = "deployment_default"
 	ConfigurationSourceTenantChalkManaged  = "tenant_chalk_managed"
 	ConfigurationSourceTenantManaged       = "tenant_managed"
@@ -32,11 +26,9 @@ const (
 )
 
 var (
-	ErrUnknownProvider       = errors.New("unknown media plane provider")
-	ErrInvalidMode           = errors.New("invalid media plane mode")
-	ErrMissingProviderConfig = errors.New("missing media plane provider config")
-	ErrInvalidProviderConfig = errors.New("invalid media plane provider config")
-	ErrAdapterUnavailable    = errors.New("media plane adapter unavailable")
+	ErrUnknownProvider    = errors.New("unknown media plane provider")
+	ErrInvalidMode        = errors.New("invalid media plane mode")
+	ErrAdapterUnavailable = errors.New("media plane adapter unavailable")
 )
 
 type Resolver interface {
@@ -44,7 +36,7 @@ type Resolver interface {
 }
 
 type Resolution struct {
-	Provider            spaces.MediaPlaneProvider
+	Provider            mediaplane.Provider
 	ConfigurationSource string
 	Mode                string
 	Outcome             string
@@ -55,5 +47,5 @@ type Resolution struct {
 type Telemetry interface {
 	RecordResolution(context.Context, Resolution)
 	// RecordPlacement counts where a new Episode went and why.
-	RecordPlacement(context.Context, spaces.MediaPlaneProvider, mediaplane.PlacementReason)
+	RecordPlacement(context.Context, mediaplane.Provider, mediaplane.PlacementReason)
 }

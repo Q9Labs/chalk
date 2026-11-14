@@ -1,6 +1,6 @@
 # Real-call proofs
 
-`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans, their media planes and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:fleet`, `prod:sfu-e2e`, `prod:latency`, `prod:sfu-classes`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
+`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans, their media planes and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:latency`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -103,22 +103,11 @@ pnpm prod:latency --environment staging --samples 3 --planes chalk_sfu
 - It writes a private report and one `scorecard-<plane>.json` per plane in the public `chalk.scorecard/v1` shape (no hosts, IPs, URLs or Tenant or Space IDs). It fails on a p95 over the `action.*` budgets in [`perf/budgets.json`](../../perf/budgets.json), on any timeout, or when a plane has fewer kept cycles than `--samples`.
 - Diagnostics (round trips, one-way audio estimate, selected ICE pair, stage timings from a wire trace that only this kit installs) go to the sidecar `latency-diagnostics-<plane>.json`, never into a card, budget or verdict. See [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
 
-## Canary and fleet
+## Canary
 
-`pnpm prod:canary` proves the thresholds with two guests at a time. `pnpm prod:fleet` is the volume half of the canary exit: scripted joins and fault trials pass, plus at least 200 calls and 50 call-hours with no P1. It runs many 2-to-6-guest calls in parallel on one machine, each a new Episode with real SDK clients and generated media, working through a shuffled script of mutes, camera toggles, screen shares, rejoins and holds. Fractions and limits are flags of `fleet.mjs`.
+`pnpm prod:canary` proves the thresholds with two guests at a time.
 
 - **Joins are reported twice.** `summary.join` ends on the first 500 ms stats poll that sees growing audio and video at both guests (rounded up by up to one poll) and is the number to compare with old runs. `summary.joinEvent` (`render-probe.mjs`) ends on the last guest's first presented frame and first received audio packet.
-- **Faults are fleet-wide**, because every call on the machine shares its media path. At each interval the fleet waits for all running calls to reach a checkpoint, runs `CHALK_CANARY_FAULT_DOWN`, holds, has every call prove its camera stalled, runs `CHALK_CANARY_FAULT_UP` and times each call's recovery. Without both commands the run refuses to start; `--fault-interval-seconds 0` turns faults off. The commands need root; the example blocks outgoing UDP except DNS, which stops media without naming a node address.
-- **A P1** prints as `P1 <reason> <call>`. The reasons are in `fleet-criteria.mjs`: slow or missing join rendering, slow or missing recovery after a fault, a muted microphone or disabled camera still reaching others (`mute_leak`), fault recovery re-enabling muted media (`consent_reenabled`), and media or roster crossing calls (`cross_tenant`, the closest check one Tenant allows). Other findings fail the run without being a P1.
-- **Load decides capacity.** Each finding carries the load per core, and the fleet starts no new call above `--max-load`. Add machines, not concurrency, when load stays high. On a 4 vCPU Instabox machine a guest cost about 0.2 vCPU; larger-machine scale is unmeasured.
-- **The fleet never picks a target.** `--allow-host` names the API host a run may use and must match the proof configuration, so a configuration pointing at production fails unless named on purpose. It stops starting calls at the first P1 unless `--no-stop-on-p1`, and writes a summary and a calls file under `.private/prod-proof/<run>/`. Runs on several machines merge with `pnpm prod:fleet --merge <calls files>`; `--dry-run` exercises the scheduler without an API or browsers.
-
-```sh
-CHALK_PROOF_CONFIG_SOURCE=env CHALK_PROOF_MEDIA_PLANE=chalk_sfu \
-  CHALK_CANARY_FAULT_DOWN='iptables -I OUTPUT -p udp ! --dport 53 -j DROP' \
-  CHALK_CANARY_FAULT_UP='iptables -D OUTPUT -p udp ! --dport 53 -j DROP' \
-  pnpm prod:fleet --allow-host <api host> --concurrency 6
-```
 
 ## GitHub Actions
 
@@ -135,7 +124,7 @@ jobs:
       CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
 ```
 
-Define these in each GitHub environment (`production`, `nightly`), using that environment's own Tenant, never production's for nightly: secret `CHALK_PROOF_API_KEY`; variables `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN` (and for the nightly `CHALK_PROOF_PROOF_ORIGIN_OWN`), `CHALK_PROOF_WEBHOOK_SERVICE_URL`, `CHALK_PROOF_WEBHOOK_ENDPOINT_ID`, `CHALK_PROOF_EVIDENCE_RECIPIENT`. For unattended runs the environment must allow the workflow's ref without human approval.
+Define these in each GitHub environment (`production`, `nightly`), using that environment's own Tenant, never production's for nightly: secrets `CHALK_PROOF_API_KEY`, `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_WEBHOOK_SERVICE_URL` and `CHALK_PROOF_WEBHOOK_ENDPOINT_ID` (the repository is public, and a variable prints in the step log while a secret is masked); variables `CHALK_PROOF_PROOF_ORIGIN` (and for the nightly `CHALK_PROOF_PROOF_ORIGIN_OWN`) and `CHALK_PROOF_EVIDENCE_RECIPIENT`. For unattended runs the environment must allow the workflow's ref without human approval.
 
 Public repository artifacts are publicly downloadable, so evidence is encrypted with `age` to the public recipient in `CHALK_PROOF_EVIDENCE_RECIPIENT` (`age1...`, validated before the call; keep the private identity outside GitHub), uploaded even after failure, with three-day retention. Public logs carry fixed phases, statuses and allowlisted reason codes only; raw errors stay in the encrypted evidence, and dynamic credentials are registered with GitHub masking. To read an artifact:
 

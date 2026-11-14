@@ -17,6 +17,8 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       current: ${{ steps.plan.outputs.current }}
       previous: ${{ steps.plan.outputs.previous }}
@@ -99,6 +101,8 @@ jobs:
     needs: [plan, deploy-current, roll-back, roll-forward]
     if: always()
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require each leg to have applied its own source release

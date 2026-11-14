@@ -1,8 +1,17 @@
 import { Socket, isIP } from "node:net";
 
 const localHosts = new Set(["localhost", "::1"]);
+const guarded = Symbol.for("chalk.test.no-network");
 const connect = Socket.prototype.connect;
-Socket.prototype.connect = function (...args) {
+
+// run.mjs preloads this file and each SDK vitest config loads it too, so a direct vitest run is guarded as well.
+// A second load must not wrap the connection again.
+if (!connect[guarded]) {
+  guard[guarded] = true;
+  Socket.prototype.connect = guard;
+}
+
+function guard(...args) {
   const normalized = Array.isArray(args[0]) ? args[0] : args;
   const hostname = connectionHostname(...normalized);
   if (!isLocal(hostname)) {
@@ -15,7 +24,7 @@ Socket.prototype.connect = function (...args) {
     throw error;
   }
   return Reflect.apply(connect, this, args);
-};
+}
 
 // Node also passes its normalized argument array between socket implementations.
 function connectionHostname(options, host) {

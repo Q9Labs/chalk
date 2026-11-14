@@ -155,8 +155,6 @@ type Repository interface {
 	CommitAllocation(ctx context.Context, allocation Allocation, facts objectstorage.ObjectFacts, manifestDigest []byte, committedAt time.Time) (Bundle, error)
 }
 
-type Clock func() time.Time
-
 func (a Authority) Validate() error {
 	for name, value := range map[string]string{
 		"tenant_id": a.TenantID, "episode_id": a.EpisodeID, "recording_id": a.RecordingID,

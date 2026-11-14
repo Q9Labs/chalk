@@ -30,7 +30,7 @@ func pullPublishedRequest(t *testing.T) sfuTracksEndpointRequest {
 	return sfuTracksEndpointRequest{ParticipantID: self, Body: sfuTracksRequest{ConnectionID: "connection-self", PullPublishedAudio: true}}
 }
 
-func publication(t *testing.T, participant utilities.ID, source, id string, enabled bool) provideroperations.Publication {
+func publication(t *testing.T, participant utilities.ID, source mediaplane.PublicationSource, id string, enabled bool) provideroperations.Publication {
 	t.Helper()
 	return provideroperations.Publication{ParticipantID: participant, Source: source, Enabled: enabled, PublicationID: id}
 }

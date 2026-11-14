@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { AssignmentError } from "./errors.js";
+import { BodyTooLargeError, readBoundedBody } from "./bounded-body.js";
+import { AssignmentError, isRetryableStatus } from "./errors.js";
+import type { DispatcherLogger } from "./types.js";
 
 interface FetchVerifiedOptions {
   fetch: typeof fetch;
@@ -19,49 +21,22 @@ export interface VerifiedBytes {
 
 export async function fetchVerified(options: FetchVerifiedOptions): Promise<VerifiedBytes> {
   const response = await options.fetch(options.url, { method: "GET", ...(options.signal === undefined ? {} : { signal: options.signal }) });
-  if (!response.ok) throw new AssignmentError("chunk download failed", response.status === 408 || response.status === 429 || response.status >= 500);
+  if (!response.ok) throw new AssignmentError("chunk download failed", isRetryableStatus(response.status));
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
   if (contentType?.toLowerCase() !== options.expectedContentType.toLowerCase()) throw new AssignmentError("chunk content type mismatch");
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && Number(declaredLength) > options.maxBytes) throw new AssignmentError("chunk exceeded size bound");
   if (declaredLength && Number(declaredLength) !== options.expectedSizeBytes) throw new AssignmentError("chunk size mismatch");
-  const bytes = await boundedResponseBytes(response, options.maxBytes);
+  const bytes = await readBoundedBody(response, options.maxBytes).catch((error: unknown) => {
+    throw error instanceof BodyTooLargeError ? new AssignmentError("response exceeded size bound") : error;
+  });
   if (bytes.byteLength !== options.expectedSizeBytes) throw new AssignmentError("chunk size mismatch");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   if (sha256 !== options.expectedSha256.toLowerCase()) throw new AssignmentError("chunk checksum mismatch");
   return { bytes, contentType, sha256 };
 }
 
-async function boundedResponseBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
-  if (!response.body) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maxBytes) throw new AssignmentError("response exceeded size bound");
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      total += next.value.byteLength;
-      if (total > maxBytes) throw new AssignmentError("response exceeded size bound");
-      chunks.push(next.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
-}
-
-export async function conditionalPutJson(options: { fetch: typeof fetch; url: string; body: Uint8Array; checksumSha256: string; signal?: AbortSignal }): Promise<"created" | "already_exists"> {
+async function conditionalPutJson(options: { fetch: typeof fetch; url: string; body: Uint8Array; checksumSha256: string; signal?: AbortSignal }): Promise<"created" | "already_exists"> {
   if (!/^[a-f0-9]{64}$/i.test(options.checksumSha256)) throw new AssignmentError("result checksum is invalid");
   const response = await options.fetch(options.url, {
     method: "PUT",
@@ -74,6 +49,19 @@ export async function conditionalPutJson(options: { fetch: typeof fetch; url: st
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
   if (response.status === 412) return "already_exists";
-  if (!response.ok) throw new AssignmentError("result upload failed", response.status === 408 || response.status === 429 || response.status >= 500);
+  if (!response.ok) throw new AssignmentError("result upload failed", isRetryableStatus(response.status));
   return "created";
+}
+
+/**
+ * Upload a result object. The control plane verifies an object that already
+ * exists against this checksum, size and content type before it accepts
+ * completion, so a retry after a good PUT and a failed completion is safe.
+ */
+export async function putResult(options: { fetch: typeof fetch; url: string; body: Uint8Array; maxBytes: number; tooLarge: string; logger: DispatcherLogger; logPrefix: string }): Promise<{ checksumSha256: string; sizeBytes: number }> {
+  if (options.body.byteLength > options.maxBytes) throw new AssignmentError(options.tooLarge);
+  const checksumSha256 = createHash("sha256").update(options.body).digest("hex");
+  const outcome = await conditionalPutJson({ fetch: options.fetch, url: options.url, body: options.body, checksumSha256 });
+  if (outcome === "already_exists") options.logger.warn(`${options.logPrefix}_existing_result_verified_by_completion`);
+  return { checksumSha256, sizeBytes: options.body.byteLength };
 }

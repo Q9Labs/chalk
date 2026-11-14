@@ -1,0 +1,49 @@
+name: Download sealed artifacts
+description: >-
+  Download workflow artifacts and open their sealed files in place. Artifacts from before sealing hold plain files,
+  which stay as they are. Takes the inputs of actions/download-artifact that the release workflows use.
+
+inputs:
+  key:
+    description: The release seal key, from the secret CHALK_RELEASE_SEAL_KEY.
+    required: true
+  path:
+    description: Directory to download into.
+    required: true
+  name:
+    description: Artifact name.
+    default: ""
+  pattern:
+    description: Artifact name pattern.
+    default: ""
+  artifact-ids:
+    description: Artifact ids, comma separated.
+    default: ""
+  run-id:
+    description: Run that produced the artifacts.
+    default: ${{ github.run_id }}
+  github-token:
+    description: Token that reads artifacts of another run.
+    default: ${{ github.token }}
+  merge-multiple:
+    description: Merge several artifacts into one directory.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      with:
+        name: ${{ inputs.name }}
+        pattern: ${{ inputs.pattern }}
+        artifact-ids: ${{ inputs.artifact-ids }}
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}
+        merge-multiple: ${{ inputs.merge-multiple }}
+        path: ${{ inputs.path }}
+    - name: Open the sealed files
+      shell: bash
+      env:
+        CHALK_RELEASE_SEAL_KEY: ${{ inputs.key }}
+        DIRECTORY: ${{ inputs.path }}
+      run: python3 "$GITHUB_WORKSPACE/scripts/releases/seal.py" unseal "$DIRECTORY"

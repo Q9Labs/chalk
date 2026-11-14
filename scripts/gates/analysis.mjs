@@ -21,7 +21,27 @@ const goModules = ["apps/api", "features/media/sfu"];
 const gocyclo = "github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0";
 const deadcode = "golang.org/x/tools/cmd/deadcode@v0.52.0";
 const jscpd = "jscpd@5.4.3";
-const jscpdIgnore = ["**/generated/**", "**/sqlc/**", "**/node_modules/**", "**/dist/**", "**/.git/**", "**/pnpm-lock.yaml", "**/*.lock", "**/*.test.*", "**/*_test.go", "**/test/**", "**/tests/**", "**/testdata/**", "**/fixtures/**", "tools/formal/media-control/results/**", "**/*.md", "**/*.json", "**/*.sql", "**/*.yml", "**/*.yaml"];
+const jscpdIgnore = [
+  "**/generated/**",
+  "**/sqlc/**",
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/.git/**",
+  "**/pnpm-lock.yaml",
+  "**/*.lock",
+  "**/*.test.*",
+  "**/*_test.go",
+  "**/test/**",
+  "**/tests/**",
+  "**/testdata/**",
+  "**/fixtures/**",
+  "tools/formal/media-control/results/**",
+  "**/*.md",
+  "**/*.json",
+  "**/*.sql",
+  "**/*.yml",
+  "**/*.yaml",
+];
 
 function run(command, args, { cwd = repositoryRoot, okStatuses = [0] } = {}) {
   try {

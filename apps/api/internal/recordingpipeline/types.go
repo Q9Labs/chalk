@@ -14,7 +14,7 @@ const (
 	MaximumParticipants        = 100
 	MinimumEpisodeParticipants = 1
 	MaximumEpisodeParticipants = 10
-	MaximumRecordingDuration   = 4 * time.Hour
+	MaximumRecordingDuration   = artifactpolicy.MaximumRecordingDuration
 	// The c-2/two-page render profile took about 5.9 times media duration
 	// on the qualified fixture. Keep an absolute budget across retries,
 	// staging, and encoding for a maximum-length Recording.

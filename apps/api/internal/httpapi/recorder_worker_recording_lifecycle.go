@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -18,30 +19,12 @@ type RecorderRecordingLifecycleService interface {
 	PublishStopped(context.Context, recordinglifecycle.StoppedInput) (recordinglifecycle.Publication, error)
 }
 
-type recorderCaptureLifecycleAuthorityBody struct {
-	recorderRecordingAuthorityBody
-	SpaceID string `json:"space_id"`
-}
-
-type recorderCaptureReadyBody struct {
-	recorderCaptureLifecycleAuthorityBody
-	RequestKey  string `json:"request_key"`
-	ObservedAt  string `json:"observed_at"`
-	NoPublisher bool   `json:"no_publisher"`
-}
-
-type recorderCaptureStoppedBody struct {
-	recorderCaptureLifecycleAuthorityBody
-	RequestKey string `json:"request_key"`
-	ObservedAt string `json:"observed_at"`
-}
-
 func mountRecorderRecordingLifecycleRoutes(router chi.Router, service RecorderRecordingLifecycleService) {
 	if service == nil {
 		return
 	}
-	router.Post("/capture/ready", recorderCaptureReadyHandler(service))
-	router.Post("/capture/stopped", recorderCaptureStoppedHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureReady), recorderCaptureReadyHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureStopped), recorderCaptureStoppedHandler(service))
 }
 
 func recorderCaptureReadyHandler(service RecorderRecordingLifecycleService) http.HandlerFunc {
@@ -51,11 +34,11 @@ func recorderCaptureReadyHandler(service RecorderRecordingLifecycleService) http
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderCaptureReadyBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.CaptureReadyRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, observedAt, ok := parseRecorderCaptureLifecycle(identity, body.recorderCaptureLifecycleAuthorityBody, body.ObservedAt)
+		authority, observedAt, ok := parseRecorderCaptureLifecycle(identity, body.CaptureLifecycleAuthority, body.ObservedAt)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording capture ready callback")
 			return
@@ -75,11 +58,11 @@ func recorderCaptureStoppedHandler(service RecorderRecordingLifecycleService) ht
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderCaptureStoppedBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.CaptureStoppedRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, observedAt, ok := parseRecorderCaptureLifecycle(identity, body.recorderCaptureLifecycleAuthorityBody, body.ObservedAt)
+		authority, observedAt, ok := parseRecorderCaptureLifecycle(identity, body.CaptureLifecycleAuthority, body.ObservedAt)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording capture stopped callback")
 			return
@@ -97,8 +80,8 @@ func recorderCaptureStoppedHandler(service RecorderRecordingLifecycleService) ht
 	}
 }
 
-func parseRecorderCaptureLifecycle(identity workeridentity.Identity, body recorderCaptureLifecycleAuthorityBody, observedAtValue string) (recordinglifecycle.Authority, time.Time, bool) {
-	base, ok := parseRecorderRecordingAuthority(identity, body.recorderRecordingAuthorityBody)
+func parseRecorderCaptureLifecycle(identity workeridentity.Identity, body recorderprotocol.CaptureLifecycleAuthority, observedAtValue string) (recordinglifecycle.Authority, time.Time, bool) {
+	base, ok := parseRecorderRecordingAuthority(identity, body.RecordingAuthority)
 	spaceID, spaceErr := utilities.ParseID(body.SpaceID)
 	observedAt, observedErr := time.Parse(time.RFC3339Nano, observedAtValue)
 	if !ok || spaceErr != nil || observedErr != nil || observedAt.IsZero() || observedAt.UTC().Format(time.RFC3339Nano) != observedAtValue {
@@ -123,7 +106,7 @@ func writeRecorderRecordingLifecycleError(w http.ResponseWriter, request *http.R
 	case errors.Is(err, recordinglifecycle.ErrDeadlineStopPending):
 		writeError(w, http.StatusServiceUnavailable, "capture.deadline_pending", "Capture deadline has not yet elapsed")
 	case errors.Is(err, recordinglifecycle.ErrEpisodeStopPending):
-		observability.LogHTTPError(request.Context(), request.Method, "/internal/v1/recorder/capture/stopped", "episode.stop_pending", err)
+		observability.LogHTTPError(request.Context(), request.Method, recorderprotocol.RouteCaptureStopped.Path(), "episode.stop_pending", err)
 		writeError(w, http.StatusServiceUnavailable, "episode.stop_pending", "Episode stop is still being applied")
 	case errors.Is(err, recordinglifecycle.ErrAuthorityMismatch):
 		writeError(w, http.StatusConflict, "lease.stale", "Recording capture authority is stale or unavailable")

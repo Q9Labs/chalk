@@ -88,15 +88,13 @@ func (input WaitInput) Validate(now time.Time) error {
 	return nil
 }
 
-// Clock and WaitFunc make waiting deterministic in tests and permit callers
-// to integrate a scheduler without embedding time.Sleep in the domain.
-type Clock func() time.Time
+// WaitFunc lets callers integrate a scheduler without embedding time.Sleep in the domain.
 type WaitFunc func(context.Context, time.Duration) error
 
 // Config controls the service's polling behavior. Zero values select bounded
 // production defaults.
 type Config struct {
-	Now          Clock
+	Now          utilities.Clock
 	Wait         WaitFunc
 	PollInterval time.Duration
 }
@@ -105,7 +103,7 @@ type Config struct {
 // a Repository. It contains no database transaction or provider state.
 type Service struct {
 	repository   Repository
-	now          Clock
+	now          utilities.Clock
 	wait         WaitFunc
 	pollInterval time.Duration
 }
@@ -133,7 +131,7 @@ func NewServiceWithConfig(repository Repository, config Config) Service {
 	return Service{repository: repository, now: now, wait: wait, pollInterval: pollInterval}
 }
 
-func (s Service) WithClock(now Clock) Service {
+func (s Service) WithClock(now utilities.Clock) Service {
 	if now != nil {
 		s.now = now
 	}

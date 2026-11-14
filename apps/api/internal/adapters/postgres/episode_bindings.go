@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -62,7 +62,7 @@ func (e EpisodeBindings) CaptureSupported(ctx context.Context, tenantID, episode
 	if err != nil {
 		return err
 	}
-	if provider == string(spaces.MediaPlaneProviderChalkSFU) && !e.ownCapture {
+	if provider == mediaplane.ProviderChalkSFU.SettingName() && !e.ownCapture {
 		return recordingpipeline.ErrCaptureUnsupported
 	}
 	return nil

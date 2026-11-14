@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 	"time"
-)
 
-type Clock func() time.Time
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
 
 type Service struct {
 	repository Repository
-	now        Clock
+	now        utilities.Clock
 }
 
-func NewService(repository Repository, now Clock) (Service, error) {
+func NewService(repository Repository, now utilities.Clock) (Service, error) {
 	if repository == nil {
 		return Service{}, ErrRepositoryUnavailable
 	}

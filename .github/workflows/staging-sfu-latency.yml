@@ -28,6 +28,8 @@ jobs:
   target:
     name: Find the nightly staging runs
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -65,6 +67,8 @@ jobs:
     needs: [target, latency]
     if: always() && needs.target.outputs.sha != ''
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 20
     permissions:
       contents: write

@@ -19,6 +19,8 @@ jobs:
       actions: write
       deployments: write
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       should_cut: ${{ steps.plan.outputs.should_cut }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
@@ -27,6 +29,7 @@ jobs:
       baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
       recorder_control: ${{ steps.plan.outputs.recorder_control }}
       previous_nightly_sha: ${{ steps.plan.outputs.previous_nightly_sha }}
+      recording_changed: ${{ steps.plan.outputs.recording_changed }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
@@ -82,7 +85,8 @@ jobs:
     with:
       environment: nightly
       # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
-      proofs: camera-share call-artifacts long-call chat-upload
+      # call-artifacts boots recorder droplets, so it runs only on a cut that changed a recording path; Promote runs it every time.
+      proofs: ${{ needs.plan.outputs.recording_changed == 'true' && 'camera-share call-artifacts long-call chat-upload' || 'camera-share long-call chat-upload' }}
       media_plane: chalk_sfu
       # Only the first cut of a UTC day pays for a Transcript (the plan decides); every cut still records and checks the call.
       transcribe: ${{ needs.plan.outputs.transcribe == 'true' }}
@@ -102,6 +106,8 @@ jobs:
     needs: [plan, release, proof, web-e2e, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,6 +138,8 @@ jobs:
     needs: [plan, record]
     if: needs.plan.outputs.should_cut == 'true' && needs.record.result == 'success'
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     permissions:
       contents: write
     steps:

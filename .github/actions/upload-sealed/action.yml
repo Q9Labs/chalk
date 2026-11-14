@@ -1,0 +1,52 @@
+name: Upload a sealed artifact
+description: >-
+  Upload release files as ciphertext. Release manifests and media pins name the AWS account, registry and bucket, and
+  the artifacts of a public repository are readable by anyone, so only sealed copies are uploaded. The originals stay
+  in place for the later steps of the job.
+
+inputs:
+  name:
+    description: Artifact name.
+    required: true
+  path:
+    description: Files or directories to seal, one per line. A directory keeps its relative layout; a file lands at the top.
+    required: true
+  key:
+    description: The release seal key, from the secret CHALK_RELEASE_SEAL_KEY.
+    required: true
+  if-no-files-found:
+    description: "`error` fails the step when nothing matches; `ignore` uploads nothing."
+    default: error
+  retention-days:
+    description: Days to keep the artifact; 0 keeps the repository default.
+    default: "0"
+
+outputs:
+  artifact-id:
+    description: Id of the uploaded artifact.
+    value: ${{ steps.upload.outputs.artifact-id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Seal the files
+      shell: bash
+      env:
+        CHALK_RELEASE_SEAL_KEY: ${{ inputs.key }}
+        PATHS: ${{ inputs.path }}
+        OUT: ${{ runner.temp }}/sealed-${{ inputs.name }}
+        MISSING: ${{ inputs.if-no-files-found }}
+      run: |
+        set -euo pipefail
+        mapfile -t paths < <(printf '%s\n' "$PATHS" | sed '/^[[:space:]]*$/d')
+        rm -rf "$OUT"
+        flags=()
+        if [[ "$MISSING" == ignore ]]; then flags+=(--allow-empty); fi
+        python3 "$GITHUB_WORKSPACE/scripts/releases/seal.py" seal "${flags[@]}" --out "$OUT" "${paths[@]}"
+    - id: upload
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/sealed-${{ inputs.name }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}

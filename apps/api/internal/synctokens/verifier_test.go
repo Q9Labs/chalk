@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestVerifierUsesAnAdversarialSignedTokenTable(t *testing.T) {
+type verifierFixture struct {
+	verifier   synctokens.Verifier
+	privateKey ed25519.PrivateKey
+	input      synctokens.Input
+	token      string
+	now        time.Time
+}
+
+func newVerifierFixture(t *testing.T) verifierFixture {
+	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -28,13 +38,13 @@ func TestVerifierUsesAnAdversarialSignedTokenTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	startedAt := time.Date(2026, 7, 29, 13, 59, 58, 123_000_000, time.UTC)
 	input := synctokens.Input{
 		TenantID: id(t), SpaceID: id(t), EpisodeID: id(t), ParticipantID: id(t),
 		ParticipantGeneration: 3, AdmissionLifecycleIntentID: id(t),
 		DisplayName: "Ada", Role: "participant", Capabilities: []string{"subscribe"},
+		StartedAt: &startedAt,
 	}
-	startedAt := time.Date(2026, 7, 29, 13, 59, 58, 123_000_000, time.UTC)
-	input.StartedAt = &startedAt
 	token, err := signer.Issue(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -50,48 +60,40 @@ func TestVerifierUsesAnAdversarialSignedTokenTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return verifierFixture{verifier: verifier, privateKey: privateKey, input: input, token: token.Value, now: now}
+}
 
-	tests := []struct {
-		name  string
-		token string
-		valid bool
-	}{
-		{name: "valid", token: token.Value, valid: true},
-		{name: "subject does not match participant", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["sub"] = id(t).String()
-		})},
-		{name: "wrong audience", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["aud"] = "chalk-media"
-		})},
-		{name: "expired", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["exp"] = now.Add(-time.Minute).Unix()
-		})},
-		{name: "not yet valid", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["nbf"] = now.Add(time.Minute).Unix()
-		})},
-		{name: "zero generation", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["participant_generation"] = 0
-		})},
-		{name: "unknown capability", token: rewriteClaims(t, token.Value, privateKey, func(claims map[string]any) {
-			claims["capabilities"] = []string{"delete_everything"}
-		})},
-		{name: "invalid signature", token: tamperSignature(t, token.Value)},
-		{name: "malformed", token: "not-a-token"},
+func TestVerifierAcceptsAValidToken(t *testing.T) {
+	f := newVerifierFixture(t)
+	subject, err := f.verifier.Verify(context.Background(), f.token)
+	if err != nil {
+		t.Fatalf("valid token rejected: %v", err)
 	}
+	if subject.TenantID != f.input.TenantID || subject.ParticipantID != f.input.ParticipantID || subject.ParticipantGeneration != f.input.ParticipantGeneration {
+		t.Fatalf("subject = %#v", subject)
+	}
+}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			subject, err := verifier.Verify(context.Background(), test.token)
-			if test.valid {
-				if err != nil {
-					t.Fatalf("valid token rejected: %v", err)
-				}
-				if subject.TenantID != input.TenantID || subject.ParticipantID != input.ParticipantID || subject.ParticipantGeneration != input.ParticipantGeneration {
-					t.Fatalf("subject = %#v", subject)
-				}
-				return
-			}
-			if !errors.Is(err, synctokens.ErrInvalidCredential) {
+func TestVerifierRejectsAdversarialTokens(t *testing.T) {
+	f := newVerifierFixture(t)
+	claimChanges := map[string]map[string]any{
+		"subject does not match participant": {"sub": id(t).String()},
+		"wrong audience":                     {"aud": "chalk-media"},
+		"expired":                            {"exp": f.now.Add(-time.Minute).Unix()},
+		"not yet valid":                      {"nbf": f.now.Add(time.Minute).Unix()},
+		"zero generation":                    {"participant_generation": 0},
+		"unknown capability":                 {"capabilities": []string{"delete_everything"}},
+	}
+	tokens := map[string]string{
+		"invalid signature": tamperSignature(t, f.token),
+		"malformed":         "not-a-token",
+	}
+	for name, changes := range claimChanges {
+		tokens[name] = rewriteClaims(t, f.token, f.privateKey, func(claims map[string]any) { maps.Copy(claims, changes) })
+	}
+	for name, token := range tokens {
+		t.Run(name, func(t *testing.T) {
+			if _, err := f.verifier.Verify(context.Background(), token); !errors.Is(err, synctokens.ErrInvalidCredential) {
 				t.Fatalf("error = %v, want %v", err, synctokens.ErrInvalidCredential)
 			}
 		})

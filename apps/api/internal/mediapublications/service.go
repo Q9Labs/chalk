@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
@@ -25,10 +26,6 @@ const (
 	maxAppendAttempts   = 4
 )
 
-var publicationSources = map[string]struct{}{
-	"microphone": {}, "camera": {}, "screen": {}, "screen_audio": {},
-}
-
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
 
 type Repository interface {
@@ -45,13 +42,13 @@ type PublicationParticipant struct {
 }
 
 type PublishedTrack struct {
-	Source    string
+	Source    mediaplane.PublicationSource
 	MID       string
 	TrackName string
 }
 
 type PublishedReference struct {
-	Source        string
+	Source        mediaplane.PublicationSource
 	MID           string
 	TrackName     string
 	PublicationID string
@@ -73,7 +70,7 @@ type CloseInput struct {
 	ParticipantGeneration int64
 	ConnectionID          string
 	MID                   string
-	Source                string
+	Source                mediaplane.PublicationSource
 	PublicationID         string
 	// OnlyWhileEnabled makes the close a no-op when the publication was muted in place after the caller chose it.
 	OnlyWhileEnabled bool
@@ -83,7 +80,7 @@ type AvailabilityInput struct {
 	TenantID      utilities.ID
 	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
-	Source        string
+	Source        mediaplane.PublicationSource
 	PublicationID string
 	Enabled       bool
 }
@@ -126,7 +123,7 @@ func (s Service) RecordPublicationAvailability(ctx context.Context, input Availa
 		return ErrUnavailable
 	}
 	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() ||
-		input.PublicationID == "" || (input.Source != "camera" && input.Source != "microphone" && input.Source != "screen" && input.Source != "screen_audio") {
+		input.PublicationID == "" || !input.Source.Valid() {
 		return ErrInvalidPublication
 	}
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
@@ -171,6 +168,10 @@ type RemoteTrackObserver interface {
 	ObserveRemoteTracks(context.Context, RemoteTrackObservationInput) error
 }
 
+// Service keeps its absence evidence, receive health and liveness checks in
+// process memory. That is correct only while one API process serves the
+// deployment: production runs a single API container on a single node, and
+// single_instance_test.go fails when the deployment stops declaring that.
 type Service struct {
 	repository      Repository
 	absenceEvidence *remoteTrackAbsenceEvidence
@@ -478,16 +479,16 @@ func sortedPublications(publications map[string]provideroperations.Publication) 
 
 func validateInput(input *RecordInput) error {
 	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
-	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > len(publicationSources) {
+	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > len(mediaplane.AllSources) {
 		return ErrInvalidPublication
 	}
-	seen := make(map[string]struct{}, len(input.Tracks))
+	seen := make(map[mediaplane.PublicationSource]struct{}, len(input.Tracks))
 	for index := range input.Tracks {
 		track := &input.Tracks[index]
-		track.Source = strings.TrimSpace(track.Source)
+		track.Source = track.Source.Trimmed()
 		track.MID = strings.TrimSpace(track.MID)
 		track.TrackName = strings.TrimSpace(track.TrackName)
-		if _, validSource := publicationSources[track.Source]; !validSource || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
+		if !track.Source.Valid() || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
 			return ErrInvalidPublication
 		}
 		if _, exists := seen[track.Source]; exists {
@@ -501,12 +502,12 @@ func validateInput(input *RecordInput) error {
 func validateCloseInput(input *CloseInput) error {
 	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
 	input.MID = strings.TrimSpace(input.MID)
-	input.Source = strings.TrimSpace(input.Source)
+	input.Source = input.Source.Trimmed()
 	input.PublicationID = strings.TrimSpace(input.PublicationID)
 	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
 		return ErrInvalidPublication
 	}
-	if _, validSource := publicationSources[input.Source]; !validSource {
+	if !input.Source.Valid() {
 		return ErrInvalidPublication
 	}
 	reference, err := ParseReference(input.PublicationID)
@@ -517,6 +518,6 @@ func validateCloseInput(input *CloseInput) error {
 	return nil
 }
 
-func publicationKey(participantID utilities.ID, source string) string {
-	return participantID.String() + "\x00" + source
+func publicationKey(participantID utilities.ID, source mediaplane.PublicationSource) string {
+	return participantID.String() + "\x00" + string(source)
 }

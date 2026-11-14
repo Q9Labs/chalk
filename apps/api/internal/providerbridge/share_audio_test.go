@@ -1,6 +1,7 @@
 package providerbridge
 
 import (
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
@@ -12,7 +13,7 @@ func TestScreenRevocationIncludesAudioButNotMicrophone(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := provideroperations.OperationInput{Effect: provideroperations.EffectRevokePublication, ParticipantID: participantID, PublicationSource: "screen"}
-	for _, source := range []string{"screen", "screen_audio", "microphone", "camera"} {
+	for _, source := range mediaplane.AllSources {
 		got := publicationMatchesOperation(provideroperations.Publication{ParticipantID: participantID, Source: source}, input)
 		want := source == "screen" || source == "screen_audio"
 		if got != want {
