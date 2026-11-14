@@ -42,7 +42,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ github.event.workflow_run.id }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: bash apps/mobile/scripts/release/publish-nightly-android.sh decide
+        run: |
+          # A cut that started before this script existed has the old publisher, which has no decide mode and would sign without credentials: build it as before.
+          if [[ -f apps/mobile/scripts/release/nightly-app-paths.sh ]]; then bash apps/mobile/scripts/release/publish-nightly-android.sh decide; else echo 'build=true' >> "$GITHUB_OUTPUT"; fi
       - uses: ./.github/actions/setup-js
         if: steps.decide.outputs.build == 'true'
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
