@@ -2408,7 +2408,6 @@ create table artifact_jobs (
     constraint artifact_jobs_terminal_fields_check check ((state in ('completed', 'dead_letter', 'cancelled')) = (terminal_at is not null))
 );
 create index artifact_jobs_claim_idx on artifact_jobs(priority desc, available_at asc, created_at asc, id asc) where state in ('pending', 'retryable');
-create index transcription_cleanup_jobs_lease_idx on transcription_cleanup_jobs(lease_expires_at) where state = 'leased';
 create index artifact_jobs_lease_expiry_idx on artifact_jobs(lease_expires_at) where state = 'leased';
 create index artifact_jobs_tenant_created_idx on artifact_jobs(tenant_id, created_at desc, id desc);
 
@@ -2548,6 +2547,7 @@ create table transcription_cleanup_jobs (
     constraint transcription_cleanup_jobs_provider_copy_check check (provider_copy_status in ('not_applicable', 'pending', 'completed', 'failed'))
 );
 create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(due_at, created_at, id) where state in ('pending', 'retryable');
+create index transcription_cleanup_jobs_lease_idx on transcription_cleanup_jobs(lease_expires_at) where state = 'leased';
 
 create table recording_capacity (
     id smallint primary key check (id = 1),

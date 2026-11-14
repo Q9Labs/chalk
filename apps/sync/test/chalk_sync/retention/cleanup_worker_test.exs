@@ -160,6 +160,25 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     refute checkpointed?(connection, fixture)
   end
 
+  test "holds an Episode with a deadline change instead of crashing the batch", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = seed_ended_episode_with_deadline(connection, ~U[2026-07-03 00:00:00.123090Z])
+    cleanup_fixture(connection, fixture)
+
+    Postgrex.query!(
+      connection,
+      "update sync_control_events set event_name = 'deadline_changed' where tenant_id = $1 and episode_id = $2 and revision = 1",
+      episode_ids(fixture)
+    )
+
+    assert {:ok, %Result{episodes: 0, held: [{_id, {:invalid_history, _reason}}]}} =
+             run_cleanup(connection)
+
+    refute checkpointed?(connection, fixture)
+  end
+
   test "defers a middle-sequence Episode until the earlier chat prefix is cleaned", %{
     connections: connections
   } do

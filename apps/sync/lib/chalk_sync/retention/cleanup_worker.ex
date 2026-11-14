@@ -278,6 +278,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     else
       :not_usable -> {:ok, config_policy}
       false -> {:ok, config_policy}
+      true -> {:ok, config_policy}
     end
   end
 
