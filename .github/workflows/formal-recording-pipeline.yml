@@ -1,0 +1,49 @@
+name: Recording pipeline model
+
+# Model-checks the recording pipeline across Sync and the API. See
+# .agents/skills/recording-pipeline-formal/SKILL.md. Keep these paths in step with
+# the skill's coverage record.
+on:
+  pull_request:
+    paths:
+      - apps/api/db/queries/recording_pipeline.sql
+      - apps/api/db/queries/recording_key_object_authority.sql
+      - apps/api/db/queries/recording_capture_lifecycle.sql
+      - apps/api/internal/recordingpipeline/**
+      - apps/api/internal/capturesignaling/**
+      - apps/api/internal/recorderfleet/**
+      - apps/api/internal/recorderworker/**
+      - apps/api/internal/recordingorchestrator/**
+      - apps/api/internal/providerbridge/sfu_executor.go
+      - apps/sync/lib/chalk_sync/episodes/reducer.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
+      - tools/formal/recording-pipeline/**
+      - .github/workflows/formal-recording-pipeline.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-recording-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Recording pipeline model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check the recording pipeline
+        run: tools/formal/recording-pipeline/run.sh

@@ -435,6 +435,8 @@
         ".github/workflows/formal-external-operations.yml",
         ".github/workflows/formal-client-recovery.yml",
         ".github/workflows/formal-media-control.yml",
+        ".github/workflows/formal-public-invite-access.yml",
+        ".github/workflows/formal-recording-pipeline.yml",
         ".github/workflows/gate.yml",
         ".github/workflows/host-change-check.yml",
         ".github/workflows/hotfix.yml",

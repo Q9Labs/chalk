@@ -4,6 +4,8 @@
     "features/scorecard/scorecard.mjs",
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
+    "tools/formal/public-invite-access/PublicInviteAccess.view.mjs",
+    "tools/formal/recording-pipeline/RecordingPipeline.view.mjs",
     "tools/formal/sync-entry-leave/EntryLeave.view.mjs",
     "docs/statecharts/1-teacher-starts-class/StartClass.view.mjs",
     "docs/statecharts/2-student-joins/StudentJoins.view.mjs",
@@ -183,6 +185,7 @@
   "health": {
     "ignore": [
       "features/scorecard/**",
+      "tools/formal/**/*.view.mjs",
       "scripts/prod-proof/**",
       "scripts/ui-check/**",
       "**/dist/**",
