@@ -1,0 +1,13 @@
+name = "chalk-uptime-probe-test"
+main = "src/index.ts"
+compatibility_date = "2026-07-05"
+
+[vars]
+CHALK_ENVIRONMENT = "nightly"
+API_BASE_URL = "https://nightly-api.chalkmeet.com"
+SYNC_BASE_URL = "https://nightly-sync.chalkmeet.com"
+PROBE_TENANT_ID = "3d474782-c768-4dba-91f4-82ae3407dcd7"
+
+[[kv_namespaces]]
+binding = "PROBE_STATE"
+id = "d3a7534a9ddf40f5aaa81784dbdf78b8"

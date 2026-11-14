@@ -11,7 +11,7 @@ Roll back when the last deploy is the likely cause and the previous release can 
 3. Is the fix one small commit that is already on master with a green push Gate? Use the hotfix path.
 4. Otherwise restore the previous release with the restore action for the part that broke.
 
-Whether the Oncall agent may roll back production by itself is not decided. Today it may not: a person starts every rollback.
+The Oncall agent may roll production back to the previous release without asking when the evidence shows a release caused the incident and a documented rollback exists. It checks that service is back, then tells the owner what it rolled back, why, and how to roll forward.
 
 ## Where to look first
 
@@ -36,6 +36,8 @@ Whether the Oncall agent may roll back production by itself is not decided. Toda
 
 A rollback that cannot find its baseline fails closed and prints the manual inputs. Use those inputs; do not rebuild.
 
+Before any binary rollback to a release older than the one that made `chalk_sfu` the platform default, set `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` in the production environment, and move any Space that stored `chalk_sfu` with `media-settings`. The rollback restart then reads it. The older binary cannot start with a `chalk_sfu` default.
+
 ## Hotfix path
 
 Run the `Hotfix` workflow from master with the commit SHA of a fix that is already on master. It refuses a SHA that is not on master, has no green push Gate, or does not contain the release now running. Then it:
@@ -49,11 +51,11 @@ It skips the nightly record, latency and long-call proofs, the scorecard and npm
 
 ## Kill switches and media plane settings
 
-| Switch                                                  | Effect                                      | How fast                                                                            |
-| ------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `media-settings set --plane cf_sfu` for one Space       | Next Episodes of that Space use Cloudflare. | Seconds, no deploy. Live Episodes keep their plane.                                 |
-| `media-settings set --tenant <id>` for a Tenant default | Next Episodes of that Tenant follow it.     | Seconds, no deploy.                                                                 |
-| `CHALK_SFU_NEW_EPISODES=off`                            | Every new Episode uses Cloudflare.          | One API restart. Edit SSM and the host file together, or the next deploy undoes it. |
+| Switch                                                  | Effect                                      | How fast                                                           |
+| ------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
+| `media-settings set --plane cf_sfu` for one Space       | Next Episodes of that Space use Cloudflare. | Seconds, no deploy. Live Episodes keep their plane.                |
+| `media-settings set --tenant <id>` for a Tenant default | Next Episodes of that Tenant follow it.     | Seconds, no deploy.                                                |
+| `media-settings new-episodes --state off`               | Every new Episode uses Cloudflare.          | Seconds, no deploy and no restart. Live Episodes keep their plane. |
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../sfu/production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 
