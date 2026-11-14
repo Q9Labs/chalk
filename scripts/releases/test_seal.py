@@ -54,6 +54,13 @@ class Sealed(unittest.TestCase):
                          ['a.json', 'nested/b.txt', 'single.json'])
         self.assertEqual((out / 'a.json').read_bytes(), MANIFEST)
 
+    def test_rollback_media_travels_sealed_between_jobs_and_a_plain_value_still_reads(self):
+        media = b'{"recorder_source_bucket": "bucket-123456789012"}'
+        sealed = seal.seal_text(media)
+        self.assertNotIn('123456789012', sealed)
+        self.assertEqual(release.rollback_media(sealed), media)
+        self.assertEqual(release.rollback_media(media.decode()), media)
+
     def test_wildcards_match_like_a_shell_and_an_empty_match_fails_unless_allowed(self):
         (self.directory / 'r-1.json').write_bytes(b'{}')
         (self.directory / 'r-1.media.json').write_bytes(b'{}')

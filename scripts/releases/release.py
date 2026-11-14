@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+import seal
 from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
 
@@ -463,6 +464,11 @@ def media_bytes(github, info):
     return github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.media.json', checksum)
 
 
+def rollback_media(value):
+    """The rollback media pins travel between jobs sealed, because they name the bucket and a secret value in a job output is dropped."""
+    return value.encode() if value.lstrip().startswith('{') else seal.unseal_text(value)
+
+
 def prepare(github, args):
     environment = env('MANAGED_ENVIRONMENT')
     require(environment in ('nightly', 'production'), 'unsupported managed environment; expected nightly or production')
@@ -474,7 +480,7 @@ def prepare(github, args):
     media = media_bytes(github, info)
     if os.environ.get('ROLLBACK_MEDIA'):
         require(args.reuse and not media, 'rollback snapshot is only for a legacy source')
-        media = os.environ['ROLLBACK_MEDIA'].encode()
+        media = rollback_media(os.environ['ROLLBACK_MEDIA'])
     if environment == 'production':
         require('recorder_control' in json.loads(data).get('images', {}), 'production requires recorder control')
     if media:

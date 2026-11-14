@@ -87,7 +87,7 @@ jobs:
         run: |
           if [[ -z "$BASELINE_MEDIA_SHA256" ]]; then
             python3 scripts/releases/media.py retain_runtime --environment "$MANAGED_ENVIRONMENT" --output previous-media.json
-            echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
+            echo "members=$(python3 scripts/releases/seal.py text previous-media.json)" >> "$GITHUB_OUTPUT"
           fi
       - name: Save the live Pages deployment before any upload
         id: pages

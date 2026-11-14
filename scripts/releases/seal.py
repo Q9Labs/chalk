@@ -91,11 +91,15 @@ def main(argv=None):
     sealing.add_argument('--out', type=Path, required=True)
     sealing.add_argument('--allow-empty', action='store_true', help='succeed when no file matches')
     sealing.add_argument('paths', nargs='+', type=Path)
+    text = commands.add_parser('text', help='print a sealed copy of a file as one line of base64')
+    text.add_argument('file', type=Path)
     opening = commands.add_parser('unseal', help='replace sealed files under a directory with plaintext')
     opening.add_argument('directory', type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.command == 'seal':
+        if args.command == 'text':
+            print(seal_text(args.file.read_bytes()))
+        elif args.command == 'seal':
             seal_files(args.paths, args.out, args.allow_empty)
         else:
             unseal_tree(args.directory)
