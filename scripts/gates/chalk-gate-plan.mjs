@@ -31,9 +31,29 @@ export const workflowGraphNodeTests = [
   "scripts/gates/gate-runner-label.test.mjs",
   "scripts/gates/stale-merge-group.test.mjs",
 ];
-// scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
+// The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including own-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
+// What the proof tests run or read: the proof scripts, the media analyzer and its helpers, the scorecard modules, budgets and workflow they import, the API access-grant types, the web routes, docs manifest and public association files they read, and the client sources and dependencies they bundle.
+const proofTestRoots = [
+  "scripts/prod-proof",
+  "scripts/web-proof",
+  "scripts/recorder/analyze-media.mjs",
+  "scripts/recorder/file-sha256.mjs",
+  "scripts/recorder/parse-option-value.mjs",
+  "scripts/recorder/run-bounded-command.mjs",
+  "features/scorecard",
+  "perf/budgets.json",
+  ".github/workflows/real-call-proof.yml",
+  "apps/api/internal/accessgrants",
+  "apps/web/public",
+  "apps/web/src/routeTree.gen.ts",
+  "apps/web/src/docs/manifest.ts",
+  "sdks/typescript/client/src",
+  "sdks/typescript/client/package.json",
+  "sdks/typescript/client/tsconfig.json",
+  "pnpm-lock.yaml",
+];
 // What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
 // the transcription configuration that check_configuration fingerprints, the two workflows that GateCheckedTests read, and the API module files and migrations that the manifest and component planning read.
 const releaseContractRoots = [
@@ -427,6 +447,13 @@ export function createGatePlan(files, options = {}) {
   const dashboardRefresh = narrow
     ? full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web/server", "apps/web/src/lib/dashboard", "apps/web/src/components/dashboard", "apps/web/tests/dashboard", "apps/api/internal/accessgrants", "scripts/gates/with-postgres.sh"]))
     : dashboardEngine;
+  // The board proofs open the public Space page of the web build in a browser, so a pull request runs them for web inputs, for the
+  // board test, its engine configuration and the proof helpers it imports, and for the dashboard fixture and stack script that start the local stack.
+  const boardLocal = narrow
+    ? full ||
+      affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") ||
+      nonDocumentationFiles.some((file) => startsWithAny(file, ["tests/board.e2e.ts", "e2e.config.ts", "scripts/web-proof", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "scripts/gates/with-postgres.sh"]))
+    : dashboardEngine;
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   // What the call-states page imports (traced from apps/web/src/call-states/main.tsx through vite.aliases.ts) plus the harness that drives it.
@@ -460,7 +487,7 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/prod-proof", "sdks/typescript/client/src"]));
+  const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, proofTestRoots));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
@@ -547,6 +574,7 @@ export function createGatePlan(files, options = {}) {
     ),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "http"]),
     task("dashboard-refresh", "Owner call across the real media-access lifetime", dashboardRefresh, dashboardRefresh ? "refresh inputs changed, or the merge queue" : "the dashboard refresh proof is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "refresh"]),
+    task("board-local", "Board proofs in a browser against the local stack", boardLocal, boardLocal ? "web or board proof inputs changed, or the merge queue" : "the board proofs are unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "board"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
     task("call-performance", "Call performance budgets", callUi, "call rendering inputs or full gate", ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--bundle-only"]),
     task("call-leaks", "Call lifecycle leak budgets", callUi, "call lifecycle inputs or full gate", [
@@ -559,7 +587,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
-    task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs", "scripts/prod-proof/sdk-paths.test.mjs"]),
+    task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
       "publint",
@@ -661,6 +689,7 @@ const rootLaneGroups = {
   "browser-tests": ["browser-tests", "camera-proof"],
   "dashboard-engine": ["dashboard-engine"],
   "dashboard-refresh": ["dashboard-refresh"],
+  "dashboard-board": ["board-local"],
   // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
   sfu: ["sfu"],
   "call-leaks-1": ["call-leaks"],

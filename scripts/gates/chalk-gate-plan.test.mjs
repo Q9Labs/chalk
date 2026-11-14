@@ -74,7 +74,7 @@ test("a test-only change skips the dashboard engine and the call lanes on a pull
   );
   assert.deepEqual(
     jobs(files, "merge_group").rootGroups.filter((group) => group.startsWith("dashboard-") || group.startsWith("call-leaks-")),
-    ["dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
+    ["dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
   );
 });
 
@@ -97,7 +97,7 @@ test("an API test-only change still runs the API gate", () => {
 });
 
 test("the merge queue selects the dashboard engine and every leak shard for any change beyond documentation", () => {
-  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
+  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
   assert.deepEqual(jobs(["docs/observability.md"], "merge_group").rootGroups, ["checks"]);
 });
 
@@ -269,6 +269,47 @@ test("the mock-call ratchet runs for every kind of test file it counts, not only
   }
   assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
+});
+
+test("a change to a proof script, its test inputs or the client sources runs the proof tests", () => {
+  for (const file of [
+    "scripts/prod-proof/webhooks.mjs",
+    "scripts/prod-proof/proof-server.test.mjs",
+    "scripts/web-proof/guest.mjs",
+    "scripts/recorder/analyze-media.mjs",
+    "scripts/recorder/file-sha256.mjs",
+    "scripts/recorder/parse-option-value.mjs",
+    "scripts/recorder/run-bounded-command.mjs",
+    "features/scorecard/schema.mjs",
+    ".github/workflows/real-call-proof.yml",
+    "apps/api/internal/accessgrants/types.go",
+    "sdks/typescript/client/src/index.ts",
+    "sdks/typescript/client/package.json",
+    "sdks/typescript/client/tsconfig.json",
+    "perf/budgets.json",
+    "apps/web/public/.well-known/apple-app-site-association",
+    "apps/web/src/routeTree.gen.ts",
+    "apps/web/src/docs/manifest.ts",
+    "pnpm-lock.yaml",
+  ]) {
+    assert.ok(selected([file], "pull_request").includes("proof-bundle"), file);
+    assert.ok(selected([file], "merge_group").includes("proof-bundle"), file);
+  }
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("proof-bundle"));
+  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("proof-bundle"));
+});
+
+test("the board proofs run for web and board proof inputs, and for the queue", () => {
+  const board = (files, event) => jobs(files, event).rootGroups.includes("dashboard-board");
+  for (const file of ["tests/board.e2e.ts", "e2e.config.ts", "scripts/web-proof/guest.mjs", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "apps/web/src/components/space/Controls.tsx", "packages/whiteboard/src/index.ts"]) {
+    assert.equal(board([file], "pull_request"), true, file);
+  }
+  assert.equal(board(["apps/api/internal/httpapi/router.go"], "pull_request"), false);
+  assert.equal(board(["docs/observability.md"], "pull_request"), false);
+  assert.equal(board(["apps/api/internal/httpapi/router.go"], "merge_group"), true);
+  assert.equal(board(["docs/observability.md"], "merge_group"), false);
+  assert.ok(ciJobs([], { full: true }).rootGroups.includes("dashboard-board"));
+  assert.equal(laneGroup("board-local"), "dashboard-board");
 });
 
 test("a demoted check keeps running, wrapped so that its failure is a warning", () => {

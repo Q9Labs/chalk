@@ -153,7 +153,7 @@ jobs:
       actions: write
       pull-requests: write
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
+    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"dashboard-board":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       # One run holds at most eight root runners, so a full run takes 10 of the organisation's 20 hosted-runner slots
@@ -162,7 +162,7 @@ jobs:
       # whichever order it runs in. The matrix lists the slowest groups first so they start first.
       max-parallel: 8
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
@@ -293,11 +293,12 @@ jobs:
 
       # Browser tests, the call bundle budget (in the build group) and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "dashboard-refresh", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
+        if: contains(fromJSON('["browser-tests", "dashboard-refresh", "dashboard-board", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
+          verify-engine: ${{ matrix.group == 'dashboard-board' }}
 
       # call-performance runs in the build group for call UI changes;
       # GitHub enforces gzip budgets; timing limits need a calibrated runner.

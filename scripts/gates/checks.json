@@ -277,6 +277,16 @@
       "sample": "Split from dashboard-engine in #1199; no history of its own."
     },
     {
+      "id": "gate:board-local",
+      "owner": "Web",
+      "catches": "A board proof of tests/board.e2e.ts that fails in a browser against the local stack, such as the desktop teacher and phone follower zoom assertion of the nightly cut.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "New. The nightly cut failed this proof in run 43294636272 and fixed it in #1295; before this lane it ran only in the cut."
+    },
+    {
       "id": "gate:build",
       "owner": "Build",
       "catches": "A workspace that no longer builds.",
@@ -319,7 +329,7 @@
     {
       "id": "gate:proof-bundle",
       "owner": "Release chain",
-      "catches": "A production proof script that no longer bundles against the Leave baseline client.",
+      "catches": "A production or web proof script whose unit test fails, such as the proof origin collision of the nightly cut, or one that no longer bundles against the Leave baseline client.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
