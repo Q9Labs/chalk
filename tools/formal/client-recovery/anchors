@@ -16,7 +16,7 @@ FiberGrace	sdks/typescript/client/src/connection/lifecycle.ts	yield* Effect.slee
 ProcessRec	sdks/typescript/client/src/connection/lifecycle.ts	if (model.epoch === epoch && active(model)) yield* transition("reconnecting");
 PlanCycle	sdks/typescript/client/src/connection/lifecycle.ts	while (model.epoch === epoch && active(model)) {
 PlanCycle	sdks/typescript/client/src/connection/lifecycle.ts	const plan = yield* recoveryPlan(model.recoveryQueued ?? kind);
-AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
+AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	const replacement = yield* access.replaceMedia().pipe(Effect.mapError(accessFailure));
 AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	yield* foreign(() => media.restart(grant.media), "media_start_failed", "Media transport could not restart");
 AttemptRestartSync	sdks/typescript/client/src/connection/lifecycle.ts	if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
 AttemptFatal	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(Effect.suspend(() => (model.epoch === epoch && active(model) ? failForSnapshot(failure) : Effect.void)));

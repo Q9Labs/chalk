@@ -300,7 +300,8 @@ AttemptSeesMedia ==
     /\ okM' = TRUE
     /\ UNCHANGED <<coreV, worldV, rq, fib, fibE, fibKind, pk, okS, accV, budV, histV>>
 
-\* recoverMedia: access.refresh("media_recovery", true) then media.restart(); nothing here checks Leave.
+\* recoverMedia: access.replaceMedia() then media.restart(); nothing here checks Leave. When another caller already replaced
+\* the binding, replaceMedia answers created: false and the attempt fails and is retried, which the model leaves to its failure budget.
 AttemptRestartMedia ==
     /\ fib = "attempt" /\ mediaP = "failed"
     /\ mediaP' = "recovering" /\ q' = PushSnap(q, "snapM")
