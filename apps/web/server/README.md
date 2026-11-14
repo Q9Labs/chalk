@@ -39,7 +39,6 @@ On the Orb machine, run `node apps/web/tests/dashboard/local-dev-browser.mjs <pu
 - HTTPS cookies are host-only `__Host-chalk_*` with `Secure; HttpOnly; SameSite=Lax`. Only the ten-minute Apple login cookie uses `SameSite=None`, so the browser sends it on Apple's cross-site POST. Loopback HTTP uses `local_chalk_*` names.
 - Clearing the login transaction cookie is not atomic consumption, and there is deliberately no shared transaction store. Replaying the cookie can reach the token endpoint again, but the provider rejects the consumed code, so no second session is created.
 - Workers constraints that shaped `oauth.ts`: `redirect: "error"` is unsupported (use `redirect: "manual"` with fixed `identity_<provider>_redirect` errors); production server code uses no Buffer; JWKS are cached per isolate with a one-hour cap, one refetch for an unknown `kid`, and a 30-second refresh cooldown. Logs hold fixed error codes and request IDs, never input, tokens or cookies.
-- To reproduce the unsupported-redirect regression, run `node apps/web/tests/dashboard/oauth-runtime.mjs --redirect-error` after building the client SDK. It must fail the first Google callback with zero token exchanges.
 
 ## Runtime bindings
 
@@ -61,11 +60,7 @@ First sign-in provisions the Tenant with the permanent `https://chalkmeet.com` a
 
 ## Verification
 
-The Gate's `dashboard-engine` lane runs `apps/web/tests/dashboard/check-engine.sh http` for dashboard, SDK dependency and API changes, and the `dashboard-refresh` lane runs `check-engine.sh refresh`, the owner call across the real five-minute media-access lifetime. A pull request runs the refresh lane only for the inputs it exercises; the merge queue runs it for every change. The `board-local` lane (`check-engine.sh board`, group `dashboard-board`) runs the two board proofs of `tests/board.e2e.ts` that need no proof API key in a browser against the same stack, for web and board proof inputs; the third board proof, which joins an SDK guest, needs a deployed target and runs in the nightly cut. It drives the real API and named Pages Functions in workerd with an isolated database; only the engine transport injects 429s. Heavy checks run on the M4, not a paid timing box:
-
-```sh
-CHALK_REMOTE_NEEDS_BROWSER=1 bash scripts/gates/remote.sh -- bash apps/web/tests/dashboard/check.sh
-```
+The Gate's `dashboard-engine` lane runs `apps/web/tests/dashboard/check-engine.sh http` for dashboard, SDK dependency and API changes, and the `dashboard-refresh` lane runs `check-engine.sh refresh`, the owner call across the real five-minute media-access lifetime. A pull request runs the refresh lane only for the inputs it exercises; the merge queue runs it for every change. The `board-local` lane (`check-engine.sh board`, group `dashboard-board`) runs the two board proofs of `tests/board.e2e.ts` that need no proof API key in a browser against the same stack, for web and board proof inputs; the third board proof, which joins an SDK guest, needs a deployed target and runs in the nightly cut. It drives the real API and named Pages Functions in workerd with an isolated database; only the engine transport injects 429s. Heavy checks run on Instabox, not a paid timing box.
 
 `apps/web/tests/dashboard/owner-refresh.mjs` runs in the same lane. It holds two owner tabs in one browser across the real media-token refresh and expiry, makes 300 joins across 12 other Spaces to prove cookies survive, and ends for everyone over real Sync. The promote and nightly real-SFU `prod:proof` separately checks post-refresh media.
 
@@ -77,14 +72,6 @@ After redirects, domains and bindings are installed, on staging HTTPS (then prod
 2. From a fresh profile, open `/auth/start?provider=apple`. The callback must be a POST to `/auth/callback/apple` followed by `/dashboard`, and the first authorization must keep the name.
 3. Sign in with both providers on one email and confirm separate accounts. POST `{}` to `/auth/sign-out` with exact Origin and CSRF token; cookies must disappear and the session must return 401.
 4. A rejected consent or state must give the provider-specific sign-in error, never a session. Record only status, route and request ID.
-
-For a local Google-only smoke, inject the OAuth values with `2password run --env NAME=op://…`, then:
-
-```sh
-DASHBOARD_ENGINE_DEADLINE_SECONDS=1800 DASHBOARD_OAUTH_SMOKE_SECONDS=1800 bash apps/web/tests/dashboard/real-engine.sh bash apps/web/tests/dashboard/oauth-smoke.sh
-```
-
-The smoke script writes bindings only to a mode-0600 temporary `.dev.vars` and cleans up Pages on exit. Apple is not smoke-tested on HTTP localhost.
 
 ## Failure evidence
 
