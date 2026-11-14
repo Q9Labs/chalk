@@ -487,6 +487,7 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
+  const diagnoseCall = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/diagnose-call", "infrastructure/observability/production-alerts/call-verdict"]));
   const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, proofTestRoots));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
@@ -587,6 +588,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
+    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis or verdict thresholds changed" : "call diagnosis is unaffected", ["node", "--test", "scripts/diagnose-call/diagnose-call.test.mjs"]),
     task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
