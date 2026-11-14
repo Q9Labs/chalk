@@ -255,7 +255,7 @@ type CreateArrivalResult struct {
 }
 
 type UpdateArrivalStateInput struct {
-	RequirePending          bool
+	RequirePending bool
 	// RequireAdmission is the admission mode a collected pending arrival must still be in.
 	RequireAdmission        AdmissionMode
 	TenantID                utilities.ID

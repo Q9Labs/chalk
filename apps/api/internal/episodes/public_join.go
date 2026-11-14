@@ -25,13 +25,13 @@ type PublicJoinInput struct {
 	// PendingArrivalID fences the join on a pending arrival that is valid only while the Space stays in AdmissionMode.
 	PendingArrivalID utilities.ID
 	AdmissionMode    string
-	TenantID       utilities.ID
-	SpaceID        utilities.ID
-	AccountID      utilities.ID
-	IdentityMode   string
-	DisplayName    string
-	Role           string
-	Request        Request
+	TenantID         utilities.ID
+	SpaceID          utilities.ID
+	AccountID        utilities.ID
+	IdentityMode     string
+	DisplayName      string
+	Role             string
+	Request          Request
 	// MediaClients is what the joining guest's SDK can run. A new Episode binds
 	// the own SFU only when it declares it.
 	MediaClients mediaplane.ClientProviders

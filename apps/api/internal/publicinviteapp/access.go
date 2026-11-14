@@ -145,7 +145,7 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 		result, err = a.episodes.JoinPublic(ctx, episodes.PublicJoinInput{
 			PendingArrivalID: pendingArrivalID,
 			AdmissionMode:    string(input.RequireAdmission),
-			TenantID:       arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
+			TenantID:         arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
 			IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
 			Role:    publicinvites.PublicRoleCollaborator,
 			Request: episodes.Request{Key: arrival.IdempotencyKey, Fingerprint: arrival.IdempotencyFingerprint},
