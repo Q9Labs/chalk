@@ -17,7 +17,7 @@ import { JoiningScreen, type JoinTarget } from "./src/join/JoiningScreen";
 import type { ArrivedCall } from "./src/lib/arrived-call";
 import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
-import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spaces";
+import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/space-link";
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
 import { loadDisplayName, saveDisplayName } from "./src/screens/display-name-store";
 
@@ -119,26 +119,8 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
     [onNameChange, reportError],
   );
 
-  // App links and chalk:// links open straight into joining.
-  useEffect(() => {
-    const subscription = Linking.addEventListener("url", ({ url }) => {
-      void routeMobileLink(url)
-        .then((route) => {
-          if (route) join({ kind: "link", route });
-        })
-        .catch(reportError("open-link"));
-    });
-    return () => subscription.remove();
-  }, [join, reportError]);
-
-  useEffect(() => {
-    if (!diagnosticsEnabled) return;
-    const route = step.kind === "call" ? step.call.route : step.kind !== "home" && step.target.kind === "link" ? step.target.route : null;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App step: ${step.kind}`, route ? `Space: ${route.space}` : undefined);
-    setDevDiagnosticsEnvironment({ apiBaseURL, buildProfile, routeKind: step.kind === "home" ? "home" : "space", routeSource: route?.source ?? null, routeSpaceId: route?.space ?? null });
-    setDevDiagnosticsDevice(getDeviceInfo());
-    if (step.kind === "home") setDevDiagnosticsConnection(null);
-  }, [apiBaseURL, buildProfile, diagnosticsEnabled, step]);
+  useJoinOnLink(join, reportError);
+  useStepDiagnostics(step, { apiBaseURL, buildProfile, diagnosticsEnabled });
 
   const joinFailed = useCallback(
     (cause: unknown) => {
@@ -174,6 +156,31 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
     case "call":
       return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRejoin={() => join({ kind: "link", route: step.call.route })} onRemember={recentCalls.remember} preferences={preferences} />;
   }
+}
+
+/** App links and chalk:// links open straight into joining. */
+function useJoinOnLink(join: (target: JoinTarget) => void, reportError: ShellProps["reportError"]): void {
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      void routeMobileLink(url)
+        .then((route) => {
+          if (route) join({ kind: "link", route });
+        })
+        .catch(reportError("open-link"));
+    });
+    return () => subscription.remove();
+  }, [join, reportError]);
+}
+
+function useStepDiagnostics(step: Step, { apiBaseURL, buildProfile, diagnosticsEnabled }: Pick<ShellProps, "apiBaseURL" | "buildProfile" | "diagnosticsEnabled">): void {
+  useEffect(() => {
+    if (!diagnosticsEnabled) return;
+    const route = step.kind === "call" ? step.call.route : step.kind !== "home" && step.target.kind === "link" ? step.target.route : null;
+    recordDevDiagnosticsLifecycleEvent("navigation", `App step: ${step.kind}`, route ? `Space: ${route.space}` : undefined);
+    setDevDiagnosticsEnvironment({ apiBaseURL, buildProfile, routeKind: step.kind === "home" ? "home" : "space", routeSource: route?.source ?? null, routeSpaceId: route?.space ?? null });
+    setDevDiagnosticsDevice(getDeviceInfo());
+    if (step.kind === "home") setDevDiagnosticsConnection(null);
+  }, [apiBaseURL, buildProfile, diagnosticsEnabled, step]);
 }
 
 /** Home watches the clipboard only while it shows, so a call never reads it. */
