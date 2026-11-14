@@ -7091,7 +7091,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.control_busy", "episode.not_active", "request.idempotency_conflict"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.control_busy", "request.idempotency_conflict"]
           },
           "429": {
             "content": {
@@ -15836,9 +15836,6 @@
         "type": "object"
       },
       "EpisodeDeadline": {
-        "$ref": "#/components/schemas/EpisodeEnd"
-      },
-      "EpisodeEnd": {
         "additionalProperties": false,
         "properties": {
           "episode_id": {
@@ -15887,6 +15884,57 @@
           }
         },
         "required": ["episode_id", "external_operation", "status"],
+        "type": "object"
+      },
+      "EpisodeEnd": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "$ref": "#/components/schemas/EpisodeId"
+          },
+          "external_operation": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "deadline_generation": {
+                "type": ["integer", "null"]
+              },
+              "id": {
+                "$ref": "#/components/schemas/UUID"
+              },
+              "operation_name": {
+                "type": "string"
+              },
+              "request_key": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "target_participant_generation": {
+                "type": ["integer", "null"]
+              },
+              "target_participant_id": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ParticipantId"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["created_at", "id", "operation_name", "request_key", "status"],
+            "type": ["object", "null"]
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": ["episode_id", "status"],
         "type": "object"
       },
       "EpisodeId": {

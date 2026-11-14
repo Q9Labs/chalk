@@ -106,7 +106,8 @@ export type TranscriptLanguage = "auto" | WhisperLanguage;
 export type TranscriptLanguageMode = { readonly mode: "auto" } | { readonly mode: "fixed"; readonly language: WhisperLanguage };
 export function parseTranscriptLanguage(value: unknown): TranscriptLanguageMode {
   if (value === "auto") return { mode: "auto" };
-  if (typeof value === "string" && whisperLanguageCodes.some((code) => code === value)) return { mode: "fixed", language: value as WhisperLanguage };
+  const language = whisperLanguageCodes.find((code) => code === value);
+  if (language) return { mode: "fixed", language };
   throw new Error("Invalid transcript language");
 }
 export function transcriptLanguageValue(mode: TranscriptLanguageMode): TranscriptLanguage {

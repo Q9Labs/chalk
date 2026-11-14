@@ -1,7 +1,7 @@
 import { BottomSheet, ChalkText, PillButton } from "@q9labsai/chalk-react-native/ui";
 import { useEffect, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
-import { parseSpaceLink, type SpaceRoute } from "../lib/spaces";
+import { parseSpaceLink, type SpaceRoute } from "../lib/space-link";
 import { PasteButton } from "./PasteButton";
 import { TextField } from "./TextField";
 import { space } from "@q9labsai/chalk-react-native";

@@ -435,6 +435,10 @@ def reconcile_nightly_address(provider, config):
     raise RuntimeError('nightly recorder address association did not converge; cold boot refused')
 
 
+# The fleet's archive CDN settings; the boot check gets them too, so it downloads through CloudFront and not S3 (0.12 USD a GB).
+ARCHIVE_CDN_KEYS = ('CHALK_RECORDER_FLEET_ARCHIVE_CDN_URL', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_KEY_PAIR_ID', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64')
+
+
 def qualify(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
@@ -452,7 +456,7 @@ def qualify(args):
             path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
             private_json(path, request)
             checks.append(subprocess.Popen([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)],
-                           env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
+                           env={**os.environ, **{key: values[key] for key in ARCHIVE_CDN_KEYS if key in values}, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
                                 'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter}))
     finally:
         # A setup error on one role must not orphan the other role's droplet; the original error still propagates.

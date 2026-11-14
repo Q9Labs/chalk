@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createFacehashScene, getColor, getForegroundColor, type Intensity3D, type Variant } from "./core/index.js";
 import { FacehashSceneSvg } from "./FacehashSceneSvg.js";
+import { sanitizeId } from "./scene-svg.js";
 
 export interface FacehashProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "children"> {
   name: string;
@@ -12,10 +13,6 @@ export interface FacehashProps extends Omit<React.HTMLAttributes<HTMLDivElement>
   colors?: readonly string[];
   enableBlink?: boolean;
   renderMouth?: () => React.ReactNode;
-}
-
-function sanitizeId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
 export const Facehash = React.forwardRef<HTMLDivElement, FacehashProps>(function Facehash(

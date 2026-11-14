@@ -52,3 +52,32 @@ func TestCleanupRejectsChangedBytesAndReplaysAbsence(t *testing.T) {
 		t.Fatal("kept owner accepted")
 	}
 }
+
+func TestManifestValidationRequiresCleanKeysAndApprovedOwners(t *testing.T) {
+	scope := testScope()
+	erased, kept := scope.Delete[0].ID, scope.Keep[0].ID
+	good := StorageObject{Key: "tenants/" + erased + "/a.bin", ETag: "e", Size: 1, OwnerTenantID: erased}
+	shared := StorageObject{Key: "shared/a.bin", ETag: "e", Size: 1}
+	if err := (ObjectManifest{Bucket: "b", SharedPrefixes: []string{"shared/"}, Objects: []StorageObject{good, shared}}).Validate(scope); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]ObjectManifest{
+		"no bucket":           {Objects: []StorageObject{good}},
+		"root prefix":         {Bucket: "b", SharedPrefixes: []string{"/"}},
+		"unclean prefix":      {Bucket: "b", SharedPrefixes: []string{"a//b/"}},
+		"short prefix":        {Bucket: "b", SharedPrefixes: []string{"a/"}},
+		"absolute key":        {Bucket: "b", Objects: []StorageObject{{Key: "/x", ETag: "e", OwnerTenantID: erased}}},
+		"parent key":          {Bucket: "b", Objects: []StorageObject{{Key: "../x", ETag: "e", OwnerTenantID: erased}}},
+		"negative size":       {Bucket: "b", Objects: []StorageObject{{Key: good.Key, ETag: "e", Size: -1, OwnerTenantID: erased}}},
+		"missing etag":        {Bucket: "b", Objects: []StorageObject{{Key: good.Key, OwnerTenantID: erased}}},
+		"duplicate key":       {Bucket: "b", Objects: []StorageObject{good, good}},
+		"retained owner":      {Bucket: "b", Objects: []StorageObject{{Key: "tenants/" + kept + "/a", ETag: "e", OwnerTenantID: kept}}},
+		"owner prefix off":    {Bucket: "b", Objects: []StorageObject{{Key: "other/a", ETag: "e", OwnerTenantID: erased}}},
+		"no owner, no prefix": {Bucket: "b", SharedPrefixes: []string{"shared/"}, Objects: []StorageObject{{Key: "elsewhere/a", ETag: "e"}}},
+	}
+	for name, manifest := range cases {
+		if err := manifest.Validate(scope); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

@@ -33,7 +33,6 @@ const (
 	OutcomeJourneyConstraint
 	OutcomeJourneyUnavailable
 	OutcomeJourneyInternal
-	outcomeCount
 )
 
 var outcomeCauses = [...]string{
@@ -67,14 +66,6 @@ var outcomeCauses = [...]string{
 }
 
 func (o Outcome) Cause() string { return outcomeCauses[o] }
-
-func Outcomes() []Outcome {
-	result := make([]Outcome, outcomeCount)
-	for i := range result {
-		result[i] = Outcome(i)
-	}
-	return result
-}
 
 type Result struct {
 	Outcome  Outcome

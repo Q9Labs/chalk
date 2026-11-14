@@ -340,6 +340,8 @@ type Removal struct {
 	Intent      Intent
 }
 
+// EndRequest answers a request to end an Episode. Intent is the zero value when the Episode was already ending or
+// had ended, because no operation was needed.
 type EndRequest struct {
 	Episode Episode
 	Intent  Intent

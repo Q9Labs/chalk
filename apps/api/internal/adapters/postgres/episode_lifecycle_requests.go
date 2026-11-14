@@ -99,8 +99,11 @@ func (r EpisodeLifecycleRepository) RequestEpisodeEnd(ctx context.Context, input
 		if err != nil {
 			return err
 		}
+		// An Episode that is ending or has ended is already done, whatever key asks for it. An error here would
+		// make every caller that retries until success loop on an Episode that never changes again.
 		if episode.Status != episodes.EpisodeStatusActive {
-			return episodes.ErrEpisodeNotActive
+			result = episodes.EndRequest{Episode: mapLifecycleEpisode(episode)}
+			return nil
 		}
 
 		operation, err = createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
