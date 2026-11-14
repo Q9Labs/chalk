@@ -41,6 +41,16 @@ class PrunePlanTest(unittest.TestCase):
         orphan = kept + [version("d", 50, "managed-episode-old"), version("e", 50, "sha256-" + "d" * 64)]
         self.assertEqual(self.plan(orphan, {digest("b"): [digest("c")]}, keep=1), {digest("d"), digest("e")})
 
+    def test_an_index_kept_by_age_keeps_its_older_children_and_attestation(self):
+        newest = [version(str(n), 1, f"managed-episode-{n}") for n in "abc"]
+        young = version("d", 9, "managed-episode-young")
+        old_child = version("e", 11)
+        attestation = version("f", 11, "sha256-" + "d" * 64)
+        attestation_child = version("1", 11)
+        versions = newest + [young, old_child, attestation, attestation_child]
+        children = {digest("d"): [digest("e")], digest("f"): [digest("1")]}
+        self.assertEqual(self.plan(versions, children, keep=3), set())
+
     def test_nothing_younger_than_the_minimum_age_is_deleted(self):
         versions = [version("a", 1, "managed-episode-new"), version("b", 2, "managed-episode-new-2"), version("c", 3)]
         self.assertEqual(self.plan(versions, {}), set())

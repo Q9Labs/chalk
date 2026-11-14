@@ -45,8 +45,10 @@ def plan_prune(versions, children_of, now, keep_releases=KEEP_RELEASES, min_age_
         key=lambda v: v["created_at"],
         reverse=True,
     )
+    cutoff = now - timedelta(days=min_age_days)
+    kept = [r for n, r in enumerate(releases) if n < keep_releases or r["created_at"] >= cutoff]
     protected = set()
-    for release in releases[:keep_releases]:
+    for release in kept:
         protected.add(release["digest"])
         protected.update(children_of(release["digest"]))
     for referrer in versions:
@@ -54,7 +56,6 @@ def plan_prune(versions, children_of, now, keep_releases=KEEP_RELEASES, min_age_
         if subject in protected:
             protected.add(referrer["digest"])
             protected.update(children_of(referrer["digest"]))
-    cutoff = now - timedelta(days=min_age_days)
     return [v for v in versions if v["digest"] not in protected and v["created_at"] < cutoff]
 
 
