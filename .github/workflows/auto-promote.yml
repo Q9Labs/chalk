@@ -67,8 +67,9 @@ jobs:
           SHA: ${{ steps.decide.outputs.sha }}
         run: |
           # A run that the live-call guard refused deployed nothing, so it does not use up the attempt.
+          ids="$(gh run list --workflow promote.yml --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId")"
           tried=0
-          for id in $(gh run list --workflow promote.yml --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId"); do
+          for id in ${ids}; do
             refused="$(gh run view "${id}" --json jobs --jq '[.jobs[] | select(.name == "live-calls" and .conclusion == "failure")] | length')"
             [[ "${refused}" == 0 ]] && tried=$((tried + 1))
           done
