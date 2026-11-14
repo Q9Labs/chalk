@@ -371,7 +371,7 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 }
 
 // record takes a node's answered probe at the time it was read. It holds f.mu.
-func (f *Fleet) record(ctx context.Context, node string, ready wireReady, now time.Time) {
+func (f *Fleet) record(ctx context.Context, node string, ready protocol.ReadyResponse, now time.Time) {
 	before, known := f.loads[node]
 	load := f.loadOf(node, ready, now)
 	wasReady := known && f.readyFor(node, before, now) && f.seen[node].incarnation == load.incarnation
