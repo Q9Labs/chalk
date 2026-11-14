@@ -37,7 +37,7 @@ const sidecar = (overrides = {}) => ({
 });
 
 function card(overrides = {}) {
-  const metrics = actionIds.map((id) => ({ id, unit: "ms", n: 20, p50: 100, p95: 100, source: "latency-kit" }));
+  const metrics = actionIds.map((id) => ({ id, unit: "ms", n: 60, p50: 100, p95: 100, source: "latency-kit" }));
   return {
     schema: SCORECARD_SCHEMA,
     run: { id: "nightly-1", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
