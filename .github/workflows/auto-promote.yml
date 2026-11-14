@@ -14,12 +14,18 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # It dispatches Promote, which already retains the live Pages deployment and media pins, deploys the held release,
 # proves a real call on production, and rolls back to the retained release when that call does not pass. This run
 # then follows Promote to its end, so it turns red when production was rolled back or Promote failed.
+# It starts only in a quiet window, because Promote rolls production over and a rollback in class hours costs more than waiting.
+# The window is 21:00-01:00 UTC (02:00-06:00 in Pakistan) unless the variable CHALK_AUTO_PROMOTE_WINDOW (UTC, HH:MM-HH:MM) says
+# otherwise. A cut that passes outside it waits: an hourly check asks again, and a person's dispatch ignores the window.
+# When Promote fails (it has already rolled back to the retained release), this run pages Oncall.
 # A SHA is tried automatically once: a second attempt is a person's call, because Promote is named by its SHA and a
 # rolled-back SHA would otherwise be tried again after every latency run.
 on:
   workflow_run:
     workflows: [Nightly latency]
     types: [completed]
+  schedule:
+    - cron: "17 * * * *"
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,7 +38,7 @@ jobs:
   promote:
     if: >-
       vars.CHALK_AUTO_PROMOTE == 'true' &&
-      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -45,8 +51,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+      - name: Check the quiet window
+        id: window
+        env:
+          AUTO_PROMOTE_WINDOW: ${{ vars.CHALK_AUTO_PROMOTE_WINDOW }}
+        run: python3 scripts/releases/release.py auto_window
       - name: Name the held nightly that Promote would take now
         id: decide
+        if: steps.window.outputs.open == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/releases/release.py auto_promote
@@ -63,6 +75,7 @@ jobs:
             echo "Promote already ran ${tried} time(s) for ${SHA}. Not promoting it again automatically." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
       - name: Dispatch Promote and follow it to its end
+        id: promote
         if: steps.decide.outputs.sha != '' && steps.tried.outputs.tried == '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,3 +91,13 @@ jobs:
           [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
           gh run watch "${run_id}" --exit-status --compact --interval 30
+      - name: Page Oncall when the automatic promotion failed
+        if: failure() && steps.promote.outcome == 'failure'
+        env:
+          ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
+          SHA: ${{ steps.decide.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg detail "Automatic promotion of ${SHA} failed; Promote rolled production back to the retained release unless its own summary says recovery did not run. ${RUN_URL}" \
+            '{source: "oncall-poller", incidents: [{app: "chalk", kind: "new", key: "auto-promote", detail: $detail}]}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$ONCALL_WEBHOOK_URL"

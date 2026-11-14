@@ -92,3 +92,17 @@ test("Promote runs the MCP production check only for a release that changes MCP,
   const check = load(readFileSync(resolve(root, ".github/workflows/mcp-production-check.yml"), "utf8"));
   assert.deepEqual(Object.keys(check.on ?? check[true]).sort(), ["workflow_call", "workflow_dispatch"]);
 });
+
+// Automatic promotion stays behind its switch, starts only in the quiet window, and pages Oncall when Promote fails.
+test("Auto-promote checks the quiet window before it names a cut, waits for an hourly check, and pages Oncall on failure", () => {
+  const auto = load(readFileSync(resolve(root, ".github/workflows/auto-promote.yml"), "utf8"));
+  const steps = auto.jobs.promote.steps;
+  const index = (id) => steps.findIndex((step) => step.id === id);
+  assert.match(auto.jobs.promote.if, /vars\.CHALK_AUTO_PROMOTE == 'true'/);
+  assert.ok(Object.keys(auto.on ?? auto[true]).includes("schedule"), "a cut that passes outside the window is asked about again");
+  assert.ok(index("window") >= 0 && index("window") < index("decide"));
+  assert.match(steps[index("decide")].if, /steps\.window\.outputs\.open == 'true'/);
+  assert.equal(steps[index("window")].env.AUTO_PROMOTE_WINDOW, "${{ vars.CHALK_AUTO_PROMOTE_WINDOW }}");
+  const page = steps.find((step) => step.env?.ONCALL_WEBHOOK_URL);
+  assert.match(page.if, /steps\.promote\.outcome == 'failure'/);
+});

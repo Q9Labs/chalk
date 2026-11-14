@@ -67,6 +67,9 @@ def recording_changed(previous, target):
 
 
 LATENCY_SAMPLES = 60
+# Automatic promotion waits for a window with no classes: 02:00 to 06:00 in Pakistan, 21:00 to 01:00 UTC. The repository variable
+# CHALK_AUTO_PROMOTE_WINDOW (UTC, HH:MM-HH:MM, may cross midnight) replaces it once real Episode start times show a better one.
+AUTO_PROMOTE_WINDOW = '21:00-01:00'
 
 
 # What decides the Chalk SFU's media speed: the `media` paths in features.json, the latency kit and the stack it measures on.
@@ -478,6 +481,29 @@ def select(github, args):
     summarize_override(result.get('scorecard_override'))
 
 
+def in_quiet_window(now, spec):
+    """Whether a UTC time falls in an HH:MM-HH:MM window that may cross midnight."""
+    match = re.fullmatch(r'([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)', spec)
+    require(match, f'the auto-promote window must look like 21:00-01:00 (UTC), not {spec!r}')
+    start, end = (int(match[1]) * 60 + int(match[2]), int(match[3]) * 60 + int(match[4]))
+    require(start != end, 'the auto-promote window is empty')
+    minute = now.hour * 60 + now.minute
+    return start <= minute < end if start < end else minute >= start or minute < end
+
+
+def auto_window(github, args):
+    """Says whether automatic promotion may start now. A person's dispatch ignores the window; a passing cut outside it waits for the hourly check."""
+    spec = os.environ.get('AUTO_PROMOTE_WINDOW') or AUTO_PROMOTE_WINDOW
+    manual = os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+    now = datetime.now(timezone.utc)
+    inside = manual or in_quiet_window(now, spec)
+    reason = ('a person started this run, so the window does not apply' if manual
+              else f'{now:%H:%M}Z is {"inside" if inside else "outside"} the quiet window {spec} UTC')
+    outputs({'open': 'true' if inside else 'false'})
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f'## Quiet window\n\n{"Open" if inside else "Closed, waiting for the next window"}: {reason}\n')
+
+
 def auto_promote(github, args):
     """Name the SHA Promote takes now, or nothing. Not ready is an answer, not a failure: the next latency verdict asks again."""
     os.environ.pop('EXPECTED_RELEASE_SHA', None)
@@ -705,7 +731,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'host_proof_target', 'record_host_proof', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_window', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'host_proof_target', 'record_host_proof', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

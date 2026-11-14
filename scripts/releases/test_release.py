@@ -208,6 +208,29 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         line = [line for line in self.output.read_text().splitlines() if line.startswith('sha=')][-1]
         return line.removeprefix('sha=')
 
+    def window_open(self, hour, minute=0, spec=None, event='schedule'):
+        environment = dict(GITHUB_EVENT_NAME=event, **({'AUTO_PROMOTE_WINDOW': spec} if spec else {}))
+        with patch.dict(os.environ, environment), patch.object(release, 'datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 15, hour, minute, tzinfo=timezone.utc)
+            release.auto_window(None, None)
+        line = [line for line in self.output.read_text().splitlines() if line.startswith('open=')][-1]
+        return line.removeprefix('open=') == 'true'
+
+    def test_automatic_promotion_starts_only_inside_the_quiet_window_unless_a_person_dispatches(self):
+        self.assertFalse(self.window_open(12))
+        self.assertFalse(self.window_open(1, 0))
+        self.assertFalse(self.window_open(20, 59))
+        self.assertTrue(self.window_open(21, 0))
+        self.assertTrue(self.window_open(0, 59))
+        self.assertTrue(self.window_open(12, event='workflow_dispatch'))
+
+    def test_the_quiet_window_is_a_repository_variable_and_a_bad_one_is_refused(self):
+        self.assertTrue(self.window_open(3, spec='02:00-06:00'))
+        self.assertFalse(self.window_open(6, 0, spec='02:00-06:00'))
+        for spec in ('2-6', '24:00-01:00', '05:00-05:00'):
+            with self.assertRaises(ValueError):
+                self.window_open(3, spec=spec)
+
     def test_automatic_promotion_names_a_held_cut_whose_gates_all_passed(self):
         self.assertEqual(self.promoted_sha(self.github(held())), SHA)
 
