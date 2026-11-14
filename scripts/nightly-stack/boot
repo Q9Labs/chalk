@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Boots a throwaway Chalk stack for one Nightly run: Postgres, Redis, the migrator, API, Sync and one Chalk SFU, all on the
+# host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
+#
+#   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> [--dir <state dir>] [--announce-ip <ip>]
+#
+# It writes <dir>/proof.env (the CHALK_PROOF_* values a proof run reads) and prints how long each phase took. The images
+# come from the caller: Nightly passes the digests that the release build just published. `down` removes the containers.
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+dir="${RUNNER_TEMP:-/tmp}/chalk-nightly-stack"
+announce_ip=127.0.0.1
+api_image="" sync_image="" sfu_image=""
+postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
+redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
+
+if [ "${1:-}" = down ]; then
+  docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu > /dev/null 2>&1 || true
+  exit 0
+fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --api-image) api_image=$2 ;;
+    --sync-image) sync_image=$2 ;;
+    --sfu-image) sfu_image=$2 ;;
+    --dir) dir=$2 ;;
+    --announce-ip) announce_ip=$2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift 2
+done
+: "${api_image:?--api-image is required}" "${sync_image:?--sync-image is required}" "${sfu_image:?--sfu-image is required}"
+
+mkdir -p "$dir"
+chmod 700 "$dir"
+timings="$dir/timings.tsv"
+: > "$timings"
+phase_start=$(date +%s.%N)
+tick() {
+  local now
+  now=$(date +%s.%N)
+  printf '%s\t%.1f\n' "$1" "$(echo "$now - $phase_start" | bc)" | tee -a "$timings" | awk -F'\t' '{printf "boot %-22s %6.1fs\n", $1, $2}'
+  phase_start=$now
+}
+boot_start=$phase_start
+
+port_api=8080 port_sync=4100 port_bridge=8444 port_sfu_control=8443 port_sfu_media=50000
+db_url="postgres://postgres:$(openssl rand -hex 16)@127.0.0.1:5432/chalk"
+
+# Pull everything at once; the pulls are the slowest step on a cold machine.
+for image in "$postgres_image" "$redis_image" "$api_image" "$sync_image" "$sfu_image"; do
+  docker image inspect "$image" > /dev/null 2>&1 || docker pull --quiet "$image" > /dev/null &
+done
+wait
+tick pull
+
+# Keys, certificates and tokens. Nothing here is a stored secret; the machine and these files go away after the run.
+node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media"
+tick identity
+
+docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu > /dev/null 2>&1 || true
+pg_password="${db_url#postgres://postgres:}"
+pg_password="${pg_password%%@*}"
+docker run -d --name chalk-stack-postgres --network host \
+  -e POSTGRES_DB=chalk -e POSTGRES_PASSWORD="$pg_password" \
+  "$postgres_image" -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c wal_level=logical > /dev/null
+docker run -d --name chalk-stack-redis --network host "$redis_image" --save "" --appendonly no > /dev/null
+until docker exec chalk-stack-postgres pg_isready -U postgres -d chalk -q 2> /dev/null; do sleep 0.2; done
+until docker exec chalk-stack-redis redis-cli ping 2> /dev/null | grep -q PONG; do sleep 0.2; done
+tick datastores
+
+printf '%s' "$db_url" > "$dir/database-url"
+chmod 644 "$dir/database-url"
+docker run --rm --network host -v "$dir:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
+  "$api_image" --database-url-file /run/chalk/stack/database-url > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
+tick migrate
+
+docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \
+  -v "$dir/sfu:/run/chalk-sfu:ro" --user 65532:65532 "$sfu_image" > /dev/null
+docker run -d --name chalk-stack-api --network host --env-file "$dir/api.env" \
+  -v "$dir/api:/run/chalk/provider-bridge:ro" --user 65532:65532 "$api_image" > /dev/null
+docker run -d --name chalk-stack-sync --network host --env-file "$dir/sync.env" \
+  -v "$dir/sync:/run/chalk/sync:ro" "$sync_image" > /dev/null
+wait_http() {
+  local url=$1 name=$2 deadline=$((SECONDS + 120))
+  until curl -fsS -o /dev/null "$url" 2> /dev/null; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "$name did not answer $url in 120s" >&2
+      docker logs --tail 30 "chalk-stack-$name" >&2 || true
+      exit 1
+    fi
+    sleep 0.3
+  done
+}
+wait_http "http://127.0.0.1:$port_api/healthz" api
+wait_http "http://127.0.0.1:$port_sync/healthz" sync
+tick services
+
+node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api"
+tick seed
+
+printf 'boot total %.1fs\n' "$(echo "$(date +%s.%N) - $boot_start" | bc)"
