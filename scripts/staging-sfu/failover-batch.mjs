@@ -29,16 +29,12 @@ import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 
-export const TARGET = { recovered: 1, audioBackP95S: 10, cloudflareRequests: 0, minStopTrials: 5 };
+const TARGET = { recovered: 1, audioBackP95S: 10, cloudflareRequests: 0, minStopTrials: 5 };
 
-const PORTS_DOWN = [
-  "iptables -I INPUT 1 -p udp --dport 50000 -j DROP",
-  "iptables -I INPUT 1 -p tcp --dport 50000 -j DROP",
-  "iptables -I INPUT 1 -p tcp --dport 8443 -j DROP",
-];
+const PORTS_DOWN = ["iptables -I INPUT 1 -p udp --dport 50000 -j DROP", "iptables -I INPUT 1 -p tcp --dport 50000 -j DROP", "iptables -I INPUT 1 -p tcp --dport 8443 -j DROP"];
 const PORTS_UP = PORTS_DOWN.map((rule) => rule.replace("-I INPUT 1", "-D INPUT"));
 const UNIT = "systemctl --user -M chalk-sfu@";
-export const NODE_COMMANDS = {
+const NODE_COMMANDS = {
   stop: { fault: `${UNIT} stop chalk-sfu`, restore: `${UNIT} start chalk-sfu` },
   blackhole: { fault: PORTS_DOWN.join("; "), restore: PORTS_UP.join("; ") },
   check: `iptables -S INPUT | grep -c 'dport 50000 -j DROP'; ${UNIT} is-active chalk-sfu`,
@@ -135,11 +131,7 @@ function runTrial({ index, mode, dryRun, ssh, watchS, settleS, log }) {
   }
   const startCmd = `${ssh} ${JSON.stringify(commands.fault)}`;
   const recovery = resolve(dirname(new URL(import.meta.url).pathname), "../prod-proof/recovery.mjs");
-  const run = spawnSync(
-    "node",
-    [recovery, "--environment", "staging", "--scenario", `failover-${mode}`, "--start-cmd", startCmd, "--watch-s", String(watchS), "--settle-s", String(settleS)],
-    { encoding: "utf8", timeout: 400_000 },
-  );
+  const run = spawnSync("node", [recovery, "--environment", "staging", "--scenario", `failover-${mode}`, "--start-cmd", startCmd, "--watch-s", String(watchS), "--settle-s", String(settleS)], { encoding: "utf8", timeout: 400_000 });
   const restore = sh(`${ssh} ${JSON.stringify(commands.restore)}; ${ssh} ${JSON.stringify(NODE_COMMANDS.check)}`);
   log(`   rc=${run.status} restore: ${restore.out.trim().replace(/\n/g, " ")}`);
   return trialResult({ name, mode, exitCode: run.status ?? 1, report: parseRecoveryOutput(`${run.stdout ?? ""}`) });

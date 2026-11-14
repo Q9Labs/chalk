@@ -181,6 +181,7 @@
       "features/scorecard/**",
       "scripts/prod-proof/**",
       "scripts/ui-check/**",
+      "scripts/staging-sfu/**",
       "**/dist/**",
       "**/*.test.ts",
       "scripts/gates/**",
