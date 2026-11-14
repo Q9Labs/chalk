@@ -256,6 +256,8 @@ type CreateArrivalResult struct {
 
 type UpdateArrivalStateInput struct {
 	RequirePending          bool
+	// RequireAdmission is the admission mode a collected pending arrival must still be in.
+	RequireAdmission        AdmissionMode
 	TenantID                utilities.ID
 	ArrivalHandle           utilities.ID
 	State                   ArrivalState
@@ -329,7 +331,8 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
-	RequireKnock           bool
+	// RequireAdmission names the admission mode the Space must be in when the pending arrival is allocated; empty fences nothing.
+	RequireAdmission       AdmissionMode
 	Admission              *AdmissionBinding
 	Arrival                Arrival
 	MediaProof             string

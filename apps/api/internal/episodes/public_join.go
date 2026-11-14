@@ -22,7 +22,9 @@ type PublicJoinRepository interface {
 }
 
 type PublicJoinInput struct {
-	KnockArrivalID utilities.ID
+	// PendingArrivalID fences the join on a pending arrival that is valid only while the Space stays in AdmissionMode.
+	PendingArrivalID utilities.ID
+	AdmissionMode    string
 	TenantID       utilities.ID
 	SpaceID        utilities.ID
 	AccountID      utilities.ID

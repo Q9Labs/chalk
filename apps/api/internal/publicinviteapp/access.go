@@ -138,12 +138,13 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 			return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
 		}
 	} else {
-		knockArrivalID := utilities.ID{}
-		if input.RequireKnock {
-			knockArrivalID = arrival.ArrivalHandle
+		pendingArrivalID := utilities.ID{}
+		if input.RequireAdmission != "" {
+			pendingArrivalID = arrival.ArrivalHandle
 		}
 		result, err = a.episodes.JoinPublic(ctx, episodes.PublicJoinInput{
-			KnockArrivalID: knockArrivalID,
+			PendingArrivalID: pendingArrivalID,
+			AdmissionMode:    string(input.RequireAdmission),
 			TenantID:       arrival.TenantID, SpaceID: arrival.SpaceID, AccountID: arrival.AccountID,
 			IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
 			Role:    publicinvites.PublicRoleCollaborator,
