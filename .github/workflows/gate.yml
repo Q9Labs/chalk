@@ -57,7 +57,7 @@ jobs:
   ready-cap:
     name: Ready cap
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft != true && contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action) }}
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     permissions:
       contents: read
