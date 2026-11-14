@@ -95,13 +95,12 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
 
   await step("media works again after the rejoin: the starter publishes and the guest sees the video advance", async () => {
     // A rejoin starts a new seat and a new media connection, so camera and microphone may come back off.
-    await starter.page.getByRole("region", { name: "Space stage", exact: true }).hover();
     for (const [off, on] of [
       ["Unmute microphone", "Mute microphone"],
       ["Turn on camera", "Turn off camera"],
     ]) {
-      const button = starter.page.getByRole("button", { name: off, exact: true });
-      if (await button.isVisible()) await button.click();
+      await starter.page.getByRole("region", { name: "Space stage", exact: true }).hover();
+      if (await starter.page.getByRole("button", { name: off, exact: true }).isVisible()) await control(starter, off);
       await starter.page.getByRole("button", { name: on, exact: true }).waitFor({ timeout: enableMs });
     }
     const own = await measureFirstFrame(starter.page, starter.name, { timeoutMs: waitMs });
