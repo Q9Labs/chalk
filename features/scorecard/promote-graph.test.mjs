@@ -21,15 +21,23 @@ test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
 test("Promote's production proof and its rerun run on chalk_sfu, and none runs on Cloudflare", () => {
   const proof = promote.jobs.proof;
   assert.equal(proof.with.media_plane, "chalk_sfu");
-  assert.equal(proof.with.proofs, "${{ inputs.capture_proofs && 'leave-chalk-sfu camera-share chat-upload call-artifacts' || 'leave-chalk-sfu camera-share chat-upload' }}");
+  assert.equal(proof.with.proofs, "${{ matrix.proofs }}");
+  assert.equal(proof.with.lane, "${{ matrix.lane }}");
+  const lanes = JSON.parse(proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
+  assert.deepEqual(
+    lanes.map((lane) => lane.lane),
+    ["calls", "recording"],
+    "two lanes run at once, each on its own proof Space",
+  );
+  assert.deepEqual(lanes.flatMap((lane) => lane.proofs.split(" ")).sort(), ["call-artifacts", "camera-share", "chat-upload", "leave-chalk-sfu"]);
   assert.ok(needsOf(proof).includes("release"));
   const rerun = promote.jobs["scorecard-rerun"];
   assert.deepEqual([rerun.with.proofs, rerun.with.media_plane], ["leave-chalk-sfu", "chalk_sfu"]);
-  for (const job of [proof, rerun]) assert.doesNotMatch(job.with.proofs, /\b(leave|smoke|transcript)\b(?!-)/);
+  for (const proofs of [proof.strategy.matrix, rerun.with.proofs]) assert.doesNotMatch(proofs, /\b(leave|smoke|transcript)\b(?!-)/);
 });
 
 test("a failed Chalk SFU proof still rolls the release back", () => {
-  for (const name of ["rollback", "rollback-npm"]) assert.match(promote.jobs[name].if, /needs\.proof\.outputs\.result != 'passed'/);
+  for (const name of ["rollback", "rollback-npm"]) assert.match(promote.jobs[name].if, /needs\.proof\.result != 'success'/);
 });
 
 test("a Release job with an environment that runs after a failed dependency still needs the master ref", () => {

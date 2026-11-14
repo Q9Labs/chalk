@@ -153,20 +153,26 @@ jobs:
       promotion_audit: ${{ toJSON(fromJSON(needs.select.outputs.selection).scorecard_override) }}
     secrets: inherit
   proof:
+    # Two lanes run at once, each on its own proof Space (manual and automatic Recording), so they never share an Episode.
+    # The first leg to fail cancels the other, and a cancelled leg still removes its proof keys and Episodes. A matrix call exposes
+    # no reliable output of its own: the job result is success only when every leg passed, and Promote reads that.
     permissions:
       contents: read
     needs: [select, release]
+    strategy:
+      matrix: ${{ fromJSON(inputs.capture_proofs && '{"include":[{"lane":"calls","proofs":"leave-chalk-sfu camera-share chat-upload"},{"lane":"recording","proofs":"call-artifacts"}]}' || '{"include":[{"lane":"calls","proofs":"leave-chalk-sfu camera-share chat-upload"}]}') }}
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: ${{ inputs.capture_proofs && 'leave-chalk-sfu camera-share chat-upload call-artifacts' || 'leave-chalk-sfu camera-share chat-upload' }}
+      proofs: ${{ matrix.proofs }}
+      lane: ${{ matrix.lane }}
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
   scorecard:
     # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
     needs: [select, proof]
-    if: needs.proof.result == 'success' && needs.proof.outputs.result == 'passed'
+    if: needs.proof.result == 'success'
     outputs:
       over: ${{ steps.gate.outputs.over }}
     runs-on: ubuntu-24.04
@@ -249,7 +255,7 @@ jobs:
     needs: [select, approve, release, proof]
     if: >-
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
-      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
+      (needs.release.result != 'success' || needs.proof.result != 'success')
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
@@ -270,7 +276,7 @@ jobs:
     needs: [select, approve, release, proof, rollback]
     if: >-
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
-      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
+      (needs.release.result != 'success' || needs.proof.result != 'success')
     runs-on: ubuntu-24.04
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -304,7 +310,7 @@ jobs:
         if: always() && needs.approve.result == 'success' && needs.release.result != 'skipped'
         env:
           DEPLOY_RESULT: ${{ needs.release.result }}
-          PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
+          PROOF_RESULT: ${{ needs.proof.result == 'success' && 'passed' || 'failed' }}
           ROLLBACK_RESULT: ${{ needs.rollback.result }}
           NPM_ROLLBACK_RESULT: ${{ needs.rollback-npm.result }}
           SELECTION: ${{ needs.select.outputs.selection }}

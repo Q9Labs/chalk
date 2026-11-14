@@ -55,6 +55,10 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
+      lane:
+        description: Names a production proof that may run beside another one, because the two use different Spaces. Empty keeps one run at a time
+        type: string
+        default: ""
       media_plane:
         description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-chalk-sfu and chalk-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
@@ -152,7 +156,7 @@ on:
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
   # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
-  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment || 'production') }}
+  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}-{1}', inputs.environment || 'production', inputs.lane || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
