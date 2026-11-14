@@ -24,6 +24,24 @@ on:
     secrets:
       CHALK_PROOF_API_KEY:
         required: true
+      CHALK_PROOF_API_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEB_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_TENANT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_SPACE_ID_CHALK_SFU:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_SERVICE_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
     outputs:
       result:
         description: passed only when the web call and cleanup pass
@@ -54,14 +72,14 @@ jobs:
     env:
       CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
       # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one.
-      CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+      CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
       CHALK_PROOF_CONFIG_SOURCE: env
-      CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
-      CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
-      CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+      CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}
+      CHALK_PROOF_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+      CHALK_PROOF_WEB_URL: ${{ secrets.CHALK_PROOF_WEB_URL }}
       CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
-      CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
-      CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+      CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
       EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
       E2E_TELEMETRY_DISABLED: "1"
       CHALK_PROOF_WEBKIT: "1"

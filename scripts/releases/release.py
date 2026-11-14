@@ -2,7 +2,6 @@
 """Nightly decisions, artifact validation and immutable deployment envelopes."""
 
 import argparse
-import base64
 import json
 import os
 import re
@@ -12,7 +11,8 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require
+import seal
+from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -76,7 +76,8 @@ def previous_production(github, retain_legacy=False):
         info = dict(payload(durable[0]))
         data = retained_manifest(info)
         info['recorder_control'] = 'recorder_control' in json.loads(data).get('images', {})
-        del info['manifest_base64']
+        for key in ('manifest_base64', 'manifest_sealed', 'media_base64', 'media_sealed'):
+            info.pop(key, None)
         del info['channel']
         return info
     # Bootstrap an existing release once; all new production deploys retain bytes.
@@ -109,14 +110,14 @@ def previous_production(github, retain_legacy=False):
     # Only the approved recheck holds the production lock. Nightly planning
     # must remain read-only to avoid adopting stale production during a deploy.
     if retain_legacy:
-        saved = dict(info, channel='production-release', manifest_base64=base64.b64encode(data).decode())
+        saved = retain(dict(info, channel='production-release'), 'manifest', data)
         item = save_production(github, saved)
         github.request(f"deployments/{item['id']}/statuses", {'state': 'success', 'auto_inactive': False})
     return info
 
 
 def retained_manifest(info):
-    data = base64.b64decode(info['manifest_base64'], validate=True)
+    data = retained(info, 'manifest')
     require(digest(data) == info['manifest_sha256'], 'retained production manifest checksum mismatch')
     value = json.loads(data)
     require(value['release_id'] == info['release_id'] and value['source_revision'] == info['target_sha'],
@@ -138,10 +139,11 @@ def retain_production(github, args):
             'production manifest identity mismatch')
     info = dict(channel='production-release', run_id=env('GITHUB_RUN_ID'), target_sha=value['source_revision'],
                 release_id=value['release_id'], manifest_artifact_id=env('MANIFEST_ARTIFACT_ID'),
-                manifest_sha256=digest(data), manifest_base64=base64.b64encode(data).decode())
+                manifest_sha256=digest(data))
+    info = retain(info, 'manifest', data)
     media = source.with_suffix('.media.json')
     if media.exists():
-        info.update(media_sha256=digest(media.read_bytes()), media_base64=base64.b64encode(media.read_bytes()).decode())
+        info = retain(dict(info, media_sha256=digest(media.read_bytes())), 'media', media.read_bytes())
     audit = json.loads(os.environ.get('PROMOTION_AUDIT') or 'null')
     if audit:
         require(audit['target_sha'] == info['target_sha'] and override_reason(audit['reason']),
@@ -479,11 +481,16 @@ def media_bytes(github, info):
     require(re.fullmatch('[0-9a-f]{64}', checksum), 'invalid media checksum')
     for item in github.deployments('production', 'production-release', sha=info['target_sha'], manifest_sha256=info.get('manifest_sha256')):
         saved = payload(item)
-        if saved.get('media_sha256') == checksum and saved.get('media_base64'):
-            data = base64.b64decode(saved['media_base64'], validate=True)
+        if saved.get('media_sha256') == checksum and (saved.get('media_sealed') or saved.get('media_base64')):
+            data = retained(saved, 'media')
             require(digest(data) == checksum, 'retained media checksum mismatch')
             return data
     return github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.media.json', checksum)
+
+
+def rollback_media(value):
+    """The rollback media pins travel between jobs sealed, because they name the bucket and a secret value in a job output is dropped."""
+    return value.encode() if value.lstrip().startswith('{') else seal.unseal_text(value)
 
 
 def prepare(github, args):
@@ -497,7 +504,7 @@ def prepare(github, args):
     media = media_bytes(github, info)
     if os.environ.get('ROLLBACK_MEDIA'):
         require(args.reuse and not media, 'rollback snapshot is only for a legacy source')
-        media = os.environ['ROLLBACK_MEDIA'].encode()
+        media = rollback_media(os.environ['ROLLBACK_MEDIA'])
     if environment == 'production':
         require('recorder_control' in json.loads(data).get('images', {}), 'production requires recorder control')
     if media:

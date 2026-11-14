@@ -181,6 +181,8 @@ jobs:
     # critical path (19.7 minutes in cut 43358933721) for 0.1 minutes of work.
     if: ${{ !inputs.gate_checked }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -201,6 +203,8 @@ jobs:
       !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) &&
       (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
       release_id: ${{ steps.plan.outputs.release_id }}
@@ -213,6 +217,13 @@ jobs:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
+      - name: Require a target that seals its release files
+        run: |
+          if [[ ! -f scripts/releases/seal.py || ! -d .github/actions/upload-sealed ]]; then
+            echo "::error::Target $TARGET_SHA predates sealed release files. Rebase it on master and release again."
+            exit 1
+          fi
+
       - name: Set up Go for recorder dependency planning
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
@@ -221,8 +232,9 @@ jobs:
 
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           github-token: ${{ github.token }}
           run-id: ${{ inputs.stable_manifest_run_id }}
           pattern: release-manifest-*
@@ -231,8 +243,9 @@ jobs:
 
       - name: Download exact build baseline artifact
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id != ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           github-token: ${{ github.token }}
           run-id: ${{ inputs.stable_manifest_run_id }}
           artifact-ids: ${{ inputs.stable_manifest_artifact_id }}
@@ -312,12 +325,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload release plan
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: managed-release-plan-${{ steps.plan.outputs.release_id }}
           path: ${{ runner.temp }}/managed-release-plan
           retention-days: 7
-          if-no-files-found: error
 
       - name: Plan summary
         env:
@@ -338,6 +351,8 @@ jobs:
     # Without a status function a skipped require-gate (a cut) would skip this job through plan-managed, so it names plan-managed itself.
     if: ${{ !cancelled() && needs.plan-managed.result == 'success' }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - name: Checkout exact release
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -371,8 +386,9 @@ jobs:
       contents: read
       id-token: write
     env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       AWS_REGION: ap-southeast-1
-      ECR_REGISTRY: 688819141892.dkr.ecr.ap-southeast-1.amazonaws.com
+      ECR_REGISTRY: ${{ secrets.CHALK_ECR_REGISTRY }}
       COMPONENT: ${{ matrix.component }}
       RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
     steps:
@@ -384,7 +400,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: arn:aws:iam::688819141892:role/chalk-ci-image-publish
+          role-to-assume: ${{ secrets.CHALK_IMAGE_PUBLISH_ROLE_ARN }}
           aws-region: ap-southeast-1
 
       - name: Verify signing profile is active
@@ -483,14 +499,14 @@ jobs:
           done
 
       - name: Upload immutable image reference
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: managed-image-${{ matrix.component }}-${{ env.RELEASE_ID }}
           path: |
             ${{ runner.temp }}/${{ matrix.component }}-image.txt
             ${{ runner.temp }}/recorder-control-image.txt
           retention-days: 7
-          if-no-files-found: error
 
   build-media:
     name: Build immutable media release archives
@@ -505,8 +521,9 @@ jobs:
       name: nightly
       deployment: false
     env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
-      CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
+      CHALK_MEDIA_ARTIFACT_BUCKET: ${{ secrets.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -525,11 +542,12 @@ jobs:
           node-version-file: .tool-versions
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media-plan
       - name: Prefer the qualified environment pins, including a deploy-only first install
@@ -545,7 +563,7 @@ jobs:
       - name: Refresh credentials before the render build
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
       - name: Build first-install or changed render archive
@@ -557,7 +575,7 @@ jobs:
       - name: Refresh credentials before dispatcher publication
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
       - name: Check whether dispatcher inputs changed
@@ -584,12 +602,12 @@ jobs:
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py publish_zip "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media.json
           retention-days: 90
-          if-no-files-found: error
 
   publish-managed-manifest:
     name: Publish managed release manifest
@@ -604,6 +622,8 @@ jobs:
       (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && (inputs.managed_environment != 'nightly' || needs.plan-managed.outputs.recorder_control != 'true'))) &&
       (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - name: Checkout exact release
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -611,24 +631,27 @@ jobs:
           ref: ${{ inputs.target_sha }}
 
       - name: Download release plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           pattern: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/managed-release-plan
           merge-multiple: true
 
       - name: Download built image references
         if: needs.plan-managed.outputs.build_set != '[]'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           pattern: managed-image-*-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/managed-images
           merge-multiple: true
 
       - name: Download immutable media members
         if: needs.build-media.result == 'success'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media-members
 
@@ -690,12 +713,12 @@ jobs:
 
       - name: Upload release manifest
         id: manifest-upload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
           path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}*.json
           retention-days: 90
-          if-no-files-found: error
 
   deploy-managed:
     name: Deploy managed release to ${{ inputs.managed_environment }}
@@ -705,6 +728,8 @@ jobs:
       release_id: ${{ steps.result.outputs.release_id }}
       restored_source_release_id: ${{ steps.result.outputs.restored_source_release_id }}
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     # The nightly deploy first waits up to 30 minutes for the staging-SFU lease; host polling is bounded to 30 minutes, with time for guarded dispatcher plans.
     timeout-minutes: 90
     environment: ${{ inputs.managed_environment }}
@@ -732,8 +757,9 @@ jobs:
 
       - name: Download exact release manifest
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: ./.github/actions/download-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           merge-multiple: true
           artifact-ids: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
           github-token: ${{ github.token }}
@@ -767,8 +793,8 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
-          CHALK_MANAGED_DEPLOY_ROLE_ARN: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
-          CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
+          CHALK_MANAGED_DEPLOY_ROLE_ARN: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          CHALK_MANAGED_INSTANCE_ID: ${{ secrets.CHALK_MANAGED_INSTANCE_ID }}
           CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
           CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
           CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
@@ -793,7 +819,7 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
 
@@ -820,12 +846,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CHALK_MANAGED_AWS_REGION: ${{ vars.CHALK_MANAGED_AWS_REGION }}
-          CHALK_MANAGED_INSTANCE_ID: ${{ vars.CHALK_MANAGED_INSTANCE_ID }}
+          CHALK_MANAGED_INSTANCE_ID: ${{ secrets.CHALK_MANAGED_INSTANCE_ID }}
           CHALK_MANAGED_LOG_GROUP_NAME: ${{ vars.CHALK_MANAGED_LOG_GROUP_NAME }}
           CHALK_MANAGED_PARAMETER_PREFIX: ${{ vars.CHALK_MANAGED_PARAMETER_PREFIX }}
           CHALK_MANAGED_SSM_DOCUMENT_NAME: ${{ vars.CHALK_MANAGED_SSM_DOCUMENT_NAME }}
           CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || format('/chalk/{0}/release/recorder.json', inputs.managed_environment) }}
-          CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
+          CHALK_MEDIA_ARTIFACT_BUCKET: ${{ secrets.CHALK_MEDIA_ARTIFACT_BUCKET }}
           DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
           MANAGED_ENVIRONMENT: ${{ inputs.managed_environment }}
           MANAGED_SECRET_EXCLUSIONS: ${{ inputs.managed_secret_exclusions || vars.CHALK_MANAGED_SECRET_EXCLUSIONS }}
@@ -929,7 +955,7 @@ jobs:
             printf '## Managed release: %s\n\nSource: `%s`\nApplied: `%s`\n\n' "$MANAGED_ENVIRONMENT" "$SOURCE_RELEASE_ID" "$RELEASE_ID"
             if [[ -s "$DEPLOYMENT_RESULT" ]]; then
               printf '```json\n'
-              jq '{deployment_phase, status, health, release_id, request_id, rolled_back, ssm_command_id, document_version, dispatcher_binding}' "$DEPLOYMENT_RESULT"
+              jq '{deployment_phase, status, health, release_id, request_id, rolled_back, ssm_command_id, document_version, dispatcher_verified: .dispatcher_binding.verified, scheduler_state: .dispatcher_binding.scheduler_state}' "$DEPLOYMENT_RESULT"
               printf '```\n'
             else
               printf 'Deployment did not complete. Inspect the failed step and its SSM command ID; do not bypass CI.\n'
@@ -938,8 +964,9 @@ jobs:
 
       - name: Retain managed deployment proof
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: ./.github/actions/upload-sealed
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: managed-deployment-${{ needs.prepare-release.outputs.release_id }}
           path: ${{ runner.temp }}/managed-deployment.json
           if-no-files-found: ignore
@@ -960,6 +987,8 @@ jobs:
     if: >-
       !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) && inputs.deploy_web && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     strategy:
       matrix:
         target: ${{ fromJSON(inputs.managed_environment == 'nightly' && '["nightly","production"]' || '["production"]') }}
@@ -983,7 +1012,7 @@ jobs:
         env:
           WEB_TARGET: ${{ matrix.target }}
           # Nightly only; the production artifact never receives a direct Sync URL from this job.
-          CHALK_WEB_SYNC_DIRECT_URL: ${{ matrix.target == 'nightly' && vars.CHALK_NIGHTLY_SYNC_DIRECT_URL || '' }}
+          CHALK_WEB_SYNC_DIRECT_URL: ${{ matrix.target == 'nightly' && secrets.CHALK_NIGHTLY_SYNC_DIRECT_URL || '' }}
         run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --source-root "$GITHUB_WORKSPACE/build-source"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -996,6 +1025,8 @@ jobs:
     needs: build-web
     if: always() && !cancelled() && needs.build-web.result == 'success'
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       web: ${{ steps.refs.outputs.web }}
     steps:
@@ -1012,6 +1043,8 @@ jobs:
       always() && (!cancelled() || inputs.pages_rollback_id != '') &&
       (inputs.manifest_run_id != '' || needs.publish-managed-manifest.result == 'success')
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       release_id: ${{ steps.prepare.outputs.release_id }}
       manifest_artifact_id: ${{ steps.upload.outputs.artifact-id || needs.publish-managed-manifest.outputs.artifact_id }}
@@ -1045,14 +1078,14 @@ jobs:
           args=()
           if [[ "$REUSE" == true ]]; then args+=(--reuse); fi
           python3 scripts/releases/release.py prepare "${args[@]}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: ./.github/actions/upload-sealed
         id: upload
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.manifest_run_id != '')
         with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: release-manifest-${{ steps.prepare.outputs.release_id }}
           path: release-input/${{ steps.prepare.outputs.release_id }}*.json
           retention-days: 90
-          if-no-files-found: error
 
   deploy-web:
     name: Deploy selected web or restore Pages
@@ -1068,11 +1101,12 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.managed_environment }}
     env:
-      # Preserve today's production destination; new configuration is nightly-only.
-      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.managed_environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+      # The account id is an environment secret so no workflow file or log carries it.
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
-      CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ vars.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
       # The Pages-only credential cannot deploy Workers. Probe both live routes and fail closed.
       CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY: "true"
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
