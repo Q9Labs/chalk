@@ -7,7 +7,8 @@ from unittest.mock import Mock, patch
 
 import live_calls
 import release
-from github_release import GitHub
+from github_release import GitHub, payload
+from test_release import OTHER_SHA, SHA, held
 
 
 def at(hour, minute=0, second=0, day=15):
@@ -94,36 +95,61 @@ class LiveCallsTests(unittest.TestCase):
                                    deadline=at(1, day=16))
 
 
+def readiness(answer):
+    """Fake the HTTP boundary: the production API answers with these bytes, or fails with this error."""
+    opener = Mock()
+    if isinstance(answer, Exception):
+        opener.open.side_effect = answer
+    else:
+        opener.open.return_value.read.return_value = answer
+    return patch.object(live_calls.urllib.request, 'build_opener', return_value=opener)
+
+
+QUIET, BUSY = b'{"live_participants": 0}', b'{"live_participants": 2}'
+
+
 class AutoPromoteWindowTests(unittest.TestCase):
     """Automatic promotion names a SHA only inside the quiet window and only while no call runs."""
 
-    def promoted(self, now, calls=live_calls.Quiet()):
+    def setUp(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
-        output = Path(directory) / 'output'
-        self.enterContext(patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')))
-        self.enterContext(patch.object(live_calls, 'now', return_value=now))
-        self.enterContext(patch.object(live_calls, 'read_configured', return_value=calls))
-        self.enterContext(patch.object(release, 'choose', return_value=dict(selection=dict(target_sha='a' * 40), previous=dict(target_sha='b' * 40))))
-        release.auto_promote(Mock(spec=GitHub), None)
-        return dict(line.split('=', 1) for line in output.read_text().splitlines())
+        self.output = Path(directory) / 'output'
+        self.enterContext(patch.dict(os.environ, GITHUB_OUTPUT=str(self.output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'),
+                                     SCORECARD_OVERRIDE='', LIVE_CALLS_API_URL='https://api.example', LIVE_CALLS_API_TOKEN='token'))
+        # Release validation, the production lookup and git ancestry have their own tests (test_release.py); selection runs for real.
+        self.enterContext(patch.object(release, 'validate_choice', side_effect=lambda github, item: payload(item)))
+        self.enterContext(patch.object(release, 'previous_production', return_value=dict(target_sha=OTHER_SHA)))
+        self.enterContext(patch.object(release, 'ancestor'))
+
+    def github(self):
+        item = held()
+        api = Mock(spec=GitHub)
+        latency = [dict(id=9, payload=dict(channel='nightly-latency', target_sha=SHA, result='passed', scorecard_result='passed',
+                                           scorecard_gated_metrics=[], scorecard_missing_items=[]))]
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: latency if task == 'nightly-latency' else [item]
+        api.request.side_effect = lambda route: [dict(state=item['latest_status'])] if '/statuses?' in route else item
+        return api
+
+    def promoted(self, now, answer=QUIET):
+        with patch.object(live_calls, 'now', return_value=now), readiness(answer):
+            release.auto_promote(self.github(), None)
+        return dict(line.split('=', 1) for line in self.output.read_text().splitlines())
 
     def test_it_waits_for_the_quiet_window(self):
         for now, promotes in ((at(20, 59), False), (at(21), True), (at(23, 59), True), (at(0, 44, day=16), True),
                               (at(0, 45, day=16), False), (at(0, 59, day=16), False),
                               (at(1, day=16), False), (at(12), False)):
             with self.subTest(now=f'{now:%H:%M}'):
-                self.assertEqual(self.promoted(now)['sha'], 'a' * 40 if promotes else '')
+                self.assertEqual(self.promoted(now)['sha'], SHA if promotes else '')
 
     def test_it_holds_while_calls_run_or_the_count_is_unknown(self):
-        for calls in (live_calls.Busy(), live_calls.Unknown('no answer')):
-            with self.subTest(calls=calls):
-                self.assertEqual(self.promoted(at(22, 5), calls)['sha'], '')
+        for answer in (BUSY, OSError('no answer'), b'{}'):
+            with self.subTest(answer=answer):
+                self.assertEqual(self.promoted(at(22, 5), answer)['sha'], '')
 
     def test_a_slow_read_that_crosses_the_end_of_the_window_promotes_nothing(self):
         for first, second in ((at(0, 59, 59, day=16), at(1, 0, 1, day=16)), (at(0, 44, 59, day=16), at(0, 45, day=16))):
-            with self.subTest(read_ends=f'{second:%H:%M:%S}'):
-                self.enterContext(patch.object(live_calls, 'now', side_effect=[first, second]))
-                self.enterContext(patch.object(live_calls, 'read_configured', return_value=live_calls.Quiet()))
+            with self.subTest(read_ends=f'{second:%H:%M:%S}'), patch.object(live_calls, 'now', side_effect=[first, second]), readiness(QUIET):
                 with self.assertRaises(ValueError) as error:
                     live_calls.require_quiet_window()
                 self.assertIn('too late to dispatch', str(error.exception))
