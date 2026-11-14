@@ -40,7 +40,9 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      deployment: false
     # A nightly chalk_sfu run may wait up to 30 minutes for the staging SFU lease.
     timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 15 }}
     # The staging SFU lease is a Git ref, so a nightly chalk_sfu run needs contents:write. Other runs never push.

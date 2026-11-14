@@ -129,7 +129,10 @@ jobs:
   smoke:
     name: Real-call proofs
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.environment || 'production' }}
+    # The proof only needs the environment's secrets and variables. A deployment record would mark the held nightly cut inactive (features/scorecard/deployment-records.test.mjs).
+    environment:
+      name: ${{ inputs.environment || 'production' }}
+      deployment: false
     outputs:
       result: ${{ steps.result.outputs.result }}
       failure: ${{ steps.prove.outputs.failure }}
