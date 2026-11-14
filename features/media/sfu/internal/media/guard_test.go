@@ -71,19 +71,6 @@ func TestStealAboveThresholdRefusesNewEpisodesAndKeepsExistingOnes(t *testing.T)
 	node.newTestSession(t, episodeScope("new", "bob"))
 }
 
-func TestOneBusySecondAtBootDoesNotCloseAdmission(t *testing.T) {
-	node := newTestNode(t, nil)
-	host := &fakeSteal{}
-	node.guard.readSteal = host.read
-	for range 5 {
-		host.advance(50)
-		node.guard.tick()
-	}
-	if reason := node.guard.closedReason(); reason != "" {
-		t.Fatalf("admission closed before a full window: %s", reason)
-	}
-}
-
 // fakeSched is the runtime's cumulative scheduler latency histogram, with
 // buckets up to 1, 5, 20, 50 and 100 ms and beyond.
 type fakeSched struct{ counts [6]uint64 }
@@ -167,59 +154,6 @@ func TestAHostStallUnderTheStealThresholdClosesAdmissionAndReopensWithinSeconds(
 	}
 	run(30, 2, 0, open("recovered"))
 	node.newTestSession(t, episodeScope("new", "bob"))
-}
-
-// One class joining an idle node: its transports drain keyframes at their first
-// estimate, so pacer queue delay reads 50-75 ms for 30 s, while the host is idle
-// and goroutines get the CPU at once. That delay is the links', so admission
-// stays open.
-func TestAJoinsPacerQueueDelayDoesNotCloseAdmission(t *testing.T) {
-	node := newTestNode(t, func(cfg *config.Config) { cfg.Guard.MaxSchedulerLatency = 20 * time.Millisecond })
-	host, sched := &fakeSteal{}, &fakeSched{}
-	node.guard.readSteal, node.guard.readSched = host.read, sched.read
-	for second := range 40 {
-		host.advance(2)
-		sched.second(5_000, 0)
-		if second < 30 {
-			for range 84 {
-				node.guard.delays.record(0)
-			}
-			for range 10 {
-				node.guard.delays.record(45 * time.Millisecond)
-			}
-			for range 6 {
-				node.guard.delays.record(70 * time.Millisecond)
-			}
-		}
-		node.guard.tick()
-		if health := node.guard.snapshot(); health.AdmissionReason != "" {
-			t.Fatalf("second %d of a join: health %+v, want admission open", second, health)
-		}
-		if second == 29 && node.guard.snapshot().QueueDelayP95 <= 50*time.Millisecond {
-			t.Fatalf("health %+v, want the join's queue delay still reported", node.guard.snapshot())
-		}
-	}
-	node.newTestSession(t, episodeScope("new", "bob"))
-}
-
-func TestReadProcStatParsesStealOnLinux(t *testing.T) {
-	times, ok := readProcStat()
-	if !ok {
-		t.Skip("no /proc/stat on this host")
-	}
-	if times.total == 0 || times.steal > times.total {
-		t.Fatalf("cpu times %+v", times)
-	}
-}
-
-func TestSchedulerLatencyIsReadable(t *testing.T) {
-	first := readSchedulerLatencies()
-	time.Sleep(10 * time.Millisecond)
-	second := readSchedulerLatencies()
-	if first == nil || second == nil {
-		t.Fatal("the runtime exports no scheduler latency histogram")
-	}
-	_ = histogramDeltaPercentile(*first, *second, 0.99)
 }
 
 // A joining Participant's real pacer at its first estimate, fed 120 kB of

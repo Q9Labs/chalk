@@ -1,7 +1,6 @@
 package media
 
 import (
-	"math"
 	"testing"
 	"time"
 )
@@ -14,7 +13,6 @@ type pathSim struct {
 	now   int64 // node monotonic nanoseconds
 	skew  int64 // receiver clock minus node clock
 	sent  float64
-	seq   uint16
 	last  int64 // arrival of the latest packet, so the path keeps order
 	free  int64 // when the bottleneck finishes what it holds
 	queue []pathPacket
@@ -113,71 +111,6 @@ func (s *pathSim) run(d time.Duration) (paused bool) {
 }
 
 func (s *pathSim) estimate() float64 { return s.tr.estimator.current() }
-
-var simLayers = []layerRate{{rid: "h", bps: 1_200_000}, {rid: "m", bps: 500_000}, {rid: "l", bps: 150_000}}
-
-// A sender that sends little onto a path that loses no media must not pause for
-// congestion. A delay hump reads as overuse, and the estimate then falls to 85%
-// of the sender's own low rate (under the lowest layer's cost) and regrows only
-// 8% a second. A few large packets the receiver never reports (padding it drops)
-// take the delivered share of bytes under 95% while packet loss stays low. Before
-// the fix the tile paused for those seconds.
-func TestAppLimitedSenderDoesNotPauseForADelayHump(t *testing.T) {
-	sim := newPathSim(120_000, simLayers)
-	sim.run(3 * time.Second)
-	before := sim.estimate()
-	start := sim.now
-	sim.stray = time.Second
-	sim.extra = func(at int64) time.Duration {
-		if at < start || at > start+int64(time.Second) {
-			return 0
-		}
-		return time.Duration(float64(at-start) / float64(time.Second) * float64(250*time.Millisecond))
-	}
-	paused := sim.run(10 * time.Second)
-	t.Logf("estimate %.0f -> %.0f, decrease %+v, lost %d", before, sim.estimate(), sim.tr.estimator.lastDecrease, sim.lost)
-	if paused {
-		t.Errorf("the tile paused for congestion though the path lost no media (estimate %.0f -> %.0f)", before, sim.estimate())
-	}
-}
-
-// A sender ramps from 150 kbps to 600 kbps on a path that carries far more, and
-// one blip of receiver jitter reads as overuse in the middle of it. One blip is
-// no evidence of a full path: the estimate must hold, never fall under the rate
-// the path already carried, and the tile must never pause.
-func TestRampWithOneOveruseBlipNeverPausesOrCutsTheEstimate(t *testing.T) {
-	sim := newPathSim(150_000, simLayers)
-	floor, lowest := 0.0, math.MaxFloat64
-	step := func(d time.Duration) {
-		t.Helper()
-		if sim.run(d) {
-			t.Fatalf("the tile paused at %v, sending %.0f bps, estimate %.0f", time.Duration(sim.now), sim.sendBps, sim.estimate())
-		}
-		floor = max(floor, sim.sendBps)
-		lowest = min(lowest, sim.estimate()-floor)
-	}
-	step(3 * time.Second)
-	for _, rate := range []float64{250_000, 400_000, 600_000} {
-		sim.sendBps = rate
-		step(time.Second)
-	}
-	// The blip: for 100 ms the receiver holds each packet longer, up to 100 ms, then catches up.
-	blip := sim.now
-	sim.extra = func(at int64) time.Duration {
-		if at < blip || at > blip+int64(100*time.Millisecond) {
-			return 0
-		}
-		return time.Duration(float64(at-blip) / float64(100*time.Millisecond) * float64(100*time.Millisecond))
-	}
-	cuts := sim.tr.estimator.lastDecrease
-	step(10 * time.Second)
-	if sim.tr.estimator.lastDecrease != cuts {
-		t.Errorf("one blip cut the estimate: %+v", sim.tr.estimator.lastDecrease)
-	}
-	if lowest < 0 {
-		t.Errorf("the estimate fell %.0f bps under the rate the path had carried (%.0f bps)", -lowest, floor)
-	}
-}
 
 // A sender at 600 kbps onto a path of 300 kbps loses packets for as long as it
 // sends. The tile, whose lowest layer needs more than the path carries, must

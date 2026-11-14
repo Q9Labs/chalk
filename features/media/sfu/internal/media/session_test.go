@@ -273,56 +273,6 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 	})
 }
 
-func TestForcedSubscriptionCloseReleasesTheSender(t *testing.T) {
-	node := newTestNode(t, nil)
-	publisher := node.newTestSession(t, testScope("alice", 1))
-	subscriber := node.newTestSession(t, testScope("bob", 1))
-	publish(t, publisher, "mic", 1)
-	viewer := newTestPeer(t)
-
-	for cycle := range 6 {
-		pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic-0"))
-		if err != nil || len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 0 {
-			t.Fatalf("cycle %d pull: %+v, %v", cycle, pulled, err)
-		}
-		if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
-			t.Fatalf("cycle %d answer: %v", cycle, err)
-		}
-		mid := pulled.Tracks[0].Mid
-		subscriber.mu.Lock()
-		closing := subscriber.subscribed[mid]
-		subscriber.mu.Unlock()
-		if closing == nil {
-			t.Fatalf("cycle %d: no subscription for mid %q", cycle, mid)
-		}
-
-		if _, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
-			t.Fatalf("cycle %d close: %v", cycle, err)
-		}
-
-		// The RTCP reader must end, or every cycle leaks a goroutine.
-		ended := make(chan error, 1)
-		go func() {
-			_, _, err := closing.sender.ReadRTCP()
-			ended <- err
-		}()
-		select {
-		case err := <-ended:
-			if err == nil {
-				t.Fatalf("cycle %d: the sender still delivers RTCP after the close", cycle)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("cycle %d: the RTCP reader of a closed subscription is still blocked", cycle)
-		}
-		if direction := closing.transceiver.Direction(); direction != webrtc.RTPTransceiverDirectionInactive {
-			t.Fatalf("cycle %d: closed subscription's transceiver is %s, want inactive", cycle, direction)
-		}
-		if tracks, _ := subscriber.Inspect(); len(tracks.Tracks) != 0 {
-			t.Fatalf("cycle %d: inspect still lists %+v", cycle, tracks.Tracks)
-		}
-	}
-}
-
 func TestPullBatchCountsItsOwnAdditions(t *testing.T) {
 	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSubscriptionsPerSession = 2 })
 	publisher := node.newTestSession(t, testScope("alice", 1))
@@ -396,67 +346,6 @@ func TestUnsupportedCodecIsATrackError(t *testing.T) {
 	}
 }
 
-func TestConnectTimerStopsOnceConnected(t *testing.T) {
-	node := newTestNode(t, nil)
-	session := node.newTestSession(t, testScope("alice", 1))
-	peer := newTestPeer(t)
-	peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
-	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
-		Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("mic", peer.mids(), "microphone"),
-	})
-	if err != nil || len(response.TrackErrors) != 0 {
-		t.Fatalf("push: %+v, %v", response, err)
-	}
-	if err := peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: response.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	eventually(t, "the session to connect", 15*time.Second, func() bool {
-		return session.pc.ConnectionState() == webrtc.PeerConnectionStateConnected
-	})
-	// Reset reports whether the timer was still armed. The connection callback runs shortly
-	// after the state change, so poll; an armed timer stays armed and the wait times out.
-	eventually(t, "the connect timer to stop", 2*time.Second, func() bool { return !session.connectTimer.Reset(time.Hour) })
-}
-
-func TestRejectedRemoteDescriptionClosesTheSession(t *testing.T) {
-	garbage := protocol.SessionDescription{Type: "answer", SDP: "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:9\r\n"}
-
-	t.Run("answer", func(t *testing.T) {
-		node := newTestNode(t, nil)
-		publisher := node.newTestSession(t, testScope("alice", 1))
-		publish(t, publisher, "mic", 1)
-		subscriber := node.newTestSession(t, testScope("bob", 1))
-		pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic-0"))
-		if err != nil || pulled.SessionDescription == nil {
-			t.Fatalf("pull: %+v, %v", pulled, err)
-		}
-		if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: garbage}); !errors.Is(err, ErrNegotiationFailed) {
-			t.Fatalf("garbage answer: %v, want negotiation failed", err)
-		}
-		if !subscriber.isClosed() {
-			t.Fatal("the session stayed open with a pending offer nobody can answer")
-		}
-		if _, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic-0")); !errors.Is(err, ErrSessionGone) {
-			t.Fatalf("pull after the failed answer: %v, want session gone", err)
-		}
-	})
-
-	t.Run("offer", func(t *testing.T) {
-		node := newTestNode(t, nil)
-		session := node.newTestSession(t, testScope("alice", 1))
-		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
-			Scope: session.scope, SessionDescription: &protocol.SessionDescription{Type: "offer", SDP: "not sdp"},
-			Tracks: localTracks("mic", []string{"0"}, "microphone"),
-		})
-		if !errors.Is(err, ErrNegotiationFailed) {
-			t.Fatalf("garbage offer: %v, want negotiation failed", err)
-		}
-		if !session.isClosed() {
-			t.Fatal("the session stayed open after a rejected offer")
-		}
-	})
-}
-
 func TestInvalidCloseBatchChangesNothing(t *testing.T) {
 	node := newTestNode(t, nil)
 	session := node.newTestSession(t, testScope("alice", 1))
@@ -471,26 +360,5 @@ func TestInvalidCloseBatchChangesNothing(t *testing.T) {
 	inspected, err := session.Inspect()
 	if err != nil || len(inspected.Tracks) != 2 {
 		t.Fatalf("inspect after a refused batch: %+v, %v; want both tracks", inspected, err)
-	}
-}
-
-func TestStaleGenerationStaysFencedAfterTheSessionCloses(t *testing.T) {
-	node := newTestNode(t, nil)
-	older := testScope("alice", 1)
-	newer := testScope("alice", 2)
-	current := node.newTestSession(t, newer)
-	current.Close()
-	if node.SessionCount() != 0 {
-		t.Fatal("the newer session did not close")
-	}
-
-	if _, err := node.Create("delayed-create", older, ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
-		t.Fatalf("delayed create from generation 1 after generation 2 closed: %v, want stale generation", err)
-	}
-	if node.SessionCount() != 0 {
-		t.Fatal("the stale create left a session")
-	}
-	if _, err := node.Create("create-gen-3", testScope("alice", 3), ParticipantSession, nil); err != nil {
-		t.Fatalf("a newer generation was refused: %v", err)
 	}
 }

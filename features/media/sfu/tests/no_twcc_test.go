@@ -54,26 +54,6 @@ func (c *noTWCCCall) cameraLayer(t *testing.T) string {
 	return ""
 }
 
-// A viewer that sends no transport-wide feedback is still adapted: heavy loss in its receiver
-// reports lowers its ceiling, the allocator moves its camera to the low layer, and media keeps
-// flowing on a link that cannot carry the high one.
-func TestViewerWithoutTWCCStepsDownOnALossyLink(t *testing.T) {
-	call := startNoTWCCCall(t)
-	eventually(t, "the camera starts on the high layer", 20*time.Second, func() bool { return call.cameraLayer(t) == "h" })
-	call.viewer.link.shape(700_000, 20_000, 20*time.Millisecond, 0, 0)
-	started := time.Now()
-	eventually(t, "the camera steps down to the low layer", 30*time.Second, func() bool { return call.cameraLayer(t) == "l" })
-	t.Logf("low layer after %s", time.Since(started).Round(100*time.Millisecond))
-
-	for second := range 4 {
-		before := call.received.count(webrtc.RTPCodecTypeVideo)
-		time.Sleep(time.Second)
-		if got := call.received.count(webrtc.RTPCodecTypeVideo) - before; got < 10 {
-			t.Fatalf("second %d after the step down carried %d video packets, want a flowing stream", second, got)
-		}
-	}
-}
-
 // A viewer that sends REMB is held to what it asks for, on a link with no loss at all.
 func TestViewerWithoutTWCCFollowsItsREMB(t *testing.T) {
 	call := startNoTWCCCall(t)

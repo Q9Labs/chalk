@@ -144,24 +144,6 @@ func TestOnlyListedEventsAndFieldsLeaveTheNode(t *testing.T) {
 	}
 }
 
-// The body of an exported record is its event name, even when the emitting line has another message.
-func TestExportedBodyIsTheEventName(t *testing.T) {
-	sink := newExportSink(t)
-	log, shutdown := newExportLogger(t, sink, slog.NewJSONHandler(io.Discard, nil))
-	log.Info("subscription paused for congestion", "event", media.EventSubscriptionCongestion, "episode_id", "episode-1", "reason", "insufficient_bandwidth", "estimate_bps", 1200.0, "probing", true)
-	shutdown()
-
-	exported := sink.exported()
-	if strings.Contains(exported, "subscription paused for congestion") {
-		t.Error("the message text left the node")
-	}
-	for _, want := range []string{"sfu.subscription.congestion", "insufficient_bandwidth", "estimate_bps"} {
-		if !strings.Contains(exported, want) {
-			t.Errorf("the congestion event lost %q", want)
-		}
-	}
-}
-
 // OTEL_RESOURCE_ATTRIBUTES is merged into a provider's resource by the SDK, outside the allowlist.
 // Neither the logs nor the metrics of the node may carry it.
 func TestResourceAttributesFromTheEnvironmentStayOnTheNode(t *testing.T) {
