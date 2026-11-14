@@ -1086,8 +1086,12 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		arrivalResult.Credential = append([]byte(nil), guestCredential...)
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
+		role, roleErr := r.arrivalRole(ctx, space, input)
+		if roleErr != nil {
+			return PublicSpaceArrival{}, roleErr
+		}
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
+			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Role: role, Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}
@@ -1102,7 +1106,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		if arrivalResult.Arrival.State != ArrivalPending {
 			return PublicSpaceArrival{}, ErrArrivalUnavailable
 		}
-		grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
+		grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Role: role, Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
 		if grantErr != nil {
 			return PublicSpaceArrival{}, grantErr
 		}
@@ -1257,6 +1261,33 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		return result, err
 	}
 	return r.arrivalResult(space, arrival), nil
+}
+
+// arrivalRole is owner for the person who started this public call, who arrives again after a Leave or a lost seat,
+// and collaborator for everyone else. A rejoin is a new arrival, so the starter is known by the credential of the
+// arrival that created the Space: the guest credential of a native client, or the starter credential of a browser.
+func (r Runtime) arrivalRole(ctx context.Context, space PublicSpace, input PublicInviteArrivalInput) (string, error) {
+	lifecycle, err := r.service.GetAutoLifecycle(ctx, space.TenantID, space.SpaceID)
+	if errors.Is(err, ErrAutoLifecycleNotFound) || (err == nil && lifecycle.CreatorArrivalHandle.IsZero()) {
+		return PublicRoleCollaborator, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read the starter of public Space: %w", err)
+	}
+	for _, presented := range []string{input.StarterCredentials[lifecycle.CreatorArrivalHandle.String()], input.GuestCredential} {
+		credential, decodeErr := decodeGuestCredential(presented)
+		if decodeErr != nil || len(credential) == 0 {
+			continue
+		}
+		_, err := r.service.GetArrivalForCredential(ctx, lifecycle.CreatorArrivalHandle, credential)
+		if err == nil {
+			return PublicRoleOwner, nil
+		}
+		if !errors.Is(err, ErrCredentialMismatch) && !errors.Is(err, ErrInvalidCredential) {
+			return "", fmt.Errorf("check the starter of public Space: %w", err)
+		}
+	}
+	return PublicRoleCollaborator, nil
 }
 
 func (r Runtime) resumeAdmittedArrival(ctx context.Context, space PublicSpace, arrival Arrival, clients mediaplane.ClientProviders) (PublicSpaceArrival, error) {

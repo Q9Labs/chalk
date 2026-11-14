@@ -468,11 +468,14 @@ type PublicInviteArrivalInput struct {
 	ArrivalHandle string
 	// GuestCredential is optional for a new guest arrival. Runtime derives a
 	// server-bound credential from the invite and request key when it is absent.
-	GuestCredential   string
-	AccountID         utilities.ID
-	AccountAuthorized bool
-	Native            bool
-	MediaClients      mediaplane.ClientProviders
+	GuestCredential string
+	// StarterCredentials holds the credentials a browser kept from the calls it started, by the arrival handle that
+	// started each. A rejoin is a new arrival, so this is how the Space's starter is known again.
+	StarterCredentials map[string]string
+	AccountID          utilities.ID
+	AccountAuthorized  bool
+	Native             bool
+	MediaClients       mediaplane.ClientProviders
 }
 
 type PublicInviteArrivalStatusInput struct {
