@@ -11,6 +11,18 @@ export function Cancel({ onClose }: { readonly onClose: () => void }) {
   );
 }
 
+/** The footer of a form dialog: Cancel, and the button that submits the form. */
+export function FormActions({ onClose, busy, children }: { readonly onClose: () => void; readonly busy: boolean; readonly children: string }) {
+  return (
+    <>
+      <Cancel onClose={onClose} />
+      <button type="submit" className="btn pri lg" disabled={busy}>
+        {children}
+      </button>
+    </>
+  );
+}
+
 export function FieldError({ id, children }: { readonly id: string; readonly children: string }) {
   return (
     <p className="err" id={id}>

@@ -62,11 +62,11 @@ function mapRecordings(data: CallPageDTO, change: Recordings): CallPageDTO {
 }
 
 function lifecycleChanged(data: CallPageDTO, status: CallStatusDTO): boolean {
-  const episode = data.episodes.find((item) => item.status !== "ended");
-  if (status.episode?.status === "active" && data.live?.id !== status.episode.id) return true;
+  const next = status.episode;
+  if (next?.status === "active" && data.live?.id !== next.id) return true;
   if ((data.episodes[0]?.id ?? null) !== status.latestEpisodeId) return true;
-  if ((episode?.id ?? data.live?.id) !== status.episode?.id) return true;
-  return (episode?.status ?? (data.live ? "active" : undefined)) !== status.episode?.status;
+  const current = data.episodes.find((item) => item.status !== "ended") ?? (data.live ? { id: data.live.id, status: "active" } : undefined);
+  return current?.id !== next?.id || current?.status !== next?.status;
 }
 
 /** Reload the newest page after a start or end. Older ended sessions stay snapshots until an explicit page refresh. */

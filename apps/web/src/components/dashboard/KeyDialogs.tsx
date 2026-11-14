@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type Ref } from "react";
 import { type DeveloperAction, type KeyDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
 import { Dialog } from "./Dialog";
 import { Seg, useIntentKeys, useToast } from "./kit";
-import { Cancel, FieldError } from "./developer-dialog-parts";
+import { Cancel, FieldError, FormActions } from "./developer-dialog-parts";
 
 type CreateKey = Extract<DeveloperAction, { action: "create-key" }>;
 type Scope = CreateKey["scopes"][number];
@@ -38,11 +38,92 @@ export function accessLabel(scopes: readonly string[]): string {
     .join(", ");
 }
 
+const ACCESS_HELP: Record<Access, string> = {
+  full: "Reads and changes everything in this account.",
+  read: "Reads calls, sessions and recordings. Changes nothing.",
+  custom: "Pick what this key can read and change.",
+};
+
+function scopesFor(access: Access, custom: readonly Scope[]): readonly Scope[] {
+  if (access === "full") return ALL_SCOPES;
+  return access === "read" ? ALL_SCOPES.filter((scope) => scope.endsWith(":read")) : custom;
+}
+
+function ScopeGrid({ chosen, onChange }: { readonly chosen: readonly Scope[]; readonly onChange: (scopes: readonly Scope[]) => void }) {
+  return (
+    <div className="scopes" role="group" aria-label="Scopes">
+      <span className="h">Resource</span>
+      <span className="h">Read</span>
+      <span className="h">Write</span>
+      {RESOURCES.map(([resource, label]) => (
+        <ScopeRow key={resource} resource={resource} label={label} chosen={chosen} onChange={onChange} />
+      ))}
+    </div>
+  );
+}
+
+function NameField({ name, invalid, inputRef, onChange }: { readonly name: string; readonly invalid: boolean; readonly inputRef: Ref<HTMLInputElement>; readonly onChange: (name: string) => void }) {
+  return (
+    <div className="field" style={{ marginTop: "var(--space-4)" }}>
+      <label className="lbl" htmlFor="key-name">
+        Name
+      </label>
+      <input
+        ref={inputRef}
+        id="key-name"
+        className={invalid ? "inp bad" : "inp"}
+        value={name}
+        placeholder="For example, Production server"
+        maxLength={120}
+        autoComplete="off"
+        aria-invalid={invalid}
+        aria-describedby={invalid ? "key-name-error" : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid ? <FieldError id="key-name-error">Give the key a name, so you know where it’s used.</FieldError> : null}
+    </div>
+  );
+}
+
+type AccessFieldProps = { readonly access: Access; readonly custom: readonly Scope[]; readonly invalid: boolean; readonly onAccess: (access: Access) => void; readonly onCustom: (scopes: readonly Scope[]) => void };
+
+function AccessField({ access, custom, invalid, onAccess, onCustom }: AccessFieldProps) {
+  return (
+    <div className="field">
+      <span className="lbl" id="key-access">
+        Access
+      </span>
+      <Seg labelledBy="key-access" options={ACCESS} value={access} onChange={onAccess} />
+      <p className="help">{ACCESS_HELP[access]}</p>
+      {access === "custom" ? <ScopeGrid chosen={custom} onChange={onCustom} /> : null}
+      {invalid ? <FieldError id="key-scope-error">Choose at least one scope.</FieldError> : null}
+    </div>
+  );
+}
+
+function ExpiryField({ expiry, expiresAt, onChange }: { readonly expiry: "30" | "90" | "365"; readonly expiresAt: string; readonly onChange: (expiry: "30" | "90" | "365") => void }) {
+  return (
+    <div className="field">
+      <span className="lbl" id="key-expiry">
+        Expires
+      </span>
+      <Seg labelledBy="key-expiry" options={EXPIRY} value={expiry} onChange={onChange} />
+      <p className="help">On {fullDate(expiresAt)}.</p>
+    </div>
+  );
+}
+
+/** The chosen lifetime, and the moment it ends counted from when the dialog opened. */
+function useExpiry() {
+  const [expiry, setExpiry] = useState<"30" | "90" | "365">("90");
+  const [openedAt] = useState(Date.now);
+  return { expiry, setExpiry, expiresAt: new Date(openedAt + Number(expiry) * 24 * 60 * 60 * 1000).toISOString() };
+}
+
 export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () => void; readonly onCreated: (secret: string) => void }) {
   const [name, setName] = useState("");
   const [access, setAccess] = useState<Access>("full");
-  const [expiry, setExpiry] = useState<"30" | "90" | "365">("90");
-  const [openedAt] = useState(Date.now);
+  const { expiry, setExpiry, expiresAt } = useExpiry();
   const [custom, setCustom] = useState<readonly Scope[]>([]);
   const [errors, setErrors] = useState<{ name?: boolean; scopes?: boolean }>({});
   const [saving, setSaving] = useState(false);
@@ -50,11 +131,10 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
   const intents = useIntentKeys();
   const nameInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const expiresAt = new Date(openedAt + Number(expiry) * 24 * 60 * 60 * 1000).toISOString();
 
   async function create() {
     const trimmed = name.trim();
-    const scopes = access === "full" ? ALL_SCOPES : access === "read" ? ALL_SCOPES.filter((scope) => scope.endsWith(":read")) : custom;
+    const scopes = scopesFor(access, custom);
     if (!trimmed || !scopes.length) {
       setErrors({ name: !trimmed, scopes: !scopes.length });
       if (!trimmed) nameInput.current?.focus();
@@ -63,8 +143,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
     setSaving(true);
     try {
       const request = { name: trimmed, scopes: [...scopes], expiresAt };
-      const { secret } = await act("developer", { action: "create-key", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
-      onCreated(secret);
+      onCreated((await act("developer", { action: "create-key", ...request, idempotencyKey: intents.key(JSON.stringify(request)) })).secret);
     } catch (error) {
       toast(errorMessage(error), { icon: "alert" });
     } finally {
@@ -81,69 +160,31 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
       onClose={onClose}
       onSubmit={() => void create()}
       actions={
-        <>
-          <Cancel onClose={onClose} />
-          <button type="submit" className="btn pri lg" disabled={saving}>
-            Create key
-          </button>
-        </>
+        <FormActions onClose={onClose} busy={saving}>
+          Create key
+        </FormActions>
       }
     >
-      <div className="field" style={{ marginTop: "var(--space-4)" }}>
-        <label className="lbl" htmlFor="key-name">
-          Name
-        </label>
-        <input
-          ref={nameInput}
-          id="key-name"
-          className={errors.name ? "inp bad" : "inp"}
-          value={name}
-          placeholder="For example, Production server"
-          maxLength={120}
-          autoComplete="off"
-          aria-invalid={Boolean(errors.name)}
-          aria-describedby={errors.name ? "key-name-error" : undefined}
-          onChange={(event) => {
-            setName(event.target.value);
-            setErrors((value) => ({ ...value, name: false }));
-          }}
-        />
-        {errors.name ? <FieldError id="key-name-error">Give the key a name, so you know where it’s used.</FieldError> : null}
-      </div>
-      <div className="field">
-        <span className="lbl" id="key-access">
-          Access
-        </span>
-        <Seg labelledBy="key-access" options={ACCESS} value={access} onChange={setAccess} />
-        <p className="help">{access === "full" ? "Reads and changes everything in this account." : access === "read" ? "Reads calls, sessions and recordings. Changes nothing." : "Pick what this key can read and change."}</p>
-        {access === "custom" ? (
-          <div className="scopes" role="group" aria-label="Scopes">
-            <span className="h">Resource</span>
-            <span className="h">Read</span>
-            <span className="h">Write</span>
-            {RESOURCES.map(([resource, label]) => (
-              <ScopeRow
-                key={resource}
-                resource={resource}
-                label={label}
-                chosen={custom}
-                onChange={(next) => {
-                  setCustom(next);
-                  setErrors((value) => ({ ...value, scopes: false }));
-                }}
-              />
-            ))}
-          </div>
-        ) : null}
-        {errors.scopes ? <FieldError id="key-scope-error">Choose at least one scope.</FieldError> : null}
-      </div>
-      <div className="field">
-        <span className="lbl" id="key-expiry">
-          Expires
-        </span>
-        <Seg labelledBy="key-expiry" options={EXPIRY} value={expiry} onChange={setExpiry} />
-        <p className="help">On {fullDate(expiresAt)}.</p>
-      </div>
+      <NameField
+        name={name}
+        invalid={Boolean(errors.name)}
+        inputRef={nameInput}
+        onChange={(value) => {
+          setName(value);
+          setErrors((current) => ({ ...current, name: false }));
+        }}
+      />
+      <AccessField
+        access={access}
+        custom={custom}
+        invalid={Boolean(errors.scopes)}
+        onAccess={setAccess}
+        onCustom={(next) => {
+          setCustom(next);
+          setErrors((current) => ({ ...current, scopes: false }));
+        }}
+      />
+      <ExpiryField expiry={expiry} expiresAt={expiresAt} onChange={setExpiry} />
     </Dialog>
   );
 }

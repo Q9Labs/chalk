@@ -3,7 +3,7 @@ import { type DeveloperAction, type WebhookDTO } from "../../lib/dashboard/contr
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { Dialog } from "./Dialog";
 import { useIntentKeys, useToast } from "./kit";
-import { Cancel, FieldError } from "./developer-dialog-parts";
+import { Cancel, FieldError, FormActions } from "./developer-dialog-parts";
 
 type EventType = Extract<DeveloperAction, { action: "create-webhook" }>["eventTypes"][number];
 
@@ -18,6 +18,74 @@ const EVENT_GROUPS: readonly (readonly [string, readonly EventType[]])[] = [
 const EVENT_NAMES: readonly string[] = EVENT_GROUPS.flatMap(([, types]) => types);
 const isEventType = (value: string): value is EventType => EVENT_NAMES.includes(value);
 
+type EndpointErrors = { name?: boolean; url?: boolean; events?: boolean };
+
+function EndpointFields({ name, url, errors, onName, onUrl }: { readonly name: string; readonly url: string; readonly errors: EndpointErrors; readonly onName: (name: string) => void; readonly onUrl: (url: string) => void }) {
+  return (
+    <>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
+        <label className="lbl" htmlFor="endpoint-name">
+          Name
+        </label>
+        <input
+          id="endpoint-name"
+          className={errors.name ? "inp bad" : "inp"}
+          value={name}
+          placeholder="For example, Attendance sync"
+          maxLength={120}
+          autoComplete="off"
+          aria-invalid={Boolean(errors.name)}
+          aria-describedby={errors.name ? "endpoint-name-error" : undefined}
+          onChange={(event) => onName(event.target.value)}
+        />
+        {errors.name ? <FieldError id="endpoint-name-error">Give the endpoint a name.</FieldError> : null}
+      </div>
+      <div className="field">
+        <label className="lbl" htmlFor="endpoint-url">
+          URL
+        </label>
+        <input
+          id="endpoint-url"
+          className={errors.url ? "inp mono bad" : "inp mono"}
+          value={url}
+          placeholder="https://example.com/chalk/webhooks"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          aria-invalid={Boolean(errors.url)}
+          aria-describedby={errors.url ? "endpoint-url-error" : undefined}
+          onChange={(event) => onUrl(event.target.value)}
+        />
+        {errors.url ? <FieldError id="endpoint-url-error">Use a public https:// URL.</FieldError> : null}
+      </div>
+    </>
+  );
+}
+
+type EventsFieldsetProps = { readonly events: readonly EventType[]; readonly invalid: boolean; readonly spaced: boolean; readonly onChange: (events: readonly EventType[]) => void };
+
+function EventsFieldset({ events, invalid, spaced, onChange }: EventsFieldsetProps) {
+  return (
+    <fieldset className="field" style={spaced ? { marginTop: "var(--space-4)" } : undefined}>
+      <legend className="lbl">Events</legend>
+      <div className="evgrid">
+        {EVENT_GROUPS.map(([group, types], groupIndex) => (
+          <div key={group}>
+            <h4>{group}</h4>
+            {types.map((type, index) => (
+              <label className="chk" key={type}>
+                <input id={groupIndex === 0 && index === 0 ? "endpoint-events" : undefined} type="checkbox" checked={events.includes(type)} onChange={(event) => onChange(event.target.checked ? [...events, type] : events.filter((item) => item !== type))} />
+                {type}
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+      {invalid ? <FieldError id="endpoint-events-error">Pick at least one event.</FieldError> : null}
+    </fieldset>
+  );
+}
+
 type EndpointDialogProps = { readonly onClose: () => void } & ({ readonly webhook?: undefined; readonly onCreated: (webhook: WebhookDTO, secret: string) => void } | { readonly webhook: WebhookDTO; readonly onSaved: (webhook: WebhookDTO) => void });
 
 /** Adds an endpoint, or edits an existing one's events. Editing never sends the URL: the list only has it redacted. */
@@ -26,7 +94,7 @@ export function EndpointDialog(props: EndpointDialogProps) {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [events, setEvents] = useState<readonly EventType[]>(webhook ? webhook.eventTypes.filter(isEventType) : ["episode.started", "episode.ended"]);
-  const [errors, setErrors] = useState<{ name?: boolean; url?: boolean; events?: boolean }>({});
+  const [errors, setErrors] = useState<EndpointErrors>({});
   const [saving, setSaving] = useState(false);
   // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
   const intents = useIntentKeys();
@@ -74,70 +142,13 @@ export function EndpointDialog(props: EndpointDialogProps) {
       onClose={onClose}
       onSubmit={() => void save()}
       actions={
-        <>
-          <Cancel onClose={onClose} />
-          <button type="submit" className="btn pri lg" disabled={saving}>
-            {webhook ? "Save events" : "Add endpoint"}
-          </button>
-        </>
+        <FormActions onClose={onClose} busy={saving}>
+          {webhook ? "Save events" : "Add endpoint"}
+        </FormActions>
       }
     >
-      {webhook ? null : (
-        <>
-          <div className="field" style={{ marginTop: "var(--space-4)" }}>
-            <label className="lbl" htmlFor="endpoint-name">
-              Name
-            </label>
-            <input
-              id="endpoint-name"
-              className={errors.name ? "inp bad" : "inp"}
-              value={name}
-              placeholder="For example, Attendance sync"
-              maxLength={120}
-              autoComplete="off"
-              aria-invalid={Boolean(errors.name)}
-              aria-describedby={errors.name ? "endpoint-name-error" : undefined}
-              onChange={(event) => setName(event.target.value)}
-            />
-            {errors.name ? <FieldError id="endpoint-name-error">Give the endpoint a name.</FieldError> : null}
-          </div>
-          <div className="field">
-            <label className="lbl" htmlFor="endpoint-url">
-              URL
-            </label>
-            <input
-              id="endpoint-url"
-              className={errors.url ? "inp mono bad" : "inp mono"}
-              value={url}
-              placeholder="https://example.com/chalk/webhooks"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={Boolean(errors.url)}
-              aria-describedby={errors.url ? "endpoint-url-error" : undefined}
-              onChange={(event) => setUrl(event.target.value)}
-            />
-            {errors.url ? <FieldError id="endpoint-url-error">Use a public https:// URL.</FieldError> : null}
-          </div>
-        </>
-      )}
-      <fieldset className="field" style={webhook ? { marginTop: "var(--space-4)" } : undefined}>
-        <legend className="lbl">Events</legend>
-        <div className="evgrid">
-          {EVENT_GROUPS.map(([group, types], groupIndex) => (
-            <div key={group}>
-              <h4>{group}</h4>
-              {types.map((type, index) => (
-                <label className="chk" key={type}>
-                  <input id={groupIndex === 0 && index === 0 ? "endpoint-events" : undefined} type="checkbox" checked={events.includes(type)} onChange={(event) => setEvents(event.target.checked ? [...events, type] : events.filter((item) => item !== type))} />
-                  {type}
-                </label>
-              ))}
-            </div>
-          ))}
-        </div>
-        {errors.events ? <FieldError id="endpoint-events-error">Pick at least one event.</FieldError> : null}
-      </fieldset>
+      {webhook ? null : <EndpointFields name={name} url={url} errors={errors} onName={setName} onUrl={setUrl} />}
+      <EventsFieldset events={events} invalid={Boolean(errors.events)} spaced={Boolean(webhook)} onChange={setEvents} />
     </Dialog>
   );
 }

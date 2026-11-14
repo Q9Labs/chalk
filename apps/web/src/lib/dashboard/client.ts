@@ -94,14 +94,26 @@ async function readJSON(response: Response): Promise<unknown> {
   }
 }
 
+function bodyRetryAfter(body: unknown): number | undefined {
+  if (!body || typeof body !== "object" || !("error" in body)) return undefined;
+  const { error } = body;
+  if (!error || typeof error !== "object" || !("retryAfterSeconds" in error)) return undefined;
+  const seconds = error.retryAfterSeconds;
+  return typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
+}
+
+/** Seconds from a `Retry-After` header, which is either a number of seconds or an HTTP date. */
+function headerRetryAfter(header: string | null): number | undefined {
+  if (header === null) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+  const date = Date.parse(header);
+  return Number.isFinite(date) ? Math.max(0, (date - Date.now()) / 1000) : undefined;
+}
+
 function toError(response: Response, body: unknown): DashboardRequestError {
   const code = errorCode(body) ?? (response.status >= 500 ? "service_unavailable" : "request_failed");
-  const retryAfter = body && typeof body === "object" && "error" in body && body.error && typeof body.error === "object" && "retryAfterSeconds" in body.error && typeof body.error.retryAfterSeconds === "number" ? body.error.retryAfterSeconds : undefined;
-  const header = response.headers.get("Retry-After");
-  const seconds = header === null ? NaN : Number(header);
-  const date = header === null ? NaN : Date.parse(header);
-  const headerDelay = Number.isFinite(seconds) && seconds >= 0 ? seconds : Number.isFinite(date) ? Math.max(0, (date - Date.now()) / 1000) : undefined;
-  return new DashboardRequestError(response.status, code, headerDelay ?? (retryAfter !== undefined && Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter : undefined));
+  return new DashboardRequestError(response.status, code, headerRetryAfter(response.headers.get("Retry-After")) ?? bodyRetryAfter(body));
 }
 
 function errorCode(body: unknown): string | undefined {
