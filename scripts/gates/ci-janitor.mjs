@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 
 const GIB = 1024 ** 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -72,7 +71,7 @@ export async function janitor({ env, fetchImpl = fetch, now = new Date(), log = 
   log(`${caches.length} caches, ${(freed / GIB).toFixed(2)} GiB ${dryRun ? "to free" : "freed"} in ${deletions.length} deletions, ${(remainingBytes / GIB).toFixed(2)} GiB left`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.main) {
   try {
     await janitor({ env: process.env });
   } catch (error) {
