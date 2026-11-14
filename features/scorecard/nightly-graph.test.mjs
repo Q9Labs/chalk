@@ -430,7 +430,7 @@ test("Nightly host proof runs on master only, in the host-proof environment, and
   const hostProof = workflow("nightly-host-proof.yml");
   assert.deepEqual(Object.keys(hostProof.on).sort(), ["schedule", "workflow_dispatch", "workflow_run"]);
   assert.deepEqual(hostProof.on.workflow_run.workflows, ["Cut nightly"]);
-  assert.equal(hostProof.jobs.host.environment, "nightly-host-proof");
+  assert.deepEqual(hostProof.jobs.host.environment, { name: "nightly-host-proof", deployment: false });
   assert.equal(hostProof.jobs.host.permissions["id-token"], "write");
   assert.equal(hostProof.jobs.target.steps[0].env.WORKFLOW_REF, "${{ github.ref }}");
   assert.match(hostProof.jobs.target.steps[0].run, /refs\/heads\/master/);
