@@ -85,7 +85,6 @@ create table users (
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now()
 );
-create index users_created_at_id_idx on users(created_at desc, id desc);
 
 create table memberships (
     id uuid primary key,
@@ -841,9 +840,6 @@ create table sync_chat_attachments (
         )
     )
 );
-create index sync_chat_attachments_cleanup_idx
-    on sync_chat_attachments(status, expires_at)
-    where status <> 'attached';
 create index sync_chat_attachments_space_status_idx
     on sync_chat_attachments(tenant_id, space_id, status);
 create index sync_chat_attachments_finalize_lease_idx
@@ -1437,6 +1433,8 @@ create table sync_episode_control (
         )
     )
 );
+create index sync_episode_control_retention_pending_idx
+    on sync_episode_control(tenant_id, space_id, episode_id) where retention_cleaned_at is null;
 
 create table sync_lifecycle_intents (
     tenant_id uuid not null,
