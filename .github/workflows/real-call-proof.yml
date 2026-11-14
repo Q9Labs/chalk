@@ -235,7 +235,7 @@ jobs:
       - name: Name the revision's proofs
         # A Promote or latency run can check out a cut made before the Chalk SFU rename, whose CLI and scorecard code use the old names.
         run: |
-          for legacy in features/scorecard/own-sfu.m?s; do
+          for legacy in features/scorecard/own-sfu.m*s; do
             [ -f "$legacy" ] || continue
             echo "PROOF_NAMES_BEFORE_RENAME=true" >> "$GITHUB_ENV"
             echo "LEGACY_COLLECTOR=$legacy" >> "$GITHUB_ENV"
