@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, laneResult, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
 import { RegisterError } from "./register.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
@@ -310,4 +310,26 @@ test("the board proofs run for web and board proof inputs, and for the queue", (
   assert.equal(board(["docs/observability.md"], "merge_group"), false);
   assert.ok(ciJobs([], { full: true }).rootGroups.includes("dashboard-board"));
   assert.equal(laneGroup("board-local"), "dashboard-board");
+});
+
+test("a demoted check keeps running, wrapped so that its failure is a warning", () => {
+  const plan = createGatePlan(["apps/web/src/call-states/camera-backgrounds.test.ts"], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+  const camera = plan.tasks.find((task) => task.id === "camera-proof");
+  assert.ok(camera?.selected);
+  assert.deepEqual(camera.command.slice(0, 4), ["node", "scripts/gates/demoted.mjs", "gate:camera-proof", "--"]);
+  assert.ok(!plan.tasks.find((task) => task.id === "browser-tests").command.includes("scripts/gates/demoted.mjs"));
+});
+
+test("a passing lane prints a demoted check's warning, because q9gate drops a passing lane's output", () => {
+  const warning = "::warning title=Demoted check gate:camera-proof failed::gate:camera-proof failed and is demoted";
+  const logged = [];
+  const log = console.log;
+  console.log = (line) => logged.push(line);
+  try {
+    assert.deepEqual(laneResult("camera-proof", { failed: false, stdout: `noise\n${warning}\nmore` }), { status: "passed" });
+    assert.deepEqual(laneResult("browser-tests", { failed: false, stdout: "noise" }), { status: "passed" });
+    assert.deepEqual(logged, [warning]);
+  } finally {
+    console.log = log;
+  }
 });

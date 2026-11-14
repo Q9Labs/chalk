@@ -46,21 +46,19 @@ Production plans require `capture_capacity_inputs_migrated = true` after `reserv
 
 Production R2 adoption is fail-closed: a plan must name the existing bucket, give its private inventory import ID and carry the digest of the approved no-delete, no-replacement plan. Nightly can use its generated name. Backend configuration and credentials live outside this tree, and `scripts/recorder/gate.sh` initializes with the backend disabled and never applies a provider.
 
-The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. Every apply must set `whiteboard_allowed_origins` to the exact web origins (no wildcards, paths or trailing slashes). The CORS rule permits only `GET`, `PUT` and the headers those uploads sign, and does not make the bucket public.
+The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. The managed CORS rule allows any origin for `GET` and `PUT` with the fixed headers in `whiteboard_cors_allowed_headers` (`locals.tf`). There is no origin list to maintain: the API authenticates the participant before it issues a URL, and the URL's signature is the access control, so an origin list adds nothing against a caller who holds the URL. A new tenant or portal origin needs no bucket change. The rule does not make the bucket public; keep its r2.dev and custom domains off.
+
+Today the production chat-files rule is updated by hand, not by this root. It is the rule with the production chat-files rule ID on the production file bucket, and it sits beside an unrelated rule. Both names are in the private operator inventory, not in this repository. A change to `cloudflare_r2_bucket_cors.whiteboard` in `main.tf` does not reach that rule unless an operator adopts it and applies the root with the approved plan. To update it by hand:
+
+1. Save the live rules, as the bare JSON array that `update` reads: `cf r2 buckets cors get <production bucket> | jq .rules > <undo file>`. The `get` command wraps the array in a `rules` key, and `update` rejects the wrapped form.
+2. Copy the file, and edit only the chat-files rule. Keep every other rule exactly as it is.
+3. Replace the rule set: `cf r2 buckets cors update <production bucket> --rules @<edited file> --force`. This command replaces all rules, so a rule that is not in the file is deleted.
+4. Run `pnpm prod:proof chat-upload`. It sends a preflight from an origin on no list.
+5. To undo, run the same `update` command with the undo file.
 
 No bootstrap assertion or reusable credential may enter OpenTofu state, cloud-init, logs or a tracked file.
 
 ## Retained boot diagnostics and cold qualification
-
-The private bucket also serves browser-authorized chat and whiteboard files
-through short-lived presigned URLs. The managed CORS rule allows any origin for
-`GET` and `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
-checksum and attachment identity headers used by chat uploads. There is no
-origin list to maintain: the API authenticates the participant before it issues
-a URL, and the URL's signature is the access control, so an origin list adds
-nothing against a caller who holds the URL. The rule does not make the bucket
-public; keep its r2.dev and custom domains off. A new tenant or portal origin
-needs no bucket change.
 
 Failed-bootstrap fleet nodes retain a `<name>-bootstrap-evidence` snapshot (the newest three are kept). To inspect one, create a Droplet from it with the diagnostic SSH key and read `/var/log/cloud-init-output.log` and `journalctl -u chalk-recorder-*`. The snapshot may hold the node's one-time bootstrap environment, so delete it after use.
 

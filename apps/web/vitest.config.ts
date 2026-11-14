@@ -5,7 +5,8 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      exclude: configDefaults.exclude,
+      // The camera proof is a demoted check (scripts/gates/checks.json, gate:camera-proof): vitest.camera.config.ts runs it by itself.
+      exclude: [...configDefaults.exclude, "src/call-states/camera-backgrounds.test.ts"],
       maxWorkers: 2,
       server: { deps: { inline: [/open-color/, /@excalidraw/, /packages\/whiteboard/] } },
     },
