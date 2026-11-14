@@ -25,8 +25,8 @@ function parseRecentCalls(value: string | null): readonly RecentCall[] {
 
 function isRecentCall(value: unknown): value is RecentCall {
   if (typeof value !== "object" || value === null) return false;
-  if (!("link" in value) || !("name" in value) || !("joinedAt" in value) || !("people" in value)) return false;
-  return typeof value.link === "string" && typeof value.name === "string" && typeof value.joinedAt === "number" && Array.isArray(value.people) && value.people.every((person) => typeof person === "string");
+  const [link, name, joinedAt, people] = ["link", "name", "joinedAt", "people"].map((key) => Reflect.get(value, key));
+  return typeof link === "string" && typeof name === "string" && typeof joinedAt === "number" && Array.isArray(people) && people.every((person) => typeof person === "string");
 }
 
 /** Puts `call` first, replacing any earlier entry for the same link. */

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { RecorderControlApiClient } from "../src/control-api.js";
 import { runDispatcher } from "../src/dispatcher.js";
-import { HmacWorkloadSigner } from "../src/workload-auth.js";
+import { createWorkloadSigner } from "../src/workload-auth.js";
 import type { DispatcherDependencies, ReleaseConfig } from "../src/types.js";
 
 const config: ReleaseConfig = {
@@ -43,7 +43,7 @@ describe("transcription finalizer failures", () => {
     const warnings: string[] = [];
     const control = new RecorderControlApiClient({
       baseUrl: "https://control.example.test",
-      signer: new HmacWorkloadSigner({ secret: "test-secret", environment: "test", releaseId: "test-release", audience: "test-audience" }),
+      signer: createWorkloadSigner({ secret: "test-secret", environment: "test", releaseId: "test-release", audience: "test-audience" }),
       fetch: async (input, init) => {
         const path = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url).pathname;
         if (path === "/internal/v1/transcription/finalize/claim") {
