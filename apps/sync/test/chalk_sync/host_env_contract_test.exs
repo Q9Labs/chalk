@@ -10,12 +10,13 @@ defmodule ChalkSync.HostEnvContractTest do
 
   # The loader must see only the contract: a variable the CI job exports would hide one the contract lacks.
   setup do
-    inherited = chalk_env()
-    Enum.each(Map.keys(inherited), &System.delete_env/1)
+    original = System.get_env()
+    original |> Map.keys() |> Enum.filter(&String.starts_with?(&1, "CHALK_")) |> Enum.each(&System.delete_env/1)
 
+    # The contract also sets variables outside the CHALK_ prefix, so the whole environment is restored.
     on_exit(fn ->
-      Enum.each(Map.keys(chalk_env()), &System.delete_env/1)
-      Enum.each(inherited, fn {key, value} -> System.put_env(key, value) end)
+      System.get_env() |> Map.keys() |> Enum.each(&System.delete_env/1)
+      Enum.each(original, fn {key, value} -> System.put_env(key, value) end)
     end)
   end
 
@@ -28,12 +29,6 @@ defmodule ChalkSync.HostEnvContractTest do
       assert Config.Reader.read!(@runtime, env: :prod, target: :host)
              |> Keyword.has_key?(:chalk_sync)
     end
-  end
-
-  defp chalk_env do
-    System.get_env()
-    |> Enum.filter(fn {key, _value} -> String.starts_with?(key, "CHALK_") end)
-    |> Map.new()
   end
 
   defp read_contract(name) do
