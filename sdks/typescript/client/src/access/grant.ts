@@ -21,7 +21,7 @@ export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
   readonly expiresAt: string;
 };
-/** What the own SFU can do for this connection. A flag the server does not send as `true` is off. */
+/** What the Chalk SFU can do for this connection. A flag the server does not send as `true` is off. */
 export type ChalkSFUCapabilities = {
   /** The SFU picks each subscriber's layer under the requested one, so a requested layer is a ceiling. */
   readonly serverLayerAdaptation: boolean;
@@ -47,7 +47,7 @@ export type CloudflareSFUClientPayload = {
 export type ChalkSFUClientPayload = {
   readonly connectionId: string;
   readonly episodeRef: string;
-  /** Every ICE server the own SFU wants. It can be empty, because the SFU has a public address. */
+  /** Every ICE server the Chalk SFU wants. It can be empty, because the SFU has a public address. */
   readonly iceServers: readonly CloudflareSFUIceServer[];
   readonly capabilities: ChalkSFUCapabilities;
 };

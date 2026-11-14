@@ -42,7 +42,7 @@ type AdoptSpaceMediaPlaneSettingParams struct {
 
 // Moves a Space stored on a plane onto the setting without changing where it runs. It writes only
 // while the Space still has no setting and still stores that plane, and the Tenant can still serve
-// the own SFU, so a choice made after the caller looked is never overwritten.
+// the Chalk SFU, so a choice made after the caller looked is never overwritten.
 func (q *Queries) AdoptSpaceMediaPlaneSetting(ctx context.Context, arg AdoptSpaceMediaPlaneSettingParams) (int64, error) {
 	result, err := q.db.Exec(ctx, adoptSpaceMediaPlaneSetting, arg.Plane, arg.TenantID, arg.ID)
 	if err != nil {

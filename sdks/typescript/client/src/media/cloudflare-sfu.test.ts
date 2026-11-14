@@ -7221,7 +7221,7 @@ describe("visible-tile video subscriptions", () => {
   });
 });
 
-describe("own-SFU subscription state", () => {
+describe("Chalk SFU subscription state", () => {
   const own: CloudflareSFUBootstrap = { connectionId: "own-connection-1", iceServers: [], capabilities: { serverLayerAdaptation: true, subscriptionState: true } };
   const onScreen = { width: 640, height: 360 };
   const camera = (h: ReturnType<typeof createHarness>) => h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
@@ -7581,10 +7581,10 @@ describe("own-SFU subscription state", () => {
   });
 });
 
-describe("in-place ICE restart on the own SFU", () => {
-  const OWN_SFU = { serverLayerAdaptation: false, subscriptionState: false, iceRestart: true } as const;
+describe("in-place ICE restart on the Chalk SFU", () => {
+  const CHALK_SFU = { serverLayerAdaptation: false, subscriptionState: false, iceRestart: true } as const;
   function ownBootstrap(connectionId: string, iceRestart = true): CloudflareSFUBootstrap {
-    return { connectionId, iceServers: [], capabilities: { ...OWN_SFU, iceRestart } };
+    return { connectionId, iceServers: [], capabilities: { ...CHALK_SFU, iceRestart } };
   }
   function restartRequests(h: ReturnType<typeof createHarness>) {
     return h.transport.addInputs.filter((input) => input.tracks.length === 0);
@@ -7920,7 +7920,7 @@ describe("in-place ICE restart on the own SFU", () => {
 
   it.each([
     { name: "Cloudflare", bootstrap: bootstrap("connection-1") },
-    { name: "an own SFU without the capability", bootstrap: ownBootstrap("connection-1", false) },
+    { name: "a Chalk SFU without the capability", bootstrap: ownBootstrap("connection-1", false) },
   ])("$name still reports a failed path at once and never restarts ICE", async ({ bootstrap: initial }) => {
     await withTimedHarness(
       async (h) => {

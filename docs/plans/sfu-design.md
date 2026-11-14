@@ -2,7 +2,7 @@
 
 # Chalk SFU
 
-Why Chalk runs its own SFU, and the constraints it must keep. The code under `features/media/sfu/` and `apps/api/internal/adapters/chalksfu/` is the source for behavior, routes and defaults. The [SFU README](../../features/media/sfu/README.md) covers the service. [Capacity calibration](../sfu/capacity-calibration.md) explains the node budgets and [production rollout](../sfu/production-rollout.md) the move of traffic.
+Why Chalk runs its Chalk SFU, and the constraints it must keep. The code under `features/media/sfu/` and `apps/api/internal/adapters/chalksfu/` is the source for behavior, routes and defaults. The [SFU README](../../features/media/sfu/README.md) covers the service. [Capacity calibration](../sfu/capacity-calibration.md) explains the node budgets and [production rollout](../sfu/production-rollout.md) the move of traffic.
 
 ## Decisions
 

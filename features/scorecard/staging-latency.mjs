@@ -28,7 +28,7 @@ async function json(path, fallback) {
 async function emptyCard() {
   return {
     schema: SCORECARD_SCHEMA,
-    run: { id: `${prefix}-latency`, commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), tier: "nightly", environment: "staging", startedAt: new Date().toISOString(), client: { kind: "browser", browser: "unknown", region: "github-hosted", size: "ubuntu-24-04" } },
+    run: { id: `${prefix}-latency`, commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), tier: "nightly", environment: "nightly", startedAt: new Date().toISOString(), client: { kind: "browser", browser: "unknown", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
     metrics: [],
     dropped: [],

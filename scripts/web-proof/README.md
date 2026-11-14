@@ -25,7 +25,7 @@ The API must be ready, but recording and transcription can be disabled: this
 proof tests the live web call, not media processing. The separate recording and
 transcript proofs still require both media capabilities before a nightly can hold.
 
-The proof Space is on Cloudflare by default. `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` runs the call on the own SFU
+The proof Space is on Cloudflare by default. `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` runs the call on the Chalk SFU
 instead: the public API cannot create such a Space, so set `CHALK_PROOF_SPACE_ID_CHALK_SFU` to a Space an operator moved with
 `media-settings` (manual Recording, on-demand Transcription, open admission). The run turns that Space's public invite on
 for the call and off again afterwards, and ends the Episode it made. `CHALK_PROOF_WEBKIT=1` adds Playwright WebKit (an

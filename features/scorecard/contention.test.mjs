@@ -18,7 +18,7 @@ const idle = { nodeIncarnation: "boot-a", sessions: 0, allocations: 0, draining:
 function card(evidence, value = 300, id = "nightly-1") {
   return parseScorecard({
     schema: SCORECARD_SCHEMA,
-    run: { id, commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
+    run: { id, commit: "a".repeat(40), tier: "nightly", environment: "nightly", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
     metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: value, p95: value, source: "latency-kit" }],
     dropped: [],

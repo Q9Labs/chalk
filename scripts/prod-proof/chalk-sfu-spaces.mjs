@@ -1,12 +1,12 @@
 import { check, ProofError } from "./runtime.mjs";
 
-// The two proof Spaces Promote reuses on the own SFU. The public API of a release with the per-Space
+// The two proof Spaces Promote reuses on the Chalk SFU. The public API of a release with the per-Space
 // setting refuses chalk_sfu, so they must reach chalk_sfu BEFORE that release deploys: the previous
 // release lets the public API set it on an allowlisted Space, and a plane stored that way survives the
 // upgrade. They are found by slug, so no Space ID lives in a variable or a log.
 export const manualPolicy = { recording: "manual", transcription: "on_demand" };
 const automaticPolicy = { recording: "automatic", transcription: "automatic" };
-export const ownSfuSpaces = {
+export const chalkSfuSpaces = {
   manual: { slug: "promote-proof-chalk-sfu", policy: manualPolicy },
   automatic: { slug: "promote-proof-chalk-sfu-automatic", policy: automaticPolicy },
 };
@@ -14,7 +14,7 @@ export const ownSfuSpaces = {
 // The release before the per-Space setting has no effective_media_plane.
 export const spacePlane = (space) => space.effective_media_plane ?? space.media_plane;
 
-export function ownSfuSpaceKind(policy) {
+export function chalkSfuSpaceKind(policy) {
   if (policy.recording === manualPolicy.recording && policy.transcription === manualPolicy.transcription) return "manual";
   if (policy.recording === automaticPolicy.recording && policy.transcription === automaticPolicy.transcription) return "automatic";
   return undefined;
@@ -42,7 +42,7 @@ const pinVariable = (kind) => (kind === "manual" ? "CHALK_PROOF_SPACE_ID_CHALK_S
 
 // The one Space this run proves on for `kind`: the pinned one when an operator pinned it, otherwise the one with the
 // fixed slug. The ensure step and the proof both resolve it here, so the proof runs on the Space the step checked.
-export async function findOwnSfuSpace(apiRequest, tenantPath, kind) {
+export async function findChalkSfuSpace(apiRequest, tenantPath, kind) {
   const pinned = process.env[pinVariable(kind)];
   if (pinned) {
     try {
@@ -52,14 +52,14 @@ export async function findOwnSfuSpace(apiRequest, tenantPath, kind) {
       throw error;
     }
   }
-  return findSpaceBySlug(apiRequest, tenantPath, ownSfuSpaces[kind].slug);
+  return findSpaceBySlug(apiRequest, tenantPath, chalkSfuSpaces[kind].slug);
 }
 
 async function ensureOne(run, kind) {
-  const wanted = ownSfuSpaces[kind];
+  const wanted = chalkSfuSpaces[kind];
   const path = `${run.tenantPath}/spaces`;
   const pinned = Boolean(process.env[pinVariable(kind)]);
-  let space = await findOwnSfuSpace(run.apiRequest, run.tenantPath, kind);
+  let space = await findChalkSfuSpace(run.apiRequest, run.tenantPath, kind);
   if (pinned && !space) {
     const message = `${pinVariable(kind)} names a Space that does not exist: unset it or fix it`;
     console.error(message);
@@ -92,6 +92,6 @@ async function ensureOne(run, kind) {
   return { slug: wanted.slug, plane: "chalk_sfu" };
 }
 
-export async function ensureOwnSfuSpaces(run) {
+export async function ensureChalkSfuSpaces(run) {
   return { manual: await ensureOne(run, "manual"), automatic: await ensureOne(run, "automatic") };
 }

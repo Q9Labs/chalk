@@ -74,7 +74,7 @@ jobs:
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
-    # The gate. It proves a real call on the own SFU (chalk_sfu) for the cut's revision: the call, its Recording,
+    # The gate. It proves a real call on the Chalk SFU (chalk_sfu) for the cut's revision: the call, its Recording,
     # export and Transcript, and a long call across media-access refreshes. The staging lease serializes it with
     # every other lane that drives the staging SFU, and a lease that stays busy fails the gate by name
     # (staging-sfu-lease-timeout, shown on the run and again by `record`).
@@ -124,8 +124,8 @@ jobs:
           PROOF_FAILURE: ${{ needs.proof.outputs.failure }}
           PROOF_RESULTS: ${{ needs.proof.outputs.results }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
-          # Staging latency runs in staging-sfu-latency.yml; Promote reads its verdict for this SHA next to this one.
-          OWN_SFU_RESULT: ${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
+          # Nightly latency runs in staging-sfu-latency.yml; Promote reads its verdict for this SHA next to this one.
+          CHALK_SFU_RESULT: ${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
           SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |
           python3 scripts/releases/release.py record

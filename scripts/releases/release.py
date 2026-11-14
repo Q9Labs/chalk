@@ -289,11 +289,11 @@ def validate_choice(github, item):
     return info
 
 
-def require_own_sfu_proof(info):
-    result = info.get('own_sfu_proof_result', 'missing')
+def require_chalk_sfu_proof(info):
+    result = info.get('chalk_sfu_proof_result', 'missing')
     require(result == 'passed',
             f"cannot promote SHA {info['target_sha']} from nightly run {info.get('proof_run_id') or info['run_id']}: "
-            f'own_sfu_proof_result={result}; a passed own-SFU proof for this SHA is required')
+            f'chalk_sfu_proof_result={result}; a passed Chalk SFU proof for this SHA is required')
 
 
 def require_scorecard(info):
@@ -310,13 +310,13 @@ SCORECARD_RANK = {'passed': 0, 'gated-breach': 1, 'missing': 2}
 
 
 def with_latency(github, info):
-    """Promote reads the cut and the newest staging latency run of the same SHA together; no run yet is not a pass."""
+    """Promote reads the cut and the newest Nightly latency run of the same SHA together; no run yet is not a pass."""
     records = github.deployments('nightly', 'nightly-latency', sha=info['target_sha'])
     latency = payload(records[0]) if records else None
     merged = dict(info)
-    proof = info.get('own_sfu_proof_result', 'missing')
+    proof = info.get('chalk_sfu_proof_result', 'missing')
     if proof == 'passed':
-        merged['own_sfu_proof_result'] = 'latency-missing' if not latency else 'passed' if latency.get('result') == 'passed' else 'failed'
+        merged['chalk_sfu_proof_result'] = 'latency-missing' if not latency else 'passed' if latency.get('result') == 'passed' else 'failed'
     if latency:
         scorecard_result = info.get('scorecard_result', 'missing')
         results = [scorecard_result, latency.get('scorecard_result', 'missing')]
@@ -335,11 +335,11 @@ def promotion_override(github, info):
     if not reason or scorecard_result not in ('gated-breach', 'missing'):
         require_scorecard(info)
     if not reason:
-        require_own_sfu_proof(info)
+        require_chalk_sfu_proof(info)
         return None
     proof_results = {}
-    if info.get('own_sfu_proof_result') != 'passed':
-        proof_results['own_sfu_proof_result'] = info.get('own_sfu_proof_result', 'missing')
+    if info.get('chalk_sfu_proof_result') != 'passed':
+        proof_results['chalk_sfu_proof_result'] = info.get('chalk_sfu_proof_result', 'missing')
     if scorecard_result != 'passed':
         proof_results['scorecard_result'] = scorecard_result
     return dict(reason=reason, target_sha=info['target_sha'], nightly_run_id=info.get('proof_run_id') or info['run_id'],
@@ -403,19 +403,19 @@ def auto_promote(github, args):
 
 
 def deployed_cut(github):
-    """The SHA staging runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
+    """The SHA Nightly runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
     lease. So the newest cut record must be newer than that write (a rerun of only the deploy job writes again with the
     same run, release and SHA), match its run, applied release and SHA, and say its deploy succeeded. A cut that fails its
     proofs still deploys, so its proof result does not matter here."""
     marker = github.deployments('nightly', 'nightly-write')
-    require(marker, 'staging has no nightly write')
+    require(marker, 'Nightly has no write')
     write = payload(marker[0])
     cuts = github.deployments('nightly', passed_only=False)
     cut = payload(cuts[0]) if cuts else {}
     require(cuts and int(cuts[0]['id']) > int(marker[0]['id'])
             and cut.get('run_id') == write.get('run_id') and cut.get('applied_release_id') == write.get('release_id')
             and cut.get('target_sha') == marker[0]['sha'] and cut.get('deploy_result') == 'success',
-            f"staging does not run a finished nightly deploy: the newest write is run {write.get('run_id')} release {write.get('release_id')}")
+            f"Nightly does not run a finished deploy: the newest write is run {write.get('run_id')} release {write.get('release_id')}")
     return cut['target_sha']
 
 
@@ -425,12 +425,12 @@ def latency_target(github, args):
     except ValueError as error:
         outputs({'sha': ''})
         with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
-            summary.write(f'No staging latency was measured: {error}.\n')
+            summary.write(f'No Nightly latency was measured: {error}.\n')
 
 
 def record_latency(github, args):
     sha = env('TARGET_SHA')
-    require(deployed_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
+    require(deployed_cut(github) == sha, f'Nightly no longer runs the measured cut {sha}; refusing a stale latency verdict')
     scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
     if scorecard:
         require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
@@ -440,7 +440,7 @@ def record_latency(github, args):
     info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
                 result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
                 scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
-                scorecard_missing_items=scorecard.get('missing_items', ['staging latency scorecard'] if not scorecard else []))
+                scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
     outputs({'deployment_id': github.record_latency(sha, info)})
 
 
@@ -541,17 +541,17 @@ def record(github, args):
     info['target_sha'] = env('TARGET_SHA')
     info['transcribed'] = os.environ.get('TRANSCRIBE') == 'true'
     info['web'] = json.loads(info.get('web') or '{}')
-    # The gate: the chalk_sfu real-call proof. own_sfu is the same proof; promotion adds the staging latency run of this SHA (with_latency).
+    # The gate: the Chalk SFU real-call proof (chalk_sfu); promotion adds the Nightly latency run of this SHA (with_latency).
     real_call = os.environ.get('PROOF_RESULT', 'failed')
     web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
-    own_sfu = os.environ.get('OWN_SFU_RESULT', 'skipped')
+    chalk_sfu = os.environ.get('CHALK_SFU_RESULT', 'skipped')
     scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
     if scorecard:
         require(scorecard.get('target_sha') == info['target_sha'] and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
                 f"scorecard identity does not match SHA {info['target_sha']} and nightly run {env('GITHUB_RUN_ID')}")
     passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
     info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', deploy_result=os.environ.get('DEPLOY_RESULT', ''),
-                real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
+                real_call_proof_result=real_call, web_e2e_result=web_e2e, chalk_sfu_proof_result=chalk_sfu,
                 proof_run_id=env('GITHUB_RUN_ID'))
     info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
                 scorecard_missing_items=scorecard.get('missing_items', ['nightly scorecard result'] if not scorecard else []),

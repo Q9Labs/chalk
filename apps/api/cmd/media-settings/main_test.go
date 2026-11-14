@@ -197,7 +197,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 		t.Fatalf("get after undo = %v", got)
 	}
 
-	// A value no operator approved never selects the own SFU, and an operator can repair one
+	// A value no operator approved never selects the Chalk SFU, and an operator can repair one
 	// that names no plane at all, with the raw value in the audit line.
 	exec(`update tenants set default_media_plane='chalk_sfu' where id=$1`, tenantID.Bytes())
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
@@ -222,7 +222,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 		t.Fatalf("the backfill overwrote the Space owner's choice: %v", setting)
 	}
 
-	// The own SFU is refused for a Tenant that runs its own credentials.
+	// The Chalk SFU is refused for a Tenant that runs its own credentials.
 	var out bytes.Buffer
 	err = run(t.Context(), []string{"set", "--tenant", otherTenant.String(), "--plane", "chalk_sfu"}, &out)
 	if err == nil || !strings.Contains(err.Error(), spaces.ErrTenantCannotServePlane.Error()) {

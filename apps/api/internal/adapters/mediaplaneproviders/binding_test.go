@@ -60,7 +60,7 @@ func TestUnconfiguredMediaDoesNotInventBinding(t *testing.T) {
 	}
 }
 
-func TestOldSDKInOwnSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
+func TestOldSDKInChalkSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
 	registry := NewRegistry(Config{DefaultProvider: mediaplane.ProviderCloudflareSFU})
 	chalkSelected := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, chalkSelected, mediaplane.ClientProviders{})
@@ -78,7 +78,7 @@ func TestOldSDKInOwnSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
 	}
 }
 
-func TestOnlyAllowlistedSpacesStartOnTheOwnSFU(t *testing.T) {
+func TestOnlyAllowlistedSpacesStartOnTheChalkSFU(t *testing.T) {
 	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
 	other, _ := utilities.ParseID("22222222-2222-4222-8222-222222222222")
 	allowed, err := spaces.ParseChalkSFUAllowlist([]string{listed.String()})
@@ -87,14 +87,14 @@ func TestOnlyAllowlistedSpacesStartOnTheOwnSFU(t *testing.T) {
 	}
 	registry := NewRegistry(Config{DefaultProvider: mediaplane.ProviderCloudflareSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"}, Rollout: Rollout{Spaces: allowed}})
 	chalkSelected := mediaplane.ProviderChalkSFU.SettingName()
-	runsOwnSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
+	runsChalkSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
 
-	// Without a fleet the listed Space cannot resolve the own SFU at all, which
+	// Without a fleet the listed Space cannot resolve the Chalk SFU at all, which
 	// shows it was not diverted to Cloudflare.
-	if _, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: chalkSelected}, runsOwnSFU); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
-		t.Fatalf("listed Space: err = %v, want the own SFU to be tried", err)
+	if _, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: chalkSelected}, runsChalkSFU); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+		t.Fatalf("listed Space: err = %v, want the Chalk SFU to be tried", err)
 	}
-	binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{ID: other, MediaPlane: chalkSelected}, runsOwnSFU)
+	binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{ID: other, MediaPlane: chalkSelected}, runsChalkSFU)
 	if err != nil || binding == nil || binding.Provider != mediaplane.ProviderCloudflareSFU.SettingName() {
 		t.Fatalf("Space outside the allowlist: %#v %v, want Cloudflare", binding, err)
 	}
@@ -113,10 +113,10 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 	}
 	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
 	ownText := string(own)
-	runsOwnSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
+	runsChalkSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
 
-	// With no fleet, a Space that selects the own SFU fails as unavailable instead of
-	// binding to Cloudflare, which shows the own SFU was tried.
+	// With no fleet, a Space that selects the Chalk SFU fails as unavailable instead of
+	// binding to Cloudflare, which shows the Chalk SFU was tried.
 	tried := []struct {
 		name   string
 		tenant tenants.Tenant
@@ -127,42 +127,42 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 		{"Space setting over a Tenant on Cloudflare", tenants.Tenant{DefaultMediaPlane: strPtr("cf_sfu")}, spaces.Space{MediaPlane: ownText, MediaPlaneSetting: &own}},
 	}
 	for _, c := range tried {
-		if _, err := registry(false).ResolveBinding(context.Background(), c.tenant, c.space, runsOwnSFU); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
-			t.Errorf("%s: err = %v, want the own SFU to be tried", c.name, err)
+		if _, err := registry(false).ResolveBinding(context.Background(), c.tenant, c.space, runsChalkSFU); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+			t.Errorf("%s: err = %v, want the Chalk SFU to be tried", c.name, err)
 		}
-		binding, err := registry(true).ResolveBinding(context.Background(), c.tenant, c.space, runsOwnSFU)
+		binding, err := registry(true).ResolveBinding(context.Background(), c.tenant, c.space, runsChalkSFU)
 		if err != nil || binding == nil || binding.Provider != cloudflare.SettingName() {
 			t.Errorf("%s with the kill switch on: %#v %v, want Cloudflare", c.name, binding, err)
 		}
 	}
 
-	// A Tenant default no operator approved never reaches the own SFU, and one that names
+	// A Tenant default no operator approved never reaches the Chalk SFU, and one that names
 	// no plane does not break new Episodes, even with the kill switch on.
 	for name, tenant := range map[string]tenants.Tenant{
 		"unapproved legacy chalk_sfu": {DefaultMediaPlane: &ownText},
 		"unknown legacy value":        {DefaultMediaPlane: strPtr("bogus")},
 	} {
 		for _, paused := range []bool{false, true} {
-			binding, err := registry(paused).ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: "cf_sfu"}, runsOwnSFU)
+			binding, err := registry(paused).ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: "cf_sfu"}, runsChalkSFU)
 			if err != nil || binding == nil || binding.Provider != cloudflare.SettingName() {
 				t.Errorf("%s (kill switch %v): %#v %v, want Cloudflare", name, paused, binding, err)
 			}
 		}
 	}
 
-	// A Space that sets Cloudflare beats a Tenant default of the own SFU.
-	binding, err := registry(false).ResolveBinding(context.Background(), tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{MediaPlane: "cf_sfu", MediaPlaneSetting: &cloudflare}, runsOwnSFU)
+	// A Space that sets Cloudflare beats a Tenant default of the Chalk SFU.
+	binding, err := registry(false).ResolveBinding(context.Background(), tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{MediaPlane: "cf_sfu", MediaPlaneSetting: &cloudflare}, runsChalkSFU)
 	if err != nil || binding == nil || binding.Provider != cloudflare.SettingName() {
-		t.Fatalf("Space on Cloudflare under a Tenant on the own SFU: %#v %v", binding, err)
+		t.Fatalf("Space on Cloudflare under a Tenant on the Chalk SFU: %#v %v", binding, err)
 	}
 }
 
 func strPtr(s string) *string { return &s }
 
-// A new Episode starts on the own SFU only for a caller whose SDK declares it.
-// With no fleet configured, an attempt on the own SFU fails as unavailable, so a
+// A new Episode starts on the Chalk SFU only for a caller whose SDK declares it.
+// With no fleet configured, an attempt on the Chalk SFU fails as unavailable, so a
 // Cloudflare binding shows the selector never tried it for the old caller.
-func TestOldSDKNeverStartsANewEpisodeOnTheOwnSFU(t *testing.T) {
+func TestOldSDKNeverStartsANewEpisodeOnTheChalkSFU(t *testing.T) {
 	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
 	onlyListed, err := spaces.ParseChalkSFUAllowlist([]string{listed.String()})
 	if err != nil {
@@ -183,7 +183,7 @@ func TestOldSDKNeverStartsANewEpisodeOnTheOwnSFU(t *testing.T) {
 		{"operator pin on the Space", everyone, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
 		{"operator pin on one allowlisted Space", onlyListed, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
 		{"approved Tenant default (automatic policy)", everyone, tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{ID: listed, MediaPlane: "cf_sfu"}},
-		{"stored own SFU plane without a setting", everyone, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText}},
+		{"stored Chalk SFU plane without a setting", everyone, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText}},
 		{"Space setting over a Tenant on Cloudflare", everyone, tenants.Tenant{DefaultMediaPlane: strPtr("cf_sfu")}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
 	}
 	for _, test := range tests {
@@ -202,13 +202,13 @@ func TestOldSDKNeverStartsANewEpisodeOnTheOwnSFU(t *testing.T) {
 					t.Errorf("%s, kill switch %v, %s: %#v %v, want a Cloudflare binding", test.name, paused, header, binding, err)
 				}
 			}
-			// The declaring caller reaches the own SFU, unless the kill switch holds it back.
+			// The declaring caller reaches the Chalk SFU, unless the kill switch holds it back.
 			binding, err := registry.ResolveBinding(context.Background(), test.tenant, test.space, mediaplane.ParseClientProviders("chalk_sfu"))
 			switch {
 			case paused && (err != nil || binding == nil || binding.Provider != cloudflare.SettingName()):
 				t.Errorf("%s with the kill switch on, declaring caller: %#v %v, want Cloudflare", test.name, binding, err)
 			case !paused && !errors.Is(err, providercontracts.ErrAdapterUnavailable):
-				t.Errorf("%s, declaring caller: %#v %v, want the own SFU to be tried", test.name, binding, err)
+				t.Errorf("%s, declaring caller: %#v %v, want the Chalk SFU to be tried", test.name, binding, err)
 			}
 		}
 	}
@@ -245,14 +245,14 @@ func TestLiveKillSwitchSendsNewEpisodesToCloudflareWithoutARestart(t *testing.T)
 		DefaultProvider: mediaplane.ProviderChalkSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
 		Rollout: Rollout{Spaces: everyone, Switch: live},
 	})
-	runsOwnSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
+	runsChalkSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
 	resolve := func(ctx context.Context) (*mediaplane.Binding, error) {
-		return registry.ResolveBinding(ctx, tenants.Tenant{}, spaces.Space{MediaPlane: "cf_sfu"}, runsOwnSFU)
+		return registry.ResolveBinding(ctx, tenants.Tenant{}, spaces.Space{MediaPlane: "cf_sfu"}, runsChalkSFU)
 	}
 
-	// The switch is on: the own SFU is tried (no fleet here, so it is unavailable).
+	// The switch is on: the Chalk SFU is tried (no fleet here, so it is unavailable).
 	if _, err := resolve(context.Background()); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
-		t.Fatalf("switch on: err = %v, want the own SFU to be tried", err)
+		t.Fatalf("switch on: err = %v, want the Chalk SFU to be tried", err)
 	}
 	// The same registry sees the flip on the next call.
 	live.paused = true
@@ -263,7 +263,7 @@ func TestLiveKillSwitchSendsNewEpisodesToCloudflareWithoutARestart(t *testing.T)
 	// A value read inside the caller's transaction wins, and no second read happens.
 	reads := live.reads
 	if _, err := resolve(spaces.WithNewEpisodesPaused(context.Background(), false)); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
-		t.Fatalf("carried switch on: err = %v, want the own SFU to be tried", err)
+		t.Fatalf("carried switch on: err = %v, want the Chalk SFU to be tried", err)
 	}
 	if live.reads != reads {
 		t.Fatal("a carried switch value must not cost another read")
@@ -275,7 +275,7 @@ func TestLiveKillSwitchSendsNewEpisodesToCloudflareWithoutARestart(t *testing.T)
 	}
 }
 
-func TestCloudflareFallbackRunsUnderAnOwnSFUDefault(t *testing.T) {
+func TestCloudflareFallbackRunsUnderAnChalkSFUDefault(t *testing.T) {
 	registry := NewRegistry(Config{
 		DefaultProvider: mediaplane.ProviderChalkSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
 		Rollout: Rollout{NewEpisodesPaused: true},

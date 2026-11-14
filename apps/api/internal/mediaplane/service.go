@@ -96,7 +96,7 @@ const (
 )
 
 // SourceControl grants or revokes one Participant's source on a media plane that
-// fences sources itself, as the own SFU does. Revision orders it against the
+// fences sources itself, as the Chalk SFU does. Revision orders it against the
 // source's other controls: the plane applies it only when it records nothing
 // newer, and a revoke wins a tie, so a retried or delayed control is harmless.
 // A grant at the recorded revision renews the source's forwarding lease.

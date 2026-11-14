@@ -1,5 +1,5 @@
 {
-  "source": "Cut nightly 42725337871, own-sfu job, long-call on chalk_sfu. Numbers only, in milliseconds from the first sample of the call.",
+  "source": "Cut nightly 42725337871, chalk-sfu job, long-call on chalk_sfu. Numbers only, in milliseconds from the first sample of the call.",
   "durationMs": 598000,
   "guests": [
     {

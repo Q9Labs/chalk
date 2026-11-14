@@ -131,8 +131,8 @@ func participantIDParameter() APIParameterContract {
 }
 
 // mediaProvidersHeader names the media providers the caller's SDK can run.
-// Episode creation binds the own SFU only for an SDK that declares it, and a
-// join into an own-SFU Episode needs the same declaration.
+// Episode creation binds the Chalk SFU only for an SDK that declares it, and a
+// join into a Chalk SFU Episode needs the same declaration.
 const mediaProvidersHeader = "X-Chalk-Media-Providers"
 
 func mediaClients(r *http.Request) mediaplane.ClientProviders {

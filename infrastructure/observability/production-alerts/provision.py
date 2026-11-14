@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-# Thresholds of the own-SFU rules, set only here. The APL files read them as ${NAME}.
+# Thresholds of the Chalk SFU rules, set only here. The APL files read them as ${NAME}.
 THRESHOLDS = {
     # A healthy fleet pays a retirement debt within seconds, so one older than 15 minutes means a
     # silent node. The branch reads four of five minute samples, like the readiness rules.

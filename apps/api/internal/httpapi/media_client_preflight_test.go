@@ -41,7 +41,7 @@ func (p boundPlane) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space
 }
 
 // An Episode keeps its provider, so the preflight shared by admission, join and
-// grant decides by the Episode's provider alone: an own-SFU Episode refuses a
+// grant decides by the Episode's provider alone: a Chalk SFU Episode refuses a
 // caller that does not declare chalk_sfu, and a Cloudflare Episode never refuses.
 func TestMediaPreflightRefusesOnlyACallerThatCannotRunTheEpisodeProvider(t *testing.T) {
 	tenant, _ := utilities.NewID()
@@ -53,11 +53,11 @@ func TestMediaPreflightRefusesOnlyACallerThatCannotRunTheEpisodeProvider(t *test
 		header   string
 		refused  bool
 	}{
-		{"own SFU Episode, request without the header", mediaplane.ProviderChalkSFU, "", true},
-		{"own SFU Episode, header names only Cloudflare", mediaplane.ProviderChalkSFU, "cloudflare_sfu", true},
-		{"own SFU Episode, header declares the own SFU", mediaplane.ProviderChalkSFU, "cloudflare_sfu,chalk_sfu", false},
+		{"Chalk SFU Episode, request without the header", mediaplane.ProviderChalkSFU, "", true},
+		{"Chalk SFU Episode, header names only Cloudflare", mediaplane.ProviderChalkSFU, "cloudflare_sfu", true},
+		{"Chalk SFU Episode, header declares the Chalk SFU", mediaplane.ProviderChalkSFU, "cloudflare_sfu,chalk_sfu", false},
 		{"Cloudflare Episode, request without the header", mediaplane.ProviderCloudflareSFU, "", false},
-		{"Cloudflare Episode, header declares the own SFU", mediaplane.ProviderCloudflareSFU, "chalk_sfu", false},
+		{"Cloudflare Episode, header declares the Chalk SFU", mediaplane.ProviderCloudflareSFU, "chalk_sfu", false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -84,7 +84,7 @@ func (s *admissionCounter) AdmitParticipant(context.Context, episodes.AdmitParti
 }
 
 // Admission refuses an old SDK before it stores the Participant or takes a seat.
-func TestAdmitRefusesAnOldSDKIntoAnOwnSFUEpisodeBeforeWritingAnything(t *testing.T) {
+func TestAdmitRefusesAnOldSDKIntoAnChalkSFUEpisodeBeforeWritingAnything(t *testing.T) {
 	tenant, _ := utilities.NewID()
 	space, _ := utilities.NewID()
 	episode, _ := utilities.NewID()
@@ -96,8 +96,8 @@ func TestAdmitRefusesAnOldSDKIntoAnOwnSFUEpisodeBeforeWritingAnything(t *testing
 		admitted int
 		status   int
 	}{
-		{"old SDK, own SFU Episode", mediaplane.ProviderChalkSFU, "", 0, http.StatusConflict},
-		{"new SDK, own SFU Episode", mediaplane.ProviderChalkSFU, "cloudflare_sfu,chalk_sfu", 1, 0},
+		{"old SDK, Chalk SFU Episode", mediaplane.ProviderChalkSFU, "", 0, http.StatusConflict},
+		{"new SDK, Chalk SFU Episode", mediaplane.ProviderChalkSFU, "cloudflare_sfu,chalk_sfu", 1, 0},
 		{"old SDK, Cloudflare Episode", mediaplane.ProviderCloudflareSFU, "", 1, 0},
 		{"new SDK, Cloudflare Episode", mediaplane.ProviderCloudflareSFU, "cloudflare_sfu,chalk_sfu", 1, 0},
 	}

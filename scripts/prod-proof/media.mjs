@@ -16,7 +16,7 @@ const { build } = requireSDK("esbuild");
 // options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller), headed, path and pathGuest (the latency kit's forced ICE path for one guest, see latency-path.mjs)
 // and executablePaths (a browser executable per guest index, for a guest that runs inside its own network namespace).
-// A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
+// A full Chalk SFU falls back to Cloudflare; a Chalk SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
   if (plane !== "chalk_sfu") return;
   check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
@@ -395,7 +395,7 @@ export async function proveLayers(run, { before, after, limited = false, receive
   else {
     for (let guest = 0; guest < after.length; guest++) {
       const layers = movingLayers(before[guest], after[guest]);
-      // Cloudflare makes every simulcast encoding live. The own SFU asks a publisher only for the layers someone views.
+      // Cloudflare makes every simulcast encoding live. The Chalk SFU asks a publisher only for the layers someone views.
       const live = new Set(layers.map((row) => row.rid)).size;
       if (mediaPlane === "chalk_sfu") check(live >= 1, "Stats did not prove a live simulcast encoding");
       else check(live === 3, "Stats did not prove three live simulcast encodings");

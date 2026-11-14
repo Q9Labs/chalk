@@ -142,8 +142,8 @@ func TestMCPConnectionDoesNotListTheDerivedCallCredentialsPermission(t *testing.
 	}
 }
 
-// ownSFUGrantHandler serves an Episode bound to the own SFU, with the issuer and verifier the REST route uses.
-func ownSFUGrantHandler(t *testing.T, principal authentication.Principal, lifecycle EpisodeLifecycleService) (http.Handler, *chalkGrantPlane, accessgrants.Subject) {
+// chalkSFUGrantHandler serves an Episode bound to the Chalk SFU, with the issuer and verifier the REST route uses.
+func chalkSFUGrantHandler(t *testing.T, principal authentication.Principal, lifecycle EpisodeLifecycleService) (http.Handler, *chalkGrantPlane, accessgrants.Subject) {
 	t.Helper()
 	subject := participantMediaSubject(t)
 	subject.TenantID = principal.TenantID
@@ -165,26 +165,26 @@ func ownSFUGrantHandler(t *testing.T, principal authentication.Principal, lifecy
 	return NewMCPHandler(Options{Episodes: lifecycle, SyncTokenRefresh: fixture, ParticipantMediaIssuer: fixture, ParticipantMediaVerify: verifier, ParticipantMediaActive: active, ParticipantGeneration: active, Spaces: fixture, Tenants: fixture, MediaPlane: fixture, TenantAuthz: authorization.NewTenantPolicy(nil, nil)}), fixture, subject
 }
 
-func TestMCPControlCallWorksOnOwnSFUEpisodes(t *testing.T) {
+func TestMCPControlCallWorksOnChalkSFUEpisodes(t *testing.T) {
 	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
 	lifecycle := &admissionRecorder{}
-	handler, fixture, subject := ownSFUGrantHandler(t, writer, lifecycle)
+	handler, fixture, subject := chalkSFUGrantHandler(t, writer, lifecycle)
 	base := `"space_id":"` + subject.SpaceID.String() + `","episode_id":"` + subject.EpisodeID.String() + `"`
 
 	admit := callControlCall(t, handler, writer, `{"action":"admit",`+base+`,"name":"Hana","role":"collaborator","request_key":"mcp-call-admit-0001"}`)
 	if lifecycle.admitted != 1 || strings.Contains(admit.Body.String(), "media.client_unsupported") {
-		t.Fatalf("admit into an own-SFU Episode: %d admissions, %s", lifecycle.admitted, admit.Body.String())
+		t.Fatalf("admit into a Chalk SFU Episode: %d admissions, %s", lifecycle.admitted, admit.Body.String())
 	}
 
 	grant := callControlCall(t, handler, writer, `{"action":"access_grant",`+base+`,"participant_id":"`+subject.ParticipantID.String()+`","participant_generation":7,"replace_media_connection":true}`)
 	if fixture.created != 1 || strings.Contains(grant.Body.String(), "media.client_unsupported") {
-		t.Fatalf("access grant for an own-SFU Episode: %d joins, %s", fixture.created, grant.Body.String())
+		t.Fatalf("access grant for a Chalk SFU Episode: %d joins, %s", fixture.created, grant.Body.String())
 	}
 }
 
 func TestMCPControlCallRejectsAnEmptyConnectionFence(t *testing.T) {
 	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
-	handler, fixture, subject := ownSFUGrantHandler(t, writer, &admissionRecorder{})
+	handler, fixture, subject := chalkSFUGrantHandler(t, writer, &admissionRecorder{})
 	base := `{"action":"access_grant","space_id":"` + subject.SpaceID.String() + `","episode_id":"` + subject.EpisodeID.String() + `","participant_id":"` + subject.ParticipantID.String() + `","participant_generation":7`
 	for _, tail := range []string{
 		`,"replace_media_connection":true,"expected_media_connection_id":""}`,
@@ -197,6 +197,6 @@ func TestMCPControlCallRejectsAnEmptyConnectionFence(t *testing.T) {
 		}
 	}
 	if fixture.created != 0 {
-		t.Fatalf("an empty fence reserved %d own-SFU joins", fixture.created)
+		t.Fatalf("an empty fence reserved %d Chalk SFU joins", fixture.created)
 	}
 }

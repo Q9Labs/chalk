@@ -30,7 +30,7 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
   for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
 });
 
-// The gate of the cut is the own SFU (chalk_sfu): the proof job holds the cut, and the staging latency workflow holds only Promote.
+// The gate of the cut is the Chalk SFU (chalk_sfu): the proof job holds the cut, and the staging latency workflow holds only Promote.
 test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => {
   const { proof: gate, "web-e2e": web, record, scorecard } = nightly.jobs;
   assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
@@ -53,7 +53,7 @@ test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => 
   const env = record.steps.find((item) => item.env?.PROOF_RESULT).env;
   assert.match(env.PROOF_RESULT, /needs\.proof\.result == 'success' && needs\.proof\.outputs\.result/);
   assert.match(env.PROOF_FAILURE, /needs\.proof\.outputs\.failure/);
-  assert.equal(env.OWN_SFU_RESULT, "${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}");
+  assert.equal(env.CHALK_SFU_RESULT, "${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$DEPLOY_RESULT" = success && test "\$PROOF_RESULT" = passed && test "\$WEB_E2E_RESULT" = passed/);
 });
@@ -140,7 +140,7 @@ function runLatencyStep({ leaseBusy, kitStatus = 0 }) {
     mkdirSync(join(dir, "features/scorecard"), { recursive: true });
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
     mkdirSync(join(dir, "bin"));
-    writeFileSync(join(dir, "features/scorecard/own-sfu.mjs"), "");
+    writeFileSync(join(dir, "features/scorecard/chalk-sfu.mjs"), "");
     const lock = join(dir, "scripts/staging-sfu/staging-lock");
     writeFileSync(
       lock,
@@ -163,7 +163,7 @@ exec "$@"
         PATH: `${join(dir, "bin")}:${process.env.PATH}`,
         CF_LATENCY_ONLY: "true",
         CHALK_PROOF_MEDIA_PLANE: "cf_sfu",
-        SCORECARD_ENVIRONMENT: "staging",
+        SCORECARD_ENVIRONMENT: "nightly",
         SCORECARD_TIER: "nightly",
         RUN_PREFIX: "abc",
         GITHUB_RUN_ID: "42",
@@ -360,7 +360,7 @@ test("every cut-side lease wait is longer than the Cloudflare run can own the le
   }
 });
 
-test("own-sfu's caps fit a full lease wait before the proof and before the latency run", () => {
+test("chalk-sfu's caps fit a full lease wait before the proof and before the latency run", () => {
   const proofCap = capMinutes(proofStep).chalk;
   const latencyCap = capMinutes(latencyStep).chalk;
   assert.ok(cutWaits["camera-share proof"] / 60 < proofCap, "the proof step cap covers the wait");

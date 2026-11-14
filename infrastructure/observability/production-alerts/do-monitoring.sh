@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reconciles DigitalOcean monitoring for the own-SFU nodes of one environment: alert policies for
+# Reconciles DigitalOcean monitoring for the Chalk SFU nodes of one environment: alert policies for
 # CPU, memory and disk, and a ping uptime check with a "down everywhere" alert. DigitalOcean
 # monitoring is free. Alerts go to the Discord channel, which accepts Slack payloads at
 # <webhook>/slack. DigitalOcean cannot reach Oncall: it answers HTTP 500 to a Slack webhook URL that

@@ -8,7 +8,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
 
 /** @typedef {"chalk_sfu" | "cf_sfu"} MediaPlane */
 /** @typedef {"pr" | "nightly" | "promote" | "manual"} Tier */
-/** @typedef {"ci" | "staging" | "production"} Environment */
+/** @typedef {"ci" | "nightly" | "production"} Environment */
 /**
  * @typedef {object} ScorecardClient
  * @property {"browser" | "sdk"} kind
@@ -91,7 +91,9 @@ export const METRICS = { ...ACTION_METRICS, .../** @type {Record<string, {unit: 
 // A dropped entry with this metric covers a whole cycle (for example cycle_failed), not one metric.
 export const WHOLE_CYCLE = "*";
 const tiers = ["pr", "nightly", "promote", "manual"];
-const environments = ["ci", "staging", "production"];
+const environments = ["ci", "nightly", "production"];
+/** Cards and workflows from before the rename call Nightly "staging". @param {string | undefined} value */
+export const normalizeEnvironment = (value) => (value === "staging" ? "nightly" : value);
 export const MEDIA_PLANES = ["chalk_sfu", "cf_sfu"];
 const isoTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const clientKinds = ["browser", "sdk"];

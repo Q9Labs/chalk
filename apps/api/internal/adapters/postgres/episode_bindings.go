@@ -28,7 +28,7 @@ func NewEpisodeBindings(db episodeBindingQuerier) EpisodeBindings {
 	return EpisodeBindings{db: db}
 }
 
-// WithOwnCapture says the recorder can reach the own SFU's nodes, so an Episode bound to it is
+// WithOwnCapture says the recorder can reach the Chalk SFU's nodes, so an Episode bound to it is
 // capturable.
 func (e EpisodeBindings) WithOwnCapture(enabled bool) EpisodeBindings {
 	e.ownCapture = enabled

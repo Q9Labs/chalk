@@ -39,7 +39,7 @@ text only.
 ## Open question
 
 Whether the SDK media client runs in Node with an injected WebRTC library against
-both the own SFU and the Cloudflare SFU is unproven. Answer it with a one-day
+both the Chalk SFU and the Cloudflare SFU is unproven. Answer it with a one-day
 spike (join, subscribe to one audio track, publish one tone, record CPU and
 memory) before building. The fallback is headless Chromium with fake media
 devices, as `scripts/prod-proof` already does. It works but costs more per Agent.

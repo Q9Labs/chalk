@@ -11,7 +11,7 @@
 (*                                                                         *)
 (*   Cloudflare today   CloseCanFail = TRUE   OrphansLinger = TRUE         *)
 (*                      AtomicRevoke = FALSE                               *)
-(*   Own SFU, state     CloseCanFail = FALSE  OrphansLinger = FALSE        *)
+(*   Chalk SFU, state     CloseCanFail = FALSE  OrphansLinger = FALSE        *)
 (*   in the room                                                           *)
 (*   authority          AtomicRevoke = TRUE                                *)
 (***************************************************************************)

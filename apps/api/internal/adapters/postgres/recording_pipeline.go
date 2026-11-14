@@ -218,7 +218,7 @@ func (r RecordingPipelineRepository) WithTranscriptionEnabled(enabled bool) Reco
 	return r
 }
 
-// WithColocatedCapture turns on capture workers beside own-SFU nodes: such a worker claims only the
+// WithColocatedCapture turns on capture workers beside Chalk SFU nodes: such a worker claims only the
 // captures of its own node, and the fleet leaves a capture to a healthy one for the grace.
 func (r RecordingPipelineRepository) WithColocatedCapture(grace time.Duration) RecordingPipelineRepository {
 	r.colocatedGrace = grace

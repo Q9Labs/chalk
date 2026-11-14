@@ -21,7 +21,7 @@ import (
 // TestLiveSmoke sends real audio and video through a deployed node and checks a second
 // participant receives it, then ends the Episode and checks the node returns to the state it
 // started in. It is the live media smoke the production canary requires before production serves
-// own-SFU calls (docs/sfu/production-rollout.md); TestLoopback does not count, because it starts its
+// Chalk SFU calls (docs/sfu/production-rollout.md); TestLoopback does not count, because it starts its
 // own service. It skips unless scripts/live-smoke sets the environment:
 //
 //	CHALK_SFU_LIVE_ENV      staging or production

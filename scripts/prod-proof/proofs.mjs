@@ -11,7 +11,7 @@ import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { findChalkSfuSpace, manualPolicy, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -39,9 +39,9 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
-// Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
+// Recording runs only on Cloudflare, so the Chalk SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-// A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
+// A proof Space on `plane`. The public API refuses a request that names the Chalk SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
 // Tenant default an operator set decides. Either way the Space must land on `plane`, and a
@@ -71,14 +71,14 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   await save(`${run.directory}/space.json`, space);
   return space;
 }
-// CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) uses the Space the own-sfu-spaces step checked and moved:
+// CHALK_PROOF_SPACE_BY_SLUG=true (Promote's Chalk SFU proof) uses the Space the chalk-sfu-spaces step checked and moved:
 // the pinned Space ID when an operator pinned one, otherwise the Space with the fixed slug (same resolver as the step).
 // Otherwise a Space ID variable reuses the Space an operator moved.
 async function pinnedSpace(run, plane, policy, pinName) {
-  const kind = ownSfuSpaceKind(policy);
+  const kind = chalkSfuSpaceKind(policy);
   if (plane === "chalk_sfu" && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
-    const found = await findOwnSfuSpace(run.apiRequest, run.tenantPath, kind);
-    check(found, `The proof Space for ${pinName} or ${ownSfuSpaces[kind].slug} does not exist: run the own-sfu-spaces proof first`, "media-plane-config");
+    const found = await findChalkSfuSpace(run.apiRequest, run.tenantPath, kind);
+    check(found, `The proof Space for ${pinName} or ${chalkSfuSpaces[kind].slug} does not exist: run the chalk-sfu-spaces proof first`, "media-plane-config");
     return found;
   }
   const pinned = pinName && process.env[pinName];

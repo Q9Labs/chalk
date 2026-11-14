@@ -55,12 +55,12 @@ var (
 
 	backlogCount, _ = backlogMeter.Int64ObservableGauge(
 		"chalk.sfu.retirement_debts",
-		metric.WithDescription("Retirement debts no own-SFU node has acknowledged yet"),
+		metric.WithDescription("Retirement debts no Chalk SFU node has acknowledged yet"),
 		metric.WithUnit("{debt}"),
 	)
 	backlogOldest, _ = backlogMeter.Float64ObservableGauge(
 		"chalk.sfu.retirement_debt_oldest_age",
-		metric.WithDescription("Age of the oldest unpaid own-SFU retirement debt"),
+		metric.WithDescription("Age of the oldest unpaid Chalk SFU retirement debt"),
 		metric.WithUnit("s"),
 	)
 )

@@ -1,5 +1,5 @@
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
-import { evaluateOwnSfuLeave, awaitRelease, scorecardShape } from "./leave-own-sfu-criteria.mjs";
+import { evaluateChalkSfuLeave, awaitRelease, scorecardShape } from "./leave-chalk-sfu-criteria.mjs";
 import { measureLeave } from "./leave.mjs";
 import { createSpace, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
@@ -36,9 +36,9 @@ const survivorView = (page, leaver) =>
     };
   }, leaver);
 
-// Two guests join on the own SFU with the current client. One leaves: the Sync acknowledgement arrives in time, its microphone and
+// Two guests join on the Chalk SFU with the current client. One leaves: the Sync acknowledgement arrives in time, its microphone and
 // camera are released, the other guest drops it from the roster and from its received media, keeps its own capture, and the Episode lives on.
-export async function leaveOwnSfuProof(run) {
+export async function leaveChalkSfuProof(run) {
   const receiver = await prepareIntegration(run, false);
   const space = await createSpace(run);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
@@ -66,10 +66,10 @@ export async function leaveOwnSfuProof(run) {
     survivor: { ...view, ownTracksLive: survivorTracks.audio >= 1 && survivorTracks.video >= 1 },
     episodeStatus: current.status,
   };
-  const evaluation = evaluateOwnSfuLeave(sample);
-  await save(`${run.directory}/leave-own-sfu.json`, { ...sample, ...evaluation });
+  const evaluation = evaluateChalkSfuLeave(sample);
+  await save(`${run.directory}/leave-chalk-sfu.json`, { ...sample, ...evaluation });
   await save(`${run.directory}/leave-comparison.json`, scorecardShape(sample, evaluation));
-  console.log(`Own-SFU Leave: acknowledged in ${Math.round(leave.ms)} ms; capture released in ${releaseMs} ms; other guest dropped the leaver ${view.rosterWithoutLeaver && view.remoteWithoutLeaver}`);
-  check(evaluation.passed, `Own-SFU Leave failed: ${evaluation.failures.join("; ")}`);
+  console.log(`Chalk SFU Leave: acknowledged in ${Math.round(leave.ms)} ms; capture released in ${releaseMs} ms; other guest dropped the leaver ${view.rosterWithoutLeaver && view.remoteWithoutLeaver}`);
+  check(evaluation.passed, `Chalk SFU Leave failed: ${evaluation.failures.join("; ")}`);
   return evaluation;
 }

@@ -4,7 +4,7 @@
     "id": "nightly-latency",
     "commit": "8e7a9381803d7e24e924a0f847250ec6c2bb390a",
     "tier": "nightly",
-    "environment": "staging",
+    "environment": "nightly",
     "startedAt": "2026-11-08T16:55:52.628Z",
     "client": { "kind": "browser", "browser": "chromium-headless/151", "region": "github-hosted", "size": "ubuntu-24-04" }
   },

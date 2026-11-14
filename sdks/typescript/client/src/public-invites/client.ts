@@ -92,7 +92,7 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
 }
 export const createChalkPublicInviteClient = createChalkPublicClient;
 function requestHeaders(options: ChalkPublicClientOptions, guestCredential: string | undefined): Readonly<Record<string, string>> {
-  // The API binds a call to the own SFU only for an SDK that declares it runs it.
+  // The API binds a call to the Chalk SFU only for an SDK that declares it runs it.
   const headers: Record<string, string> = { [MEDIA_PROVIDERS_HEADER]: MEDIA_PROVIDERS, ...options.headers };
   if (options.runtime === "react-native") {
     headers["X-Chalk-Client"] = "react-native";

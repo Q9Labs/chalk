@@ -2393,7 +2393,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
     if (!this.#started || this.#negotiatedGeneration === generation || this.#replacementAttemptedGeneration === generation || !this.#replaceMediaConnection) return;
-    // The own SFU keeps an unused connection until it reports it gone, and the publish recovers from that report.
+    // The Chalk SFU keeps an unused connection until it reports it gone, and the publish recovers from that report.
     if (this.#capabilities().keepsIdleSession) return;
     await this.#replaceMediaConnectionForRecovery(generation, "dormant_connection");
   }

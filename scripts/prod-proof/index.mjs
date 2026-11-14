@@ -2,8 +2,8 @@
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
-import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
-import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
+import { leaveChalkSfuProof } from "./leave-chalk-sfu.mjs";
+import { ensureChalkSfuSpaces } from "./chalk-sfu-spaces.mjs";
 import { offReasonProof } from "./off-reason.mjs";
 import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
@@ -18,10 +18,10 @@ import { createProofKey, prepareIntegration, recordProof, exportProof, transcrip
 
 const plans = {
   leave: { media: false, webhooks: false, proofs: ["leave"] },
-  // The current client's Leave on the own SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
-  "leave-own-sfu": { media: false, webhooks: false, proofs: ["leave-own-sfu"] },
-  // Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
-  "own-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["own-sfu-spaces"] },
+  // The current client's Leave on the Chalk SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
+  "leave-chalk-sfu": { media: false, webhooks: false, proofs: ["leave-chalk-sfu"] },
+  // Finds or creates Promote's two Chalk SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
+  "chalk-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["chalk-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   // A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket. No browser or media.
   "chat-upload": { media: false, webhooks: false, proofs: ["chat-upload"] },
@@ -83,7 +83,7 @@ const plans = {
     webhooks: false,
     proofs: ["deploy-hold"],
   },
-  // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.
+  // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, Chalk SFU.
   "toggle-offers": {
     media: false,
     longCall: true,
@@ -92,7 +92,7 @@ const plans = {
   },
 };
 const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|deploy-hold|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|deploy-hold|toggle-offers|leave|leave-chalk-sfu|chalk-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -142,8 +142,8 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     "toggle-offers": () => toggleOffersProof(run, receiver),
     "deploy-hold": () => deployHoldProof(run, receiver),
     leave: () => leaveProof(run),
-    "leave-own-sfu": () => leaveOwnSfuProof(run),
-    "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
+    "leave-chalk-sfu": () => leaveChalkSfuProof(run),
+    "chalk-sfu-spaces": () => ensureChalkSfuSpaces(run),
     offreason: () => offReasonProof(run),
     "chat-upload": () => chatUploadProof(run),
     "camera-share": async () => {

@@ -1,5 +1,5 @@
 name: Nightly Cloudflare latency
-# Warn-only Cloudflare action latency, measured with the same kit and runner as the own-SFU job of Cut nightly.
+# Warn-only Cloudflare action latency, measured with the same kit and runner as the Chalk SFU job of Cut nightly.
 # It is a separate workflow so it can never hold the nightly deployment lock, delay the next cut, or change the
 # conclusion of Cut nightly, which the Android release reads.
 on:

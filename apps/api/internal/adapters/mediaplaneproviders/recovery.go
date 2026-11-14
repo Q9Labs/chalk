@@ -13,7 +13,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// recoverBinding returns the binding a call on a live own-SFU Episode should use. It is the
+// recoverBinding returns the binding a call on a live Chalk SFU Episode should use. It is the
 // binding it was given while the bound allocation is healthy. When the node is silent or has
 // restarted, the Episode moves through one durable, generation-fenced transition:
 //
@@ -26,7 +26,7 @@ import (
 // error. Losing the compare-and-set to another API replica returns the winner's binding, so
 // every replica follows one move. A crash between the two steps leaves an expiring hold and
 // the old binding, and the next call repeats the same reserve and commits. The Episode never
-// leaves the own SFU here: only a new Episode may overflow to Cloudflare. Participants then
+// leaves the Chalk SFU here: only a new Episode may overflow to Cloudflare. Participants then
 // rejoin through their normal join, with fresh generations.
 func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) (mediaplane.Binding, error) {
 	if r.chalk == nil || r.recovery == nil || !binding.Is(mediaplane.ProviderChalkSFU) || binding.Node == "" {

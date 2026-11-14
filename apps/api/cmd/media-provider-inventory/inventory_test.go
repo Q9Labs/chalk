@@ -203,18 +203,18 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	}
 	ptr := func(value string) *string { return &value }
 
-	// A: default configuration, own SFU, on the allowlist.
+	// A: default configuration, Chalk SFU, on the allowlist.
 	tenantA := tenant(nil, "")
 	space(tenantA, "chalk_sfu", false, a1)
 	// B: the Tenant default is Cloudflare and the Space inherits it.
 	tenantB := tenant(ptr("cf_sfu"), "")
 	b1 := space(tenantB, "", false)
-	// C: explicit Cloudflare at Space level, an own-SFU Space outside the allowlist, an archived Space.
+	// C: explicit Cloudflare at Space level, a Chalk SFU Space outside the allowlist, an archived Space.
 	tenantC := tenant(ptr("chalk_sfu"), chalkManaged)
 	c1 := space(tenantC, "cf_sfu", false)
 	c2 := space(tenantC, "chalk_sfu", false)
 	space(tenantC, "cf_sfu", true)
-	// D: tenant-managed Cloudflare. It runs on Cloudflare, and an own-SFU Space under it selects Cloudflare, as the resolver does.
+	// D: tenant-managed Cloudflare. It runs on Cloudflare, and a Chalk SFU Space under it selects Cloudflare, as the resolver does.
 	tenantD := tenant(nil, tenantManagedCloudflare)
 	d1 := space(tenantD, "cf_sfu", false)
 	space(tenantD, "chalk_sfu", false, d2)
@@ -225,7 +225,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	// F: unreadable settings and an unknown Tenant default.
 	tenantF := tenant(ptr("bogus"), `{}`)
 	space(tenantF, "chalk_sfu", false, f1)
-	// H: only an own-SFU Space outside the allowlist, which the API pins to Cloudflare.
+	// H: only a Chalk SFU Space outside the allowlist, which the API pins to Cloudflare.
 	tenantH := tenant(nil, "")
 	space(tenantH, "chalk_sfu", false)
 	// I: a settings document the API cannot read, even though it names a mode.
@@ -245,7 +245,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	episode(tenantC, c2, "ending", `{"media_plane_binding":null}`)
 	episode(tenantD, d1, "active", `{"media_plane_binding":{"provider":"other_sfu"}}`)
 	dEnded := episode(tenantD, d2, "ended", `{"media_plane_binding":{"provider":"cf_sfu"}}`)
-	// Recordings: Cloudflare with live capture and transcription, own SFU finished, legacy with neither.
+	// Recordings: Cloudflare with live capture and transcription, Chalk SFU finished, legacy with neither.
 	recording(tenantB, b1, bEpisode, "capturing_segmented", "transcribing")
 	recording(tenantB, b1, bEpisode, "rendering", "")
 	recording(tenantA, a1, aEpisode, "committed", "complete")

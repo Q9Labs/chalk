@@ -211,7 +211,7 @@ type CreateEpisodeInput struct {
 	StartedAt       *time.Time
 	ConfigSnapshot  json.RawMessage
 	// MediaClients is what the creator's SDK can run. The Episode binds the
-	// own SFU only when it can.
+	// Chalk SFU only when it can.
 	MediaClients                  mediaplane.ClientProviders
 	MaximumDurationSeconds        int32
 	MaximumDurationCeilingSeconds int32

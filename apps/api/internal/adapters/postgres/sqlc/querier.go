@@ -17,7 +17,7 @@ type Querier interface {
 	ActivateRecordingFleetBootstrap(ctx context.Context, arg ActivateRecordingFleetBootstrapParams) (RecordingFleetNode, error)
 	// Moves a Space stored on a plane onto the setting without changing where it runs. It writes only
 	// while the Space still has no setting and still stores that plane, and the Tenant can still serve
-	// the own SFU, so a choice made after the caller looked is never overwritten.
+	// the Chalk SFU, so a choice made after the caller looked is never overwritten.
 	AdoptSpaceMediaPlaneSetting(ctx context.Context, arg AdoptSpaceMediaPlaneSettingParams) (int64, error)
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
@@ -121,7 +121,7 @@ type Querier interface {
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
 	DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error
-	// The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+	// The API registers the capture worker beside each Chalk SFU node from its node list. A revoked or
 	// existing row is never reactivated or rewritten here. These rows live apart from
 	// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
@@ -281,7 +281,7 @@ type Querier interface {
 	ListRecordingRenderCaptureObjects(ctx context.Context, arg ListRecordingRenderCaptureObjectsParams) ([]ListRecordingRenderCaptureObjectsRow, error)
 	ListRecordingTranscriptionSourceChunks(ctx context.Context, arg ListRecordingTranscriptionSourceChunksParams) ([]RecordingTranscriptionSourceChunk, error)
 	ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error)
-	// The newest confirmed grant of every source in a live own-SFU Episode whose
+	// The newest confirmed grant of every source in a live Chalk SFU Episode whose
 	// authorization still stands, in key order after the cursor. A stop decided at
 	// or after the grant ends it whatever its delivery outcome, so a dropped or
 	// failed revoke can never be renewed back to life. So does the Participant's

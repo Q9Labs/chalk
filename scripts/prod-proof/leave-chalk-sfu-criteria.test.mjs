@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { awaitRelease, evaluateOwnSfuLeave, scorecardShape } from "./leave-own-sfu-criteria.mjs";
+import { awaitRelease, evaluateChalkSfuLeave, scorecardShape } from "./leave-chalk-sfu-criteria.mjs";
 
 const good = () => ({
   leave: { confirmed: true, deadlineFallback: false, ms: 240, peerClosedBeforeAck: false },
@@ -12,7 +12,7 @@ const good = () => ({
 
 test("a clean Leave passes and feeds the scorecard one sample", () => {
   const sample = good();
-  const result = evaluateOwnSfuLeave(sample);
+  const result = evaluateChalkSfuLeave(sample);
   assert.deepEqual(result, { passed: true, failures: [] });
   assert.deepEqual(scorecardShape(sample, result), { passed: true, candidateSamples: 1, candidateMedianMs: 240, candidateMaxMs: 240, plane: "chalk_sfu" });
 });
@@ -33,7 +33,7 @@ for (const [name, change, message] of [
   test(`fails on ${name}`, () => {
     const sample = good();
     change(sample);
-    const result = evaluateOwnSfuLeave(sample);
+    const result = evaluateChalkSfuLeave(sample);
     assert.equal(result.passed, false);
     assert.match(result.failures.join("\n"), message);
   });
@@ -54,14 +54,14 @@ test("tracks that end right at the deadline are seen as ended and pass", async (
   const { after, ms } = await awaitRelease(capture.sample, 0, capture);
   assert.equal(after.live, 0);
   assert.ok(ms <= 10_000);
-  assert.equal(evaluateOwnSfuLeave({ ...good(), release: { ...after, ms } }).passed, true);
+  assert.equal(evaluateChalkSfuLeave({ ...good(), release: { ...after, ms } }).passed, true);
 });
 
 test("tracks that end after the deadline still fail", async () => {
   const capture = fakeCapture(10_100);
   const { after, ms } = await awaitRelease(capture.sample, 0, capture);
   assert.equal(after.live, 2);
-  assert.equal(evaluateOwnSfuLeave({ ...good(), release: { ...after, ms } }).passed, false);
+  assert.equal(evaluateChalkSfuLeave({ ...good(), release: { ...after, ms } }).passed, false);
 });
 
 test("a slow acknowledgement leaves less time to release", async () => {

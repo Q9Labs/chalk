@@ -10,7 +10,7 @@ import { SCORECARD_SCHEMA } from "./schema.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
-const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "staging", startedAt: "2026-11-09T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
+const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-09T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
 const metric = (id, value, n = 20) => ({ id, unit: "ms", n, p50: value, p95: value, source: "latency-kit" });
 const card = (mediaPlane, metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane, metrics, dropped: [] });
 const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, ...env } });
@@ -31,11 +31,11 @@ test("a Cloudflare latency card is collected, shown with the note, and an over-b
   assert.equal(spawnSync("mkdir", ["-p", join(evidence, "run-latency")]).status, 0);
   writeFileSync(join(evidence, "run-latency", "scorecard-cf_sfu.json"), readFileSync(path));
 
-  const collected = node("own-sfu.mjs", [evidence, "cf_sfu", revision, artifacts], { GITHUB_STEP_SUMMARY: summary });
+  const collected = node("chalk-sfu.mjs", [evidence, "cf_sfu", revision, artifacts], { GITHUB_STEP_SUMMARY: summary });
   assert.equal(collected.status, 0, collected.stderr);
   assert.ok(existsSync(join(artifacts, "scorecard-cf_sfu.json")));
   const text = readFileSync(summary, "utf8");
-  assert.match(text, /Own SFU nightly: cf_sfu/);
+  assert.match(text, /Chalk SFU nightly: cf_sfu/);
   assert.match(text, /Iowa/);
   assert.match(text, /❌ blocks/);
   assert.doesNotMatch(text, /⚠️ warns/);

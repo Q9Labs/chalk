@@ -17,7 +17,7 @@ const indexPath = resolve(import.meta.dirname, "index.mjs");
 // Run its own shell line for every proof it accepts, then the same validation the script runs first.
 test("the run ID the workflow builds is valid for every proof it accepts", async () => {
   const names = /^\s*(all\|[a-z|-]+)\) ;;$/m.exec(workflow)?.[1].split("|");
-  assert.ok(names?.includes("own-sfu-spaces") && names.includes("leave-own-sfu"));
+  assert.ok(names?.includes("chalk-sfu-spaces") && names.includes("leave-chalk-sfu"));
   const line = /^\s*(run_id="\$\{RUN_PREFIX\}-\$\{proof\}")$/m.exec(workflow)?.[1];
   assert.ok(line, "the workflow no longer builds run_id from RUN_PREFIX and proof");
   const suffix = "0123456789abcdef0123456789abcdef";
@@ -75,11 +75,11 @@ function fakeApi({ release, allowed = true, preexisting = [] }) {
 async function runStep(api, env = {}) {
   await new Promise((done) => api.server.listen(0, "127.0.0.1", done));
   const url = `http://127.0.0.1:${api.server.address().port}`;
-  const directory = await mkdtemp(`${tmpdir()}/own-sfu-spaces-`);
-  const runId = "0123456789abcdef0123456789abcdef-own-sfu-spaces";
+  const directory = await mkdtemp(`${tmpdir()}/chalk-sfu-spaces-`);
+  const runId = "0123456789abcdef0123456789abcdef-chalk-sfu-spaces";
   let result;
   try {
-    result = await execute("node", [indexPath, "own-sfu-spaces"], {
+    result = await execute("node", [indexPath, "chalk-sfu-spaces"], {
       cwd: directory,
       env: {
         PATH: process.env.PATH,

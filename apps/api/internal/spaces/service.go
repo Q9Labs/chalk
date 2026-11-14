@@ -280,7 +280,7 @@ func NewServiceWithDefaultProvider(repository Repository, defaultProvider mediap
 }
 
 // WithPlanePolicy sets the deployment's plane policy: the platform default that new
-// Spaces inherit, and the own-SFU kill switch and allowlist that Effective applies.
+// Spaces inherit, and the Chalk SFU kill switch and allowlist that Effective applies.
 func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
 	s.planes = policy
 	return s
@@ -365,7 +365,7 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 				return Space{}, err
 			}
 			if provider == mediaplane.ProviderChalkSFU {
-				// A public write naming the own SFU inherits; see PublicWriteAllowed.
+				// A public write naming the Chalk SFU inherits; see PublicWriteAllowed.
 				input.MediaPlane = s.planes.legacyPlane(nil)
 				break
 			}
@@ -440,7 +440,7 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 			if err := s.planes.publicWriteAllowed(provider); err != nil {
 				return Space{}, err
 			}
-			if provider != mediaplane.ProviderChalkSFU { // naming the own SFU inherits; see PublicWriteAllowed
+			if provider != mediaplane.ProviderChalkSFU { // naming the Chalk SFU inherits; see PublicWriteAllowed
 				setting = &provider
 			}
 		}

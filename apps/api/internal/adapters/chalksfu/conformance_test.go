@@ -30,7 +30,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// everySpace is the staging allowlist: these tests run the own SFU for a Space without picking an ID.
+// everySpace is the staging allowlist: these tests run the Chalk SFU for a Space without picking an ID.
 var everySpace = func() spaces.ChalkSFUAllowlist {
 	list, err := spaces.ParseChalkSFUAllowlist([]string{"*"})
 	if err != nil {
@@ -522,7 +522,7 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 
 	oldSDK, err := registry(started).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, mediaplane.ClientProviders{})
 	if err != nil || oldSDK.Provider != mediaplane.ProviderCloudflareSFU.SettingName() {
-		t.Fatalf("an SDK that cannot run the own SFU got %+v, %v, want Cloudflare", oldSDK, err)
+		t.Fatalf("an SDK that cannot run the Chalk SFU got %+v, %v, want Cloudflare", oldSDK, err)
 	}
 	next, err := registry(started).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"))
 	if err != nil || next.Provider != mediaplane.ProviderChalkSFU.SettingName() || next.Node != "sfu-a" {
@@ -544,7 +544,7 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 
 // An operator's change after an Episode started never moves it: flipping the Space
 // setting, the Tenant default or the kill switch changes only the next Episode, and a
-// live own-SFU Episode keeps resolving to the node it was bound to.
+// live Chalk SFU Episode keeps resolving to the node it was bound to.
 func TestConformanceSettingFlipsNeverMoveALiveEpisode(t *testing.T) {
 	box := startSFU(t, nil)
 	adapter := box.fleet(t)
@@ -560,9 +560,9 @@ func TestConformanceSettingFlipsNeverMoveALiveEpisode(t *testing.T) {
 	}
 	ownSpace := spaces.Space{MediaPlane: ownText, MediaPlaneSetting: &own}
 
-	started, err := registry(nil, false).ResolveBinding(context.Background(), tenants.Tenant{}, ownSpace, ownSFUClients)
+	started, err := registry(nil, false).ResolveBinding(context.Background(), tenants.Tenant{}, ownSpace, chalkSFUClients)
 	if err != nil || started.Provider != ownText || started.Node != "sfu-a" {
-		t.Fatalf("Episode started on the own SFU: %+v, %v", started, err)
+		t.Fatalf("Episode started on the Chalk SFU: %+v, %v", started, err)
 	}
 
 	flips := []struct {
@@ -579,29 +579,29 @@ func TestConformanceSettingFlipsNeverMoveALiveEpisode(t *testing.T) {
 	for _, flip := range flips {
 		live, err := registry(started, flip.paused).ResolveEpisode(context.Background(), flip.tenant, flip.space, utilities.ID{})
 		if err != nil || live.Provider() != mediaplane.ProviderChalkSFU {
-			t.Errorf("%s: the live own-SFU Episode resolved to %v, %v", flip.name, live, err)
+			t.Errorf("%s: the live Chalk SFU Episode resolved to %v, %v", flip.name, live, err)
 			continue
 		}
-		next, err := registry(started, flip.paused).ResolveBinding(context.Background(), flip.tenant, flip.space, ownSFUClients)
+		next, err := registry(started, flip.paused).ResolveBinding(context.Background(), flip.tenant, flip.space, chalkSFUClients)
 		if err != nil || next.Provider != cloudflareText {
 			t.Errorf("%s: the next Episode got %+v, %v, want Cloudflare", flip.name, next, err)
 		}
 	}
 
-	// The reverse: a Cloudflare Episode stays on Cloudflare after the Space is set to the own SFU.
-	onCloudflare, err := registry(nil, false).ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{MediaPlane: cloudflareText, MediaPlaneSetting: &cloudflare}, ownSFUClients)
+	// The reverse: a Cloudflare Episode stays on Cloudflare after the Space is set to the Chalk SFU.
+	onCloudflare, err := registry(nil, false).ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{MediaPlane: cloudflareText, MediaPlaneSetting: &cloudflare}, chalkSFUClients)
 	if err != nil || onCloudflare.Provider != cloudflareText {
 		t.Fatalf("Episode started on Cloudflare: %+v, %v", onCloudflare, err)
 	}
 	live, err := registry(onCloudflare, false).ResolveEpisode(context.Background(), tenants.Tenant{}, ownSpace, utilities.ID{})
 	if err != nil || live.Provider() != mediaplane.ProviderCloudflareSFU {
-		t.Fatalf("live Cloudflare Episode after the Space moved to the own SFU: %v, %v", live, err)
+		t.Fatalf("live Cloudflare Episode after the Space moved to the Chalk SFU: %v, %v", live, err)
 	}
 }
 
 // A Tenant whose Chalk-managed document names Cloudflare still lets a Space pick
-// the own SFU, because Chalk runs both providers in that mode.
-func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
+// the Chalk SFU, because Chalk runs both providers in that mode.
+func TestConformanceChalkManagedTenantLetsTheSpacePickTheChalkSFU(t *testing.T) {
 	box := startSFU(t, nil)
 	fleet := box.fleet(t)
 	fleet.Probe(context.Background())
@@ -610,7 +610,7 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 		DefaultProvider: mediaplane.ProviderCloudflareSFU, ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace},
 	})
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
-	binding, err := registry.ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}, ownSFUClients)
+	binding, err := registry.ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}, chalkSFUClients)
 	if err != nil || binding == nil || binding.Provider != mediaplane.ProviderChalkSFU.SettingName() {
 		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
 	}

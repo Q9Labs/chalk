@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { createEpisode, createSpace } from "./proofs.mjs";
 import { ProofError, measured, publicFailure } from "./runtime.mjs";
 
-// The public API refuses a Create Space request that names the own SFU, so a proof names no
+// The public API refuses a Create Space request that names the Chalk SFU, so a proof names no
 // plane and fails at once when the Space it gets is not on the plane it asked for.
 async function fakeRun(responder) {
   const requests = [];
@@ -184,9 +184,9 @@ test("a measured check prints its message, a nested one prints every message, an
   ]);
 });
 
-// Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the own-SFU lane
+// Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the Chalk SFU lane
 // takes the Space an operator moved, which the workflow hands to the proof as CHALK_PROOF_SPACE_ID_CHALK_SFU.
-test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {
+test("the Cloudflare lane and the Chalk SFU lane each land on their own plane", async () => {
   const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
   for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
     assert.equal(workflow.split(`${name}: \${{ secrets.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
@@ -196,9 +196,9 @@ test("the Cloudflare lane and the own-SFU lane each land on their own plane", as
   assert.equal((await createSpace(cloudflareLane, "cf_sfu")).effective_media_plane, "cf_sfu");
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "chalk-space";
   try {
-    const ownSfuLane = await fakeRun(deployment);
-    assert.equal((await createSpace(ownSfuLane, "chalk_sfu")).id, "chalk-space");
-    assert.equal((await createSpace(ownSfuLane, "cf_sfu")).effective_media_plane, "cf_sfu");
+    const chalkSfuLane = await fakeRun(deployment);
+    assert.equal((await createSpace(chalkSfuLane, "chalk_sfu")).id, "chalk-space");
+    assert.equal((await createSpace(chalkSfuLane, "cf_sfu")).effective_media_plane, "cf_sfu");
   } finally {
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
   }
@@ -223,7 +223,7 @@ test("the automatic-policy proof reuses its own Space and never the manual one",
   }
 });
 
-test("Promote's own-SFU proof finds its Space by slug and never creates one", async () => {
+test("Promote's Chalk SFU proof finds its Space by slug and never creates one", async () => {
   process.env.CHALK_PROOF_SPACE_BY_SLUG = "true";
   try {
     const found = { id: "s", slug: "promote-proof-chalk-sfu", media_plane: "chalk_sfu", ...policyApplied };
@@ -234,13 +234,13 @@ test("Promote's own-SFU proof finds its Space by slug and never creates one", as
       ["GET"],
     );
     const missing = await fakeRun(() => ({ spaces: [], pagination: { next_cursor: "" } }));
-    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /own-sfu-spaces/.test(error.message));
+    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /chalk-sfu-spaces/.test(error.message));
   } finally {
     delete process.env.CHALK_PROOF_SPACE_BY_SLUG;
   }
 });
 
-test("Promote's own-SFU proof uses the Space an operator pinned, the same one the ensure step checks", async () => {
+test("Promote's Chalk SFU proof uses the Space an operator pinned, the same one the ensure step checks", async () => {
   process.env.CHALK_PROOF_SPACE_BY_SLUG = "true";
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "pinned";
   try {

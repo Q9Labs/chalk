@@ -46,7 +46,7 @@ Run the `Hotfix` workflow from master with the commit SHA of a fix that is alrea
 
 1. builds on the release now running and validates the release,
 2. deploys API, Sync and web, with that release kept as the rollback baseline,
-3. runs the real-call smoke on the own SFU,
+3. runs the real-call smoke on the Chalk SFU,
 4. rolls back by itself if the smoke fails, and stays red until someone confirms service.
 
 It skips the nightly record, latency and long-call proofs, the scorecard and npm publish. Measured on nightly on 12 Nov 2026: 22.3 minutes from dispatch to live with the build reused (backend deploy 660 s, web 124 s, real-call smoke 457 s), and about 30 minutes with a fresh 8.3 minute build and validate. A forced smoke failure restored service 10.5 minutes after the rollback started. After the incident, the next nightly cut carries the fix through the normal path, and the postmortem below closes the gap that let it through.
@@ -59,7 +59,7 @@ It skips the nightly record, latency and long-call proofs, the scorecard and npm
 | `media-settings set --plane cf_sfu` for one Space                           | Next Episodes of that Space use Cloudflare.        | Seconds, no deploy. Live Episodes keep their plane. |
 | `media-settings set --tenant <id>` for a Tenant default                     | Next Episodes of that Tenant follow it.            | Seconds, no deploy.                                 |
 
-The first row is an emergency stop for new Episodes, not the normal failover: a live call never moves to Cloudflare, and a new Episode that no own-SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.
+The first row is an emergency stop for new Episodes, not the normal failover: a live call never moves to Cloudflare, and a new Episode that no Chalk SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../sfu/production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 

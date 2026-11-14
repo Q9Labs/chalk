@@ -50,14 +50,14 @@ func create(t *testing.T, service Service, edit func(*CreateSpaceInput)) (Create
 	return repository.created, err
 }
 
-var ownSFUDefaults = NewSpaceDefaults{
+var chalkSFUDefaults = NewSpaceDefaults{
 	MediaPlane:          mediaplane.ProviderChalkSFU,
 	RecordingPolicy:     artifactpolicy.RecordingAutomatic,
 	TranscriptionPolicy: artifactpolicy.TranscriptionAutomatic,
 }
 
 func TestCreateSpaceAppliesNewSpaceDefaultsOnlyWhenOmitted(t *testing.T) {
-	configured := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{})
+	configured := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(chalkSFUDefaults, fixedTenant{})
 
 	omitted, err := create(t, configured, func(*CreateSpaceInput) {})
 	if err != nil {
@@ -105,7 +105,7 @@ func TestNewSpacePlaneFollowsWhatTheTenantCanServe(t *testing.T) {
 		{"Tenant default plane", tenants.Tenant{DefaultMediaPlane: &cloudflare}, cloudflare},
 	}
 	for _, c := range cases {
-		service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{tenant: c.tenant})
+		service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(chalkSFUDefaults, fixedTenant{tenant: c.tenant})
 		got, err := create(t, service, func(*CreateSpaceInput) {})
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
@@ -121,20 +121,20 @@ func TestNewSpacePlaneFollowsWhatTheTenantCanServe(t *testing.T) {
 
 func TestNewSpacePlaneDefaultNeedsTheTenant(t *testing.T) {
 	lookupFailed := errors.New("tenant lookup failed")
-	service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{err: lookupFailed})
+	service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithNewSpaceDefaults(chalkSFUDefaults, fixedTenant{err: lookupFailed})
 	if _, err := create(t, service, func(*CreateSpaceInput) {}); !errors.Is(err, lookupFailed) {
 		t.Errorf("got %v, want the Tenant lookup error", err)
 	}
 }
 
-// Under the own SFU as the deployment default, a request that names no plane creates a
+// Under the Chalk SFU as the deployment default, a request that names no plane creates a
 // Space that inherits: no setting of its own, and Cloudflare in the legacy column, which both
 // releases can serve. Create Space must not refuse it.
-func TestCreateSpaceWithNoPlaneInheritsTheOwnSFUDefault(t *testing.T) {
+func TestCreateSpaceWithNoPlaneInheritsTheChalkSFUDefault(t *testing.T) {
 	service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderChalkSFU)
 	got, err := create(t, service, func(*CreateSpaceInput) {})
 	if err != nil {
-		t.Fatalf("create under the own SFU default: %v", err)
+		t.Fatalf("create under the Chalk SFU default: %v", err)
 	}
 	if got.MediaPlaneSetting != nil || got.MediaPlane != mediaplane.ProviderCloudflareSFU.SettingName() {
 		t.Errorf("stored setting %v, legacy plane %q, want no setting and %q", got.MediaPlaneSetting, got.MediaPlane, mediaplane.ProviderCloudflareSFU)

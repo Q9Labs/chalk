@@ -1,5 +1,5 @@
 // media-settings is the operator's way to choose the media plane for a Tenant or a
-// Space. The public API cannot select the own SFU, and no operator principal exists in
+// Space. The public API cannot select the Chalk SFU, and no operator principal exists in
 // production, so this command is the only write path to it. It logs one JSON line per
 // change to stdout and keeps Tenant and Space IDs out of metrics.
 //
@@ -8,7 +8,7 @@
 //	media-settings backfill [--dry-run]
 //	media-settings new-episodes [--state on|off --operator NAME --reason TEXT]
 //
-// new-episodes is the kill switch of the own SFU, stored in the database so a flip needs
+// new-episodes is the kill switch of the Chalk SFU, stored in the database so a flip needs
 // no API restart. off sends every new Episode to Cloudflare; Episodes already on the own
 // SFU keep running there. With --state it flips the switch and writes an audit row (who,
 // why, before, after) in the same transaction; without it, it reads the switch.

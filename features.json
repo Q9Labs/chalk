@@ -84,7 +84,7 @@
         "apps/api/internal/adapters/mediaplaneproviders",
         "apps/api/internal/adapters/pion",
         "apps/api/internal/captureplane",
-        "apps/api/internal/httpapi/create_space_own_sfu_test.go",
+        "apps/api/internal/httpapi/create_space_chalk_sfu_test.go",
         "apps/api/internal/httpapi/direct_ingress.go",
         "apps/api/internal/httpapi/direct_ingress_test.go",
         "apps/api/internal/httpapi/media_client_preflight_test.go",

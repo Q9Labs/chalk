@@ -233,12 +233,12 @@ type ChalkSFUNode struct {
 	Role       ChalkSFURole
 }
 
-// ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
+// ChalkSFUConfig points the API at the Chalk SFU. It is off by default: while
 // Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
 type ChalkSFUConfig struct {
 	Enabled bool
 	// CaptureEnabled lets the recorder reach the pool's nodes through the capture plane. It is
-	// off by default and needs Enabled. Starting a recording on the own SFU stays refused until
+	// off by default and needs Enabled. Starting a recording on the Chalk SFU stays refused until
 	// the milestone's last step removes that check.
 	CaptureEnabled bool
 	// ColocatedCaptureGrace turns on the capture worker that runs beside each node. Zero is off,
@@ -263,7 +263,7 @@ type ChalkSFUConfig struct {
 	// what the node itself reports. The node enforces its own budget as well.
 	StandbyPacketBudget int
 
-	// AllowedSpaces are the only Spaces that start Episodes on the own SFU while the
+	// AllowedSpaces are the only Spaces that start Episodes on the Chalk SFU while the
 	// rest of the deployment stays on Cloudflare. It is empty by default, even when
 	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
 	AllowedSpaces spaces.ChalkSFUAllowlist
@@ -274,21 +274,21 @@ type ChalkSFUConfig struct {
 	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
 	ClientSunset time.Time
 
-	// UnifiedSignaling advertises the single-URL signalling route in each own-SFU join, so the
+	// UnifiedSignaling advertises the single-URL signalling route in each Chalk SFU join, so the
 	// SDK sends every signalling call to one URL and pays one CORS preflight. It is on by
 	// default. Turning it off sends clients back to the per-operation routes without a web
 	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
 	UnifiedSignaling bool
 
 	// DirectSignalingURL is the origin of the direct door (TLS proxy on the host) for the
-	// signalling routes. Each own-SFU join advertises it as directSignalingUrl, so the SDK
+	// signalling routes. Each Chalk SFU join advertises it as directSignalingUrl, so the SDK
 	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
 	// joins without a web deploy. CHALK_API_DIRECT_URL.
 	DirectSignalingURL string
 
 	// NewEpisodesPaused is the deploy-time floor of the kill switch, CHALK_SFU_NEW_EPISODES=off.
-	// Every new Episode then starts on Cloudflare, and Episodes already on the own SFU keep
-	// running there. Turning the own SFU off instead would also strand those live Episodes.
+	// Every new Episode then starts on Cloudflare, and Episodes already on the Chalk SFU keep
+	// running there. Turning the Chalk SFU off instead would also strand those live Episodes.
 	// The live switch (media-settings new-episodes) pauses on top of this floor, with no restart.
 	NewEpisodesPaused bool
 
@@ -752,8 +752,8 @@ func loadDefaultMediaPlane() (mediaplane.Provider, error) {
 
 // loadNewSpaceDefaults reads what a Create Space request gets for the fields it
 // omits. A new Space has a random ID that no allowlist can name in advance, so
-// the own SFU as the new-Space plane needs every Space allowed. Automatic capture
-// defaults on the own SFU need capture, or new Spaces would promise artifacts
+// the Chalk SFU as the new-Space plane needs every Space allowed. Automatic capture
+// defaults on the Chalk SFU need capture, or new Spaces would promise artifacts
 // that no node produces. An omitted policy is the database default, so it counts.
 func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
 	var defaults spaces.NewSpaceDefaults
@@ -926,7 +926,7 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 
 // validateMediaPlaneProcessConfig checks what a platform default needs to run. Cloudflare is
 // needed under either default: it is the default itself, or the fallback for an SDK that
-// cannot run the own SFU, for the kill switch and for Episodes already bound to it.
+// cannot run the Chalk SFU, for the kill switch and for Episodes already bound to it.
 func validateMediaPlaneProcessConfig(provider mediaplane.Provider, processConfig CloudflareRealtimeConfig, chalkSFU ChalkSFUConfig) error {
 	if provider == "" {
 		return nil
@@ -937,10 +937,10 @@ func validateMediaPlaneProcessConfig(provider mediaplane.Provider, processConfig
 	if provider == mediaplane.ProviderChalkSFU && !chalkSFU.Enabled {
 		return fmt.Errorf("%s=%s requires %s=true", DefaultMediaPlane, provider, ChalkSFUEnabled)
 	}
-	// A Space can turn recording or transcription on at any time, and an Episode on the own SFU
+	// A Space can turn recording or transcription on at any time, and an Episode on the Chalk SFU
 	// has no capture path without this flag, so every inheriting Space would lose them.
 	if provider == mediaplane.ProviderChalkSFU && !chalkSFU.CaptureEnabled {
-		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of an own-SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
+		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of a Chalk SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
 	}
 	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
 		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)

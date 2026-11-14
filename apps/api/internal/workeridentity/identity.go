@@ -43,7 +43,7 @@ func (v Verifier) Verify(request *http.Request) (Identity, error) {
 	return Identity{WorkerID: identity.ID, Role: identity.Role}, nil
 }
 
-// ColocatedWorkerID names the capture worker that runs beside one own-SFU node. It is derived,
+// ColocatedWorkerID names the capture worker that runs beside one Chalk SFU node. It is derived,
 // not issued, so the API can register the worker from its node list and the deploy can put the
 // same ID in the worker's certificate. infrastructure/sfu/certs computes the same value.
 func ColocatedWorkerID(environment, sfuNode string) utilities.ID {

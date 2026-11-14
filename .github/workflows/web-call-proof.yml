@@ -71,7 +71,7 @@ jobs:
       failure: ${{ steps.prove.outputs.failure }}
     env:
       CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
-      # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one.
+      # A Space an operator moved to the Chalk SFU (media-settings), since the public API refuses to create one.
       CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
       CHALK_PROOF_CONFIG_SOURCE: env
       CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}

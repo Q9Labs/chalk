@@ -36,7 +36,7 @@ async function read(fetchImpl = fake(), configuration = env) {
 function card(isolation) {
   return parseScorecard({
     schema: SCORECARD_SCHEMA,
-    run: { id: "metrics-test", commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: "2026-01-01T00:00:00Z", client: { kind: "browser", browser: "test", region: "test", size: "test" } },
+    run: { id: "metrics-test", commit: "a".repeat(40), tier: "nightly", environment: "nightly", startedAt: "2026-01-01T00:00:00Z", client: { kind: "browser", browser: "test", region: "test", size: "test" } },
     mediaPlane: "chalk_sfu",
     metrics: [],
     dropped: [],

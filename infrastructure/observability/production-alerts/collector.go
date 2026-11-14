@@ -138,11 +138,11 @@ func message(rule string) (headline, impact, next string) {
 	case "sync-readiness":
 		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
 	case "sfu-readiness":
-		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
+		return "A Chalk SFU node is refusing new calls or unreachable", "At least one Chalk SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
 	case "certificate-expiry":
-		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, a CA that ends first by rotating the service CA (see the README), the direct door by checking that its proxy can renew over port 443."
+		return "A Chalk certificate is close to expiring", "A certificate that the Chalk SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, a CA that ends first by rotating the service CA (see the README), the direct door by checking that its proxy can renew over port 443."
 	case "sfu-retirement-debt":
-		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
+		return "A Chalk SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
 	case "export":
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
 	case "transcript":
@@ -238,7 +238,7 @@ func collectReadiness(ctx context.Context, client *http.Client, endpoint string)
 	return item
 }
 
-// sfuProbe locates one own-SFU node's readiness endpoint. ServerName is the
+// sfuProbe locates one Chalk SFU node's readiness endpoint. ServerName is the
 // name in the node's certificate, which the API also verifies, because the URL
 // usually holds an address.
 type sfuProbe struct {
@@ -385,7 +385,7 @@ func collectCertificateExpiry(ctx context.Context, probes []sfuProbe, doorURL st
 	var readings []certReading
 	if len(probes) > 0 {
 		if notAfter, ok := fileCertificateNotAfter(probes[0].ClientCertFile); ok {
-			readings = append(readings, certReading{label: "the API client certificate for the own SFU", notAfter: notAfter})
+			readings = append(readings, certReading{label: "the API client certificate for the Chalk SFU", notAfter: notAfter})
 		}
 	}
 	nodes := make([]certReading, len(probes))
@@ -494,12 +494,12 @@ func sfuServerCertificate(ctx context.Context, probe sfuProbe) certReading {
 	if !seen.reached {
 		return certReading{}
 	}
-	reading := certReading{label: "an own SFU server certificate", notAfter: seen.notAfter}
+	reading := certReading{label: "a Chalk SFU server certificate", notAfter: seen.notAfter}
 	if seen.byCA {
-		reading.label = "the CA of the own SFU server certificates"
+		reading.label = "the CA of the Chalk SFU server certificates"
 	}
 	if seen.untrusted {
-		reading.failure = "an own SFU server certificate is untrusted"
+		reading.failure = "a Chalk SFU server certificate is untrusted"
 	}
 	return reading
 }

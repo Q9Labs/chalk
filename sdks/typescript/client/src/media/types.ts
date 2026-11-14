@@ -16,7 +16,7 @@ export type CloudflareSFUBootstrap =
   | {
       readonly connectionId: string;
       readonly stunServer?: undefined;
-      /** The own SFU sends every ICE server it wants. Empty means host candidates only. */
+      /** The Chalk SFU sends every ICE server it wants. Empty means host candidates only. */
       readonly iceServers: readonly CloudflareSFUIceServer[];
       /** Absent means none: the client behaves as it does on Cloudflare. */
       readonly capabilities?: SFUMediaCapabilities;

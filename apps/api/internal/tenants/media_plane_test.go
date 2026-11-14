@@ -50,7 +50,7 @@ func TestPublicTenantWritesAcceptOnlyNullOrThePlatformDefault(t *testing.T) {
 	}{
 		{"null inherits", nil, nil},
 		{"the platform default", text("cf_sfu"), nil},
-		{"the own SFU", text("chalk_sfu"), ErrMediaPlaneNotPermitted},
+		{"the Chalk SFU", text("chalk_sfu"), ErrMediaPlaneNotPermitted},
 		{"an unknown string", text("bogus"), ErrInvalidTenantField},
 	}
 	for _, c := range cases {

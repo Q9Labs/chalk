@@ -310,7 +310,7 @@ func TestAnExpiredButTrustedServerCertificateReadsAsExpired(t *testing.T) {
 	server, caFile, pool := certServer(t, time.Now().Add(-time.Hour))
 	probes[0].URL, probes[0].CAFile = server.URL+"/readyz", caFile
 	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
-	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate has expired") || strings.Contains(items[0].Reason, "untrusted") {
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "a Chalk SFU server certificate has expired") || strings.Contains(items[0].Reason, "untrusted") {
 		t.Fatalf("an expired trusted SFU certificate must alert as expired only: %+v", items)
 	}
 	doorRoots = pool
@@ -357,7 +357,7 @@ func TestACAThatExpiresBeforeItsLeafSetsTheEffectiveExpiry(t *testing.T) {
 	probes[0].URL, probes[0].CAFile = server.URL+"/readyz", caFile
 	// Handshakes start failing when the CA ends, so the leaf's year-long NotAfter must not read as healthy.
 	items := collectCertificateExpiry(context.Background(), probes[:1], "", time.Now())
-	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "the CA of the own SFU server certificates expires within 7 days") || strings.Contains(items[0].Reason, "an own SFU server certificate expires") {
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "the CA of the Chalk SFU server certificates expires within 7 days") || strings.Contains(items[0].Reason, "a Chalk SFU server certificate expires") {
 		t.Fatalf("the CA's earlier expiry must decide and be named: %+v", items)
 	}
 }
@@ -368,7 +368,7 @@ func TestAnImpostorCertificateRaisesAnUntrustedFindingInsteadOfHidingExpiry(t *t
 	impostor, _, _ := certServer(t, time.Now().Add(time.Hour))
 	probes[0].URL = impostor.URL + "/readyz"
 	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
-	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate is untrusted") {
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "a Chalk SFU server certificate is untrusted") {
 		t.Fatalf("a certificate from another CA must alert as untrusted: %+v", items)
 	}
 	door := collectCertificateExpiry(context.Background(), nil, strings.Replace(impostor.URL, "127.0.0.1", "localhost", 1), time.Now())

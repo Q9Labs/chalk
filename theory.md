@@ -8,7 +8,7 @@ model and intended behavior. [design.md](design.md) owns presentation, and
 
 Chalk is a real-time collaboration and communication layer. A **Space** is the durable place where Users and Agents participate. An **Episode** is one bounded run of activity in that Space, and it leaves immutable artifacts such as a Recording or Transcript. Chalk can run as a standalone product or as an embedded SDK surface, on managed infrastructure or a customer-operated app tier. <!-- invariant:what-chalk-is-space -->
 
-The media plane is replaceable. Cloudflare SFU and Chalk's own SFU are adapters behind the same contract, so a provider change never changes Space, Episode, or Participant behavior. <!-- invariant:media-port -->
+The media plane is replaceable. Cloudflare SFU and the Chalk SFU are adapters behind the same contract, so a provider change never changes Space, Episode, or Participant behavior. <!-- invariant:media-port -->
 
 ## The three values
 

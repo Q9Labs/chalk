@@ -389,12 +389,12 @@ type PublicAccessClientPayload struct {
 	ICEServers      []mediaplane.ICEServer
 	ProviderSubject string
 	Token           string
-	// EpisodeRef, ICEServers and Capabilities describe the own SFU. Cloudflare sets none of them but ICEServers.
+	// EpisodeRef, ICEServers and Capabilities describe the Chalk SFU. Cloudflare sets none of them but ICEServers.
 	EpisodeRef   string
 	Capabilities PublicAccessCapabilities
 }
 
-// PublicAccessCapabilities is what the own SFU can do for one connection.
+// PublicAccessCapabilities is what the Chalk SFU can do for one connection.
 type PublicAccessCapabilities struct {
 	ServerLayerAdaptation bool
 	SubscriptionState     bool

@@ -20,7 +20,7 @@ import { contentionMarkdown } from "./contention.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
 import { withoutRetiredMetrics } from "./baseline.mjs";
-import { SCORECARD_SCHEMA, countsAsEvidence, parseScorecard } from "./schema.mjs";
+import { SCORECARD_SCHEMA, countsAsEvidence, normalizeEnvironment, parseScorecard } from "./schema.mjs";
 
 const read = (path) => readFileSync(path, "utf8");
 const readJson = (path) => JSON.parse(read(path));
@@ -67,7 +67,7 @@ function build(argv) {
   const browser = values.browser ?? (values.web ? `chromium/${readJson(values.web).browser}` : "none");
   const card = parseScorecard({
     schema: SCORECARD_SCHEMA,
-    run: { id: values.id, commit: values.commit, tier: values.tier, environment: values.environment, startedAt: new Date().toISOString(), client: { kind: values["client-kind"], browser, region: values.region, size: values.size } },
+    run: { id: values.id, commit: values.commit, tier: values.tier, environment: normalizeEnvironment(values.environment), startedAt: new Date().toISOString(), client: { kind: values["client-kind"], browser, region: values.region, size: values.size } },
     mediaPlane: values.plane,
     metrics,
     dropped,

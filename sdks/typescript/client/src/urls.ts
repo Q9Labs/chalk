@@ -2,7 +2,7 @@ export const DEFAULT_API_BASE_URL = "https://api.chalkmeet.com";
 export const SYNC_PATH = "/v1/sync";
 export const WHITEBOARD_PATH = "/v1/whiteboard";
 
-/** An API that binds a call to the own SFU does so only for an SDK that says which media providers it runs. */
+/** An API that binds a call to the Chalk SFU does so only for an SDK that says which media providers it runs. */
 export const MEDIA_PROVIDERS_HEADER = "X-Chalk-Media-Providers";
 export const MEDIA_PROVIDERS = "cloudflare_sfu,chalk_sfu";
 

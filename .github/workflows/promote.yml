@@ -12,7 +12,7 @@ on:
         type: boolean
         default: true
       scorecard_override:
-        description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
+        description: Written reason to accept failed nightly Chalk SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
         required: false
 permissions:
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Choose newest held record and verify its own-SFU proof, exact SHA and rollback source
+      - name: Choose newest held record and verify its Chalk SFU proof, exact SHA and rollback source
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Recheck exact selection and own-SFU proof after approval under the production lock
+      - name: Recheck exact selection and Chalk SFU proof after approval under the production lock
         env:
           GH_TOKEN: ${{ github.token }}
           SELECTION: ${{ needs.select.outputs.selection }}
@@ -118,7 +118,7 @@ jobs:
             previous-media.json
             previous-npm.json
           retention-days: 90
-  own-sfu-spaces:
+  chalk-sfu-spaces:
     # Runs before the deploy, on the release still in production. That release lets the public API move an allowlisted Space to chalk_sfu, and a plane stored that way survives the upgrade; the release that adds the per-Space setting refuses it. It runs the proof code of this master revision. A failure stops Promote before anything deploys.
     permissions:
       contents: read
@@ -126,7 +126,7 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: own-sfu-spaces
+      proofs: chalk-sfu-spaces
       media_plane: chalk_sfu
     secrets: inherit
   release:
@@ -135,7 +135,7 @@ jobs:
       actions: read
       deployments: write
       id-token: write
-    needs: [select, approve, own-sfu-spaces]
+    needs: [select, approve, chalk-sfu-spaces]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
@@ -159,7 +159,7 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: ${{ inputs.capture_proofs && 'leave-own-sfu camera-share chat-upload call-artifacts' || 'leave-own-sfu camera-share chat-upload' }}
+      proofs: ${{ inputs.capture_proofs && 'leave-chalk-sfu camera-share chat-upload call-artifacts' || 'leave-chalk-sfu camera-share chat-upload' }}
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
@@ -210,7 +210,7 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave-own-sfu
+      proofs: leave-chalk-sfu
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       scorecard_label: rerun

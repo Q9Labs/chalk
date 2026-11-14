@@ -38,7 +38,7 @@ try {
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
   await prepareIntegration(run, false);
-  // The public API refuses to create an own-SFU Space, so chalk_sfu reuses the Space an operator moved (CHALK_PROOF_SPACE_ID_CHALK_SFU).
+  // The public API refuses to create a Chalk SFU Space, so chalk_sfu reuses the Space an operator moved (CHALK_PROOF_SPACE_ID_CHALK_SFU).
   const space =
     mediaPlane === "chalk_sfu"
       ? await createSpace(run, mediaPlane)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Live media smoke: real audio and video through a deployed own-SFU node.
+# Live media smoke: real audio and video through a deployed Chalk SFU node.
 #
 #   live-smoke <staging|production> --confirm <staging|production> [--seconds N]
 #

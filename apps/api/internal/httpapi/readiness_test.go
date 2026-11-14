@@ -13,7 +13,7 @@ type readyChecker struct{}
 
 func (readyChecker) Check(context.Context) error { return nil }
 
-// The own-SFU retirement backlog is reported by /readyz and never fails it: an old node that stays
+// The Chalk SFU retirement backlog is reported by /readyz and never fails it: an old node that stays
 // silent must not take the API out of service.
 func TestReadyzReportsTheRetirementBacklogWithoutFailingReadiness(t *testing.T) {
 	router := NewRouter(Options{

@@ -38,7 +38,7 @@ cp.spawn = (program, args, options) => {
   const dir = path.join(".private/prod-proof", id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "episodes.jsonl"), JSON.stringify(episode) + "\n");
-  fs.writeFileSync(path.join(dir, "scorecard-chalk_sfu.json"), JSON.stringify({ schema: "chalk.scorecard/v1", run: { id, commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: new Date(clock).toISOString(), client: { kind: "browser", browser: "test", region: "test", size: "test" } }, mediaPlane: "chalk_sfu", metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: 200, p95: 300, source: "latency-kit" }], dropped: [] }));
+  fs.writeFileSync(path.join(dir, "scorecard-chalk_sfu.json"), JSON.stringify({ schema: "chalk.scorecard/v1", run: { id, commit: "a".repeat(40), tier: "nightly", environment: "nightly", startedAt: new Date(clock).toISOString(), client: { kind: "browser", browser: "test", region: "test", size: "test" } }, mediaPlane: "chalk_sfu", metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: 200, p95: 300, source: "latency-kit" }], dropped: [] }));
   // The latency kit writes its diagnostics sidecar beside its card.
   if (process.env.TEST_SIDECAR) fs.copyFileSync(process.env.TEST_SIDECAR, path.join(dir, "latency-diagnostics-chalk_sfu.json"));
   activeStart = clock;
@@ -156,7 +156,7 @@ test("postflight metric failure preserves measurements as unobservable and fails
   assert.equal(card.contention.unobservable, true);
   assert.equal(existsSync(join(directory, ".private/workloads-started")), true);
   const root = resolve(import.meta.dirname, "../..");
-  const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "own-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), join(directory, "artifacts")], { cwd: root, encoding: "utf8" });
+  const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "chalk-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), join(directory, "artifacts")], { cwd: root, encoding: "utf8" });
   assert.equal(collected.status, 1, collected.stderr);
   assert.match(collected.stdout, /unavailable/);
 });
@@ -169,7 +169,7 @@ test("the diagnostics sidecar travels from the latency run to the summary and th
   const root = resolve(import.meta.dirname, "../..");
   const collect = ({ directory }) => {
     const artifacts = join(directory, "artifacts");
-    const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "own-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), artifacts], { cwd: root, encoding: "utf8" });
+    const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "chalk-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), artifacts], { cwd: root, encoding: "utf8" });
     return { collected, artifacts, carried: existsSync(join(directory, ".private/latency-scorecard", diagnosticsFileName("chalk_sfu"))) };
   };
 

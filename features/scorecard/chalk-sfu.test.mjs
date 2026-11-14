@@ -9,15 +9,15 @@ import { SCORECARD_SCHEMA } from "./schema.mjs";
 import { contention } from "./contention.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
-const script = resolve(import.meta.dirname, "own-sfu.mjs");
+const script = resolve(import.meta.dirname, "chalk-sfu.mjs");
 const revision = "abcdef0123456789abcdef0123456789abcdef01";
 
 function collect(metrics, isolation) {
-  const dir = mkdtempSync(join(tmpdir(), "scorecard-own-sfu-"));
+  const dir = mkdtempSync(join(tmpdir(), "scorecard-chalk-sfu-"));
   const evidence = join(dir, "evidence", "run-latency");
   mkdirSync(evidence, { recursive: true });
   if (metrics) {
-    const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "staging", startedAt: "2026-11-08T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
+    const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-08T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
     writeFileSync(join(evidence, "scorecard-chalk_sfu.json"), JSON.stringify({ schema: SCORECARD_SCHEMA, run, mediaPlane: "chalk_sfu", metrics, dropped: [], ...(isolation ? { contention: isolation } : {}) }));
   }
   const summary = join(dir, "summary.md");
@@ -35,7 +35,7 @@ test("a card with metrics is copied to the artifact folder and shown against its
   const { result, artifacts, summary } = collect([leaveMetric(Math.floor(leave.max_p95 / 2))]);
   assert.equal(result.status, 0, result.stderr);
   assert.ok(existsSync(join(artifacts, "scorecard-chalk_sfu.json")));
-  assert.match(summary, /Own SFU nightly: chalk_sfu at abcdef012/);
+  assert.match(summary, /Chalk SFU nightly: chalk_sfu at abcdef012/);
   const row = rowOf(summary, "action.leave_ms");
   assert.ok(row, summary);
   assert.ok(row.includes(String(leave.max_p95)), row);

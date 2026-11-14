@@ -52,7 +52,7 @@ export function evaluateLeaves(baseline, candidate, capturedMedianMs) {
   };
 }
 
-// The own SFU has no earlier client to compare against, so its Leaves are judged on absolute bounds:
+// The Chalk SFU has no earlier client to compare against, so its Leaves are judged on absolute bounds:
 // every ordinary and rejected Leave is acknowledged within 5 s, and a rejected background request never closes the peer first.
 export function evaluateOwnLeaves(samples) {
   const ordinary = samples.filter((sample) => sample.scenario === "ordinary");

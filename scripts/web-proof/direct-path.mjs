@@ -3,7 +3,7 @@
 // (the SDK uses the door the grant advertises) and the control arm (?direct=off, everything on the Tunnel), and
 // records for each join which hosts carried Sync and SFU signalling, plus the time from Join to the in-call controls.
 // Run it like `pnpm web:proof`: CHALK_PROOF_CONFIG_SOURCE=env with the environment's proof Tenant, plus
-// CHALK_DOOR_HOST (the hostname of the direct door). Hold the staging SFU lease when the Space is on the own SFU.
+// CHALK_DOOR_HOST (the hostname of the direct door). Hold the staging SFU lease when the Space is on the Chalk SFU.
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";

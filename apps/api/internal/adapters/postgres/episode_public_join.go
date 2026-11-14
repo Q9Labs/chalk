@@ -402,9 +402,9 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 }
 
 // requireClientRunsBinding returns mediaplane.ErrClientUnsupported when the
-// Episode is bound to the own SFU and the caller's SDK cannot run it. Bindings
+// Episode is bound to the Chalk SFU and the caller's SDK cannot run it. Bindings
 // name providers in the Space vocabulary, and every SDK runs Cloudflare, so only
-// an own-SFU binding can refuse. An Episode with no binding, or one that predates
+// a Chalk SFU binding can refuse. An Episode with no binding, or one that predates
 // bindings, is Cloudflare or has no media.
 func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
 	binding, _, err := episode.MediaPlaneBinding()

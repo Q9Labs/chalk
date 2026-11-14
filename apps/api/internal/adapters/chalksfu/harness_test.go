@@ -519,5 +519,5 @@ func eventually(t *testing.T, what string, timeout time.Duration, condition func
 	}
 }
 
-// ownSFUClients is an SDK that runs both providers.
-var ownSFUClients = mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu")
+// chalkSFUClients is an SDK that runs both providers.
+var chalkSFUClients = mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu")

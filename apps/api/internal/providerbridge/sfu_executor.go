@@ -41,7 +41,7 @@ type EpisodeProviders interface {
 	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, generation int64, err error)
 }
 
-// ChalkNode is the own SFU node's control surface: it grants and revokes sources,
+// ChalkNode is the Chalk SFU node's control surface: it grants and revokes sources,
 // closes tracks and ends the Episode's sessions and reservations.
 type ChalkNode interface {
 	TrackCloser
@@ -294,7 +294,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
 
-// revokeSources fences the sources on the own SFU, which stops forwarding and closes
+// revokeSources fences the sources on the Chalk SFU, which stops forwarding and closes
 // the publications admitted before the revoke. A track a newer grant admitted stays
 // open, so the executor records as closed only the tracks the node reports and never
 // follows the revoke with a close of its own. A record a lost response leaves open is
@@ -335,7 +335,7 @@ func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input 
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
 
-// bound picks the closer from the Episode's binding, and for the own SFU the
+// bound picks the closer from the Episode's binding, and for the Chalk SFU the
 // node the binding names. A provider this build does not know ends the operation
 // as a terminal failure; it never falls back to Cloudflare, which would close
 // another provider's tracks by the wrong rules.
@@ -376,7 +376,7 @@ func (e SFUExecutor) bound(ctx context.Context, input provideroperations.Operati
 	}
 }
 
-// resumePublication grants the source on the own SFU, which forwards a source only
+// resumePublication grants the source on the Chalk SFU, which forwards a source only
 // under a grant. Cloudflare needs nothing: the browser publishes on a fresh MID
 // after a forced close, so no previous track is made available again.
 func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {

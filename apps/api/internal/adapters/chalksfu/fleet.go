@@ -162,7 +162,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 func (f *Fleet) observeReadiness(meter metric.Meter) error {
 	_, err := meter.Int64ObservableGauge(
 		"chalk.api.sfu.node.ready",
-		metric.WithDescription("1 while the API counts an own-SFU node as in placement (fresh answer, compatible protocol, not draining), else 0"),
+		metric.WithDescription("1 while the API counts a Chalk SFU node as in placement (fresh answer, compatible protocol, not draining), else 0"),
 		metric.WithUnit("{node}"),
 		metric.WithInt64Callback(func(_ context.Context, observer metric.Int64Observer) error {
 			f.mu.Lock()

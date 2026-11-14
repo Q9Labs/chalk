@@ -31,8 +31,8 @@ func TestRequireClientRunsBinding(t *testing.T) {
 		clients  mediaplane.ClientProviders
 		want     error
 	}{
-		{"own SFU Episode, declaring client", snapshot(&own), mediaplane.ParseClientProviders("chalk_sfu"), nil},
-		{"own SFU Episode, silent client", snapshot(&own), mediaplane.ClientProviders{}, mediaplane.ErrClientUnsupported},
+		{"Chalk SFU Episode, declaring client", snapshot(&own), mediaplane.ParseClientProviders("chalk_sfu"), nil},
+		{"Chalk SFU Episode, silent client", snapshot(&own), mediaplane.ClientProviders{}, mediaplane.ErrClientUnsupported},
 		{"Cloudflare Episode, silent client", snapshot(&cloudflare), mediaplane.ClientProviders{}, nil},
 		{"Cloudflare Episode, declaring client", snapshot(&cloudflare), mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"), nil},
 		{"Episode without media", snapshot(nil), mediaplane.ClientProviders{}, nil},

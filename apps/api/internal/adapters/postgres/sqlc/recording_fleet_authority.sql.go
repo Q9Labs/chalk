@@ -268,7 +268,7 @@ type EnsureRecordingColocatedCaptureWorkerParams struct {
 	WorkerID    pgtype.UUID `json:"worker_id"`
 }
 
-// The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+// The API registers the capture worker beside each Chalk SFU node from its node list. A revoked or
 // existing row is never reactivated or rewritten here. These rows live apart from
 // recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 func (q *Queries) EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error {

@@ -66,9 +66,9 @@ func TestEffectivePlanePrecedence(t *testing.T) {
 	}
 }
 
-// A Tenant on its own Cloudflare credentials cannot reach the own SFU, so whatever chose the
-// own SFU earlier, its next Episode starts on Cloudflare.
-func TestATenantOnItsOwnCredentialsNeverSelectsTheOwnSFU(t *testing.T) {
+// A Tenant on its own Cloudflare credentials cannot reach the Chalk SFU, so whatever chose the
+// Chalk SFU earlier, its next Episode starts on Cloudflare.
+func TestATenantOnItsOwnCredentialsNeverSelectsTheChalkSFU(t *testing.T) {
 	cf, own := mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU
 	policy := PlanePolicy{Platform: cf, Allowed: allowAll(t)}
 	ownText := string(own)
@@ -126,7 +126,7 @@ func ids(t *testing.T) (utilities.ID, utilities.ID) {
 	return tenantID, spaceID
 }
 
-func TestPublicUpdateCannotSelectTheOwnSFU(t *testing.T) {
+func TestPublicUpdateCannotSelectTheChalkSFU(t *testing.T) {
 	tenantID, spaceID := ids(t)
 	repository := &updatingRepository{}
 	service := NewServiceWithDefaultProvider(repository, mediaplane.ProviderCloudflareSFU).WithPlanePolicy(PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, Allowed: allowAll(t)})
@@ -172,7 +172,7 @@ func TestClearingASpacePlaneWorksWithoutAPlatformDefault(t *testing.T) {
 	}
 }
 
-func TestPublicWriteNeverNamesTheOwnSFUWhateverNewSpacesGet(t *testing.T) {
+func TestPublicWriteNeverNamesTheChalkSFUWhateverNewSpacesGet(t *testing.T) {
 	tenantID, spaceID := ids(t)
 	repository := &updatingRepository{}
 	policy := PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, NewSpace: mediaplane.ProviderChalkSFU, Allowed: allowAll(t)}
@@ -251,7 +251,7 @@ func (s *recordingTenantStore) SetDefaultMediaPlane(context.Context, utilities.I
 	return s.tenant, nil
 }
 
-func TestPublicCreateCannotSelectTheOwnSFUUnlessConfigDriven(t *testing.T) {
+func TestPublicCreateCannotSelectTheChalkSFUUnlessConfigDriven(t *testing.T) {
 	service := NewServiceWithDefaultProvider(nil, mediaplane.ProviderCloudflareSFU).WithPlanePolicy(PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, Allowed: allowAll(t)})
 	_, err := create(t, service, func(input *CreateSpaceInput) {
 		input.MediaPlane, input.MediaPlaneSet = "chalk_sfu", true
@@ -294,7 +294,7 @@ func TestOperatorSetsAndClearsASpace(t *testing.T) {
 	}
 }
 
-func TestOperatorRefusesTheOwnSFUForTenantsThatCannotServeIt(t *testing.T) {
+func TestOperatorRefusesTheChalkSFUForTenantsThatCannotServeIt(t *testing.T) {
 	tenantID, spaceID := ids(t)
 	for name, config := range map[string]string{
 		"tenant managed": `{"provider":"cf_sfu","mode":"tenant_managed"}`,
@@ -330,7 +330,7 @@ func TestLiveSwitchPausesOnTopOfTheDeployFloor(t *testing.T) {
 	cf, own := mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU
 	policy := PlanePolicy{Platform: own, Allowed: allowAll(t)}
 	if got, _ := policy.Effective(tenants.Tenant{}, Space{}); got != own {
-		t.Fatalf("an own SFU default with the switch on: got %q", got)
+		t.Fatalf("a Chalk SFU default with the switch on: got %q", got)
 	}
 	if got, _ := policy.Paused(true).Effective(tenants.Tenant{}, Space{}); got != cf {
 		t.Fatalf("the live switch off must send new Episodes to Cloudflare: got %q", got)
@@ -353,15 +353,15 @@ func TestPausedValueTravelsInTheContext(t *testing.T) {
 	}
 }
 
-func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpaces(t *testing.T) {
+func TestChalkSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpaces(t *testing.T) {
 	cf, own := mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU
 	policy := PlanePolicy{Platform: own, Allowed: allowAll(t)}
 	if !policy.PublicWriteAllowed(own) || !policy.PublicWriteAllowed(cf) {
-		t.Fatal("under an own SFU default an owner may name the default and Cloudflare")
+		t.Fatal("under a Chalk SFU default an owner may name the default and Cloudflare")
 	}
 	cfDefault := PlanePolicy{Platform: cf}
 	if cfDefault.PublicWriteAllowed(own) {
-		t.Fatal("under a Cloudflare default an owner must not name the own SFU")
+		t.Fatal("under a Cloudflare default an owner must not name the Chalk SFU")
 	}
 	if got := policy.legacyPlane(nil); got != cf.SettingName() {
 		t.Fatalf("an inheriting Space must store cf_sfu, got %q", got)
@@ -371,7 +371,7 @@ func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpac
 	}
 }
 
-func TestPublicWriteNamingTheOwnSFUDefaultFollowsTheDefaultBackToCloudflare(t *testing.T) {
+func TestPublicWriteNamingTheChalkSFUDefaultFollowsTheDefaultBackToCloudflare(t *testing.T) {
 	cf, own := mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU
 	ownDefault := PlanePolicy{Platform: own, Allowed: allowAll(t)}
 	reverted := PlanePolicy{Platform: cf, Allowed: allowAll(t)}
@@ -393,7 +393,7 @@ func TestPublicWriteNamingTheOwnSFUDefaultFollowsTheDefaultBackToCloudflare(t *t
 		"update": {MediaPlaneSetting: repository.updated.MediaPlaneSetting.Value, MediaPlane: *repository.updated.MediaPlane.Value},
 	} {
 		if got, err := ownDefault.Effective(tenants.Tenant{}, space); err != nil || got != own {
-			t.Fatalf("%s: under the own SFU default the next Episode resolves to %q, %v; want chalk_sfu", name, got, err)
+			t.Fatalf("%s: under the Chalk SFU default the next Episode resolves to %q, %v; want chalk_sfu", name, got, err)
 		}
 		if got, err := reverted.Effective(tenants.Tenant{}, space); err != nil || got != cf {
 			t.Errorf("%s: after the default moved back the next Episode resolves to %q, %v; want cf_sfu", name, got, err)

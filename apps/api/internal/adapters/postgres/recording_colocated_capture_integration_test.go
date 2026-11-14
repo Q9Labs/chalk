@@ -28,7 +28,7 @@ type colocatedScenario struct {
 	worker  string
 }
 
-// newColocatedScenario makes a pending capture on an Episode bound to a fresh own-SFU node, with
+// newColocatedScenario makes a pending capture on an Episode bound to a fresh Chalk SFU node, with
 // a registered, ready colocated worker beside that node.
 func newColocatedScenario(t *testing.T) colocatedScenario {
 	t.Helper()

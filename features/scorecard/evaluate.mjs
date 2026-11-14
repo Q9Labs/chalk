@@ -27,12 +27,12 @@ for (const path of paths) {
   }
   if (card.metrics.length === 0) throw new Error(`${path}: scorecard has no metrics`);
   planes.add(card.mediaPlane);
-  // Only the own-SFU plane holds the cut. The Cloudflare plane gates in its own history job.
+  // Only the Chalk SFU plane holds the cut. The Cloudflare plane gates in its own history job.
   if (card.mediaPlane !== "chalk_sfu") continue;
   for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
   for (const row of diffMetrics([], card.metrics, planeBudgets(budgets, card.mediaPlane)).failures) metrics.add(`${card.mediaPlane}.${row.id}`);
 }
-// A standalone latency evaluation needs the own-SFU card: a Cloudflare card cannot replace its measurements, and the latency kit
+// A standalone latency evaluation needs the Chalk SFU card: a Cloudflare card cannot replace its measurements, and the latency kit
 // records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
 // A deferred cut has no latency card to show: the cut's proofs write none, and Promote adds the staging latency verdict of the same SHA.
 if (planes.has("chalk_sfu")) {

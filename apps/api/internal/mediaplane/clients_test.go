@@ -10,9 +10,9 @@ func TestClientProviders(t *testing.T) {
 		cloudflare bool
 	}{
 		{name: "an SDK that declares nothing runs Cloudflare only", list: "", cloudflare: true},
-		{name: "a declared own SFU", list: "cloudflare_sfu, chalk_sfu", chalk: true, cloudflare: true},
+		{name: "a declared Chalk SFU", list: "cloudflare_sfu, chalk_sfu", chalk: true, cloudflare: true},
 		{name: "unknown names are ignored", list: "later_sfu,chalk_sfu", chalk: true, cloudflare: true},
-		{name: "a near miss is not the own SFU", list: "chalk_sfu_v2,CHALK_SFU", cloudflare: true},
+		{name: "a near miss is not the Chalk SFU", list: "chalk_sfu_v2,CHALK_SFU", cloudflare: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

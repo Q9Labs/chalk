@@ -313,7 +313,7 @@ test("the card bytes are identical with and without the one-way estimate", () =>
   const build = (audio) => {
     const cycles = [1, 2, 3].map((index) => cycle(index, audio));
     const report = { cycles, planes: { chalk_sfu: { summary: summarize(cycles.map((entry) => entry.sample)) } } };
-    const run = { id: "nightly-1", commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } };
+    const run = { id: "nightly-1", commit: "a".repeat(40), tier: "nightly", environment: "nightly", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } };
     return { card: JSON.stringify(scorecard(report, "chalk_sfu", run)), sidecar: diagnosticsFile(report, "chalk_sfu") };
   };
   const without = build(undefined);

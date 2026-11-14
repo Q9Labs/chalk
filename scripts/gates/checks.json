@@ -1091,7 +1091,7 @@
       "sample": "Waits for a person; no failure count."
     },
     {
-      "id": "workflow:promote.yml#own-sfu-spaces",
+      "id": "workflow:promote.yml#chalk-sfu-spaces",
       "owner": "Media",
       "catches": "Production Spaces on the wrong media plane when Promote starts.",
       "runs": ["promote"],
@@ -1278,7 +1278,7 @@
     {
       "id": "workflow:staging-sfu-latency.yml#latency",
       "owner": "Scorecard",
-      "catches": "The own-SFU action latencies over their budgets on the staging node.",
+      "catches": "The Chalk SFU action latencies over their budgets on the staging node.",
       "runs": ["cut", "daily", "manual"],
       "blocks": "release",
       "minutes": 32.6,
@@ -1338,7 +1338,7 @@
     {
       "id": "scorecard:chalk_sfu.action",
       "owner": "Media",
-      "catches": "An own-SFU call action (join, toggle, publish, leave) getting slower than its p95 ceiling.",
+      "catches": "A Chalk SFU call action (join, toggle, publish, leave) getting slower than its p95 ceiling.",
       "runs": ["cut", "daily"],
       "blocks": "release",
       "minutes": null,

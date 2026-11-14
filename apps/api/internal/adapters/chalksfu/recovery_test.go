@@ -175,7 +175,7 @@ var chalkSpace = spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingNam
 func placedBinding(t *testing.T, fleet *chalksfu.Fleet) mediaplane.Binding {
 	t.Helper()
 	fleet.Probe(context.Background())
-	binding, err := recoveryRegistry(fleet, newRecoveryStore(mediaplane.Binding{}, 0)).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
+	binding, err := recoveryRegistry(fleet, newRecoveryStore(mediaplane.Binding{}, 0)).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || binding == nil || binding.Node == "" || binding.NodeIncarnation == "" {
 		t.Fatalf("placement: %+v, %v", binding, err)
 	}

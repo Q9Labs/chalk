@@ -52,14 +52,14 @@ it("reaches Sync on the nightly host when the app talks to the nightly API", asy
   }
 });
 
-it("builds the media peer connection from the ICE servers an own SFU grant names, not Cloudflare's STUN server", async () => {
+it("builds the media peer connection from the ICE servers a Chalk SFU grant names, not Cloudflare's STUN server", async () => {
   stubNetwork();
   // The test stops at peer construction: it checks the configuration, not that negotiation succeeds.
   peerConnection.mockImplementation(() => {
     throw new Error("stop after the configuration");
   });
   const iceServers = [{ urls: ["stun:sfu.test:3478"] }, { urls: ["turns:sfu.test:443?transport=tcp"], username: "user", credential: "secret" }];
-  const client = createNativeSpaceClient({ space: "space-1", getAccess: async () => ownSFUGrant(iceServers), baseUrl: "https://api.chalk.test", microphone: false, camera: false });
+  const client = createNativeSpaceClient({ space: "space-1", getAccess: async () => chalkSFUGrant(iceServers), baseUrl: "https://api.chalk.test", microphone: false, camera: false });
   try {
     await client.join().catch(() => undefined);
     await vi.waitFor(() => expect(peerConnection).toHaveBeenCalled());
@@ -69,8 +69,8 @@ it("builds the media peer connection from the ICE servers an own SFU grant names
   }
 });
 
-function ownSFUGrant(iceServers: readonly unknown[]): AccessGrant {
-  const grant = opaqueAccessGrant("own-sfu");
+function chalkSFUGrant(iceServers: readonly unknown[]): AccessGrant {
+  const grant = opaqueAccessGrant("chalk-sfu");
   const capabilities = { serverLayerAdaptation: true, subscriptionState: true, iceRestart: true };
   return { ...grant, media: { ...grant.media, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref", iceServers, capabilities } } } as unknown as AccessGrant;
 }

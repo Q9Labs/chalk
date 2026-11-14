@@ -830,7 +830,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return this.#serialize("microphone", this.#serialize("camera", publish));
   }
   /**
-   * A source published at join still needs Sync to accept its on: Chalk's own SFU forwards a source only under the
+   * A source published at join still needs Sync to accept its on: the Chalk SFU forwards a source only under the
    * grant Sync makes for an accepted on. The join does not wait for it, because the call goes live only after the
    * join. The on stays owed until Sync answers: a lost connection or a left call keeps it owed and consent intact,
    * and the next return to live resends it. Any other failure while the call stays live is retried on the off-retry

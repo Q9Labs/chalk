@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ProofError } from "./runtime.mjs";
-import { ensureOwnSfuSpaces, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { ensureChalkSfuSpaces, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 
 // A tenant with the two proof Spaces, as the release before the per-Space setting serves them (media_plane only).
 function fakeApi({ spaces = [], refuse = false } = {}) {
@@ -25,7 +25,7 @@ const run = (api) => ({ apiRequest: api.apiRequest, tenantPath: "/v1/tenants/t" 
 
 test("creates both proof Spaces with their policies and moves them to chalk_sfu", async () => {
   const api = fakeApi();
-  await ensureOwnSfuSpaces(run(api));
+  await ensureChalkSfuSpaces(run(api));
   assert.deepEqual(
     api.spaces.map((space) => [space.slug, space.media_plane, space.recording_policy, space.transcription_policy]),
     [
@@ -37,9 +37,9 @@ test("creates both proof Spaces with their policies and moves them to chalk_sfu"
 
 test("a second run changes nothing", async () => {
   const api = fakeApi();
-  await ensureOwnSfuSpaces(run(api));
+  await ensureChalkSfuSpaces(run(api));
   const before = api.calls.length;
-  await ensureOwnSfuSpaces(run(api));
+  await ensureChalkSfuSpaces(run(api));
   assert.deepEqual(
     api.calls.slice(before).map(([method]) => method),
     ["GET", "GET"],
@@ -48,18 +48,18 @@ test("a second run changes nothing", async () => {
 
 test("a refused move names the Space and the operator step, and no Space ID", async () => {
   const api = fakeApi({ refuse: true });
-  await assert.rejects(ensureOwnSfuSpaces(run(api)), (error) => error.reason === "media-plane-config" && /promote-proof-chalk-sfu/.test(error.message) && /CHALK_SFU_ALLOWED_SPACES/.test(error.message) && !error.message.includes("space-0"));
+  await assert.rejects(ensureChalkSfuSpaces(run(api)), (error) => error.reason === "media-plane-config" && /promote-proof-chalk-sfu/.test(error.message) && /CHALK_SFU_ALLOWED_SPACES/.test(error.message) && !error.message.includes("space-0"));
 });
 
 test("a Space with other policies is refused", async () => {
   const api = fakeApi({ spaces: [{ id: "x", slug: "promote-proof-chalk-sfu", media_plane: "chalk_sfu", recording_policy: "automatic", transcription_policy: "automatic" }] });
-  await assert.rejects(ensureOwnSfuSpaces(run(api)), /other Recording or Transcription policies/);
+  await assert.rejects(ensureChalkSfuSpaces(run(api)), /other Recording or Transcription policies/);
 });
 
 test("policy sets map to their slug and the new response field wins over the old one", () => {
-  assert.equal(ownSfuSpaceKind({ recording: "manual", transcription: "on_demand" }), "manual");
-  assert.equal(ownSfuSpaceKind({ recording: "automatic", transcription: "automatic" }), "automatic");
-  assert.equal(ownSfuSpaceKind({ recording: "manual", transcription: "automatic" }), undefined);
-  assert.equal(ownSfuSpaces.manual.slug, "promote-proof-chalk-sfu");
+  assert.equal(chalkSfuSpaceKind({ recording: "manual", transcription: "on_demand" }), "manual");
+  assert.equal(chalkSfuSpaceKind({ recording: "automatic", transcription: "automatic" }), "automatic");
+  assert.equal(chalkSfuSpaceKind({ recording: "manual", transcription: "automatic" }), undefined);
+  assert.equal(chalkSfuSpaces.manual.slug, "promote-proof-chalk-sfu");
   assert.equal(spacePlane({ media_plane: "chalk_sfu", effective_media_plane: "cf_sfu" }), "cf_sfu");
 });

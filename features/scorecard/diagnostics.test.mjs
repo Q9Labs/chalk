@@ -40,7 +40,7 @@ function card(overrides = {}) {
   const metrics = actionIds.map((id) => ({ id, unit: "ms", n: 20, p50: 100, p95: 100, source: "latency-kit" }));
   return {
     schema: SCORECARD_SCHEMA,
-    run: { id: "nightly-1", commit: revision, tier: "nightly", environment: "staging", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
+    run: { id: "nightly-1", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
     metrics,
     dropped: [],
@@ -170,7 +170,7 @@ test("a sidecar, even a hostile one, cannot change a verdict, a gate exit code o
       mkdirSync(evidence, { recursive: true });
       writeFileSync(join(evidence, "scorecard-chalk_sfu.json"), JSON.stringify(card()));
       if (text !== undefined) writeFileSync(join(evidence, diagnosticsFileName("chalk_sfu")), text);
-      const result = run("own-sfu.mjs", [evidence, "chalk_sfu", revision, artifacts]);
+      const result = run("chalk-sfu.mjs", [evidence, "chalk_sfu", revision, artifacts]);
       return { ...result, copied: existsSync(join(artifacts, "scorecard-chalk_sfu.json")), stdout: result.stdout.split(/(?:#### )?Action latency diagnostics/)[0] };
     };
     const without = collect("none");

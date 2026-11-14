@@ -90,10 +90,10 @@ func TestEpisodeCreationBindsThePlaneTheSettingsSelect(t *testing.T) {
 		want          string
 	}{
 		{"nothing set", nil, nil, cf, false, true, cf},
-		{"tenant sets the own SFU", &own, nil, cf, false, true, own},
-		{"space sets the own SFU", nil, &own, own, false, true, own},
-		{"space sets Cloudflare under a tenant on the own SFU", &own, &cf, cf, false, true, cf},
-		{"space sets the own SFU under a tenant on Cloudflare", &cf, &own, own, false, true, own},
+		{"tenant sets the Chalk SFU", &own, nil, cf, false, true, own},
+		{"space sets the Chalk SFU", nil, &own, own, false, true, own},
+		{"space sets Cloudflare under a tenant on the Chalk SFU", &own, &cf, cf, false, true, cf},
+		{"space sets the Chalk SFU under a tenant on Cloudflare", &cf, &own, own, false, true, own},
 		{"kill switch beats the space", nil, &own, own, true, true, cf},
 		{"kill switch beats the tenant", &own, nil, cf, true, true, cf},
 		{"allowlist stays an AND", &own, &own, own, false, false, cf},

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Collect the own-SFU latency scorecard of a nightly run: copy it to the artifact folder and list every metric against its budget in the run summary.
+// Collect the Chalk SFU latency scorecard of a nightly run: copy it to the artifact folder and list every metric against its budget in the run summary.
 // An absent or empty card fails, so a run that measured nothing cannot pass for a revision that should have a card.
-// Usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>   (run from the repository root; GITHUB_STEP_SUMMARY is optional)
+// Usage: chalk-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>   (run from the repository root; GITHUB_STEP_SUMMARY is optional)
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { planeBudgets, readBudgets } from "./budgets.mjs";
@@ -13,8 +13,8 @@ import { planeNoteMarkdown } from "./plane-note.mjs";
 import { limitText } from "./stats.mjs";
 
 const [evidence, plane, revision, artifacts] = process.argv.slice(2);
-if (!artifacts) throw new Error("usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
-const title = `Own SFU nightly: ${plane} at ${revision.slice(0, 9)}`;
+if (!artifacts) throw new Error("usage: chalk-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
+const title = `Chalk SFU nightly: ${plane} at ${revision.slice(0, 9)}`;
 
 function summarize(text) {
   console.log(text);

@@ -98,7 +98,7 @@ type ListRenewableSourceGrantsRow struct {
 	ControlRevision int64       `json:"control_revision"`
 }
 
-// The newest confirmed grant of every source in a live own-SFU Episode whose
+// The newest confirmed grant of every source in a live Chalk SFU Episode whose
 // authorization still stands, in key order after the cursor. A stop decided at
 // or after the grant ends it whatever its delivery outcome, so a dropped or
 // failed revoke can never be renewed back to life. So does the Participant's

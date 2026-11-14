@@ -1,9 +1,9 @@
-name: Staging SFU latency
+name: Nightly latency
 
-# Own-SFU staging action latency for the newest held nightly. It runs outside Cut nightly so the 45-minute measurement
+# Chalk SFU action latency on Nightly for the newest held cut. It runs outside Cut nightly so the 45-minute measurement
 # never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 50 minutes later; the daily run and
 # a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
-# selects, and refuses a SHA with no verdict (own_sfu_proof_result=latency-missing).
+# selects, and refuses a SHA with no verdict (chalk_sfu_proof_result=latency-missing).
 on:
   schedule:
     - cron: "43 2 * * *"
