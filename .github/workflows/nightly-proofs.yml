@@ -104,17 +104,22 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
       - name: Install proof dependencies
-        run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+        # The web proof also builds the web app, so it needs the whole workspace.
+        run: pnpm install --frozen-lockfile ${{ matrix.proof == 'web-call' && ' ' || '--filter @q9labsai/chalk-client...' }}
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg imagemagick espeak fonts-dejavu-core age
       - name: Install ImageMagick 7 entry point
         run: |
+          # shellcheck disable=SC2016
           printf '#!/bin/sh\nif [ "$1" = montage ]; then shift; exec montage "$@"; fi\nexec convert "$@"\n' | sudo tee /usr/local/bin/magick > /dev/null
           sudo chmod +x /usr/local/bin/magick
       - uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
+      - name: Install the web proof's browsers
+        if: matrix.proof == 'web-call'
+        run: pnpm exec e2e-web install chromium webkit --with-deps
       - name: Validate evidence recipient
         env:
           EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
@@ -164,12 +169,23 @@ jobs:
               -t stack-sync infrastructure/managed-episode > /dev/null &
           fi
           wait
+      - name: Build the web app against this stack
+        if: matrix.proof == 'web-call'
+        env:
+          CHALK_ENVIRONMENT: nightly
+          CHALK_COMMIT_SHA: ${{ inputs.release_sha }}
+          VITE_API_URL: http://127.0.0.1:8000
+          VITE_CHALK_SYNC_URL: ws://127.0.0.1:8000/v1/sync
+          VITE_PUBLIC_APP_URL: http://127.0.0.1:8000
+        run: pnpm exec turbo run build --filter=web... --env-mode=loose
       - name: Boot the stack
         env:
           API_IMAGE: ${{ steps.images.outputs.api }}
           SYNC_IMAGE: ${{ steps.images.outputs.sync }}
         run: |
-          bash scripts/nightly-stack/boot --api-image "$API_IMAGE" --sync-image "$SYNC_IMAGE" --sfu-image stack-sfu \
+          web=()
+          if [ "$PROOF" = web-call ]; then web=(--web-root "$GITHUB_WORKSPACE/apps/web/dist/client"); fi
+          bash scripts/nightly-stack/boot --api-image "$API_IMAGE" --sync-image "$SYNC_IMAGE" --sfu-image stack-sfu "${web[@]}" \
             --migration-target "$(grep -o '[0-9]\{14\}' apps/api/db/migrations/embed.go | head -1)" --dir "$RUNNER_TEMP/stack"
       - name: Keep private proof files in memory
         run: |
@@ -187,7 +203,12 @@ jobs:
           mkdir -p lane
           status=0
           start=$(date +%s)
-          CHALK_PROOF_RUN_ID="nightly-$GITHUB_RUN_ID-$PROOF" pnpm prod:proof "$PROOF" || status=$?
+          export CHALK_PROOF_RUN_ID="nightly-$GITHUB_RUN_ID-$PROOF"
+          if [ "$PROOF" = web-call ]; then
+            CHALK_PROOF_WEBKIT=1 pnpm web:proof || status=$?
+          else
+            pnpm prod:proof "$PROOF" || status=$?
+          fi
           echo "$PROOF wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -eq 0 ]; then echo passed > "lane/$PROOF"; else echo failed > "lane/$PROOF"; fi
           exit "$status"
@@ -195,14 +216,35 @@ jobs:
         if: failure()
         run: |
           for name in api sync sfu; do echo "== $name"; docker logs --tail 60 "chalk-stack-$name" 2>&1 | grep -v '"/v1/sync"' | cut -c1-1500; done
+      - name: Build the scorecard from the Leave proof
+        if: always() && matrix.proof == 'leave-chalk-sfu'
+        # A scoring failure must not change the proof result: the scorecard job fails the cut when this card is missing.
+        continue-on-error: true
+        run: |
+          leave=$(find .private/prod-proof -path "*-leave-chalk-sfu/leave-comparison.json" -print -quit 2> /dev/null || true)
+          if [ -z "$leave" ]; then echo "No Leave proof result in this lane; no scorecard."; exit 0; fi
+          mkdir -p artifacts
+          node features/scorecard/scorecard.mjs build --proof-leave "$leave" --tier nightly --environment nightly --id "$GITHUB_RUN_ID" \
+            --plane chalk_sfu --region github-hosted --size ubuntu-24-04-arm --commit "$(git rev-parse HEAD)" --out artifacts/scorecard-proof.json
+      - name: Upload the scorecard
+        if: always() && matrix.proof == 'leave-chalk-sfu'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scorecard-nightly-${{ matrix.proof }}
+          path: artifacts/scorecard-*.json
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Encrypt private proof evidence
         if: always()
         env:
           EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
         run: |
-          if [ -d .private/prod-proof ]; then
+          directories=()
+          for directory in prod-proof web-proof/e2e; do [ -d ".private/$directory" ] && directories+=("$directory"); done
+          if [ "${#directories[@]}" -gt 0 ]; then
             mkdir -p .private/prod-proof-artifact
-            tar -czf - -C .private prod-proof | age --recipient "$EVIDENCE_RECIPIENT" --output .private/prod-proof-artifact/evidence.tar.gz.age
+            tar -czf - -C .private "${directories[@]}" | age --recipient "$EVIDENCE_RECIPIENT" --output .private/prod-proof-artifact/evidence.tar.gz.age
           fi
       - name: Upload encrypted proof evidence
         if: always()

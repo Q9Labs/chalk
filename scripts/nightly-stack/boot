@@ -3,6 +3,7 @@
 # host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
 #
 #   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> --migration-target <version> [--dir <state dir>] [--announce-ip <ip>]
+#        [--web-root <built web app>]
 #
 # It writes <dir>/proof.env (the CHALK_PROOF_* values a proof run reads) and prints how long each phase took. The images
 # come from the caller: Nightly passes the digests that the release build just published. `down` removes the containers.
@@ -11,7 +12,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="${RUNNER_TEMP:-/tmp}/chalk-nightly-stack"
 announce_ip=127.0.0.1
-api_image="" sync_image="" sfu_image="" migration_target=""
+api_image="" sync_image="" sfu_image="" migration_target="" web_root=""
 postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
 redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
 proxy_image="${CHALK_STACK_PROXY_IMAGE:-caddy:2.10}"
@@ -29,6 +30,7 @@ while [ "$#" -gt 0 ]; do
     --migration-target) migration_target=$2 ;;
     --dir) dir=$2 ;;
     --announce-ip) announce_ip=$2 ;;
+    --web-root) web_root=$2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift 2
@@ -123,7 +125,20 @@ wait_http "https://chalk-sfu:$port_sfu_control/readyz" sfu --resolve "chalk-sfu:
   --cacert "$dir/ca.crt" --cert "$dir/api.crt" --key "$dir/api.key"
 tick services
 
-# The SDK finds Sync on the API's own origin, as it does behind the real ingress, so one proxy serves both.
+# The SDK finds Sync on the API's own origin, as it does behind the real ingress, so one proxy serves both. With a web root it
+# also serves the built web app on that origin, so a browser proof needs no second host.
+web_site=""
+web_mount=()
+if [ -n "$web_root" ]; then
+  web_site='	@app not path /v1/* /healthz /readyz
+	handle @app {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+'
+  web_mount=(-v "$web_root:/srv/web:ro")
+fi
 cat > "$dir/Caddyfile" <<CADDY
 {
 	admin off
@@ -131,11 +146,15 @@ cat > "$dir/Caddyfile" <<CADDY
 :$port_front {
 	bind 127.0.0.1
 	@sync path /v1/sync /v1/sync/* /v1/whiteboard /v1/whiteboard/*
-	reverse_proxy @sync 127.0.0.1:$port_sync
-	reverse_proxy 127.0.0.1:$port_api
+	handle @sync {
+		reverse_proxy 127.0.0.1:$port_sync
+	}
+$web_site	handle {
+		reverse_proxy 127.0.0.1:$port_api
+	}
 }
 CADDY
-docker run -d --name chalk-stack-front --network host -v "$dir/Caddyfile:/etc/caddy/Caddyfile:ro" "$proxy_image" > /dev/null
+docker run -d --name chalk-stack-front --network host -v "$dir/Caddyfile:/etc/caddy/Caddyfile:ro" "${web_mount[@]}" "$proxy_image" > /dev/null
 wait_http "http://127.0.0.1:$port_front/readyz" front
 node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api" "$proof_origin" "http://127.0.0.1:$port_front"
 tick seed
