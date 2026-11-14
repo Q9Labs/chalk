@@ -36,6 +36,11 @@ function cardWithSeries(evidence, value = 300, series = []) {
   });
 }
 
+test("a card stored before the rename with environment staging parses as nightly", () => {
+  const stored = card(contention(input()));
+  assert.equal(parseScorecard({ ...stored, run: { ...stored.run, environment: "staging" } }).run.environment, "nightly");
+});
+
 test("scorecard series is optional for old cards and validates bounded per-cycle action samples", () => {
   const legacy = card(contention(input()));
   assert.equal(Object.hasOwn(legacy, "series"), false);

@@ -283,10 +283,12 @@ export function countsAsEvidence(card) {
 }
 
 /**
- * @param {unknown} value
+ * @param {any} input
  * @returns {Scorecard}
  */
-export function parseScorecard(value) {
+export function parseScorecard(input) {
+  // A card stored before the rename says "staging"; it is the same environment as "nightly".
+  const value = input?.run?.environment === "staging" ? { ...input, run: { ...input.run, environment: normalizeEnvironment(input.run.environment) } } : input;
   const problems = scorecardProblems(value);
   if (problems.length) throw new Error(`Invalid scorecard:\n- ${problems.join("\n- ")}`);
   return /** @type {Scorecard} */ (value); // Every field was checked by scorecardProblems.

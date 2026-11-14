@@ -236,6 +236,10 @@ jobs:
       - name: Identify invocation
         id: invocation
         run: echo "suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+      - name: Name the revision's proofs
+        # A Promote or latency run can check out a cut made before the Chalk SFU rename, whose CLI and scorecard code use the old names.
+        run: |
+          if [ -f features/scorecard/own-sfu.mjs ]; then echo "PROOF_NAMES_BEFORE_RENAME=true" >> "$GITHUB_ENV"; fi
       - name: Keep private proof files in memory
         run: |
           mkdir -p .private /dev/shm/chalk-proof-private /dev/shm/chalk-proof-tmp
@@ -326,7 +330,9 @@ jobs:
               run_id="${RUN_PREFIX}-${proof}"
               echo "$run_id" >> .private/proof-run-ids
               status=0
-              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof" || status=$?
+              command="$proof"
+              if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then command="${proof//chalk-sfu/own-sfu}"; fi
+              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$command" || status=$?
               echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
               if [ "$status" -eq 0 ]; then
                 results+=("$proof=passed")
@@ -376,13 +382,18 @@ jobs:
           CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_METRICS_DATASET }}
           CHALK_AXIOM_METRICS_BASE_URL: ${{ secrets.CHALK_AXIOM_METRICS_BASE_URL }}
         run: |
+          collector=features/scorecard/chalk-sfu.mjs
+          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then
+            collector=features/scorecard/own-sfu.mjs
+            [ "$SCORECARD_ENVIRONMENT" != nightly ] || export SCORECARD_ENVIRONMENT=staging
+          fi
           # A revision from before the Chalk SFU nightly has no latency kit scorecard code to run.
-          if [ ! -f features/scorecard/chalk-sfu.mjs ]; then
+          if [ ! -f "$collector" ]; then
             echo "The selected revision predates the Chalk SFU nightly, so no latency was measured." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           mkdir -p .private
-          if [[ "$SCORECARD_ENVIRONMENT" == nightly && "$CHALK_PROOF_MEDIA_PLANE" == chalk_sfu ]]; then
+          if [[ "$SCORECARD_ENVIRONMENT" =~ ^(nightly|staging)$ && "$CHALK_PROOF_MEDIA_PLANE" == chalk_sfu ]]; then
             node features/scorecard/staging-latency.mjs
             exit $?
           fi
@@ -412,12 +423,14 @@ jobs:
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
-          if [ ! -f features/scorecard/chalk-sfu.mjs ] || [ -f .private/cf-latency-skipped ]; then
+          collector=features/scorecard/chalk-sfu.mjs
+          [ "${PROOF_NAMES_BEFORE_RENAME:-}" != true ] || collector=features/scorecard/own-sfu.mjs
+          if [ ! -f "$collector" ] || [ -f .private/cf-latency-skipped ]; then
             exit 0
           fi
           evidence=.private/prod-proof
           [[ "$STAGING_LATENCY" != true ]] || evidence=.private/latency-scorecard
-          node features/scorecard/chalk-sfu.mjs "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
+          node "$collector" "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
       - name: Clean proof runs
         if: always()
         # Deleting this run's resources must never wait on another lane's measurement lease.
@@ -450,6 +463,7 @@ jobs:
             exit 0
           fi
           mkdir -p artifacts
+          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ] && [ "$SCORECARD_ENVIRONMENT" = nightly ]; then SCORECARD_ENVIRONMENT=staging; fi
           node features/scorecard/scorecard.mjs build --proof-leave "$leave" --tier "$SCORECARD_TIER" --environment "$SCORECARD_ENVIRONMENT" --id "$GITHUB_RUN_ID" \
             --plane "$CHALK_PROOF_MEDIA_PLANE" --region github-hosted --size ubuntu-24-04 --commit "$(git rev-parse HEAD)" \
             --out artifacts/scorecard-proof.json
