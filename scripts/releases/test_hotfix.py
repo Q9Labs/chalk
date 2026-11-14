@@ -129,12 +129,27 @@ class Rehearsal(Files):
         with patch.object(rehearsal, 'manifest_bytes'), self.assertRaisesRegex(ValueError, 'two nightly cuts'):
             rehearsal.plan(self.github(self.cut('x-new')), None)
 
-    def judge(self, rollback_source):
+    def judge(self, rollback_source, baseline='x-new', baseline_needed='true'):
         current, previous = self.cut('x-new'), self.cut('z-old')
         leg = lambda source: json.dumps(dict(restored_source_release_id=source, release_id='fresh', applied_release_id='fresh'))
-        variables = dict(CURRENT=json.dumps(current), PREVIOUS=json.dumps(previous), BASELINE=leg('x-new'), ROLLBACK=leg(rollback_source), FORWARD=leg('x-new'))
+        variables = dict(CURRENT=json.dumps(current), PREVIOUS=json.dumps(previous), BASELINE=leg(baseline) if baseline else '{}', ROLLBACK=leg(rollback_source),
+                         FORWARD=leg('x-new'), BASELINE_NEEDED=baseline_needed)
         with patch.dict(os.environ, variables):
             rehearsal.verdict(Mock(), None)
+
+    def test_the_first_leg_runs_unless_staging_already_runs_the_current_cut(self):
+        with patch.object(rehearsal, 'deployed_cut', return_value='x' * 40):
+            self.assertFalse(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
+        with patch.object(rehearsal, 'deployed_cut', return_value='z' * 40):
+            self.assertTrue(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
+        with patch.object(rehearsal, 'deployed_cut', side_effect=ValueError('staging has no nightly write')):
+            self.assertTrue(rehearsal.baseline_needed(Mock(), self.cut('x-new')))
+
+    def test_a_skipped_first_leg_is_not_judged_but_a_failed_one_is(self):
+        self.judge('z-old', baseline=None, baseline_needed='false')
+        self.assertIn('first leg was skipped', self.summary.read_text())
+        with self.assertRaisesRegex(SystemExit, 'deploy current'):
+            self.judge('z-old', baseline=None)
 
     def test_three_legs_on_their_own_sources_pass(self):
         self.judge('z-old')

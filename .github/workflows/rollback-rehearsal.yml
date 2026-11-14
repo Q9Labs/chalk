@@ -1,5 +1,5 @@
 name: Rollback rehearsal
-# Weekly, on nightly: deploy the newest passed cut, roll back to the one before it with the Release job production uses, and roll forward again.
+# Weekly, on nightly: make sure nightly runs the newest passed cut (a deploy, skipped when it already does), roll back to the one before it with the Release job production uses, and roll forward again.
 # The rollback on 23 Oct failed because the older release's controller could not read the pointer the newer one wrote. This run fails when that happens again.
 on:
   schedule:
@@ -22,6 +22,7 @@ jobs:
     outputs:
       current: ${{ steps.plan.outputs.current }}
       previous: ${{ steps.plan.outputs.previous }}
+      baseline: ${{ steps.plan.outputs.baseline }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
@@ -36,7 +37,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/releases/rehearsal.py plan
   deploy-current:
+    # Skipped when nightly already runs the current cut from a finished deploy, which saves about a third of the run.
     needs: plan
+    if: needs.plan.outputs.baseline == 'true'
     permissions:
       contents: write # The nightly deploy holds the staging-SFU lease.
       actions: read
@@ -57,6 +60,7 @@ jobs:
     secrets: inherit
   roll-back:
     needs: [plan, deploy-current]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.deploy-current.result) }}
     permissions:
       contents: write
       actions: read
@@ -108,6 +112,7 @@ jobs:
       - name: Require each leg to have applied its own source release
         env:
           GH_TOKEN: ${{ github.token }}
+          BASELINE_NEEDED: ${{ needs.plan.outputs.baseline }}
           CURRENT: ${{ needs.plan.outputs.current }}
           PREVIOUS: ${{ needs.plan.outputs.previous }}
           BASELINE: ${{ toJSON(needs.deploy-current.outputs) }}
