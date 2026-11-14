@@ -206,6 +206,10 @@ jobs:
           export CHALK_PROOF_RUN_ID="nightly-$GITHUB_RUN_ID-$PROOF"
           if [ "$PROOF" = web-call ]; then
             CHALK_PROOF_WEBKIT=1 pnpm web:proof || status=$?
+          elif [ "$PROOF" = latency-smoke ]; then
+            # A runner shares its CPU, so this run checks that the kit emits every gated action metric, not how fast they are.
+            # The speed check is nightly-latency.yml on a host of its own.
+            pnpm prod:latency --samples 4 --planes chalk_sfu --smoke --environment nightly --tier nightly --region github-hosted --size ubuntu-24-04-arm || status=$?
           else
             pnpm prod:proof "$PROOF" || status=$?
           fi

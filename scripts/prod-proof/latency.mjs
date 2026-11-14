@@ -3,6 +3,7 @@
 //
 //   pnpm prod:latency                                  # 20 cycles on each plane, chalk_sfu and cf_sfu interleaved
 //   pnpm prod:latency --samples 3 --planes chalk_sfu
+//   pnpm prod:latency --samples 3 --planes chalk_sfu --smoke   # no p95 budget, still fails when a gated metric is missing
 //   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
@@ -49,6 +50,7 @@ function options() {
       size: { type: "string", default: "unknown" },
       "lobby-dwell-ms": { type: "string", default: "0" },
       path: { type: "string", default: "direct" },
+      smoke: { type: "boolean", default: false },
     },
   });
   const samples = Number(values.samples);
@@ -61,7 +63,7 @@ function options() {
   check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");
   const { tier, region, size, headed } = values;
   const environment = normalizeEnvironment(values.environment);
-  return { samples, planes, headed, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
+  return { samples, planes, headed, smoke: values.smoke, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
 }
 
 // measure arms the receiver's watches, runs the action on the sender, and returns each watch's delay in ms.
@@ -295,13 +297,15 @@ async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, 
   }
 }
 
-async function conclude(report, { samples, planes }) {
+async function conclude(report, { samples, planes, smoke }) {
   const { budgets } = await readBudgets();
   report.planes = {};
   for (const plane of planes) {
     const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
     const summary = summarize(kept.map((outcome) => outcome.sample));
-    const limits = planeLimits(budgets, plane);
+    // A smoke run measures on a shared runner with few cycles, so its p95 proves nothing about speed. It still fails when a
+    // gated action metric is missing, short of samples or timed out, which proves the kit emits every metric the budgets expect.
+    const limits = smoke ? Object.fromEntries(Object.entries(planeLimits(budgets, plane)).map(([metric, limit]) => [metric, { ...limit, warnOnly: true }])) : planeLimits(budgets, plane);
     const failures = budgetFailures(summary, limits, samples);
     const warnings = budgetWarnings(summary, limits);
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
@@ -328,7 +332,7 @@ async function main() {
   const report = { startedAt: new Date().toISOString(), settings, cycles: [] };
   let run;
   try {
-    const config = await loadConfig({ readiness: false });
+    const config = await loadConfig({ capabilities: false });
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
     const receiver = await prepareIntegration(run, false);

@@ -18,6 +18,6 @@ jobs:
     uses: ./.github/workflows/nightly-proofs.yml
     with:
       release_sha: ${{ github.sha }}
-      proofs: camera-share long-call chat-upload leave-chalk-sfu web-call
+      proofs: latency-smoke
       image_source: build
     secrets: inherit
