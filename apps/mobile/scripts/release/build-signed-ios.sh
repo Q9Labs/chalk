@@ -18,6 +18,10 @@ main_profile_was_present=false
 screen_share_profile_was_present=false
 original_keychains=()
 build_dir=""
+info_plist="$mobile_root/ios/Chalk/Info.plist"
+info_plist_backup=""
+build_number_override=${CHALK_IOS_BUILD_NUMBER:-}
+build_settings=()
 
 while IFS= read -r keychain; do
   keychain=${keychain#*\"}
@@ -38,6 +42,7 @@ cleanup() {
     find "$screen_share_profile_path" -delete
   fi
 
+  if [[ -n "$info_plist_backup" && -f "$info_plist_backup" ]]; then cp "$info_plist_backup" "$info_plist"; fi
   unset CHALK_APP_VARIANT
   if [[ -n "$build_dir" && -d "$build_dir" && ! -L "$build_dir" && $(dirname "$build_dir") == "$output_dir" && $(basename "$build_dir") == .chalk-xcodebuild.* ]]; then
     find "$build_dir" -depth -delete
@@ -130,6 +135,16 @@ if [[ -f "$screen_share_profile_path" ]]; then screen_share_profile_was_present=
 cp "$temp_dir/main.mobileprovision" "$main_profile_path"
 cp "$temp_dir/screen-share.mobileprovision" "$screen_share_profile_path"
 
+# A nightly upload needs a build number above every build on TestFlight. The app's Info.plist holds a literal, so set it
+# there for this run and let the screen-share extension take the same value from the build setting.
+if [[ -n "$build_number_override" ]]; then
+  [[ "$build_number_override" =~ ^[1-9][0-9]*$ ]] || { echo "CHALK_IOS_BUILD_NUMBER must be a positive integer." >&2; exit 1; }
+  info_plist_backup="$temp_dir/Info.plist.original"
+  cp "$info_plist" "$info_plist_backup"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number_override" "$info_plist"
+  build_settings=("CURRENT_PROJECT_VERSION=$build_number_override")
+fi
+
 export CHALK_APP_VARIANT=production
 timestamp=${CHALK_RELEASE_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 build_dir=$(mktemp -d "$output_dir/.chalk-xcodebuild.XXXXXX")
@@ -144,7 +159,7 @@ if ! xcodebuild \
   -destination generic/platform=iOS \
   -derivedDataPath "$build_dir/DerivedData" \
   -archivePath "$archive_path" \
-  archive > "$archive_log" 2>&1; then
+  archive ${build_settings[@]+"${build_settings[@]}"} > "$archive_log" 2>&1; then
   rg -n 'error:|ARCHIVE FAILED' "$archive_log" | tail -80 >&2 || true
   tail -120 "$archive_log" >&2
   exit 1
@@ -221,13 +236,19 @@ if [[ "$embedded_screen_share_uuid" != "$expected_screen_share_profile_uuid" || 
   exit 1
 fi
 
+if [[ -n "$build_number_override" ]]; then
+  for bundle_path in "$app_path" "$screen_share_app_path"; do
+    [[ $(plutil -extract CFBundleVersion raw -o - "$bundle_path/Info.plist") == "$build_number_override" ]] || { echo "The Chalk IPA does not carry build number $build_number_override." >&2; exit 1; }
+  done
+fi
+
 if [[ -z $(find "$app_path" -path '*/ChalkWhiteboard.bundle/chalk-whiteboard/index.html' -print -quit) ]]; then
   echo "The Chalk IPA does not contain the embedded whiteboard renderer." >&2
   exit 1
 fi
 
 version_name=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*MARKETING_VERSION = //p' | head -n 1)
-build_number=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings 2>/dev/null | sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION = //p' | head -n 1)
+build_number=$(xcodebuild -workspace "$mobile_root/ios/Chalk.xcworkspace" -scheme Chalk -configuration Release -showBuildSettings ${build_settings[@]+"${build_settings[@]}"} 2>/dev/null | sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION = //p' | head -n 1)
 mkdir -p "$output_dir"
 output_ipa="$output_dir/chalk-ios-${version_name:-unknown}-${build_number:-unknown}-$timestamp.ipa"
 cp "$built_ipa" "$output_ipa"

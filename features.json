@@ -6,6 +6,7 @@
       "paths": [
         ".github/workflows/mobile-ci.yml",
         ".github/workflows/mobile-nightly-android.yml",
+        ".github/workflows/mobile-nightly-ios.yml",
         ".github/workflows/mobile-signed-build.yml",
         ".github/workflows/real-call-proof.yml",
         ".github/workflows/web-call-proof.yml",
