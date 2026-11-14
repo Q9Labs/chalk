@@ -224,21 +224,25 @@ defmodule ChalkSync.Live.Episode do
         {:ok, state, []}
 
       :equal ->
-        apply_equal_media_observation(state, observation.publications)
+        apply_equal_media_observation(state, observation.publications, options)
 
       :newer ->
         apply_newer_media_observation(state, cursor, observation.publications, options)
     end
   end
 
-  defp apply_equal_media_observation(state, publications) do
+  defp apply_equal_media_observation(state, publications, options) do
     observed_items = normalize_media_items(publications)
 
     if observed_items == state.media_observed_items do
-      reconcile_observed_media(
-        state,
-        apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
-      )
+      {_pauses, media_items} =
+        projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
+
+      # Every look renews the lease of a share that still runs, even when nothing changed. An unchanged
+      # observation is no evidence that a share ended, so a lease whose share has not appeared yet stays.
+      with {:ok, next} <- reconcile_screen_leases(state, media_items, options, :keep_absent) do
+        reconcile_observed_media(next, projection)
+      end
     else
       {:error, :dependency_unavailable}
     end
@@ -250,7 +254,7 @@ defmodule ChalkSync.Live.Episode do
     {_pauses, media_items} =
       projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
 
-    with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
+    with {:ok, next} <- reconcile_screen_leases(state, media_items, options, :release_absent) do
       next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
       reconcile_observed_media(next, projection)
     end
@@ -663,16 +667,21 @@ defmodule ChalkSync.Live.Episode do
 
   defp maybe_release_screen_lease(state, _authority, _source, _enabled, _outcome), do: state
 
-  defp reconcile_screen_leases(state, media_items, options) do
+  defp reconcile_screen_leases(state, media_items, options, absent) do
     case observed_screen_participants(media_items) do
-      [] -> release_absent_screen_leases(state, media_items, options)
-      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options)
-      _conflicting -> {:error, :conflicting_screen_publications}
+      [] ->
+        settle_screen_leases(state, media_items, options, absent)
+
+      [participant_id] ->
+        reconcile_single_screen(state, media_items, participant_id, options, absent)
+
+      _conflicting ->
+        {:error, :conflicting_screen_publications}
     end
   end
 
-  defp reconcile_single_screen(state, media_items, participant_id, options) do
-    with {:ok, state} <- release_absent_screen_leases(state, media_items, options) do
+  defp reconcile_single_screen(state, media_items, participant_id, options, absent) do
+    with {:ok, state} <- settle_screen_leases(state, media_items, options, absent) do
       case Map.fetch(state.screen_leases, participant_id) do
         {:ok, _lease} -> {:ok, state}
         :error -> acquire_observed_screen_lease(state, participant_id, options)
@@ -680,14 +689,19 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
-  defp release_absent_screen_leases(state, media_items, options) do
+  defp settle_screen_leases(state, media_items, options, absent) do
     Enum.reduce_while(state.screen_leases, {:ok, state}, fn
       {participant_id, lease}, {:ok, current} ->
         result =
-          if screen_observed?(media_items, participant_id) do
-            reconcile_observed_screen_lease(current, participant_id, lease, options)
-          else
-            {:ok, release_and_forget_screen_lease(current, participant_id, lease)}
+          cond do
+            screen_observed?(media_items, participant_id) ->
+              reconcile_observed_screen_lease(current, participant_id, lease, options)
+
+            absent == :release_absent ->
+              {:ok, release_and_forget_screen_lease(current, participant_id, lease)}
+
+            true ->
+              {:ok, current}
           end
 
         case result do
@@ -710,7 +724,17 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
+  # A lease that its hard cap would end before the next look is replaced while the
+  # share still runs, so the lease never lapses under a sharer.
   defp renew_screen_lease(state, participant_id, lease, options) do
+    if ScreenShareLease.outlasts_renewal?(lease, options) do
+      extend_screen_lease(state, participant_id, lease, options)
+    else
+      rotate_screen_lease(state, participant_id, lease, options)
+    end
+  end
+
+  defp extend_screen_lease(state, participant_id, lease, options) do
     with {:ok, connection} <- database_connection(state),
          {:ok, renewed} <- ScreenShareLease.renew(connection, state.episode, lease, options) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, renewed)}}
@@ -733,7 +757,7 @@ defmodule ChalkSync.Live.Episode do
              state.episode,
              participant_id,
              lease.owner_generation,
-             options
+             Keyword.put(options, :replace_own, true)
            ) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, rotated)}}
     else
@@ -817,7 +841,10 @@ defmodule ChalkSync.Live.Episode do
         state.episode,
         authority.participant_id,
         authority.generation,
-        screen_lease_options(operation_id)
+        [
+          {:replace_own, not Map.has_key?(state.screen_leases, authority.participant_id)}
+          | screen_lease_options(operation_id)
+        ]
       )
     end
   catch

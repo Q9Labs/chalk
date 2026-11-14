@@ -1,0 +1,11 @@
+# Broken variants of the code. `run.sh` runs each one and
+# requires TLC to report the named rule as broken.
+# Format: <Break value><TAB><rule TLC must report><TAB><code edit it mirrors>
+write_ignores_fence	OnlyLeaseHolderWrites	recording_pipeline.sql InsertRecordingBundle and CommitRecordingBundleAllocation drop lease_token, lease_owner and fencing_generation
+write_ignores_expiry	OnlyLeaseHolderWrites	the same two writes drop lease_expires_at > now()
+claim_ignores_job_state	NoLeaseSteal	ClaimRecordingJob drops recording_jobs.state = 'pending'
+claim_ignores_stop	NoFreshCaptureAfterStop	ClaimRecordingJob drops the stop_operation_id and stop_requested_at guards
+segment_after_complete	SegmentsFrozenAtCompletion	InsertRecordingBundle drops state = 'leased'
+salvage_not_flagged	LostTailIsSalvaged	CompleteCaptureRecordingJob drops the recording.capture.salvaged event
+recover_skips_stopped	EndedEpisodeResolves	RecoverExpiredRecordingJobs drops the pending-job-after-stop clause
+end_skips_recording_stop	EndedEpisodeHasNoUnstoppedCapture	invoke_end_cleanup ends the Episode without calling the API stop_recording

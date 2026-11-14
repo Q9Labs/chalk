@@ -421,6 +421,61 @@
       "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
     },
     {
+      "id": "workflow:formal-episode-lifecycle.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the Episode lifecycle or admission code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
+      "id": "workflow:formal-screen-share-lease.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the screen-share lease code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
+      "id": "workflow:formal-external-operations.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the external-operation queue, publication grants or role transitions that breaks the model-checked invariants or drifts from the model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs TLC for about 2 minutes only when a covered Sync file or the model changes, so it cannot be a required context for every pull request."
+    },
+    {
+      "id": "workflow:formal-public-invite-access.yml#check",
+      "owner": "Call",
+      "catches": "A change to the public invite, arrival or access code that breaks a model-checked rule or drifts from the TLA+ model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
+    },
+    {
+      "id": "workflow:formal-recording-pipeline.yml#check",
+      "owner": "Recording",
+      "catches": "A change to the recording pipeline that breaks a model-checked rule or drifts from the TLA+ model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
@@ -1319,6 +1374,28 @@
       "minutes": null,
       "record": "never-failed",
       "sample": "14 nightly values between 0.3 and 0.5 s."
+    },
+    {
+      "id": "workflow:formal-client-recovery.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the SDK connection and recovery lifecycle (join, Sync and media recovery, access refresh, terminal frames, Leave), or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
+    },
+    {
+      "id": "workflow:formal-media-control.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the media-control model, or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
     }
   ]
 }
