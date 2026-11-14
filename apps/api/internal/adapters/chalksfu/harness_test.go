@@ -373,7 +373,7 @@ func (s *sfu) grant(t *testing.T, scopes ...mediaplane.Scope) {
 	adapter := s.adapterAt(t, s.controlURL)
 	for _, scope := range scopes {
 		var controls []mediaplane.SourceControl
-		for _, source := range []string{"microphone", "camera", "screen", "screen_audio"} {
+		for _, source := range mediaplane.AllSources {
 			controls = append(controls, mediaplane.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: mediaplane.SourceGrant, Revision: 1})
 		}
 		if _, err := adapter.ControlSources(context.Background(), mediaplane.ControlSourcesInput{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, Controls: controls}); err != nil {

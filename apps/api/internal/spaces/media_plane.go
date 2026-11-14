@@ -1,37 +1,10 @@
 package spaces
 
 import (
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
-
-var ErrInvalidMediaPlaneProvider = errors.New("invalid media plane provider")
-
-type MediaPlaneProvider string
-
-const (
-	MediaPlaneProviderCloudflareSFU MediaPlaneProvider = "cf_sfu"
-	MediaPlaneProviderChalkSFU      MediaPlaneProvider = "chalk_sfu"
-)
-
-func ParseMediaPlaneProvider(value string) (MediaPlaneProvider, error) {
-	provider := MediaPlaneProvider(strings.TrimSpace(value))
-	switch provider {
-	case MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU:
-		return provider, nil
-	default:
-		return "", fmt.Errorf("%w: %s", ErrInvalidMediaPlaneProvider, value)
-	}
-}
-
-// KnownMediaPlaneProvider reports whether the string names a media plane.
-func KnownMediaPlaneProvider(value string) bool {
-	_, err := ParseMediaPlaneProvider(value)
-	return err == nil
-}
 
 // ChalkSFUAllowlist names the Spaces that may use the own SFU. The zero value
 // allows none, so a deployment that turns the own SFU on still keeps every other

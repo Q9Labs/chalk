@@ -11,7 +11,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -66,8 +65,8 @@ func TestAJoinWhoseBindingReadRacesTheMoveLeavesNoSessionOnTheOldNode(t *testing
 			store := newRecoveryStore(bound, 2)
 			barrier := &pausedRead{recoveryStore: store, read: make(chan struct{}), release: make(chan struct{})}
 			stale, err := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-				ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
-				ChalkSFU: first, ChalkSFUSpaces: everySpace, Episodes: store, Recovery: barrier,
+				ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU,
+				ChalkSFU: first, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace}, Episodes: store, Recovery: barrier,
 			}).ResolveEpisode(context.Background(), recoveringTenant, chalkSpace, recoveringEpisode)
 			if err != nil {
 				t.Fatal(err)

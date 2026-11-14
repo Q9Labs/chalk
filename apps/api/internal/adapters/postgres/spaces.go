@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -334,11 +335,14 @@ func mapSpaceRole(role sqlc.SpaceRole) spaces.Role {
 
 var _ spaces.Repository = SpaceRepository{}
 
-func mediaPlaneSetting(value pgtype.Text) *spaces.MediaPlaneProvider {
+func mediaPlaneSetting(value pgtype.Text) *mediaplane.Provider {
 	if !value.Valid {
 		return nil
 	}
-	provider := spaces.MediaPlaneProvider(value.String)
+	provider, err := mediaplane.ParseSettingName(value.String)
+	if err != nil {
+		return nil
+	}
 	return &provider
 }
 
@@ -346,16 +350,16 @@ func optionalPlaneSetting(input spaces.OptionalMediaPlaneSetting) pgtype.Text {
 	if !input.Set || input.Value == nil {
 		return pgtype.Text{}
 	}
-	return pgtype.Text{String: string(*input.Value), Valid: true}
+	return pgtype.Text{String: input.Value.SettingName(), Valid: true}
 }
 
 // AdoptStoredPlaneSetting moves a Space stored on the plane onto the setting. It reports
 // false when the Space no longer qualifies: it gained a setting, stores another plane, or
 // its Tenant can no longer serve the own SFU. No Space reads differently afterwards, so it
 // sends no space.updated event.
-func (r SpaceRepository) AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane spaces.MediaPlaneProvider) (bool, error) {
+func (r SpaceRepository) AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane mediaplane.Provider) (bool, error) {
 	rows, err := r.queries.AdoptSpaceMediaPlaneSetting(ctx, sqlc.AdoptSpaceMediaPlaneSettingParams{
-		Plane: string(plane), TenantID: uuid(tenantID), ID: uuid(spaceID),
+		Plane: plane.SettingName(), TenantID: uuid(tenantID), ID: uuid(spaceID),
 	})
 	if err != nil {
 		return false, err

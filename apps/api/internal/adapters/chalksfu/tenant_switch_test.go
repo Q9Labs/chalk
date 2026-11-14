@@ -18,7 +18,7 @@ func TestALiveOwnSFUEpisodeSurvivesItsTenantSwitchingToOwnCredentials(t *testing
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	bound := placedBinding(t, fleet)
 	registry := recoveryRegistry(fleet, newRecoveryStore(bound, 2))
-	ownChoice := string(spaces.MediaPlaneProviderChalkSFU)
+	ownChoice := mediaplane.ProviderChalkSFU.SettingName()
 	switched := tenants.Tenant{
 		ID:                        recoveringTenant.ID,
 		DefaultMediaPlane:         &ownChoice,
@@ -32,7 +32,7 @@ func TestALiveOwnSFUEpisodeSurvivesItsTenantSwitchingToOwnCredentials(t *testing
 	}
 
 	next, err := recoveryRegistry(fleet, newRecoveryStore(mediaplane.Binding{}, 0)).ResolveBinding(context.Background(), switched, spaces.Space{MediaPlane: "cf_sfu"}, ownSFUClients)
-	if err != nil || next == nil || next.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+	if err != nil || next == nil || next.Provider != mediaplane.ProviderCloudflareSFU.SettingName() {
 		t.Fatalf("the next Episode of a Tenant on its own credentials must start on Cloudflare: %+v, %v", next, err)
 	}
 }

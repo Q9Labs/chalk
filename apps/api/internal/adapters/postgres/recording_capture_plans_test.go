@@ -102,14 +102,14 @@ func TestBuildRecordingCapturePlanDecodesEveryStoredPublicationShape(t *testing.
 	admittedID := capturePlanID(t, "77777777-7777-4777-8777-777777777777")
 	reference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher","m":"0","t":"camera","g":7}`))
 	mutedReference := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher","m":"1","t":"microphone","g":7}`))
-	_, _, payload, err := provideroperations.CanonicalizeObservation(provideroperations.ObservationInput{
+	_, _, payload, err := (provideroperations.ObservationInput{
 		TenantID: input.TenantID, EpisodeID: input.EpisodeID,
 		Publications: []provideroperations.Publication{
 			{ParticipantID: admittedID, Source: "camera", Enabled: true, PublicationID: reference},
 			{ParticipantID: admittedID, Source: "microphone", Enabled: false, PublicationID: mutedReference, Held: true},
 			{ParticipantID: admittedID, Source: "screen", Enabled: false},
 		},
-	})
+	}).Canonicalize()
 	if err != nil {
 		t.Fatalf("canonicalize observation: %v", err)
 	}

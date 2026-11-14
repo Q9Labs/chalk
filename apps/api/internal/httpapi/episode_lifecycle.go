@@ -536,7 +536,7 @@ var episodeLifecycleRules = errorRules{
 	ruleFor(apiErrorMediaClientUnsupported, mediaplane.ErrClientUnsupported),
 	ruleFor(apiErrorEpisodeControlBusy, episodes.ErrEpisodeControlBusy),
 	ruleFor(apiErrorInvalidRequest, mediapublications.ErrInvalidPublication, mediaplane.ErrInvalidSignalRequest),
-	ruleFor(apiErrorMediaPlaneUnavailable, mediapublications.ErrUnavailable, mediaplaneproviders.ErrUnknownProvider, mediaplaneproviders.ErrInvalidMode, mediaplaneproviders.ErrMissingProviderConfig, mediaplaneproviders.ErrInvalidProviderConfig, mediaplaneproviders.ErrAdapterUnavailable, mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderFailed),
+	ruleFor(apiErrorMediaPlaneUnavailable, mediapublications.ErrUnavailable, mediaplaneproviders.ErrUnknownProvider, mediaplaneproviders.ErrInvalidMode, mediaplane.ErrMissingTenantConfig, mediaplane.ErrInvalidTenantConfig, mediaplaneproviders.ErrAdapterUnavailable, mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderFailed),
 	ruleFor(apiErrorInvalidTenantID, episodes.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidSpaceID, episodes.ErrInvalidSpaceID),
 	ruleFor(apiErrorInvalidEpisodeID, episodes.ErrInvalidEpisodeID),

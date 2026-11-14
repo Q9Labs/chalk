@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -37,9 +38,9 @@ func TestCaptureStoppedCallbackAcceptanceIsLoggedWithoutRequestSecrets(t *testin
 		{"stale authority", recordinglifecycle.ErrAuthorityMismatch, http.StatusConflict, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			body, err := json.Marshal(recorderCaptureStoppedBody{
-				recorderCaptureLifecycleAuthorityBody: recorderCaptureLifecycleAuthorityBody{
-					recorderRecordingAuthorityBody: recorderRecordingAuthorityBody{
+			body, err := json.Marshal(recorderprotocol.CaptureStoppedRequest{
+				CaptureLifecycleAuthority: recorderprotocol.CaptureLifecycleAuthority{
+					RecordingAuthority: recorderprotocol.RecordingAuthority{
 						TenantID: workerTestTenant, EpisodeID: workerTestEpisode, RecordingID: workerTestRecord, JobID: workerTestJob,
 						AttemptCount: 2, FencingGeneration: 3, CaptureEpoch: 1, EnvelopeDigest: strings.Repeat("ab", 32),
 						LeaseToken: "private-lease-token", LeaseOwner: recorderWorkerLeaseOwner(workeridentity.Identity{WorkerID: mustRecorderWorkerID(t, workerTestID), Role: workeridentity.RoleCapture}), LeaseExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano),

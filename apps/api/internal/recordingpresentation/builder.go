@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 )
 
 const whiteboardStateSchemaVersion = "recording_whiteboard_state.v1"
@@ -1313,11 +1314,7 @@ func setEventBase(event Event, base EventBase) {
 }
 
 func presentationObjectPrefix(source CompletionSource) string {
-	return fmt.Sprintf(
-		"tenants/%s/recordings/%s/presentation/%d/%s",
-		source.TenantID.String(), source.RecordingID.String(), source.CaptureEpoch,
-		source.PresentationHandle.String(),
-	)
+	return recordingobjectkey.Presentation(source.TenantID.String(), source.RecordingID.String(), int64(source.CaptureEpoch), source.PresentationHandle.String())
 }
 
 func existingAssetObjectKey(source CompletionSource, assetID, kind, digest string) string {

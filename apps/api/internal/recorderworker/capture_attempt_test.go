@@ -127,7 +127,7 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 	peer := &captureTestPeer{err: errors.New("peer failed")}
 	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{MID: "0"}, readErr: captureTimeoutError{}}
 	events := make(chan captureRuntimeEvent, 1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 
 func TestCaptureReaderStopWaitsForReadLoopToSettle(t *testing.T) {
 	track := &captureBlockingTestTrack{started: make(chan struct{}), release: make(chan struct{})}
-	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, make(chan captureRuntimeEvent, 1))
+	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, make(chan captureRuntimeEvent, 1), time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestCaptureReaderPropagatesLossKeyFrameRequestError(t *testing.T) {
 	sequence := append([]uint16{100}, captureTestSequence(102, 118)...)
 	track := capturePacketTestTrack(captureplane.TrackKindVideo, sequence)
 	events := make(chan captureRuntimeEvent, len(sequence)+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -293,7 +293,7 @@ func capturePacketTestTrack(kind captureplane.TrackKind, sequence []uint16) *cap
 func captureTestReadPackets(t *testing.T, peer *captureTestPeer, track *captureTestTrack, packetCount int) {
 	t.Helper()
 	events := make(chan captureRuntimeEvent, packetCount+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}

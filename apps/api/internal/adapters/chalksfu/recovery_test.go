@@ -165,11 +165,11 @@ func (s *recoveryStore) current() (mediaplane.Binding, int) {
 
 func recoveryRegistry(fleet *chalksfu.Fleet, store *recoveryStore) mediaplaneproviders.Registry {
 	return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-		ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: store, Recovery: store,
+		ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU, ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace}, Episodes: store, Recovery: store,
 	})
 }
 
-var chalkSpace = spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+var chalkSpace = spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 
 // placedBinding places a new Episode on the pool as Episode creation does.
 func placedBinding(t *testing.T, fleet *chalksfu.Fleet) mediaplane.Binding {
@@ -260,7 +260,7 @@ func TestRecoveryMovesAnEpisodeOffALostPrimaryToTheStandby(t *testing.T) {
 		t.Fatalf("recovery: %v", err)
 	}
 	moved, moves := store.current()
-	if moves != 1 || moved.Generation != 1 || moved.Node != "sfu-standby" || moved.PlacementReason != mediaplane.PlacementStandby || moved.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
+	if moves != 1 || moved.Generation != 1 || moved.Node != "sfu-standby" || moved.PlacementReason != mediaplane.PlacementStandby || moved.Provider != mediaplane.ProviderChalkSFU.SettingName() {
 		t.Fatalf("after the primary was lost: %+v (%d moves), want one move to the standby on chalk_sfu", moved, moves)
 	}
 	if want := []mediaplane.Allocation{bound.Current()}; len(moved.PreviousAllocations) != 1 || moved.PreviousAllocations[0] != want[0] {
@@ -312,7 +312,7 @@ func TestRecoveryAfterARestartStaysOnTheSameNode(t *testing.T) {
 		t.Fatalf("restart recovery: %v", err)
 	}
 	moved, moves := store.current()
-	if moves != 1 || moved.Generation != 1 || moved.Node != "sfu-a" || moved.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
+	if moves != 1 || moved.Generation != 1 || moved.Node != "sfu-a" || moved.Provider != mediaplane.ProviderChalkSFU.SettingName() {
 		t.Fatalf("after a restart: %+v (%d moves), want the same node on chalk_sfu", moved, moves)
 	}
 	if moved.NodeIncarnation == bound.NodeIncarnation || moved.NodeIncarnation != stateOf(t, box).NodeIncarnation {
@@ -478,7 +478,7 @@ func TestRecoveryRefusedLeavesTheBindingAndSaysCapacity(t *testing.T) {
 		if !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) || !errors.Is(err, mediaplane.ErrRecoveryRefused) {
 			t.Fatalf("recovery with no node: %v, want the capacity error", err)
 		}
-		if after, moves := store.current(); moves != 0 || after.Generation != 0 || after.Node != "sfu-a" || after.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
+		if after, moves := store.current(); moves != 0 || after.Generation != 0 || after.Node != "sfu-a" || after.Provider != mediaplane.ProviderChalkSFU.SettingName() {
 			t.Fatalf("binding changed to %+v (%d moves)", after, moves)
 		}
 	})

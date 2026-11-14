@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 )
 
 type StorageObject struct {
@@ -63,7 +64,7 @@ func cleanObjectKey(object StorageObject) bool {
 // validateOwner requires an object to belong to an erased Tenant or to sit under an explicit shared prefix.
 func (m ObjectManifest) validateOwner(object StorageObject, approved map[string]bool) error {
 	if object.OwnerTenantID != "" {
-		if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, "tenants/"+object.OwnerTenantID+"/") {
+		if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, recordingobjectkey.TenantPrefix(object.OwnerTenantID)) {
 			return errors.New("object owner outside explicit erase scope")
 		}
 		return nil

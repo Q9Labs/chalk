@@ -48,13 +48,6 @@ func (q operationQuerier) CreateMembership(ctx context.Context, arg sqlc.CreateM
 	return membership, err
 }
 
-func (q operationQuerier) CreateRecording(ctx context.Context, arg sqlc.CreateRecordingParams) (sqlc.Recording, error) {
-	startedAt := time.Now()
-	recording, err := q.next.CreateRecording(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "CreateRecording", startedAt, err)
-	return recording, err
-}
-
 func (q operationQuerier) RelinquishCaptureRecordingJob(ctx context.Context, arg sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error) {
 	startedAt := time.Now()
 	job, err := q.next.RelinquishCaptureRecordingJob(ctx, arg)
@@ -193,13 +186,6 @@ func (q operationQuerier) UpdateTenantMembership(ctx context.Context, arg sqlc.U
 	membership, err := q.next.UpdateTenantMembership(ctx, arg)
 	LogOperation(ctx, q.logger, "db.query", "UpdateTenantMembership", startedAt, err)
 	return membership, err
-}
-
-func (q operationQuerier) UpdateTenantRecording(ctx context.Context, arg sqlc.UpdateTenantRecordingParams) (sqlc.Recording, error) {
-	startedAt := time.Now()
-	recording, err := q.next.UpdateTenantRecording(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "UpdateTenantRecording", startedAt, err)
-	return recording, err
 }
 
 func (q operationQuerier) UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error) {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestBindingPlacementReasonIsBoundedAndOptional(t *testing.T) {
-	binding, err := NewBinding("cloudflare_sfu", BindingSourceDeploymentDefault, "app")
+	binding, err := NewBinding(ProviderCloudflareSFU, BindingSourceDeploymentDefault, "app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestBindingPlacementFieldsAreAdditive(t *testing.T) {
 	if err := json.Unmarshal([]byte(legacy), &old); err != nil || old.Validate() != nil || old.PlacementReason != "" || old.NodeIncarnation != "" {
 		t.Fatalf("binding without placement fields: %#v, %v", old, err)
 	}
-	current, err := NewBinding("chalk_sfu", BindingSourceDeploymentDefault, "pool-a")
+	current, err := NewBinding(ProviderChalkSFU, BindingSourceDeploymentDefault, "pool-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestBindingPlacementFieldsAreAdditive(t *testing.T) {
 
 func placedOn(t *testing.T, node, incarnation string) Binding {
 	t.Helper()
-	binding, err := NewBinding("chalk_sfu", BindingSourceDeploymentDefault, "pool-a")
+	binding, err := NewBinding(ProviderChalkSFU, BindingSourceDeploymentDefault, "pool-a")
 	if err != nil {
 		t.Fatal(err)
 	}

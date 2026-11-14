@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -34,7 +35,7 @@ func NewProviderOperationRepositoryWithPool(pool *pgxpool.Pool) ProviderOperatio
 }
 
 func (r ProviderOperationRepository) Prepare(ctx context.Context, input provideroperations.OperationInput) (provideroperations.PrepareResult, error) {
-	canonical, err := provideroperations.Canonicalize(input)
+	canonical, err := input.Canonicalize()
 	if err != nil {
 		return provideroperations.PrepareResult{}, err
 	}
@@ -45,7 +46,7 @@ func (r ProviderOperationRepository) Prepare(ctx context.Context, input provider
 		EpisodeID:             uuid(canonical.Input.EpisodeID),
 		ParticipantID:         uuid(canonical.Input.ParticipantID),
 		ParticipantGeneration: providerOptionalInt8(canonical.Input.ParticipantGeneration),
-		PublicationSource:     providerText(canonical.Input.PublicationSource),
+		PublicationSource:     providerText(string(canonical.Input.PublicationSource)),
 		RecordingID:           uuid(canonical.Input.RecordingID),
 		RequestFingerprint:    canonical.Fingerprint[:],
 		RequestPayload:        []byte(canonical.Payload),
@@ -156,7 +157,7 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 }
 
 func (r ProviderOperationRepository) appendObservation(ctx context.Context, input provideroperations.ObservationInput, publisher *mediapublications.PublicationParticipant) (provideroperations.Observation, error) {
-	canonical, fingerprint, payload, err := provideroperations.CanonicalizeObservation(input)
+	canonical, fingerprint, payload, err := input.Canonicalize()
 	if err != nil {
 		return provideroperations.Observation{}, err
 	}
@@ -309,7 +310,7 @@ func mapProviderOperationReceipt(row providerOperationReceiptRow) provideroperat
 	copy(fingerprint[:], row.RequestFingerprint)
 	return provideroperations.Receipt{
 		OperationID: row.OperationID, Effect: provideroperations.Effect(row.Effect), TenantID: utilities.IDFromBytes(row.TenantID.Bytes), EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
-		ParticipantID: nullableID(row.ParticipantID), ParticipantGeneration: providerNullableInt64(row.ParticipantGeneration), PublicationSource: providerNullableTextValue(row.PublicationSource), RecordingID: nullableID(row.RecordingID),
+		ParticipantID: nullableID(row.ParticipantID), ParticipantGeneration: providerNullableInt64(row.ParticipantGeneration), PublicationSource: mediaplane.PublicationSource(providerNullableTextValue(row.PublicationSource)), RecordingID: nullableID(row.RecordingID),
 		Fingerprint: fingerprint, Payload: jsonRaw(row.RequestPayload), State: provideroperations.ReceiptState(row.State), Outcome: nullableOutcome(row.Outcome), Reason: providerNullableTextPointer(row.Reason), LastErrorCode: providerNullableTextPointer(row.LastErrorCode), CreatedAt: timestamp(row.CreatedAt), DispatchingAt: nullableTimestamp(row.DispatchingAt), CompletedAt: nullableTimestamp(row.CompletedAt),
 	}
 }
@@ -337,7 +338,7 @@ func mapProviderObservation(row providerOperationObservationRow) (provideroperat
 		if publication.PublicationID != nil {
 			publicationID = *publication.PublicationID
 		}
-		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantID: id, Source: publication.Source, Enabled: publication.Enabled, PublicationID: publicationID, Held: publication.Held})
+		result.Publications = append(result.Publications, provideroperations.Publication{ParticipantID: id, Source: mediaplane.PublicationSource(publication.Source), Enabled: publication.Enabled, PublicationID: publicationID, Held: publication.Held})
 	}
 	return result, nil
 }
