@@ -20,8 +20,13 @@ export function demotion(taskId) {
   return readRegister().find((entry) => entry.id === `gate:${taskId}`)?.demoted ?? null;
 }
 
+/** RegisterError means the register and the planner disagree. Running every job cannot fix it, so CI fails the selection job and stops. */
+export class RegisterError extends Error {
+  name = "RegisterError";
+}
+
 export function requireRegistered(taskId) {
   if (!gateTaskIds().includes(taskId)) {
-    throw new Error(`Gate task "${taskId}" has no entry in scripts/gates/checks.json. Add one with its purpose, owner, run points and consequence.`);
+    throw new RegisterError(`Gate task "${taskId}" has no entry in scripts/gates/checks.json. Add one with its purpose, owner, run points and consequence.`);
   }
 }

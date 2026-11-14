@@ -20,9 +20,12 @@ server_ref="${CHALK_EVAL_SERVER_REF:-HEAD}"
 git rev-parse "${server_ref}^{commit}" > "$state/server-revision"
 if [[ "$server_ref" != HEAD ]]; then
   source_root="$(mktemp -d "$state/source.XXXXXX")"
-  # Refs from before the MCP fold-in still reach features/mcp/api through the go.mod replace.
+  # Older refs still reach features/mcp/api, and refs from before the protocol module split have no
+  # features/media/sfu/protocol; take each replaced module the ref has.
   paths=(apps/api)
-  if git cat-file -e "${server_ref}:features/mcp/api" 2>/dev/null; then paths+=(features/mcp/api); fi
+  for module in features/mcp/api features/media/sfu/protocol; do
+    if git cat-file -e "${server_ref}:${module}" 2>/dev/null; then paths+=("$module"); fi
+  done
   git archive "$server_ref" "${paths[@]}" | tar -x -C "$source_root"
   cp apps/api/internal/adapters/postgres/mcp_eval_test.go "$source_root/apps/api/internal/adapters/postgres/mcp_eval_test.go"
 fi

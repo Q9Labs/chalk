@@ -89,7 +89,7 @@ export type ConnectionMediaFactoryInput = {
   readonly credential: () => Promise<string>;
   /** A fresh grant for the current media connection (no replacement); resolves to its media token. */
   readonly refreshCredential?: () => Promise<string>;
-  readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
+  readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly onTransportPath?: (path: TransportPath) => void;

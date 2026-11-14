@@ -74,7 +74,7 @@ const ACTION_METRICS = /** @type {const} */ ({
   "action.publish.first_frame_ms": { unit: "ms", description: "Camera on until the remote decodes the first new frame" },
   "action.publish.first_audio_ms": { unit: "ms", description: "Microphone on until the remote receives the first new audio packet" },
   "action.unpublish.removed_ms": { unit: "ms", description: "Camera off until the remote no longer holds a live camera track" },
-  "action.unpublish.audio_removed_ms": { unit: "ms", description: "Microphone off until the remote no longer holds a live microphone track" },
+  "action.unpublish.audio_removed_ms": { unit: "ms", description: "Microphone off until the remote microphone track is ended, or disabled and receiving no audio packets" },
   "action.screenshare.start_ms": { unit: "ms", description: "Screen share start until the remote decodes the first share frame" },
   "action.screenshare.stop_ms": { unit: "ms", description: "Screen share stop until the remote no longer holds a live share track" },
   "action.screenshare.start_signal_ms": { unit: "ms", description: "Screen share start until the remote's roster shows it active" },
@@ -92,7 +92,7 @@ export const METRICS = { ...ACTION_METRICS, .../** @type {Record<string, {unit: 
 export const WHOLE_CYCLE = "*";
 const tiers = ["pr", "nightly", "promote", "manual"];
 const environments = ["ci", "staging", "production"];
-const planes = ["chalk_sfu", "cf_sfu"];
+export const MEDIA_PLANES = ["chalk_sfu", "cf_sfu"];
 const isoTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const clientKinds = ["browser", "sdk"];
 // Free-form fields allow only these shapes. None holds a dot outside a browser version, so no host name fits, whatever its top-level domain.
@@ -117,7 +117,7 @@ function scorecardProblems(value) {
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
   exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "series", "dropped", "contention"], "scorecard", fail);
   runProblems(card?.run, fail);
-  if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
+  if (!MEDIA_PLANES.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${MEDIA_PLANES.join(", ")}`);
   metricProblems(card?.metrics, fail);
   if (card?.series !== undefined) seriesProblems(card.series, fail);
   dropProblems(card?.dropped, fail);
@@ -128,7 +128,6 @@ function scorecardProblems(value) {
 
 /**
  * @param {any} series
- * @param {any} metrics
  * @param {(problem: string) => void} fail
  */
 function seriesProblems(series, fail) {
@@ -161,7 +160,7 @@ function contentionProblems(value, fail) {
   const dates = ["lease_acquired_at_before", "lease_expires_at_before"];
   const fields = [...counts, ...booleans, ...dates, "lease_holder_before", "steal_max"];
   exactKeys(value, ["contended", "unobservable", "source", ...fields], "contention", fail);
-  if (typeof value?.contended !== "boolean" || !["axiom_api_logs_and_github_lease", "axiom_api_logs_and_metrics_and_github_lease"].includes(value?.source)) fail("contention: invalid status or source");
+  if (typeof value?.contended !== "boolean" || value?.source !== "axiom_api_logs_and_metrics_and_github_lease") fail("contention: invalid status or source");
   if (value?.unobservable !== undefined && typeof value.unobservable !== "boolean") fail("contention: unobservable must be a boolean");
   if (value?.source === "axiom_api_logs_and_metrics_and_github_lease" && value?.steal_max?.value === "unavailable" && !value?.contended && !value?.unobservable) fail("contention: unavailable node steal requires a contended card unless marked unobservable");
   for (const field of fields) {
@@ -270,6 +269,15 @@ function leakProblems(card, fail) {
   };
   const { id: _runId, ...run } = card?.run ?? {}; // The run id is checked as a plain label above.
   visit({ ...card, run }, "");
+}
+
+/**
+ * countsAsEvidence says whether a card may gate a run or serve as a baseline. A contended or unobservable
+ * measurement is diagnostic only, so every reader asks this one question instead of reading the two flags.
+ * @param {Scorecard} card
+ */
+export function countsAsEvidence(card) {
+  return !card.contention?.contended && !card.contention?.unobservable;
 }
 
 /**

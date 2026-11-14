@@ -49,7 +49,7 @@ func TestPublisherChosenRIDStaysOnTheNode(t *testing.T) {
 	bobScope := aliceScope
 	bobScope.ParticipantID = "bob"
 	create := func(id string, scope protocol.Scope) (*media.Session, string) {
-		response, err := node.CreateSession(id, scope)
+		response, err := node.Create(id, scope, media.ParticipantSession, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

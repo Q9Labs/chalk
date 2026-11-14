@@ -130,6 +130,10 @@ on:
       orchestrated:
         type: boolean
         default: false
+      gate_checked:
+        description: The caller already required this target's green master Gate in the same run (nightly `plan` does), so the release skips its own check. Only a caller can set it; a dispatch cannot.
+        type: boolean
+        default: false
       promotion_audit:
         description: Approved scorecard override audit from Promote selection; does not bypass release checks
         type: string
@@ -173,6 +177,9 @@ jobs:
   # The check runs the workflow's own release tooling, not the target's.
   require-gate:
     name: Require a green master Gate
+    # Nightly `plan` ran the same check on the same target seconds earlier. Repeating it costs a hosted-runner wait on the
+    # critical path (19.7 minutes in cut 43358933721) for 0.1 minutes of work.
+    if: ${{ !inputs.gate_checked }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -190,7 +197,9 @@ jobs:
   plan-managed:
     name: Plan managed components
     needs: require-gate
-    if: (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
+    if: >-
+      !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) &&
+      (inputs.release_managed || inputs.deploy_managed) && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     outputs:
       build_set: ${{ steps.plan.outputs.build_set }}
@@ -326,6 +335,8 @@ jobs:
   check-managed-contracts:
     name: Validate release source and pre-deploy contracts
     needs: plan-managed
+    # Without a status function a skipped require-gate (a cut) would skip this job through plan-managed, so it names plan-managed itself.
+    if: ${{ !cancelled() && needs.plan-managed.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact release
@@ -415,6 +426,7 @@ jobs:
             --platform linux/arm64 \
             --provenance=false \
             --build-context "$source_context" \
+            --build-context protocol_source=features/media/sfu/protocol \
             --cache-from "type=gha,scope=chalk-${COMPONENT}" \
             --cache-to "type=gha,scope=chalk-${COMPONENT},mode=max" \
             --file "$dockerfile" \
@@ -434,6 +446,7 @@ jobs:
             docker buildx build \
               --platform linux/arm64 --provenance=false \
               --build-context api_source=apps/api \
+              --build-context protocol_source=features/media/sfu/protocol \
               --cache-from type=gha,scope=chalk-recorder-control \
               --cache-to type=gha,scope=chalk-recorder-control,mode=max \
               --file infrastructure/managed-episode/images/recorder-control.Dockerfile \
@@ -482,10 +495,15 @@ jobs:
   build-media:
     name: Build immutable media release archives
     needs: plan-managed
-    if: needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
+    # A status function keeps a skipped require-gate (a cut) from skipping this job through plan-managed.
+    if: >-
+      !cancelled() && needs.plan-managed.result == 'success' &&
+      needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.recorder_control == 'true' && inputs.managed_environment == 'nightly'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    environment: nightly
+    environment:
+      name: nightly
+      deployment: false
     env:
       CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER }}
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
@@ -940,7 +958,7 @@ jobs:
     name: Build web-${{ matrix.target }} once
     needs: require-gate
     if: >-
-      !cancelled() && needs.require-gate.result == 'success' && inputs.deploy_web && inputs.manifest_run_id == ''
+      !cancelled() && contains(fromJSON('["success","skipped"]'), needs.require-gate.result) && inputs.deploy_web && inputs.manifest_run_id == ''
     runs-on: ubuntu-24.04
     strategy:
       matrix:

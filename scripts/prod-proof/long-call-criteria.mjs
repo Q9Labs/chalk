@@ -218,7 +218,7 @@ function hearingFailures({ toggles, hearings, guests }) {
   return failures;
 }
 
-// Mirrors features/media/sfu/internal/media/offer.go maxSDPBytes; the Go constant is not importable from this Node proof.
+// Mirrors protocol.MaxSDPBytes in features/media/sfu/protocol/routes.go; the Go constant is not importable from this Node proof.
 const nodeOfferBytesCap = 256 * 1024;
 
 export function signalLimitBytesForGuests(guests) {
