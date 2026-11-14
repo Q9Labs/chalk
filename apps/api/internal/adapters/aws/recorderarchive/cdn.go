@@ -1,6 +1,7 @@
 package recorderarchive
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -40,6 +41,26 @@ func NewCDN(baseURL, keyPairID, privateKeyBase64 string) (*CDN, error) {
 		return nil, err
 	}
 	return &CDN{baseURL: parsed, keyPairID: keyPairID, signer: sign.NewURLSigner(keyPairID, key)}, nil
+}
+
+// OptionalCDN accepts all three CDN settings or none and returns nil for none, so links come from S3.
+// A partial set is an error because it would silently fall back to S3 and its transfer cost.
+func OptionalCDN(baseURL, keyPairID, privateKeyBase64 string) (*CDN, error) {
+	if baseURL == "" && keyPairID == "" && privateKeyBase64 == "" {
+		return nil, nil
+	}
+	if baseURL == "" || keyPairID == "" || privateKeyBase64 == "" {
+		return nil, fmt.Errorf("%w: archive CDN needs URL, key pair ID and private key together", recorderfleet.ErrInvalidConfig)
+	}
+	return NewCDN(baseURL, keyPairID, privateKeyBase64)
+}
+
+// Link returns the archive download link: a signed CloudFront link when cdn is set, otherwise a presigned S3 link.
+func Link(ctx context.Context, cdn *CDN, archive recorderfleet.ArchiveSpec, startupTimeout time.Duration) (string, error) {
+	if cdn != nil {
+		return cdn.PresignCDN(archive, startupTimeout, time.Now())
+	}
+	return Presign(ctx, archive, startupTimeout)
 }
 
 // PresignCDN returns a signed CloudFront link for the archive that stays valid through the startup deadline.

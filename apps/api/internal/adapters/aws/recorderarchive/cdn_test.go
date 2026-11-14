@@ -1,6 +1,7 @@
 package recorderarchive
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -99,5 +100,31 @@ func TestNewCDNRejectsBadSettings(t *testing.T) {
 		if _, err := NewCDN(c[0], c[1], c[2]); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestOptionalCDNIsAllOrNone(t *testing.T) {
+	cdn, err := OptionalCDN("", "", "")
+	if err != nil || cdn != nil {
+		t.Fatalf("empty settings must keep S3 links: %v %v", cdn, err)
+	}
+	for _, partial := range [][3]string{{"https://d1.cloudfront.net", "", ""}, {"", "K", ""}, {"", "", "a2V5"}, {"https://d1.cloudfront.net", "K", ""}} {
+		if _, err := OptionalCDN(partial[0], partial[1], partial[2]); !errors.Is(err, recorderfleet.ErrInvalidConfig) {
+			t.Errorf("partial %v: %v", partial, err)
+		}
+	}
+}
+
+func TestLinkUsesTheCDNWhenSet(t *testing.T) {
+	cdn, err := OptionalCDN("https://d1.cloudfront.net", "K1", testKey(t, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := Link(context.Background(), cdn, testArchive(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(link, "https://d1.cloudfront.net/recorder/render/"+testSHA+".tar.gz?") {
+		t.Fatalf("link is not a CloudFront link: %s", link)
 	}
 }
