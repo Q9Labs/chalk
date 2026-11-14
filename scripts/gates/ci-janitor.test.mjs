@@ -47,11 +47,17 @@ test("the janitor deletes planned caches through the API, and a dry run deletes 
   const live = fakeGithub({ caches, pulls: [] });
   const lines = [];
   await janitor({ env: { GITHUB_TOKEN: "t", GITHUB_REPOSITORY: "o/r" }, fetchImpl: live.fetchImpl, now, log: (line) => lines.push(line) });
-  assert.deepEqual(live.calls.filter((call) => call.startsWith("DELETE")), [`DELETE o/r/actions/caches/${caches[0].id}`]);
+  assert.deepEqual(
+    live.calls.filter((call) => call.startsWith("DELETE")),
+    [`DELETE o/r/actions/caches/${caches[0].id}`],
+  );
   assert.match(lines.at(-1), /1 deletions/u);
   const dry = fakeGithub({ caches, pulls: [] });
   await janitor({ env: { GITHUB_TOKEN: "t", GITHUB_REPOSITORY: "o/r", CI_JANITOR_DRY_RUN: "true" }, fetchImpl: dry.fetchImpl, now, log: () => {} });
-  assert.deepEqual(dry.calls.filter((call) => call.startsWith("DELETE")), []);
+  assert.deepEqual(
+    dry.calls.filter((call) => call.startsWith("DELETE")),
+    [],
+  );
 });
 
 test("a failed GitHub call fails the run with the operation named", async () => {

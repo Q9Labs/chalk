@@ -62,10 +62,7 @@ export async function janitor({ env, fetchImpl = fetch, now = new Date(), log = 
   const { GITHUB_TOKEN: token, GITHUB_REPOSITORY: repository } = env;
   const dryRun = env.CI_JANITOR_DRY_RUN === "true";
   const { default_branch: defaultBranch } = await github({ fetchImpl, token, path: repository });
-  const [caches, pulls] = await Promise.all([
-    pages({ fetchImpl, token, path: `${repository}/actions/caches`, pick: (body) => body.actions_caches }),
-    pages({ fetchImpl, token, path: `${repository}/pulls?state=open`, pick: (body) => body }),
-  ]);
+  const [caches, pulls] = await Promise.all([pages({ fetchImpl, token, path: `${repository}/actions/caches`, pick: (body) => body.actions_caches }), pages({ fetchImpl, token, path: `${repository}/pulls?state=open`, pick: (body) => body })]);
   const { deletions, remainingBytes } = plan({ caches, openPulls: new Set(pulls.map((pull) => pull.number)), defaultRef: `refs/heads/${defaultBranch}`, now });
   const freed = deletions.reduce((sum, { cache }) => sum + cache.size_in_bytes, 0);
   for (const { cache, reason } of deletions) {

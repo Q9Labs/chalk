@@ -523,7 +523,6 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/analysis.test.mjs",
       "scripts/gates/ast-grep.test.mjs",
       "scripts/gates/mock-calls.test.mjs",
-      "scripts/gates/ci-janitor.test.mjs",
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
@@ -537,7 +536,7 @@ export function createGatePlan(files, options = {}) {
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", [
       "bash",
       "-c",
-      "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs scripts/gates/demoted.test.mjs",
+      "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs scripts/gates/demoted.test.mjs scripts/gates/ci-janitor.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
