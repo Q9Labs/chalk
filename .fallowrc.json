@@ -12,6 +12,7 @@
     "docs/statecharts/5-host-removes-student/HostActsOnStudent.view.mjs",
     "tools/formal/episode-lifecycle/EpisodeLifecycle.view.mjs",
     "tools/formal/screen-share-lease/ScreenShareLease.view.mjs",
+    "tools/formal/external-operations/ExternalOperations.view.mjs",
     "scripts/dev/multi-device-proof.mjs",
     "scripts/dev/camera-backgrounds-sfu-proof.mjs",
     "apps/web/tests/camera-backgrounds-mobile.mjs",

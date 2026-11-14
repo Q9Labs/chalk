@@ -443,6 +443,17 @@
       "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
     },
     {
+      "id": "workflow:formal-external-operations.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the external-operation queue, publication grants or role transitions that breaks the model-checked invariants or drifts from the model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs TLC for about 2 minutes only when a covered Sync file or the model changes, so it cannot be a required context for every pull request."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",

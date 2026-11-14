@@ -1,0 +1,42 @@
+name: Sync external-operation model
+
+# Model-checks the Sync external-operation queue. See
+# .agents/skills/external-operations-formal/SKILL.md. Keep these paths in step with
+# the skill's coverage record.
+on:
+  pull_request:
+    paths:
+      - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex
+      - tools/formal/external-operations/**
+      - tools/formal/tla2tools.sh
+      - .github/workflows/formal-external-operations.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-external-operations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Sync external-operation model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check the external-operation queue
+        run: tools/formal/external-operations/run.sh

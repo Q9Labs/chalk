@@ -1,0 +1,16 @@
+# Broken variants of the code. `run.sh` runs each one on the idealized settings
+# (see `findings`) and requires TLC to report the named rule as broken.
+# Format: <Break value><TAB><operations><TAB><nodes><TAB><Ordered><TAB><rule TLC must report><TAB><code edit it mirrors>
+# The two claim variants run without provider ordering: the Chalk SFU refuses a stale grant
+# by revision, so only the claim check protects a provider that applies controls in arrival order.
+# Paths are under apps/sync/lib/chalk_sync/stateholder/postgres/ for sql/ and the finalizer, and
+# apps/sync/lib/chalk_sync/ otherwise.
+claim_ignores_grant_source	rt	n1	FALSE	DemotedPublishesOnlyWhileCleanupRuns	sql/external_operation_claims.ex drops the `source is not null and not exists (... reservation ...)` check, so a source stop runs while a grant is in flight
+claim_ignores_grant_remove	rem	n1	FALSE	RemovedNeverPublishes	sql/external_operation_claims.ex drops the reservation check of the `operation_name in ('remove_participant')` branch
+reserve_ignores_capability	rt	n1	TRUE	DemotedPublishesOnlyWhileCleanupRuns	publication_grants.ex reserve_transaction drops `validate_capability`
+role_ignores_reservation	rt	n1	TRUE	DemotedPublishesOnlyWhileCleanupRuns	role_transition_planner.ex drops `lock_publication_reservations`, so an open reservation does not count as an exercised source
+rt_skips_provider	rt	n1	TRUE	DemotedPublishesOnlyWhileCleanupRuns	external_operation_consumer.ex dispatches :role_transition_source_stop as a local operation
+rem_skips_provider	rem	n1	TRUE	RemovedNeverPublishes	external_operation_consumer.ex dispatches :remove_participant as a local operation
+end_skips_provider	end	n1	TRUE	EndedNeverPublishes	external_operation_consumer.ex dispatches the end-Episode operations as local operations
+finalize_ignores_status	rt	n1,n2	TRUE	AppliedOnce	external_operation_finalizer.ex drops the `external.status != :pending` clause
+pending_never_gives_up	rem	n1	TRUE	OperationsSettle	external_operation_consumer.ex drops `operation.attempt_count >= @max_attempts` from the :pending branch
