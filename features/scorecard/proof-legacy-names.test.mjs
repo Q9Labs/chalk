@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -10,18 +10,17 @@ const root = resolve(import.meta.dirname, "../..");
 const proofJob = Object.values(load(readFileSync(resolve(root, ".github/workflows/real-call-proof.yml"), "utf8")).jobs).find((job) => job.steps?.some((step) => step.id === "prove"));
 const script = proofJob.steps.find((step) => step.id === "prove").run;
 
-// Runs the real "Prove a real call" script with `node` standing in for a registry from before the rename, which knows only the old names.
+// Runs the real "Prove a real call" script against the real registry.mjs, whose registry.json holds only the names from before the rename. The proof
+// runner (`pnpm prod:proof`, which calls the live API) is the one boundary replaced.
 function runProofStep({ beforeRename }) {
   const directory = mkdtempSync(join(tmpdir(), "legacy-proof-"));
   const output = join(directory, "output");
   const calls = join(directory, "calls");
-  for (const [name, body] of Object.entries({
-    node: `#!/bin/sh\ncase "$*" in *"registry.mjs check"*) case "$*" in *chalk-sfu*) echo "Unsupported proof command: $*" >&2; exit 1;; esac;; esac\n`,
-    pnpm: `#!/bin/sh\necho "$*" >> "${calls}"\n`,
-  })) {
-    writeFileSync(join(directory, name), body);
-    chmodSync(join(directory, name), 0o755);
-  }
+  mkdirSync(join(directory, "scripts/prod-proof"), { recursive: true });
+  copyFileSync(join(root, "scripts/prod-proof/registry.mjs"), join(directory, "scripts/prod-proof/registry.mjs"));
+  writeFileSync(join(directory, "scripts/prod-proof/registry.json"), readFileSync(join(root, "scripts/prod-proof/registry.json"), "utf8").replaceAll("chalk-sfu", "own-sfu"));
+  writeFileSync(join(directory, "pnpm"), `#!/bin/sh\necho "$*" >> "${calls}"\n`);
+  chmodSync(join(directory, "pnpm"), 0o755);
   writeFileSync(join(directory, "step.sh"), script);
   try {
     const result = spawnSync("bash", ["-e", join(directory, "step.sh")], {
