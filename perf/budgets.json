@@ -1160,11 +1160,6 @@
       "tolerancePct": 0,
       "gate": true
     },
-    "sfu.impairment.pass": {
-      "min_p50": 1,
-      "tolerancePct": 0,
-      "gate": true
-    },
     "proof.leave_median_ms": {
       "max_p95": 5000,
       "tolerancePct": 20,

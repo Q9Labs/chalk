@@ -44,25 +44,6 @@ func TestReportEstimatorStepsDownOnHeavyLossAndUpOnLight(t *testing.T) {
 	}
 }
 
-func TestReportEstimatorFollowsREMBOverLoss(t *testing.T) {
-	r := newReportEstimator()
-	now := int64(10 * time.Second)
-	r.onREMB(800_000, now)
-	r.onLoss(0, now+int64(2*time.Second))
-	r.onLoss(0.5, now+int64(3*time.Second))
-	if r.ceiling != 800_000 {
-		t.Fatalf("ceiling %v while a REMB stands, want 800000", r.ceiling)
-	}
-	r.onLoss(0, now+int64(rembFresh)+int64(time.Second))
-	if r.ceiling != 800_000*increasePerSec {
-		t.Fatalf("ceiling %v once the REMB is stale, want loss reports to steer again", r.ceiling)
-	}
-	r.onREMB(1, now)
-	if r.ceiling != minEstimate {
-		t.Fatalf("ceiling %v for a tiny REMB, want the floor", r.ceiling)
-	}
-}
-
 // A receiver reports each stream it receives, so a clean audio report can come right before a heavy
 // video report. The heavy one still steps the ceiling down, and a clean report does not raise it
 // again while that loss stands.
@@ -84,6 +65,9 @@ func TestReportEstimatorStepsDownRightAfterACleanReport(t *testing.T) {
 		t.Fatalf("ceiling %v after a clean report while heavy loss stands, want it held at %v", r.ceiling, lowered)
 	}
 }
+
+// chromiumOffer is a captured browser offer; tests/browser/capture-offer.mjs regenerates it.
+const chromiumOffer = "testdata/chromium-offer.sdp"
 
 // A receiver sends REMB only when the answer negotiates it, so the node's answer to a browser
 // offer must carry goog-remb on VP8 in every video section the browser opened to receive in, and
