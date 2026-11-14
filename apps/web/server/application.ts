@@ -4,57 +4,21 @@ import { configuration } from "./config";
 import type { Authentication, Identity, IdentityProvider } from "./identity";
 import { binding, checkCsrf, clearSeatCookies, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
 import { sealSession } from "./session";
-import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
+import { body, form, DashboardError, exactOrigin, json, query, redirect } from "./http";
 import { withSessionEngine, resolveTenant } from "./engine";
-import { homeMutation, homePage, homeStatus } from "./home";
-import { ownerAccess } from "./owner-access";
-import { viewerSeat } from "./owner-seats";
-import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
-import { pastMutation, pastSessionPage, pastTranscriptText } from "./past-session";
-import { developerMutation, developerPage } from "./developer";
-import { recordingsPage, sessionsPage } from "./sessions";
+import { pages, type Context } from "./pages";
 import { edgeCache, favicon } from "./favicon";
-import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
-import {
-  connectAction,
-  connectQuery,
-  connectionsAction,
-  transcriptTextQuery,
-  callAction,
-  callQuery,
-  callStatusQuery,
-  callMetadataQuery,
-  homeStatusQuery,
-  developerAction,
-  developerQuery,
-  homeAction,
-  pageQuery,
-  pastAction,
-  pastQuery,
-  recordingsQuery,
-  sessionsQuery,
-} from "../src/lib/dashboard/contracts";
+import { DASHBOARD_RETURN_PATH } from "../src/lib/dashboard/return-path";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
   provider: z.enum(["google", "apple"]),
-  returnTo: z
-    .string()
-    .regex(/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/)
-    .default("/dashboard"),
+  returnTo: z.string().regex(DASHBOARD_RETURN_PATH).default("/dashboard"),
 });
 const callbackQuery = z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024), user: z.string().max(4096).optional() });
 const transaction = z.object({ state: z.string(), codeVerifier: z.string(), nonce: z.string(), previous: z.object({ userId: z.string(), name: z.string() }).optional(), returnTo: z.string(), provider: z.enum(["google", "apple"]), expiresAt: z.number() });
 const emptyBody = z.strictObject({});
 const faviconQuery = z.strictObject({ host: z.string().min(1).max(253) });
-function query(request: Request): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [key, value] of new URL(request.url).searchParams) {
-    if (Object.hasOwn(values, key)) throw new DashboardError(400, "duplicate_parameter");
-    values[key] = value;
-  }
-  return values;
-}
 async function current(request: Request, env: DashboardEnvironment, provider: IdentityProvider): Promise<Identity> {
   const sealed = readCookie(request, env, "session");
   if (!sealed) throw new DashboardError(401, "sign_in_required");
@@ -67,56 +31,80 @@ async function current(request: Request, env: DashboardEnvironment, provider: Id
 async function sessionDTO(person: Identity, env: DashboardEnvironment): Promise<SessionDTO> {
   return { profile: { id: person.userId, name: person.name, email: person.email, avatarUrl: person.avatarUrl }, csrfToken: await csrfToken(person, env) };
 }
+type Provider = "google" | "apple";
+type AuthContext = { readonly request: Request; readonly env: DashboardEnvironment; readonly provider: IdentityProvider };
+
+async function authStart({ request, env, provider }: AuthContext): Promise<Response> {
+  const input = startQuery.parse(query(request));
+  const login = await provider.start(input.provider);
+  const response = redirect(login.url);
+  const existing = readCookie(request, env, "session");
+  const authenticated: Authentication = existing ? await provider.authenticate(existing) : { kind: "unauthenticated" };
+  const previous = authenticated.kind === "authenticated" && authenticated.identity.provider === input.provider ? { userId: authenticated.identity.userId, name: authenticated.identity.name } : undefined;
+  writeCookie(response, env, `login_${input.provider}`, await seal({ state: login.state, codeVerifier: login.codeVerifier, nonce: login.nonce, previous, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.SESSION_SECRET, `login_${input.provider}`), 600);
+  return response;
+}
+
+async function completeSignIn({ request, env, provider }: AuthContext, name: Provider): Promise<Response> {
+  if (name === "apple" && request.headers.get("Origin") !== "https://appleid.apple.com") throw new DashboardError(403, "origin_rejected");
+  const loginCookie = readCookie(request, env, `login_${name}`);
+  if (!loginCookie) throw new DashboardError(400, "login_state_missing");
+  const login = transaction.parse(await unseal(loginCookie, env.SESSION_SECRET, `login_${name}`));
+  const input = callbackQuery.parse(name === "apple" ? await form(request) : query(request));
+  if (login.expiresAt <= Date.now() || login.state !== input.state || login.provider !== name) throw new DashboardError(400, "login_state_rejected");
+  const identity = await provider.exchange({ ...input, provider: name, codeVerifier: login.codeVerifier, nonce: login.nonce });
+  if (!identity.name && login.previous?.userId === identity.userId) identity.name = login.previous.name;
+  if (!identity.name) identity.name = identity.email;
+  await resolveTenant(env, identity, true);
+  const response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
+  await setSession(response, env, await sealSession(identity, env.SESSION_SECRET), identity);
+  return response;
+}
+
+/** A failed sign-in goes back to the sign-in page, not to a JSON error. The login cookie is spent either way. */
+async function authCallback(context: AuthContext, name: Provider): Promise<Response> {
+  let response: Response;
+  try {
+    response = await completeSignIn(context, name);
+  } catch (error) {
+    const failed = failure(error);
+    response = redirect(`/dashboard/sign-in?failed=${name}`);
+    response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
+  }
+  writeCookie(response, context.env, `login_${name}`, "", 0);
+  return response;
+}
+
+async function authLeave({ request, env }: AuthContext, signOut: boolean): Promise<Response> {
+  exactOrigin(request, env.DASHBOARD_ORIGIN);
+  emptyBody.parse(await body(request));
+  const bound = await binding(request, env);
+  await checkCsrf(request, bound, env);
+  const response = json(signOut ? { ok: true, clearLocalBookmarks: true } : { ok: true });
+  if (signOut) clearSession(response, env, request);
+  else clearSeatCookies(response, request, env);
+  return response;
+}
+
 async function auth(request: Request, env: DashboardEnvironment, provider: IdentityProvider, path: string): Promise<Response> {
-  if (request.method === "GET" && path === "/auth/start") {
-    const input = startQuery.parse(query(request));
-    const login = await provider.start(input.provider);
-    const response = redirect(login.url);
-    const existing = readCookie(request, env, "session");
-    const authenticated: Authentication = existing ? await provider.authenticate(existing) : { kind: "unauthenticated" };
-    const previous = authenticated.kind === "authenticated" && authenticated.identity.provider === input.provider ? { userId: authenticated.identity.userId, name: authenticated.identity.name } : undefined;
-    writeCookie(response, env, `login_${input.provider}`, await seal({ state: login.state, codeVerifier: login.codeVerifier, nonce: login.nonce, previous, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.SESSION_SECRET, `login_${input.provider}`), 600);
-    return response;
+  const context = { request, env, provider };
+  const route = `${request.method} ${path}`;
+  switch (route) {
+    case "GET /auth/start":
+      return authStart(context);
+    case "GET /auth/callback/google":
+      return authCallback(context, "google");
+    case "POST /auth/callback/apple":
+      return authCallback(context, "apple");
+    case "GET /auth/session":
+      return json(await sessionDTO(await current(request, env, provider), env));
+    case "POST /auth/sign-out":
+      return authLeave(context, true);
+    case "POST /auth/clear-owner-seats":
+      return authLeave(context, false);
+    default:
+      throw new DashboardError(405, "method_not_allowed");
   }
-  const providerName = path === "/auth/callback/apple" ? "apple" : "google";
-  if ((request.method === "GET" && path === "/auth/callback/google") || (request.method === "POST" && path === "/auth/callback/apple")) {
-    let response: Response;
-    try {
-      if (providerName === "apple" && request.headers.get("Origin") !== "https://appleid.apple.com") throw new DashboardError(403, "origin_rejected");
-      const loginCookie = readCookie(request, env, `login_${providerName}`);
-      if (!loginCookie) throw new DashboardError(400, "login_state_missing");
-      const login = transaction.parse(await unseal(loginCookie, env.SESSION_SECRET, `login_${providerName}`));
-      const values = providerName === "apple" ? await form(request) : query(request);
-      const input = callbackQuery.parse(values);
-      if (login.expiresAt <= Date.now() || login.state !== input.state || login.provider !== providerName) throw new DashboardError(400, "login_state_rejected");
-      const identity = await provider.exchange({ ...input, provider: providerName, codeVerifier: login.codeVerifier, nonce: login.nonce });
-      if (!identity.name && login.previous?.userId === identity.userId) identity.name = login.previous.name;
-      if (!identity.name) identity.name = identity.email;
-      await resolveTenant(env, identity, true);
-      response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
-      await setSession(response, env, await sealSession(identity, env.SESSION_SECRET), identity);
-    } catch (error) {
-      const failed = failure(error);
-      response = redirect(`/dashboard/sign-in?failed=${providerName}`);
-      response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
-    }
-    writeCookie(response, env, `login_${providerName}`, "", 0);
-    return response;
-  }
-  if (request.method === "GET" && path === "/auth/session") {
-    return json(await sessionDTO(await current(request, env, provider), env));
-  }
-  if (request.method === "POST" && (path === "/auth/sign-out" || path === "/auth/clear-owner-seats")) {
-    exactOrigin(request, env.DASHBOARD_ORIGIN);
-    emptyBody.parse(await body(request));
-    const bound = await binding(request, env);
-    await checkCsrf(request, bound, env);
-    const response = json(path === "/auth/sign-out" ? { ok: true, clearLocalBookmarks: true } : { ok: true });
-    if (path === "/auth/sign-out") clearSession(response, env, request);
-    else clearSeatCookies(response, request, env);
-    return response;
-  }
-  throw new DashboardError(405, "method_not_allowed");
 }
 async function dashboard(request: Request, env: DashboardEnvironment, provider: IdentityProvider, path: string): Promise<Response> {
   if (request.method !== "GET" && request.method !== "POST") throw new DashboardError(405, "method_not_allowed");
@@ -124,71 +112,12 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   const person = await current(request, env, provider);
   if (request.method === "POST") await checkCsrf(request, person, env);
   if (request.method === "GET" && path === "/dashboard-api/favicon") return favicon(faviconQuery.parse(query(request)).host, { fetcher: fetch, cache: edgeCache() });
-  return withSessionEngine(request, env, person, async (client) => {
-    if (request.method === "GET") {
-      switch (path) {
-        case "/dashboard-api/home":
-          return json(await homePage(client, pageQuery.parse(query(request)).cursor));
-        case "/dashboard-api/call-status":
-          return json(await callStatus(client, callStatusQuery.parse(query(request)).spaceId));
-        case "/dashboard-api/call-invite":
-          return json(await callInvite(client, callStatusQuery.parse(query(request)).spaceId));
-        case "/dashboard-api/call-metadata":
-          return json(await callMetadata(client, callMetadataQuery.parse(query(request))));
-        case "/dashboard-api/home-status":
-          return json(await homeStatus(client, homeStatusQuery.parse(query(request))));
-        case "/dashboard-api/call": {
-          const input = callQuery.parse(query(request));
-          return json(await callPage(client, input.spaceId, input.cursor));
-        }
-        case "/dashboard-api/transcript-text":
-          return pastTranscriptText(client, env, transcriptTextQuery.parse(query(request)));
-        case "/dashboard-api/past-session": {
-          const input = pastQuery.parse(query(request));
-          return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
-        }
-        case "/dashboard-api/sessions":
-          return json(await sessionsPage(client, sessionsQuery.parse(query(request))));
-        case "/dashboard-api/recordings":
-          return json(await recordingsPage(client, recordingsQuery.parse(query(request))));
-        case "/dashboard-api/developer":
-          return json(await developerPage(client, developerQuery.parse(query(request))));
-        case "/dashboard-api/connect":
-          return json(await connectPage(client, connectQuery.parse(query(request)).request));
-        case "/dashboard-api/connections":
-          return json(await connectionsPage(client, pageQuery.parse(query(request)).cursor));
-        default:
-          throw new DashboardError(404, "route_not_found");
-      }
-    }
-    const input = await body(request);
-    switch (path) {
-      case "/dashboard-api/home": {
-        const action = homeAction.parse(input);
-        return json(await homeMutation(client, action));
-      }
-      case "/dashboard-api/call": {
-        const action = callAction.parse(input);
-        if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
-        const response = json(await callMutation(client, action));
-        if (action.action === "end-for-everyone") clearSeatCookies(response, request, env);
-        return response;
-      }
-      case "/dashboard-api/past-session": {
-        const action = pastAction.parse(input);
-        return json(await pastMutation(client, action));
-      }
-      case "/dashboard-api/developer": {
-        const action = developerAction.parse(input);
-        return json(await developerMutation(client, action));
-      }
-      case "/dashboard-api/connect":
-        return json(await connectMutation(client, connectAction.parse(input)));
-      case "/dashboard-api/connections":
-        return json(await connectionsMutation(client, connectionsAction.parse(input)));
-      default:
-        throw new DashboardError(404, "route_not_found");
-    }
+  const name = path.slice("/dashboard-api/".length);
+  const page = Object.hasOwn(pages, name) ? pages[name as keyof typeof pages] : undefined;
+  if (!page) throw new DashboardError(404, "route_not_found");
+  return withSessionEngine(request, env, person, async (engine) => {
+    const context: Context = { engine, request, env, person };
+    return request.method === "GET" ? page.read(context) : page.act(context, await body(request));
   });
 }
 function failure(error: unknown): Response {

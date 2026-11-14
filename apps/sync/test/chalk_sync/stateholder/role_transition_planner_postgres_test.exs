@@ -1,7 +1,7 @@
 defmodule ChalkSync.Stateholder.RoleTransitionPlannerPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.ExternalOperationConsumer.Execution
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Stateholder.Command
   alias ChalkSync.Stateholder.Postgres
@@ -67,7 +67,7 @@ defmodule ChalkSync.Stateholder.RoleTransitionPlannerPostgresTest do
     stop = claim_stop(connection, episode, parent_id, "microphone")
 
     assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                episode,
                stop,
                {MediaPlaneTestAdapter, adapter},
@@ -98,7 +98,7 @@ defmodule ChalkSync.Stateholder.RoleTransitionPlannerPostgresTest do
     stop = claim_stop(connection, episode, parent_id, "microphone")
 
     assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                episode,
                stop,
                {MediaPlaneTestAdapter, adapter},

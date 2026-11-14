@@ -5,15 +5,26 @@ defmodule ChalkSync.Retention.Scheduler do
   Cleanup failures remain observable and retry on the next fixed interval. They
   never crash the sync supervision tree or broaden a batch beyond the worker's
   database-enforced limits.
+
+  A batch that finds nothing to clean waits `idle_interval_ms` before it asks
+  again, so a quiet system does not scan every second. An Episode whose history
+  fails verification is held: it is excluded from later batches so it cannot
+  block the Episodes behind it, and it is tried again once an hour. Held
+  Episodes show in `health/1` and in the log.
   """
 
   use GenServer
 
+  require Logger
+
   alias ChalkSync.Database
   alias ChalkSync.Retention.CleanupWorker
   alias ChalkSync.Telemetry
+  alias ChalkSync.UUID
 
   @default_interval_ms 1_000
+  @default_idle_interval_ms 30_000
+  @held_retry_ms 60 * 60 * 1_000
 
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -41,10 +52,14 @@ defmodule ChalkSync.Retention.Scheduler do
 
     state = %{
       interval_ms: interval_ms,
-      cleanup_fun: Keyword.get(options, :cleanup_fun, &cleanup_once/0),
+      idle_interval_ms: Keyword.get(options, :idle_interval_ms, @default_idle_interval_ms),
+      held: %{},
+      held_retry_at_ms: nil,
+      cleanup_fun: Keyword.get(options, :cleanup_fun, &cleanup_once/1),
       clock: Keyword.get(options, :clock, fn -> System.monotonic_time(:microsecond) end),
       last_success_at_ms: nil,
       consecutive_failures: 0,
+      next_interval_ms: interval_ms,
       episodes: 0,
       event_rows: 0,
       receipt_rows: 0,
@@ -104,7 +119,8 @@ defmodule ChalkSync.Retention.Scheduler do
 
   defp ensure_cleanup(state) do
     owner = self()
-    cleanup_fun = state.cleanup_fun
+    state = release_due_held(state)
+    cleanup_fun = fn -> state.cleanup_fun.(Map.keys(state.held)) end
     started_at_us = state.clock.()
 
     {pid, ref} =
@@ -132,8 +148,29 @@ defmodule ChalkSync.Retention.Scheduler do
     Enum.each(next.cleanup_waiters, &GenServer.reply(&1, reply))
     next = %{next | cleanup_waiters: []}
 
-    if next.auto_run?, do: Process.send_after(self(), :cleanup, next.interval_ms)
+    if next.auto_run?, do: Process.send_after(self(), :cleanup, next.next_interval_ms)
     next
+  end
+
+  defp release_due_held(%{held_retry_at_ms: nil} = state), do: state
+
+  defp release_due_held(state) do
+    if System.monotonic_time(:millisecond) >= state.held_retry_at_ms do
+      %{state | held: %{}, held_retry_at_ms: nil}
+    else
+      state
+    end
+  end
+
+  defp hold(state, []), do: state
+
+  defp hold(state, held) do
+    Enum.each(held, fn {episode_id, reason} ->
+      Logger.error("retention cleanup held Episode #{UUID.load!(episode_id)}: #{inspect(reason)}")
+    end)
+
+    retry_at = state.held_retry_at_ms || System.monotonic_time(:millisecond) + @held_retry_ms
+    %{state | held: Map.merge(state.held, Map.new(held)), held_retry_at_ms: retry_at}
   end
 
   defp apply_cleanup(state, result, duration_us) do
@@ -152,13 +189,15 @@ defmodule ChalkSync.Retention.Scheduler do
           state
           | last_success_at_ms: System.monotonic_time(:millisecond),
             consecutive_failures: 0,
+            next_interval_ms:
+              if(cleanup.episodes == 0, do: state.idle_interval_ms, else: state.interval_ms),
             episodes: state.episodes + cleanup.episodes,
             event_rows: state.event_rows + cleanup.event_rows,
             receipt_rows: state.receipt_rows + cleanup.receipt_rows,
             lifecycle_intent_rows: state.lifecycle_intent_rows + cleanup.lifecycle_intent_rows
         }
 
-        {result, next}
+        {result, hold(next, cleanup.held)}
 
       {:error, reason} ->
         Telemetry.execute(
@@ -167,7 +206,12 @@ defmodule ChalkSync.Retention.Scheduler do
           Map.merge(%{outcome: :failure}, failure_metadata(reason))
         )
 
-        {result, %{state | consecutive_failures: state.consecutive_failures + 1}}
+        {result,
+         %{
+           state
+           | consecutive_failures: state.consecutive_failures + 1,
+             next_interval_ms: state.interval_ms
+         }}
     end
   end
 
@@ -213,8 +257,10 @@ defmodule ChalkSync.Retention.Scheduler do
   defp normalize_error_reason(reason) when is_tuple(reason), do: :tuple_reason
   defp normalize_error_reason(_reason), do: :unknown_reason
 
-  defp cleanup_once do
-    CleanupWorker.run_once(Database.connection_for(:retention))
+  defp cleanup_once(excluded_episode_ids) do
+    CleanupWorker.run_once(Database.connection_for(:retention),
+      excluded_episode_ids: excluded_episode_ids
+    )
   end
 
   defp public_health(state) do
@@ -222,6 +268,7 @@ defmodule ChalkSync.Retention.Scheduler do
       status: if(state.consecutive_failures == 0, do: "ok", else: "degraded"),
       consecutive_failures: state.consecutive_failures,
       last_success_age_ms: age_ms(state.last_success_at_ms),
+      held_episodes: map_size(state.held),
       cleaned_episodes: state.episodes,
       deleted_event_rows: state.event_rows,
       deleted_receipt_rows: state.receipt_rows,

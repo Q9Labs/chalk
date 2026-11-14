@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -284,7 +285,7 @@ func (r SpaceRepository) restoreSpaceWithWebhook(ctx context.Context, tenantID, 
 	return r.withSpaceRoles(ctx, after)
 }
 
-func samePlaneSetting(a, b *spaces.MediaPlaneProvider) bool {
+func samePlaneSetting(a, b *mediaplane.Provider) bool {
 	if a == nil || b == nil {
 		return a == b
 	}

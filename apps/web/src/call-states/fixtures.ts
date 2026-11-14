@@ -86,6 +86,55 @@ function networkSamples(kind: "steady" | "unstable"): readonly CallStatsSample[]
 
 const startedAt = new Date(Date.now() - (25 * 60 + 9) * 1000).toISOString();
 
+function remoteMedia(others: readonly Person[]): RemoteMedia[] {
+  return others.flatMap((person, index) => [
+    ...(person.camera === false ? [] : [{ participantId: person.id, source: "camera" as const, publicationId: `${person.id}-camera`, track: cameraTrack(person.name, BACKGROUNDS[index % BACKGROUNDS.length]!) }]),
+    ...(person.sharing ? [{ participantId: person.id, source: "screen" as const, publicationId: `${person.id}-screen`, track: screenTrack() }] : []),
+  ]);
+}
+
+function admissionQueue(admission: LiveOptions["admission"], now: number) {
+  return ["Rania Aziz", "Omar Haddad", "Lena Fischer"]
+    .slice(0, admission === true ? 1 : admission || 0)
+    .map((displayName, index) => ({ requestId: `req-${index + 1}`, participantId: `guest-${index + 1}`, displayName, initialRole: "guest" as const, eligibleRoles: ["guest" as const], expiresAt: new Date(now + 60_000).toISOString() }));
+}
+
+function pendingOffline(now: number) {
+  return {
+    pending: [
+      { id: "o1", kind: "chat_message" as const, text: "Can everyone see my screen?", queuedAt: now - 12_000 },
+      { id: "o2", kind: "hand_raise" as const, text: null, queuedAt: now - 9_000 },
+    ],
+    decisionNeeded: true,
+    policy: "ask" as const,
+  };
+}
+
+function whiteboardState(board: boolean, capabilities: readonly Capability[]): SpaceSnapshot["whiteboard"] {
+  return {
+    open: board,
+    engine: { status: board ? "ready" : "unsubscribed", sceneId: board ? "scene-1" : null, revision: board ? "1" : null, presenting: board, error: null },
+    access: { canDraw: capabilities.includes("drawWhiteboard"), policy: "everyone", permissions: [] },
+  };
+}
+
+type SelfMedia = { camera?: boolean; microphone?: boolean; sharing?: boolean };
+
+function liveMedia(base: SpaceSnapshot["media"], options: LiveOptions, self: SelfMedia, now: number): SpaceSnapshot["media"] {
+  return {
+    ...base,
+    local: {
+      microphone: { source: "microphone", state: self.microphone ? "enabled" : "disabled", track: null },
+      camera: { source: "camera", state: self.camera ? "enabled" : "disabled", track: self.camera ? cameraTrack(SELF_NAME, "#5d6b78") : null },
+      screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
+    },
+    remote: remoteMedia(options.others ?? []),
+    ...(options.network ? { callStats: networkSamples(options.network) } : {}),
+    ...(options.link ? { link: options.link } : {}),
+    incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
+  };
+}
+
 export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const capabilities = options.capabilities ?? GUEST;
   const base = createSnapshot(capabilities);
@@ -93,50 +142,20 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const others = options.others ?? [];
   const now = Date.now();
   const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, person.host ? HOST : GUEST))];
-  const remote: RemoteMedia[] = others.flatMap((person, index) => [
-    ...(person.camera === false ? [] : [{ participantId: person.id, source: "camera" as const, publicationId: `${person.id}-camera`, track: cameraTrack(person.name, BACKGROUNDS[index % BACKGROUNDS.length]!) }]),
-    ...(person.sharing ? [{ participantId: person.id, source: "screen" as const, publicationId: `${person.id}-screen`, track: screenTrack() }] : []),
-  ]);
   return {
     ...base,
-    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null, episodeEnded: false, removedByHost: false },
+    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null, episodeEnded: false, removedByHost: false, timedOut: false },
     self: { ...base.self, participantId: SELF_ID, displayName: SELF_NAME, role: capabilities === HOST ? "host" : "guest", handRaised: self.handRaised ?? false },
     participants: {
       roster,
-      admissionQueue: ["Rania Aziz", "Omar Haddad", "Lena Fischer"]
-        .slice(0, options.admission === true ? 1 : options.admission || 0)
-        .map((displayName, index) => ({ requestId: `req-${index + 1}`, participantId: `guest-${index + 1}`, displayName, initialRole: "guest" as const, eligibleRoles: ["guest" as const], expiresAt: new Date(now + 60_000).toISOString() })),
+      admissionQueue: admissionQueue(options.admission, now),
     },
-    media: {
-      ...base.media,
-      local: {
-        microphone: { source: "microphone", state: self.microphone ? "enabled" : "disabled", track: null },
-        camera: { source: "camera", state: self.camera ? "enabled" : "disabled", track: self.camera ? cameraTrack(SELF_NAME, "#5d6b78") : null },
-        screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
-      },
-      remote,
-      ...(options.network ? { callStats: networkSamples(options.network) } : {}),
-      ...(options.link ? { link: options.link } : {}),
-      incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
-    },
+    media: liveMedia(base.media, options, self, now),
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },
     reactions: options.reactions ? { active: [{ eventId: "r1", participantId: "nora", displayName: "Nora Patel", reaction: "🎉", occurredAt: new Date(now).toISOString(), expiresAt: new Date(now + 60_000).toISOString() }] } : base.reactions,
     recording: { current: options.recording ? { recordingId: "rec-1", status: "recording", failureCode: null } : null },
-    offline: options.offlinePending
-      ? {
-          pending: [
-            { id: "o1", kind: "chat_message", text: "Can everyone see my screen?", queuedAt: now - 12_000 },
-            { id: "o2", kind: "hand_raise", text: null, queuedAt: now - 9_000 },
-          ],
-          decisionNeeded: true,
-          policy: "ask",
-        }
-      : base.offline,
-    whiteboard: {
-      open: Boolean(options.board),
-      engine: { status: options.board ? "ready" : "unsubscribed", sceneId: options.board ? "scene-1" : null, revision: options.board ? "1" : null, presenting: Boolean(options.board), error: null },
-      access: { canDraw: capabilities.includes("drawWhiteboard"), policy: "everyone", permissions: [] },
-    },
+    offline: options.offlinePending ? pendingOffline(now) : base.offline,
+    whiteboard: whiteboardState(Boolean(options.board), capabilities),
   };
 }
 

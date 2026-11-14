@@ -34,6 +34,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -111,7 +112,7 @@ type request struct {
 	command string
 	tenant  utilities.ID
 	space   utilities.ID
-	plane   *spaces.MediaPlaneProvider
+	plane   *mediaplane.Provider
 	dryRun  bool
 	// flip is set for new-episodes --state: paused is the value to write.
 	flip     bool
@@ -180,7 +181,7 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool)
 	case "":
 		return request{}, errors.New("set needs --plane cf_sfu, chalk_sfu or inherit")
 	default:
-		plane, err := spaces.ParseMediaPlaneProvider(planeText)
+		plane, err := mediaplane.ParseSettingName(planeText)
 		if err != nil {
 			return request{}, errors.New("--plane must be cf_sfu, chalk_sfu or inherit")
 		}
@@ -223,14 +224,6 @@ func (s settings) execute(ctx context.Context, r request) error {
 	}
 }
 
-func planeText(plane *spaces.MediaPlaneProvider) *string {
-	if plane == nil {
-		return nil
-	}
-	text := string(*plane)
-	return &text
-}
-
 func valueOrInherit(value *string) string {
 	if value == nil {
 		return "inherit"
@@ -249,7 +242,7 @@ func (s settings) get(ctx context.Context, r request) error {
 	}
 	policy := s.policy.Paused(live)
 	attributes := []any{"scope", "tenant", "tenant_id", r.tenant.String(), "tenant_default", valueOrInherit(tenant.DefaultMediaPlane),
-		"platform_default", string(s.policy.Platform), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
+		"platform_default", s.policy.Platform.SettingName(), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
 	if !r.space.IsZero() {
 		space, err := s.spaces.GetSpace(ctx, r.tenant, r.space)
 		if err != nil {
@@ -260,9 +253,9 @@ func (s settings) get(ctx context.Context, r request) error {
 			return fmt.Errorf("resolve the effective plane: %w", err)
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
-			"space_setting", valueOrInherit(planeText(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
-			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", string(s.policy.Platform),
-			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", string(effective)}
+			"space_setting", valueOrInherit(mediaplane.OptionalSettingName(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
+			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", s.policy.Platform.SettingName(),
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", effective.SettingName()}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil
@@ -356,7 +349,7 @@ func (s settings) backfill(ctx context.Context, dryRun bool) error {
 		if dryRun {
 			message = "media plane setting would change"
 		}
-		s.log.Info(message, "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "before", "inherit", "after", string(spaces.MediaPlaneProviderChalkSFU))
+		s.log.Info(message, "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "before", "inherit", "after", mediaplane.ProviderChalkSFU.SettingName())
 	}
 	var unknownTenantDefaults, unapprovedOwnDefaults int
 	if err := s.pool.QueryRow(ctx, `select count(*) from tenants where default_media_plane is not null and default_media_plane not in ('cf_sfu', 'chalk_sfu')`).Scan(&unknownTenantDefaults); err != nil {

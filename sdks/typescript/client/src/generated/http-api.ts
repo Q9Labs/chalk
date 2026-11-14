@@ -884,7 +884,6 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.EpisodeControlBusyErrorSchema.pipe(HttpApiSchema.status(409)),
-        S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),

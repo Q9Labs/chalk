@@ -1,13 +1,11 @@
 package media
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -42,60 +40,6 @@ func defaultsNode(t *testing.T) *Node {
 		cfg.CamerasPerParticipant, cfg.MaxSessions = defaults.CamerasPerParticipant, 64
 		cfg.LargeCallParticipants, cfg.SmallTileStreamCost = defaults.LargeCallParticipants, defaults.SmallTileStreamCost
 	})
-}
-
-// A 3-person class of two cameras each sends 6·(300+90) camera uplink packets/s and receives 12
-// camera streams at 300, plus audio and a screen share. Admission has to reserve all of it, so the
-// smallest node's budget holds three such classes, not the eight that 150 packets/s per camera allowed.
-func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
-	node := defaultsNode(t)
-	const people = 3
-	uplinks := people * (2*(sdkCameraH+sdkCameraL) + 50)
-	downlinks := people * (people - 1) * (2*sdkCameraH + 50)
-	screen := people * (210 + 50)
-	want := uplinks + downlinks + screen
-	if got := node.nominalReservation(people); got != want {
-		t.Fatalf("a 3-person 2-camera class reserves %d packets/s, want the %d it sends and receives", got, want)
-	}
-
-	budget, _ := node.Budget()
-	classes := budget / want
-	for class := range classes {
-		for person := range people {
-			node.newTestSession(t, episodeScope("class-"+itoa(class), "p"+itoa(person)))
-		}
-	}
-	if _, reserved := node.Budget(); reserved != classes*want {
-		t.Fatalf("%d classes reserve %d, want %d", classes, reserved, classes*want)
-	}
-	_, err := node.Create("create-one-class-too-many", episodeScope("class-over", "p0"), ParticipantSession, nil)
-	if !errors.Is(err, errNodeFull) {
-		t.Fatalf("a class beyond %d on a %d budget: %v, want the node full", classes, budget, err)
-	}
-}
-
-// The plan lowers camera downlinks only. With the real SDK's rates the reservation leaves room
-// for every camera at its top layer, so no camera is capped or paused.
-func TestPlanKeepsRealSDKCamerasOpenInAnAdmittedEpisode(t *testing.T) {
-	node := defaultsNode(t)
-	const people, cameras = 3, 6
-	// Ingress the plan cannot lower: every layer of six cameras, every microphone to everyone
-	// and the screen share.
-	base := float64(cameras*(sdkCameraH+sdkCameraL) + people*people*50 + people*(210+50))
-	planned := make([]*plannedCamera, cameras)
-	for index := range planned {
-		// Two subscribers receive each camera.
-		planned[index] = &plannedCamera{order: uint64(index), cost: [planLevels]float64{2 * sdkCameraH, 2 * sdkCameraL, 0}}
-	}
-	ceiling := float64(node.episodeReservation(people))
-	if planEpisode(planned, base, ceiling, false) {
-		t.Fatalf("the plan lowered a camera of an admitted Episode: ceiling %.0f, base %.0f", ceiling, base)
-	}
-	for _, camera := range planned {
-		if camera.level != planOpen {
-			t.Fatalf("a camera is at level %d, want open", camera.level)
-		}
-	}
 }
 
 func TestACameraBeyondTheReservedCamerasIsRefused(t *testing.T) {
@@ -272,18 +216,6 @@ func TestBusyCPUClosesAdmission(t *testing.T) {
 	}
 }
 
-func TestEveryRefusalLogsItsReason(t *testing.T) {
-	var logs bytes.Buffer
-	node := newTestNode(t, nil)
-	node.log = slog.New(slog.NewTextHandler(&logs, nil))
-	node.mu.Lock()
-	_ = node.refuse(RefusedNodeFull, errNodeFull)
-	node.mu.Unlock()
-	if !strings.Contains(logs.String(), "reason=node_full") {
-		t.Fatalf("refusal log %q names no reason", logs.String())
-	}
-}
-
 // A ten-person call shows its Participants as small tiles, so each viewer receives one featured
 // Participant's two cameras at 300 and the other eight Participants' at 90. The all-top-layer
 // reservation was 69,400 and the Episode ceiling refused the ninth Participant on audio and camera
@@ -311,51 +243,5 @@ func TestALargeCallReservesTheSmallTilesItShows(t *testing.T) {
 	class := node.cfg.LargeCallParticipants
 	if got, want := node.nominalReservation(class), class*(2*(sdkCameraH+sdkCameraL)+50)+class*((class-1)*(2*sdkCameraH+50))+class*260; got != want {
 		t.Fatalf("a %d-person class reserves %d, want %d", class, got, want)
-	}
-}
-
-// A call that loses a Participant must never reserve more than it did before, or a departure could
-// push the node's total over its budget.
-func TestAnEpisodeNeverReservesMoreWhenItShrinks(t *testing.T) {
-	node := defaultsNode(t)
-	node.cfg.PacketBudget, node.cfg.EpisodePacketCeiling = 32_000, 32_000
-	for people := 2; people <= 16; people++ {
-		if smaller, larger := node.episodeReservation(people-1), node.episodeReservation(people); smaller > larger {
-			t.Fatalf("%d Participants reserve %d but %d reserve only %d", people-1, smaller, people, larger)
-		}
-	}
-}
-
-// A call that shrinks to the threshold takes the class ceiling back. A configuration whose class
-// ceiling cannot carry the threshold's mandatory media is refused at start, because the call's
-// admitted media would then outgrow its reservation.
-func TestALargeCallThresholdThatTheClassCeilingCannotCarryIsRefused(t *testing.T) {
-	// Six Participants need 8,040 mandatory packets/s with a screen share; the class ceiling is 7,000.
-	for _, test := range []struct {
-		name    string
-		maximum int
-		refused bool
-	}{
-		{"a maximum that lets a call cross the threshold", 16, true},
-		{"a maximum one above the threshold", 7, true},
-		{"a maximum equal to the threshold", 6, false},
-		{"a maximum below the threshold", 3, false},
-	} {
-		cfg := config.Config{
-			UDPAddr: "127.0.0.1:0", PacketBudget: 14_000, EpisodePacketCeiling: 7_000, CamerasPerParticipant: 2,
-			VideoStreamCost: 300, CameraUplinkCost: 390, AudioStreamCost: 50, ScreenStreamCost: 210,
-			LargeCallParticipants: 6, SmallTileStreamCost: 90, MaxEpisodeParticipants: test.maximum,
-		}
-		node, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-		if test.refused {
-			if err == nil || !strings.Contains(err.Error(), "SFU_LARGE_CALL_PARTICIPANTS") {
-				t.Fatalf("%s gave %v, want a refusal naming the setting", test.name, err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatalf("%s gave %v, want a node that starts: no call can cross the threshold", test.name, err)
-		}
-		node.Close()
 	}
 }

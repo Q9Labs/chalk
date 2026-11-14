@@ -56,6 +56,76 @@ function useScreenTrack(aspect: number): MediaStreamTrack | null {
   return track;
 }
 
+interface TileFixture {
+  readonly names: readonly string[];
+  readonly cameras: boolean;
+  readonly voiceLevel: number;
+  readonly secondHand: boolean;
+  readonly weak: number;
+  readonly share: Share;
+  readonly track: MediaStreamTrack | null;
+  readonly shareAudio: boolean;
+  readonly aspect: number;
+  readonly shareState: ScreenShareState;
+}
+
+function sharesScreen(share: Share, index: number): boolean {
+  if (share === "local") return index === 0;
+  if (share === "two") return index === 1 || index === 2;
+  return share === "remote" && index === 1;
+}
+
+function fixtureTile(index: number, fixture: TileFixture): Participant {
+  const speaking = index === 1;
+  return {
+    id: `stage-${index}`,
+    displayName: fixture.names[index] ?? `Guest ${index + 1}`,
+    isLocal: index === 0,
+    isMuted: index === 2,
+    isVideoEnabled: fixture.cameras,
+    videoTrack: fixture.cameras ? cameraTrack(`stage-${index}`, "#4d5d73") : null,
+    isSpeaking: speaking,
+    audioLevel: speaking ? fixture.voiceLevel : 0,
+    isActiveSpeaker: speaking,
+    isHandRaised: index === 5 || (fixture.secondHand && index === 2),
+    handRaiseOrder: index === 5 ? 1 : undefined,
+    connectionQuality: index === fixture.weak ? 1 : 4,
+    isScreenSharing: sharesScreen(fixture.share, index),
+    screenShareTrack: fixture.track,
+    screenShareHasAudio: fixture.shareAudio,
+    screenShareAspect: fixture.aspect,
+    screenShareState: fixture.shareState,
+  };
+}
+
+interface FixtureControlsProps {
+  readonly layout: "focus" | "grid";
+  readonly share: Share;
+  readonly people: boolean;
+  readonly secondHand: boolean;
+  readonly voiceLevel: number;
+  readonly onLayout: (layout: "focus" | "grid") => void;
+  readonly onShare: (share: Share) => void;
+  readonly onCount: (change: (count: number) => number) => void;
+  readonly onPeople: (open: boolean) => void;
+  readonly onSecondHand: (raised: boolean) => void;
+  readonly onVoiceLevel: (level: number) => void;
+}
+
+function FixtureControls({ layout, share, people, secondHand, voiceLevel, onLayout, onShare, onCount, onPeople, onSecondHand, onVoiceLevel }: FixtureControlsProps) {
+  return (
+    <div className="flex max-w-[calc(100vw_-_32px)] items-center gap-2 overflow-x-auto [&>button]:shrink-0">
+      <ChalkButton onClick={() => onLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
+      <ChalkButton onClick={() => onShare(share === "none" ? "remote" : "none")}>{share === "none" ? "Start fixture share" : "Stop fixture share"}</ChalkButton>
+      <ChalkButton onClick={() => onCount((value) => value + 1)}>Add participant</ChalkButton>
+      <ChalkButton onClick={() => onCount((value) => Math.max(1, value - 1))}>Remove participant</ChalkButton>
+      <ChalkButton onClick={() => onPeople(!people)}>People</ChalkButton>
+      <ChalkButton onClick={() => onSecondHand(!secondHand)}>{secondHand ? "Lower second hand" : "Raise second hand"}</ChalkButton>
+      <ChalkButton onClick={() => onVoiceLevel(voiceLevel < 0.5 ? 0.9 : 0.1)}>Change fixture voice level</ChalkButton>
+    </div>
+  );
+}
+
 /** The actual frame and stage, with deterministic media and observable roster/share controls. */
 function StageFixture({ count: initialCount = 6, theme = "dark", layout: initialLayout = "focus", share: initialShare = "none", aspect = 16 / 9, shareState = "live", shareAudio = false, cameras = true, board = false, names = NAMES, weak = 4 }: StageFixtureProps) {
   const [count, setCount] = useState(initialCount);
@@ -66,26 +136,7 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
   const [secondHand, setSecondHand] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0.5);
   const tiles = useMemo<Participant[]>(
-    () =>
-      Array.from({ length: count }, (_, index) => ({
-        id: `stage-${index}`,
-        displayName: names[index] ?? `Guest ${index + 1}`,
-        isLocal: index === 0,
-        isMuted: index === 2,
-        isVideoEnabled: cameras,
-        videoTrack: cameras ? cameraTrack(`stage-${index}`, "#4d5d73") : null,
-        isSpeaking: index === 1,
-        audioLevel: index === 1 ? voiceLevel : 0,
-        isActiveSpeaker: index === 1,
-        isHandRaised: index === 5 || (secondHand && index === 2),
-        handRaiseOrder: index === 5 ? 1 : undefined,
-        connectionQuality: index === weak ? 1 : 4,
-        isScreenSharing: share === "local" ? index === 0 : share === "two" ? index === 1 || index === 2 : share === "remote" && index === 1,
-        screenShareTrack: track,
-        screenShareHasAudio: shareAudio,
-        screenShareAspect: aspect,
-        screenShareState: shareState,
-      })),
+    () => Array.from({ length: count }, (_, index) => fixtureTile(index, { names, cameras, voiceLevel, secondHand, weak, share, track, shareAudio, aspect, shareState })),
     [count, cameras, share, track, aspect, shareState, shareAudio, names, weak, secondHand, voiceLevel],
   );
   return (
@@ -106,17 +157,7 @@ function StageFixture({ count: initialCount = 6, theme = "dark", layout: initial
             onChangeShare={async () => setShare("local")}
           />
         }
-        controls={
-          <div className="flex max-w-[calc(100vw_-_32px)] items-center gap-2 overflow-x-auto [&>button]:shrink-0">
-            <ChalkButton onClick={() => setLayout(layout === "grid" ? "focus" : "grid")}>{layout === "grid" ? "Spotlight" : "Grid"}</ChalkButton>
-            <ChalkButton onClick={() => setShare(share === "none" ? "remote" : "none")}>{share === "none" ? "Start fixture share" : "Stop fixture share"}</ChalkButton>
-            <ChalkButton onClick={() => setCount((value) => value + 1)}>Add participant</ChalkButton>
-            <ChalkButton onClick={() => setCount((value) => Math.max(1, value - 1))}>Remove participant</ChalkButton>
-            <ChalkButton onClick={() => setPeople(!people)}>People</ChalkButton>
-            <ChalkButton onClick={() => setSecondHand(!secondHand)}>{secondHand ? "Lower second hand" : "Raise second hand"}</ChalkButton>
-            <ChalkButton onClick={() => setVoiceLevel(voiceLevel < 0.5 ? 0.9 : 0.1)}>Change fixture voice level</ChalkButton>
-          </div>
-        }
+        controls={<FixtureControls layout={layout} share={share} people={people} secondHand={secondHand} voiceLevel={voiceLevel} onLayout={setLayout} onShare={setShare} onCount={setCount} onPeople={setPeople} onSecondHand={setSecondHand} onVoiceLevel={setVoiceLevel} />}
         sidebar={
           people ? (
             <aside className="chalk-drawer" data-state="open" aria-label="People">

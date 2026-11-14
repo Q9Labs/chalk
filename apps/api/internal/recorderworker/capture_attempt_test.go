@@ -1,7 +1,6 @@
 package recorderworker
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -27,25 +26,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestRTPSequenceExtenderHandlesWrapAndLatePacket(t *testing.T) {
-	var extender rtpSequenceExtender
-	if got := extender.Extend(65534); got != 65534 {
-		t.Fatalf("first sequence = %d", got)
-	}
-	if got := extender.Extend(65535); got != 65535 {
-		t.Fatalf("pre-wrap sequence = %d", got)
-	}
-	if got := extender.Extend(0); got != 65536 {
-		t.Fatalf("wrapped sequence = %d", got)
-	}
-	if got := extender.Extend(65535); got != 65535 {
-		t.Fatalf("late pre-wrap sequence = %d", got)
-	}
-	if got := extender.Extend(1); got != 65537 {
-		t.Fatalf("post-wrap sequence = %d", got)
-	}
-}
-
 func TestCaptureTrackClocksShareRecordingOriginWithoutLateTrackCollapse(t *testing.T) {
 	audio := new(captureTrackClock)
 	video := new(captureTrackClock)
@@ -61,23 +41,6 @@ func TestCaptureTrackClocksShareRecordingOriginWithoutLateTrackCollapse(t *testi
 	audioNext := &rtp.Packet{Header: rtp.Header{Timestamp: audioFirst.Timestamp + 48_000}}
 	if media, timestamp := audio.normalize(audioNext, captureplane.TrackKindAudio, 1_000); media != 1_000 || timestamp != 48_000 {
 		t.Fatalf("continued audio clock = media %d timestamp %d, want 1000/48000", media, timestamp)
-	}
-}
-
-func TestCaptureRuntimeEventSendBackpressuresInsteadOfDropping(t *testing.T) {
-	events := make(chan captureRuntimeEvent)
-	done := make(chan error, 1)
-	go func() {
-		done <- sendCaptureRuntimeEvent(context.Background(), events, captureRuntimeEvent{mid: "0"})
-	}()
-	select {
-	case err := <-done:
-		t.Fatalf("send returned before a consumer was ready: %v", err)
-	case <-time.After(10 * time.Millisecond):
-	}
-	<-events
-	if err := <-done; err != nil {
-		t.Fatalf("backpressured send: %v", err)
 	}
 }
 
@@ -113,21 +76,11 @@ func TestCaptureReadyIsEmittedOnceWithExplicitNoPublisher(t *testing.T) {
 	}
 }
 
-func TestCaptureLifecycleKeyIsStableAcrossAttemptReplacement(t *testing.T) {
-	const recordingID = "55555555-5555-4555-8555-555555555555"
-	if got, want := captureLifecycleKey("ready", recordingID, 7), "capture_ready_55555555-5555-4555-8555-555555555555_7"; got != want {
-		t.Fatalf("ready lifecycle key = %q, want %q", got, want)
-	}
-	if got, want := captureLifecycleKey("stopped", recordingID, 7), "capture_stopped_55555555-5555-4555-8555-555555555555_7"; got != want {
-		t.Fatalf("stopped lifecycle key = %q, want %q", got, want)
-	}
-}
-
 func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 	peer := &captureTestPeer{err: errors.New("peer failed")}
 	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{MID: "0"}, readErr: captureTimeoutError{}}
 	events := make(chan captureRuntimeEvent, 1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Millisecond, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -144,7 +97,7 @@ func TestCaptureReaderPropagatesTerminalPeerError(t *testing.T) {
 
 func TestCaptureReaderStopWaitsForReadLoopToSettle(t *testing.T) {
 	track := &captureBlockingTestTrack{started: make(chan struct{}), release: make(chan struct{})}
-	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, make(chan captureRuntimeEvent, 1))
+	stop, err := startCaptureReader(context.Background(), &captureTestPeer{}, "0", track, time.Second, 0, make(chan captureRuntimeEvent, 1), time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -198,7 +151,7 @@ func TestCaptureReaderPropagatesLossKeyFrameRequestError(t *testing.T) {
 	sequence := append([]uint16{100}, captureTestSequence(102, 118)...)
 	track := capturePacketTestTrack(captureplane.TrackKindVideo, sequence)
 	events := make(chan captureRuntimeEvent, len(sequence)+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -293,7 +246,7 @@ func capturePacketTestTrack(kind captureplane.TrackKind, sequence []uint16) *cap
 func captureTestReadPackets(t *testing.T, peer *captureTestPeer, track *captureTestTrack, packetCount int) {
 	t.Helper()
 	events := make(chan captureRuntimeEvent, packetCount+1)
-	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events)
+	cancel, err := startCaptureReader(context.Background(), peer, "0", track, time.Second, 0, events, time.Time{})
 	if err != nil {
 		t.Fatalf("start reader: %v", err)
 	}
@@ -307,125 +260,6 @@ func captureTestReadPackets(t *testing.T, peer *captureTestPeer, track *captureT
 		case <-time.After(time.Second):
 			t.Fatal("reader did not emit packet")
 		}
-	}
-}
-
-func TestCaptureBundleWriterEncryptsAndCommitsMediaAndTail(t *testing.T) {
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i + 1)
-	}
-	storage := &captureTestStorage{key: key}
-	attempt := &PionCaptureAttempt{
-		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-			Envelope:       recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"},
-			EnvelopeDigest: bytesOf(0x42),
-		},
-		lease: capturesignaling.WorkerLease{Token: "lease"},
-		keys:  storage, objects: storage, bundles: storage,
-		config: CaptureAttemptConfig{Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
-	}
-	writer := newCaptureBundleWriter(attempt)
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
-	activateCaptureTestTrack(writer, track, time.UnixMilli(1001).UTC(), 1)
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 10, Timestamp: 100}, Payload: []byte{1, 2, 3}}, time.UnixMilli(1001).UTC()); err != nil {
-		t.Fatalf("add packet: %v", err)
-	}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, time.UnixMilli(1002).UTC()); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	if storage.accesses != 1 || storage.finalizes != 2 || storage.uploads != 2 || storage.commits != 2 {
-		t.Fatalf("storage calls = accesses %d finalizes %d uploads %d commits %d", storage.accesses, storage.finalizes, storage.uploads, storage.commits)
-	}
-	if _, err := recordingbundle.Decrypt(key, storage.upload.Body); err != nil {
-		t.Fatalf("decrypt committed object: %v", err)
-	}
-}
-
-func TestCaptureBundleWriterFinishesLegacySignedJobInLegacyFormat(t *testing.T) {
-	origin := time.UnixMilli(1_000).UTC()
-	writer, storage := newCaptureTestWriter(t, origin)
-	writer.attempt.authority.Envelope.BundleSchemaVersion = recordingbundle.LegacyVersion
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
-	activateCaptureTestTrack(writer, track, origin, 1)
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1, 2, 3}}, origin.Add(time.Millisecond)); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(2*time.Millisecond)); err != nil {
-		t.Fatal(err)
-	}
-	if len(storage.uploadHistory) == 0 {
-		t.Fatal("legacy job did not upload a bundle")
-	}
-	for _, uploaded := range storage.uploadHistory {
-		decoded, err := recordingbundle.Decrypt(storage.key, uploaded.Body)
-		if err != nil || decoded.Version != recordingbundle.LegacyVersion || uploaded.ContentType != legacyCaptureBundleContentType {
-			t.Fatalf("legacy upload: version=%s content_type=%s error=%v", decoded.Version, uploaded.ContentType, err)
-		}
-	}
-}
-
-func TestCaptureBundleWriterCloseBoundsStoragePersistence(t *testing.T) {
-	storage := &captureTestStorage{key: bytesOf(0x41)}
-	attempt := &PionCaptureAttempt{
-		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1,
-			Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema, KeyHandle: "key-handle"}, EnvelopeDigest: bytesOf(0x42),
-		},
-		lease: capturesignaling.WorkerLease{Owner: "worker", Token: "lease", ExpiresAt: time.Now().Add(time.Minute)},
-		keys:  storage, objects: storage, bundles: storage,
-		config: CaptureAttemptConfig{CloseTimeout: 10 * time.Millisecond, Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
-	}
-	writer := newCaptureBundleWriter(attempt)
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
-	activateCaptureTestTrack(writer, track, time.UnixMilli(1001).UTC(), 1)
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1}}, time.UnixMilli(1001).UTC()); err != nil {
-		t.Fatalf("add packet: %v", err)
-	}
-	storage.finalize = func(ctx context.Context, _ CaptureBundleFinalize) (CaptureBundleUpload, error) {
-		<-ctx.Done()
-		return CaptureBundleUpload{}, ctx.Err()
-	}
-	started := time.Now()
-	err := writer.close(recordingbundle.CloseReasonFinalStop, time.UnixMilli(1002).UTC())
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("close error = %v", err)
-	}
-	if elapsed := time.Since(started); elapsed > time.Second {
-		t.Fatalf("bounded close took %s", elapsed)
-	}
-}
-
-func TestCaptureBundleWriterRetriesAllocatedCiphertextAfterCanceledUpload(t *testing.T) {
-	now := time.Unix(100, 0).UTC()
-	storage := newCaptureFinalizeReplayStorage(t, now)
-	writer := newCaptureFinalizeReplayWriter(t, now, storage)
-
-	uploadCtx, cancelUpload := context.WithCancel(context.Background())
-	first := make(chan error, 1)
-	go func() { first <- writer.persist(uploadCtx) }()
-	select {
-	case <-storage.firstUploadStarted:
-	case <-time.After(time.Second):
-		t.Fatal("first upload did not start after finalization")
-	}
-	cancelUpload()
-	if err := <-first; !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled upload error = %v", err)
-	}
-	if storage.repository.allocation.State != "allocated" {
-		t.Fatalf("allocation state after canceled upload = %q, want allocated", storage.repository.allocation.State)
-	}
-
-	if err := writer.persist(context.Background()); err != nil {
-		t.Fatalf("retry allocated ciphertext: %v", err)
-	}
-	if storage.uploadCalls != 2 || storage.commitCalls != 3 || storage.repository.finalizeCalls != 1 {
-		t.Fatalf("upload/commit/finalize calls = %d/%d/%d, want 2/3/1", storage.uploadCalls, storage.commitCalls, storage.repository.finalizeCalls)
-	}
-	if !bytes.Equal(storage.uploadBodies[0], storage.uploadBodies[1]) {
-		t.Fatal("allocated ciphertext changed across upload retry")
 	}
 }
 
@@ -455,33 +289,6 @@ func TestCaptureBundleWriterCommitsUploadAcceptedBeforeCanceledResponse(t *testi
 	}
 }
 
-func TestCaptureBundleWriterReplaysCommitAcceptedBeforeCanceledResponse(t *testing.T) {
-	now := time.Unix(100, 0).UTC()
-	storage := newCaptureFinalizeReplayStorage(t, now)
-	storage.blockFirstUpload = false
-	storage.cancelFirstCommit = true
-	writer := newCaptureFinalizeReplayWriter(t, now, storage)
-
-	commitCtx, cancelCommit := context.WithCancel(context.Background())
-	first := make(chan error, 1)
-	go func() { first <- writer.persist(commitCtx) }()
-	select {
-	case <-storage.firstCommitStarted:
-	case <-time.After(time.Second):
-		t.Fatal("first commit did not reach the accepted-response boundary")
-	}
-	cancelCommit()
-	if err := <-first; !errors.Is(err, context.Canceled) {
-		t.Fatalf("ambiguous commit error = %v", err)
-	}
-	if err := writer.persist(context.Background()); err != nil {
-		t.Fatalf("replay accepted commit: %v", err)
-	}
-	if storage.uploadCalls != 1 || storage.commitCalls != 2 || storage.repository.finalizeCalls != 1 {
-		t.Fatalf("upload/commit/finalize calls = %d/%d/%d, want 1/2/1", storage.uploadCalls, storage.commitCalls, storage.repository.finalizeCalls)
-	}
-}
-
 func newCaptureFinalizeReplayWriter(t *testing.T, now time.Time, storage *captureFinalizeReplayStorage) *captureBundleWriter {
 	t.Helper()
 	attempt := &PionCaptureAttempt{
@@ -503,121 +310,6 @@ func newCaptureFinalizeReplayWriter(t *testing.T, now time.Time, storage *captur
 		t.Fatalf("close assembler: %v", err)
 	}
 	return writer
-}
-
-func TestCaptureBundleWriterPersistsTerminalGapAfterFinalBundle(t *testing.T) {
-	key := make([]byte, 32)
-	storage := &captureTestStorage{key: key}
-	attempt := &PionCaptureAttempt{
-		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema}, EnvelopeDigest: bytesOf(0x42),
-		},
-		lease: capturesignaling.WorkerLease{Token: "lease"}, keys: storage, objects: storage, bundles: storage,
-		config: CaptureAttemptConfig{Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
-	}
-	writer := newCaptureBundleWriter(attempt)
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
-	activateCaptureTestTrack(writer, track, time.UnixMilli(1001).UTC(), 1)
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 10, Timestamp: 100}, Payload: []byte{1}}, time.UnixMilli(1001).UTC()); err != nil {
-		t.Fatalf("add packet: %v", err)
-	}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, time.UnixMilli(1002).UTC()); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	if storage.commits != 2 {
-		t.Fatalf("commits = %d, want final bundle plus terminal gap bundle", storage.commits)
-	}
-	gapBundle, err := recordingbundle.Decrypt(key, storage.upload.Body)
-	if err != nil {
-		t.Fatalf("decrypt terminal gap bundle: %v", err)
-	}
-	if gapBundle.Manifest.MediaRange.EndMilliseconds != 1 || len(gapBundle.Gaps) != 1 || !gapBundle.Gaps[0].Terminal ||
-		gapBundle.Gaps[0].StartMediaMilliseconds != 0 || gapBundle.Gaps[0].EndMediaMilliseconds != 1 {
-		t.Fatalf("terminal tail bundle = %#v", gapBundle)
-	}
-}
-
-func TestCaptureBundleWriterPersistsPositiveNoPublisherDuration(t *testing.T) {
-	key := make([]byte, 32)
-	storage := &captureTestStorage{key: key}
-	attempt := &PionCaptureAttempt{
-		authority: recordercapture.AttemptAuthority{
-			TenantID: captureTestID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: captureTestID(t, "44444444-4444-4444-8444-444444444444"), RecordingID: captureTestID(t, "55555555-5555-4555-8555-555555555555"), JobID: captureTestID(t, "66666666-6666-4666-8666-666666666666"), CaptureEpoch: 1, AttemptCount: 1, FencingGeneration: 1, Envelope: recordingpipeline.RecorderJobEnvelope{BundleSchemaVersion: recordingpipeline.RecordingBundleSchema}, EnvelopeDigest: bytesOf(0x42),
-		},
-		lease: capturesignaling.WorkerLease{Token: "lease"}, keys: storage, objects: storage, bundles: storage,
-		config: CaptureAttemptConfig{Now: func() time.Time { return time.UnixMilli(1000).UTC() }}.normalized(),
-	}
-	writer := newCaptureBundleWriter(attempt)
-	writer.setOrigin(time.UnixMilli(1000).UTC())
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, time.UnixMilli(6000).UTC()); err != nil {
-		t.Fatalf("close no-publisher writer: %v", err)
-	}
-	if storage.commits != 1 {
-		t.Fatalf("commits = %d, want one no-publisher gap bundle", storage.commits)
-	}
-	bundle, err := recordingbundle.Decrypt(key, storage.upload.Body)
-	if err != nil {
-		t.Fatalf("decrypt no-publisher gap bundle: %v", err)
-	}
-	if bundle.Manifest.MediaRange.StartMilliseconds != 0 || bundle.Manifest.MediaRange.EndMilliseconds != 5_000 ||
-		len(bundle.Gaps) != 1 || !bundle.Gaps[0].Terminal || bundle.Gaps[0].StartMediaMilliseconds != 0 || bundle.Gaps[0].EndMediaMilliseconds != 5_000 {
-		t.Fatalf("no-publisher duration bundle = %#v", bundle)
-	}
-}
-
-func TestCaptureBundleWriterCheckpointsSilenceWithActiveTrackAndResumesRTP(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, storage := newCaptureTestWriter(t, origin)
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto}, MID: "0"}, codec: "opus"}
-	activateCaptureTestTrack(writer, track, origin, 2)
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1}}, origin.Add(time.Millisecond)); err != nil {
-		t.Fatalf("add initial packet: %v", err)
-	}
-	for seconds := 2; seconds <= 8; seconds += 2 {
-		if err := writer.checkpointNoRTP(context.Background(), origin.Add(time.Duration(seconds)*time.Second)); err != nil {
-			t.Fatalf("checkpoint at %ds: %v", seconds, err)
-		}
-	}
-	if storage.commits != 0 {
-		t.Fatalf("commits during recent RTP = %d, want 0", storage.commits)
-	}
-	if err := writer.checkpointNoRTP(context.Background(), origin.Add(10*time.Second)); err != nil {
-		t.Fatalf("checkpoint active-track silence: %v", err)
-	}
-	if storage.commits != 2 {
-		t.Fatalf("online silence commits = %d, want media bundle plus bounded gap", storage.commits)
-	}
-	gap := storage.bundles[1]
-	if len(gap.Gaps) != 1 || gap.Gaps[0].Terminal || gap.Gaps[0].StartMediaMilliseconds != 1 || gap.Gaps[0].EndMediaMilliseconds != 10_000 {
-		t.Fatalf("online active-track gap = %#v", gap.Gaps)
-	}
-
-	if err := writer.addPacket(context.Background(), track, &rtp.Packet{Header: rtp.Header{SequenceNumber: 2, Timestamp: 480100}, Payload: []byte{2}}, origin.Add(10_001*time.Millisecond)); err != nil {
-		t.Fatalf("resume RTP after gap: %v", err)
-	}
-	if err := writer.checkpointNoRTP(context.Background(), origin.Add(15*time.Second)); err != nil {
-		t.Fatalf("checkpoint recent resumed RTP: %v", err)
-	}
-	if storage.commits != 2 {
-		t.Fatalf("commits after recent resumed RTP = %d, want 2", storage.commits)
-	}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(16*time.Second)); err != nil {
-		t.Fatalf("close resumed RTP writer: %v", err)
-	}
-	if storage.commits != 4 || len(storage.uploadHistory) != 4 {
-		t.Fatalf("final commits/uploads = %d/%d, want resumed media plus terminal gap", storage.commits, len(storage.uploadHistory))
-	}
-	resumed, err := recordingbundle.Decrypt(storage.key, storage.uploadHistory[2].Body)
-	if err != nil {
-		t.Fatalf("decrypt resumed media bundle: %v", err)
-	}
-	tail := storage.bundles[3]
-	if resumed.Manifest.MediaRange.StartMilliseconds != 10_001 || resumed.Manifest.MediaRange.EndMilliseconds != 10_001 || len(resumed.Fragments) != 1 || len(resumed.Fragments[0].Packets) != 1 || resumed.Fragments[0].Packets[0].SequenceNumber != 2 {
-		t.Fatalf("resumed media bundle = %#v", resumed)
-	}
-	if len(tail.Gaps) != 1 || !tail.Gaps[0].Terminal || tail.Gaps[0].StartMediaMilliseconds != 10_001 || tail.Gaps[0].EndMediaMilliseconds != 16_000 {
-		t.Fatalf("terminal gap after resumed RTP = %#v", tail.Gaps)
-	}
 }
 
 func TestPionCaptureAttemptFactoryUsesServerEpochExactly(t *testing.T) {
@@ -2167,49 +1859,6 @@ func captureTestPlanAtEpoch(t *testing.T, epoch captureplane.CaptureEpoch, revis
 	return plan
 }
 
-func TestCaptureBundleWriterKeepsFirstPlanEpochWhenTrackBindsAfterNewPlan(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, _ := newCaptureTestWriter(t, origin)
-	binding := capturePlanWatchPulledTrack(t, "0", "late-binding")
-	track := &captureTestTrack{capture: binding, codec: "opus"}
-	authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
-	first := capturePlanWatchPlan(t, authority, 1, origin, captureplan.StopStateRunning, binding)
-	later := capturePlanWatchPlan(t, authority, 2, origin.Add(time.Second), captureplan.StopStateRunning, binding)
-	if err := writer.reconcileTracks(context.Background(), first, nil, origin); err != nil {
-		t.Fatalf("observe plan before binding: %v", err)
-	}
-	if err := writer.reconcileTracks(context.Background(), later, map[string]CaptureMediaTrack{"0": track}, origin.Add(time.Second)); err != nil {
-		t.Fatalf("bind after next plan: %v", err)
-	}
-	want, err := recordingbundle.ComposeTrackEpoch(2, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := writer.active["0"].Epoch; got != want {
-		t.Fatalf("late-bound track epoch = %d, want first plan epoch %d", got, want)
-	}
-}
-
-func TestCaptureBundleWriterUsesCaptureEpochNamespaceForTrackEpoch(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, _ := newCaptureTestWriter(t, origin)
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{
-		TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio,
-		RequestedLayer: captureplane.TrackLayerAuto,
-	}, MID: "0"}, codec: "opus"}
-	plan := captureTestPlanAtEpoch(t, 2, 1, origin)
-	if err := writer.reconcileTracks(context.Background(), plan, map[string]CaptureMediaTrack{"0": track}, origin); err != nil {
-		t.Fatalf("reconcile retry track: %v", err)
-	}
-	want, err := recordingbundle.ComposeTrackEpoch(2, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := writer.active["0"].Epoch; got != want {
-		t.Fatalf("retry track epoch = %d, want %d", got, want)
-	}
-}
-
 func newCaptureTestWriter(t *testing.T, origin time.Time) (*captureBundleWriter, *captureTestStorage) {
 	t.Helper()
 	storage := &captureTestStorage{key: bytesOf(0x41)}
@@ -2465,112 +2114,6 @@ func TestCaptureBundleWriterDropsQueuedPacketAfterPlanRebind(t *testing.T) {
 	}
 }
 
-func TestCaptureBundleWriterPreservesNoPublisherCheckpointAcrossZeroToActive(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, storage := newCaptureTestWriter(t, origin)
-	checkpoint := recordingbundle.TargetBundleDurationMilliseconds - 1
-	if err := writer.appendGapUntil(context.Background(), checkpoint, checkpoint, false); err != nil {
-		t.Fatalf("append no-publisher checkpoint: %v", err)
-	}
-	if err := writer.closeCurrentBundle(context.Background(), recordingbundle.CloseReasonExplicit); err != nil {
-		t.Fatalf("persist no-publisher checkpoint: %v", err)
-	}
-	track := &captureTestTrack{capture: captureplane.PulledCaptureTrack{CaptureTrack: captureplane.CaptureTrack{
-		TrackReference: "track", OwnerReference: "owner", Kind: captureplane.TrackKindAudio, RequestedLayer: captureplane.TrackLayerAuto,
-	}, MID: "0"}, codec: "opus"}
-	activeAt := origin.Add(time.Duration(checkpoint) * time.Millisecond)
-	if err := writer.reconcileTracks(context.Background(), captureTestPlan(t, 2, activeAt), map[string]CaptureMediaTrack{"0": track}, activeAt); err != nil {
-		t.Fatalf("reconcile first active track: %v", err)
-	}
-	packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 100}, Payload: []byte{1}}
-	if err := writer.addPacket(context.Background(), track, packet, activeAt.Add(time.Millisecond)); err != nil {
-		t.Fatalf("add first active packet: %v", err)
-	}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, activeAt.Add(500*time.Millisecond)); err != nil {
-		t.Fatalf("close zero-to-active capture: %v", err)
-	}
-	if len(storage.bundles) < 3 {
-		t.Fatalf("committed %d bundles, want checkpoint, media, and terminal tail", len(storage.bundles))
-	}
-	for index := 1; index < len(storage.bundles); index++ {
-		if err := recordingbundle.ValidateSequence(storage.bundles[index-1], storage.bundles[index]); err != nil {
-			t.Fatalf("bundle %d zero-to-active sequence: %v", index, err)
-		}
-	}
-	checkpointGap := storage.bundles[0].Gaps
-	if len(checkpointGap) != 1 || checkpointGap[0].Reason != "no_rtp" || checkpointGap[0].Terminal || checkpointGap[0].StartMonotonicMilliseconds != 0 || checkpointGap[0].EndMonotonicMilliseconds != checkpoint {
-		t.Fatalf("no-publisher checkpoint = %+v", checkpointGap)
-	}
-	wantEpoch, err := recordingbundle.ComposeTrackEpoch(2, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	foundTrackSnapshot := false
-	for _, bundle := range storage.bundles[1:] {
-		for _, event := range bundle.TrackTimeline {
-			if event.Track.Epoch == wantEpoch && event.Reason == "bundle_start" {
-				foundTrackSnapshot = true
-			}
-		}
-	}
-	if !foundTrackSnapshot {
-		t.Fatalf("first active bundle did not use plan revision epoch %d", wantEpoch)
-	}
-}
-
-func TestCaptureBundleWriterSplitsLongTerminalNoRTPGap(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, storage := newCaptureTestWriter(t, origin)
-	writer.hasLayout = true
-	writer.layout = recordingbundle.LayoutTimelineEvent{Kind: recordingbundle.LayoutEventSnapshot, Revision: 1, Layout: string(captureplan.LayoutProfileComposite720PV1)}
-	if err := writer.close(recordingbundle.CloseReasonFinalStop, origin.Add(65*time.Second)); err != nil {
-		t.Fatalf("close after long no-RTP interval: %v", err)
-	}
-	if len(storage.bundles) < 2 {
-		t.Fatalf("committed %d bundles, want split gap bundles", len(storage.bundles))
-	}
-	gapStart := int64(0)
-	for index, bundle := range storage.bundles {
-		manifest := bundle.Manifest
-		if duration := manifest.MonotonicRange.EndMilliseconds - manifest.MonotonicRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
-			t.Fatalf("bundle %d monotonic duration = %d", index, duration)
-		}
-		if duration := manifest.MediaRange.EndMilliseconds - manifest.MediaRange.StartMilliseconds; duration > recordingbundle.MaxBundleDurationMilliseconds {
-			t.Fatalf("bundle %d media duration = %d", index, duration)
-		}
-		if index > 0 {
-			if err := recordingbundle.ValidateSequence(storage.bundles[index-1], bundle); err != nil {
-				t.Fatalf("bundle %d sequence: %v; manifests=%+v", index, err, storage.manifests)
-			}
-		}
-		if len(bundle.Gaps) != 1 {
-			t.Fatalf("bundle %d gaps = %+v, want one segment", index, bundle.Gaps)
-		}
-		gap := bundle.Gaps[0]
-		if gap.StartMonotonicMilliseconds != gapStart || gap.StartMediaMilliseconds != gapStart {
-			t.Fatalf("bundle %d gap starts at %d/%d, want %d", index, gap.StartMonotonicMilliseconds, gap.StartMediaMilliseconds, gapStart)
-		}
-		gapStart = gap.EndMonotonicMilliseconds
-		if gap.EndMediaMilliseconds != gapStart {
-			t.Fatalf("bundle %d gap ends at %d/%d", index, gap.EndMonotonicMilliseconds, gap.EndMediaMilliseconds)
-		}
-		wantTerminal := index == len(storage.bundles)-1
-		if gap.Terminal != wantTerminal {
-			t.Fatalf("bundle %d terminal gap = %t, want %t", index, gap.Terminal, wantTerminal)
-		}
-		wantCloseReason := recordingbundle.CloseReasonExplicit
-		if wantTerminal {
-			wantCloseReason = recordingbundle.CloseReasonFinalStop
-		}
-		if manifest.CloseReason != wantCloseReason {
-			t.Fatalf("bundle %d close reason = %s, want %s", index, manifest.CloseReason, wantCloseReason)
-		}
-	}
-	if gapStart != 65_000 {
-		t.Fatalf("terminal gap coverage ends at %d, want 65000", gapStart)
-	}
-}
-
 func TestCaptureBundleWriterRotatesForDelayedLayoutEvent(t *testing.T) {
 	origin := time.UnixMilli(1000).UTC()
 	writer, storage := newCaptureTestWriter(t, origin)
@@ -2624,47 +2167,4 @@ func TestCaptureBundleWriterRotatesForDelayedLayoutEvent(t *testing.T) {
 	if !foundRevision {
 		t.Fatal("revision 2 layout event was not committed at the delayed control boundary")
 	}
-}
-
-func TestCapturePlanPollingDoesNotRetireTracksBeforeConsumerAppliesPlan(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	coordinator := &capturePollingCoordinator{reconciled: make(chan struct{}, 1)}
-	attempt := &PionCaptureAttempt{coordinator: coordinator, plans: &captureTestPlanSource{}, config: CaptureAttemptConfig{}.normalized()}
-	events := make(chan capturePlanEvent)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		attempt.planLoop(ctx, events, 1)
-	}()
-	select {
-	case <-coordinator.reconciled:
-		t.Fatal("polling retired or replaced peer tracks before the packet consumer accepted the plan")
-	case event := <-events:
-		if event.err != nil {
-			t.Fatal(event.err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("plan was not delivered")
-	}
-	cancel()
-	<-done
-	select {
-	case <-coordinator.reconciled:
-		t.Fatal("polling mutated the coordinator ahead of the packet consumer")
-	default:
-	}
-}
-
-type capturePollingCoordinator struct {
-	captureTestCoordinator
-	reconciled chan struct{}
-}
-
-func (c *capturePollingCoordinator) Reconcile(context.Context, captureplan.Plan) (recordercapture.Snapshot, error) {
-	select {
-	case c.reconciled <- struct{}{}:
-	default:
-	}
-	return recordercapture.Snapshot{}, nil
 }

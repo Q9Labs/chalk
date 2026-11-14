@@ -4,6 +4,8 @@ name: Staging SFU latency
 # never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 50 minutes later; the daily run and
 # a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
 # selects, and refuses a SHA with no verdict (own_sfu_proof_result=latency-missing).
+# A SHA that already has a passed verdict is measured again only by a manual dispatch, because Promote reads the newest
+# verdict and a repeat run on a busy staging would turn the pass into a failure.
 on:
   schedule:
     - cron: "43 2 * * *"
@@ -28,6 +30,8 @@ jobs:
   target:
     name: Find the nightly staging runs
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -39,7 +43,7 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: target
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,20 +69,22 @@ jobs:
     needs: [target, latency]
     if: always() && needs.target.outputs.sha != ''
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 20
     permissions:
       contents: write
       deployments: write
       issues: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
       - name: Download the latency card
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: scorecard-nightly-*
           path: artifacts/nightly
@@ -92,16 +98,10 @@ jobs:
           node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
       - name: Score the run and add it to the history
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
-          if [ -z "$cards" ]; then
-            echo "No latency scorecard in this run."
-            exit 0
-          fi
-          # shellcheck disable=SC2086
-          features/scorecard/nightly.sh $cards
+        uses: ./.github/actions/scorecard-history
+        with:
+          cards-dir: artifacts/nightly
+          none-message: No latency scorecard in this run.
       - name: Record the verdict for Promote
         if: always()
         env:

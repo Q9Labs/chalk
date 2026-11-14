@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -56,7 +56,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
       transcribe:
@@ -93,6 +93,39 @@ on:
       CHALK_PROOF_API_KEY:
         description: Bootstrap key for the environment proof Tenant
         required: true
+      CHALK_PROOF_API_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEB_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_TENANT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_SPACE_ID_CF_SFU:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_SPACE_ID_CHALK_SFU:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_SERVICE_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_AXIOM_STAGING_LOG_DATASET:
+        description: Axiom location, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_AXIOM_STAGING_METRICS_DATASET:
+        description: Axiom location, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_AXIOM_METRICS_BASE_URL:
+        description: Axiom location, held as an environment secret so it never prints in logs
+        required: false
       CHALK_AXIOM_QUERY_TOKEN:
         description: Read-only staging API-log query token, needed only for own-SFU staging latency
         required: false
@@ -159,20 +192,16 @@ jobs:
             echo "Latency-only mode requires nightly, chalk_sfu or cf_sfu, and latency=true." >&2
             exit 1
           }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Require selected proof code to be merged before dependency installation
         run: git merge-base --is-ancestor HEAD origin/master
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: ./.github/actions/setup-js
         with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - name: Install proof dependencies
-        run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+          install-args: "--filter @q9labsai/chalk-client..."
       - uses: ./.github/actions/apt-install
         with:
           packages: ffmpeg imagemagick espeak fonts-dejavu-core age
@@ -225,40 +254,22 @@ jobs:
           # Promote's own-SFU proof reuses the two Spaces that own-sfu-spaces moved, found by slug.
           CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
-          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
-          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CF_SFU }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
           # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
-          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
           CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
           CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
-          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
-          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
-          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ secrets.CHALK_PROOF_WEB_URL }}
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
           CHALK_PROOF_PROOF_ORIGIN_OWN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN_OWN }}
-          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
-          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
           read -r -a proofs <<< "$PROOFS"
-          if [ "${#proofs[@]}" -eq 0 ]; then
-            echo "PROOF configuration: failed (empty-proof-list)" >&2
-            exit 1
-          fi
-          case "$CHALK_PROOF_MEDIA_PLANE" in
-            cf_sfu|chalk_sfu) ;;
-            *) echo "Unsupported media plane" >&2; exit 1 ;;
-          esac
-          for proof in "${proofs[@]}"; do
-            case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces|chat-upload) ;;
-              *) echo "Unsupported proof command" >&2; exit 1 ;;
-            esac
-            # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ] && [ "$proof" != chat-upload ]; then
-              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu, own-sfu-spaces and chat-upload" >&2
-              exit 1
-            fi
-          done
+          node scripts/prod-proof/registry.mjs check "$CHALK_PROOF_MEDIA_PLANE" "${proofs[@]}"
           mkdir -p .private
           results=()
           failed=()
@@ -321,16 +332,16 @@ jobs:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
-          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
-          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CF_SFU }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
           # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
-          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
-          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
-          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
-          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
+          CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ secrets.CHALK_PROOF_WEB_URL }}
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
-          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
-          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
           SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'manual' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
@@ -338,10 +349,10 @@ jobs:
           CHALK_LATENCY_SAMPLES: ${{ inputs.latency_samples }}
           # The Cloudflare latency-only run never queries the staging API logs, so it does not receive their token.
           CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && inputs.media_plane == 'cf_sfu') && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
-          CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
+          CHALK_AXIOM_STAGING_LOG_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_LOG_DATASET }}
           CHALK_AXIOM_METRICS_QUERY_TOKEN: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && secrets.CHALK_AXIOM_METRICS_QUERY_TOKEN || '' }}
-          CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ vars.CHALK_AXIOM_STAGING_METRICS_DATASET }}
-          CHALK_AXIOM_METRICS_BASE_URL: ${{ vars.CHALK_AXIOM_METRICS_BASE_URL }}
+          CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_METRICS_DATASET }}
+          CHALK_AXIOM_METRICS_BASE_URL: ${{ secrets.CHALK_AXIOM_METRICS_BASE_URL }}
         run: |
           # A revision from before the own-SFU nightly has no latency kit scorecard code to run.
           if [ ! -f features/scorecard/own-sfu.mjs ]; then
@@ -391,12 +402,12 @@ jobs:
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
-          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
-          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
-          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ secrets.CHALK_PROOF_WEB_URL }}
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
-          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
-          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
           status=0
           if [ -f .private/proof-run-ids ]; then
@@ -429,7 +440,7 @@ jobs:
         if: always() && (inputs.environment == 'nightly' || (inputs.environment == 'production' && github.event_name == 'workflow_dispatch'))
         # A scoring failure must not change the proof result: Promote rolls back on a failed proof, and the nightly records a failed proof as a failed cut.
         continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # The warn-only Cloudflare latency card has its own prefix, so the gate's scorecard-nightly-* download never sees it.
           name: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'warn-scorecard' || 'scorecard' }}-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}
@@ -449,7 +460,7 @@ jobs:
           fi
       - name: Upload encrypted proof evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: real-call-proof-${{ inputs.environment || 'production' }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ steps.invocation.outputs.suffix }}
           path: .private/prod-proof-artifact/

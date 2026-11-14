@@ -77,7 +77,7 @@ export const CALL_STATES: readonly CallState[] = [
       </main>
     ),
   },
-  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
+  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }} /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -99,7 +99,7 @@ export const CALL_STATES: readonly CallState[] = [
   },
   { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
   { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
-  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
+  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }} /> },
 
   { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
   { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
@@ -150,7 +150,7 @@ export const CALL_STATES: readonly CallState[] = [
             initialColorScheme={scheme}
             snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })}
             board={{ scene: true, people: [nora, malik] }}
-            then={(client) => {
+            step={(client) => {
               if (params.get("raise") !== "event") return raiseNotices(client, kind, count);
               document.addEventListener("raise-notices", () => raiseNotices(client, kind, count), { once: true });
               document.documentElement.dataset.noticesReady = "";
@@ -225,21 +225,21 @@ export const CALL_STATES: readonly CallState[] = [
     render: () => (
       <Live
         snapshot={liveSnapshot({ self: { handRaised: true }, others: [nora] })}
-        then={(client) => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((person) => (person.participantId === nora.id ? { ...person, handRaised: true } : person)) } }))}
+        step={(client) => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((person) => (person.participantId === nora.id ? { ...person, handRaised: true } : person)) } }))}
       />
     ),
   },
-  { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
-  { id: "media-failed", title: "Media could not connect", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed", "connection.media_start_failed"))} /> },
+  { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
+  { id: "media-failed", title: "Media could not connect", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "failed", "connection.media_start_failed"))} /> },
   { id: "leaving", title: "Leaving", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "leaving" })} /> },
-  { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
+  { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} step={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
   {
     id: "episode-ended",
     title: "Call ended for everyone",
     render: () => (
       <Live
         snapshot={liveSnapshot({ others: [nora] })}
-        then={(client) => {
+        step={(client) => {
           client.emit("episodeEnded", { episode: client.getSnapshot().connection.episode });
           client.updateSnapshot((current) => withStatus(current, "left"));
         }}
@@ -276,7 +276,7 @@ function WaitingForHost() {
 }
 
 function JoiningComplete() {
-  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }));
+  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }));
   return (
     <main className="h-dvh">
       <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>

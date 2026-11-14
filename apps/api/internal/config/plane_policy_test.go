@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 func TestLoadPlanePolicyReadsTheKillSwitch(t *testing.T) {
@@ -32,7 +32,7 @@ func TestLoadPlanePolicyReadsTheKillSwitch(t *testing.T) {
 			}
 			continue
 		}
-		if err != nil || policy.NewEpisodesPaused != c.wantPaused || policy.Platform != spaces.MediaPlaneProviderCloudflareSFU {
+		if err != nil || policy.NewEpisodesPaused != c.wantPaused || policy.Platform != mediaplane.ProviderCloudflareSFU {
 			t.Errorf("%q: policy = %+v, err = %v", c.value, policy, err)
 		}
 	}
@@ -42,16 +42,16 @@ func TestChalkSFUPlatformDefaultNeedsTheSFUAndKeepsCloudflare(t *testing.T) {
 	cloudflare := CloudflareRealtimeConfig{RealtimeAppID: "app", RealtimeAppSecret: "secret", RequestTimeout: 1}
 	cases := []struct {
 		name       string
-		provider   spaces.MediaPlaneProvider
+		provider   mediaplane.Provider
 		cloudflare CloudflareRealtimeConfig
 		sfu        ChalkSFUConfig
 		wantErr    string
 	}{
-		{"own SFU default runs with Cloudflare as fallback", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
-		{"own SFU default needs capture for recording", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
-		{"own SFU default needs the SFU enabled", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
-		{"own SFU default needs the Cloudflare fallback", spaces.MediaPlaneProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
-		{"Cloudflare default keeps working", spaces.MediaPlaneProviderCloudflareSFU, cloudflare, ChalkSFUConfig{}, ""},
+		{"own SFU default runs with Cloudflare as fallback", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
+		{"own SFU default needs capture for recording", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
+		{"own SFU default needs the SFU enabled", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
+		{"own SFU default needs the Cloudflare fallback", mediaplane.ProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
+		{"Cloudflare default keeps working", mediaplane.ProviderCloudflareSFU, cloudflare, ChalkSFUConfig{}, ""},
 		{"no default needs nothing", "", CloudflareRealtimeConfig{}, ChalkSFUConfig{}, ""},
 	}
 	for _, c := range cases {

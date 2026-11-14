@@ -3,6 +3,7 @@ import { test } from "@e2e-dev/web";
 import { createRequire } from "node:module";
 import { devices, type BrowserType } from "playwright";
 import { webMediaFixture } from "../scripts/web-proof/media.mjs";
+import ports from "../scripts/dev/ports.json";
 
 // The journey launches the web engine's own browsers. This repo's `playwright` ships an older WebKit that refuses
 // TURN URLs with `?transport=`, so a page opened from it cannot join a call, while the engine's WebKit can.
@@ -19,7 +20,7 @@ test("a tablet visitor who was never asked allows the camera and joins the call"
     const context = await browser.newContext({ viewport: ipad.viewport, userAgent: ipad.userAgent });
     await context.addInitScript(webMediaFixture(2, { permission: "prompt" }));
     const page = await context.newPage();
-    await page.goto(new URL(invite, process.env.CHALK_PROOF_WEB_URL ?? "http://localhost:3000").href);
+    await page.goto(new URL(invite, process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}`).href);
     // Typing before the page hydrates loses the name, so type until the form accepts it.
     const name = page.getByLabel("Your name", { exact: true });
     const join = page.getByRole("button", { name: "Join call", exact: true });

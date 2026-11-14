@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
+	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -298,7 +299,7 @@ func (r ChatAttachmentRepository) AuthorizedDownload(ctx context.Context, subjec
 	)
 }
 
-func (r ChatAttachmentRepository) ClaimCleanup(ctx context.Context, input chatattachments.CleanupClaimInput) ([]chatattachments.CleanupClaim, error) {
+func (r ChatAttachmentRepository) ClaimCleanup(ctx context.Context, input objectcleanup.ClaimInput) ([]chatattachments.CleanupClaim, error) {
 	token, err := utilities.NewID()
 	if err != nil {
 		return nil, fmt.Errorf("generate chat attachment cleanup token: %w", err)
@@ -335,7 +336,7 @@ func (r ChatAttachmentRepository) CompleteCleanup(ctx context.Context, claim cha
 		return fmt.Errorf("complete chat attachment cleanup: %w", err)
 	}
 	if count != 1 {
-		return chatattachments.ErrCleanupLeaseLost
+		return objectcleanup.ErrLeaseLost
 	}
 	return nil
 }
@@ -374,4 +375,4 @@ func chatAttachmentUniqueViolation(err error) bool {
 const sha256Size = 32
 
 var _ chatattachments.Repository = ChatAttachmentRepository{}
-var _ chatattachments.CleanupRepository = ChatAttachmentRepository{}
+var _ objectcleanup.Repository[chatattachments.CleanupClaim] = ChatAttachmentRepository{}

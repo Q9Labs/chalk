@@ -3,11 +3,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ElixirAtom, renderAttribute, renderElixirValue, wrapElixirSource } from "./elixir-layout.mjs";
-import { codegenPath, loadSyncContract, syncProtocolVersion } from "./sync-contract.mjs";
+import { codegenPath, loadSyncContract } from "./sync-contract.mjs";
 
-const protocolVersion = syncProtocolVersion();
 const outputPath = codegenPath("CODEGEN_SYNC_ELIXIR_OUTPUT_PATH", "apps/sync/lib/chalk_sync/contract/generated.ex");
-const contract = await loadSyncContract(undefined, protocolVersion);
+const contract = await loadSyncContract();
 const source = renderElixir(contract);
 
 await mkdir(path.dirname(outputPath), { recursive: true });

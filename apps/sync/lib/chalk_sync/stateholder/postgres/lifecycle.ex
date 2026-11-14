@@ -5,23 +5,17 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.LifecycleDecision
-  alias ChalkSync.Stateholder.Operation
-  alias ChalkSync.Stateholder.OperationDecision
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.Control
-  alias ChalkSync.Stateholder.Postgres.ExternalOperationPlanner
-  alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
+  alias ChalkSync.Stateholder.Postgres.Lifecycle.AutomaticRecording
+  alias ChalkSync.Stateholder.Postgres.Lifecycle.Participant
   alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Authority, as: AuthoritySQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: SQL
   alias ChalkSync.Stateholder.Postgres.Transaction
   alias ChalkSync.UUID
-
-  @automatic_recording_policy_snapshot_version 2
-  @uuid_namespace_dns <<0x6B, 0xA7, 0xB8, 0x10, 0x9D, 0xAD, 0x11, 0xD1, 0x80, 0xB4, 0x00, 0xC0,
-                        0x4F, 0xD4, 0x30, 0xC8>>
 
   def record_lifecycle_failure(%EpisodeKey{} = episode, lifecycle_intent_id, reason)
       when is_binary(lifecycle_intent_id) and is_atom(reason) do
@@ -116,274 +110,29 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   defp apply_pending_lifecycle(connection, episode, control, intent) do
     policy = Authority.lock_episode(connection, episode)
-    participant = lock_lifecycle_participant(connection, episode, intent)
+    participant = Participant.lock_lifecycle_participant(connection, episode, intent)
 
-    with :ok <- validate_lifecycle_product_state(intent, policy.status, participant),
+    with :ok <- Participant.validate_lifecycle_product_state(intent, policy.status, participant),
          {:ok, state} <- Control.validate_fold(episode, control),
-         payload = lifecycle_payload(intent, participant, state),
+         payload = Participant.lifecycle_payload(intent, participant, state),
          {:ok, event, next_state} <-
-           Reducer.apply_lifecycle(state, lifecycle_name(intent.name), payload) do
+           Reducer.apply_lifecycle(state, Participant.lifecycle_name(intent.name), payload) do
       decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
 
-      maybe_accept_automatic_recording(connection, episode, intent, policy, next_state)
+      AutomaticRecording.maybe_accept_automatic_recording(
+        connection,
+        episode,
+        intent,
+        policy,
+        next_state
+      )
+
       decision
     else
       {:error, reason} ->
-        Postgrex.rollback(connection, {:error, normalize_lifecycle_error(reason)})
+        Postgrex.rollback(connection, {:error, Participant.normalize_lifecycle_error(reason)})
     end
   end
-
-  defp maybe_accept_automatic_recording(
-         connection,
-         episode,
-         %{name: "participant_joined"} = intent,
-         policy,
-         state
-       ) do
-    if automatic_recording_policy?(policy) do
-      operation = automatic_recording_operation(episode)
-
-      case ExternalOperationPlanner.fetch_internal_operation(connection, episode, operation) do
-        {:ok, existing} when existing.request_fingerprint == operation.fingerprint ->
-          :ok
-
-        {:ok, _conflicting} ->
-          Postgrex.rollback(connection, {:error, :invalid_state})
-
-        :not_found ->
-          checkpoint_automatic_recording_acceptance(
-            connection,
-            episode,
-            intent,
-            operation,
-            policy,
-            state
-          )
-      end
-    else
-      :ok
-    end
-  end
-
-  defp maybe_accept_automatic_recording(
-         _connection,
-         _episode,
-         _intent,
-         _policy,
-         _state
-       ),
-       do: :ok
-
-  defp checkpoint_automatic_recording_acceptance(
-         connection,
-         episode,
-         intent,
-         operation,
-         policy,
-         state
-       ) do
-    case accept_automatic_recording(connection, episode, operation, policy, state) do
-      %OperationDecision{} ->
-        FaultHooks.lifecycle(:after_automatic_recording_acceptance, episode, intent.id)
-
-      :ok ->
-        :ok
-    end
-  end
-
-  defp accept_automatic_recording(connection, episode, operation, policy, state) do
-    case ExternalOperationPlanner.persist_new_internal_operation(
-           connection,
-           episode,
-           operation,
-           policy,
-           state
-         ) do
-      %OperationDecision{} = decision ->
-        decision
-
-      {:error, :recording_in_progress} ->
-        :ok
-
-      {:error, :overloaded} ->
-        Postgrex.rollback(connection, {:retryable, :overloaded})
-
-      {:error, reason} ->
-        Postgrex.rollback(connection, {:error, reason})
-    end
-  end
-
-  defp automatic_recording_policy?(%{
-         status: "active",
-         artifact_policy: %{
-           "schema_version" => "episode_config.v2",
-           "recording" => %{"mode" => "automatic"}
-         }
-       }),
-       do: true
-
-  defp automatic_recording_policy?(_policy), do: false
-
-  defp automatic_recording_operation(%EpisodeKey{} = episode) do
-    request_key = "automatic_recording_" <> String.replace(episode.episode_id, "-", "")
-
-    {:ok, operation} =
-      Operation.system_recording_start(
-        request_key,
-        automatic_recording_id(episode),
-        @automatic_recording_policy_snapshot_version
-      )
-
-    operation
-  end
-
-  defp automatic_recording_id(%EpisodeKey{episode_id: episode_id}) do
-    <<a::48, _version::4, b::12, _variant::2, c::62, _rest::binary>> =
-      :crypto.hash(:sha, [@uuid_namespace_dns, "chalk-sync/automatic-recording/", episode_id])
-
-    UUID.load!(<<a::48, 5::4, b::12, 2::2, c::62>>)
-  end
-
-  defp lock_lifecycle_participant(_connection, _episode, %{name: "episode_ended"}), do: nil
-
-  defp lock_lifecycle_participant(
-         connection,
-         episode,
-         %{name: "admission_requested", payload: payload}
-       ) do
-    with {:ok, admission_request_id} <- UUID.dump(payload["admission_request_id"]),
-         {:ok, participant_id} <- UUID.dump(payload["participant_id"]) do
-      admission_params = Scope.episode(episode) ++ [admission_request_id]
-
-      admission =
-        case Postgrex.query!(connection, SQL.lock_admission_request(), admission_params).rows do
-          [
-            [
-              id,
-              participant_id,
-              display_name,
-              role,
-              status,
-              expires_at,
-              _
-            ]
-          ] ->
-            %{
-              id: UUID.load!(id),
-              participant_id: UUID.load!(participant_id),
-              display_name: display_name,
-              role: role,
-              status: status,
-              expires_at: expires_at
-            }
-
-          [] ->
-            Postgrex.rollback(connection, {:error, :admission_request_not_found})
-        end
-
-      participant =
-        case Postgrex.query!(
-               connection,
-               SQL.lock_admission_participant(),
-               Scope.episode(episode) ++ [participant_id]
-             ).rows do
-          [[generation, status, display_name, role, capabilities]] ->
-            %{
-              id: payload["participant_id"],
-              generation: generation,
-              status: status,
-              display_name: display_name,
-              role: role,
-              capabilities: capabilities
-            }
-
-          [] ->
-            Postgrex.rollback(connection, {:error, :participant_not_found})
-        end
-
-      %{admission: admission, participant: participant}
-    else
-      :error -> Postgrex.rollback(connection, {:error, :invalid_lifecycle_intent})
-    end
-  end
-
-  defp lock_lifecycle_participant(connection, episode, intent) do
-    params = Scope.episode(episode) ++ [Scope.uuid(intent.participant_id)]
-
-    case Postgrex.query!(connection, AuthoritySQL.lock_participant(), params).rows do
-      [[generation, status, role, capabilities, _identity_id]] ->
-        %{generation: generation, status: status, role: role, capabilities: capabilities}
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :participant_not_found})
-    end
-  end
-
-  defp validate_lifecycle_product_state(
-         %{name: "participant_joined"} = intent,
-         "active",
-         participant
-       ) do
-    cond do
-      participant.generation != intent.participant_generation ->
-        {:error, :stale_participant_generation}
-
-      participant.status != "joining" ->
-        {:error, :invalid_lifecycle_transition}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_lifecycle_product_state(
-         %{name: "admission_requested", payload: payload},
-         "active",
-         %{admission: admission, participant: participant}
-       ) do
-    expected_payload = %{
-      "admission_request_id" => admission.id,
-      "participant_id" => admission.participant_id,
-      "display_name" => admission.display_name,
-      "role" => admission.role,
-      "expires_at_ms" => DateTime.to_unix(admission.expires_at, :millisecond)
-    }
-
-    if admission.status == "pending" and participant.status == "joining" and
-         participant.id == admission.participant_id and
-         participant.display_name == admission.display_name and
-         participant.role == admission.role and payload == expected_payload do
-      :ok
-    else
-      {:error, :invalid_lifecycle_transition}
-    end
-  end
-
-  defp validate_lifecycle_product_state(
-         %{name: "participant_left"} = intent,
-         "active",
-         participant
-       ) do
-    cond do
-      participant.generation != intent.participant_generation ->
-        {:error, :stale_participant_generation}
-
-      participant.status != "leaving" ->
-        {:error, :invalid_lifecycle_transition}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_lifecycle_product_state(%{name: "episode_ended"}, "ending", nil), do: :ok
-
-  defp validate_lifecycle_product_state(%{name: name}, status, _participant)
-       when name in ["participant_joined", "participant_left"] and status in ["ending", "ended"],
-       do: {:error, :episode_ending}
-
-  defp validate_lifecycle_product_state(_intent, _status, _participant),
-    do: {:error, :invalid_lifecycle_transition}
 
   defp lifecycle_decision(connection, episode, lifecycle_intent_id, intent) do
     params = [
@@ -416,24 +165,6 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       reason: lifecycle_terminal_reason(intent.terminal_reason)
     }
   end
-
-  defp lifecycle_name("admission_requested"), do: :admission_requested
-  defp lifecycle_name("participant_joined"), do: :participant_joined
-  defp lifecycle_name("participant_left"), do: :participant_left
-  defp lifecycle_name("episode_ended"), do: :episode_ended
-
-  defp lifecycle_payload(%{name: "participant_joined", payload: payload}, participant, state) do
-    payload
-    |> Map.put("role", participant.role)
-    |> Map.put("admission_revision", state.revision + 1)
-  end
-
-  defp lifecycle_payload(intent, _participant, _state), do: intent.payload
-
-  defp normalize_lifecycle_error(:revision_gap), do: :invalid_state
-  defp normalize_lifecycle_error(:invalid_payload), do: :invalid_lifecycle_intent
-  defp normalize_lifecycle_error(:unknown_event), do: :invalid_lifecycle_intent
-  defp normalize_lifecycle_error(reason), do: reason
 
   defp lifecycle_terminal_reason("superseded_by_episode_end"),
     do: :superseded_by_episode_end

@@ -23,7 +23,7 @@ type WhiteboardFileService interface {
 }
 
 type WhiteboardParticipantVerifier interface {
-	VerifyWhiteboardParticipant(context.Context, string) (whiteboardfiles.Subject, bool, error)
+	VerifyParticipant(context.Context, string) (whiteboardfiles.Subject, bool, error)
 }
 
 type downloadWhiteboardFileRequest struct {
@@ -84,7 +84,7 @@ func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(h
 				writeUnauthenticated(response)
 				return
 			}
-			subject, valid, err := verifier.VerifyWhiteboardParticipant(request.Context(), token)
+			subject, valid, err := verifier.VerifyParticipant(request.Context(), token)
 			if err != nil {
 				writeServiceUnavailable(response)
 				return

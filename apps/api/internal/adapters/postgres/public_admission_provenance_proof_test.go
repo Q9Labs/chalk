@@ -198,7 +198,7 @@ func proveExpiredPendingArrivalRetry(t *testing.T, ctx context.Context, pool *pg
 	if _, err := pool.Exec(ctx, `update space_public_arrivals set state='pending',terminal_reason=null where arrival_handle=$1`, uuid(arrival.Arrival.ArrivalHandle)); err != nil {
 		t.Fatal(err)
 	}
-	_, legacyErr := NewEpisodeLifecycleRepository(pool).JoinPublic(ctx, episodes.PublicJoinInput{TenantID: tenantID, SpaceID: spaceID, KnockArrivalID: arrival.Arrival.ArrivalHandle, IdentityMode: "guest", DisplayName: "Expired legacy retry", Role: publicinvites.PublicRoleCollaborator, Request: episodes.Request{Key: accountTenantIntegrationID(t).String()}})
+	_, legacyErr := NewEpisodeLifecycleRepository(pool).JoinPublic(ctx, episodes.PublicJoinInput{TenantID: tenantID, SpaceID: spaceID, PendingArrivalID: arrival.Arrival.ArrivalHandle, AdmissionMode: "knock", IdentityMode: "guest", DisplayName: "Expired legacy retry", Role: publicinvites.PublicRoleCollaborator, Request: episodes.Request{Key: accountTenantIntegrationID(t).String()}})
 	if !errors.Is(legacyErr, publicinvites.ErrArrivalUnavailable) {
 		t.Fatalf("expired legacy allocation = %v", legacyErr)
 	}

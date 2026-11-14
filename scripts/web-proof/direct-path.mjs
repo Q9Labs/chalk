@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
+import { median } from "../lib/stats.mjs";
 import { createRun, loadConfig, save, maskCredentials, publicFailure, check, request } from "../prod-proof/runtime.mjs";
 import { createEpisode, createSpace, prepareIntegration } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
@@ -89,9 +90,10 @@ try {
   for (const arm of ["direct", "control"]) {
     const rows = joins.filter((row) => row.arm === arm);
     const times = rows.map((row) => row.joinMs).sort((a, b) => a - b);
-    const median = times.length ? times[Math.floor(times.length / 2)] : null;
     const paths = (key) => [...new Set(rows.map((row) => row[key].join("+") || "none"))].join(" | ");
-    console.log(`${arm}: ${rows.length} joins, median ${median} ms, min ${times[0]} ms, max ${times.at(-1)} ms; sync on [${paths("sync")}]; signalling on [${paths("signalling")}]; ?direct kept after Join: ${rows.filter((row) => row.kept === "off").length}/${rows.length}`);
+    console.log(
+      `${arm}: ${rows.length} joins, median ${times.length ? median(times) : null} ms, min ${times[0]} ms, max ${times.at(-1)} ms; sync on [${paths("sync")}]; signalling on [${paths("signalling")}]; ?direct kept after Join: ${rows.filter((row) => row.kept === "off").length}/${rows.length}`,
+    );
   }
 } catch (error) {
   failed = true;

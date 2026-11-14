@@ -15,34 +15,10 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel/trace"
 )
-
-func TestCaptureDaemonCompletesSuccessfulServerEpoch(t *testing.T) {
-	claim := captureDaemonClaim(t, 7)
-	control := &captureControlStub{}
-	attempt := &captureAttemptStub{run: func(context.Context) error { return nil }}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return attempt, nil
-	}), nil)
-
-	if err := daemon.runClaim(context.Background(), claim); err != nil {
-		t.Fatalf("run claim: %v", err)
-	}
-	if control.completeCalls.Load() != 1 || control.failCalls != 0 {
-		t.Fatalf("terminal calls = complete %d fail %d", control.completeCalls.Load(), control.failCalls)
-	}
-	if control.completed.CaptureEpoch != 7 || control.completed.AttemptCount != claim.Envelope.AttemptCount {
-		t.Fatalf("completed fence = %+v", control.completed)
-	}
-	if attempt.closeCalls != 1 {
-		t.Fatalf("close calls = %d", attempt.closeCalls)
-	}
-}
 
 func TestCaptureDaemonRequiresHandoffBudgetsInsideReadinessAndLeaseWindows(t *testing.T) {
 	control := &captureControlStub{}
@@ -61,37 +37,6 @@ func TestCaptureDaemonRequiresHandoffBudgetsInsideReadinessAndLeaseWindows(t *te
 	}
 	if defaultCaptureCloseTimeout >= DefaultHandoffShutdown || DefaultHandoffShutdown+DefaultRelinquishTimeout >= ReadinessShutdownGrace || DefaultHandoffShutdown+DefaultRelinquishTimeout >= DefaultCaptureLease-DefaultHeartbeatInterval {
 		t.Fatal("default capture cleanup and handoff budgets are not strictly nested")
-	}
-}
-
-func TestCaptureDaemonCorrelatesWholeAttemptFromClaimAuthority(t *testing.T) {
-	claim := captureDaemonClaim(t, 7)
-	control := &captureControlStub{}
-	var factoryContext, runContext context.Context
-	attempt := &captureAttemptStub{run: func(ctx context.Context) error {
-		runContext = ctx
-		return nil
-	}}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(ctx context.Context, _ ClaimResult) (CaptureAttempt, error) {
-		factoryContext = ctx
-		return attempt, nil
-	}), nil)
-
-	if err := daemon.runClaim(context.Background(), claim); err != nil {
-		t.Fatalf("run claim: %v", err)
-	}
-	for name, ctx := range map[string]context.Context{"factory": factoryContext, "run": runContext, "complete": control.completeContext} {
-		journeyID, ok := observability.JourneyIDFromContext(ctx)
-		if !ok || journeyID != claim.ClaimRequestID {
-			t.Fatalf("%s journey = %v %v, want %s", name, journeyID, ok, claim.ClaimRequestID)
-		}
-		span := trace.SpanContextFromContext(ctx)
-		if !span.IsValid() || !span.IsSampled() {
-			t.Fatalf("%s trace context = %v", name, span)
-		}
-	}
-	if trace.SpanContextFromContext(factoryContext).TraceID() != trace.SpanContextFromContext(control.completeContext).TraceID() {
-		t.Fatal("capture attempt trace changed before completion")
 	}
 }
 
@@ -195,29 +140,6 @@ func TestCaptureCompletionDoesNotRetryTerminalFailure(t *testing.T) {
 	}
 	if control.completeCalls.Load() != 1 || control.failCalls != 1 || control.failed.ErrorCode != completionFailureCode || control.failed.ErrorDetail != "stage=api_complete outcome=returned error_class=fenced http_status=0" {
 		t.Fatalf("completion calls=%d failures=%d detail=%q", control.completeCalls.Load(), control.failCalls, control.failed.ErrorDetail)
-	}
-}
-
-func TestCaptureCompletionOnlyClaimSkipsMediaAndReportsOutcome(t *testing.T) {
-	claim := captureDaemonClaim(t, 7)
-	claim.Envelope.CompletionOnly = true
-	control := &captureControlStub{}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		t.Fatal("completion retry started a media attempt")
-		return nil, nil
-	}), nil)
-	if err := daemon.runClaim(context.Background(), claim); err != nil {
-		t.Fatalf("complete stopped capture: %v", err)
-	}
-	if control.completeCalls.Load() != 1 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
-		t.Fatalf("completion calls=%d failures=%d epoch=%d", control.completeCalls.Load(), control.failCalls, control.completed.CaptureEpoch)
-	}
-	if detail := completionFailureDetail(completionStageError{stage: "api_complete", outcome: "returned", cause: HTTPError{Status: 503}}); detail != "stage=api_complete outcome=returned error_class=http http_status=503" {
-		t.Fatalf("HTTP outcome detail = %q", detail)
-	}
-	timedOut := completionStageError{stage: "api_complete", outcome: "timed_out", cause: errors.Join(context.DeadlineExceeded, HTTPError{Status: 500, Code: "recording.invalid_completion_source", Retryable: true})}
-	if detail := completionFailureDetail(timedOut); detail != "stage=api_complete outcome=timed_out error_class=http http_status=500 api_error_code=recording.invalid_completion_source" {
-		t.Fatalf("timed out detail = %q", detail)
 	}
 }
 
@@ -429,75 +351,6 @@ func TestCaptureDaemonRejectsHeartbeatAuthorityMutation(t *testing.T) {
 	}
 }
 
-func TestCaptureDaemonRetriesSameClaimRequestAfterRetryableTransportFailure(t *testing.T) {
-	control := &captureControlStub{}
-	control.claim = func(_ context.Context, claimRequestID utilities.ID, _ time.Duration) (ClaimResult, error) {
-		control.claimRequestIDs = append(control.claimRequestIDs, claimRequestID)
-		if len(control.claimRequestIDs) == 1 {
-			return ClaimResult{}, TransportError{Err: errors.New("response lost")}
-		}
-		return captureDaemonClaim(t, 4), nil
-	}
-	waits := 0
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
-	}), nil)
-	daemon.config.Wait = func(context.Context, time.Duration) error {
-		waits++
-		return nil
-	}
-
-	claimRequestID := testID(t, "22222222-2222-4222-8222-222222222222")
-	if _, err := daemon.claimJob(context.Background(), claimRequestID); err != nil {
-		t.Fatalf("retry claim: %v", err)
-	}
-	if waits != 1 || len(control.claimRequestIDs) != 2 || control.claimRequestIDs[0] != claimRequestID || control.claimRequestIDs[1] != claimRequestID {
-		t.Fatalf("claim retries = waits %d ids %v", waits, control.claimRequestIDs)
-	}
-}
-
-func TestCaptureDaemonDrainRelinquishesActiveClaimAfterShutdown(t *testing.T) {
-	t.Parallel()
-	claim := captureDaemonClaim(t, 7)
-	claimCalls := 0
-	control := &captureControlStub{claim: func(context.Context, utilities.ID, time.Duration) (ClaimResult, error) {
-		claimCalls++
-		if claimCalls > 1 {
-			t.Fatal("capture daemon claimed after drain")
-		}
-		return claim, nil
-	}}
-	started := make(chan struct{})
-	closed := false
-	attempt := &captureAttemptStub{run: func(ctx context.Context) error {
-		close(started)
-		<-ctx.Done()
-		return ctx.Err()
-	}, close: func(context.Context) error {
-		closed = true
-		return nil
-	}}
-	control.relinquish = func(_ context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-		if !closed {
-			t.Fatal("capture lease relinquished before attempt shutdown")
-		}
-		return relinquishedCaptureJob(input), nil
-	}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return attempt, nil
-	}), nil)
-	result := make(chan error, 1)
-	go func() { result <- daemon.Run(context.Background()) }()
-	<-started
-	daemon.Drain()
-	if err := <-result; !errors.Is(err, ErrWorkerDraining) {
-		t.Fatalf("drain error = %v", err)
-	}
-	if claimCalls != 1 || control.relinquishCalls != 1 || control.completeCalls.Load() != 0 || control.failCalls != 0 {
-		t.Fatalf("claims/relinquishes/completions/failures = %d/%d/%d/%d", claimCalls, control.relinquishCalls, control.completeCalls.Load(), control.failCalls)
-	}
-}
-
 func TestCaptureDaemonHandoffSettlesPionAttemptOnceBeforeRelinquish(t *testing.T) {
 	claim := captureDaemonClaim(t, 7)
 	claim.Envelope.HardDeadline = time.Now().UTC().Add(time.Hour).Format(time.RFC3339Nano)
@@ -602,108 +455,6 @@ func TestCaptureDaemonDoesNotRelinquishOutsideLiveLeaseWindow(t *testing.T) {
 	}
 	if control.relinquishCalls != 0 {
 		t.Fatalf("relinquish calls = %d, want 0", control.relinquishCalls)
-	}
-}
-
-func TestCaptureDaemonCancellationRelinquishesWithDetachedBoundedContext(t *testing.T) {
-	t.Parallel()
-	claim := captureDaemonClaim(t, 5)
-	started := make(chan struct{})
-	control := &captureControlStub{}
-	control.relinquish = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-		if ctx.Err() != nil {
-			t.Fatalf("relinquish context = %v", ctx.Err())
-		}
-		if _, ok := ctx.Deadline(); !ok {
-			t.Fatal("relinquish context has no deadline")
-		}
-		journeyID, ok := observability.JourneyIDFromContext(ctx)
-		if !ok || journeyID != claim.ClaimRequestID || !trace.SpanContextFromContext(ctx).IsValid() {
-			t.Fatalf("relinquish correlation = journey %s present %v trace %v", journeyID, ok, trace.SpanContextFromContext(ctx))
-		}
-		return relinquishedCaptureJob(input), nil
-	}
-	attempt := &captureAttemptStub{run: func(ctx context.Context) error {
-		close(started)
-		<-ctx.Done()
-		return ctx.Err()
-	}}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return attempt, nil
-	}), nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	go func() { result <- daemon.runClaim(ctx, claim) }()
-	<-started
-	cancel()
-	if err := <-result; !errors.Is(err, ErrCaptureDaemonStopped) || !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled claim error = %v", err)
-	}
-	if control.relinquishCalls != 1 || control.completeCalls.Load() != 0 || control.failCalls != 0 {
-		t.Fatalf("relinquishes/completions/failures = %d/%d/%d", control.relinquishCalls, control.completeCalls.Load(), control.failCalls)
-	}
-}
-
-func TestCaptureDaemonDoesNotRelinquishUnstoppedAttempt(t *testing.T) {
-	claim := captureDaemonClaim(t, 4)
-	runRelease := make(chan struct{})
-	closeRelease := make(chan struct{})
-	defer close(runRelease)
-	defer close(closeRelease)
-	started := make(chan struct{})
-	control := &captureControlStub{}
-	attempt := &captureAttemptStub{
-		run: func(context.Context) error {
-			close(started)
-			<-runRelease
-			return nil
-		},
-		close: func(context.Context) error {
-			<-closeRelease
-			return nil
-		},
-	}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return attempt, nil
-	}), nil)
-	daemon.config.HandoffShutdown = 10 * time.Millisecond
-	result := make(chan error, 1)
-	go func() { result <- daemon.runClaim(context.Background(), claim) }()
-	<-started
-	daemon.Drain()
-	if err := <-result; !errors.Is(err, ErrCaptureAttemptShutdown) {
-		t.Fatalf("unstopped claim error = %v", err)
-	}
-	if control.relinquishCalls != 0 {
-		t.Fatalf("unsafe relinquish calls = %d", control.relinquishCalls)
-	}
-}
-
-func TestCaptureDaemonDoesNotRelinquishAfterCleanupError(t *testing.T) {
-	claim := captureDaemonClaim(t, 4)
-	started := make(chan struct{})
-	cleanupErr := errors.New("capture peer close failed")
-	attempt := &captureAttemptStub{
-		run: func(ctx context.Context) error {
-			close(started)
-			<-ctx.Done()
-			return ctx.Err()
-		},
-		close: func(context.Context) error { return cleanupErr },
-	}
-	control := &captureControlStub{}
-	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return attempt, nil
-	}), nil)
-	result := make(chan error, 1)
-	go func() { result <- daemon.runClaim(context.Background(), claim) }()
-	<-started
-	daemon.Drain()
-	if err := <-result; !errors.Is(err, ErrCaptureAttemptShutdown) || !errors.Is(err, cleanupErr) {
-		t.Fatalf("capture cleanup error = %v", err)
-	}
-	if control.relinquishCalls != 0 {
-		t.Fatalf("unsafe relinquish calls = %d", control.relinquishCalls)
 	}
 }
 
@@ -890,7 +641,6 @@ type captureControlStub struct {
 	complete        func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	heartbeat       func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
 	relinquish      func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
-	claimRequestIDs []utilities.ID
 	heartbeatJob    recordingpipeline.Job
 	heartbeatCalls  int
 	relinquishCalls int

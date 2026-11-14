@@ -1,0 +1,9 @@
+# Each broken variant must break the rule it names; `run.sh` fails otherwise.
+# Format: <Break value><TAB><rule><TAB><code edit the variant mirrors>
+stale_observation_applies	NewestObservationWins	drop the `cursor < current -> :older` clause of compare_media_cursor in live/episode.ex
+renew_skips_authority	LeaseNeedsAuthority	renew in reconcile_observed_screen_lease without matching the participant authority generation
+takeover_ignores_expiry	NoTakeoverWhileLive	drop the `where least(...) <= excluded.acquired_at` guard of acquire_query
+equal_look_skips_renew	AtMostOneShare	drop the reconcile_screen_leases call from apply_equal_media_observation in live/episode.ex
+short_renewal	AtMostOneShare	set @default_renewal_ms in stateholder/postgres/screen_share_lease.ex below the 15 s look interval
+reshare_inherits	ReshareGetsFullLease	drop the :replace_own option that acquire_screen_lease passes for a share without a lease in memory
+hard_cap_lapses	AtMostOneShare	drop the outlasts_renewal? check in renew_screen_lease in live/episode.ex

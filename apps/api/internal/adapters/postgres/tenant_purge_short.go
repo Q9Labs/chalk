@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 )
 
@@ -338,7 +339,7 @@ func shortObjectQueryAfterSnapshot(catalog purgeCatalog, selected map[string]str
 		// Validated ownership lets us fence the whole approved namespace once.
 		// This is stronger than matching every object individually, and avoids
 		// rescanning large retained JSON values hundreds of times per row.
-		prefix := "tenants/" + o.OwnerTenantID + "/"
+		prefix := recordingobjectkey.TenantPrefix(o.OwnerTenantID)
 		if o.OwnerTenantID != "" && strings.HasPrefix(o.Key, prefix) {
 			addNamespace(prefix)
 			continue

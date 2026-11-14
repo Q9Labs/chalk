@@ -2,13 +2,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
-const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" })
+const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: repositoryRoot, encoding: "utf8" })
   .split("\0")
-  .filter((file) => file && existsSync(path.join(root, file)));
-const scripts = new Set(files.filter((file) => path.basename(file) === "package.json").flatMap((file) => Object.keys(JSON.parse(readFileSync(path.join(root, file), "utf8")).scripts ?? {})));
+  .filter((file) => file && existsSync(path.join(repositoryRoot, file)));
+const scripts = new Set(files.filter((file) => path.basename(file) === "package.json").flatMap((file) => Object.keys(JSON.parse(readFileSync(path.join(repositoryRoot, file), "utf8")).scripts ?? {})));
 // pnpm's own subcommands are not package scripts. Everything else must be declared.
 const pnpmCommands = new Set([
   "add",
@@ -43,7 +42,7 @@ const pnpmCommands = new Set([
   "view",
   "why",
 ]);
-const examples = JSON.parse(readFileSync(path.join(root, "scripts/gates/doclint-examples.json"), "utf8"));
+const examples = JSON.parse(readFileSync(path.join(repositoryRoot, "scripts/gates/doclint-examples.json"), "utf8"));
 // Frozen evidence and release notes are history, not maintained runbooks.
 const docs = files.filter((file) => /\.(md|mdx)$/.test(file) && !/^(?:scratchpad\/|\.changeset\/)|(?:^|\/)(?:CHANGELOG\.md|testdata\/|fixtures\/)/.test(file));
 let errors = 0;
@@ -58,16 +57,16 @@ function localExists(file, target, repoPath = true) {
   } catch {
     return false;
   }
-  if (!repoPath) return existsSync(path.resolve(root, path.dirname(file), clean));
+  if (!repoPath) return existsSync(path.resolve(repositoryRoot, path.dirname(file), clean));
   let owner = path.dirname(file);
-  while (owner !== "." && !existsSync(path.join(root, owner, "package.json")) && !existsSync(path.join(root, owner, "go.mod")) && !existsSync(path.join(root, owner, "mix.exs"))) owner = path.dirname(owner);
-  return [path.dirname(file), owner, "."].some((base) => existsSync(path.resolve(root, base, clean)));
+  while (owner !== "." && !existsSync(path.join(repositoryRoot, owner, "package.json")) && !existsSync(path.join(repositoryRoot, owner, "go.mod")) && !existsSync(path.join(repositoryRoot, owner, "mix.exs"))) owner = path.dirname(owner);
+  return [path.dirname(file), owner, "."].some((base) => existsSync(path.resolve(repositoryRoot, base, clean)));
 }
 function isRepoPath(value) {
   return !/\s|[<>|=]|^[@~/#]|:\/\//.test(value) && (/^(?:\.\.?\/|apps\/|packages\/|sdks\/|scripts\/|docs\/|contract\/|infrastructure\/|tools\/|\.github\/)/.test(value) || /(?:^|\/)[\w.-]+\.(?:mdx?|[cm]?js|[jt]sx?|json|ya?ml|sh|go|exs?|css|html|toml|sql|proto|lock)(?::\d[\d,:-]*)?$/.test(value));
 }
 for (const file of docs) {
-  const lines = readFileSync(path.join(root, file), "utf8").split(/\r?\n/);
+  const lines = readFileSync(path.join(repositoryRoot, file), "utf8").split(/\r?\n/);
   let fence;
   for (const [index, line] of lines.entries()) {
     const number = index + 1;

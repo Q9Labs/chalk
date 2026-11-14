@@ -23,6 +23,8 @@ A missing failure report does not prove success. A worker can lose its lease or 
 A terminal failure, rejection or timeout must say why, in a bounded and redacted form ([coding standards](../CODING_STANDARDS.md)).
 
 - Tags and metric attributes use a fixed, small set of values. A metric never carries an Episode, Tenant or Participant ID. Put the ID in a log line and search the log.
+- A caller is named by its matched `route` pattern, never by an ID. `chalk.api.participant_media.authentication` carries `outcome`, `reason` and `route`, and the log line `participant_media.authentication` adds the `trace_id` that leads to the `http.request` line with the path.
+- Counters in the production metrics dataset are cumulative: each export repeats the running total. Read them with `prom::rate` or by the difference of the first and last point of a window. Summing the exported points counts every event once per export, so a counter stuck at 29 reads as 1,740 an hour.
 - Allowlist error text. Provider descriptions, raw transport errors, SDP, URLs, paths and anything media-derived can echo hosts, addresses or content. Export a code class, a fixed phrase or a hash (`provider_message_fingerprint`, `participant_id_hash`) instead.
 - Tokens, grants, authorization headers, tool arguments, transcript text and audio never enter a log, span or metric.
 - Bound state kept for diagnostics (entries, bytes, age), and make a full or failed diagnostic degrade to silence. Diagnostics must never fail the user's operation.

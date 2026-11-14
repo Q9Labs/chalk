@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { UUIDSchema } from "@q9labsai/chalk-client/effect";
-import type { ConnectAction, ConnectDTO, ConnectionsAction, ConnectionsDTO } from "../src/lib/dashboard/contracts";
+import type { ActionResult, ConnectAction, ConnectDTO, ConnectionsAction, ConnectionsDTO } from "../src/lib/dashboard/contracts";
 import type { Engine } from "./engine";
-import { run } from "./engine";
+import { ENGINE_MAX_PAGE_SIZE, run } from "./engine";
 
 // Connected apps are Claude, ChatGPT and other MCP clients that signed in through OAuth.
 // The tenant always comes from the signed-in session (engine.tenantId), never from the request.
@@ -18,7 +18,7 @@ export async function connectPage(engine: Engine, request: string): Promise<Conn
 }
 
 /** Returns the URL that sends the browser back to the app, with a code or an error. */
-export async function connectMutation(engine: Engine, action: ConnectAction): Promise<{ redirectUrl: string }> {
+export async function connectMutation(engine: Engine, action: ConnectAction): Promise<ActionResult<ConnectAction>> {
   const result = action.action === "approve-connection" ? await run(engine.api.default.approveMCPConsentRequest({ payload: { request: action.request, scope: action.scope, tenant_id: engine.tenantId } })) : await run(engine.api.default.denyMCPConsentRequest({ payload: { request: action.request } }));
   return { redirectUrl: result.redirect_url };
 }
@@ -27,7 +27,6 @@ function connectionRow(row: { id: string; client_name: string; scope: string; la
   return { id: row.id, clientName: row.client_name, scope: bundle(row.scope), lastUsedAt: row.last_used_at, createdAt: row.created_at };
 }
 
-const NAME_PAGE_SIZE = 100;
 const NAME_PAGE_LIMIT = 20;
 
 /**
@@ -52,7 +51,7 @@ export async function connectionsPage(engine: Engine, cursor?: string): Promise<
   try {
     let next = first.pagination.next_cursor;
     for (let pages = 0; next && pages < NAME_PAGE_LIMIT; pages++) {
-      const more = await read(next, NAME_PAGE_SIZE);
+      const more = await read(next, ENGINE_MAX_PAGE_SIZE);
       for (const row of more.data) names.add(row.client_name);
       next = more.pagination.next_cursor;
     }
@@ -66,7 +65,7 @@ function logFailure(engine: Engine, error: unknown) {
   console.warn(JSON.stringify({ event: "dashboard.mcp_connections_failed", tenant_id: engine.tenantId, error: error instanceof Error ? error.name : "unknown" }));
 }
 
-export async function connectionsMutation(engine: Engine, action: ConnectionsAction) {
+export async function connectionsMutation(engine: Engine, action: ConnectionsAction): Promise<ActionResult<ConnectionsAction>> {
   await run(engine.api.default.revokeMCPConnection({ params: { tenant_id: engine.tenantId, connection_id: Schema.decodeUnknownSync(UUIDSchema)(action.connectionId) } }));
   return { ok: true };
 }

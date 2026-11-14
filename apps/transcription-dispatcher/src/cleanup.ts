@@ -1,7 +1,8 @@
-import { ControlApiError, AssignmentError, isTerminalFailure, safeErrorCode } from "./errors.js";
+import { AssignmentError, isLateCompletion, isRetryableStatus, isTerminalFailure, safeErrorCode } from "./errors.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
-import type { CleanupAssignment, DispatcherDependencies, JourneyContext } from "./types.js";
+import type { CleanupAssignment } from "./assignment-types.js";
+import type { DispatcherDependencies, JourneyContext } from "./types.js";
 
 export function cleanupQueue(dependencies: DispatcherDependencies): JobQueue<CleanupAssignment> {
   return {
@@ -16,12 +17,12 @@ async function processCleanup(dependencies: DispatcherDependencies, assignment: 
   const logger = loggerOf(dependencies);
   try {
     const response = await dependencies.fetch(assignment.deleteUrl, { method: "DELETE" });
-    if (response.status !== 404 && !response.ok) throw new AssignmentError("cleanup delete failed", response.status === 408 || response.status === 429 || response.status >= 500);
+    if (response.status !== 404 && !response.ok) throw new AssignmentError("cleanup delete failed", isRetryableStatus(response.status));
     await dependencies.control.completeCleanup({ assignment, context: journey });
     logger.info("cleanup_completed", { absent: response.status === 404 });
     return true;
   } catch (error) {
-    if (error instanceof ControlApiError && error.status === 409) {
+    if (isLateCompletion(error)) {
       logger.warn("cleanup_late_or_duplicate_completion_rejected");
       return false;
     }

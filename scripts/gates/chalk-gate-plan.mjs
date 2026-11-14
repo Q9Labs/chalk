@@ -4,11 +4,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { gitLines } from "../lib/git.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
+export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
+const CALL_LEAK_SHARDS = 3;
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
@@ -111,13 +112,6 @@ export class GatePlanningError extends Error {
   }
 }
 
-function gitLines(args, cwd = repositoryRoot, environment = process.env) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", env: environment })
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
 function normalizeFiles(files) {
   if (!Array.isArray(files)) throw new GatePlanningError("invalid-path", "Gate files must be a list of paths");
   const normalized = files.map((file) => {
@@ -187,9 +181,9 @@ function isKnownPath(file, workspaces, narrow) {
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
   let manifests;
   if (snapshot.mode === "ref") {
-    manifests = gitLines(["ls-tree", "-r", "--name-only", snapshot.ref], root, environment);
+    manifests = gitLines(["ls-tree", "-r", "--name-only", snapshot.ref], { cwd: root, env: environment });
   } else {
-    manifests = gitLines(snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"], root, environment);
+    manifests = gitLines(snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"], { cwd: root, env: environment });
   }
   return manifests.filter((manifest) => {
     const directory = path.posix.dirname(manifest);
@@ -487,6 +481,7 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
+  const diagnoseCall = full || normalizedFiles.some((file) => startsWithAny(file, ["scripts/diagnose-call", "infrastructure/observability/production-alerts/call-verdict"]));
   const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, proofTestRoots));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
   const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
@@ -523,10 +518,15 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/feature-map.test.mjs",
       "scripts/gates/ready-cap.test.mjs",
+      "scripts/gates/references.test.mjs",
+      "scripts/gates/ratchets.test.mjs",
+      "scripts/gates/analysis.test.mjs",
       "scripts/gates/ast-grep.test.mjs",
       "scripts/gates/mock-calls.test.mjs",
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
+    task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
+    task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "bash",
       "-c",
@@ -543,6 +543,9 @@ export function createGatePlan(files, options = {}) {
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
+    task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity"]),
+    task("dead-code", "No new unreachable Go function", full || sourceFiles.some((file) => file.endsWith(".go")), full ? fullReason : "Go source changed", ["node", "scripts/gates/analysis.mjs", "dead-code"]),
+    task("duplication", "Clone count does not rise", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "duplication"]),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
     task("formal-sync", "Sync entry and Leave model check", formalSync, formalSync ? "Sync entry or Leave inputs changed" : "Sync entry and Leave are unaffected", ["bash", "tools/formal/sync-entry-leave/run.sh"]),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
@@ -585,9 +588,10 @@ export function createGatePlan(files, options = {}) {
       "--leaks-only",
       "--out",
       process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? `artifacts/${process.env.GATE_LANE_GROUP}.json` : "artifacts/call-leaks.json",
-      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
+      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/${CALL_LEAK_SHARDS}`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
+    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis or verdict thresholds changed" : "call diagnosis is unaffected", ["node", "--test", "scripts/diagnose-call/diagnose-call.test.mjs"]),
     task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
@@ -602,9 +606,7 @@ export function createGatePlan(files, options = {}) {
       "Affected package TypeScript resolution",
       publishableWorkspaces.length > 0,
       publishableWorkspaces.map((workspace) => workspace.name).join(", ") || "no affected public package",
-      publishableWorkspaces.length > 0
-        ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--ignore-rules", "cjs-resolves-to-esm", "internal-resolution-error", "--exclude-entrypoints", "./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"]
-        : null,
+      publishableWorkspaces.length > 0 ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--config-path", path.join(options.repositoryRoot ?? repositoryRoot, ".attw.json")] : null,
     ),
   ];
 
@@ -686,35 +688,41 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
+// timeoutMinutes includes up to 12m of browser setup (usually under a minute): tests and bundles take ~12m each, leaks ~27m.
+const CHECKS_TIMEOUT_MINUTES = 30;
 const rootLaneGroups = {
-  "browser-tests": ["browser-tests", "camera-proof"],
-  "dashboard-engine": ["dashboard-engine"],
-  "dashboard-refresh": ["dashboard-refresh"],
-  "dashboard-board": ["board-local"],
-  // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
-  sfu: ["sfu"],
-  "call-leaks-1": ["call-leaks"],
-  "call-leaks-2": ["call-leaks"],
-  "call-leaks-3": ["call-leaks"],
-  build: ["call-performance", "build", "publint", "attw"],
+  "browser-tests": { lanes: ["browser-tests", "camera-proof"], timeoutMinutes: 27, browser: true },
+  "dashboard-engine": { lanes: ["dashboard-engine"], timeoutMinutes: 27, browser: false },
+  "dashboard-refresh": { lanes: ["dashboard-refresh"], timeoutMinutes: 27, browser: true },
+  "dashboard-board": { lanes: ["board-local"], timeoutMinutes: 27, browser: true },
+  sfu: { lanes: ["sfu"], timeoutMinutes: CHECKS_TIMEOUT_MINUTES, browser: false },
+  ...Object.fromEntries(Array.from({ length: CALL_LEAK_SHARDS }, (_, index) => [`call-leaks-${index + 1}`, { lanes: ["call-leaks"], timeoutMinutes: 57, browser: true }])),
+  build: { lanes: ["call-performance", "build", "publint", "attw"], timeoutMinutes: CHECKS_TIMEOUT_MINUTES, browser: true },
 };
+const groupNames = Object.keys(rootLaneGroups);
 
 export function laneGroup(laneId) {
-  return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
+  return groupNames.find((group) => rootLaneGroups[group].lanes.includes(laneId)) ?? "checks";
 }
 
 export function laneGroupLanes(lanes, group) {
   if (group === undefined) return lanes;
   if (group !== "checks" && !Object.hasOwn(rootLaneGroups, group)) throw new GatePlanningError("invalid-lane-group", `Unknown lane group: ${group}`);
-  return lanes.filter((lane) => (group === "checks" ? laneGroup(lane.id) === group : rootLaneGroups[group].includes(lane.id)));
+  return lanes.filter((lane) => (group === "checks" ? laneGroup(lane.id) === group : rootLaneGroups[group].lanes.includes(lane.id)));
 }
 
 // The checks group always runs; the other root groups and the service gates run only when the plan selects them.
 export function ciJobs(files, options = {}) {
   const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", ...options });
-  const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].includes(task.id)));
+  const groups = groupNames.filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].lanes.includes(task.id)));
   return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups], planFull: plan.full };
 }
+
+// What the Gate workflow needs to know about a group beyond its name, so the workflow keeps no copy of this table.
+export const groupSettings = {
+  timeoutMinutes: Object.fromEntries([["checks", CHECKS_TIMEOUT_MINUTES], ...groupNames.map((group) => [group, rootLaneGroups[group].timeoutMinutes])]),
+  browserGroups: groupNames.filter((group) => rootLaneGroups[group].browser),
+};
 
 function changedFiles(base) {
   return gitLines(["diff", "--name-only", `${base}...HEAD`]);
@@ -757,6 +765,9 @@ export function selectCiJobs(base, plan = ciJobs) {
   }
 }
 
+// Format is always on so documentation-only changes are still checked.
+export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format"]);
+
 // The proof file is untrusted input from an earlier run: any doubt about it means no sharing, never a skipped check.
 function applyProof(jobs, base, proofPath) {
   try {
@@ -776,7 +787,7 @@ function applyProof(jobs, base, proofPath) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const [flag, base, proofFlag, proofPath] = process.argv.slice(2);
   if (flag !== "--ci-jobs" || !base || (proofFlag !== undefined && (proofFlag !== "--proof" || !proofPath))) {
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full> [--proof <file>]");
@@ -794,4 +805,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   }
   const jobs = proofPath && !selected.full ? applyProof(selected, base, proofPath) : selected;
   console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
+  console.log(`group_timeouts=${JSON.stringify(groupSettings.timeoutMinutes)}\nbrowser_groups=${JSON.stringify(groupSettings.browserGroups)}`);
 }

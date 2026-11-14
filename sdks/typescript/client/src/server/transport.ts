@@ -101,20 +101,12 @@ function serializedBody(body: unknown): { readonly body?: string } {
 
 function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBody: boolean, idempotencyKeyValue: string | undefined): Headers {
   const headers = new Headers(options.headers);
-  setContentType(headers, hasBody);
-  setOptionalHeader(headers, "idempotency-key", idempotencyKeyValue);
+  if (hasBody) headers.set("content-type", "application/json");
+  if (idempotencyKeyValue !== undefined) headers.set("idempotency-key", idempotencyKeyValue);
   headers.set("authorization", `Bearer ${apiKey}`);
   // The API binds an Episode to the own SFU only for an SDK that declares it.
   headers.set(MEDIA_PROVIDERS_HEADER, MEDIA_PROVIDERS);
   return headers;
-}
-
-function setContentType(headers: Headers, hasBody: boolean): void {
-  if (hasBody) headers.set("content-type", "application/json");
-}
-
-function setOptionalHeader(headers: Headers, name: string, value: string | undefined): void {
-  if (value !== undefined) headers.set(name, value);
 }
 
 async function responseError(response: Response, retryable: boolean): Promise<ChalkAPIError> {

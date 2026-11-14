@@ -47,9 +47,6 @@ defmodule ChalkSync.ProtocolV1 do
 
   def recovery_id, do: UUID.generate()
 
-  def recovery_welcome(%Identity{} = identity, %Recovery{} = recovery, recovery_id),
-    do: recovery_welcome(identity, recovery, recovery_id, %{})
-
   def recovery_welcome(
         %Identity{} = identity,
         %Recovery{} = recovery,

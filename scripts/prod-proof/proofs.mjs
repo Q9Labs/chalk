@@ -11,7 +11,8 @@ import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { findOwnSfuSpace, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -40,13 +41,13 @@ export async function prepareIntegration(run, webhooks) {
   return receiver;
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
-const recordable = mediaPlane === "cf_sfu";
+export const onCloudflare = mediaPlane === "cf_sfu";
 // A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
 // Tenant default an operator set decides. Either way the Space must land on `plane`, and a
-// run that cannot get one stops at once with reason media-plane-config.
-export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
+// run that cannot get one stops at once with reason media-plane-config. `explicitPlane` names the plane in the request (never for chalk_sfu).
+export async function createSpace(run, plane = mediaPlane, policy = manualPolicy, { explicitPlane = false } = {}) {
   const pinName = pinnedSpaceVariable(plane, policy);
   const existing = await pinnedSpace(run, plane, policy, pinName);
   if (existing) {
@@ -55,17 +56,7 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     await save(`${run.directory}/space.json`, existing);
     return existing;
   }
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `prod-proof-${randomUUID()}`,
-    metadata: { proof_run_id: run.runId },
-    recording_policy: policy.recording,
-    transcription_policy: policy.transcription,
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, metadata: { proof_run_id: run.runId }, mediaPlane: explicitPlane ? plane : undefined }));
   checkSpacePlane(space, plane, pinName);
   checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);
@@ -170,7 +161,7 @@ export async function createEpisode(run, space, policy = manualPolicy) {
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
-  if (!recordable) return;
+  if (!onCloudflare) return;
   const started = await pages[0].evaluate(() => window.proofClient.recording.start());
   check(started.recordingId, "Recording start returned no Recording");
   run.recordingId = started.recordingId;
@@ -288,7 +279,7 @@ export function availableSource(run) {
   );
 }
 async function finalizedSource(run) {
-  if (!recordable) return null;
+  if (!onCloudflare) return null;
   const recording = await availableSource(run);
   check(recording.transcription_policy === "on_demand", "Recording effective transcription policy is disabled");
   return recording;

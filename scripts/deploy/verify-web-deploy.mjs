@@ -1,5 +1,7 @@
-import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
+
+import { errorMessage } from "../lib/errors.mjs";
 
 const DEFAULT_DEADLINE_MS = 300_000;
 const DEFAULT_INITIAL_DELAY_MS = 2_000;
@@ -237,16 +239,7 @@ function endpointURL(baseURL, pathname, cacheBuster) {
   return url;
 }
 
-function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function delay(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : undefined;
-if (invokedPath === import.meta.url) {
+if (import.meta.main) {
   verifyWebDeploy(parseArguments(process.argv.slice(2))).catch((error) => {
     console.error(errorMessage(error));
     process.exitCode = 1;

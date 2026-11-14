@@ -13,7 +13,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -30,7 +29,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 			}
 		}
 		var invite sqlc.SpacePublicInvite
-		if !input.KnockArrivalID.IsZero() {
+		if !input.PendingArrivalID.IsZero() {
 			var err error
 			invite, err = queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID)})
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -61,8 +60,8 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 			return episodes.ErrEpisodeNotActive
 		}
 
-		if !input.KnockArrivalID.IsZero() {
-			arrival, err := queries.LockSpacePublicArrival(ctx, uuid(input.KnockArrivalID))
+		if !input.PendingArrivalID.IsZero() {
+			arrival, err := queries.LockSpacePublicArrival(ctx, uuid(input.PendingArrivalID))
 			if errors.Is(err, pgx.ErrNoRows) {
 				return publicinvites.ErrArrivalUnavailable
 			}
@@ -72,7 +71,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 			if arrival.TenantID != uuid(input.TenantID) || arrival.SpaceID != uuid(input.SpaceID) {
 				return publicinvites.ErrArrivalUnavailable
 			}
-			valid, err := publicAdmissionProvenanceValid(space, invite, arrival, episode, time.Now())
+			valid, err := publicAdmissionProvenanceValid(space, invite, arrival, episode, input.AdmissionMode, time.Now())
 			if err != nil {
 				return err
 			}
@@ -412,7 +411,7 @@ func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.Clien
 	if err != nil {
 		return err
 	}
-	if binding != nil && spaces.MediaPlaneProvider(binding.Provider) == spaces.MediaPlaneProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+	if binding != nil && mediaplane.Provider(binding.Provider) == mediaplane.ProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
 		return mediaplane.ErrClientUnsupported
 	}
 	return nil

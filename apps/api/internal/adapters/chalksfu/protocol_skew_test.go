@@ -147,7 +147,7 @@ func TestPlacementRefusesANodeThatPredatesTheWireProtocolAndSaysWhy(t *testing.T
 	old := startOldNode(t, ca, real, nil)
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
 	ctx := context.Background()
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 
 	logged := &logLines{}
 	fleet := real.loggedFleetOf(t, slog.New(slog.NewJSONHandler(logged, nil)), ca, clientIdentity, nodes...)
@@ -168,7 +168,7 @@ func TestPlacementRefusesANodeThatPredatesTheWireProtocolAndSaysWhy(t *testing.T
 	}
 	telemetry := &placements{}
 	moved, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || moved.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || moved.Node != "" {
+	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.Node != "" {
 		t.Fatalf("overflow on: %+v, %v, want Cloudflare", moved, err)
 	}
 	if err := moved.Validate(); err != nil || moved.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
@@ -290,13 +290,13 @@ func TestReviewColdStartMustNotBindAnUnverifiedOldNode(t *testing.T) {
 	gate := make(chan struct{})
 	old := startOldNode(t, ca, real, gate)
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	check := func(stage string, fleet *chalksfu.Fleet) {
 		t.Helper()
 		started, err := registryOn(fleet, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-		if err != nil || started == nil || started.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || started.Node != "" {
+		if err != nil || started == nil || started.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || started.Node != "" {
 			t.Fatalf("%s: binding %+v, %v, want an Episode on Cloudflare and none on the node", stage, started, err)
 		}
 		if old.posts() != 0 {
@@ -331,7 +331,7 @@ func TestReviewKnownOldNodeWithoutCloudflareMustBeRefused(t *testing.T) {
 	real := startSFUUnder(t, ca, nil)
 	old := startOldNode(t, ca, real, nil)
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	for _, overflow := range []bool{true, false} {
@@ -380,7 +380,7 @@ func TestReviewMixedFleetCannotBindOldOrUnverifiedFallback(t *testing.T) {
 				}
 				fleet := real.fleetWithOverflow(t, ca, clientIdentity, true, first, runtimeconfig.ChalkSFUNode{ID: "sfu-current", ControlURL: current.controlURL})
 				fleet.Probe(context.Background())
-				chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+				chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 				binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
 				switch {
 				case currentFull && (binding != nil || !errors.Is(err, mediaplane.ErrPlacementRefused)):
@@ -404,7 +404,7 @@ func TestReviewTransientProbeFailureKeepsWorkingOwnOnlyCalls(t *testing.T) {
 	proxy := startOldNode(t, ca, real, nil)
 	proxy.current = true
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-flaky", ControlURL: proxy.url}}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	for _, overflow := range []bool{true, false} {
@@ -414,7 +414,7 @@ func TestReviewTransientProbeFailureKeepsWorkingOwnOnlyCalls(t *testing.T) {
 		fleet.Probe(ctx)
 		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
 		proxy.failReady.Store(false)
-		if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderChalkSFU) || binding.Node != "sfu-flaky" {
+		if err != nil || binding == nil || binding.Provider != mediaplane.ProviderChalkSFU.SettingName() || binding.Node != "sfu-flaky" {
 			t.Fatalf("overflow %t, after a lost probe: %+v, %v, want the Episode bound to the node", overflow, binding, err)
 		}
 		bound, err := fleet.Allocation(binding.Node, binding.NodeIncarnation, 1)

@@ -1,6 +1,8 @@
 // The scripted three-guest call that call-artifacts plays, and the checks that find that script again in the Recording.
 // Every expectation (marker times, silence bound, mute and stop windows) derives from the one `script` object that the run records.
 
+import { median } from "../lib/stats.mjs";
+
 export const slotSeconds = 8;
 export const guestCount = 3;
 export const cycleSeconds = slotSeconds * guestCount;
@@ -19,7 +21,7 @@ export const bounds = {
   markerOffsetMs: 1500,
   // Largest gap between a guest's flash and its beep in the Recording.
   avOffsetMs: 300,
-  // The design's 15 s source lease (docs/plans/sfu-design.md "Reconnect and authority", the lease bound) bounds how long captured media may outlive a mute, an unshare or a host stop.
+  // A mute, an unshare or a host stop the node hears takes effect at once, so captured media may outlive it by 15 s at most. Only a stop the node never heard of waits for the source lease (60 s by default, docs/plans/sfu-design.md "Reconnect and authority"), and this script never cuts the control path.
   endMs: 15_000,
   // Silence beyond the script's own longest gap (hold tones and the next marker start on different clocks).
   silenceToleranceMs: 2500,
@@ -122,11 +124,6 @@ export function analyzeAudio(samples, rate, frequencies) {
     silences: intervalsOf(silent, hopSeconds, 0).filter((interval) => interval.end - interval.start >= 0.5),
     tones: Object.fromEntries(frequencies.map((hz, position) => [hz, intervalsOf(tonalFlags[position], hopSeconds, 0.3).filter((interval) => interval.end - interval.start >= 0.2)])),
   };
-}
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
 }
 
 /** Start times (s) of the bright flashes: runs of frames far above the median brightness around them. */
@@ -254,5 +251,5 @@ export function judgeScript(script, signals, durationSeconds) {
   if (runOnMs > bounds.endMs) failures.push(`Recording runs ${Math.round(runOnMs)} ms past the host stop, beyond ${bounds.endMs} ms`);
 
   if (script.restart && !script.restart.resumed) failures.push("Capture did not resume after the capture-node restart");
-  return { failures, measurements: { markers, holds, silenceBoundMs: Math.round(bound), longestSilenceMs: Math.round(longest) } };
+  return { failures, measurements: { markers, holds, runOnMs: Math.round(runOnMs), silenceBoundMs: Math.round(bound), longestSilenceMs: Math.round(longest) } };
 }

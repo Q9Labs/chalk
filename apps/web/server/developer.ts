@@ -5,7 +5,7 @@ import type { Engine } from "./engine";
 import { run } from "./engine";
 import { DashboardError } from "./http";
 import { keyDTO, webhookDTO } from "./dto";
-import type { RecordingRenderSettingsDTO, AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
+import type { ActionResult, RecordingRenderSettingsDTO, AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
 export async function developerPage(engine: Engine, cursors: { keyCursor?: string; webhookCursor?: string }): Promise<DeveloperDTO> {
   const params = { tenant_id: engine.tenantId };
   const [keys, webhooks, tenant] = await Promise.all([
@@ -33,8 +33,9 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
   };
 }
 
-export async function developerMutation(engine: Engine, action: DeveloperAction) {
-  const api = engine.api.default;
+type TenantAction = Extract<DeveloperAction, { action: "set-default-transcript-language" | "set-recording-render-mode" | "allowed-websites" | "set-allowed-websites" }>;
+
+async function tenantMutation(engine: Engine, action: TenantAction): Promise<ActionResult<TenantAction>> {
   const params = { tenant_id: engine.tenantId };
   switch (action.action) {
     case "set-default-transcript-language": {
@@ -55,6 +56,15 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
       const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { cors_allowed_origins: origins } }));
       return { allowedWebsites: tenant.cors_allowed_origins } satisfies AllowedWebsitesDTO;
     }
+  }
+}
+
+type KeyAction = Extract<DeveloperAction, { action: "create-key" | "rotate-key" | "revoke-key" }>;
+
+async function keyMutation(engine: Engine, action: KeyAction): Promise<ActionResult<KeyAction>> {
+  const api = engine.api.default;
+  const params = { tenant_id: engine.tenantId };
+  switch (action.action) {
     case "create-key": {
       const result = await run(api.createAPIKey({ params, headers: { "Idempotency-Key": action.idempotencyKey }, payload: { name: action.name, scopes: action.scopes, expires_at: Schema.decodeUnknownSync(DateTimeStringSchema)(action.expiresAt) } }));
       return { id: result.api_key.id, secret: result.secret } satisfies SecretDTO;
@@ -66,6 +76,15 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
     case "revoke-key":
       await run(api.revokeAPIKey({ params: { ...params, api_key_id: Schema.decodeUnknownSync(UUIDSchema)(action.keyId) } }));
       return { ok: true };
+  }
+}
+
+type WebhookAction = Extract<DeveloperAction, { action: "create-webhook" | "update-webhook" | "delete-webhook" | "rotate-webhook-secret" | "test-webhook" | "webhook-deliveries" | "webhook-delivery" | "redeliver-webhook" }>;
+
+async function webhookMutation(engine: Engine, action: WebhookAction): Promise<ActionResult<WebhookAction>> {
+  const api = engine.api.default;
+  const params = { tenant_id: engine.tenantId };
+  switch (action.action) {
     case "create-webhook": {
       const result = await run(api.createWebhookEndpoint({ params, headers: { "Idempotency-Key": action.idempotencyKey }, payload: { name: action.name, url: action.url, enabled: action.enabled, event_types: action.eventTypes, api_version: 1 } }));
       return { webhook: webhookDTO(result), secret: result.secret };
@@ -112,6 +131,29 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
       const result = await run(api.redeliverWebhookDelivery({ params: { ...params, endpoint_id: Schema.decodeUnknownSync(UUIDSchema)(action.webhookId), delivery_id: Schema.decodeUnknownSync(UUIDSchema)(action.deliveryId) }, headers: { "Idempotency-Key": action.idempotencyKey } }));
       return { deliveryId: result.delivery_id };
     }
+  }
+}
+
+export function developerMutation(engine: Engine, action: DeveloperAction): Promise<ActionResult<DeveloperAction>> {
+  switch (action.action) {
+    case "set-default-transcript-language":
+    case "set-recording-render-mode":
+    case "allowed-websites":
+    case "set-allowed-websites":
+      return tenantMutation(engine, action);
+    case "create-key":
+    case "rotate-key":
+    case "revoke-key":
+      return keyMutation(engine, action);
+    case "create-webhook":
+    case "update-webhook":
+    case "delete-webhook":
+    case "rotate-webhook-secret":
+    case "test-webhook":
+    case "webhook-deliveries":
+    case "webhook-delivery":
+    case "redeliver-webhook":
+      return webhookMutation(engine, action);
   }
 }
 

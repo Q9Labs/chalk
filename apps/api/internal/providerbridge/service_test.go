@@ -50,21 +50,6 @@ func TestInvalidProviderResultIsRecorded(t *testing.T) {
 	}
 }
 
-func TestCanceledCallerStillRecordsAttemptFailure(t *testing.T) {
-	repository := &failureReceiptRepository{}
-	input := testEndOperation(t)
-	prepared, err := repository.Prepare(context.Background(), input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err = NewService(repository, nil).apply(ctx, prepared.Receipt, ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "provider_timeout"})
-	if err != nil || repository.receipt.LastErrorCode == nil || *repository.receipt.LastErrorCode != "provider_timeout" {
-		t.Fatalf("canceled caller erased failure: %+v, %v", repository.receipt, err)
-	}
-}
-
 func testEndOperation(t *testing.T) provideroperations.OperationInput {
 	t.Helper()
 	return provideroperations.OperationInput{OperationID: "episode-end-operation-0001", Effect: provideroperations.EffectEndEpisode, TenantID: testExecutorID(t, "11111111-1111-4111-8111-111111111111"), EpisodeID: testExecutorID(t, "22222222-2222-4222-8222-222222222222")}

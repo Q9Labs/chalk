@@ -1,4 +1,5 @@
-import type { MobileSpaceArrival, SpaceRoute } from "./spaces";
+import type { MobileSpaceArrival } from "./spaces";
+import type { SpaceRoute } from "./space-link";
 
 export type ArrivedCall = {
   readonly route: SpaceRoute;

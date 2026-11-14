@@ -1,10 +1,11 @@
 import type * as React from "react";
+import { BLINK_CLOSED_SCALE_Y } from "./core/blink-scale.js";
 import type { FacehashBlinkTiming } from "./core/index.js";
 
 const BLINK_KEYFRAMES = `
 @keyframes facehash-blink {
   0%, 92%, 100% { transform: scaleY(1); }
-  96% { transform: scaleY(0.05); }
+  96% { transform: scaleY(${BLINK_CLOSED_SCALE_Y}); }
 }
 `;
 

@@ -1,0 +1,25 @@
+# Code that each ScreenShareLease step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+Time	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	@default_renewal_ms 20_000
+Time	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	@default_hard_lifetime_ms 30_000
+Time	apps/sync/lib/chalk_sync/episodes/coordinator/server.ex	@live_reconcile_interval_ms 15_000
+Acquire	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	on conflict (tenant_id, episode_id) do update
+Acquire	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	where least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at) <= excluded.acquired_at or #{own_live_lease()}
+Acquire	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	and least(sync_screen_share_leases.renewed_until, sync_screen_share_leases.hard_expires_at) > excluded.acquired_at
+Acquire	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	hard_expires_at = case when #{keeps_lease()} then sync_screen_share_leases.hard_expires_at else excluded.hard_expires_at end
+Renew	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	set renewed_until = least(hard_expires_at, $8)
+Renew	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	and renewed_until > $7 and hard_expires_at > $7
+Release	apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex	delete from sync_screen_share_leases where tenant_id = $1 and episode_id = $2 and lease_id = $3 and lease_generation = $4 and owner_participant_id = $5 and owner_generation = $6
+Release	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	_ = release_screen_lease(state, lease)
+Observe	apps/sync/lib/chalk_sync/live/episode/media_observation.ex	defp compare_media_cursor(cursor, current) when cursor < current, do: :older
+Observe	apps/sync/lib/chalk_sync/live/episode/media_observation.ex	:equal -> apply_equal_media_observation(state, observation.publications, options)
+Observe	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	_conflicting -> {:error, :conflicting_screen_publications}
+Handle	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	{:ok, %{generation: generation}} when generation == lease.owner_generation -> renew_screen_lease(state, participant_id, lease, options)
+Handle	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	{:error, :lease_expired} -> rotate_screen_lease(state, participant_id, lease, options)
+Observed	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	:error -> acquire_observed_screen_lease(state, participant_id, options)
+EnableScreen	apps/sync/lib/chalk_sync/live/episode/publication.ex	case ScreenLeases.acquire_screen_lease(state, authority, target.operation_id) do
+Observe	apps/sync/lib/chalk_sync/live/episode/media_observation.ex	ScreenLeases.reconcile_screen_leases(state, media_items, options, :keep_absent) do reconcile_observed_media(next, projection)
+EnableScreen	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	{:replace_own, not Map.has_key?(state.screen_leases, authority.participant_id)}
+Handle	apps/sync/lib/chalk_sync/live/episode/screen_leases.ex	if ScreenShareLease.outlasts_renewal?(lease, options) do

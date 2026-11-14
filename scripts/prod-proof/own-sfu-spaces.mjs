@@ -1,10 +1,10 @@
 import { check, ProofError } from "./runtime.mjs";
+import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 
 // The two proof Spaces Promote reuses on the own SFU. The public API of a release with the per-Space
 // setting refuses chalk_sfu, so they must reach chalk_sfu BEFORE that release deploys: the previous
 // release lets the public API set it on an allowlisted Space, and a plane stored that way survives the
 // upgrade. They are found by slug, so no Space ID lives in a variable or a log.
-export const manualPolicy = { recording: "manual", transcription: "on_demand" };
 const automaticPolicy = { recording: "automatic", transcription: "automatic" };
 export const ownSfuSpaces = {
   manual: { slug: "promote-proof-chalk-sfu", policy: manualPolicy },
@@ -65,16 +65,7 @@ async function ensureOne(run, kind) {
     console.error(message);
     throw new ProofError("media-plane-config", message);
   }
-  space ??= await run.apiRequest("POST", path, {
-    name: wanted.slug,
-    slug: wanted.slug,
-    recording_policy: wanted.policy.recording,
-    transcription_policy: wanted.policy.transcription,
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  space ??= await run.apiRequest("POST", path, spacePayload({ name: wanted.slug, slug: wanted.slug, policy: wanted.policy }));
   checkPolicy(space, wanted);
   if (spacePlane(space) !== "chalk_sfu") {
     try {

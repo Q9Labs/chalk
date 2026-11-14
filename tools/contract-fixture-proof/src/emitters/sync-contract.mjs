@@ -19,31 +19,19 @@ export function codegenPath(environmentVariable, fallback) {
   return path.resolve(process.env[environmentVariable] ?? path.resolve(repositoryRoot, fallback));
 }
 
-/**
- * @param {string | undefined} value
- */
-export function syncProtocolVersion(value = process.env.CODEGEN_SYNC_PROTOCOL_VERSION) {
-  if (value === undefined || value === "1") return 1;
-  throw new Error(`Unsupported sync protocol version ${JSON.stringify(value)}; expected "1"`);
-}
-
-/**
- * @param {number} _version
- */
-export function syncContractPath(_version = 1) {
+export function syncContractPath() {
   return codegenPath("CODEGEN_SYNC_CONTRACT_PATH", "contract/schema/sync-v1.json");
 }
 
 /**
  * @param {string} inputPath
- * @param {number} version
  */
-export async function loadSyncContract(inputPath = syncContractPath(syncProtocolVersion()), version = syncProtocolVersion()) {
+export async function loadSyncContract(inputPath = syncContractPath()) {
   const source = await readFile(inputPath, "utf8");
 
   try {
     const parsed = new LocationPreservingJsonParser(source).parse();
-    validateSyncContract(parsed.value, version);
+    validateSyncContractDocument(parsed.value);
     return /** @type {JsonObject} */ (parsed.value);
   } catch (error) {
     if (error instanceof JsonSourceDiagnostic) {
@@ -194,15 +182,6 @@ function validateCorrelationDefinition(value) {
   if (value.rule !== "propagate_from_first_observed_layer_to_every_downstream_frame") {
     throw new Error("Invalid sync v1 contract: correlation propagation rule is invalid");
   }
-}
-
-/**
- * @param {unknown} value
- * @param {number} version
- */
-function validateSyncContract(value, version) {
-  if (version !== 1) throw new Error(`Unsupported sync protocol version ${JSON.stringify(version)}`);
-  validateSyncContractDocument(value);
 }
 
 /**

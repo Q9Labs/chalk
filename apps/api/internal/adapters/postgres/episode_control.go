@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -122,7 +123,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
 				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
 				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
-				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
+				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration, int(row.FailedAttempts))
 				if err != nil {
 					return err
 				}
@@ -322,11 +323,11 @@ func createEndReadyOperation(ctx context.Context, queries *sqlc.Queries, tx pgx.
 		return sqlc.SyncExternalOperation{}, err
 	}
 	for _, participant := range participants {
-		for _, source := range []string{"microphone", "camera", "screen"} {
+		for _, source := range mediaplane.SelectableSources {
 			owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
 				TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 				ParticipantID: participant.ID, ParticipantGeneration: participant.Generation,
-				Source: source, ExternalOperationID: operation.ExternalOperationID,
+				Source: string(source), ExternalOperationID: operation.ExternalOperationID,
 			})
 			if err != nil || owner != operation.ExternalOperationID {
 				if err == nil || errors.Is(err, pgx.ErrNoRows) {
@@ -357,11 +358,11 @@ func createParticipantRemovalOperation(ctx context.Context, queries *sqlc.Querie
 	if err != nil {
 		return sqlc.SyncExternalOperation{}, sqlc.Participant{}, err
 	}
-	for _, source := range []string{"microphone", "camera", "screen"} {
+	for _, source := range mediaplane.SelectableSources {
 		owner, err := queries.CreateTenantEndPublicationFence(ctx, sqlc.CreateTenantEndPublicationFenceParams{
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.EpisodeID),
 			ParticipantID: participant.ID, ParticipantGeneration: participant.Generation,
-			Source: source, ExternalOperationID: operation.ExternalOperationID,
+			Source: string(source), ExternalOperationID: operation.ExternalOperationID,
 		})
 		if err != nil || owner != operation.ExternalOperationID {
 			if err == nil {

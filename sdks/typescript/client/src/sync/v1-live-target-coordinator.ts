@@ -5,6 +5,7 @@ import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-defer
 import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
 import { V1ReplicaError } from "./v1-reducer";
+import { V1TimerMap } from "./v1-timer-map";
 import type { V1LiveTargetResult, V1MediaPublication, V1MediaSource, V1SelfMediaTargetResult, V1SyncClientOptions } from "./v1-types";
 
 const MAX_RETRIES = 3;
@@ -30,8 +31,6 @@ type LiveDeferred = V1Deferred<V1SelfMediaTargetResult> & {
   headStart?: { readonly target: MediaPlaneTarget; started: boolean };
 };
 
-type V1LiveTargetOptions = { readonly requestId?: string };
-
 type V1LiveTargetCoordinatorOptions = {
   readonly mediaPlane: V1SyncClientOptions["mediaPlane"];
   readonly requestIds: V1SyncClientOptions["requestIds"];
@@ -48,12 +47,14 @@ type V1LiveTargetCoordinatorOptions = {
 export class V1LiveTargetCoordinator {
   readonly #options: V1LiveTargetCoordinatorOptions;
   readonly #targets = new Map<string, LiveDeferred>();
-  readonly #retryTimers = new Map<string, unknown>();
-  readonly #deadlineTimers = new Map<string, unknown>();
+  readonly #retryTimers: V1TimerMap;
+  readonly #deadlineTimers: V1TimerMap;
   readonly #localMedia: Record<V1MediaSource, "unknown" | "requesting" | "enabled" | "disabled" | "failed"> = { microphone: "unknown", camera: "unknown", screen: "unknown" };
 
   constructor(options: V1LiveTargetCoordinatorOptions) {
     this.#options = options;
+    this.#retryTimers = new V1TimerMap(options.clock);
+    this.#deadlineTimers = new V1TimerMap(options.clock);
   }
 
   get pendingCount(): number {
@@ -81,7 +82,7 @@ export class V1LiveTargetCoordinator {
     for (const source of ["microphone", "camera", "screen"] as const) this.#localMedia[source] = "unknown";
   }
 
-  send(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  send(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: { readonly requestId?: string }): Promise<V1SelfMediaTargetResult> {
     this.#options.assertCapacity();
     const participantId = this.#options.participantId();
     if (!this.#options.isLive() || !participantId) return Promise.reject(new V1SyncError("self-media targets require a live participant", "not_live"));
@@ -92,11 +93,13 @@ export class V1LiveTargetCoordinator {
     encodeV1ClientFrame(frame);
     const { deferred, promise } = createLiveDeferred(frame, source, enabled, this.#now());
     this.#targets.set(operationId, deferred);
-    const deadlineTimer = this.#options.clock().setTimeout(() => {
-      this.#deadlineTimers.delete(operationId);
-      if (this.#targets.get(operationId) === deferred) this.#fail(operationId, deferred, new V1SyncError("self-media target confirmation timed out", "retry_exhausted"));
-    }, LIVE_TARGET_RETRY_BUDGET_MS);
-    this.#deadlineTimers.set(operationId, deadlineTimer);
+    this.#deadlineTimers.schedule(
+      operationId,
+      () => {
+        if (this.#targets.get(operationId) === deferred) this.#fail(operationId, deferred, new V1SyncError("self-media target confirmation timed out", "retry_exhausted"));
+      },
+      LIVE_TARGET_RETRY_BUDGET_MS,
+    );
     this.#localMedia[source] = "requesting";
     this.#options.sendIfLive(frame);
     if (enabled) this.#prepareLocal(deferred, participantId);
@@ -171,13 +174,15 @@ export class V1LiveTargetCoordinator {
     }
     deferred.serverResult = frame;
     deferred.serverResultSignature = frameSignature(frame);
-    this.#clearRetryTimer(frame.operation_id);
-    this.#clearDeadlineTimer(frame.operation_id);
-    const localDeadline = this.#options.clock().setTimeout(() => {
-      this.#deadlineTimers.delete(frame.operation_id);
-      if (this.#targets.get(frame.operation_id) === deferred) this.#fail(frame.operation_id, deferred, new V1SyncError("Media did not respond in time. Try again.", "media_timeout"));
-    }, LOCAL_MEDIA_TIMEOUT_MS);
-    this.#deadlineTimers.set(frame.operation_id, localDeadline);
+    this.#retryTimers.cancel(frame.operation_id);
+    this.#deadlineTimers.cancel(frame.operation_id);
+    this.#deadlineTimers.schedule(
+      frame.operation_id,
+      () => {
+        if (this.#targets.get(frame.operation_id) === deferred) this.#fail(frame.operation_id, deferred, new V1SyncError("Media did not respond in time. Try again.", "media_timeout"));
+      },
+      LOCAL_MEDIA_TIMEOUT_MS,
+    );
     this.#executeLocal(frame.operation_id, deferred);
   }
 
@@ -190,7 +195,8 @@ export class V1LiveTargetCoordinator {
   }
 
   disconnect(code: string): void {
-    this.#clearTimers();
+    this.#retryTimers.cancelAll();
+    this.#deadlineTimers.cancelAll();
     for (const deferred of this.#targets.values()) {
       this.#cancelHeadStart(deferred);
       rejectV1Deferred(deferred, new V1SyncError(code, code));
@@ -208,7 +214,7 @@ export class V1LiveTargetCoordinator {
     deferred.serverRetries += 1;
     const baseDelay = this.#options.retryDelayMs ?? 100;
     const delay = Math.min(remainingBudget, MAX_LIVE_TARGET_RETRY_DELAY_MS, baseDelay * 2 ** Math.min(deferred.serverRetries - 1, 4));
-    this.#scheduleRetry(operationId, () => this.#options.sendIfLive(deferred.frame), delay);
+    this.#retryTimers.schedule(operationId, () => this.#options.sendIfLive(deferred.frame), delay);
   }
 
   #executeLocal(operationId: string, deferred: LiveDeferred): void {
@@ -242,7 +248,7 @@ export class V1LiveTargetCoordinator {
       return;
     }
     deferred.localRetries += 1;
-    this.#scheduleRetry(operationId, () => this.#executeLocal(operationId, deferred));
+    this.#retryTimers.schedule(operationId, () => this.#executeLocal(operationId, deferred), this.#options.retryDelayMs ?? 100);
   }
 
   #settleLocal(operationId: string, deferred: LiveDeferred, result: MediaPlaneResult): void {
@@ -257,26 +263,18 @@ export class V1LiveTargetCoordinator {
     const serverResult = deferred.serverResult;
     if (!serverResult) throw new V1ReplicaError("local MediaPlane completed before server authorization");
     this.#targets.delete(operationId);
-    this.#clearRetryTimer(operationId);
-    this.#clearDeadlineTimer(operationId);
+    this.#retryTimers.cancel(operationId);
+    this.#deadlineTimers.cancel(operationId);
     this.#localMedia[deferred.source] = deferred.enabled ? "enabled" : "disabled";
     resolveV1Deferred(deferred, { operationId, name: deferred.frame.name, serverOutcome: serverResult.outcome, mediaPlaneOutcome: result.outcome });
     this.#options.stateChanged();
   }
 
-  #scheduleRetry(operationId: string, retry: () => void, delay = this.#options.retryDelayMs ?? 100): void {
-    const timer = this.#options.clock().setTimeout(() => {
-      this.#retryTimers.delete(operationId);
-      retry();
-    }, delay);
-    this.#retryTimers.set(operationId, timer);
-  }
-
   #fail(operationId: string, deferred: LiveDeferred, error: V1SyncError): void {
     this.#cancelHeadStart(deferred);
     this.#targets.delete(operationId);
-    this.#clearRetryTimer(operationId);
-    this.#clearDeadlineTimer(operationId);
+    this.#retryTimers.cancel(operationId);
+    this.#deadlineTimers.cancel(operationId);
     this.#localMedia[deferred.source] = "failed";
     rejectV1Deferred(deferred, error);
     this.#options.stateChanged();
@@ -292,27 +290,6 @@ export class V1LiveTargetCoordinator {
 
   #requireLive(): void {
     if (!this.#options.isLive()) throw new V1ReplicaError("live frame arrived before four-stream recovery completed");
-  }
-
-  #clearTimers(): void {
-    for (const timer of this.#retryTimers.values()) this.#options.clock().clearTimeout(timer);
-    for (const timer of this.#deadlineTimers.values()) this.#options.clock().clearTimeout(timer);
-    this.#retryTimers.clear();
-    this.#deadlineTimers.clear();
-  }
-
-  #clearRetryTimer(operationId: string): void {
-    const timer = this.#retryTimers.get(operationId);
-    if (timer === undefined) return;
-    this.#options.clock().clearTimeout(timer);
-    this.#retryTimers.delete(operationId);
-  }
-
-  #clearDeadlineTimer(operationId: string): void {
-    const timer = this.#deadlineTimers.get(operationId);
-    if (timer === undefined) return;
-    this.#options.clock().clearTimeout(timer);
-    this.#deadlineTimers.delete(operationId);
   }
 }
 

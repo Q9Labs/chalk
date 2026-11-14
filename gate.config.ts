@@ -1,6 +1,6 @@
 import { defineGate, lanes } from "@q9labsai/gates";
 import { gateTaskIds } from "./scripts/gates/register.mjs";
-import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
+import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
 
 // The checks register lists the lanes in run order; a lane without an entry cannot be planned.
 const taskIds = gateTaskIds();
@@ -11,7 +11,6 @@ const designTokenOptions = {
   roots: ["apps/web/src", "packages/ui/src", "sdks/typescript/react/src", "sdks/typescript/react-native/src", "apps/mobile"],
   ignore: ["**/theme/tokens.ts"],
 };
-const alwaysIds = new Set(["self-test", "feature-map", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
   "apps/api",
   "apps/sync",
@@ -47,7 +46,7 @@ const chalkLanes = taskIds.map((id) =>
     id,
     title: `Chalk ${id}`,
     exclusive: true,
-    triggers: alwaysIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
+    triggers: alwaysTaskIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
       if (!task?.command) return { status: "skipped" };
@@ -68,7 +67,7 @@ const emptyScopeLane = lanes.custom({
 });
 
 export default defineGate({
-  workspaceRoots: ["apps", "infrastructure", "packages", "sdks/typescript", "tools"],
+  workspaceRoots,
   targets: { web: ["apps/web", ...sharedTargetRoots], mobile: ["apps/mobile", ...sharedTargetRoots] },
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],

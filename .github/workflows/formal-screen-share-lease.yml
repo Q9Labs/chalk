@@ -1,0 +1,39 @@
+name: Screen-share lease model
+
+# Model-checks the screen-share lease. See
+# .agents/skills/screen-share-lease-formal/SKILL.md. Keep these paths in step with
+# the skill's coverage record.
+on:
+  pull_request:
+    paths:
+      - apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex
+      - apps/sync/lib/chalk_sync/live/episode.ex
+      - apps/sync/lib/chalk_sync/live/episode/**
+      - apps/sync/lib/chalk_sync/episodes/coordinator.ex
+      - apps/sync/lib/chalk_sync/episodes/coordinator/**
+      - tools/formal/screen-share-lease/**
+      - tools/formal/tla2tools.sh
+      - .github/workflows/formal-screen-share-lease.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-screen-share-lease-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Screen-share lease model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check the screen-share lease
+        run: tools/formal/screen-share-lease/run.sh

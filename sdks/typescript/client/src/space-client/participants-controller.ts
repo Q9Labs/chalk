@@ -1,16 +1,15 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
 import type { OfflineActionsHold } from "./offline-actions";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ChalkParticipantMediaState } from "../collaboration/types";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { SpaceStore } from "./store";
 import type { V1ControlState, V1Participant, V1Presence, V1Projection } from "../sync/v1-types";
 import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
-export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
+const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
 type SeatDevice = Pick<Participant, "identityId" | "deviceType"> & { readonly admissionRevision: number };
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ParticipantsControllerEffects = {
   readonly assignRole: (participantId: string, roleName: string) => ClientEffect<void>;
   readonly mute: (participantId: string) => ClientEffect<void>;
@@ -31,14 +30,12 @@ export type ParticipantsControllerEffects = {
   readonly renameSelf: (displayName: string) => ClientEffect<void>;
   readonly dispose: () => void;
 };
-export class ParticipantsControllerService extends Context.Service<ParticipantsControllerService, ParticipantsControllerEffects>()("@chalk/client/ParticipantsController") {}
 /** Scoped owner of participant subscriptions and native port commands. */
 export const makeParticipantsController = (connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold): Effect.Effect<ParticipantsControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.acquireRelease(
     Effect.sync(() => new ParticipantsControllerRuntime(connection, store, offline)),
     (controller) => Effect.sync(() => controller.dispose()),
   );
-export const makeParticipantsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(ParticipantsControllerService, makeParticipantsController(connection, store));
 class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
@@ -64,21 +61,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       assertName(roleName, "role");
       return ({ sync }) => foreign(() => sync.assignRole(participantId, roleName));
     });
-  mute = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.muteParticipant(participantId));
-    });
-  stopVideo = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.stopParticipantCamera(participantId));
-    });
-  stopScreenShare = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.stopParticipantScreenShare(participantId));
-    });
+  mute = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.muteParticipant(participantId));
+  stopVideo = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.stopParticipantCamera(participantId));
+  stopScreenShare = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.stopParticipantScreenShare(participantId));
   requestMedia = (
     participantId: string,
     kind: MediaRequestKind,
@@ -91,21 +76,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       if (kind !== "microphone" && kind !== "camera") throw invalid("Media requests must target a microphone or camera");
       return ({ sync }) => (kind === "microphone" ? foreign(() => sync.requestUnmute(participantId)) : foreign(() => sync.requestStartCamera(participantId))).pipe(Effect.map(directed));
     });
-  remove = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.removeParticipant(participantId));
-    });
-  admit = (requestId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(requestId, "admission request ID");
-      return ({ sync }) => foreign(() => sync.admit(requestId));
-    });
-  deny = (requestId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(requestId, "admission request ID");
-      return ({ sync }) => foreign(() => sync.deny(requestId));
-    });
+  remove = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.removeParticipant(participantId));
+  admit = (requestId: string): ClientEffect<void> => this.#withId(requestId, "admission request ID", (sync) => sync.admit(requestId));
+  deny = (requestId: string): ClientEffect<void> => this.#withId(requestId, "admission request ID", (sync) => sync.deny(requestId));
   raiseHand = (): ClientEffect<void> => this.#setHandRaised(true);
   lowerHand = (): ClientEffect<void> => this.#setHandRaised(false);
   #setHandRaised(raised: boolean): ClientEffect<void> {
@@ -131,6 +104,12 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribeMedia = null;
     this.#unsubscribePorts = null;
     this.#unsubscribe = null;
+  }
+  #withId<A>(id: string, label: string, run: (sync: ConnectionPorts["sync"]) => Promise<A>): ClientEffect<A> {
+    return this.#command(() => {
+      assertIdentifier(id, label);
+      return ({ sync }) => foreign(() => run(sync));
+    });
   }
   #command<A>(operation: () => (ports: ConnectionPorts) => Effect.Effect<A, unknown>): ClientEffect<A> {
     return Effect.try({ try: operation, catch: normalizeClientError }).pipe(
@@ -214,13 +193,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       roster: Object.freeze(projected.roster.map((participant) => Object.freeze({ ...participant, media: Object.freeze({ ...participant.media, screenShareHasAudio: participant.media.screenShare === "active" && audioParticipants.has(participant.participantId) }) }))),
     });
     const self = selfFor(snapshot, participants.roster);
-    const current = this.#store.getSnapshot();
-    if (!sameParticipants(current.participants, participants)) this.#store.updateParticipants(participants);
-    if (!sameSelf(current.self, self)) this.#store.updateSelf(self);
+    this.#store.update("participants", participants);
+    if (!sameSelf(this.#store.getSnapshot().self, self)) this.#store.update("self", self);
   }
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function assertIdentifier(value: string, label: string): void {
   if (typeof value !== "string" || value.trim().length === 0) throw invalid(`A non-empty ${label} is required`);
@@ -325,47 +300,8 @@ function participantPresence(participantId: string, presence: ReturnType<Connect
   if (!item) return Object.freeze({ state: "unknown", speaking: false, activeSpeaker: false });
   return Object.freeze({ state: item.state, speaking: item.speaking, activeSpeaker: item.activeSpeaker, ...(item.connectionQuality === undefined ? {} : { connectionQuality: item.connectionQuality }) });
 }
-function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): boolean {
-  return (
-    sameArray(left.roster, right.roster, sameParticipant) &&
-    sameArray(
-      left.admissionQueue,
-      right.admissionQueue,
-      (current, next) => current.requestId === next.requestId && current.participantId === next.participantId && current.displayName === next.displayName && current.initialRole === next.initialRole && current.expiresAt === next.expiresAt && sameValues(current.eligibleRoles, next.eligibleRoles),
-    )
-  );
-}
-function sameParticipant(left: Participant, right: Participant): boolean {
-  return sameParticipantProfile(left, right) && sameParticipantMedia(left, right) && sameParticipantPresence(left, right);
-}
-function sameParticipantProfile(left: Participant, right: Participant): boolean {
-  return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.eligibleRoles, right.eligibleRoles) && sameValues(left.capabilities, right.capabilities);
-}
-function sameParticipantMedia(left: Participant, right: Participant): boolean {
-  return (
-    left.media.microphone === right.media.microphone &&
-    left.media.camera === right.media.camera &&
-    left.media.screenShare === right.media.screenShare &&
-    left.media.screenShareHasAudio === right.media.screenShareHasAudio &&
-    left.media.cameraPublicationId === right.media.cameraPublicationId &&
-    left.media.screenSharePublicationId === right.media.screenSharePublicationId
-  );
-}
-function sameParticipantPresence(left: Participant, right: Participant): boolean {
-  return (
-    left.identityId === right.identityId &&
-    left.deviceType === right.deviceType &&
-    left.presence.state === right.presence.state &&
-    left.presence.speaking === right.presence.speaking &&
-    left.presence.activeSpeaker === right.presence.activeSpeaker &&
-    left.presence.connectionQuality === right.presence.connectionQuality
-  );
-}
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
   return left.participantId === right.participantId && left.identityId === right.identityId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
-}
-function sameArray<T>(left: readonly T[], right: readonly T[], equal: (current: T, next: T) => boolean): boolean {
-  return left.length === right.length && left.every((value, index) => equal(value, right[index]!));
 }
 function sameValues(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);

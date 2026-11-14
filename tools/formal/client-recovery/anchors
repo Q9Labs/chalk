@@ -1,0 +1,42 @@
+# Code that each ClientRecovery step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+Active	sdks/typescript/client/src/connection/lifecycle.ts	return !model.closed && (model.state === "live" || model.state === "reconnecting");
+ProcessLeave	sdks/typescript/client/src/connection/lifecycle.ts	yield* stopRecovery();
+ProcessLeave	sdks/typescript/client/src/connection/lifecycle.ts	const confirmed = yield* leaveIsConfirmed();
+LeaveEnds	sdks/typescript/client/src/connection/lifecycle.ts	model.failure = confirmed ? null : toFailure(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));
+StopPorts	sdks/typescript/client/src/connection/lifecycle.ts	if (scope) yield* Scope.close(scope, Exit.void);
+StopPorts	sdks/typescript/client/src/connection/lifecycle.ts	yield* access.clear;
+RecoverPost	sdks/typescript/client/src/connection/lifecycle.ts	if (kind === "sync") model.recoveryQueued = kind;
+RecoverPost	sdks/typescript/client/src/connection/lifecycle.ts	if (!active(model) || !scope) return;
+RecoverPost	sdks/typescript/client/src/connection/lifecycle.ts	model.recoveryQueued = kind;
+RecoverPost	sdks/typescript/client/src/connection/lifecycle.ts	if (phase === "terminal" || phase === "failed") yield* transition("reconnecting");
+FiberGrace	sdks/typescript/client/src/connection/lifecycle.ts	yield* Effect.sleep(RECONNECT_GRACE_MS);
+ProcessRec	sdks/typescript/client/src/connection/lifecycle.ts	if (model.epoch === epoch && active(model)) yield* transition("reconnecting");
+PlanCycle	sdks/typescript/client/src/connection/lifecycle.ts	while (model.epoch === epoch && active(model)) {
+PlanCycle	sdks/typescript/client/src/connection/lifecycle.ts	const plan = yield* recoveryPlan(model.recoveryQueued ?? kind);
+AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	const replacement = yield* access.replaceMedia().pipe(Effect.mapError(accessFailure));
+AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	yield* foreign(() => media.restart(grant.media), "media_start_failed", "Media transport could not restart");
+AttemptRestartSync	sdks/typescript/client/src/connection/lifecycle.ts	if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
+AttemptFatal	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(Effect.suspend(() => (model.epoch === epoch && active(model) ? failForSnapshot(failure) : Effect.void)));
+AttemptSucceeds	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(finishRecovery(outcome.attempt, epoch));
+AttemptExhausted	sdks/typescript/client/src/connection/lifecycle.ts	if (remaining <= 0) return null;
+ProcessExh	sdks/typescript/client/src/connection/lifecycle.ts	if (plan.kind === "sync" && model.sync?.getSnapshot().connection.phase === "live") {
+ProcessExh	sdks/typescript/client/src/connection/lifecycle.ts	model.recoveryQueued = "media";
+ProcessExh	sdks/typescript/client/src/connection/lifecycle.ts	yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
+AfterExh	sdks/typescript/client/src/connection/lifecycle.ts	if (model.recoveryQueued !== plan.kind) continue;
+ProcessFin	sdks/typescript/client/src/connection/lifecycle.ts	if (model.epoch !== epoch || !active(model)) return;
+ProcessFin	sdks/typescript/client/src/connection/lifecycle.ts	if (model.syncSnapshot?.connection.phase !== "live") return yield* recover("sync");
+ProcessFin	sdks/typescript/client/src/connection/lifecycle.ts	if (model.mediaSnapshot?.connection.phase !== "live") return yield* recover("media");
+ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (yield* settleTerminalSnapshot(snapshot)) return;
+ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (syncNeedsRecovery(snapshot)) yield* recover("sync");
+ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
+ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (removed) model.removedByHost = true;
+ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
+ProcessSnapM	sdks/typescript/client/src/connection/lifecycle.ts	if (mediaNeedsRecovery(snapshot)) yield* recover("media");
+ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure));
+ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	if (expiresIn !== null && expiresIn <= 0) return yield* failForSnapshot(lifecycleFailure("access_unavailable", true,
+ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	yield* scheduleRefresh(expiresIn === null ? retryIn : Math.min(retryIn, expiresIn));
+RefreshStarts	sdks/typescript/client/src/connection/lifecycle.ts	model.refreshFiber = yield* Effect.forkIn(Effect.sleep(Math.max(0, milliseconds)).pipe(Effect.andThen(enqueue(refreshAccess())), Effect.ignore), scope);
+GrantAges	sdks/typescript/client/src/access/manager.ts	if (expiresAt(access.sync.expiresAt) <= now || expiresAt(access.media.expiresAt) <= now) throw new TypeError("Access grant is expired");

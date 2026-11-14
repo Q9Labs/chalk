@@ -212,7 +212,6 @@ type Execution struct {
 	Replayed    bool
 }
 
-type Clock func() time.Time
 type WaitFunc func(context.Context, time.Duration) error
 
 // PublicationRetirer persists per-track absence before a pull result is
@@ -222,7 +221,7 @@ type PublicationRetirer interface {
 }
 
 type Options struct {
-	Now          Clock
+	Now          utilities.Clock
 	Wait         WaitFunc
 	PollInterval time.Duration
 	MaxWait      time.Duration

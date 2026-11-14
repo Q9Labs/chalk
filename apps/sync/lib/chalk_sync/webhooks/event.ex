@@ -74,6 +74,8 @@ defmodule ChalkSync.Webhooks.Event do
     ])
   end
 
+  # TRIPWIRE(owner=sync, by=2027-02-13): delete once every ended Episode has started_at; check with a count of
+  # ended Episodes whose started_at is null.
   # Legacy Episodes can lack started_at. Match the API snapshot fallback while
   # retaining the webhook contract's non-null timestamp.
   defp normalize_object("episode.ended", %{started_at: nil, created_at: created_at} = object),

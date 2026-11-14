@@ -53,3 +53,18 @@ func startCaptureSenderReports(ctx context.Context, mid string, track CaptureMed
 	}()
 	return func() { <-done }
 }
+
+func (w *captureBundleWriter) addSenderReport(track CaptureMediaTrack, report *rtcp.SenderReport) {
+	identity := track.CaptureTrack()
+	mid := string(identity.MID)
+	if binding, ok := w.bindings[mid]; !ok || binding != identity {
+		return
+	}
+	key := trackClockKey(w.active[mid])
+	clock := w.clocks[key]
+	if clock == nil {
+		clock = new(captureTrackClock)
+		w.clocks[key] = clock
+	}
+	clock.observeSenderReport(report, identity.Kind)
+}

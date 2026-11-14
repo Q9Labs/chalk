@@ -1,0 +1,10 @@
+# break	mode	rule	the code edit it mirrors
+decide_not_fenced	knock	DecisionOnce	DecideAdmissionRequest: drop the GetAdmissionDecisionOperationName check, so a reserved request accepts the other decision
+decide_skips_provenance	knock	NoApprovalOfStaleRequest	DecideAdmissionRequest: drop publicAdmissionProvenanceValid
+collect_skips_provenance	knock	AdmittedOnlyOnValidInvite	UpdateArrivalState: drop publicAdmissionProvenanceValid when RequirePending admits
+transition_unchecked	open	TerminalStays	UpdateArrivalState: drop arrivalTransitionAllowed
+knock_ignores_archive	knock	NoNewAccessInArchivedSpace	CreateAdmissionRequest: drop the archived Space refusal
+join_ignores_archive	open	NoNewAccessInArchivedSpace	JoinPublic: drop the archived Space refusal
+issue_skips_participant	knock	NoGrantToInactiveParticipant	GetSyncTokenSubject: drop the participants.status and episodes.status conditions
+archive_without_second_end	knock	ArchiveLeavesNoActiveEpisode	LifecycleWorker.process: drop the EndEpisode call after ArchiveSpace
+open_turns_away	knock	OpenedRoomTurnsNoOneAway	pendingGuestArrivalValid: refuse open mode again, and ArrivalStatus: drop the admitPendingArrival branch

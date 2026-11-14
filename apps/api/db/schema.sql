@@ -183,9 +183,6 @@ create table api_key_mutation_requests (
     primary key (tenant_id, operation, request_key)
 );
 
-create index api_key_mutation_requests_resource_idx
-    on api_key_mutation_requests (tenant_id, api_key_id)
-    where api_key_id is not null;
 
 -- Self-hosted OAuth for the hosted MCP server. Every bearer value (authorization
 -- request handle, code, access token, refresh token) is stored as a SHA-256 hash.
@@ -256,27 +253,6 @@ create table mcp_oauth_tokens (
 
 create index mcp_oauth_tokens_grant_idx on mcp_oauth_tokens (grant_id);
 create index mcp_oauth_tokens_expiry_idx on mcp_oauth_tokens (expires_at);
-
--- Participant tokens: JWT/JWS
--- Algorithm: EdDSA / Ed25519
--- Key model: tenant signs with private key, Chalk stores public
--- key
--- Token TTL: short, like 5-15 minutes or longer like 60 minutes
-create table tenant_signing_keys (
-    id uuid primary key,
-    tenant_id uuid not null references tenants(id),
-    key_id text not null,
-    algorithm text not null,
-    public_key_jwk jsonb not null,
-    last_used_at timestamptz,
-    created_by_api_key_id uuid references api_keys(id),
-    created_by_user_id uuid references users(id),
-    revoked_at timestamptz,
-    expires_at timestamptz not null,
-    updated_at timestamptz not null default now(),
-    created_at timestamptz not null default now(),
-    unique (key_id)
-);
 
 create table spaces (
     id uuid primary key,
@@ -378,7 +354,6 @@ create table identities (
     unique (tenant_id, external_id),
     unique (tenant_id, id)
 );
-create index identities_tenant_created_at_id_idx on identities(tenant_id, created_at desc, id desc);
 
 create table space_roles (
     id uuid primary key,
@@ -395,28 +370,6 @@ create table space_roles (
         on delete cascade,
     check (name <> '' and cardinality(capabilities) > 0 and valid_capabilities(capabilities))
 );
-create index space_roles_space_created_at_id_idx on space_roles(space_id, created_at desc, id desc);
-
-create table space_members (
-    id uuid primary key,
-    tenant_id uuid not null references tenants(id),
-    space_id uuid not null,
-    identity_id uuid not null,
-    role_id uuid not null,
-    updated_at timestamptz not null default now(),
-    created_at timestamptz not null default now(),
-    unique (space_id, identity_id),
-    foreign key (tenant_id, space_id)
-        references spaces(tenant_id, id)
-        on delete cascade,
-    foreign key (tenant_id, space_id, role_id)
-        references space_roles(tenant_id, space_id, id)
-        on delete restrict,
-    foreign key (tenant_id, identity_id)
-        references identities(tenant_id, id)
-        on delete restrict
-);
-create index space_members_space_created_at_id_idx on space_members(space_id, created_at desc, id desc);
 
 create function validate_episode_config_snapshot(value jsonb)
 returns boolean
@@ -626,9 +579,6 @@ create index participants_admission_cleanup_active_idx
 create unique index participants_dashboard_account_episode_idx
     on participants(tenant_id, episode_id, account_id)
     where account_id is not null and status in ('joining', 'active');
-create index participants_dashboard_account_space_idx
-    on participants(tenant_id, space_id, account_id, created_at desc)
-    where account_id is not null;
 -- Chat limits apply to a person: the account, else the identity, else that one row.
 create index participants_chat_person_idx
     on participants(tenant_id, space_id, (coalesce(account_id, identity_id, id)));
@@ -1053,7 +1003,6 @@ create table space_public_invites (
     check (admission_mode in ('open', 'knock', 'members_only')),
     check (last_rotation_request_key is null or octet_length(last_rotation_request_key) between 16 and 128)
 );
-create index space_public_invites_handle_idx on space_public_invites(handle);
 create unique index space_public_invites_invite_code_idx on space_public_invites(invite_code);
 create unique index space_public_invites_invite_words_idx on space_public_invites(invite_words);
 
@@ -2075,7 +2024,7 @@ create table sync_screen_share_leases (
         references participants(tenant_id, space_id, episode_id, id, generation)
         on delete restrict,
     check (owner_generation > 0 and lease_generation > 0),
-    check (status in ('acquiring', 'active')),
+    check (status = 'active'),
     check (acquired_at < renewed_until and renewed_until <= hard_expires_at)
 );
 create index sync_screen_share_leases_expiry_idx
@@ -2413,7 +2362,6 @@ create table recording_transcription_source_chunks (
     constraint recording_transcription_source_chunks_checksum_check check (octet_length(checksum) = 32),
     constraint recording_transcription_source_chunks_size_check check (size between 1 and 524288000)
 );
-create index recording_transcription_source_chunks_recording_idx on recording_transcription_source_chunks(recording_id, generation, chunk_index);
 
 create table artifact_jobs (
     transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
@@ -2500,7 +2448,6 @@ create table transcript_chunks (
     constraint transcript_chunks_result_key_check check (length(result_key) between 1 and 1024 and result_key !~ '(^/|//|(^|/)\.\.?(/|$))')
 );
 alter table artifact_jobs add constraint artifact_jobs_chunk_fkey foreign key (chunk_id) references transcript_chunks(id) on delete restrict;
-create index transcript_chunks_transcript_idx on transcript_chunks(transcript_id, generation, chunk_index);
 
 create table transcription_attempts (
     id uuid primary key,
@@ -2600,6 +2547,7 @@ create table transcription_cleanup_jobs (
     constraint transcription_cleanup_jobs_provider_copy_check check (provider_copy_status in ('not_applicable', 'pending', 'completed', 'failed'))
 );
 create index transcription_cleanup_jobs_claim_idx on transcription_cleanup_jobs(due_at, created_at, id) where state in ('pending', 'retryable');
+create index transcription_cleanup_jobs_lease_idx on transcription_cleanup_jobs(lease_expires_at) where state = 'leased';
 
 create table recording_capacity (
     id smallint primary key check (id = 1),
@@ -3086,8 +3034,6 @@ create table recording_bundles (
     created_at timestamptz not null default now(),
     unique (recording_id, sequence_number)
 );
-create index recording_bundles_recording_sequence_idx
-    on recording_bundles(recording_id, sequence_number);
 
 create table recording_artifacts (
     recording_id uuid primary key references recordings(id),
@@ -3448,8 +3394,6 @@ create table webhook_delivery_attempts (
         check (span_id is null or span_id ~ '^[0-9a-f]{16}$')
 );
 
-create index webhook_delivery_attempts_delivery_idx
-    on webhook_delivery_attempts(tenant_id, delivery_id, attempt_number);
 
 create table webhook_idempotency_records (
     tenant_id uuid not null references tenants(id) on delete cascade,
@@ -3563,9 +3507,6 @@ create table provider_operation_receipts (
 
 create index provider_operation_receipts_episode_idx
     on provider_operation_receipts(tenant_id, episode_id, created_at desc, operation_id, effect);
-create index provider_operation_receipts_reconciliation_idx
-    on provider_operation_receipts(state, created_at, operation_id, effect)
-    where state in ('prepared', 'dispatching');
 
 create table provider_operation_observation_heads (
     tenant_id uuid not null references tenants(id) on delete restrict,
@@ -3597,8 +3538,6 @@ create table provider_operation_observations (
     constraint provider_operation_observations_fingerprint_check check (octet_length(observation_fingerprint) = 32)
 );
 
-create index provider_operation_observations_episode_cursor_idx
-    on provider_operation_observations(tenant_id, episode_id, incarnation, sequence);
 
 create function notify_provider_publication_observation() returns trigger
 language plpgsql as $$

@@ -24,13 +24,22 @@ async function fakeRun(responder) {
   };
 }
 
+const cloudflare = "cf_sfu";
 const policyApplied = { recording_policy: "manual", transcription_policy: "on_demand" };
 
 test("a proof Space is created without naming a plane and must be on the requested one", async () => {
-  const run = await fakeRun(() => ({ id: "s", effective_media_plane: "chalk_sfu", media_plane: "cf_sfu", ...policyApplied }));
+  const run = await fakeRun(() => ({ id: "s", effective_media_plane: "chalk_sfu", media_plane: "other", ...policyApplied }));
   const space = await createSpace(run, "chalk_sfu");
   assert.equal(space.id, "s");
   assert.equal("media_plane" in run.requests[0].body, false);
+});
+
+test("a Cloudflare proof can name its plane, so a Tenant that defaults to the own SFU still gets a Cloudflare Space", async () => {
+  const plane = cloudflare;
+  const run = await fakeRun((_, body) => ({ id: "s", effective_media_plane: body.media_plane ?? "other", ...policyApplied }));
+  const space = await createSpace(run, plane, undefined, { explicitPlane: true });
+  assert.equal(run.requests[0].body.media_plane, plane);
+  assert.equal(space.effective_media_plane, plane);
 });
 
 test("a Space on another plane stops the run with media-plane-config", async () => {
@@ -189,11 +198,11 @@ test("a measured check prints its message, a nested one prints every message, an
 test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {
   const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
   for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
-    assert.equal(workflow.split(`${name}: \${{ vars.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
+    assert.equal(workflow.split(`${name}: \${{ secrets.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
   }
   const deployment = (method) => (method === "GET" ? { id: "chalk-space", effective_media_plane: "chalk_sfu", ...policyApplied } : { id: "new", effective_media_plane: "cf_sfu", ...policyApplied });
   const cloudflareLane = await fakeRun(deployment);
-  assert.equal((await createSpace(cloudflareLane, "cf_sfu")).effective_media_plane, "cf_sfu");
+  assert.equal((await createSpace(cloudflareLane, cloudflare)).effective_media_plane, cloudflare);
   process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "chalk-space";
   try {
     const ownSfuLane = await fakeRun(deployment);

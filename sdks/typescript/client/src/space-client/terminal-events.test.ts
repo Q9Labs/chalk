@@ -71,6 +71,28 @@ describe("SpaceClient terminal callbacks", () => {
     }
   });
 
+  it("marks a seat the server let go as timed out, and a person's own Leave as not", async () => {
+    const dropped = terminalTestPlatform();
+    const droppedHarness = terminalTestClient(dropped);
+    const left = terminalTestPlatform();
+    const leftHarness = terminalTestClient(left);
+    try {
+      await joinWithTerminalControl(droppedHarness.client, dropped);
+      dropped.emitSync({ ...dropped.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" }, control: null });
+      await vi.waitFor(() => expect(droppedHarness.client.getSnapshot().connection.status).toBe("left"));
+      expect(droppedHarness.client.getSnapshot().connection.timedOut).toBe(true);
+
+      await joinWithTerminalControl(leftHarness.client, left);
+      await leftHarness.client.leave();
+      left.emitSync({ ...left.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" }, control: null });
+      expect(leftHarness.client.getSnapshot().connection.status).toBe("left");
+      expect(leftHarness.client.getSnapshot().connection.timedOut).toBe(false);
+    } finally {
+      droppedHarness.client.dispose();
+      leftHarness.client.dispose();
+    }
+  });
+
   it("closes from an acknowledged end even without a final control event", async () => {
     const platform = terminalTestPlatform();
     platform.endEpisode.mockResolvedValue({ type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" });
@@ -205,7 +227,7 @@ describe("SpaceClient terminal callbacks", () => {
     }
   });
 
-  it("keeps retrying an expired Access grant through an outage and recovers without errors", async () => {
+  it("keeps retrying a refresh through an outage while the Access grant is still valid and recovers without errors", async () => {
     const platform = terminalTestPlatform();
     let now = Date.now();
     const timers = new Map<() => void, number>();
@@ -254,7 +276,7 @@ describe("SpaceClient terminal callbacks", () => {
     };
     try {
       await client.join({ microphone: false, camera: false });
-      now += 301_000;
+      now += 241_000;
       foreground();
       await retry(3, 5_000);
       await retry(4, 10_000);
@@ -265,6 +287,54 @@ describe("SpaceClient terminal callbacks", () => {
       expect(ended).not.toHaveBeenCalled();
       expect(platform.stopped).not.toHaveBeenCalled();
       expect(platform.syncStopped).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("fails the Connection when the Access grant expires before it can be renewed", async () => {
+    const platform = terminalTestPlatform();
+    let now = Date.now();
+    const timers = new Map<() => void, number>();
+    platform.dependencies.clock.now = () => now;
+    platform.dependencies.clock.setTimeout = (callback, delay) => {
+      timers.set(callback, delay);
+      return callback;
+    };
+    platform.dependencies.clock.clearTimeout = (callback) => {
+      timers.delete(callback as () => void);
+    };
+    let foreground = () => undefined;
+    let accessCalls = 0;
+    const access = async () => {
+      accessCalls += 1;
+      if (accessCalls === 2 || accessCalls === 3) throw new Error("Access unavailable");
+      const grant = opaqueAccessGrant(1);
+      const expiresAt = new Date(now + 300_000).toISOString();
+      return { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt, client_payload: { connectionId: accessCalls > 1 ? "connection-2" : "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } } };
+    };
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess: access },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          subscribeForeground: (listener) => {
+            foreground = listener;
+            return () => undefined;
+          },
+        },
+      },
+    );
+    const errors: unknown[] = [];
+    client.on("error", (event) => errors.push(event));
+    try {
+      await client.join({ microphone: false, camera: false });
+      now += 301_000;
+      foreground();
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
+      expect(client.getSnapshot().connection.lastError?.code).toBe("access.unavailable");
+      expect(errors).toHaveLength(1);
     } finally {
       client.dispose();
     }

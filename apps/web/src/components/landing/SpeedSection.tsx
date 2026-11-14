@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { Dither } from "./Dither";
+import { Dither } from "../site/Dither";
 
 const BUDGETS = [
   { value: "<1s", line: "Click to first frame, at p50. Under 2.5 s at p95." },

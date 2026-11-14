@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { lstat, readlink } from "node:fs/promises";
 import path from "node:path";
 
-import { fileSHA256 } from "./file-sha256.mjs";
+import { sha256File } from "../lib/hash.mjs";
 import { runBoundedCommand } from "./run-bounded-command.mjs";
 
 const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
@@ -60,7 +60,7 @@ async function fingerprint(root, files, status) {
     let bytes;
     if (facts.isFile()) {
       kind = "file";
-      digest = await fileSHA256(absolute);
+      digest = await sha256File(absolute);
       bytes = facts.size;
     } else if (facts.isSymbolicLink()) {
       kind = "symlink";

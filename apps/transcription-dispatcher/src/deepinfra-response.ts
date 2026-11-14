@@ -1,4 +1,5 @@
 import { providerSchemaError } from "./errors.js";
+import { valueAt } from "./provider-response.js";
 
 export function nativeDeepInfraBody(body: unknown, maxTextChars: number): unknown {
   if (typeof body !== "object" || body === null || !("words" in body) || body.words == null) return body;
@@ -35,12 +36,11 @@ export function observedDeepInfraVersion(response: Response, body: unknown): str
 }
 
 export function observedDeepInfraCost(body: unknown): number | undefined {
-  if (typeof body !== "object" || body === null || !("inference_status" in body) || body.inference_status == null) return undefined;
-  const status = body.inference_status;
-  if (typeof status !== "object" || !("cost" in status) || status.cost == null) return undefined;
-  if (typeof status.cost !== "number" || !Number.isFinite(status.cost) || status.cost < 0 || status.cost > 1_000) throw providerSchemaError("DeepInfra reported cost was invalid", "inference_status.cost", "finite number in [0, 1000]", status.cost);
+  const cost = valueAt(body, "inference_status", "cost");
+  if (cost === undefined || cost === null) return undefined;
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0 || cost > 1_000) throw providerSchemaError("DeepInfra reported cost was invalid", "inference_status.cost", "finite number in [0, 1000]", cost);
   // The native inference API reports US cents; transcript metadata stores USD.
-  return status.cost / 100;
+  return cost / 100;
 }
 
 function observedText(candidates: [string, unknown][], label: string): string | undefined {

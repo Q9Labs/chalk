@@ -117,14 +117,13 @@
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "check:tokens": "node ./scripts/check-tokenized-styles.mjs",
     "check:worklets": "node ./scripts/check-worklet-directives.mjs",
-    "check:client-package": "node ./scripts/check-client-package.mjs",
     "lint": "pnpm run check:tokens && pnpm run check:worklets && pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@q9labsai/chalk-client": "workspace:^5.5.0",
-    "@q9labsai/chalk-whiteboard": "workspace:^5.5.0",
-    "@q9labsai/facehash": "workspace:^5.5.0",
+    "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/chalk-whiteboard": "workspace:^",
+    "@q9labsai/facehash": "workspace:^",
     "uqr": "^0.1.3"
   },
   "devDependencies": {

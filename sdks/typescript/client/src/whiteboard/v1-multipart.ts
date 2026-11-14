@@ -30,10 +30,6 @@ export function whiteboardV1OperationFrames(frame: WhiteboardV1LogicalOperationF
   return multipartSubmitFrames(frame);
 }
 
-export function whiteboardV1PendingOperationBytes(frame: WhiteboardV1LogicalOperationFrame): number {
-  return encodedWhiteboardV1FrameBytes(frame);
-}
-
 export class WhiteboardV1UpdateAssembler {
   readonly #assemblies = new Map<string, UpdateAssembly>();
   #bytes = 0;
@@ -82,7 +78,7 @@ export class WhiteboardV1UpdateAssembler {
   }
 }
 
-export function whiteboardV1UpdateAssemblyKey(frame: Pick<UpdatePartFrame, "operation_id" | "scene_id" | "revision">): string {
+function whiteboardV1UpdateAssemblyKey(frame: Pick<UpdatePartFrame, "operation_id" | "scene_id" | "revision">): string {
   return `${frame.scene_id}:${frame.revision}:${frame.operation_id}`;
 }
 

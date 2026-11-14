@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "../lib/hash.mjs";
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,7 +41,7 @@ export async function loadDocument(path) {
   assertDocumentFile(bytes, resolvedPath);
   const document = parseJson(bytes.toString("utf8"), "managed deployment document is invalid JSON");
   assertDocumentContract(document);
-  const hash = createHash("sha256").update(bytes).digest("hex");
+  const hash = sha256(bytes);
   return {
     format: "JSON",
     path: resolvedPath,
@@ -92,9 +92,9 @@ export function parseControllerResult(output, expectedReleaseId, expectedRequest
   return result;
 }
 
-export function isApprovedRunCommand(commands) {
+function isApprovedRunCommand(commands) {
   if (!Array.isArray(commands)) return false;
-  return createHash("sha256").update(JSON.stringify(commands)).digest("hex") === approvedRunCommandSha256;
+  return sha256(JSON.stringify(commands)) === approvedRunCommandSha256;
 }
 
 export function buildDryRunProof({ document, manifest, manifestBytes, options, request, parameters }) {
@@ -113,7 +113,7 @@ export function buildDryRunProof({ document, manifest, manifestBytes, options, r
     request,
     manifest: {
       path: resolve(options.manifestPath),
-      sha256: createHash("sha256").update(manifestBytes).digest("hex"),
+      sha256: sha256(manifestBytes),
       bytes: manifestBytes.length,
     },
     document,

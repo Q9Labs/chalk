@@ -1,7 +1,9 @@
 import { parseInviteCode } from "@q9labsai/chalk-client/invites";
 
+import { SITE_HOST } from "../../lib/site-origin";
+
 const SPACE_PATH = /^\/space\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-const CHALK_HOSTS = new Set(["chalkmeet.com", "www.chalkmeet.com"]);
+const CHALK_HOSTS = new Set([SITE_HOST, `www.${SITE_HOST}`]);
 
 /**
  * Returns the path and hash of a pasted call link on this site, or undefined when it isn't one.

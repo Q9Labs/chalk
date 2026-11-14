@@ -1,0 +1,11 @@
+# Hand-written Elixir files over 300 lines. Each line is "path: reason". A file leaves this list when it
+# drops to 300 lines or fewer; scripts/check-file-size fails on a missing reason or a stale entry.
+lib/chalk_sync/episodes/reducer.ex: pure Episode state machine; every clause reads and writes the same state shape, so a split would only pass that shape between modules
+lib/chalk_sync/transport/outbound_queue.ex: one bounded queue data structure; its byte and frame accounting must change together
+lib/chalk_sync/protocol.ex: v1 frame decode table; one clause per wire frame, kept in wire order
+lib/chalk_sync/provider_bridge/codec.ex: encode and decode table for the provider bridge wire format; one clause per message
+lib/chalk_sync/retention/sql.ex: flat list of retention statements; each is independent text with no logic
+lib/chalk_sync/chat/sql.ex: flat list of chat statements; each is independent text with no logic
+lib/chalk_sync/whiteboard_v1/sql.ex: flat list of whiteboard statements; each is independent text with no logic
+lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex: flat list of finalizer statements; each is independent text with no logic
+lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex: flat list of lifecycle statements; each is independent text with no logic

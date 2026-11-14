@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 )
@@ -22,135 +24,40 @@ const MaxRecordingObjectUploadBytes = 24 << 20
 
 var ErrRecordingObjectUpload = errors.New("recording object upload failed")
 
-type recorderRecordingAuthorityRequest struct {
-	TenantID          string `json:"tenant_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseOwner        string `json:"lease_owner"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-}
-
-type recorderRecordingKeyAccessRequest struct {
-	recorderRecordingAuthorityRequest
-	KeyHandle string `json:"key_handle"`
-}
-
-type recorderRecordingObjectAuthorityRequest struct {
-	recorderRecordingAuthorityRequest
-	ObjectHandle string `json:"object_handle"`
-}
-
-type recorderRecordingObjectReserveRequest struct {
-	recorderRecordingObjectAuthorityRequest
-	ReservationRequestID    string `json:"reservation_request_id"`
-	EncryptionContextDigest string `json:"encryption_context_digest"`
-}
-
-type recorderRecordingObjectFinalizeRequest struct {
-	recorderRecordingObjectAuthorityRequest
-	AllocationID         string  `json:"allocation_id"`
-	ByteSize             int64   `json:"byte_size"`
-	ChecksumSHA256       string  `json:"checksum_sha256"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-}
-
-type recorderRecordingObjectCommitRequest struct {
-	recorderRecordingObjectAuthorityRequest
-	AllocationID         string `json:"allocation_id"`
-	UploadToken          string `json:"upload_token"`
-	ManifestDigest       string `json:"manifest_digest"`
-	MonotonicStartMillis int64  `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64  `json:"monotonic_end_millis"`
-	MediaStartMillis     int64  `json:"media_start_millis"`
-	MediaEndMillis       int64  `json:"media_end_millis"`
-}
-
-type recorderRecordingKeyAccessResponse struct {
-	KeyHandle        string `json:"key_handle"`
-	Plaintext        []byte `json:"plaintext"`
-	CiphertextDigest string `json:"ciphertext_digest"`
-	ContextDigest    string `json:"context_digest"`
-	CaptureEpoch     int64  `json:"capture_epoch"`
-}
-
-type recorderRecordingObjectReserveResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	SequenceNumber    int64  `json:"sequence_number"`
-	AllocationVersion int64  `json:"allocation_version"`
-}
-
-type recorderRecordingSignedUploadResponse struct {
-	Method        string              `json:"method"`
-	URL           string              `json:"url"`
-	ExpiresAt     string              `json:"expires_at"`
-	SignedHeaders map[string][]string `json:"signed_headers"`
-}
-
-type recorderRecordingObjectFinalizeResponse struct {
-	AllocationID string                                `json:"allocation_id"`
-	UploadToken  string                                `json:"upload_token"`
-	Upload       recorderRecordingSignedUploadResponse `json:"upload"`
-	ExpiresAt    string                                `json:"expires_at"`
-}
-
-type recorderRecordingObjectCommitResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	SequenceNumber    int64  `json:"sequence_number"`
-	AllocationVersion int64  `json:"allocation_version"`
-	ObjectVersion     string `json:"object_version"`
-	ObjectETag        string `json:"object_etag"`
-	ObjectChecksum    string `json:"object_checksum_sha256"`
-	ManifestDigest    string `json:"manifest_digest"`
-	CommittedAt       string `json:"committed_at"`
-}
-
 func (c *ControlPlaneClient) AccessRecordingKey(ctx context.Context, authority recordingkeys.Authority) (recordingkeys.DataKey, error) {
 	if err := authority.Validate(); err != nil {
 		return recordingkeys.DataKey{}, ErrInvalidControlPlaneRequest
 	}
-	request := recorderRecordingKeyAccessRequest{recorderRecordingAuthorityRequest: keyAuthorityRequest(authority), KeyHandle: authority.KeyHandle}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/keys/access", request, ControlPlaneResponseLimit)
+	request := recorderprotocol.RecordingKeyAccessRequest{RecordingAuthority: keyAuthorityRequest(authority), KeyHandle: authority.KeyHandle}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteKeysAccess.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingkeys.DataKey{}, err
 	}
 	defer clear(body)
-	var response recorderRecordingKeyAccessResponse
+	var response recorderprotocol.RecordingKeyAccessResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingkeys.DataKey{}, ProtocolError{Err: err}
 	}
 	ciphertextDigest, cipherErr := decodeExactLowerHex(response.CiphertextDigest)
 	contextDigest, contextErr := decodeExactLowerHex(response.ContextDigest)
-	if cipherErr != nil || contextErr != nil || response.KeyHandle != authority.KeyHandle || response.CaptureEpoch != authority.CaptureEpoch || len(response.Plaintext) != 32 {
-		clear(response.Plaintext)
+	plaintext, plaintextErr := base64.StdEncoding.DecodeString(response.Plaintext)
+	if cipherErr != nil || contextErr != nil || plaintextErr != nil || response.KeyHandle != authority.KeyHandle || response.CaptureEpoch != authority.CaptureEpoch || len(plaintext) != 32 {
+		clear(plaintext)
 		return recordingkeys.DataKey{}, ProtocolError{Err: errors.New("recording key response authority mismatch")}
 	}
-	return recordingkeys.DataKey{KeyHandle: response.KeyHandle, Plaintext: response.Plaintext, CiphertextDigest: ciphertextDigest, ContextDigest: contextDigest, CaptureEpoch: response.CaptureEpoch}, nil
+	return recordingkeys.DataKey{KeyHandle: response.KeyHandle, Plaintext: plaintext, CiphertextDigest: ciphertextDigest, ContextDigest: contextDigest, CaptureEpoch: response.CaptureEpoch}, nil
 }
 
 func (c *ControlPlaneClient) ReserveRecordingObject(ctx context.Context, input recordingobjects.ReserveInput) (recordingobjects.Allocation, error) {
 	if err := input.Validate(); err != nil {
 		return recordingobjects.Allocation{}, ErrInvalidControlPlaneRequest
 	}
-	request := recorderRecordingObjectReserveRequest{recorderRecordingObjectAuthorityRequest: objectAuthorityRequest(input.Authority), ReservationRequestID: input.ReservationRequestID, EncryptionContextDigest: hex.EncodeToString(input.EncryptionContextDigest)}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/bundles/reserve", request, ControlPlaneResponseLimit)
+	request := recorderprotocol.RecordingObjectReserveRequest{RecordingObjectAuthority: objectAuthorityRequest(input.Authority), ReservationRequestID: input.ReservationRequestID, EncryptionContextDigest: hex.EncodeToString(input.EncryptionContextDigest)}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteBundlesReserve.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingobjects.Allocation{}, err
 	}
-	var response recorderRecordingObjectReserveResponse
+	var response recorderprotocol.RecordingObjectReserveResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingobjects.Allocation{}, ProtocolError{Err: err}
 	}
@@ -166,12 +73,12 @@ func (c *ControlPlaneClient) FinalizeRecordingObject(ctx context.Context, input 
 	if err := validation.Validate(time.Now().UTC()); err != nil {
 		return recordingobjects.AllocationResult{}, ErrInvalidControlPlaneRequest
 	}
-	request := recorderRecordingObjectFinalizeRequest{recorderRecordingObjectAuthorityRequest: objectAuthorityRequest(input.Authority), AllocationID: input.AllocationID, ByteSize: input.ExpectedByteSize, ChecksumSHA256: hex.EncodeToString(input.ExpectedChecksumSHA256), ContentType: input.ContentType, Codec: input.Codec, Layer: input.Layer, MonotonicStartMillis: input.MonotonicStartMillis, MonotonicEndMillis: input.MonotonicEndMillis, MediaStartMillis: input.MediaStartMillis, MediaEndMillis: input.MediaEndMillis}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/bundles/finalize", request, ControlPlaneResponseLimit)
+	request := recorderprotocol.RecordingObjectFinalizeRequest{RecordingObjectAuthority: objectAuthorityRequest(input.Authority), AllocationID: input.AllocationID, ByteSize: input.ExpectedByteSize, ChecksumSHA256: hex.EncodeToString(input.ExpectedChecksumSHA256), ContentType: input.ContentType, Codec: input.Codec, Layer: input.Layer, MonotonicStartMillis: input.MonotonicStartMillis, MonotonicEndMillis: input.MonotonicEndMillis, MediaStartMillis: input.MediaStartMillis, MediaEndMillis: input.MediaEndMillis}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteBundlesFinalize.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingobjects.AllocationResult{}, err
 	}
-	var response recorderRecordingObjectFinalizeResponse
+	var response recorderprotocol.RecordingObjectFinalizeResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingobjects.AllocationResult{}, ProtocolError{Err: err}
 	}
@@ -225,12 +132,12 @@ func (c *ControlPlaneClient) CommitRecordingObject(ctx context.Context, input re
 	if err := input.Validate(); err != nil {
 		return recordingobjects.Bundle{}, ErrInvalidControlPlaneRequest
 	}
-	request := recorderRecordingObjectCommitRequest{recorderRecordingObjectAuthorityRequest: objectAuthorityRequest(input.Authority), AllocationID: input.AllocationID, UploadToken: input.UploadToken, ManifestDigest: hex.EncodeToString(input.ManifestDigest), MonotonicStartMillis: input.MonotonicStartMillis, MonotonicEndMillis: input.MonotonicEndMillis, MediaStartMillis: input.MediaStartMillis, MediaEndMillis: input.MediaEndMillis}
-	body, _, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/bundles/commit", request, ControlPlaneResponseLimit)
+	request := recorderprotocol.RecordingObjectCommitRequest{RecordingObjectAuthority: objectAuthorityRequest(input.Authority), AllocationID: input.AllocationID, UploadToken: input.UploadToken, ManifestDigest: hex.EncodeToString(input.ManifestDigest), MonotonicStartMillis: input.MonotonicStartMillis, MonotonicEndMillis: input.MonotonicEndMillis, MediaStartMillis: input.MediaStartMillis, MediaEndMillis: input.MediaEndMillis}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteBundlesCommit.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingobjects.Bundle{}, err
 	}
-	var response recorderRecordingObjectCommitResponse
+	var response recorderprotocol.RecordingObjectCommitResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return recordingobjects.Bundle{}, ProtocolError{Err: err}
 	}
@@ -256,12 +163,12 @@ func (c *ControlPlaneClient) CommitRecordingObject(ctx context.Context, input re
 	return recordingobjects.Bundle{Allocation: allocation, ManifestDigest: manifestDigest, ObjectVersion: response.ObjectVersion, ObjectETag: response.ObjectETag, ObjectChecksumSHA256: objectChecksum, CommittedAt: committedAt}, nil
 }
 
-func keyAuthorityRequest(authority recordingkeys.Authority) recorderRecordingAuthorityRequest {
-	return recorderRecordingAuthorityRequest{TenantID: authority.TenantID, EpisodeID: authority.EpisodeID, RecordingID: authority.RecordingID, JobID: authority.JobID, AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano)}
+func keyAuthorityRequest(authority recordingkeys.Authority) recorderprotocol.RecordingAuthority {
+	return recorderprotocol.RecordingAuthority{TenantID: authority.TenantID, EpisodeID: authority.EpisodeID, RecordingID: authority.RecordingID, JobID: authority.JobID, AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano)}
 }
 
-func objectAuthorityRequest(authority recordingobjects.Authority) recorderRecordingObjectAuthorityRequest {
-	return recorderRecordingObjectAuthorityRequest{recorderRecordingAuthorityRequest: recorderRecordingAuthorityRequest{TenantID: authority.TenantID, EpisodeID: authority.EpisodeID, RecordingID: authority.RecordingID, JobID: authority.JobID, AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano)}, ObjectHandle: authority.ObjectHandle}
+func objectAuthorityRequest(authority recordingobjects.Authority) recorderprotocol.RecordingObjectAuthority {
+	return recorderprotocol.RecordingObjectAuthority{RecordingAuthority: recorderprotocol.RecordingAuthority{TenantID: authority.TenantID, EpisodeID: authority.EpisodeID, RecordingID: authority.RecordingID, JobID: authority.JobID, AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration, CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: hex.EncodeToString(authority.EnvelopeDigest), LeaseToken: authority.LeaseToken, LeaseOwner: authority.LeaseOwner, LeaseExpiresAt: authority.LeaseExpiresAt.UTC().Format(time.RFC3339Nano)}, ObjectHandle: authority.ObjectHandle}
 }
 
 func validateRecordingUploadURL(value string) (*url.URL, error) {

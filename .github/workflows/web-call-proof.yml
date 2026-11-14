@@ -24,6 +24,24 @@ on:
     secrets:
       CHALK_PROOF_API_KEY:
         required: true
+      CHALK_PROOF_API_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEB_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_TENANT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_SPACE_ID_CHALK_SFU:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
+      CHALK_PROOF_WEBHOOK_SERVICE_URL:
+        description: Proof identifier, held as an environment secret so it never prints in logs
+        required: false
     outputs:
       result:
         description: passed only when the web call and cleanup pass
@@ -54,14 +72,14 @@ jobs:
     env:
       CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
       # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one.
-      CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+      CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ secrets.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
       CHALK_PROOF_CONFIG_SOURCE: env
-      CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
-      CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
-      CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+      CHALK_PROOF_TENANT_ID: ${{ secrets.CHALK_PROOF_TENANT_ID }}
+      CHALK_PROOF_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+      CHALK_PROOF_WEB_URL: ${{ secrets.CHALK_PROOF_WEB_URL }}
       CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
-      CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
-      CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+      CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
       EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
       E2E_TELEMETRY_DISABLED: "1"
       CHALK_PROOF_WEBKIT: "1"
@@ -70,16 +88,10 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - name: Install browser and evidence tools
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js
       - uses: ./.github/actions/apt-install
         with:
           packages: age
@@ -94,7 +106,7 @@ jobs:
           JS
       - name: Restore web engine browser cache
         id: web-browser-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.web-browser-key.outputs.key }}
@@ -106,7 +118,7 @@ jobs:
           verify-engine: true
       - name: Save web engine browser cache
         if: steps.web-browser-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.web-browser-key.outputs.key }}
@@ -151,7 +163,7 @@ jobs:
           fi
       - name: Upload encrypted evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-call-proof-${{ inputs.environment }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: .private/web-proof-artifact/

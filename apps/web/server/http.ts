@@ -56,3 +56,11 @@ export async function body(request: Request): Promise<unknown> {
     throw new DashboardError(400, "invalid_json");
   }
 }
+export function query(request: Request): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of new URL(request.url).searchParams) {
+    if (Object.hasOwn(values, key)) throw new DashboardError(400, "duplicate_parameter");
+    values[key] = value;
+  }
+  return values;
+}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -28,7 +29,7 @@ func (r *storedSpaces) CreateSpaceIdempotent(_ context.Context, input spaces.Cre
 func TestCreateSpaceWithNoPlaneUnderTheOwnSFUDefault(t *testing.T) {
 	tenant, _ := utilities.NewID()
 	repository := &storedSpaces{}
-	service := spaces.NewServiceWithDefaultProvider(repository, spaces.MediaPlaneProviderChalkSFU)
+	service := spaces.NewServiceWithDefaultProvider(repository, mediaplane.ProviderChalkSFU)
 	endpoint := createSpaceEndpoint(service, allowAllTenants{})
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalAPIKey, TenantID: tenant})
 	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Team","slug":"team"}`)).WithContext(ctx)

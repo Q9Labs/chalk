@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { setTimeout as delay } from "node:timers/promises";
+import { startAndJoinCall } from "./call-steps.mjs";
 
 /** Exercise the already-loaded legacy tab's cache fallback, not a fabricated denial. */
 export async function proveEvictionReload(context, origin) {
@@ -31,10 +32,7 @@ export async function proveEvictionReload(context, origin) {
         await route.fulfill({ response });
       } else await route.continue();
     });
-    await page.goto(`${origin}/dashboard`);
-    await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
-    await page.getByRole("button", { name: "Join call", exact: true }).click();
-    await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+    await startAndJoinCall(page, origin);
     assert(initial, "The original owner must join before evicting its entry");
     const { csrfToken } = await (await context.request.get(`${origin}/auth/session`)).json();
     for (let join = 0; join < 5; join++) {

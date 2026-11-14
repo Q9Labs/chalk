@@ -21,7 +21,9 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { execFileSync, spawn } from "node:child_process";
+import ports from "./dev/ports.json" with { type: "json" };
 
 const repoRoot = new URL("..", import.meta.url);
 const scratchpadDir = path.join(repoRoot.pathname, "scratchpad");
@@ -33,10 +35,6 @@ const androidAvdName = "Chalk-Pixel-9";
 const chalkBundleId = "ai.q9labs.chalk.mobile";
 const helperScriptRelativePath = "apps/mobile/scripts/start-ios-sim-dev-client.mjs";
 const expoPort = 8088;
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function ensureScratchpad() {
   fs.mkdirSync(scratchpadDir, { recursive: true });
@@ -193,7 +191,7 @@ async function ensureAndroidEmulator() {
 }
 
 function reverseAndroidPorts(serial) {
-  for (const port of ["8787", "8080", "8081", "4100"]) {
+  for (const port of [8787, ports.api, ports.metro, ports.sync]) {
     tryRun("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
   }
 }

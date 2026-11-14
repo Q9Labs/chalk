@@ -1,0 +1,35 @@
+# Code that each ExternalOperations step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	:ok <- validate_capability(policy, participant, source) do
+Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	[_row] -> Postgrex.rollback(connection, {:error, :publication_fenced})
+Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	$8, now() + interval '30 seconds',
+Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	where sync_publication_grant_reservations.expires_at <= now()
+ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	[row] -> from_row(row)
+ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	[] -> insert_publication_grant_reservation(connection, identity, operation_id, source)
+ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	and not (status in ('pending', 'ambiguous') and expires_at <= now())
+CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	publication_cleanup_required?(connection, episode, policy, participant, reservation)
+CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	expires_at = greatest(expires_at, now() + interval '5 minutes')
+RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex	reservations = lock_publication_reservations(connection, identity.episode, affected)
+RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex	if exercised_sources == [] do
+RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex	and participant_id = $4 and participant_generation = $5 and expires_at > now()
+RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex	payload, fence_active, control_revision
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	@lease_seconds 60
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	source is not null and not exists (
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	operation_name in ('remove_participant') and not exists (
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	operation_name in (#{stored_names_list(OperationTable.episode_end_names())}) and not exists (
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	and reservation.status in ('pending', 'ambiguous') and reservation.expires_at > now()
+Claim	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex	attempt_count = least(operation.attempt_count + 1, 100),
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer/dispatch.ex	when OperationTable.is_local_name(name),
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer/dispatch.ex	when OperationTable.is_media_name(name) do
+NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer/dispatch.ex	when OperationTable.is_episode_end_name(name) do
+NodeHears	apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex	@max_attempts 100
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex	defp settle(_episode, %{name: :role_transition_source_stop}, :pending, _finalize), do: :pending
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex	if operation.attempt_count >= @max_attempts, do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize), else: :pending
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	external.status != :pending -> ExternalOperationDecision.build(external, :duplicate)
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	{:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	PublicationFences.delete(connection, episode, parent)
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	Enum.all?(statuses, &(&1 == "applied"))
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex	do: keep_source_stop_pending(operation, reason)
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	{:confirmed, :provider}

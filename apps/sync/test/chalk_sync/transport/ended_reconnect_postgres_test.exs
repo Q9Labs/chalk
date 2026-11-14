@@ -95,11 +95,20 @@ defmodule ChalkSync.Transport.EndedReconnectPostgresTest do
     for client <- [sync, whiteboard] do
       assert {:ok, _projections, client} = Client.drain(client)
       client = Client.send_json(client, %{"type" => "ping"})
-      assert {:json, %{"type" => "pong"}, client} = Client.recv(client)
+      client = recv_pong(client)
       Client.close_tcp(client)
     end
 
     assert System.monotonic_time(:millisecond) - started >= 90_000
+  end
+
+  # The Episode reconciles its projections every 15 s, so a stale one can rotate and send a
+  # snapshot between the drain and the pong.
+  defp recv_pong(client) do
+    case Client.recv(client) do
+      {:json, %{"type" => "pong"}, client} -> client
+      {:json, %{"type" => "projection_snapshot"}, client} -> recv_pong(client)
+    end
   end
 
   defp end_episode(episode) do

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -40,8 +41,8 @@ func TestCaptureFailureDetailIsSanitizedBeforeStorageAndLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := json.Marshal(recorderWorkerFailBody{
-		recorderWorkerLeaseBody: recorderWorkerLeaseBody{
+	body, err := json.Marshal(recorderprotocol.FailRequest{
+		LeaseRequest: recorderprotocol.LeaseRequest{
 			JobID: jobID.String(), AttemptCount: 1, FencingGeneration: 1, LeaseToken: token, CaptureEpoch: 1,
 			EnvelopeDigest: hex.EncodeToString(bytes.Repeat([]byte{7}, 32)),
 		},

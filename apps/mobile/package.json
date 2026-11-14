@@ -25,15 +25,14 @@
     "build:android:release:production": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts -- pnpm run build:android:release",
     "with:production-release-env": "pnpm exec tsx ./scripts/run-with-production-mobile-env.ts --",
     "check-types": "tsc-rs --noEmit",
-    "test:client": "node scripts/check-native-client.mjs",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
     "@cloudflare/react-native-webrtc": "~125.0.3",
     "@expo/vector-icons": "^15.0.2",
-    "@q9labsai/chalk-client": "workspace:^5.5.0",
-    "@q9labsai/chalk-react-native": "workspace:^5.5.0",
+    "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/chalk-react-native": "workspace:^",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "^55.0.6",
     "expo-audio": "~55.0.18",

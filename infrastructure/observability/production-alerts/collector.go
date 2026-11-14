@@ -31,6 +31,20 @@ var stateSQL string
 // body does, and gives 0 when none is owed. A healthy fleet pays a debt in seconds.
 const sfuRetirementDebtSQL = `select coalesce(extract(epoch from now() - min(created_at)), 0)::bigint from sfu_retirement_debts`
 
+// chalk_alert_rule values the collector writes; the .apl files and monitors.json in this folder read the same names.
+const (
+	ruleDeliveryTest      = "delivery-test"
+	ruleRecording         = "recording"
+	ruleRecordingStop     = "recording-stop"
+	ruleSyncReadiness     = "sync-readiness"
+	ruleSFUReadiness      = "sfu-readiness"
+	ruleCertificateExpiry = "certificate-expiry"
+	ruleSFURetirementDebt = "sfu-retirement-debt"
+	ruleExport            = "export"
+	ruleTranscript        = "transcript"
+	ruleWebhook           = "webhook"
+)
+
 type snapshot struct {
 	Tenant        string     `json:"chalk_alert_tenant"`
 	TenantName    string     `json:"chalk_alert_tenant_name"`
@@ -81,7 +95,7 @@ func run() error {
 		if mode == "--clear-test" {
 			value = 0
 		}
-		snapshots = []snapshot{{Rule: "delivery-test", Value: value, Summary: "TEST: Chalk production alert delivery proof; no user failure was induced."}}
+		snapshots = []snapshot{{Rule: ruleDeliveryTest, Value: value, Summary: "TEST: Chalk production alert delivery proof; no user failure was induced."}}
 	case "", "--check":
 		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"), sfuProbesFromEnv())
 	default:
@@ -93,13 +107,13 @@ func run() error {
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID."
-		if snapshots[i].Rule == "sync-readiness" {
+		if snapshots[i].Rule == ruleSyncReadiness {
 			snapshots[i].Engineers = "For engineers: sync-readiness; inspect /readyz and sync.readiness.failed events, then systemctl status chalk-alert-state.timer chalk-alert-state.service."
 		}
-		if snapshots[i].Rule == "certificate-expiry" {
+		if snapshots[i].Rule == ruleCertificateExpiry {
 			snapshots[i].Engineers = "For engineers: certificate-expiry; run `openssl s_client -connect <host>:443 </dev/null | openssl x509 -noout -enddate` for the door, or deploy/certs for the SFU, then the renewal steps in the production-alerts README."
 		}
-		if snapshots[i].Rule == "sfu-readiness" {
+		if snapshots[i].Rule == ruleSFUReadiness {
 			snapshots[i].Engineers = "For engineers: sfu-readiness; open /readyz on the node through the SFU deploy tunnel and read its media telemetry journal lines."
 		}
 		if snapshots[i].Time == "" {
@@ -131,23 +145,23 @@ func run() error {
 
 func message(rule string) (headline, impact, next string) {
 	switch rule {
-	case "recording":
+	case ruleRecording:
 		return "A class was not recorded", "The Recording stopped before it finished, so there is no complete video for this class.", "An engineer must check immediately whether any retained source can be recovered; a complete video cannot be promised."
-	case "recording-stop":
+	case ruleRecordingStop:
 		return "A Recording has not finished stopping", "Capture finished more than two minutes ago, but Sync still reports stopping. This can block Episode end and another Episode in the same Space.", "An engineer must check capture-stopped callback delivery and pipeline maintenance now."
-	case "sync-readiness":
+	case ruleSyncReadiness:
 		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
-	case "sfu-readiness":
+	case ruleSFUReadiness:
 		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
-	case "certificate-expiry":
+	case ruleCertificateExpiry:
 		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, a CA that ends first by rotating the service CA (see the README), the direct door by checking that its proxy can renew over port 443."
-	case "sfu-retirement-debt":
+	case ruleSFURetirementDebt:
 		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
-	case "export":
+	case ruleExport:
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
-	case "transcript":
+	case ruleTranscript:
 		return "A class transcript failed or is taking longer than 30 minutes", "The video is not affected.", "An engineer needs to check the source expiry and retry before it expires; a transcript cannot be promised."
-	case "webhook":
+	case ruleWebhook:
 		return "A customer's system was not told about a class event", "Chalk tried several times to reach the customer's server and gave up, so their attendance or Recording records may be out of date.", "An engineer must check the customer's server now, then redeliver the event; automatic retries have ended."
 	default:
 		return "TEST: Chalk alert delivery", "No customer failure was induced.", "This only tests notification delivery; no customer action is needed."
@@ -156,7 +170,7 @@ func message(rule string) (headline, impact, next string) {
 
 func formatMessage(item *snapshot) {
 	item.Headline, item.Summary, item.Next = message(item.Rule)
-	if item.Rule == "sync-readiness" || item.Rule == "sfu-readiness" || (item.Rule == "certificate-expiry" && item.Value > 0) {
+	if item.Rule == ruleSyncReadiness || item.Rule == ruleSFUReadiness || (item.Rule == ruleCertificateExpiry && item.Value > 0) {
 		item.Summary += " Latest readiness reason: " + item.Reason + "."
 	}
 	if item.Tenant != "" {
@@ -170,7 +184,7 @@ func formatMessage(item *snapshot) {
 			item.Next += " Earliest affected source expires at " + item.ExpiresAt.UTC().Format(time.RFC3339) + "."
 		}
 	}
-	if (item.Rule == "export" || item.Rule == "transcript") && item.Value > 0 && item.UnknownExpiry > 0 {
+	if (item.Rule == ruleExport || item.Rule == ruleTranscript) && item.Value > 0 && item.UnknownExpiry > 0 {
 		item.Next += " Some source expiry times are unknown; an engineer must check them now."
 	}
 }
@@ -191,7 +205,7 @@ func collectReadiness(ctx context.Context, client *http.Client, endpoint string)
 	if endpoint == "" {
 		endpoint = "http://127.0.0.1:14100/readyz"
 	}
-	item := snapshot{Rule: "sync-readiness", Value: 1, Reason: "unreachable", Time: time.Now().UTC().Format(time.RFC3339Nano)}
+	item := snapshot{Rule: ruleSyncReadiness, Value: 1, Reason: "unreachable", Time: time.Now().UTC().Format(time.RFC3339Nano)}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -305,7 +319,7 @@ type sfuReadiness struct {
 // value 1 with an allowlisted reason. It never exports error text or response
 // bodies, because TLS and HTTP errors can hold addresses and certificate names.
 func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
-	item := snapshot{Rule: "sfu-readiness", Value: 1, Reason: "tls_config", Time: time.Now().UTC().Format(time.RFC3339Nano)}
+	item := snapshot{Rule: ruleSFUReadiness, Value: 1, Reason: "tls_config", Time: time.Now().UTC().Format(time.RFC3339Nano)}
 	client, err := sfuClient(probe)
 	if err != nil {
 		return item
@@ -417,7 +431,7 @@ func collectCertificateExpiry(ctx context.Context, probes []sfuProbe, doorURL st
 	if len(readings) == 0 {
 		return nil
 	}
-	item := snapshot{Rule: "certificate-expiry", Reason: "all_valid", Time: now.UTC().Format(time.RFC3339Nano)}
+	item := snapshot{Rule: ruleCertificateExpiry, Reason: "all_valid", Time: now.UTC().Format(time.RFC3339Nano)}
 	var findings []string
 	seen := make(map[string]bool)
 	for _, reading := range readings {
@@ -670,7 +684,7 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 	if err := tx.QueryRow(ctx, sfuRetirementDebtSQL).Scan(&oldestDebtSeconds); err != nil {
 		return snapshots, errors.New("sfu retirement debt query failed")
 	}
-	return append(snapshots, snapshot{Rule: "sfu-retirement-debt", Value: oldestDebtSeconds}), nil
+	return append(snapshots, snapshot{Rule: ruleSFURetirementDebt, Value: oldestDebtSeconds}), nil
 }
 
 func ingestConfig(headers string) (token, dataset string) {

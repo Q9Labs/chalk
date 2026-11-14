@@ -1,0 +1,158 @@
+defmodule ChalkSync.Contract.GeneratedWhiteboardV1OperationsTest do
+  use ExUnit.Case, async: true
+
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
+
+  @operation_id "operation-0000000001"
+  @scene_id "10000000-0000-4000-8000-000000000001"
+  @participant_id "20000000-0000-4000-8000-000000000002"
+  @session_id "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
+
+  test "decodes strict update and explicit clear operations" do
+    element = %{
+      "id" => "rectangle-1",
+      "type" => "rectangle",
+      "version" => 2,
+      "version_nonce" => 4,
+      "index" => "a0",
+      "is_deleted" => false,
+      "payload" => %{"x" => 10, "y" => 12}
+    }
+
+    assert {:ok, {:submit_update, update}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "submit_update",
+               "operation_id" => @operation_id,
+               "scene_id" => @scene_id,
+               "sync_all" => false,
+               "elements" => [element]
+             })
+
+    assert update.elements == [element]
+
+    assert {:ok, {:clear, %{operation_id: @operation_id, scene_id: @scene_id}}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               "type" => "clear",
+               "operation_id" => @operation_id,
+               "scene_id" => @scene_id
+             })
+  end
+
+  test "keeps valid hello baggage and ignores invalid values" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil
+    }
+
+    assert {:ok, {:hello, %{baggage: "session.id=" <> @session_id}}} =
+             GeneratedWhiteboardV1.decode_client_frame(
+               Map.put(hello, "baggage", "session.id=#{@session_id}")
+             )
+
+    for baggage <- ["session.id=invalid", 7] do
+      assert {:ok, {:hello, %{baggage: nil}}} =
+               GeneratedWhiteboardV1.decode_client_frame(Map.put(hello, "baggage", baggage))
+    end
+  end
+
+  test "negotiates relay origins and accepts optional paired view versions" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil,
+      "extensions" => [%{"name" => "presentation_v1"}, %{"name" => "view_v1", "origins" => true}]
+    }
+
+    assert {:ok, {:hello, _}} = GeneratedWhiteboardV1.decode_client_frame(hello)
+
+    view = %{
+      "type" => "view",
+      "x" => 1,
+      "y" => 2,
+      "width" => 300,
+      "height" => 200,
+      "bring" => false
+    }
+
+    assert {:ok, {:view, _}} = GeneratedWhiteboardV1.decode_client_frame(view)
+
+    versioned =
+      Map.merge(view, %{"origin_participant_id" => @participant_id, "origin_sequence" => 7})
+
+    assert {:ok, {:view, %{origin_participant_id: @participant_id, origin_sequence: 7}}} =
+             GeneratedWhiteboardV1.decode_client_frame(versioned)
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(Map.delete(versioned, "origin_sequence"))
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(%{versioned | "origin_sequence" => 0})
+  end
+
+  test "owner inputs cannot supply canonical output sequences" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil,
+      "extensions" => [
+        %{"name" => "presentation_v1"},
+        %{"name" => "view_v1", "origins" => true, "owner" => true}
+      ]
+    }
+
+    assert {:ok, {:hello, _}} = GeneratedWhiteboardV1.decode_client_frame(hello)
+
+    view = %{
+      "type" => "view",
+      "x" => 0,
+      "y" => 0,
+      "width" => 100,
+      "height" => 100,
+      "bring" => false
+    }
+
+    input = Map.merge(view, %{"input_id" => "#{@participant_id}:1", "move" => true})
+    assert {:ok, {:view, %{move: true}}} = GeneratedWhiteboardV1.decode_client_frame(input)
+
+    for id <- [
+          "#{@participant_id}:0",
+          "#{@participant_id}:01",
+          "#{@participant_id}:9007199254740992"
+        ] do
+      assert {:error, :invalid_payload} =
+               GeneratedWhiteboardV1.decode_client_frame(%{input | "input_id" => id})
+    end
+
+    assert {:error, :invalid_payload} =
+             GeneratedWhiteboardV1.decode_client_frame(
+               Map.merge(view, %{"owner_id" => @participant_id, "owner_sequence" => 999})
+             )
+  end
+
+  test "bounds view coordinates and extents before broadcasting" do
+    view = %{
+      "type" => "view",
+      "x" => 0,
+      "y" => 0,
+      "width" => 800,
+      "height" => 600,
+      "bring" => true
+    }
+
+    for field <- ["x", "y", "width", "height"] do
+      assert {:error, :invalid_payload} =
+               GeneratedWhiteboardV1.decode_client_frame(Map.put(view, field, 1.7e308))
+    end
+
+    assert {:ok, {:view, _}} =
+             GeneratedWhiteboardV1.decode_client_frame(%{
+               view
+               | "x" => -1_000_000,
+                 "width" => 2_000_000
+             })
+  end
+end

@@ -9,7 +9,8 @@ import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { BadgeView } from "./ListParts";
 import { Page, Stat } from "./Page";
-import { DownloadMenu, SessionViewer, usePastSession, type Ids, type Page as Loaded, type Parts } from "./SessionViewer";
+import { DownloadMenu, SessionViewer, type Parts } from "./SessionViewer";
+import { usePastSession, type Ids, type Page as Loaded } from "./session-reads";
 import { CopyAction, ErrorPanel, Sk } from "./kit";
 import { VIDEO_BADGE } from "../../lib/dashboard/lists";
 
@@ -138,11 +139,75 @@ const VIDEO_STAT: Record<"off" | VideoState, { readonly value: string; readonly 
   expired: { value: "Expired", sub: "No longer available" },
 };
 
+type StatText = { readonly value: string; readonly sub: string };
+
+function SessionStats({ startedAt, end, participants, video, transcript }: { readonly startedAt: string; readonly end: string; readonly participants: AttendanceDTO["participants"]; readonly video: StatText; readonly transcript: StatText }) {
+  return (
+    <div className="card stats" role="group" aria-label="Summary">
+      <Stat
+        icon="clock"
+        label="Duration"
+        value={
+          <>
+            {duration(startedAt, end).replace(" min", "")} <small>{duration(startedAt, end).includes(" h ") ? "" : "min"}</small>
+          </>
+        }
+      >
+        {clock(startedAt)} to {clock(end)}
+      </Stat>
+      <Stat icon="users" label="People" value={String(participants.length)}>
+        <span className="ell">{names(participants.map((person) => person.name))}</span>
+      </Stat>
+      <Stat icon="film" label="Recording" value={video.value}>
+        {video.sub}
+      </Stat>
+      <Stat icon="file" label="Transcript" value={transcript.value}>
+        {transcript.sub}
+      </Stat>
+    </div>
+  );
+}
+
+function RecordingSplit({ video, media, panel }: { readonly video: VideoState | null; readonly media: ReactNode; readonly panel: ReactNode }) {
+  return (
+    <div className="dsplit">
+      <section className="card rc" aria-labelledby="recording-title">
+        <div className="ph">
+          <Icon name="film" size={18} />
+          <h2 id="recording-title">Recording</h2>
+          {video ? <BadgeView badge={VIDEO_BADGE[videoGroup(video)]} /> : null}
+        </div>
+        <div className="body">{media}</div>
+      </section>
+      <section className="card trcard" aria-labelledby="transcript-title">
+        <div className="ph">
+          <Icon name="file" size={18} />
+          <h2 id="transcript-title">Transcript</h2>
+        </div>
+        <div className="fill">{panel}</div>
+      </section>
+    </div>
+  );
+}
+
+function NoRecording() {
+  return (
+    <section className="card">
+      <div className="blank tall">
+        <span className="tile">
+          <Icon name="recOff" size={20} />
+        </span>
+        <b>No recording</b>
+        <p>Recording was off for this session, so there’s no transcript either. Who came is still kept.</p>
+      </div>
+    </section>
+  );
+}
+
 function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page: Loaded; readonly parts: Parts; readonly crumb: ReactNode }) {
   const { episode, attendance } = page.session;
   const { recording, playable, downloadableTranscript, media, panel } = parts;
   const end = episode.endedAt ?? episode.startedAt;
-  const count = attendance.participants.length;
   const video = recording ? videoState(recording) : null;
   const stat = VIDEO_STAT[video ?? "off"];
   const words = recording ? TRANSCRIPT_STAT[parts.transcript] : { value: "None", sub: "Needs a recording" };
@@ -159,57 +224,8 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
         </span>
       }
     >
-      <div className="card stats" role="group" aria-label="Summary">
-        <Stat
-          icon="clock"
-          label="Duration"
-          value={
-            <>
-              {duration(episode.startedAt, end).replace(" min", "")} <small>{duration(episode.startedAt, end).includes(" h ") ? "" : "min"}</small>
-            </>
-          }
-        >
-          {clock(episode.startedAt)} to {clock(end)}
-        </Stat>
-        <Stat icon="users" label="People" value={String(count)}>
-          <span className="ell">{names(attendance.participants.map((person) => person.name))}</span>
-        </Stat>
-        <Stat icon="film" label="Recording" value={stat.value}>
-          {stat.sub}
-        </Stat>
-        <Stat icon="file" label="Transcript" value={words.value}>
-          {words.sub}
-        </Stat>
-      </div>
-      {recording ? (
-        <div className="dsplit">
-          <section className="card rc" aria-labelledby="recording-title">
-            <div className="ph">
-              <Icon name="film" size={18} />
-              <h2 id="recording-title">Recording</h2>
-              {video ? <BadgeView badge={VIDEO_BADGE[videoGroup(video)]} /> : null}
-            </div>
-            <div className="body">{media}</div>
-          </section>
-          <section className="card trcard" aria-labelledby="transcript-title">
-            <div className="ph">
-              <Icon name="file" size={18} />
-              <h2 id="transcript-title">Transcript</h2>
-            </div>
-            <div className="fill">{panel}</div>
-          </section>
-        </div>
-      ) : (
-        <section className="card">
-          <div className="blank tall">
-            <span className="tile">
-              <Icon name="recOff" size={20} />
-            </span>
-            <b>No recording</b>
-            <p>Recording was off for this session, so there’s no transcript either. Who came is still kept.</p>
-          </div>
-        </section>
-      )}
+      <SessionStats startedAt={episode.startedAt} end={end} participants={attendance.participants} video={stat} transcript={words} />
+      {recording ? <RecordingSplit video={video} media={media} panel={panel} /> : <NoRecording />}
       <WhoJoined attendance={attendance} startedAt={episode.startedAt} endedAt={end} />
     </Page>
   );

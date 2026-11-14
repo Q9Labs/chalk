@@ -36,7 +36,11 @@ test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => 
   assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
+  // call-artifacts boots recorder droplets, so the cut runs it only when `plan` saw a recording path change.
+  const [, recordingProofs, otherProofs] = gate.with.proofs.match(/&& '([^']+)' \|\| '([^']+)' \}\}$/);
+  assert.match(gate.with.proofs, /needs\.plan\.outputs\.recording_changed == 'true'/);
+  assert.deepEqual(recordingProofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
+  assert.deepEqual(otherProofs.split(" "), ["camera-share", "long-call", "chat-upload"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
@@ -102,9 +106,9 @@ test("the Cloudflare workflow runs after a successful cut, outside the nightly l
   assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(history), ["latency"]);
   assert.match(history.if, /needs\.latency\.result == 'success'/);
-  const step = history.steps.find((item) => item.env?.SCORECARD_WARN_ONLY);
-  assert.equal(step.env.SCORECARD_WARN_ONLY, "true");
-  assert.match(step.run, /features\/scorecard\/nightly\.sh/);
+  const step = history.steps.find((item) => item.uses === "./.github/actions/scorecard-history");
+  assert.equal(step.with["warn-only"], "true");
+  assert.match(readFileSync(resolve(root, ".github/actions/scorecard-history/action.yml"), "utf8"), /features\/scorecard\/nightly\.sh/);
 });
 
 test("the gate's scorecard download cannot match the Cloudflare card", () => {
@@ -135,7 +139,9 @@ function runLatencyStep({ leaseBusy, kitStatus = 0 }) {
   try {
     mkdirSync(join(dir, "features/scorecard"), { recursive: true });
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "scripts/prod-proof"), { recursive: true });
     mkdirSync(join(dir, "bin"));
+    for (const file of ["registry.json", "registry.mjs"]) copyFileSync(resolve(root, "scripts/prod-proof", file), join(dir, "scripts/prod-proof", file));
     writeFileSync(join(dir, "features/scorecard/own-sfu.mjs"), "");
     const lock = join(dir, "scripts/staging-sfu/staging-lock");
     writeFileSync(
@@ -206,7 +212,9 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
   const dir = mkdtempSync(join(tmpdir(), "proof-step-"));
   try {
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "scripts/prod-proof"), { recursive: true });
     mkdirSync(join(dir, "bin"));
+    for (const file of ["registry.json", "registry.mjs"]) copyFileSync(resolve(root, "scripts/prod-proof", file), join(dir, "scripts/prod-proof", file));
     const lease = join(dir, "scripts/staging-sfu/gate-lease");
     const pnpm = join(dir, "bin/pnpm");
     // staging-lock rejects a purpose that is not a plain label, so the stand-in rejects it too.

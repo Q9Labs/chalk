@@ -200,9 +200,11 @@ func (t *LaunchTelemetry) recordParticipantIssuance(ctx context.Context, outcome
 
 func (t *LaunchTelemetry) recordParticipantAuthentication(ctx context.Context, outcome, reason string, duration time.Duration) {
 	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
-	t.participantAuthentication.Add(ctx, 1, attributes)
+	// The route names the caller's endpoint, so a rejection can be traced without a tenant or participant label.
+	route := requestRoute(ctx)
+	t.participantAuthentication.Add(ctx, 1, otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason), attribute.String("route", route)))
 	t.participantAuthenticationDelay.Record(ctx, nonNegative(duration).Seconds(), attributes)
-	t.logger.Log(ctx, launchLogLevel(outcome, "accepted"), "participant media authentication", "event", "participant_media.authentication", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
+	t.logger.Log(ctx, launchLogLevel(outcome, "accepted"), "participant media authentication", "event", "participant_media.authentication", "outcome", outcome, "reason", reason, "route", route, "duration_ms", milliseconds(nonNegative(duration)))
 }
 
 func finishLaunchSpan(span trace.Span, outcome, reason string, err error) {

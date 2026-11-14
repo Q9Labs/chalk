@@ -31,6 +31,8 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       baseline: ${{ steps.plan.outputs.baseline }}
     steps:
@@ -38,7 +40,7 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Require a master commit with a green push Gate and name the rollback baseline
@@ -60,20 +62,21 @@ jobs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
       rollback_media: ${{ steps.media.outputs.members }}
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Select the explicit production Pages destination
         if: inputs.environment == 'production'
         run: |
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
       - name: Retain the live media pins when the baseline has none
         id: media
@@ -84,7 +87,7 @@ jobs:
         run: |
           if [[ -z "$BASELINE_MEDIA_SHA256" ]]; then
             python3 scripts/releases/media.py retain_runtime --environment "$MANAGED_ENVIRONMENT" --output previous-media.json
-            echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
+            echo "members=$(python3 scripts/releases/seal.py text previous-media.json)" >> "$GITHUB_OUTPUT"
           fi
       - name: Save the live Pages deployment before any upload
         id: pages
@@ -155,8 +158,10 @@ jobs:
     needs: [plan, retain, release, smoke, rollback]
     if: always()
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Say whether the hotfix is live, rolled back, or needs a hand

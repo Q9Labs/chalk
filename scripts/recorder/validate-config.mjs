@@ -144,7 +144,7 @@ async function readConfig(path) {
   return { desiredCaptureNodes: capture, minimumRenderNodes: render };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   try {
     const configPath = process.argv[2];
     if (configPath) {

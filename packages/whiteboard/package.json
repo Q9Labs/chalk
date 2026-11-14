@@ -78,7 +78,7 @@
     "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:embedded": "pnpm run build:embedded-module && pnpm run build:renderer",
     "build:embedded-module": "tsup ./src/embedded/index.ts --format esm --out-dir ./dist/embedded --platform browser && tsc --project tsconfig.embedded.json --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
-    "build:renderer": "node ./scripts/build-embedded.mjs",
+    "build:renderer": "node --experimental-strip-types ./scripts/build-embedded.mjs",
     "dev": "tsup ./src/assets.ts ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw --watch",
     "test": "node ../../scripts/test/run.mjs pnpm exec vitest run",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
@@ -88,8 +88,8 @@
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@excalidraw/excalidraw": "0.18.1",
-    "@q9labsai/chalk-client": "workspace:^5.5.0",
-    "@q9labsai/facehash": "workspace:^5.5.0",
+    "@q9labsai/chalk-client": "workspace:^",
+    "@q9labsai/facehash": "workspace:^",
     "mathjax": "4.1.3"
   },
   "devDependencies": {

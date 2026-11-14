@@ -20,7 +20,7 @@ The Oncall agent may roll production back to the previous release without asking
 1. The uptime monitor's message says which check failed. The join probe fails at a named stage: create Episode, admit participant, or Sync handshake.
 2. A user's problem report prints `Last failed request: <journey id> (HTTP <status>)`. Search the API log for that journey ID to get the route, status and error code.
 3. For one Episode, search both the API log and the Sync trace for its ID.
-4. Check what shipped last: the newest runs of `Release`, `Cut nightly`, `Promote` and `Hotfix`.
+4. Check what shipped last: the newest runs of `Release`, `Cut nightly`, `Promote` and `Hotfix`. If a cut was slow, `python3 scripts/releases/cut_timing.py <run-id>` shows where it spent its time: each job's wait for a runner and its work, and the chain of jobs that set the end time.
 
 ## Restore one deployable
 
@@ -62,6 +62,10 @@ It skips the nightly record, latency and long-call proofs, the scorecard and npm
 The first row is an emergency stop for new Episodes, not the normal failover: a live call never moves to Cloudflare, and a new Episode that no own-SFU node can take is refused with a retryable `503 media.unavailable`. `--state on` turns it back on. `CHALK_SFU_NEW_EPISODES=off` in the API environment is a deploy-time floor under it: while it says off, the switch is off whatever the database says.
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../sfu/production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
+
+## Rehearse an own-SFU node failure on staging
+
+`node scripts/staging-sfu/failover-batch.mjs --trials 20` runs the stop and blackhole faults against the staging node and writes a summary that passes only when every trial recovered, audio came back in under 10 seconds at p95, no request reached Cloudflare and at least five stop trials ran. A real run reads `FAILOVER_NODE_HOST`, `FAILOVER_SSH_KEY` and `FAILOVER_KNOWN_HOSTS` from the environment; `--dry-run` proves the loop and the summary without touching the node. Hold the staging lease first.
 
 ## Never stop the production node
 

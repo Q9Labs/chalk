@@ -3,7 +3,7 @@ import type { AppClassProperties, ExcalidrawImperativeAPI } from "@excalidraw/ex
 
 export type EngineHistoryState = { readonly canUndo: boolean; readonly canRedo: boolean };
 
-/** 0.18.1 exposes clear, but not the history reader/emitter, on its imperative API. */
+/** The pinned Excalidraw exposes clear, but not the history reader/emitter, on its imperative API. */
 export function observeEngineHistory(api: ExcalidrawImperativeAPI, canvas: HTMLElement, onChange: (state: EngineHistoryState) => void): () => void {
   let connected = false;
   let dispose = () => {};

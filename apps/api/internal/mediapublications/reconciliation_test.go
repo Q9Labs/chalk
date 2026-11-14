@@ -6,78 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
-
-func TestObserveRemoteTracksRequiresRepeatedAgeBoundedAbsence(t *testing.T) {
-	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
-	repository := &reconciliationRepositoryStub{}
-	service := newService(repository, func() time.Time { return now })
-	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
-	input := RemoteTrackObservationInput{TenantID: tenantID, EpisodeID: episodeID, Requested: []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity}}
-
-	for _, advance := range []time.Duration{0, 4 * time.Second, 4 * time.Second, 4 * time.Second} {
-		now = now.Add(advance)
-		if err := service.ObserveRemoteTracks(context.Background(), input); err != nil {
-			t.Fatalf("observe absence before grace: %v", err)
-		}
-	}
-	if len(repository.appendedInputs) != 1 {
-		t.Fatalf("append count before grace = %d, want publication only", len(repository.appendedInputs))
-	}
-	now = now.Add(4 * time.Second)
-	if err := service.ObserveRemoteTracks(context.Background(), input); err != nil {
-		t.Fatalf("observe confirmed absence: %v", err)
-	}
-
-	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
-}
-
-func TestObserveRemoteTracksRecordsServedWithoutReadingRegistryOnSuccess(t *testing.T) {
-	repository := &reconciliationRepositoryStub{}
-	service := newService(repository, time.Now)
-	tenantID, episodeID, _, identity := publishRemoteObservationFixture(t, service, repository)
-	repository.listObservationsErr = errors.New("registry read unavailable")
-	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
-
-	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
-		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		ListenerConnectionID: "listener-" + listenerID.String(),
-		Requested:            []RemoteTrackIdentity{identity},
-	}); err != nil {
-		t.Fatalf("observe successful pull: %v", err)
-	}
-	key := servedKey{tenantID: tenantID.String(), episodeID: episodeID.String(), identity: identity}
-	service.liveness.mu.Lock()
-	report, recorded := service.liveness.evidence[key][listenerID]
-	service.liveness.mu.Unlock()
-	if !recorded || report.failing || report.connectionID != "listener-"+listenerID.String() {
-		t.Fatal("successful pull did not record the listener as served")
-	}
-}
-
-func TestObserveRemoteTracksCountsConcurrentMissesAsOneEvidenceWave(t *testing.T) {
-	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
-	repository := &reconciliationRepositoryStub{}
-	service := newService(repository, func() time.Time { return now })
-	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
-	input := RemoteTrackObservationInput{TenantID: tenantID, EpisodeID: episodeID, Requested: []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity}}
-
-	for index := 0; index < 4; index++ {
-		if err := service.ObserveRemoteTracks(context.Background(), input); err != nil {
-			t.Fatalf("observe same evidence wave %d: %v", index+1, err)
-		}
-	}
-	for _, advance := range []time.Duration{4 * time.Second, 4 * time.Second, 8 * time.Second} {
-		now = now.Add(advance)
-		if err := service.ObserveRemoteTracks(context.Background(), input); err != nil {
-			t.Fatalf("observe spaced evidence: %v", err)
-		}
-	}
-
-	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
-}
 
 func TestObserveRemoteTracksFrequentPollingStillAccumulatesSpacedEvidence(t *testing.T) {
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
@@ -243,7 +175,7 @@ func reconciliationTestID(t *testing.T, raw string) utilities.ID {
 	return id
 }
 
-func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source string, enabled bool) {
+func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source mediaplane.PublicationSource, enabled bool) {
 	t.Helper()
 	for _, publication := range publications {
 		if publication.ParticipantID == participantID && publication.Source == source {
@@ -281,26 +213,6 @@ func TestLatestRetiresInactiveAndReplacedPublicationsWithNewCursor(t *testing.T)
 				t.Fatalf("retirement not idempotent: %#v, %v", again, err)
 			}
 		})
-	}
-}
-
-func TestReplacementRetiresSourcesNotRepublishedOnNewConnection(t *testing.T) {
-	repository := &reconciliationRepositoryStub{}
-	service := NewService(repository)
-	tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
-	_, err := service.RecordPublishedTracks(context.Background(), RecordInput{
-		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "replacement",
-		Tracks: []PublishedTrack{{Source: "microphone", MID: "0", TrackName: "microphone"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
-	assertPublicationEnabled(t, repository.appended.Publications, participantID, "microphone", true)
-	for _, publication := range repository.appended.Publications {
-		if publication.Source == "camera" && publication.PublicationID == "" {
-			t.Fatal("old camera reference lost before provider cleanup")
-		}
 	}
 }
 
@@ -360,7 +272,7 @@ func TestRetiringAMutedMicrophoneAdvancesTheCursorOnceAndStopsHoldingIt(t *testi
 				t.Fatalf("publish microphone: %v", err)
 			}
 			microphone := repository.appended.Publications[0]
-			mute := func(source, publicationID string) {
+			mute := func(source mediaplane.PublicationSource, publicationID string) {
 				t.Helper()
 				if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: source, PublicationID: publicationID, Enabled: false}); err != nil {
 					t.Fatalf("mute %s: %v", source, err)

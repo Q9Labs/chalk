@@ -1,3 +1,4 @@
+import { CANONICAL_INK } from "../../collab/ink";
 /** The board's look: the mockup's surfaces, island, zoom, chips and cursors, on the call's own tokens. */
 export function BoardStyles() {
   return (
@@ -29,7 +30,7 @@ const BOARD_CSS = `.chalk-board {
   --board-muted: #aeb9b4;
   background-image: radial-gradient(120% 90% at 50% 35%, rgba(255,255,255,.05), transparent 70%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-.chalk-board[data-surface="paper"] {--board-fill: #eae6db; --board-ink: #1b1c1f; --board-muted: #5d5a52;}
+.chalk-board[data-surface="paper"] {--board-fill: #eae6db; --board-ink: ${CANONICAL_INK}; --board-muted: #5d5a52;}
 .chalk-board[data-surface="paper"][data-theme="light"] {--board-fill: #f5f2ea;}
 .chalk-board[data-surface="dots"] {
   --board-fill: var(--chalk-surface);
@@ -119,7 +120,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-tile[data-checked] {border-color:var(--chalk-text);}
 .chalk-board-tile-preview {display:block; position:relative; width:100%; height:38px; border-radius:6px; overflow:hidden; box-shadow:0 0 0 1px var(--chalk-line-strong);}
 .chalk-board-tile-preview[data-surface="chalkboard"] {background:#1c2622; color:#f1f0ea;}
-.chalk-board-tile-preview[data-surface="paper"] {background:#f5f2ea; color:#1b1c1f;}
+.chalk-board-tile-preview[data-surface="paper"] {background:#f5f2ea; color:${CANONICAL_INK};}
 .chalk-board-tile-preview[data-surface="dots"] {background:var(--chalk-surface) radial-gradient(var(--chalk-muted-text) 1px, transparent 1.5px) 0 0/8px 8px;}
 .chalk-board-tile-preview[data-island] {background:var(--chalk-raised);}
 .chalk-board-tile-preview[data-island] i {position:absolute; background:var(--chalk-text); border-radius:3px;}

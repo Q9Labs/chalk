@@ -31,6 +31,26 @@
       "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:references",
+      "owner": "Repository",
+      "catches": "A script nothing calls, or a workflow that names a path that no longer exists.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:ratchets",
+      "owner": "Code quality",
+      "catches": "A file over 300 lines that grows, or a copied value (port, provider name, entrypoint check) that is copied once more.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
       "id": "gate:workflow-graph",
       "owner": "Release chain",
       "catches": "A workflow or scorecard edit breaks the cut, proof, Promote or scorecard graph that releases depend on.",
@@ -109,6 +129,36 @@
       "minutes": null,
       "record": "unmeasured",
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:complexity",
+      "owner": "Code quality",
+      "catches": "A function above cyclomatic complexity 15 that is new or gets more complex than its baseline.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:dead-code",
+      "owner": "Code quality",
+      "catches": "A new Go function that no entry point can reach.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:duplication",
+      "owner": "Code quality",
+      "catches": "A new clone of existing code, found by jscpd, that raises the clone count.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
     },
     {
       "id": "gate:ast-grep",
@@ -327,6 +377,16 @@
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:diagnose-call",
+      "owner": "Call",
+      "catches": "A change to the call diagnosis command or its verdict thresholds that no longer joins client, API, Sync and SFU rows by id or no longer names the failing stage.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New lane: no runs recorded yet."
+    },
+    {
       "id": "gate:proof-bundle",
       "owner": "Release chain",
       "catches": "A production or web proof script whose unit test fails, such as the proof origin collision of the nightly cut, or one that no longer bundles against the Leave baseline client.",
@@ -419,6 +479,61 @@
       "record": "unmeasured",
       "sample": "No failure history recorded in the register yet.",
       "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
+    },
+    {
+      "id": "workflow:formal-episode-lifecycle.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the Episode lifecycle or admission code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
+      "id": "workflow:formal-screen-share-lease.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the screen-share lease code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
+      "id": "workflow:formal-external-operations.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the external-operation queue, publication grants or role transitions that breaks the model-checked invariants or drifts from the model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs TLC for about 2 minutes only when a covered Sync file or the model changes, so it cannot be a required context for every pull request."
+    },
+    {
+      "id": "workflow:formal-public-invite-access.yml#check",
+      "owner": "Call",
+      "catches": "A change to the public invite, arrival or access code that breaks a model-checked rule or drifts from the TLA+ model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
+    },
+    {
+      "id": "workflow:formal-recording-pipeline.yml#check",
+      "owner": "Recording",
+      "catches": "A change to the recording pipeline that breaks a model-checked rule or drifts from the TLA+ model.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
     },
     {
       "id": "workflow:gate.yml#ready-cap",
@@ -876,6 +991,16 @@
       "sample": "1 of 12 runs failed (Gradle 504)."
     },
     {
+      "id": "workflow:mobile-nightly-ios.yml#ios",
+      "owner": "Mobile",
+      "catches": "A nightly iOS build that fails to sign, upload or process after a successful cut.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New workflow; no runs yet."
+    },
+    {
       "id": "workflow:mobile-signed-build.yml#android",
       "owner": "Mobile",
       "catches": "Signs and builds the Android release.",
@@ -1311,16 +1436,6 @@
       "sample": "No breach in the audit sample."
     },
     {
-      "id": "scorecard:sfu.impairment",
-      "owner": "Media",
-      "catches": "The SFU impairment test pass rate falling.",
-      "runs": ["pull_request", "merge_queue"],
-      "blocks": "merge",
-      "minutes": null,
-      "record": "never-failed",
-      "sample": "No breach in the audit sample."
-    },
-    {
       "id": "scorecard:proof.leave_median_ms",
       "owner": "Media",
       "catches": "The median Leave confirmation on the real-call proof getting slower than 5 s.",
@@ -1329,6 +1444,28 @@
       "minutes": null,
       "record": "never-failed",
       "sample": "14 nightly values between 0.3 and 0.5 s."
+    },
+    {
+      "id": "workflow:formal-client-recovery.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the SDK connection and recovery lifecycle (join, Sync and media recovery, access refresh, terminal frames, Leave), or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
+    },
+    {
+      "id": "workflow:formal-media-control.yml#check",
+      "owner": "Call",
+      "catches": "A change to a covered file that breaks a rule of the TLA+ model of the media-control model, or lets the model drift from the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
     }
   ]
 }

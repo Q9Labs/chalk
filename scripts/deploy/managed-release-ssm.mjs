@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { errorMessage, parseJson } from "./managed-release-support.mjs";
+import { errorMessage } from "../lib/errors.mjs";
+import { parseJson } from "./managed-release-support.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");

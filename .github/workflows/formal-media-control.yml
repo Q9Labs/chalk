@@ -1,0 +1,39 @@
+name: Media control model
+
+# Model-checks media on/off control. See .agents/skills/media-control-formal/SKILL.md.
+# CI runs a bounded subset of rows; the full set (about 15 minutes) runs locally.
+on:
+  pull_request:
+    paths:
+      - sdks/typescript/client/src/space-client/media-controller.ts
+      - tools/formal/media-control/**
+      - tools/formal/tla2tools.sh
+      - .github/workflows/formal-media-control.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-media-control-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Media control model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check the decided rule, the old rule and the broken variants
+        run: >-
+          tools/formal/media-control/run.sh
+          cf-decided-safety-1src own-decided-safety-1src
+          cf-current-P2-1src cf-current-P4-1src cf-current-P4-drop-1src
+          mutant-adoptSync-P1 mutant-optimisticUi-P3
+          witness-on witness-hostmute

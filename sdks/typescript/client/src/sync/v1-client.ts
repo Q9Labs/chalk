@@ -16,6 +16,7 @@ import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
+import { V1TimerMap } from "./v1-timer-map";
 import { syncEntryUrl } from "./entry-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
@@ -26,7 +27,6 @@ import type {
   V1DirectedRequest,
   V1DirectedRequestResult,
   V1MediaPublication,
-  V1MediaSource,
   V1MediaPause,
   V1PendingTarget,
   V1Presence,
@@ -40,13 +40,15 @@ import type {
   V1SyncClientOptions,
   V1TargetCommand,
 } from "./v1-types";
+type SocketCloseEvent = Parameters<NonNullable<V1Socket["onclose"]>>[0];
+type ServerFrame<Type extends SyncV1ServerFrame["type"]> = Extract<SyncV1ServerFrame, { readonly type: Type }>;
 const encoder = new TextEncoder();
 const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
-/** Sync servers that rejected a hello carrying `baggage`; they predate the session ID. Kept for the page or app run only. */
-const legacyHelloServers = new Set<string>();
+/** Sync servers that rejected a hello carrying `baggage` because they predate the session ID. Kept for the page or app run only. */
+const baggageRejectingServers = new Set<string>();
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -54,13 +56,14 @@ const DIGEST_RECOVERY_COOLDOWN_MS = 60000;
 type RequestDeferred = Deferred<V1DirectedRequestResult> & {
   readonly frame: SyncV1ClientFrame;
 };
+type Head = {
+  readonly revision: number;
+  readonly state_schema_version: number;
+  readonly state_digest: string;
+};
 type Recovery = {
   readonly id: string;
-  readonly head: {
-    readonly revision: number;
-    readonly state_schema_version: number;
-    readonly state_digest: string;
-  };
+  readonly head: Head;
   replayEvents: number;
   replayBytes: number;
   controlComplete: boolean;
@@ -104,7 +107,6 @@ export class V1SyncClient implements V1CollaborationClient {
   #started = false;
   #startupGeneration = 0;
   #connectionGeneration = 0;
-  #reconnectTimer: unknown;
   #cancelDial: (() => void) | undefined;
   #dialTimeoutCount = 0;
   #connectStartedAt: number | null = null;
@@ -121,17 +123,17 @@ export class V1SyncClient implements V1CollaborationClient {
   readonly link: LinkJudge;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
+  get #dialing(): boolean {
+    return this.#phase.phase === "connecting" || this.#phase.phase === "recovering";
+  }
   #connectDiagnostic(): SyncConnectDiagnostic {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
   #reconnectAttempt = 0;
   /** The socket whose hello carried baggage and has not been answered by a welcome yet. */
   #baggageHelloSocket: V1Socket | null = null;
-  #episodeEndTimer: unknown;
-  #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
-  #noticeTimer: unknown;
-  #noticeProbeTimer: unknown;
+  readonly #timers = new V1TimerMap(() => this.#clock());
   #health = new V1SyncHealth(0);
   #unsubscribeLifecycle: (() => void) | undefined;
   #inbound = Promise.resolve();
@@ -224,12 +226,8 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#startupGeneration += 1;
     this.#unsubscribeLifecycle?.();
     this.#unsubscribeLifecycle = undefined;
-    this.#clearReconnect();
     this.#clearDial();
-    this.#clock().clearTimeout(this.#episodeEndTimer);
-    this.#episodeEndTimer = undefined;
-    this.#clearHeartbeat();
-    this.#clearNoticeProbe();
+    this.#timers.cancelAll();
     this.#commandScheduler.stop("client_stopped");
     this.#unsubscribeMediaPlane();
     this.#socket?.close(1000, "client stopped");
@@ -269,8 +267,8 @@ export class V1SyncClient implements V1CollaborationClient {
       connection: {
         ...this.#phase,
         recoveryDiagnostic: { socketAttempts: this.#connectAttemptCount, socketCloses: this.#socketCloses.slice(), omittedSocketCloses: this.#omittedSocketCloses, lastHeartbeatReplyAt: this.#lastHeartbeatReplyAt },
-        ...(this.#connectStartedAt !== null && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectAttempt: this.#connectDiagnostic() } : {}),
-        ...(this.#connectFailure && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering") ? { connectFailure: this.#connectFailure } : {}),
+        ...(this.#connectStartedAt !== null && this.#dialing ? { connectAttempt: this.#connectDiagnostic() } : {}),
+        ...(this.#connectFailure && this.#dialing ? { connectFailure: this.#connectFailure } : {}),
         ...(this.#phase.phase === "live" ? { noticeUnresponsive: this.#health.health === "recovering", health: this.#health.health } : {}),
         ...(this.#dialTimeoutCount ? { dialTimeoutCount: this.#dialTimeoutCount } : {}),
       },
@@ -295,7 +293,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#mediaPauseListeners.add(listener);
     return () => this.#mediaPauseListeners.delete(listener);
   }
-  #notifyMediaPause(event: Extract<SyncV1ServerFrame, { type: "event" }>): void {
+  #notifyMediaPause(event: ServerFrame<"event">): void {
     if (event.name === "episode_ended") this.#options.mediaPlane?.remotePublicationsChanged?.([]);
     const source = event.name === "participant_microphone_stopped" ? "microphone" : event.name === "participant_camera_stopped" ? "camera" : event.name === "participant_screen_share_stopped" ? "screen" : null;
     if (source && "participant_id" in event.payload && event.payload.participant_id === this.#participantId) {
@@ -386,13 +384,13 @@ export class V1SyncClient implements V1CollaborationClient {
     return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "extend_episode", payload: { extension_seconds: minutes * 60 } }), options);
   }
   setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#sendLiveTarget("set_microphone_enabled", "microphone", enabled, options);
+    return this.#liveTargets.send("set_microphone_enabled", "microphone", enabled, options);
   }
   setCameraEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#sendLiveTarget("set_camera_enabled", "camera", enabled, options);
+    return this.#liveTargets.send("set_camera_enabled", "camera", enabled, options);
   }
   setScreenShareEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#sendLiveTarget("set_screen_share_enabled", "screen", enabled, options);
+    return this.#liveTargets.send("set_screen_share_enabled", "screen", enabled, options);
   }
   requestUnmute(participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {
     return this.#sendDirectedRequest("request_unmute", participantId, options);
@@ -405,9 +403,6 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #sendOperation(createFrame: V1OperationFrameFactory, options?: CommandOptions): Promise<V1CommandResult> {
     return this.#commandScheduler.sendOperation(createFrame, this.#liveTargets.pendingCount + this.#requests.size, options);
-  }
-  #sendLiveTarget(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#liveTargets.send(name, source, enabled, options);
   }
   #sendDirectedRequest(name: "request_unmute" | "request_start_camera", participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {
     this.#assertCapacity();
@@ -466,45 +461,46 @@ export class V1SyncClient implements V1CollaborationClient {
     socket.onmessage = (event) => {
       this.#inbound = this.#inbound.then(() => this.#receive(socket, event.data));
     };
-    socket.onclose = (event) => {
-      this.#diagnostic({ event: "sync_socket_close", close_code: event.code, duration_ms: this.#clock().now() - socketStartedAt, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
-      if (this.#started) {
-        this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
-        if (this.#socketCloses.length > 50) {
-          this.#socketCloses.shift();
-          this.#omittedSocketCloses += 1;
-        }
-      }
-      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
-        this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
-        this.#emit();
-      }
-      this.#clock().setTimeout(() => {
-        if (connectionGeneration !== this.#connectionGeneration) return;
-        this.#inbound = this.#inbound.then(() => {
-          const legacyHello = event.code === 1009 && this.#legacyHelloRejected(socket);
-          if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
-            this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
-            this.#emit();
-          }
-          this.#disconnected(socket, legacyHello);
-        });
-      }, 0);
-    };
+    socket.onclose = (event) => this.#socketClosed(socket, event, connectionGeneration, socketStartedAt);
     socket.onerror = () => {
-      if (socket === this.#socket && (this.#phase.phase === "connecting" || this.#phase.phase === "recovering")) {
+      if (socket === this.#socket && this.#dialing) {
         this.#connectFailure ??= this.#connectDiagnostic();
         this.#emit();
       }
       socket.close(CLIENT_RESTART_CLOSE_CODE, "transport error");
     };
   }
+  #socketClosed(socket: V1Socket, event: SocketCloseEvent, connectionGeneration: number, socketStartedAt: number): void {
+    this.#diagnostic({ event: "sync_socket_close", close_code: event.code, duration_ms: this.#clock().now() - socketStartedAt, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
+    if (this.#started) {
+      this.#socketCloses.push({ code: event.code, wasClean: event.wasClean ?? null });
+      if (this.#socketCloses.length > 50) {
+        this.#socketCloses.shift();
+        this.#omittedSocketCloses += 1;
+      }
+    }
+    if (socket === this.#socket && this.#dialing) {
+      this.#connectFailure = { ...this.#connectDiagnostic(), closeCode: event.code, closeReason: safeSyncCloseReason(event.reason) };
+      this.#emit();
+    }
+    this.#clock().setTimeout(() => {
+      if (connectionGeneration !== this.#connectionGeneration) return;
+      this.#inbound = this.#inbound.then(() => {
+        const baggageRejected = event.code === 1009 && this.#baggageRejected(socket);
+        if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
+          this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
+          this.#emit();
+        }
+        this.#disconnected(socket, baggageRejected);
+      });
+    }, 0);
+  }
   async #authenticate(socket: V1Socket): Promise<void> {
     try {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
-      const baggage = legacyHelloServers.has(this.#options.url) ? undefined : sessionBaggage();
+      const baggage = baggageRejectingServers.has(this.#options.url) ? undefined : sessionBaggage();
       const hello = {
         type: "hello",
         protocol: 1,
@@ -520,11 +516,7 @@ export class V1SyncClient implements V1CollaborationClient {
       } as const;
       const collaborationExtension = this.#collaborationState.helloExtension;
       this.#baggageHelloSocket = baggage ? socket : null;
-      if (!collaborationExtension) {
-        this.#send(hello);
-      } else {
-        this.#send({ ...hello, extensions: [collaborationExtension] });
-      }
+      this.#send(collaborationExtension ? { ...hello, extensions: [collaborationExtension] } : hello);
       this.#emit();
     } catch {
       socket.close(CLIENT_RESTART_CLOSE_CODE, "authentication failed");
@@ -539,7 +531,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
-      else this.#recover("invalid_frame", error instanceof V1ReplicaError && error.message === "invalid_frame" && this.#legacyHelloRejected(socket));
+      else this.#recover("invalid_frame", error instanceof V1ReplicaError && error.message === "invalid_frame" && this.#baggageRejected(socket));
     }
   }
   async #handleFrame(frame: SyncV1ServerFrame): Promise<void> {
@@ -561,45 +553,12 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "event":
         this.#requireLive();
-        if (frame.revision <= this.#requireControl().revision) {
-          if (this.#controlEvents.get(frame.revision) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate control event");
-        } else {
-          this.#control = await applyV1Event(this.#requireControl(), frame);
-          this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
-          this.#rememberControlEvent(frame);
-          this.#notifyMediaPause(frame);
-        }
-        await this.#commandScheduler.settleTerminalLifecycle(frame, this.#participantId);
-        await this.#commandScheduler.settleProven();
-        {
-          const control = this.#requireControl();
-          this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
-        }
-        if (this.#control?.status === "ended" || (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId)) this.#participantIdentityId = undefined;
-        if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
-          this.#phase = { phase: "terminal", terminalReason: frame.payload.reason === "removed" ? "participant_removed" : "participant_inactive" };
-          this.#socket?.close(1000, "participant inactive");
-        }
-        this.#emit();
+        await this.#applyControlEvent(frame);
         return;
       case "ack":
         this.#requireLive();
         await this.#commandScheduler.acknowledge(frame);
-        if (frame.outcome === "rejected" && frame.reason === "episode_ended") {
-          // Recover the committed end event before giving up its reason. Bound
-          // recovery so an unavailable server cannot strand a finished call.
-          if (this.#episodeEndTimer === undefined) {
-            this.#episodeEndTimer = this.#clock().setTimeout(() => {
-              this.#episodeEndTimer = undefined;
-              if (this.#control?.status === "ended" || this.#phase.phase === "terminal") return;
-              this.#phase = { phase: "terminal", terminalReason: "episode_ended" };
-              this.#clearReconnect();
-              this.#socket?.close(1000, "episode ended");
-              this.#emit();
-            }, 5000);
-          }
-          this.#recover("episode ended");
-        }
+        if (frame.outcome === "rejected" && frame.reason === "episode_ended") this.#recoverEndedEpisode();
         return;
       case "retryable_error":
         this.#requireLive();
@@ -650,26 +609,61 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#requireLive();
         this.#entryPending = false;
         return;
-      case "pong": {
+      case "pong":
         this.#requireLive();
         this.#watch.ponged();
         this.#missedHeartbeats = 0;
         this.#lastHeartbeatReplyAt = this.#now();
-        const previous = this.#health.health;
-        this.#health.observePong(this.#now());
-        if (previous !== this.#health.health) this.#emit();
+        this.#observeHealth(() => this.#health.observePong(this.#now()));
         return;
-      }
     }
   }
-  async #welcome(
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "welcome";
-      }
-    >,
-  ): Promise<void> {
+  async #applyControlEvent(frame: ServerFrame<"event">): Promise<void> {
+    if (frame.revision <= this.#requireControl().revision) {
+      if (this.#controlEvents.get(frame.revision) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate control event");
+    } else {
+      this.#control = await applyV1Event(this.#requireControl(), frame);
+      this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
+      this.#rememberControlEvent(frame);
+      this.#notifyMediaPause(frame);
+    }
+    await this.#commandScheduler.settleTerminalLifecycle(frame, this.#participantId);
+    await this.#commandScheduler.settleProven();
+    const control = this.#requireControl();
+    this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
+    if (this.#control?.status === "ended" || (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId)) this.#participantIdentityId = undefined;
+    if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
+      this.#phase = { phase: "terminal", terminalReason: frame.payload.reason === "removed" ? "participant_removed" : "participant_inactive" };
+      this.#socket?.close(1000, "participant inactive");
+    }
+    this.#emit();
+  }
+  /**
+   * Recovers the committed end event before giving up its reason. Bound recovery so an unavailable server cannot strand
+   * a finished call.
+   */
+  #recoverEndedEpisode(): void {
+    if (!this.#timers.has("episodeEnd")) {
+      this.#timers.schedule(
+        "episodeEnd",
+        () => {
+          if (this.#control?.status === "ended" || this.#phase.phase === "terminal") return;
+          this.#phase = { phase: "terminal", terminalReason: "episode_ended" };
+          this.#timers.cancel("reconnect");
+          this.#socket?.close(1000, "episode ended");
+          this.#emit();
+        },
+        5000,
+      );
+    }
+    this.#recover("episode ended");
+  }
+  #observeHealth(update: () => void): void {
+    const previous = this.#health.health;
+    update();
+    if (previous !== this.#health.health) this.#emit();
+  }
+  async #welcome(frame: ServerFrame<"welcome">): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
@@ -680,7 +674,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
     this.#participantIdentityId = frame.mode === "terminal" ? undefined : frame.participant_identity_id;
-    this.#updateLocalMediaStates();
+    this.#liveTargets.updateFromPublications(this.#localPublications);
     if (frame.mode === "terminal") {
       await this.#commandScheduler.settleTerminalRecovery(frame);
       this.#phase = { phase: "terminal", terminalReason: frame.reason };
@@ -707,14 +701,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (frame.mode === "snapshot") this.#ackRecovery();
     this.#emit();
   }
-  async #replay(
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "replay_page";
-      }
-    >,
-  ): Promise<void> {
+  async #replay(frame: ServerFrame<"replay_page">): Promise<void> {
     const recovery = this.#requireRecovery();
     if (frame.recovery_id !== recovery.id || frame.first_revision !== this.#requireControl().revision + 1) throw new V1ReplicaError("replay page is not exact-next");
     recovery.replayEvents += frame.events.length;
@@ -729,27 +716,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#ackRecovery();
     this.#emit();
   }
-  #completeRecovery(
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "recovery_complete";
-      }
-    >,
-  ): void {
+  #completeRecovery(frame: ServerFrame<"recovery_complete">): void {
     const recovery = this.#requireRecovery();
     if (frame.recovery_id !== recovery.id || !sameHead(this.#control, frame.head) || !sameRawHead(recovery.head, frame.head)) throw new V1ReplicaError("recovery completed at the wrong head");
     recovery.controlComplete = true;
     this.#enterLiveIfReady();
   }
-  #replaceProjection(
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "projection_snapshot";
-      }
-    >,
-  ): void {
+  #replaceProjection(frame: ServerFrame<"projection_snapshot">): void {
     if (this.#phase.phase !== "recovering" && this.#phase.phase !== "live") throw new V1ReplicaError("projection snapshot arrived in the wrong phase");
     if (frame.stream === "media") {
       const previous = this.#media?.items ?? [];
@@ -769,14 +742,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#enterLiveIfReady();
     this.#emit();
   }
-  #applyProjection(
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "projection_event";
-      }
-    >,
-  ): void {
+  #applyProjection(frame: ServerFrame<"projection_event">): void {
     this.#requireLive();
     if (frame.stream === "media") {
       if (this.#acceptProjectionDuplicate(this.#media, this.#mediaEventEvidence, frame)) return;
@@ -844,14 +810,7 @@ export class V1SyncClient implements V1CollaborationClient {
     const control = this.#requireControl();
     this.#send({ type: "recovery_ack", recovery_id: recovery.id, revision: control.revision, state_digest: control.stateDigest });
   }
-  #ackHeadIsProven(
-    ack: Extract<
-      V1CommandResult,
-      {
-        readonly outcome: "committed" | "satisfied";
-      }
-    >,
-  ): boolean {
+  #ackHeadIsProven(ack: Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>): boolean {
     // A validated authoritative snapshot includes every earlier committed revision.
     // Stored duplicate receipts keep their original head, even after it is superseded.
     return (this.#snapshotRevision !== null && ack.revision < this.#snapshotRevision) || this.#controlHeads.get(ack.revision) === ack.state_digest;
@@ -862,26 +821,10 @@ export class V1SyncClient implements V1CollaborationClient {
     const oldest = this.#controlHeads.keys().next().value;
     if (oldest !== undefined) this.#controlHeads.delete(oldest);
   }
-  #rememberControlEvent(
-    event: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "event";
-      }
-    >,
-  ): void {
+  #rememberControlEvent(event: ServerFrame<"event">): void {
     rememberBoundedEvidence(this.#controlEvents, event.revision, frameSignature(event), MAX_REPLAY_EVENTS);
   }
-  #acceptProjectionDuplicate<T>(
-    projection: V1Projection<T> | null,
-    evidence: ReadonlyMap<number, string>,
-    frame: Extract<
-      SyncV1ServerFrame,
-      {
-        readonly type: "projection_event";
-      }
-    >,
-  ): boolean {
+  #acceptProjectionDuplicate<T>(projection: V1Projection<T> | null, evidence: ReadonlyMap<number, string>, frame: ServerFrame<"projection_event">): boolean {
     if (!projection || frame.projection_id !== projection.projectionId || frame.sequence > projection.sequence) return false;
     if (evidence.get(frame.sequence) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate projection event");
     return true;
@@ -891,7 +834,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket = null;
     this.#clearDial();
     this.#recovery = null;
-    this.#clearHeartbeat();
+    this.#timers.cancel("heartbeat");
     this.#clearNoticeProbe();
     this.#liveTargets.disconnect("disconnected_before_delivery");
     this.#commandScheduler.disconnect();
@@ -904,12 +847,9 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#phase = { phase: "connecting" };
     this.#emit();
     if (!this.#transportAvailable) return;
-    this.#clearReconnect();
+    this.#timers.cancel("reconnect");
     if (retryNow) {
-      this.#reconnectTimer = this.#clock().setTimeout(() => {
-        this.#reconnectTimer = undefined;
-        this.#connect();
-      }, 0);
+      this.#timers.schedule("reconnect", () => this.#connect(), 0);
       return;
     }
     const configuredDelay = this.#options.reconnectDelayMs;
@@ -920,10 +860,7 @@ export class V1SyncClient implements V1CollaborationClient {
     // A Sync restart drops every client at once; ±20% jitter spreads the default retries apart.
     const delay = configuredDelay === undefined ? Math.round(baseDelay * (0.8 + 0.4 * Math.random())) : baseDelay;
     this.#reconnectAttempt += 1;
-    this.#reconnectTimer = this.#clock().setTimeout(() => {
-      this.#reconnectTimer = undefined;
-      this.#connect();
-    }, delay);
+    this.#timers.schedule("reconnect", () => this.#connect(), delay);
   }
   #recover(reason: string, retryNow = false): void {
     const socket = this.#socket;
@@ -933,12 +870,12 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   /**
    * A Sync that predates the session ID rejects any hello with an unknown `baggage` field before welcome. The first
-   * rejection marks that server as legacy, so the retry and every later reconnect send the hello without it.
+   * rejection marks that server as baggage-rejecting, so the retry and every later reconnect send the hello without it.
    */
-  #legacyHelloRejected(socket: V1Socket): boolean {
+  #baggageRejected(socket: V1Socket): boolean {
     if (this.#baggageHelloSocket !== socket) return false;
     this.#baggageHelloSocket = null;
-    legacyHelloServers.add(this.#options.url);
+    baggageRejectingServers.add(this.#options.url);
     return true;
   }
   #recoverDigestMismatch(): void {
@@ -957,7 +894,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #failDigestRecovery(): void {
     this.#phase = { phase: "terminal", terminalReason: "state_digest_recovery_failed" };
-    this.#clearReconnect();
+    this.#timers.cancel("reconnect");
     this.#commandScheduler.stop("state_digest_recovery_failed");
     const socket = this.#socket;
     socket?.close(CLIENT_RESTART_CLOSE_CODE, "state_digest_recovery_failed");
@@ -1023,11 +960,6 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#cancelDial?.();
     this.#cancelDial = undefined;
   }
-  #clearReconnect(): void {
-    if (this.#reconnectTimer === undefined) return;
-    this.#clock().clearTimeout(this.#reconnectTimer);
-    this.#reconnectTimer = undefined;
-  }
   #subscribeMediaPlane(mediaPlane: ClientMediaPlane | undefined): void {
     if (!mediaPlane) return;
     try {
@@ -1050,14 +982,11 @@ export class V1SyncClient implements V1CollaborationClient {
     const copy = publications.map(copyPublication);
     if (kind === "local") {
       this.#localPublications = copy;
-      this.#updateLocalMediaStates();
+      this.#liveTargets.updateFromPublications(this.#localPublications);
     } else {
       this.#remotePublications = copy;
     }
     this.#emit();
-  }
-  #updateLocalMediaStates(): void {
-    this.#liveTargets.updateFromPublications(this.#localPublications);
   }
   #diagnostic(event: ConnectionReportTransportEvent): void {
     try {
@@ -1067,24 +996,21 @@ export class V1SyncClient implements V1CollaborationClient {
     }
   }
   #startHeartbeat(): void {
-    this.#clearHeartbeat();
-    this.#heartbeatTimer = this.#clock().setTimeout(() => {
-      this.#heartbeatTimer = undefined;
-      if (this.#phase.phase !== "live") return;
-      this.#missedHeartbeats += 1;
-      if (this.#missedHeartbeats > 1) this.#diagnostic({ event: "sync_heartbeat_gap", duration_ms: this.#missedHeartbeats * 20000, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
-      if (this.#missedHeartbeats > 2) {
-        this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
-        return;
-      }
-      if (!this.#sendPing()) return;
-      this.#startHeartbeat();
-    }, 20000);
-  }
-  #clearHeartbeat(): void {
-    if (this.#heartbeatTimer === undefined) return;
-    this.#clock().clearTimeout(this.#heartbeatTimer);
-    this.#heartbeatTimer = undefined;
+    this.#timers.schedule(
+      "heartbeat",
+      () => {
+        if (this.#phase.phase !== "live") return;
+        this.#missedHeartbeats += 1;
+        if (this.#missedHeartbeats > 1) this.#diagnostic({ event: "sync_heartbeat_gap", duration_ms: this.#missedHeartbeats * 20000, ...(this.#lastHeartbeatReplyAt === null ? {} : { heartbeat_gap_ms: this.#now() - this.#lastHeartbeatReplyAt }) });
+        if (this.#missedHeartbeats > 2) {
+          this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
+          return;
+        }
+        if (!this.#sendPing()) return;
+        this.#startHeartbeat();
+      },
+      20000,
+    );
   }
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
@@ -1092,20 +1018,20 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#sendPing();
     this.#health = new V1SyncHealth(this.#now());
     const tick = () => {
-      this.#noticeProbeTimer = undefined;
       if (this.#phase.phase !== "live") return;
-      const previous = this.#health.health;
-      this.#health.check(this.#now());
-      if (previous !== this.#health.health) this.#emit();
+      this.#observeHealth(() => this.#health.check(this.#now()));
       if (!this.#sendPing()) return;
-      this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
+      this.#timers.schedule("noticeProbe", tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     };
-    this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
-    this.#noticeTimer = this.#clock().setTimeout(() => {
-      this.#noticeTimer = undefined;
-      this.#health.check(this.#now());
-      this.#emit();
-    }, SYNC_HEALTH_BUDGET.degradedAfterMs);
+    this.#timers.schedule("noticeProbe", tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
+    this.#timers.schedule(
+      "notice",
+      () => {
+        this.#health.check(this.#now());
+        this.#emit();
+      },
+      SYNC_HEALTH_BUDGET.degradedAfterMs,
+    );
   }
   // The link watch times each ping, so every ping goes through here. When the oldest ping has gone unanswered for over 60 s, the
   // old heartbeat timeout, the socket is dead: it is replaced through the normal reconnect and this ping is not sent.
@@ -1118,10 +1044,8 @@ export class V1SyncClient implements V1CollaborationClient {
     return true;
   }
   #clearNoticeProbe(): void {
-    if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
-    if (this.#noticeProbeTimer !== undefined) this.#clock().clearTimeout(this.#noticeProbeTimer);
-    this.#noticeTimer = undefined;
-    this.#noticeProbeTimer = undefined;
+    this.#timers.cancel("notice");
+    this.#timers.cancel("noticeProbe");
   }
   #emit(): void {
     const snapshot = this.getSnapshot();
@@ -1159,17 +1083,10 @@ function presenceItem(item: typeof import("../generated/sync").PresenceProjectio
 function mediaKey(item: V1MediaPublication): string {
   return `${item.participantId}:${item.source}`;
 }
-function sameHead(
-  control: V1ControlState | null,
-  head: {
-    readonly revision: number;
-    readonly state_schema_version: number;
-    readonly state_digest: string;
-  },
-): boolean {
+function sameHead(control: V1ControlState | null, head: Head): boolean {
   return control !== null && control.revision === head.revision && control.stateSchemaVersion === head.state_schema_version && control.stateDigest === head.state_digest;
 }
-function sameRawHead(left: Recovery["head"], right: Recovery["head"]): boolean {
+function sameRawHead(left: Head, right: Head): boolean {
   return left.revision === right.revision && left.state_schema_version === right.state_schema_version && left.state_digest === right.state_digest;
 }
 function copyProjection<T>(projection: V1Projection<T> | null): V1Projection<T> | null {

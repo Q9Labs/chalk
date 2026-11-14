@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
-	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -28,211 +28,19 @@ type RecorderRenderAuthorityService interface {
 	CommitTranscriptionPreparation(context.Context, recordingrender.TranscriptionPreparationInput) (*recordingrender.TranscriptionResult, error)
 }
 
-type recorderRenderAuthorityBody struct {
-	recorderRecordingAuthorityBody
-	SpaceID           string `json:"space_id"`
-	RenderInputHandle string `json:"render_input_handle"`
-	KeyHandle         string `json:"key_handle"`
-	ObjectHandle      string `json:"object_handle"`
-}
-
-type recorderRenderObjectReserveBody struct {
-	recorderRenderAuthorityBody
-	Purpose              string `json:"purpose"`
-	ReservationRequestID string `json:"reservation_request_id"`
-}
-
-type recorderRenderKeyAccessBody struct {
-	recorderRenderAuthorityBody
-	RequestedCaptureEpoch int64 `json:"requested_capture_epoch"`
-}
-
-type recorderRenderObjectFinalizeBody struct {
-	recorderRenderAuthorityBody
-	AllocationID   string `json:"allocation_id"`
-	Purpose        string `json:"purpose"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	SHA256         string `json:"sha256"`
-	DurationMillis *int64 `json:"duration_ms"`
-}
-
 const recorderRenderCommitBodyLimit = 64 << 20
-
-type recorderRenderObjectCommitBody struct {
-	recorderRenderAuthorityBody
-	AllocationID string `json:"allocation_id"`
-	UploadToken  string `json:"upload_token"`
-}
-
-type recorderRenderObjectReferenceBody struct {
-	AllocationID   string `json:"allocation_id"`
-	Purpose        string `json:"purpose"`
-	ObjectKey      string `json:"object_key"`
-	ObjectVersion  string `json:"object_version"`
-	ObjectETag     string `json:"object_etag"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	SHA256         string `json:"sha256"`
-	DurationMillis *int64 `json:"duration_ms"`
-}
-
-type recorderRenderTranscriptionChunkBody struct {
-	ChunkID               string                            `json:"chunk_id"`
-	Index                 int                               `json:"index"`
-	Generation            int64                             `json:"generation"`
-	StartMillis           int64                             `json:"start_ms"`
-	EndMillis             int64                             `json:"end_ms"`
-	SourceStartMillis     int64                             `json:"source_start_ms"`
-	SourceEndMillis       int64                             `json:"source_end_ms"`
-	ParticipantRef        string                            `json:"participant_ref"`
-	ParticipantGeneration int64                             `json:"participant_generation"`
-	DisplayNameSnapshot   string                            `json:"display_name_snapshot"`
-	TrackID               string                            `json:"track_id"`
-	TrackEpoch            string                            `json:"track_epoch"`
-	IdentityKind          string                            `json:"identity_kind"`
-	TrackClass            string                            `json:"track_class"`
-	Overlap               bool                              `json:"overlap"`
-	Object                recorderRenderObjectReferenceBody `json:"object"`
-}
-
-type recorderRenderTranscriptionSourceBody struct {
-	SchemaVersion      string                                 `json:"schema_version"`
-	PresentationSHA256 string                                 `json:"presentation_sha256"`
-	Manifest           recorderRenderObjectReferenceBody      `json:"manifest"`
-	Chunks             []recorderRenderTranscriptionChunkBody `json:"chunks"`
-}
-
-type recorderRenderCommitBody struct {
-	VideoDegradation []recordingpipeline.VideoDegradation `json:"video_degradation,omitempty"`
-	recorderRenderAuthorityBody
-	CommitDigest        string                                 `json:"commit_digest"`
-	PresentationSHA256  string                                 `json:"presentation_sha256"`
-	DurationMillis      int64                                  `json:"duration_ms"`
-	Video               recorderRenderObjectReferenceBody      `json:"video"`
-	FFprobeFactsDigest  string                                 `json:"ffprobe_facts_digest"`
-	TranscriptionSource *recorderRenderTranscriptionSourceBody `json:"transcription_source"`
-}
-
-type recorderTranscriptionPreparationCommitBody struct {
-	recorderRenderAuthorityBody
-	CommitDigest        string                                 `json:"commit_digest"`
-	PresentationSHA256  string                                 `json:"presentation_sha256"`
-	DurationMillis      int64                                  `json:"duration_ms"`
-	TranscriptionSource *recorderRenderTranscriptionSourceBody `json:"transcription_source,omitempty"`
-}
-
-type recorderRenderDownloadResponse struct {
-	Method        string              `json:"method"`
-	URL           string              `json:"url"`
-	ExpiresAt     string              `json:"expires_at"`
-	SignedHeaders map[string][]string `json:"signed_headers"`
-}
-
-type recorderRenderObjectFactsResponse struct {
-	ObjectKey     string                         `json:"object_key"`
-	ObjectVersion string                         `json:"object_version"`
-	ObjectETag    string                         `json:"object_etag"`
-	ContentType   string                         `json:"content_type"`
-	ByteSize      int64                          `json:"byte_size"`
-	SHA256        string                         `json:"sha256"`
-	Download      recorderRenderDownloadResponse `json:"download"`
-}
-
-type recorderRenderCaptureObjectResponse struct {
-	recorderRenderObjectFactsResponse
-	CaptureEpoch         int64   `json:"capture_epoch"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	KeyHandle            string  `json:"key_handle"`
-	EnvelopeDigest       string  `json:"envelope_digest"`
-	BundleSchema         string  `json:"bundle_schema"`
-	SequenceNumber       int64   `json:"sequence"`
-	MonotonicStartMillis int64   `json:"monotonic_start_ms"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_ms"`
-	MediaStartMillis     int64   `json:"media_start_ms"`
-	MediaEndMillis       int64   `json:"media_end_ms"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-}
-
-type recorderRenderPresentationResponse struct {
-	Handle         string                            `json:"handle"`
-	SchemaVersion  string                            `json:"schema_version"`
-	ProfileVersion string                            `json:"profile_version"`
-	DurationMillis int64                             `json:"duration_ms"`
-	SHA256         string                            `json:"sha256"`
-	Object         recorderRenderObjectFactsResponse `json:"object"`
-}
-
-type recorderRenderInputResponse struct {
-	SchemaVersion     string                                `json:"schema_version"`
-	TranscriptionMode string                                `json:"transcription_mode"`
-	TenantID          string                                `json:"tenant_id"`
-	SpaceID           string                                `json:"space_id"`
-	EpisodeID         string                                `json:"episode_id"`
-	RecordingID       string                                `json:"recording_id"`
-	CaptureEpoch      int64                                 `json:"capture_epoch"`
-	CaptureReadyAt    string                                `json:"capture_ready_at"`
-	DurationMillis    int64                                 `json:"duration_ms"`
-	Capture           []recorderRenderCaptureObjectResponse `json:"capture"`
-	Presentation      recorderRenderPresentationResponse    `json:"presentation"`
-	AssetManifest     recorderRenderObjectFactsResponse     `json:"asset_manifest"`
-	Assets            []recorderRenderObjectFactsResponse   `json:"assets"`
-}
-
-type recorderRenderKeyResponse struct {
-	KeyHandle    string `json:"key_handle"`
-	Plaintext    string `json:"plaintext"`
-	CaptureEpoch int64  `json:"capture_epoch"`
-}
-
-type recorderRenderObjectReserveResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	Purpose           string `json:"purpose"`
-	AllocationVersion int64  `json:"allocation_version"`
-}
-
-type recorderRenderObjectFinalizeResponse struct {
-	recorderRenderObjectReserveResponse
-	UploadToken string                       `json:"upload_token"`
-	Upload      recorderSignedUploadResponse `json:"upload"`
-	ExpiresAt   string                       `json:"expires_at"`
-}
-
-type recorderRenderObjectCommitResponse struct {
-	recorderRenderObjectReserveResponse
-	ObjectVersion  string `json:"object_version"`
-	ObjectETag     string `json:"object_etag"`
-	ContentType    string `json:"content_type"`
-	ByteSize       int64  `json:"byte_size"`
-	SHA256         string `json:"sha256"`
-	DurationMillis *int64 `json:"duration_ms"`
-	CommittedAt    string `json:"committed_at"`
-}
-
-type recorderRenderCommitResponse struct {
-	Artifact              recorderWorkerArtifactResponse `json:"artifact"`
-	TranscriptionSourceID *string                        `json:"transcription_source_id"`
-	TranscriptionJobIDs   []string                       `json:"transcription_job_ids"`
-}
-
-type recorderTranscriptionPreparationCommitResponse struct {
-	TranscriptionSourceID *string  `json:"transcription_source_id,omitempty"`
-	TranscriptionJobIDs   []string `json:"transcription_job_ids"`
-}
 
 func mountRecorderRenderAuthorityRoutes(r chi.Router, service RecorderRenderAuthorityService, logger *slog.Logger) {
 	if service == nil {
 		return
 	}
-	r.Post("/render-inputs/resolve", recorderResolveRenderInputHandler(service))
-	r.Post("/render-keys/access", recorderAccessRenderKeyHandler(service))
-	r.Post("/render-objects/reserve", recorderReserveRenderObjectHandler(service))
-	r.Post("/render-objects/finalize", recorderFinalizeRenderObjectHandler(service))
-	r.Post("/render-objects/commit", recorderCommitRenderObjectHandler(service))
-	r.Post("/renders/commit", recorderCommitRenderHandler(service, logger))
-	r.Post("/renders/transcription-commit", recorderCommitTranscriptionPreparationHandler(service))
+	r.Post(string(recorderprotocol.RouteRenderInputsResolve), recorderResolveRenderInputHandler(service))
+	r.Post(string(recorderprotocol.RouteRenderKeysAccess), recorderAccessRenderKeyHandler(service))
+	r.Post(string(recorderprotocol.RouteRenderObjectsReserve), recorderReserveRenderObjectHandler(service))
+	r.Post(string(recorderprotocol.RouteRenderObjectsFinalize), recorderFinalizeRenderObjectHandler(service))
+	r.Post(string(recorderprotocol.RouteRenderObjectsCommit), recorderCommitRenderObjectHandler(service))
+	r.Post(string(recorderprotocol.RouteRendersCommit), recorderCommitRenderHandler(service, logger))
+	r.Post(string(recorderprotocol.RouteRendersTranscriptionDone), recorderCommitTranscriptionPreparationHandler(service))
 }
 
 func recorderResolveRenderInputHandler(service RecorderRenderAuthorityService) http.HandlerFunc {
@@ -241,7 +49,7 @@ func recorderResolveRenderInputHandler(service RecorderRenderAuthorityService) h
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderAuthorityBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RenderAuthority](w, request)
 		if !ok {
 			return
 		}
@@ -265,11 +73,11 @@ func recorderAccessRenderKeyHandler(service RecorderRenderAuthorityService) http
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderKeyAccessBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RenderKeyAccessRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, ok := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+		authority, ok := recordingRenderAuthority(identity, body.RenderAuthority)
 		input := recordingrender.AccessKeyInput{Authority: authority, CaptureEpoch: body.RequestedCaptureEpoch}
 		if !ok || input.Validate() != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording render key authority")
@@ -282,7 +90,7 @@ func recorderAccessRenderKeyHandler(service RecorderRenderAuthorityService) http
 		}
 		plaintext := base64.StdEncoding.EncodeToString(key.Plaintext)
 		recordingkeys.ClearPlaintext(key.Plaintext)
-		writeJSON(w, http.StatusOK, recorderRenderKeyResponse{KeyHandle: key.KeyHandle.String(), Plaintext: plaintext, CaptureEpoch: key.CaptureEpoch})
+		writeJSON(w, http.StatusOK, recorderprotocol.RenderKeyResponse{KeyHandle: key.KeyHandle.String(), Plaintext: plaintext, CaptureEpoch: key.CaptureEpoch})
 	}
 }
 
@@ -292,11 +100,11 @@ func recorderReserveRenderObjectHandler(service RecorderRenderAuthorityService) 
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderObjectReserveBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RenderObjectReserveRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+		authority, valid := recordingRenderAuthority(identity, body.RenderAuthority)
 		requestID, requestErr := utilities.ParseID(body.ReservationRequestID)
 		input := recordingrender.ReserveObjectInput{Authority: authority, Purpose: recordingrender.ObjectPurpose(body.Purpose), ReservationRequestID: requestID}
 		if !valid || requestErr != nil || input.Validate() != nil {
@@ -318,11 +126,11 @@ func recorderFinalizeRenderObjectHandler(service RecorderRenderAuthorityService)
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderObjectFinalizeBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RenderObjectFinalizeRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+		authority, valid := recordingRenderAuthority(identity, body.RenderAuthority)
 		allocationID, allocationErr := utilities.ParseID(body.AllocationID)
 		checksum, checksumErr := decodeSHA256Hex(body.SHA256)
 		input := recordingrender.FinalizeObjectInput{Authority: authority, AllocationID: allocationID, Purpose: recordingrender.ObjectPurpose(body.Purpose), ContentType: strings.TrimSpace(body.ContentType), ByteSize: body.ByteSize, SHA256: checksum, DurationMillis: body.DurationMillis}
@@ -345,11 +153,11 @@ func recorderCommitRenderObjectHandler(service RecorderRenderAuthorityService) h
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRenderObjectCommitBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RenderObjectCommitRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+		authority, valid := recordingRenderAuthority(identity, body.RenderAuthority)
 		allocationID, allocationErr := utilities.ParseID(body.AllocationID)
 		input := recordingrender.CommitObjectInput{Authority: authority, AllocationID: allocationID, UploadToken: body.UploadToken}
 		if !valid || allocationErr != nil || input.Validate() != nil {
@@ -377,7 +185,7 @@ func recorderCommitRenderHandler(service RecorderRenderAuthorityService, logger 
 		// A bounded timeline can introduce 100,000 canonical source IDs over
 		// its history. Their per-source quality results exceed the ordinary
 		// 1 MiB API body cap; only this authenticated worker commit gets 64 MiB.
-		body, ok := decodeRecorderWorkerBodyWithLimit[recorderRenderCommitBody](w, request, recorderRenderCommitBodyLimit)
+		body, ok := decodeRecorderWorkerBodyWithLimit[recorderprotocol.RenderCommitRequest](w, request, recorderRenderCommitBodyLimit)
 		if !ok {
 			return
 		}
@@ -402,7 +210,7 @@ func recorderCommitTranscriptionPreparationHandler(service RecorderRenderAuthori
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderTranscriptionPreparationCommitBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.TranscriptionCommitRequest](w, request)
 		if !ok {
 			return
 		}
@@ -426,14 +234,14 @@ func recorderRenderIdentity(w http.ResponseWriter, request *http.Request) (worke
 		return workeridentity.Identity{}, false
 	}
 	if identity.Role != workeridentity.RoleRender {
-		writeError(w, http.StatusForbidden, "worker.forbidden", "Only render workers may access recording render authority")
+		writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Only render workers may access recording render authority")
 		return workeridentity.Identity{}, false
 	}
 	return identity, true
 }
 
-func recordingRenderAuthority(identity workeridentity.Identity, body recorderRenderAuthorityBody) (recordingrender.Authority, bool) {
-	base, ok := parseRecorderRecordingAuthority(identity, body.recorderRecordingAuthorityBody)
+func recordingRenderAuthority(identity workeridentity.Identity, body recorderprotocol.RenderAuthority) (recordingrender.Authority, bool) {
+	base, ok := parseRecorderRecordingAuthority(identity, body.RecordingAuthority)
 	tenantID, tenantErr := utilities.ParseID(base.tenantID)
 	episodeID, episodeErr := utilities.ParseID(base.episodeID)
 	recordingID, recordingErr := utilities.ParseID(base.recordingID)
@@ -456,8 +264,8 @@ func recordingRenderAuthority(identity workeridentity.Identity, body recorderRen
 	return authority, authority.Validate() == nil
 }
 
-func recordingRenderCommitInput(identity workeridentity.Identity, body recorderRenderCommitBody) (recordingrender.CommitInput, bool) {
-	authority, ok := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+func recordingRenderCommitInput(identity workeridentity.Identity, body recorderprotocol.RenderCommitRequest) (recordingrender.CommitInput, bool) {
+	authority, ok := recordingRenderAuthority(identity, body.RenderAuthority)
 	commitDigest, commitErr := decodeSHA256Hex(body.CommitDigest)
 	presentationSHA256, presentationErr := decodeSHA256Hex(body.PresentationSHA256)
 	ffprobeDigest, ffprobeErr := decodeSHA256Hex(body.FFprobeFactsDigest)
@@ -476,8 +284,8 @@ func recordingRenderCommitInput(identity workeridentity.Identity, body recorderR
 	return input, input.Validate() == nil
 }
 
-func recordingTranscriptionPreparationInput(identity workeridentity.Identity, body recorderTranscriptionPreparationCommitBody) (recordingrender.TranscriptionPreparationInput, bool) {
-	authority, ok := recordingRenderAuthority(identity, body.recorderRenderAuthorityBody)
+func recordingTranscriptionPreparationInput(identity workeridentity.Identity, body recorderprotocol.TranscriptionCommitRequest) (recordingrender.TranscriptionPreparationInput, bool) {
+	authority, ok := recordingRenderAuthority(identity, body.RenderAuthority)
 	commitDigest, commitErr := decodeSHA256Hex(body.CommitDigest)
 	presentationSHA256, presentationErr := decodeSHA256Hex(body.PresentationSHA256)
 	if !ok || commitErr != nil || presentationErr != nil {
@@ -494,7 +302,7 @@ func recordingTranscriptionPreparationInput(identity workeridentity.Identity, bo
 	return input, input.Validate() == nil
 }
 
-func recordingRenderTranscriptionSource(body recorderRenderTranscriptionSourceBody) (recordingrender.TranscriptionSource, bool) {
+func recordingRenderTranscriptionSource(body recorderprotocol.RenderTranscriptionSource) (recordingrender.TranscriptionSource, bool) {
 	presentationSHA256, err := decodeSHA256Hex(body.PresentationSHA256)
 	manifest, manifestOK := recordingRenderObjectReference(body.Manifest)
 	if err != nil || !manifestOK {
@@ -520,7 +328,7 @@ func recordingRenderTranscriptionSource(body recorderRenderTranscriptionSourceBo
 	return source, true
 }
 
-func recordingRenderObjectReference(body recorderRenderObjectReferenceBody) (recordingrender.CommitObjectReference, bool) {
+func recordingRenderObjectReference(body recorderprotocol.RenderObjectReference) (recordingrender.CommitObjectReference, bool) {
 	allocationID, allocationErr := utilities.ParseID(body.AllocationID)
 	checksum, checksumErr := decodeSHA256Hex(body.SHA256)
 	if allocationErr != nil || checksumErr != nil {
@@ -533,24 +341,24 @@ func recordingRenderObjectReference(body recorderRenderObjectReferenceBody) (rec
 	}, true
 }
 
-func recorderRenderInputResponseValue(input recordingrender.ResolvedInput) recorderRenderInputResponse {
-	response := recorderRenderInputResponse{
+func recorderRenderInputResponseValue(input recordingrender.ResolvedInput) recorderprotocol.RenderInputResponse {
+	response := recorderprotocol.RenderInputResponse{
 		SchemaVersion: input.SchemaVersion, TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(),
-		TranscriptionMode: string(input.TranscriptionMode),
+		TranscriptionMode: input.TranscriptionMode,
 		EpisodeID:         input.EpisodeID.String(), RecordingID: input.RecordingID.String(), CaptureEpoch: input.CaptureEpoch,
 		CaptureReadyAt: utilities.FormatTimestamp(input.CaptureReadyAt), DurationMillis: input.DurationMillis,
-		Capture: make([]recorderRenderCaptureObjectResponse, 0, len(input.Capture)),
-		Presentation: recorderRenderPresentationResponse{
+		Capture: make([]recorderprotocol.RenderCaptureObject, 0, len(input.Capture)),
+		Presentation: recorderprotocol.RenderPresentation{
 			Handle: input.PresentationHandle.String(), SchemaVersion: input.PresentationSchemaVersion,
 			ProfileVersion: input.PresentationProfileVersion, DurationMillis: input.DurationMillis,
 			SHA256: hex.EncodeToString(input.PresentationSHA256), Object: recorderRenderObjectFactsResponseValue(input.Presentation),
 		},
-		AssetManifest: recorderRenderObjectFactsResponseValue(input.AssetManifest), Assets: make([]recorderRenderObjectFactsResponse, 0, len(input.Assets)),
+		AssetManifest: recorderRenderObjectFactsResponseValue(input.AssetManifest), Assets: make([]recorderprotocol.RenderObject, 0, len(input.Assets)),
 	}
 	for _, captureObject := range input.Capture {
-		response.Capture = append(response.Capture, recorderRenderCaptureObjectResponse{
-			recorderRenderObjectFactsResponse: recorderRenderObjectFactsResponseValue(recordingrender.DownloadableObject{ObjectFacts: captureObject.ObjectFacts, Download: captureObject.Download}),
-			CaptureEpoch:                      captureObject.CaptureEpoch, CaptureJobID: captureObject.CaptureJobID.String(), KeyHandle: captureObject.KeyHandle.String(), EnvelopeDigest: hex.EncodeToString(captureObject.EnvelopeDigest), BundleSchema: captureObject.BundleSchema,
+		response.Capture = append(response.Capture, recorderprotocol.RenderCaptureObject{
+			RenderObject: recorderRenderObjectFactsResponseValue(recordingrender.DownloadableObject{ObjectFacts: captureObject.ObjectFacts, Download: captureObject.Download}),
+			CaptureEpoch: captureObject.CaptureEpoch, CaptureJobID: captureObject.CaptureJobID.String(), KeyHandle: captureObject.KeyHandle.String(), EnvelopeDigest: hex.EncodeToString(captureObject.EnvelopeDigest), BundleSchema: captureObject.BundleSchema,
 			SequenceNumber: captureObject.SequenceNumber, MonotonicStartMillis: captureObject.MonotonicStartMillis,
 			MonotonicEndMillis: captureObject.MonotonicEndMillis, MediaStartMillis: captureObject.MediaStartMillis,
 			MediaEndMillis: captureObject.MediaEndMillis, Codec: captureObject.Codec, Layer: captureObject.Layer,
@@ -562,37 +370,37 @@ func recorderRenderInputResponseValue(input recordingrender.ResolvedInput) recor
 	return response
 }
 
-func recorderRenderObjectFactsResponseValue(value recordingrender.DownloadableObject) recorderRenderObjectFactsResponse {
-	return recorderRenderObjectFactsResponse{
+func recorderRenderObjectFactsResponseValue(value recordingrender.DownloadableObject) recorderprotocol.RenderObject {
+	return recorderprotocol.RenderObject{
 		ObjectKey: value.ObjectKey, ObjectVersion: value.ObjectVersion, ObjectETag: value.ObjectETag,
 		ContentType: value.ContentType, ByteSize: value.ByteSize, SHA256: hex.EncodeToString(value.SHA256),
-		Download: recorderRenderDownloadResponse{Method: value.Download.Method, URL: value.Download.URL, ExpiresAt: utilities.FormatTimestamp(value.Download.ExpiresAt), SignedHeaders: value.Download.SignedHeaders},
+		Download: recorderprotocol.RenderDownload{Method: value.Download.Method, URL: value.Download.URL, ExpiresAt: utilities.FormatTimestamp(value.Download.ExpiresAt), SignedHeaders: value.Download.SignedHeaders},
 	}
 }
 
-func recorderRenderObjectReserveResponseValue(value recordingrender.ReservedObject) recorderRenderObjectReserveResponse {
-	return recorderRenderObjectReserveResponse{AllocationID: value.AllocationID.String(), ObjectKey: value.ObjectKey, Purpose: string(value.Purpose), AllocationVersion: value.AllocationVersion}
+func recorderRenderObjectReserveResponseValue(value recordingrender.ReservedObject) recorderprotocol.RenderObjectReserveResponse {
+	return recorderprotocol.RenderObjectReserveResponse{AllocationID: value.AllocationID.String(), ObjectKey: value.ObjectKey, Purpose: string(value.Purpose), AllocationVersion: value.AllocationVersion}
 }
 
-func recorderRenderObjectFinalizeResponseValue(value recordingrender.FinalizedObject) recorderRenderObjectFinalizeResponse {
-	return recorderRenderObjectFinalizeResponse{
-		recorderRenderObjectReserveResponse: recorderRenderObjectReserveResponseValue(value.ReservedObject),
-		UploadToken:                         value.UploadToken, ExpiresAt: utilities.FormatTimestamp(value.ExpiresAt),
-		Upload: recorderSignedUploadResponse{Method: value.Upload.Method, URL: value.Upload.URL, ExpiresAt: utilities.FormatTimestamp(value.Upload.ExpiresAt), SignedHeaders: cloneSignedHeaders(value.Upload)},
+func recorderRenderObjectFinalizeResponseValue(value recordingrender.FinalizedObject) recorderprotocol.RenderObjectFinalizeResponse {
+	return recorderprotocol.RenderObjectFinalizeResponse{
+		RenderObjectReserveResponse: recorderRenderObjectReserveResponseValue(value.ReservedObject),
+		UploadToken:                 value.UploadToken, ExpiresAt: utilities.FormatTimestamp(value.ExpiresAt),
+		Upload: recorderprotocol.SignedUploadResponse{Method: value.Upload.Method, URL: value.Upload.URL, ExpiresAt: utilities.FormatTimestamp(value.Upload.ExpiresAt), SignedHeaders: cloneSignedHeaders(value.Upload)},
 	}
 }
 
-func recorderRenderObjectCommitResponseValue(value recordingrender.CommittedObject) recorderRenderObjectCommitResponse {
-	return recorderRenderObjectCommitResponse{
-		recorderRenderObjectReserveResponse: recorderRenderObjectReserveResponseValue(value.ReservedObject),
-		ObjectVersion:                       value.Object.ObjectVersion, ObjectETag: value.Object.ObjectETag,
+func recorderRenderObjectCommitResponseValue(value recordingrender.CommittedObject) recorderprotocol.RenderObjectCommitResponse {
+	return recorderprotocol.RenderObjectCommitResponse{
+		RenderObjectReserveResponse: recorderRenderObjectReserveResponseValue(value.ReservedObject),
+		ObjectVersion:               value.Object.ObjectVersion, ObjectETag: value.Object.ObjectETag,
 		ContentType: value.Object.ContentType, ByteSize: value.Object.ByteSize, SHA256: hex.EncodeToString(value.Object.SHA256),
 		DurationMillis: value.DurationMillis, CommittedAt: utilities.FormatTimestamp(value.CommittedAt),
 	}
 }
 
-func recorderRenderCommitResponseValue(value recordingrender.CommitResult) recorderRenderCommitResponse {
-	response := recorderRenderCommitResponse{Artifact: recorderWorkerArtifactResponseValue(value.Artifact), TranscriptionJobIDs: make([]string, 0)}
+func recorderRenderCommitResponseValue(value recordingrender.CommitResult) recorderprotocol.RenderCommitResponse {
+	response := recorderprotocol.RenderCommitResponse{Artifact: recorderWorkerArtifactResponseValue(value.Artifact), TranscriptionJobIDs: make([]string, 0)}
 	if value.Transcription != nil {
 		sourceID := value.Transcription.SourceID.String()
 		response.TranscriptionSourceID = &sourceID
@@ -604,8 +412,8 @@ func recorderRenderCommitResponseValue(value recordingrender.CommitResult) recor
 	return response
 }
 
-func recorderTranscriptionPreparationCommitResponseValue(value *recordingrender.TranscriptionResult) recorderTranscriptionPreparationCommitResponse {
-	response := recorderTranscriptionPreparationCommitResponse{TranscriptionJobIDs: []string{}}
+func recorderTranscriptionPreparationCommitResponseValue(value *recordingrender.TranscriptionResult) recorderprotocol.TranscriptionCommitResponse {
+	response := recorderprotocol.TranscriptionCommitResponse{TranscriptionJobIDs: []string{}}
 	if value == nil {
 		return response
 	}

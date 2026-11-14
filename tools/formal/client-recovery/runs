@@ -1,0 +1,29 @@
+# One TLC run per row. run.sh runs each and requires the outcome in the last column.
+# Format: name | MaxSyncFaults MaxMediaFaults MaxTerminal MaxRefreshFaults MaxLeaves | SyncMayDie | RqRule | LeaveRule | GrantRule | Break | rule | expect
+# rule: "safety" = every invariant in ClientRecovery.cfg, or the one named invariant or temporal property.
+# expect: pass = TLC finds no error, violated = TLC reports the rule broken.
+
+# The real code: every rule holds. Bounds are small and split by what each rule needs.
+real-recovery        | 1 1 0 0 0 | FALSE | syncWins | stops | failsOnExpiry | none | safety       | pass
+real-leave           | 1 1 0 0 1 | FALSE | syncWins | stops | failsOnExpiry | none | safety       | pass
+real-terminal        | 0 1 1 0 0 | FALSE | syncWins | stops | failsOnExpiry | none | safety       | pass
+real-grant           | 0 0 0 1 0 | FALSE | syncWins | stops | failsOnExpiry | none | safety       | pass
+real-recovery-ends   | 1 1 0 0 0 | TRUE  | syncWins | stops | failsOnExpiry | none | RecoveryEnds | pass
+
+# The three findings, kept as variants of the code from before the fixes: each must break the rule it names.
+# F1: a media blip overwrites a queued Sync recovery, so a Sync that is gone for good never fails the Connection.
+break-sync_downgrade   | 1 1 0 0 0 | TRUE  | overwrite | stops        | failsOnExpiry | none | RecoveryEnds          | violated
+# F2: a recovery attempt keeps going while Leave waits for its acknowledgement.
+break-leave_keeps_going | 1 1 0 0 1 | FALSE | syncWins  | keepsRunning | failsOnExpiry | none | NoRestartWhileLeaving | violated
+# F3: the refresh keeps failing after the grant ran out and the Connection stays live.
+break-grant_stays_live | 0 0 0 1 0 | FALSE | syncWins  | stops        | staysLive     | none | ExpiredGrantNotLive   | violated
+
+# Broken variants of the code: each must break the rule it is listed for.
+break-removed_not_final | 0 1 1 0 0 | FALSE | syncWins | stops | failsOnExpiry | removed_not_final | RemovalReported | violated
+break-ended_keeps_rq | 0 1 1 0 0 | FALSE | syncWins | stops | failsOnExpiry | ended_keeps_rq | EndingIsFinal | violated
+break-fin_skips_recheck | 1 1 0 0 0 | FALSE | syncWins | stops | failsOnExpiry | fin_skips_recheck | NoAbandonedRecovery | violated
+break-media_snap_no_recover | 0 1 0 0 0 | FALSE | syncWins | stops | failsOnExpiry | media_snap_no_recover | NoAbandonedRecovery | violated
+break-fin_ignores_active | 1 1 0 0 1 | FALSE | syncWins | stops | failsOnExpiry | fin_ignores_active | LeaveNotUndone | violated
+break-rec_ignores_active | 1 1 0 0 1 | FALSE | syncWins | stops | failsOnExpiry | rec_ignores_active | LeaveNotUndone | violated
+break-fin_forgets_live | 1 1 0 0 0 | FALSE | syncWins | stops | failsOnExpiry | fin_forgets_live | RecoveryEnds | violated
+break-refresh_invalid_retries | 0 0 0 1 0 | FALSE | syncWins | stops | failsOnExpiry | refresh_invalid_retries | RevokedGrantNotLive | violated

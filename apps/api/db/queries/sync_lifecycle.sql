@@ -485,25 +485,33 @@ select
     episodes.space_id,
     episodes.id as episode_id,
     episodes.deadline_at,
-    episodes.deadline_generation
+    episodes.deadline_generation,
+    deadline_end.failed_attempts
 from episodes episodes
 join sync_episode_control control on
     control.tenant_id = episodes.tenant_id
     and control.space_id = episodes.space_id
     and control.episode_id = episodes.id
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "maximum-duration-<generation>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where operations.status <> 'failed') as live_attempts,
+        (count(*) filter (where operations.status = 'failed'))::integer as failed_attempts,
+        max(operations.completed_at) filter (where operations.status = 'failed') as last_failed_at
+    from sync_external_operations operations
+    where
+        operations.tenant_id = episodes.tenant_id
+        and operations.space_id = episodes.space_id
+        and operations.episode_id = episodes.id
+        and operations.operation_name = 'maximum_episode_duration_expired'
+        and operations.deadline_generation = episodes.deadline_generation
+) deadline_end
 where
     episodes.status = 'active'
     and episodes.deadline_at <= now()
-    and not exists (
-        select 1
-        from sync_external_operations operations
-        where
-            operations.tenant_id = episodes.tenant_id
-            and operations.space_id = episodes.space_id
-            and operations.episode_id = episodes.id
-            and operations.operation_name = 'maximum_episode_duration_expired'
-            and operations.deadline_generation = episodes.deadline_generation
-    )
+    and deadline_end.live_attempts = 0
+    and (deadline_end.failed_attempts = 0 or deadline_end.last_failed_at
+        + make_interval(mins => least(power(2, least(deadline_end.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.deadline_at, episodes.id
 for update of control skip locked
@@ -853,19 +861,22 @@ where tenant_id = sqlc.arg(tenant_id) and arrival_handle = sqlc.arg(arrival_hand
 select sync_admission_expiry_due(sqlc.arg(expires_at)::timestamptz, sqlc.narg(arrival_state)::text, now())::boolean as due;
 
 -- name: ClaimExpiredParticipantPresence :many
--- Lock control before Episode/participant, as entry and heartbeat renewal do.
+-- Lock control before Episode/participant, as entry and heartbeat renewal do. The scan starts from
+-- the active Episodes, which are few, and checks only their seats; starting from every control row
+-- would walk every ended Episode too.
 select control.tenant_id, control.space_id, control.episode_id
-from sync_episode_control control
-where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
+from episodes e
+join sync_episode_control control on control.tenant_id=e.tenant_id and control.space_id=e.space_id
+    and control.episode_id=e.id
+where e.status='active'
+    and sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
     and exists (
         select 1 from participants p
-        join episodes e on e.tenant_id=p.tenant_id and e.space_id=p.space_id and e.id=p.episode_id
         left join participant_presence_leases lease on lease.tenant_id=p.tenant_id and lease.space_id=p.space_id
             and lease.episode_id=p.episode_id and lease.participant_id=p.id and lease.generation=p.generation
-        where p.tenant_id=control.tenant_id and p.space_id=control.space_id
-            and p.episode_id=control.episode_id
+        where p.tenant_id=e.tenant_id and p.space_id=e.space_id and p.episode_id=e.id
             and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
-            and p.status='active' and e.status='active'
+            and p.status='active'
     )
     and control.episode_id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by control.episode_id

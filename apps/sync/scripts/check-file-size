@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Fails when a hand-written Elixir file under lib/ or test/ is over 300 lines without a reason
+# in size-baseline.txt, or when a baseline line has no reason or names a file that is no longer over.
+# Baseline lines are "path: reason". The generated contract files never count.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+limit=300
+baseline=size-baseline.txt
+failed=0
+
+over=$(
+  git ls-files 'lib/*.ex' 'lib/**/*.ex' 'test/*.ex' 'test/*.exs' 'test/**/*.ex' 'test/**/*.exs' |
+    grep -v -e '^lib/chalk_sync/contract/generated' |
+    xargs wc -l |
+    awk -v limit="$limit" '$2 != "total" && $1 > limit { print $2 " " $1 }'
+)
+
+while read -r file lines; do
+  [[ -z "$file" ]] && continue
+  if ! grep -q -E "^${file}:[[:space:]]*[^[:space:]]" "$baseline"; then
+    echo "$file has $lines lines (limit $limit): split it by responsibility or add 'path: reason' to $baseline" >&2
+    failed=1
+  fi
+done <<<"$over"
+
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" == \#* ]] && continue
+  path="${line%%:*}"
+  reason="${line#*:}"
+  if [[ "$path" == "$line" || -z "${reason// /}" ]]; then
+    echo "$baseline: '$path' needs a reason after the colon" >&2
+    failed=1
+  elif ! grep -q -E "^${path} " <<<"$over"; then
+    echo "$baseline lists $path, which is not over $limit lines: remove the entry" >&2
+    failed=1
+  fi
+done <"$baseline"
+
+exit "$failed"

@@ -58,9 +58,13 @@ gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -
 
 `.github/workflows/real-call-proof.yml` runs only proof code already on master, so a fix to a proof merges first. Until then, run `pnpm prod:proof <name>` from the branch. Dispatch it with `-f environment=nightly -f media_plane=chalk_sfu -f proofs=<name>`. Runs share the staging SFU lease and wait up to 30 minutes. A busy lease fails as `staging-sfu-lease-timeout`. `latency_samples` only shortens the latency run, so its p95 is not the gate value.
 
+## Private release state
+
+The repository is public, so its logs, artifacts and Deployment payloads are readable by anyone. Release manifests and media pins name the AWS account, registry and bucket, so they are stored as ciphertext: the release workflows seal them with `scripts/releases/seal.py` and the repository secret `CHALK_RELEASE_SEAL_KEY` (`./.github/actions/upload-sealed` and `download-sealed` for artifacts, `manifest_sealed` and `media_sealed` in the `production-release` and `media-current` payloads). The payload keeps the plaintext sha256, which readers check after opening the file. Records from before sealing hold `*_base64` and are still read. Step summaries print no resource names or ids. Rotating the key means re-sealing the latest `production-release` and `media-current` records, because Promote's rollback reads them.
+
 ## Environment setup
 
-- Each GitHub environment needs the `CHALK_MANAGED_*` variables the workflows read. The deploy role's OIDC trust must name that exact environment. Creating the name does not provision infrastructure.
+- Each GitHub environment needs the `CHALK_MANAGED_*` settings the workflows read. Names that identify infrastructure (the deploy role ARN, the instance id, the registry, the media bucket) are environment or repository secrets, never variables, because the repository is public and a variable prints in the step log. The deploy role's OIDC trust must name that exact environment. Creating the name does not provision infrastructure.
 - Each environment has its own recorder config at `/chalk/<environment>/release/recorder.json`. Never copy secret exclusions from another host.
 - The deploy role needs the SSM document permissions and the dispatcher module permissions (state read and write, `.tflock`, versioned ZIP read and copy, Lambda binding). It never creates roles, policies or scheduler updates. See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
 - Changes under `infrastructure/nightly/transcription/` are rejected by the media path. A root-input change needs a separately reviewed infrastructure migration.

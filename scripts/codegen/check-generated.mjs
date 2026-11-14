@@ -1,14 +1,12 @@
 import { spawn } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { repositoryRoot } from "../lib/repository.mjs";
 
 // Each entry reuses an existing check. None needs Postgres or Docker.
 const checks = [
   { name: "Camera background URLs", command: ["node", "--experimental-strip-types", "scripts/codegen/camera-background-urls.mjs"] },
   { name: "Camera background URL proof", command: ["node", "--import", "tsx", "--test", "scripts/codegen/camera-background-urls.test.mjs"] },
   { name: "Invite words", command: ["node", "scripts/codegen/invite-words.mjs"] },
+  { name: "Recording presentation enums", command: ["node", "scripts/codegen/recording-presentation-enums.mjs"] },
   { name: "Recording render contract", command: ["node", "scripts/codegen/recording-render-contract.mjs"] },
   { name: "Mobile release facts", command: ["node", "scripts/codegen/mobile-release-facts.mjs"] },
   { name: "OpenAPI, SDK, and Sync contract", command: ["pnpm", "run", "check:sdk-generated"] },
