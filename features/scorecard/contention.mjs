@@ -12,15 +12,20 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
   const nodeReadouts = [...nodeBefore, ...nodeAfter];
   const readings = [...nodeReadouts, ...nodeWindow];
   const coverage = nodeBefore.length > 0 && nodeAfter.length > 0 && nodeWindow.length > 0;
-  const changes = Math.max(0, new Set(readings.map((row) => row.nodeIncarnation)).size - 1);
+  // Staging holds a primary and a standby. A change is a node that is missing from one readout or new in another.
+  const incarnations = [nodeBefore, nodeWindow, nodeAfter].map((rows) => new Set(rows.map((row) => row.nodeIncarnation))).filter((set) => set.size > 0);
+  const steady = incarnations.reduce((common, set) => new Set([...common].filter((id) => set.has(id))), incarnations[0] ?? new Set());
+  const changes = Math.max(0, ...incarnations.map((set) => set.size - [...set].filter((id) => steady.has(id)).length));
   const steals = readings.map((row) => row.host?.stealPercent);
   const stealKnown = coverage && steals.every(Number.isFinite);
   const drainKnown = coverage && readings.every((row) => typeof row.draining === "boolean");
+  // With two nodes a missing sessions gauge on one would otherwise read as zero sessions.
+  const sessionsKnown = coverage && readings.every((row) => Number.isSafeInteger(row.sessions));
   const nodeForeign = nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
   const nodeSessions = Math.max(0, ...nodeReadouts.map((row) => row.sessions));
   const zeroEvents = window ? window.length === 0 : UNAVAILABLE;
   const observedContention = !lease?.acquired || !!lease?.lost || episodes > 0 || nodeForeign || changes > 0 || readings.some((row) => row.draining);
-  const missingEvidence = !before || !after || episodes === UNAVAILABLE || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown;
+  const missingEvidence = !before || !after || episodes === UNAVAILABLE || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown || !sessionsKnown;
   const result = {
     contended: observedContention || (!unobservable && missingEvidence),
     source: "axiom_api_logs_and_metrics_and_github_lease",

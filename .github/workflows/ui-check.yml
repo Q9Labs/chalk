@@ -1,0 +1,173 @@
+name: UI check
+
+# Required status check: "UI check". It always reports; a pull request that changes no UI path passes it in seconds.
+# For a UI change it walks the call journeys on the branch and on the base, fails on a layout problem that only the
+# branch has, and posts one sticky comment. scripts/ui-check/README.md explains the check and how to run it locally.
+# Master's walk is cached by master's commit and the check's code, so most runs walk only the branch.
+# A draft pull request runs nothing, as in the Gate: marking it ready starts one run, and so does every later push.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-ui-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+
+jobs:
+  ui-check:
+    name: UI check
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      ui: ${{ steps.select.outputs.ui }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select UI paths
+        id: select
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            node scripts/ui-check/ui-paths.mjs "origin/${{ github.base_ref }}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "ui=true" >> "${GITHUB_OUTPUT}"
+          fi
+          cat "${GITHUB_OUTPUT}"
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        if: steps.select.outputs.ui == 'true'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.select.outputs.ui == 'true'
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - name: Install
+        if: steps.select.outputs.ui == 'true'
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-playwright
+        if: steps.select.outputs.ui == 'true'
+        with:
+          browsers: chromium
+
+      # Only pull requests from this repository get the token, so only they need the CLI for the model review.
+      - name: Install Claude Code
+        if: steps.select.outputs.ui == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        run: npm install --global @anthropic-ai/claude-code@2.1.322
+
+      - name: Check the check
+        if: steps.select.outputs.ui == 'true'
+        run: node --test scripts/ui-check/*.test.mjs
+
+      - name: Restore the base walk
+        id: base-walk
+        if: steps.select.outputs.ui == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ui-check-base
+          # The run's own key is never found; the prefix finds the newest walk, and run.mjs reuses it only if its commit and check code match.
+          key: ui-check-base-${{ github.run_id }}
+          restore-keys: ui-check-base-
+
+      - name: Walk the journeys on the branch and on the base
+        id: walk
+        if: steps.select.outputs.ui == 'true'
+        env:
+          # The model review runs on the Q9 Claude subscription (`claude setup-token`). Pull requests from forks get no secret,
+          # and the review then says, in the comment and as a warning, that it did not run.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
+          UI_CHECK_IMAGE_BASE: https://raw.githubusercontent.com/${{ github.repository }}/ui-check-evidence/pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}
+        run: node scripts/ui-check/run.mjs --base "origin/${{ github.base_ref || 'master' }}" --base-cache ui-check-base
+
+      - name: Save the base walk
+        if: always() && steps.select.outputs.ui == 'true' && steps.base-walk.outputs.cache-hit != 'true' && hashFiles('ui-check-base/key.txt') != ''
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ui-check-base
+          key: ui-check-base-${{ github.run_id }}
+
+      - name: Keep the report
+        if: always() && steps.select.outputs.ui == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ui-check-report
+          path: ui-check-report
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Posts the comment and, when the check found a problem, the images it points at. This job holds write permissions,
+  # so it runs no code from the branch: it only reads the report that the job above uploaded.
+  report:
+    name: UI check report
+    needs: ui-check
+    if: always() && needs.ui-check.outputs.ui == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # A job that failed before it walked anything uploads no report; the comment below then says the walk did not finish.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: ui-check-report
+          path: ui-check-report
+
+      - name: Publish the images the comment shows
+        if: needs.ui-check.result == 'failure'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          dest="$(mktemp -d)"
+          if git ls-remote --exit-code --heads "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ui-check-evidence >/dev/null; then
+            git clone --depth 1 --branch ui-check-evidence "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${dest}"
+          else
+            git init "${dest}" && git -C "${dest}" checkout -b ui-check-evidence
+            git -C "${dest}" remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          target="${dest}/pr-${PR}/${SHA}"
+          mkdir -p "${target}"
+          cp -r ui-check-report/diff ui-check-report/head "${target}/" 2>/dev/null || true
+          git -C "${dest}" add -A
+          git -C "${dest}" config user.name "chalk-ui-check"
+          git -C "${dest}" config user.email "noreply@github.com"
+          git -C "${dest}" commit -m "UI check evidence for pull request ${PR}" --allow-empty
+          # Pull requests run at the same time and share this branch, so a rejected push is retried on the new tip.
+          for attempt in 1 2 3 4 5; do
+            git -C "${dest}" push origin ui-check-evidence && exit 0
+            git -C "${dest}" pull --rebase origin ui-check-evidence
+          done
+          exit 1
+
+      - name: Post the sticky comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          mkdir -p ui-check-report
+          if [[ ! -f ui-check-report/comment.md ]]; then
+            printf '<!-- chalk-ui-check -->\n## UI check: did not finish\n\nThe walk stopped before it wrote a report. See the run log.\n' > ui-check-report/comment.md
+          fi
+          id="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate --jq '.[] | select(.body | contains("<!-- chalk-ui-check -->")) | .id' | head -n 1)"
+          if [[ -n "${id}" ]]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@ui-check-report/comment.md >/dev/null
+          else
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -F body=@ui-check-report/comment.md >/dev/null
+          fi

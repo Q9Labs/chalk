@@ -74,7 +74,7 @@ const ACTION_METRICS = /** @type {const} */ ({
   "action.publish.first_frame_ms": { unit: "ms", description: "Camera on until the remote decodes the first new frame" },
   "action.publish.first_audio_ms": { unit: "ms", description: "Microphone on until the remote receives the first new audio packet" },
   "action.unpublish.removed_ms": { unit: "ms", description: "Camera off until the remote no longer holds a live camera track" },
-  "action.unpublish.audio_removed_ms": { unit: "ms", description: "Microphone off until the remote no longer holds a live microphone track" },
+  "action.unpublish.audio_removed_ms": { unit: "ms", description: "Microphone off until the remote microphone track is ended, or disabled and receiving no audio packets" },
   "action.screenshare.start_ms": { unit: "ms", description: "Screen share start until the remote decodes the first share frame" },
   "action.screenshare.stop_ms": { unit: "ms", description: "Screen share stop until the remote no longer holds a live share track" },
   "action.screenshare.start_signal_ms": { unit: "ms", description: "Screen share start until the remote's roster shows it active" },

@@ -23,7 +23,8 @@ globalThis.proofLatency = {
     return { at: acted, leaveAckAt: acted + 30 };
   },
   async result(id) {
-    return armed.get(id).map(({ name }) => ({ name, at: acted + 50 }));
+    // FAKE_SILENCE_BEFORE_ACTION: the receiver's microphone track was already silent when the sender acted.
+    return armed.get(id).map(({ name, kind }) => ({ name, at: kind === "silenced" && process.env.FAKE_SILENCE_BEFORE_ACTION ? acted - 100 : acted + 50 }));
   },
 };
 // Each audio read is a window later: 100 packets, 2 s of jitter buffer over them, and 50 ms of playout over 4800 samples.
