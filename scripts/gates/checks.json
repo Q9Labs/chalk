@@ -866,6 +866,16 @@
       "sample": "1 of 12 runs failed (Gradle 504)."
     },
     {
+      "id": "workflow:mobile-nightly-ios.yml#ios",
+      "owner": "Mobile",
+      "catches": "A nightly iOS build that fails to sign, upload or process after a successful cut.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New workflow; no runs yet."
+    },
+    {
       "id": "workflow:mobile-signed-build.yml#android",
       "owner": "Mobile",
       "catches": "Signs and builds the Android release.",
