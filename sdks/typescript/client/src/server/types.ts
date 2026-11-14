@@ -104,7 +104,8 @@ type ExternalOperation = {
 };
 export type EpisodeEnd = {
   readonly episode_id: string;
-  readonly external_operation: ExternalOperation;
+  /** Absent when the Episode was already ending or had ended, so no end operation was needed. */
+  readonly external_operation?: ExternalOperation;
   readonly status: string;
 };
 export type AdmitParticipantInput = {

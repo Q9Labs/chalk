@@ -900,7 +900,7 @@ export const EpisodeAttendanceSchema = /* @__PURE__ */ (() =>
   }))();
 export type EpisodeAttendance = typeof EpisodeAttendanceSchema.Type;
 
-export const EpisodeEndSchema = /* @__PURE__ */ (() =>
+export const EpisodeDeadlineSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
     external_operation: Schema.Struct({
@@ -915,10 +915,28 @@ export const EpisodeEndSchema = /* @__PURE__ */ (() =>
     }),
     status: Schema.String,
   }))();
-export type EpisodeEnd = typeof EpisodeEndSchema.Type;
-
-export const EpisodeDeadlineSchema = /* @__PURE__ */ (() => EpisodeEndSchema)();
 export type EpisodeDeadline = typeof EpisodeDeadlineSchema.Type;
+
+export const EpisodeEndSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    external_operation: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          created_at: DateTimeStringSchema,
+          deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+          id: UUIDSchema,
+          operation_name: Schema.String,
+          request_key: Schema.String,
+          status: Schema.String,
+          target_participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+          target_participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
+        }),
+      ),
+    ),
+    status: Schema.String,
+  }))();
+export type EpisodeEnd = typeof EpisodeEndSchema.Type;
 
 export const EpisodeListSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6858,7 +6876,6 @@ export const EndEpisodeErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeControlBusyErrorSchema,
   EpisodeInvalidIdErrorSchema,
-  EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
