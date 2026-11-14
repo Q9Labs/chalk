@@ -53,7 +53,9 @@ type Options struct {
 	Readiness  ReadinessChecker
 	// RetirementBacklog reports the Chalk SFU retirement debt for /readyz. It never fails readiness:
 	// a node that stays silent must not take the API out of service. It is nil without the Chalk SFU.
-	RetirementBacklog          func() (count int, oldest time.Duration, observed bool)
+	RetirementBacklog func() (count int, oldest time.Duration, observed bool)
+	// OperatorReadTokenSHA256 is the hash of the token that lets /readyz show private figures. Empty shows none.
+	OperatorReadTokenSHA256    []byte
 	RecorderHealth             RecorderHealthChecker
 	RecorderWorker             RecorderWorkerService
 	RecorderCapturePlans       RecorderCapturePlanService
