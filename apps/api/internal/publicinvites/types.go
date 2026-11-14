@@ -466,11 +466,8 @@ type PublicInviteArrivalInput struct {
 	DisplayName   string
 	RequestKey    string
 	ArrivalHandle string
-	// GuestCredential is optional for a new guest arrival. Runtime derives a
-	// server-bound credential from the invite and request key when it is absent.
-	GuestCredential string
-	// StarterCredentials holds the credentials a browser kept from the calls it started, by the arrival handle that
-	// started each. A rejoin is a new arrival, so this is how the Space's starter is known again.
+	// GuestCredential is optional for a new guest arrival: Runtime derives one from the invite and request key. StarterCredentials are the credentials a browser kept from the calls it started, by arrival handle, so a rejoin knows the starter.
+	GuestCredential    string
 	StarterCredentials map[string]string
 	AccountID          utilities.ID
 	AccountAuthorized  bool
