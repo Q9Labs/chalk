@@ -669,9 +669,14 @@ defmodule ChalkSync.Live.Episode do
 
   defp reconcile_screen_leases(state, media_items, options, absent) do
     case observed_screen_participants(media_items) do
-      [] -> settle_screen_leases(state, media_items, options, absent)
-      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options, absent)
-      _conflicting -> {:error, :conflicting_screen_publications}
+      [] ->
+        settle_screen_leases(state, media_items, options, absent)
+
+      [participant_id] ->
+        reconcile_single_screen(state, media_items, participant_id, options, absent)
+
+      _conflicting ->
+        {:error, :conflicting_screen_publications}
     end
   end
 
