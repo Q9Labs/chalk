@@ -1,7 +1,7 @@
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
 import { evaluateChalkSfuLeave, awaitRelease, scorecardShape } from "./leave-chalk-sfu-criteria.mjs";
 import { measureLeave } from "./leave.mjs";
-import { createSpace, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createSpace, prepareIntegration, startTrackedEpisode } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
 
 // Collect every track the page captures, clones included, so the proof can see whether Leave released them.
@@ -41,9 +41,7 @@ const survivorView = (page, leaver) =>
 export async function leaveChalkSfuProof(run) {
   const receiver = await prepareIntegration(run, false);
   const space = await createSpace(run);
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
-  await trackEpisode(run, space, episode);
+  const { path, episode } = await startTrackedEpisode(run, space);
   const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { observeLeave: true, pageProbe: installCaptureTracking });
   const [leaver, survivor] = guests.pages;
   await save(`${run.directory}/initial-media-progress.json`, await waitForMediaProgress(guests.pages));

@@ -4,6 +4,7 @@
     "scripts/nightly-stack/identity.mjs",
     "scripts/nightly-stack/seed.mjs",
     "features/scorecard/scorecard.mjs",
+    "features/scorecard/chalk-sfu.mjs",
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
     "tools/formal/public-invite-access/PublicInviteAccess.view.mjs",
