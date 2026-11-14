@@ -523,6 +523,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/analysis.test.mjs",
       "scripts/gates/ast-grep.test.mjs",
       "scripts/gates/mock-calls.test.mjs",
+      "scripts/gates/ci-janitor.test.mjs",
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
