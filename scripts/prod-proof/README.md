@@ -138,7 +138,7 @@ jobs:
       CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
 ```
 
-Define these in each GitHub environment (`production`, `nightly`), using that environment's own Tenant, never production's for nightly: secret `CHALK_PROOF_API_KEY`; variables `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_PROOF_ORIGIN` (and for the nightly `CHALK_PROOF_PROOF_ORIGIN_OWN`), `CHALK_PROOF_WEBHOOK_SERVICE_URL`, `CHALK_PROOF_WEBHOOK_ENDPOINT_ID`, `CHALK_PROOF_EVIDENCE_RECIPIENT`. For unattended runs the environment must allow the workflow's ref without human approval.
+Define these in each GitHub environment (`production`, `nightly`), using that environment's own Tenant, never production's for nightly: secrets `CHALK_PROOF_API_KEY`, `CHALK_PROOF_TENANT_ID`, `CHALK_PROOF_API_URL`, `CHALK_PROOF_WEB_URL`, `CHALK_PROOF_WEBHOOK_SERVICE_URL` and `CHALK_PROOF_WEBHOOK_ENDPOINT_ID` (the repository is public, and a variable prints in the step log while a secret is masked); variables `CHALK_PROOF_PROOF_ORIGIN` (and for the nightly `CHALK_PROOF_PROOF_ORIGIN_OWN`) and `CHALK_PROOF_EVIDENCE_RECIPIENT`. For unattended runs the environment must allow the workflow's ref without human approval.
 
 Public repository artifacts are publicly downloadable, so evidence is encrypted with `age` to the public recipient in `CHALK_PROOF_EVIDENCE_RECIPIENT` (`age1...`, validated before the call; keep the private identity outside GitHub), uploaded even after failure, with three-day retention. Public logs carry fixed phases, statuses and allowlisted reason codes only; raw errors stay in the encrypted evidence, and dynamic credentials are registered with GitHub masking. To read an artifact:
 

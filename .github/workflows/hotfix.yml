@@ -31,6 +31,8 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       baseline: ${{ steps.plan.outputs.baseline }}
     steps:
@@ -60,7 +62,8 @@ jobs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
       rollback_media: ${{ steps.media.outputs.members }}
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
@@ -73,7 +76,7 @@ jobs:
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
       - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
       - name: Retain the live media pins when the baseline has none
         id: media
@@ -155,6 +158,8 @@ jobs:
     needs: [plan, retain, release, smoke, rollback]
     if: always()
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

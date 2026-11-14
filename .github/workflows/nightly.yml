@@ -19,6 +19,8 @@ jobs:
       actions: write
       deployments: write
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     outputs:
       should_cut: ${{ steps.plan.outputs.should_cut }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
@@ -102,6 +104,8 @@ jobs:
     needs: [plan, release, proof, web-e2e, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -132,6 +136,8 @@ jobs:
     needs: [plan, record]
     if: needs.plan.outputs.should_cut == 'true' && needs.record.result == 'success'
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     permissions:
       contents: write
     steps:

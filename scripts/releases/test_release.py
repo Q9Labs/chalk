@@ -124,7 +124,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
             (Path(directory) / 'release.json').write_bytes(manifest)
             api = Mock(spec=GitHub)
             api.request.return_value = dict(id=2)
-            with patch.dict(os.environ, RELEASE_ID='release', TARGET_SHA=SHA, GITHUB_RUN_ID='456',
+            with patch.dict(os.environ, RELEASE_ID='release', TARGET_SHA=SHA, GITHUB_RUN_ID='456', CHALK_RELEASE_SEAL_KEY='test-seal-key',
                             MANIFEST_SHA256=digest(manifest), MANIFEST_ARTIFACT_ID='10', PROMOTION_AUDIT=json.dumps(audit)):
                 release.retain_production(api, SimpleNamespace(directory=Path(directory)))
             record = api.request.call_args.args[1]

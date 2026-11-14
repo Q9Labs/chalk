@@ -21,7 +21,7 @@ _recorder_spec = importlib.util.spec_from_file_location("recorder_archive_releas
 recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
 from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
-from github_release import GitHub, payload
+from github_release import GitHub, payload, retain, retained
 
 INPUTS = {
     'capture': ('apps/api/', 'features/media/sfu/protocol/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
@@ -96,7 +96,7 @@ def baseline(args):
     records = GitHub().deployments('nightly', 'media-current')
     if records:
         saved = payload(records[0])
-        data = base64.b64decode(saved['media_base64'], validate=True)
+        data = retained(saved, 'media')
         require(digest(data) == saved['media_sha256'], 'current media checksum mismatch')
         previous = validate_members(json.loads(data))
         if 'recorder_source_bucket' in previous:
@@ -115,7 +115,7 @@ def record_current(args):
     receipts = [json.loads((args.directory / (role + '-receipt.json')).read_text()) for role in ('capture', 'render')]
     require(all(item['result'] == 'PASS' and item['fleet_equivalent_signed_boot'] and item['cleanup_confirmed'] for item in receipts), 'current media requires successful signed boot and cleanup')
     GitHub().request('deployments', dict(ref=os.environ['TARGET_SHA'], environment='nightly', task='media-current', auto_merge=False,
-                     required_contexts=[], payload=dict(channel='media-current', media_sha256=digest(data), media_base64=base64.b64encode(data).decode())))
+                     required_contexts=[], payload=retain(dict(channel='media-current', media_sha256=digest(data)), 'media', data)))
 
 
 def build_archives(args):
