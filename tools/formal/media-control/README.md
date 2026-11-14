@@ -102,7 +102,7 @@ Files:
 - `Sfu.tla`: the SFU, behind six operators.
 - `runs.txt`: one row per run, with bounds, variant, SFU kind and expected outcome.
 - `run.sh`, `trace-diff.mjs`: the runner and the trace condenser.
-- `results/`: configs, TLC output and the summary.
+- `results/`: where `run.sh` writes each run's config, its TLC output and the summaries. Only the three counterexamples this README cites are committed; `./run.sh` regenerates the rest.
 
 ## Swap the SFU
 

@@ -1,0 +1,6 @@
+# run.sh regenerates every run. Only the counterexamples the README cites are committed.
+*
+!.gitignore
+!cf-current-P2-1src.txt
+!cf-current-P4-1src.txt
+!heal-sdk-today-P5src.txt
