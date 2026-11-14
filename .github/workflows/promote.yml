@@ -15,6 +15,10 @@ on:
         description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
         required: false
+      deploy_before:
+        description: Set by Auto-promote. An ISO time (UTC) after which the live-call guard refuses instead of deploying; leave blank for a person's run
+        type: string
+        required: false
       allow_live_calls:
         description: Deploy even while participants are in calls, or when the live count cannot be read. A deploy restarts the API and Sync, which drops live calls
         type: boolean
@@ -133,7 +137,9 @@ jobs:
     # A deploy restarts the API and Sync and drops every live call. Wait for calls to end, then refuse; the count comes from the production API's /readyz.
     needs: [select, approve, own-sfu-spaces]
     runs-on: ubuntu-24.04
-    environment: production
+    environment:
+      name: production
+      deployment: false
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,6 +147,7 @@ jobs:
         env:
           LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
           ALLOW_LIVE_CALLS: ${{ inputs.allow_live_calls }}
+          DEPLOY_BEFORE: ${{ inputs.deploy_before }}
         run: python3 scripts/releases/release.py live_calls
   release:
     permissions:
