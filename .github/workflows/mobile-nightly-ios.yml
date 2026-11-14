@@ -48,11 +48,21 @@ jobs:
         if: steps.cut.outputs.verified == 'true'
         with:
           ref: ${{ steps.cut.outputs.sha }}
-      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
+      # The cut can be older than this workflow and its scripts, so it builds with the scripts of its own revision or not at all.
+      - name: Skip a cut that predates the iOS publish script
+        id: tool
         if: steps.cut.outputs.verified == 'true'
+        run: |
+          if [[ -f apps/mobile/scripts/release/publish-nightly-ios.sh ]]; then
+            echo 'present=true' >> "$GITHUB_OUTPUT"
+          else
+            echo "Cut ${{ steps.cut.outputs.sha }} predates the iOS publish script; the next cut uploads."
+          fi
+      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
+        if: steps.tool.outputs.present == 'true'
       - name: Skip when nothing in the app changed since the last upload
         id: decide
-        if: steps.cut.outputs.verified == 'true'
+        if: steps.tool.outputs.present == 'true'
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           ASC_CREDENTIAL_ITEM_ID: ${{ vars.ASC_CREDENTIAL_ITEM_ID }}
