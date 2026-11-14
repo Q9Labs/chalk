@@ -235,7 +235,11 @@ jobs:
       - name: Name the revision's proofs
         # A Promote or latency run can check out a cut made before the Chalk SFU rename, whose CLI and scorecard code use the old names.
         run: |
-          if [ -f features/scorecard/own-sfu.mjs ]; then echo "PROOF_NAMES_BEFORE_RENAME=true" >> "$GITHUB_ENV"; fi
+          legacy=$(ls features/scorecard | grep -m1 '^own-sfu\.mjs$' || true)
+          if [ -n "$legacy" ]; then
+            echo "PROOF_NAMES_BEFORE_RENAME=true" >> "$GITHUB_ENV"
+            echo "LEGACY_COLLECTOR=features/scorecard/$legacy" >> "$GITHUB_ENV"
+          fi
       - name: Keep private proof files in memory
         run: |
           mkdir -p .private /dev/shm/chalk-proof-private /dev/shm/chalk-proof-tmp
@@ -365,7 +369,7 @@ jobs:
         run: |
           collector=features/scorecard/chalk-sfu.mjs
           if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then
-            collector=features/scorecard/own-sfu.mjs
+            collector=$LEGACY_COLLECTOR
             [ "$SCORECARD_ENVIRONMENT" != nightly ] || export SCORECARD_ENVIRONMENT=staging
           fi
           # A revision from before the Chalk SFU nightly has no latency kit scorecard code to run.
@@ -405,7 +409,7 @@ jobs:
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
           collector=features/scorecard/chalk-sfu.mjs
-          [ "${PROOF_NAMES_BEFORE_RENAME:-}" != true ] || collector=features/scorecard/own-sfu.mjs
+          [ "${PROOF_NAMES_BEFORE_RENAME:-}" != true ] || collector=$LEGACY_COLLECTOR
           if [ ! -f "$collector" ] || [ -f .private/cf-latency-skipped ]; then
             exit 0
           fi

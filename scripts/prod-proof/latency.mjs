@@ -29,7 +29,6 @@ import { ICE_PATHS, joinExpected, pathMismatch } from "./latency-path.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
-import { normalizeEnvironment } from "../../features/scorecard/schema.mjs";
 
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
 const timeoutMs = 20_000;
@@ -59,8 +58,7 @@ function options() {
   const lobbyDwellMs = Number(values["lobby-dwell-ms"]);
   check(Number.isInteger(lobbyDwellMs) && lobbyDwellMs >= 0 && lobbyDwellMs <= 15000, "--lobby-dwell-ms must be a whole number from 0 to 15000 (preconnect keeps a socket ready for 16 s after its last call)", "configuration");
   check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");
-  const { tier, region, size, headed } = values;
-  const environment = normalizeEnvironment(values.environment);
+  const { tier, environment, region, size, headed } = values;
   return { samples, planes, headed, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
 }
 

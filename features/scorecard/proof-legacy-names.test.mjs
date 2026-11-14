@@ -9,6 +9,7 @@ import { load } from "js-yaml";
 const root = resolve(import.meta.dirname, "../..");
 const proofJob = Object.values(load(readFileSync(resolve(root, ".github/workflows/real-call-proof.yml"), "utf8")).jobs).find((job) => job.steps?.some((step) => step.id === "prove"));
 const script = proofJob.steps.find((step) => step.id === "prove").run;
+const plane = JSON.parse(readFileSync(resolve(root, "scripts/prod-proof/registry.json"), "utf8"))["leave-chalk-sfu"].planes.at(-1);
 
 // Runs the real "Prove a real call" script against the real registry.mjs, whose registry.json holds only the names from before the rename. The proof
 // runner (`pnpm prod:proof`, which calls the live API) is the one boundary replaced.
@@ -31,7 +32,7 @@ function runProofStep({ beforeRename }) {
         GITHUB_OUTPUT: output,
         GITHUB_STEP_SUMMARY: join(directory, "summary"),
         PROOFS: "leave-chalk-sfu chalk-sfu-spaces",
-        CHALK_PROOF_MEDIA_PLANE: "chalk_sfu",
+        CHALK_PROOF_MEDIA_PLANE: plane,
         RUN_PREFIX: "run",
         STAGING_SFU_PROOF: "false",
         ...(beforeRename ? { PROOF_NAMES_BEFORE_RENAME: "true" } : {}),
