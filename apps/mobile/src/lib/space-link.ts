@@ -1,11 +1,10 @@
-import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
+import { INVITE_HOSTS, parseChalkInviteLink } from "@q9labsai/chalk-client/invites";
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
 import { getApiBaseURL } from "./mobile-config";
 
 const NIGHTLY_API = "https://nightly-api.chalkmeet.com";
 const NIGHTLY_WEB_HOST = "nightly.chalkmeet.com";
-const CHALK_WEB_HOSTS = ["chalkmeet.com", "chalk.q9labs.ai"];
 
 export type SpaceRoute = {
   readonly kind: "space";
@@ -16,23 +15,14 @@ export type SpaceRoute = {
   readonly source: "space-link" | "created-space";
 };
 
-/** On the nightly build, a link on the nightly web host is read as the production link it mirrors. */
-function productionLink(link: string): string {
-  if (getApiBaseURL() !== NIGHTLY_API) return link;
-  try {
-    const url = new URL(link);
-    if (url.protocol !== "https:" || url.hostname !== NIGHTLY_WEB_HOST || url.username || url.password || url.port) return link;
-    url.hostname = "chalkmeet.com";
-    return url.toString();
-  } catch {
-    // Invite codes are not URLs and remain valid inputs.
-    return link;
-  }
+/** The nightly build also reads links on the nightly web host. */
+function inviteHosts(): readonly string[] {
+  return getApiBaseURL() === NIGHTLY_API ? [...INVITE_HOSTS, NIGHTLY_WEB_HOST] : INVITE_HOSTS;
 }
 
 export function parseSpaceLink(input: string): SpaceRoute | null {
   const inviteLink = input.trim();
-  const invite = parseChalkInviteLink(productionLink(inviteLink));
+  const invite = parseChalkInviteLink(inviteLink, { hosts: inviteHosts() });
   if (!invite) return null;
   return {
     kind: "space",
@@ -62,8 +52,7 @@ function parseUrl(input: string): URL | undefined {
 }
 
 function isChalkWebLink(url: URL): boolean {
-  const isNightlyHost = url.hostname === NIGHTLY_WEB_HOST && getApiBaseURL() === NIGHTLY_API;
-  return (url.protocol === "https:" || url.protocol === "http:") && (CHALK_WEB_HOSTS.includes(url.hostname) || isNightlyHost);
+  return (url.protocol === "https:" || url.protocol === "http:") && inviteHosts().includes(url.hostname);
 }
 
 async function openInBrowser(url: URL): Promise<void> {
