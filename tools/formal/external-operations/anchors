@@ -8,8 +8,8 @@ Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	
 Reserve	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	where sync_publication_grant_reservations.expires_at <= now()
 ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	[row] -> from_row(row)
 ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	[] -> insert_publication_grant_reservation(connection, identity, operation_id, source)
-CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	if reservation.status == :failed and cleanup_required do
-CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	RoleTransitionSettlement.settle_child(connection, episode, UUID.load!(child_id), :applied)
+ResendGrant	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	and not (status in ('pending', 'ambiguous') and expires_at <= now())
+CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex	publication_cleanup_required?(connection, episode, policy, participant, reservation)
 CompleteGrant	apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex	expires_at = greatest(expires_at, now() + interval '5 minutes')
 RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex	reservations = lock_publication_reservations(connection, identity.episode, affected)
 RoleDemote	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex	if exercised_sources == [] do
@@ -25,8 +25,11 @@ NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when Operation
 NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_media_name(name) do
 NodeCalls	apps/sync/lib/chalk_sync/external_operation_consumer.ex	when OperationTable.is_episode_end_name(name) do
 NodeHears	apps/sync/lib/chalk_sync/external_operation_consumer.ex	@max_attempts 100
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	defp settle(_episode, %{name: :role_transition_source_stop}, :pending, _finalize), do: :pending
 NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	if operation.attempt_count >= @max_attempts, do: finalize_terminal_failure(episode, operation, :retry_exhausted, finalize), else: :pending
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	external.status != :pending -> ExternalOperationDecision.build(external, :duplicate)
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	{:error, reason} -> Postgrex.rollback(connection, {:error, reason})
 NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	PublicationFences.delete(connection, episode, parent)
-NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	"failed" in statuses -> :failed
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex	Enum.all?(statuses, &(&1 == "applied"))
+NodePending	apps/sync/lib/chalk_sync/external_operation_consumer.ex	do: keep_source_stop_pending(operation, reason)
+NodeFinalizes	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	do: finalize_pending_operation(connection, episode, external, nil, {:confirmed, :provider})

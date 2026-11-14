@@ -1,9 +1,0 @@
-# Findings: rules that the real code breaks. `run.sh` requires each one to keep failing
-# when only its cause is switched on, and requires every rule to hold when all causes
-# are switched off (the idealized settings). A fix to the code turns a finding into a
-# failed check here: remove the row and switch the cause off in the model.
-# Format: <id><TAB><constant that causes it><TAB><rule TLC must report><TAB><what happens>
-# All findings run with Ops = {"rt"} on one node.
-F-A	GrantRefusals	DemotedPublishesOnlyWhileCleanupRuns	A refused second grant settles the source stop as applied while the first grant is still live (publication_grants.ex satisfy_failed_grant_child)
-F-B	GiveUp	GivingUpLeavesNothingLive	A source stop that stays ambiguous for 100 attempts fails with retry_exhausted and nothing revokes the live source (external_operation_consumer.ex)
-F-C	ResendsExpired	DemotedPublishesOnlyWhileCleanupRuns	A resent expired reservation grants a source after assign_roles took the capability and started no cleanup (publication_grants.ex reserve_transaction, role_transition_planner.ex)
