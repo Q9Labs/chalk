@@ -15,9 +15,9 @@ const environmentOf = (job) => (typeof job.environment === "string" ? { name: jo
 // deployment of that environment inactive. Promote reads the held cut as a deployment whose latest status is success
 // (scripts/releases/github_release.py held_candidates), so a proof, a latency run or a reaper that names `nightly` would hide the held cut.
 // Only these jobs deploy, so only they keep their deployment.
-const deployers = new Set(["ci.yml deploy-managed", "ci.yml deploy-web", "hotfix.yml retain", "promote.yml approve"]);
+const deployers = new Set(["ci.yml deploy-managed", "ci.yml deploy-web", "promote.yml approve"]);
 
-test("every job that names the nightly or production environment and does not deploy creates no deployment", () => {
+test("every job that names an environment other than signing and does not deploy creates no deployment", () => {
   for (const { file, jobs } of parsed) {
     for (const [name, job] of Object.entries(jobs)) {
       if (!job.environment || deployers.has(`${file} ${name}`)) continue;
