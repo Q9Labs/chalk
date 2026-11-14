@@ -840,9 +840,14 @@
 .chalk-toast:not(:has(button)) {
   padding-right: var(--space-4);
 }
-.chalk-toast > [data-part="pill-button"] {
+.chalk-toast > :is([data-part="pill-button"], [data-part="toast-actions"]) {
   grid-column: 3;
   margin-left: var(--space-2);
+}
+/* A notice with two actions groups them, so they take the one action slot together instead of each claiming it. */
+.chalk-toast > [data-part="toast-actions"] {
+  display: flex;
+  gap: var(--space-2);
 }
 .chalk-toast > [data-part="toast-dismiss"] {
   grid-column: 4;
@@ -850,7 +855,7 @@
 }
 /* A narrow stack puts the action under the sentence, so the sentence keeps the width it needs to stay within two lines. */
 @container chalk-toasts (max-width: 520px) {
-  .chalk-toast > [data-part="pill-button"] {
+  .chalk-toast > :is([data-part="pill-button"], [data-part="toast-actions"]) {
     grid-row: 2;
     grid-column: 2;
     justify-self: start;
