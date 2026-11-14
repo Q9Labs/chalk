@@ -263,8 +263,6 @@ def require_gate(github, args):
 def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
-    for target in ('nightly', 'production'):
-        require(re.fullmatch('[0-9a-f]{64}', info['web'][target]['sha256']), 'missing web hash')
 
     def manifest():
         manifest_bytes(github, info)
@@ -278,6 +276,7 @@ def validate_choice(github, item):
     def web(target):
         from web import read_marker
         member = info['web'][target]
+        require(re.fullmatch('[0-9a-f]{64}', member['sha256']), 'missing web hash')
         data = github.artifact(info['run_id'], member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
         require(read_marker(data) == {'environment': target, 'commit': info['target_sha']}, 'web identity mismatch')
 
