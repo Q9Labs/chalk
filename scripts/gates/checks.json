@@ -983,7 +983,7 @@
     {
       "id": "workflow:mobile-nightly-android.yml#android",
       "owner": "Mobile",
-      "catches": "A nightly Android build that fails after a successful cut.",
+      "catches": "A nightly Android build that fails after a successful cut. It builds only when something under the mobile app paths changed since the last release on the internal track.",
       "runs": ["cut"],
       "blocks": "release",
       "minutes": null,
