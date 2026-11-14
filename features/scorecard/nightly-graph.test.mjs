@@ -64,6 +64,12 @@ test("Only the Cloudflare plane lane receives the real Cloudflare credentials", 
   assert.doesNotMatch(others, /secrets\.CHALK_CLOUDFLARE_/);
 });
 
+test("The Nightly gate holds no Axiom token: its stack has nothing to query", () => {
+  for (const name of ["nightly.yml", "nightly-proofs.yml", "nightly-host-proof.yml"]) {
+    assert.doesNotMatch(readFileSync(resolve(root, ".github/workflows", name), "utf8"), /AXIOM/, `${name} reads no Axiom secret`);
+  }
+});
+
 test("Cut nightly starts on a push to master, because the merge queue lands a commit only after its Gate passed", () => {
   assert.deepEqual(nightly.on.push, { branches: ["master"] });
   assert.equal(nightly.on.workflow_run, undefined);
