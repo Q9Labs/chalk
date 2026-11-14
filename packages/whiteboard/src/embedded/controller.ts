@@ -13,9 +13,12 @@ import {
   recordMessageId,
   type ChalkEmbeddedWhiteboardHostMessage,
   type ChalkEmbeddedWhiteboardRendererEnvelope,
+  type ChalkEmbeddedWhiteboardRendererMessage,
   type ChalkEmbeddedWhiteboardTheme,
   type ChalkEmbeddedWhiteboardViewport,
 } from "./protocol";
+
+type RendererPayload<T extends ChalkEmbeddedWhiteboardRendererMessage["type"]> = Extract<ChalkEmbeddedWhiteboardRendererMessage, { type: T }>["payload"];
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 16_384;
@@ -213,57 +216,24 @@ export class ChalkWhiteboardController {
       case "ready":
         await this.#ready(message);
         return;
-      case "view": {
-        const payload = message.payload;
-        const requestId = requireString(payload.requestId, "request ID");
-        await this.#operation(requestId, async () => {
-          const board = this.#board ?? this.options.board;
-          if (!board?.viewsAvailable || !isWhiteboardView(payload, board.viewBounds)) throw new Error("whiteboard view is invalid");
-          if (payload.bring && !this.#effectiveCanClear()) throw new Error("whiteboard presentation is not permitted");
-          const { requestId: _requestId, ...view } = payload;
-          if (!this.options.transport.sendView?.(view)) throw new Error("whiteboard view could not be sent");
-        });
+      case "view":
+        await this.#view(message.payload);
         return;
-      }
-      case "notice": {
-        if (message.payload === null) {
-          this.options.onNotice?.(null);
-          return;
-        }
-        const notice = requireRecord(message.payload, ["id", "message", "kind"], ["actionLabel"]);
-        if (notice.kind !== "info" && notice.kind !== "error") throw new Error("Board notice kind is invalid");
-        this.options.onNotice?.({ id: requireString(notice.id, "notice ID"), message: requireString(notice.message, "notice message", 1024), kind: notice.kind, ...(typeof notice.actionLabel === "string" ? { actionLabel: requireString(notice.actionLabel, "notice action", 64) } : {}) });
+      case "notice":
+        this.#notice(message.payload);
         return;
-      }
       case "follow": {
         const payload = message.payload;
         if (typeof payload !== "object" || payload === null || !("participantId" in payload) || (payload.participantId !== null && typeof payload.participantId !== "string")) throw new Error("whiteboard follow target is invalid");
         this.options.onFollow?.(payload.participantId);
         return;
       }
-      case "set_draw_policy": {
-        const payload = requireRecord(message.payload, ["requestId", "policy"]);
-        const requestId = requireString(payload.requestId, "request ID");
-        const policy = payload.policy;
-        if (policy !== "everyone" && policy !== "hosts" && policy !== "picked") throw new Error("whiteboard draw policy is invalid");
-        await this.#operation(requestId, async () => {
-          if (!this.#canClear || !this.options.transport.setDrawPolicy) throw new Error("whiteboard policy changes are unavailable");
-          await this.options.transport.setDrawPolicy(policy);
-        });
+      case "set_draw_policy":
+        await this.#setDrawPolicy(message.payload);
         return;
-      }
-      case "set_draw_permission": {
-        const payload = requireRecord(message.payload, ["requestId", "participantId", "canDraw"]);
-        const requestId = requireString(payload.requestId, "request ID");
-        const participantId = requireString(payload.participantId, "participant ID");
-        const canDraw = payload.canDraw;
-        if (typeof canDraw !== "boolean") throw new Error("whiteboard draw permission is invalid");
-        await this.#operation(requestId, async () => {
-          if (!this.#canClear || !this.options.transport.setDrawPermission) throw new Error("whiteboard permission changes are unavailable");
-          await this.options.transport.setDrawPermission(participantId, canDraw);
-        });
+      case "set_draw_permission":
+        await this.#setDrawPermission(message.payload);
         return;
-      }
       case "close_board":
         this.options.onCloseBoard?.();
         return;
@@ -280,18 +250,9 @@ export class ChalkWhiteboardController {
         await this.#operation(requestId, () => this.options.transport.requestSnapshot());
         return;
       }
-      case "clear": {
-        const { requestId } = requireRequest(message.payload);
-        await this.#operation(requestId, async () => {
-          if (!this.#effectiveCanClear()) throw new Error("whiteboard clear is not permitted");
-          const commit = await this.options.transport.clear();
-          this.#sceneId = commit.sceneId;
-          this.#sceneRevision = commit.revision;
-          this.#sceneGeneration = createRandomId("scene");
-          return { ...commit, sceneGeneration: this.#sceneGeneration };
-        });
+      case "clear":
+        await this.#clear(message.payload);
         return;
-      }
       case "file_write":
         await this.#writeFile(message);
         return;
@@ -318,6 +279,62 @@ export class ChalkWhiteboardController {
       case "close_ready":
         this.options.onCloseReady?.(requireCloseReady(message.payload).reason);
     }
+  }
+
+  async #view(payload: RendererPayload<"view">): Promise<void> {
+    const requestId = requireString(payload.requestId, "request ID");
+    await this.#operation(requestId, async () => {
+      const board = this.#board ?? this.options.board;
+      if (!board?.viewsAvailable || !isWhiteboardView(payload, board.viewBounds)) throw new Error("whiteboard view is invalid");
+      if (payload.bring && !this.#effectiveCanClear()) throw new Error("whiteboard presentation is not permitted");
+      const { requestId: _requestId, ...view } = payload;
+      if (!this.options.transport.sendView?.(view)) throw new Error("whiteboard view could not be sent");
+    });
+  }
+
+  #notice(payload: RendererPayload<"notice">): void {
+    if (payload === null) {
+      this.options.onNotice?.(null);
+      return;
+    }
+    const notice = requireRecord(payload, ["id", "message", "kind"], ["actionLabel"]);
+    if (notice.kind !== "info" && notice.kind !== "error") throw new Error("Board notice kind is invalid");
+    this.options.onNotice?.({ id: requireString(notice.id, "notice ID"), message: requireString(notice.message, "notice message", 1024), kind: notice.kind, ...(typeof notice.actionLabel === "string" ? { actionLabel: requireString(notice.actionLabel, "notice action", 64) } : {}) });
+  }
+
+  async #setDrawPolicy(rawPayload: RendererPayload<"set_draw_policy">): Promise<void> {
+    const payload = requireRecord(rawPayload, ["requestId", "policy"]);
+    const requestId = requireString(payload.requestId, "request ID");
+    const policy = payload.policy;
+    if (policy !== "everyone" && policy !== "hosts" && policy !== "picked") throw new Error("whiteboard draw policy is invalid");
+    await this.#operation(requestId, async () => {
+      if (!this.#canClear || !this.options.transport.setDrawPolicy) throw new Error("whiteboard policy changes are unavailable");
+      await this.options.transport.setDrawPolicy(policy);
+    });
+  }
+
+  async #setDrawPermission(rawPayload: RendererPayload<"set_draw_permission">): Promise<void> {
+    const payload = requireRecord(rawPayload, ["requestId", "participantId", "canDraw"]);
+    const requestId = requireString(payload.requestId, "request ID");
+    const participantId = requireString(payload.participantId, "participant ID");
+    const canDraw = payload.canDraw;
+    if (typeof canDraw !== "boolean") throw new Error("whiteboard draw permission is invalid");
+    await this.#operation(requestId, async () => {
+      if (!this.#canClear || !this.options.transport.setDrawPermission) throw new Error("whiteboard permission changes are unavailable");
+      await this.options.transport.setDrawPermission(participantId, canDraw);
+    });
+  }
+
+  async #clear(payload: RendererPayload<"clear">): Promise<void> {
+    const { requestId } = requireRequest(payload);
+    await this.#operation(requestId, async () => {
+      if (!this.#effectiveCanClear()) throw new Error("whiteboard clear is not permitted");
+      const commit = await this.options.transport.clear();
+      this.#sceneId = commit.sceneId;
+      this.#sceneRevision = commit.revision;
+      this.#sceneGeneration = createRandomId("scene");
+      return { ...commit, sceneGeneration: this.#sceneGeneration };
+    });
   }
 
   async #ready(message: ChalkEmbeddedWhiteboardRendererEnvelope): Promise<void> {

@@ -1,6 +1,16 @@
 import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
-import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, createRandomId, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, isRecord, recordMessageId, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol";
+import {
+  CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION,
+  CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION,
+  createRandomId,
+  decodeEmbeddedWhiteboardHostMessage,
+  encodeEmbeddedWhiteboardMessage,
+  isRecord,
+  recordMessageId,
+  type ChalkEmbeddedWhiteboardHostEnvelope,
+  type ChalkEmbeddedWhiteboardRendererMessage,
+} from "./protocol";
 
 declare global {
   interface Window {

@@ -101,6 +101,15 @@ type CameraControl = {
   readonly fit: () => void;
 };
 
+/** The dot grid moves with the board: a background offset, the board's one paint-only update. */
+function paintDotGrid(element: HTMLElement, camera: Camera): void {
+  let gap = 24 * camera.zoom;
+  while (gap < 14) gap *= 2;
+  element.style.setProperty("--board-dot-gap", `${gap}px`);
+  element.style.setProperty("--board-dot-x", `${(camera.scrollX * camera.zoom) % gap}px`);
+  element.style.setProperty("--board-dot-y", `${(camera.scrollY * camera.zoom) % gap}px`);
+}
+
 /** Camera motion leads by default; only applying a followed view preserves its origin. */
 function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject<HTMLDivElement | null>, onLeadingMove: () => void, onMoved: () => void, onViewportReady: () => void): CameraControl {
   const cameraRef = useRef<Camera>({ scrollX: 0, scrollY: 0, zoom: 1 });
@@ -120,15 +129,7 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
     if (!engine) return;
     const paint = (camera: Camera) => {
       cameraRef.current = camera;
-      const element = root.current;
-      if (element) {
-        // The dot grid moves with the board: a background offset, the board's one paint-only update.
-        let gap = 24 * camera.zoom;
-        while (gap < 14) gap *= 2;
-        element.style.setProperty("--board-dot-gap", `${gap}px`);
-        element.style.setProperty("--board-dot-x", `${(camera.scrollX * camera.zoom) % gap}px`);
-        element.style.setProperty("--board-dot-y", `${(camera.scrollY * camera.zoom) % gap}px`);
-      }
+      if (root.current) paintDotGrid(root.current, camera);
       setZoom(camera.zoom);
     };
     paint(readCamera(engine));
@@ -206,6 +207,11 @@ function useCamera(engine: WhiteboardEngineHandle | null, root: MutableRefObject
   return useMemo(() => ({ cameraRef, viewportRef, zoom, move, fit }), [move, zoom, fit]);
 }
 
+function swallow(event: Event): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 /** Engine keys the board does not offer never reach the engine: no help, library, menus or theme switch. */
 function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: { readonly onTool: (tool: BoardTool) => void; readonly onZoom: (factor: number) => void; readonly canDraw: boolean }) {
   const latest = useRef(handlers);
@@ -219,20 +225,16 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
       if (event.altKey && key.startsWith("arrow") && event.target instanceof Element && event.target.closest(".chalk-board-grip")) return;
       const modified = event.metaKey || event.ctrlKey;
       const { onTool, onZoom, canDraw } = latest.current;
-      if (modified && !event.altKey && key === "z") return;
-      if (modified && !event.altKey && key === "y") return;
-      if (modified && !event.altKey && !event.shiftKey && MODIFIED_ENGINE_KEYS.has(key)) return;
+      if (modified && !event.altKey && (key === "z" || key === "y" || (!event.shiftKey && MODIFIED_ENGINE_KEYS.has(key)))) return;
       if (!modified && !event.altKey) {
         const tool = TOOL_KEYS[key];
         if (tool && canDraw) {
-          event.preventDefault();
-          event.stopPropagation();
+          swallow(event);
           onTool(tool);
           return;
         }
         if (key === "+" || key === "=" || key === "-") {
-          event.preventDefault();
-          event.stopPropagation();
+          swallow(event);
           onZoom(key === "-" ? 1 / ZOOM_STEP : ZOOM_STEP);
           return;
         }
@@ -242,15 +244,11 @@ function useBoardKeys(root: MutableRefObject<HTMLDivElement | null>, handlers: {
       }
       event.stopPropagation();
     };
-    const blockMenu = (event: Event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    };
     element.addEventListener("keydown", keydown, true);
-    element.addEventListener("contextmenu", blockMenu, true);
+    element.addEventListener("contextmenu", swallow, true);
     return () => {
       element.removeEventListener("keydown", keydown, true);
-      element.removeEventListener("contextmenu", blockMenu, true);
+      element.removeEventListener("contextmenu", swallow, true);
     };
   }, [root]);
 }
@@ -264,8 +262,7 @@ function useImageRefusal(root: MutableRefObject<HTMLDivElement | null>, toast: (
     if (!element) return;
     const refuse = (files: FileList | undefined | null, event: Event) => {
       if (!files || ![...files].some((file) => file.type.startsWith("image/"))) return;
-      event.preventDefault();
-      event.stopPropagation();
+      swallow(event);
       latest.current({ type: "error", message: "The board can't take images yet.", duration: 5000 });
     };
     const paste = (event: ClipboardEvent) => refuse(event.clipboardData?.files, event);

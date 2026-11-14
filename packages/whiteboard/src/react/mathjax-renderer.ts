@@ -52,16 +52,26 @@ async function waitForMathJaxRuntime(): Promise<MathJaxRuntime> {
   throw new Error("Math renderer failed to initialize");
 }
 
+function selfHostedMathJax(): { loader?: object; svg?: object; options?: object } {
+  const configuredPath = getWhiteboardAssets()?.mathJaxBasePath;
+  if (!configuredPath) return {};
+  // The speech worker uses blob URLs, so importScripts and map fetches need absolute URLs.
+  const basePath = new URL(configuredPath, document.baseURI).href.replace(/\/$/, "");
+  return {
+    loader: { paths: { mathjax: basePath, fonts: `${basePath}/fonts` } },
+    svg: { dynamicPrefix: `${basePath}/fonts/mathjax-newcm-font/svg/dynamic` },
+    options: { worker: { path: `${basePath}/sre`, maps: `${basePath}/sre/mathmaps` } },
+  };
+}
+
 // Existing global configuration must be preserved when a host initializes MathJax first.
 function configureMathJax(target: typeof globalThis | Window, existing: (MathJaxRuntime & Record<string, unknown>) | undefined): void {
-  const configuredPath = getWhiteboardAssets()?.mathJaxBasePath;
-  // The speech worker uses blob URLs, so importScripts and map fetches need absolute URLs.
-  const basePath = configuredPath ? new URL(configuredPath, document.baseURI).href.replace(/\/$/, "") : undefined;
+  const hosted = selfHostedMathJax();
   target.MathJax = {
     ...(existing ?? {}),
-    ...(basePath ? { loader: { paths: { mathjax: basePath, fonts: `${basePath}/fonts` }, ...(existing?.loader as object | undefined) } } : {}),
-    svg: { ...(basePath ? { dynamicPrefix: `${basePath}/fonts/mathjax-newcm-font/svg/dynamic` } : {}), fontCache: "none", ...(existing?.svg as object | undefined) },
-    options: { ...(basePath ? { worker: { path: `${basePath}/sre`, maps: `${basePath}/sre/mathmaps` } } : {}), ...(existing?.options as object | undefined), enableMenu: false },
+    ...(hosted.loader && { loader: { ...hosted.loader, ...(existing?.loader as object | undefined) } }),
+    svg: { ...hosted.svg, fontCache: "none", ...(existing?.svg as object | undefined) },
+    options: { ...hosted.options, ...(existing?.options as object | undefined), enableMenu: false },
     startup: { ...(existing?.startup as object | undefined), typeset: false },
   } as unknown as MathJaxRuntime & Record<string, unknown>;
 }

@@ -483,36 +483,50 @@ export class ExcalidrawCollabEngine {
     return submitted;
   }
 
-  private applyRemoteElements(args: { sceneId: string; revision?: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
-    const remoteSceneId = args.sceneId;
-    const replacingScene = this.sceneId !== null && remoteSceneId !== this.sceneId;
-
+  /** Returns false when the update belongs to another scene and a snapshot was requested instead. */
+  private adoptRemoteSceneId(args: { sceneId: string; syncAll: boolean; remoteElements: unknown[]; isSnapshot: boolean }): boolean {
     if (!this.sceneId) {
-      this.sceneId = remoteSceneId;
-    } else if (args.isSnapshot) {
-      if (remoteSceneId !== this.sceneId) {
-        this.sceneId = remoteSceneId;
-        this.broadcastedElementVersions.clear();
-      }
-    } else if (remoteSceneId !== this.sceneId) {
-      // Clear update (epoch advance): accept immediately.
-      if (args.syncAll && asArray(args.remoteElements).length === 0) {
-        this.sceneId = remoteSceneId;
-        this.broadcastedElementVersions.clear();
-      } else {
-        this.requestSnapshot();
-        return;
+      this.sceneId = args.sceneId;
+      return true;
+    }
+    if (args.sceneId === this.sceneId) return true;
+    // A clear update (epoch advance) is accepted immediately.
+    if (!args.isSnapshot && !(args.syncAll && asArray(args.remoteElements).length === 0)) {
+      this.requestSnapshot();
+      return false;
+    }
+    this.sceneId = args.sceneId;
+    this.broadcastedElementVersions.clear();
+    return true;
+  }
+
+  private resetReplacedScene(): void {
+    this.storedImageFileIds.clear();
+    this.rejectedElementVersions.clear();
+    this.clearChangeDebounce();
+    this.dirtyDuringSubmission = false;
+    this.sceneGeneration = null;
+    this.deferredRemoteElements.clear();
+    this.resetSubmissionRetries();
+  }
+
+  private trackBroadcastedVersions(reconciled: readonly OrderedExcalidrawElement[], remoteById: ReadonlyMap<string, OrderedExcalidrawElement>, editing: readonly (string | undefined)[]): void {
+    for (const element of reconciled) {
+      const remote = remoteById.get(element.id);
+      if (remote?.version === element.version && remote.versionNonce === element.versionNonce) {
+        this.broadcastedElementVersions.set(element.id, { version: element.version, versionNonce: element.versionNonce });
+      } else if (remote && editing.includes(element.id) && isNewerVersion(remote, element)) {
+        const previous = this.deferredRemoteElements.get(element.id);
+        if (!previous || isNewerVersion(remote, previous)) this.deferredRemoteElements.set(element.id, remote);
       }
     }
-    if (replacingScene) {
-      this.storedImageFileIds.clear();
-      this.rejectedElementVersions.clear();
-      this.clearChangeDebounce();
-      this.dirtyDuringSubmission = false;
-      this.sceneGeneration = null;
-      this.deferredRemoteElements.clear();
-      this.resetSubmissionRetries();
-    }
+  }
+
+  private applyRemoteElements(args: { sceneId: string; revision?: string; sceneGeneration?: string; syncAll: boolean; remoteElements: unknown[]; appState?: SharedWhiteboardAppState; isSnapshot: boolean }) {
+    const replacingScene = this.sceneId !== null && args.sceneId !== this.sceneId;
+
+    if (!this.adoptRemoteSceneId(args)) return;
+    if (replacingScene) this.resetReplacedScene();
     this.sceneRevision = args.revision ?? null;
     if (args.sceneGeneration) this.sceneGeneration = args.sceneGeneration;
 
@@ -540,16 +554,7 @@ export class ExcalidrawCollabEngine {
       this.broadcastedElementVersions.clear();
       this.resetSubmissionRetries();
     }
-    const remoteById = new Map(restoredRemote.map((element) => [element.id, element]));
-    for (const element of reconciled) {
-      const remote = remoteById.get(element.id);
-      if (remote?.version === element.version && remote.versionNonce === element.versionNonce) {
-        this.broadcastedElementVersions.set(element.id, { version: element.version, versionNonce: element.versionNonce });
-      } else if (remote && editing.includes(element.id) && isNewerVersion(remote, element)) {
-        const previous = this.deferredRemoteElements.get(element.id);
-        if (!previous || isNewerVersion(remote, previous)) this.deferredRemoteElements.set(element.id, remote);
-      }
-    }
+    this.trackBroadcastedVersions(reconciled, new Map(restoredRemote.map((element) => [element.id, element])), editing);
     const hasUnsubmittedElements = reconciled.some((element) => this.isUnsubmitted(element));
 
     excalidrawAPI.updateScene({
