@@ -1,0 +1,21 @@
+name: Nightly proofs test
+
+on:
+  push:
+    branches: [ci/nightly-stack-boot]
+    paths:
+      - .github/workflows/nightly-proofs.yml
+      - .github/workflows/nightly-proofs-test.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  proofs:
+    uses: ./.github/workflows/nightly-proofs.yml
+    with:
+      release_sha: ${{ github.sha }}
+      proofs: camera-share long-call chat-upload
+      image_source: build
+    secrets: inherit
