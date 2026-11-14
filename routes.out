@@ -1,0 +1,6 @@
+_time	attributes.route	attributes.status	n	tenants
+2026-11-10T00:00:00Z	/v1/tenants/{tenant_id}/spaces/{space_id}/episodes	404	1	0
+--
+attributes.route	attributes.status	n	tenants
+/v1/tenants/{tenant_id}/spaces/{space_id}/episodes	404	1	0
+--

@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/tmp/chalk-axiom-readonly/q.py", line 3, in <module>
+    apl = open(sys.argv[1]).read()
+          ~~~~^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'hourly.apl'
