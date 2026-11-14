@@ -747,6 +747,14 @@ class PlanTests(unittest.TestCase):
         github.newest_green_push_gate.assert_called_once_with(self.REVISION)
         self.assertEqual((written['should_cut'], written['target_sha']), ('true', self.OLD))
 
+    def test_a_cut_that_skips_the_recorder_proof_leaves_the_days_transcript_for_a_later_cut(self):
+        previous = dict(payload=dict(target_sha=self.OLD, recorder_control=False))
+        for changed in (False, True):
+            with patch.object(release, 'held_candidates', return_value=[previous]), \
+                    patch.object(release, 'recording_changed', return_value=changed):
+                written, _ = self.plan(manual=True, github=self.github())
+            self.assertEqual((written['recording_changed'], written['transcribe']), (str(changed).lower(),) * 2)
+
     def test_a_revision_older_than_the_newest_record_defers_without_a_requeue(self):
         newer = dict(id=1, sha=self.NEWER, created_at='2026-11-12T10:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', target_sha=self.NEWER))
         github = self.github(records=[newer])

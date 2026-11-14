@@ -224,6 +224,8 @@ def plan(github, args):
         baseline = payload(held[0]) if held else previous_production(github)
         result['previous_nightly_sha'] = payload(held[0])['target_sha'] if held else ''
         result['recording_changed'] = recording_changed(result['previous_nightly_sha'], target)
+        # A cut that skips the recorder proof checks no Transcript, so it must not use up the day's Transcript.
+        result['transcribe'] = result['transcribe'] and result['recording_changed']
         # Rebuilding all components is safe when an old baseline cannot be read;
         # do not forward dead artifact IDs and wedge every future cut.
         recorder_control = baseline['recorder_control']
