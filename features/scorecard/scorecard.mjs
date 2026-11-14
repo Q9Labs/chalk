@@ -102,8 +102,8 @@ async function diff(argv) {
   }
   const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
   // Every gated action metric of the plane must be there with enough samples; the table shows each one, so a missing metric is a row.
-  const expected = values["expect-gated"] ? expectedMetricRows(gatedActionIds(budgets, current.mediaPlane), current.metrics, planeBudgets(budgets, current.mediaPlane), MIN_GATED_SAMPLES, baseline?.metrics) : [];
-  const lacking = expected.filter((row) => row.verdict === "missing" || row.verdict === "too few samples");
+  const expected = values["expect-gated"] ? expectedMetricRows(gatedActionIds(budgets, current.mediaPlane), current.metrics, planeBudgets(budgets, current.mediaPlane), MIN_GATED_SAMPLES, baseline?.metrics, current.dropped) : [];
+  const lacking = expected.filter((row) => row.verdict !== "ok" && row.verdict !== "over budget");
   const output = planeNoteMarkdown(current.mediaPlane) + table + (values["expect-gated"] ? `\n${renderExpectedMetrics(expected, `Gated action metrics on ${current.mediaPlane}`)}` : "");
   if (values.markdown) writeFileSync(values.markdown, output);
   console.log(output);
@@ -112,7 +112,7 @@ async function diff(argv) {
     process.exitCode = 1;
   }
   if (values["fail-on-gate"] && lacking.length > 0) {
-    console.error(`${lacking.length} gated metric(s) have no samples or too few: ${lacking.map((row) => `${row.id} (${row.samples} of ${row.floor})`).join(", ")}`);
+    console.error(`${lacking.length} gated metric(s) have no samples, too few or timed out: ${lacking.map((row) => `${row.id} (${row.verdict}: ${row.samples} of ${row.floor})`).join(", ")}`);
     process.exitCode = 1;
   }
 }

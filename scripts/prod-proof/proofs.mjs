@@ -140,8 +140,10 @@ const spaceBusyPolls = 30;
 const spaceBusyPollMs = 3_000;
 async function createEpisodeWhenSpaceClears(run, space) {
   for (let poll = 0; ; poll++) {
+    const startedAt = performance.now();
     try {
-      return await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+      const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+      return { episode, createMs: performance.now() - startedAt };
     } catch (error) {
       if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
       if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);
@@ -149,10 +151,16 @@ async function createEpisodeWhenSpaceClears(run, space) {
     }
   }
 }
-export async function createEpisode(run, space, policy = manualPolicy) {
+// A new Episode in a Space the run may share (an operator's moved Space, or the Promote proof Space): it ends what a finished run left live,
+// waits for an Episode that is still ending, and reports how long the successful request took, so a wait never counts as a measured delay.
+export async function openEpisodeInSpace(run, space) {
   if (space.metadata?.proof_run_id !== run.runId) await endLeftoverEpisodes(run, space);
-  const episode = await createEpisodeWhenSpaceClears(run, space);
+  const { episode, createMs } = await createEpisodeWhenSpaceClears(run, space);
   await trackEpisode(run, space, episode);
+  return { episode, createMs };
+}
+export async function createEpisode(run, space, policy = manualPolicy) {
+  const { episode } = await openEpisodeInSpace(run, space);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const effective = episode.config_snapshot.artifact_policy;

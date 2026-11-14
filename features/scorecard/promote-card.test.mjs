@@ -64,7 +64,7 @@ test("the gate fails a latency run that lacks a gated metric or measured it too 
   assert.equal(scored.status, 1);
   assert.match(scored.stdout, new RegExp(`${gated[0].replaceAll(".", "\\.")}\` \\| 0 \\(floor ${MIN_GATED_SAMPLES}\\).*missing`));
   assert.match(scored.stdout, new RegExp(`${gated[1].replaceAll(".", "\\.")}\` \\| ${MIN_GATED_SAMPLES - 1} .*too few samples`));
-  assert.match(scored.stderr, /2 gated metric\(s\) have no samples or too few/);
+  assert.match(scored.stderr, /2 gated metric\(s\) have no samples, too few or timed out/);
 });
 
 test("Promote's gate asks for one rerun when the latency run is missing or thin, and passes a complete one", async (t) => {
@@ -91,4 +91,20 @@ test("Promote's gate asks for one rerun when the latency run is missing or thin,
   const skipped = gate("first", missing, { LATENCY_EXPECTED: "false" }, join(missing.dir, "absent.json"));
   assert.equal(skipped.status, 0, skipped.stderr);
   assert.match(readFileSync(missing.output, "utf8"), /over=false$/m);
+});
+
+// The kit leaves a timed-out action out of the percentiles and lists it as a drop, so the table alone would show a healthy metric.
+test("a timeout on a gated metric is a breach even when the other samples are fast", async (t) => {
+  const files = await fixture(
+    t,
+    gated.map((id) => action(id, 48)),
+  );
+  writeFileSync(files.latency, JSON.stringify({ ...card(gated.map((id) => action(id, 48))), dropped: [{ metric: gated[0], reason: "timeout", count: 12 }] }));
+  assert.equal(node(["merge", "--out", files.merged, files.leave, files.latency]).status, 0);
+  const scored = node(["diff", "--current", files.merged, "--expect-gated", "--fail-on-gate"]);
+  assert.equal(scored.status, 1);
+  assert.match(scored.stdout, new RegExp(`${gated[0].replaceAll(".", "\\.")}\` \\| 48 .*timed out`));
+  assert.match(scored.stderr, new RegExp(`${gated[0].replaceAll(".", "\\.")} \\(timed out: 48 of ${MIN_GATED_SAMPLES}\\)`));
+  assert.equal(gate("first", files, { LATENCY_EXPECTED: "true" }).status, 0);
+  assert.match(readFileSync(files.output, "utf8"), /over=true/);
 });

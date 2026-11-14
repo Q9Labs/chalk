@@ -51,7 +51,7 @@ export const command = async () => "a".repeat(40);
 export const createRun = async (_config, directory, _signal, runId) => ({ runId, directory, tenantPath: "/v1/tenants/t", config: { api_url: "https://api.invalid" }, resources: [], apiRequest: async () => ({ id: "episode" }) });
 export const startRun = async () => {
   const runId = process.env.CHALK_PROOF_RUN_ID;
-  const directory = `.private/prod-proof/${runId}`;
+  const directory = `${process.cwd()}/.private/prod-proof/${runId}`;
   await mkdir(directory, { recursive: true });
   return { runId, directory };
 };
@@ -61,8 +61,10 @@ export const disposeResource = async () => [];
 export const runLabel = () => undefined;
 export const prepareIntegration = async () => ({ origin: "https://app.invalid" });
 export const createSpace = async () => ({ id: "space", slug: "space" });
-export const trackEpisode = async (run, space, episode) => {
+export const openEpisodeInSpace = async (run, space) => {
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, {});
   await appendFile(`${run.directory}/tracked.jsonl`, `${JSON.stringify({ space_id: space.id, id: episode.id })}\n`);
+  return { episode, createMs: 5 };
 };
 export const episodeEnd = () => ({ useSDK: () => undefined, end: async () => undefined });
 export const launchGuests = async () => ({
