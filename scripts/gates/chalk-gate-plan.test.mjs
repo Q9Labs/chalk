@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test, { mock } from "node:test";
+import test from "node:test";
 import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, laneResult, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
 import { RegisterError } from "./register.mjs";
 
@@ -281,12 +281,14 @@ test("a demoted check keeps running, wrapped so that its failure is a warning", 
 
 test("a passing lane prints a demoted check's warning, because q9gate drops a passing lane's output", () => {
   const warning = "::warning title=Demoted check gate:camera-proof failed::gate:camera-proof failed and is demoted";
-  const log = mock.method(console, "log", () => {});
+  const logged = [];
+  const log = console.log;
+  console.log = (line) => logged.push(line);
   try {
     assert.deepEqual(laneResult("camera-proof", { failed: false, stdout: `noise\n${warning}\nmore` }), { status: "passed" });
     assert.deepEqual(laneResult("browser-tests", { failed: false, stdout: "noise" }), { status: "passed" });
-    assert.deepEqual(log.mock.calls.map((call) => call.arguments[0]), [warning]);
+    assert.deepEqual(logged, [warning]);
   } finally {
-    log.mock.restore();
+    console.log = log;
   }
 });
