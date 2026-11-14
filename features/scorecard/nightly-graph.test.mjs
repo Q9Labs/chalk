@@ -40,7 +40,7 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.equal(release.with.build_web, true, "the cut keeps the production web archive");
   assert.equal(gate.uses, "./.github/workflows/nightly-proofs.yml");
   assert.equal(gate.with.image_source, "manifest");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "web-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "latency-smoke", "web-call"]);
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
   for (const name of ["release", "proof", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
   assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);
@@ -54,26 +54,35 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
 });
 
-test("the staging latency workflow measures the newest held nightly and records its verdict for Promote", () => {
-  const latencyWorkflow = workflow("staging-sfu-latency.yml");
-  assert.ok(latencyWorkflow.on.schedule?.length === 1, "daily schedule");
-  assert.ok("workflow_dispatch" in latencyWorkflow.on);
+test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
+  const latencyWorkflow = workflow("nightly-latency.yml");
   assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");
+  assert.ok("workflow_dispatch" in latencyWorkflow.on);
   const { target, latency, record } = latencyWorkflow.jobs;
-  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
+  assert.equal(latency.uses, "./.github/workflows/nightly-proofs.yml");
   assert.deepEqual(needsOf(latency), ["target"]);
   assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
   assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
-  assert.equal(latency.with.media_plane, "chalk_sfu");
-  assert.equal(latency.with.latency_only, true);
-  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
+  assert.equal(latency.with.proofs, "latency");
+  assert.equal(latency.with.image_source, "build", "the lane runs on x86 beside its x86 host, so it builds the images");
   assert.match(target.steps.at(-1).run, /release\.py latency_target/);
   assert.deepEqual(needsOf(record), ["target", "latency"]);
   assert.equal(record.permissions.deployments, "write");
   assert.match(record.steps.at(-1).run, /release\.py record_latency/);
   const evaluate = record.steps.find((item) => item.id === "evaluate").run;
   assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
-  assert.equal(latencyWorkflow.concurrency.group, "chalk-staging-sfu-latency-run", "a caller cannot share the callee's group");
+  assert.notEqual(latencyWorkflow.concurrency.group, nightly.concurrency.group, "a latency run does not hold up a cut");
+});
+
+test("the latency lane makes its Chalk SFU host, tags it for the reaper and always deletes it", () => {
+  const lane = workflow("nightly-proofs.yml").jobs.lane;
+  const create = lane.steps.find((item) => item.id === "host");
+  assert.match(create.run, /--tag-name chalk-sfu-bench/);
+  assert.match(create.run, /--size s-2vcpu-2gb/);
+  const remove = lane.steps.find((item) => item.name === "Delete the Chalk SFU host");
+  assert.equal(remove.if, "always() && matrix.proof == 'latency'");
+  assert.match(remove.run, /droplet delete "\$HOST_ID" --force/);
+  assert.match(remove.run, /ssh-key delete "\$KEY_ID" --force/);
 });
 
 test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {

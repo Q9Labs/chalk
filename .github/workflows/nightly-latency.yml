@@ -1,32 +1,31 @@
 name: Nightly latency
 
-# Chalk SFU action latency on Nightly for the newest held cut. It runs outside Cut nightly so the 45-minute measurement
-# never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 50 minutes later; the daily run and
-# a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
-# selects, and refuses a SHA with no verdict (chalk_sfu_proof_result=latency-missing).
+# Chalk SFU action latency for the newest held cut, measured at the full 60 cycles on a Chalk SFU host that this run creates and
+# deletes (nightly-proofs.yml, lane `latency`), so no other run shares it and nothing needs a lease. It runs only when no passed
+# latency record covers the cut: a record covers a cut whose SHA descends from the measured one with no latency path changed
+# since (features.json `media`, the latency kit and the stack; see release.py latency_paths). Promote reads the record and
+# refuses a cut with changed latency paths and no covering record (chalk_sfu_proof_result=latency-missing).
+# Cost: one s-2vcpu-2gb DigitalOcean host for about 55 minutes, about 0.05 USD, plus about 60 free runner minutes.
 on:
-  schedule:
-    - cron: "43 2 * * *"
   workflow_run:
     workflows: [Cut nightly]
     types: [completed]
   workflow_dispatch:
     inputs:
       samples:
-        description: Latency cycles, 1 to 60; empty measures 60. Fewer give a weaker p95, so use it only for a cut whose own staging-latency.mjs caps the run at 40 minutes, where about 45 cycles fit
+        description: Latency cycles, 1 to 60. Fewer give a weaker p95; use it to try the workflow, not to promote
         type: string
-        default: ""
+        default: "60"
 
 permissions: {}
 
 concurrency:
-  # The called proof workflow holds chalk-staging-sfu, and a caller and callee cannot share a group.
-  group: chalk-staging-sfu-latency-run
+  group: chalk-nightly-latency-run
   cancel-in-progress: false
 
 jobs:
   target:
-    name: Find the nightly staging runs
+    name: Find the cut to measure
     runs-on: ubuntu-24.04
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -42,6 +41,8 @@ jobs:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
       - id: target
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,17 +51,14 @@ jobs:
     needs: target
     if: needs.target.outputs.sha != ''
     permissions:
-      contents: write # The staging lease is a git-ref write.
-    uses: ./.github/workflows/real-call-proof.yml
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/nightly-proofs.yml
     with:
-      environment: nightly
-      proofs: none
-      media_plane: chalk_sfu
-      latency: true
-      latency_only: true
-      latency_samples: ${{ inputs.samples }}
       release_sha: ${{ needs.target.outputs.sha }}
-      scorecard_label: chalk_sfu
+      proofs: latency
+      image_source: build
+      latency_samples: ${{ inputs.samples || '60' }}
     secrets: inherit
   record:
     # Slow or failed runs matter most to the trend, so this job scores whatever card exists and records the verdict.
@@ -84,7 +82,7 @@ jobs:
       - name: Download the latency card
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: scorecard-nightly-*
+          pattern: scorecard-nightly-latency
           path: artifacts/nightly
           merge-multiple: true
       - name: Evaluate gated budgets for the measured SHA

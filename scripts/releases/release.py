@@ -267,7 +267,6 @@ def plan(github, args):
         baseline = payload(held[0]) if held else previous_production(github)
         result['previous_nightly_sha'] = payload(held[0])['target_sha'] if held else ''
         result['recording_changed'] = recording_changed(result['previous_nightly_sha'], target)
-        result['latency_required'] = covering_latency(github, target) is None
         # A cut that skips the recorder proof checks no Transcript, so it must not use up the day's Transcript.
         result['transcribe'] = result['transcribe'] and result['recording_changed']
         # Rebuilding all components is safe when an old baseline cannot be read;
@@ -466,6 +465,13 @@ def record_latency(github, args):
     outputs({'deployment_id': github.record_latency(sha, info)})
 
 
+def latency_target(github, args):
+    """The newest held cut that no passed latency record covers, or nothing: the cut Nightly latency measures."""
+    held = held_candidates(github.deployments('nightly'))
+    sha = payload(held[0])['target_sha'] if held else ''
+    outputs({'sha': sha if sha and covering_latency(github, sha) is None else ''})
+
+
 def recheck(github, args):
     selection = json.loads(env('SELECTION'))
     item = github.request(f"deployments/{selection['deployment_id']}")
@@ -626,7 +632,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'record_latency', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

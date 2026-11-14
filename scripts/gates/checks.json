@@ -1003,7 +1003,7 @@
     {
       "id": "workflow:nightly.yml#proof",
       "owner": "Real-call proofs",
-      "catches": "A real call on the nightly that fails: camera share, call artifacts or long call.",
+      "catches": "A proof of the cut failing: the proof lanes on throwaway stacks, run through nightly-proofs.yml.",
       "runs": ["cut"],
       "blocks": "release",
       "minutes": 27.7,
@@ -1011,14 +1011,64 @@
       "sample": "1 of 8 cut runs failed; the cause was not reviewed."
     },
     {
-      "id": "workflow:nightly.yml#web-e2e",
-      "owner": "Web",
-      "catches": "The web app failing a real browser journey against the nightly deploy.",
+      "id": "workflow:nightly-proofs.yml#prepare",
+      "owner": "Real-call proofs",
+      "catches": "Lists the proof lanes a run asked for.",
       "runs": ["cut"],
       "blocks": "release",
-      "minutes": 4.6,
-      "record": "never-failed",
-      "sample": "0 of 7 cut runs failed."
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-proofs.yml#lane",
+      "owner": "Real-call proofs",
+      "catches": "A proof failing on a throwaway stack of the cut: a real call, chat upload, the Leave proof, the latency kit smoke or the web call in a browser.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-proofs.yml#proof",
+      "owner": "Real-call proofs",
+      "catches": "Collects the lanes into one pass or fail for the cut.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-latency.yml#target",
+      "owner": "Scorecard",
+      "catches": "Picks the newest held cut that no passed latency record covers.",
+      "runs": ["cut", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-latency.yml#latency",
+      "owner": "Scorecard",
+      "catches": "The Chalk SFU action latencies over their budgets, measured at 60 cycles on a host made for the run.",
+      "runs": ["cut", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-latency.yml#record",
+      "owner": "Release chain",
+      "catches": "Writes the SHA-bound latency verdict Promote requires.",
+      "runs": ["cut", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
     },
     {
       "id": "workflow:nightly.yml#record",
@@ -1264,36 +1314,6 @@
       "minutes": null,
       "record": "never-failed",
       "sample": "0 of 13 runs failed."
-    },
-    {
-      "id": "workflow:staging-sfu-latency.yml#target",
-      "owner": "Scorecard",
-      "catches": "Picks the newest held nightly whose SHA staging still runs.",
-      "runs": ["cut", "daily", "manual"],
-      "blocks": "release",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "New in #1197; no history."
-    },
-    {
-      "id": "workflow:staging-sfu-latency.yml#latency",
-      "owner": "Scorecard",
-      "catches": "The Chalk SFU action latencies over their budgets on the staging node.",
-      "runs": ["cut", "daily", "manual"],
-      "blocks": "release",
-      "minutes": 32.6,
-      "record": "unmeasured",
-      "sample": "New in #1197; 0 of 2 runs failed before the move."
-    },
-    {
-      "id": "workflow:staging-sfu-latency.yml#record",
-      "owner": "Release chain",
-      "catches": "Writes the SHA-bound latency verdict Promote requires.",
-      "runs": ["cut", "daily", "manual"],
-      "blocks": "release",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "New in #1197; no history."
     },
     {
       "id": "workflow:web-call-proof.yml#web",

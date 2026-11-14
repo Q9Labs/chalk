@@ -235,6 +235,19 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         release.select(api, None)
         api.deployments.assert_any_call('nightly', 'nightly-latency')
 
+    def test_latency_target_is_the_newest_held_cut_that_no_latency_record_covers(self):
+        for latency, expected in ((None, SHA), ('failed', SHA), ('passed', '')):
+            with self.subTest(latency=latency):
+                self.output.write_text('')
+                release.latency_target(self.github(held(), latency=latency), None)
+                self.assertEqual(self.output.read_text(), f'sha={expected}\n')
+
+    def test_latency_target_is_empty_without_a_held_cut(self):
+        api = Mock(spec=GitHub)
+        api.deployments.return_value = []
+        release.latency_target(api, None)
+        self.assertEqual(self.output.read_text(), 'sha=\n')
+
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
         api = Mock(spec=GitHub)

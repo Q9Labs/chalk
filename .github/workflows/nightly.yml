@@ -36,7 +36,6 @@ jobs:
       recorder_control: ${{ steps.plan.outputs.recorder_control }}
       previous_nightly_sha: ${{ steps.plan.outputs.previous_nightly_sha }}
       recording_changed: ${{ steps.plan.outputs.recording_changed }}
-      latency_required: ${{ steps.plan.outputs.latency_required }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
@@ -93,7 +92,7 @@ jobs:
     with:
       release_sha: ${{ needs.plan.outputs.target_sha }}
       release_id: ${{ needs.release.outputs.release_id }}
-      proofs: camera-share long-call chat-upload leave-chalk-sfu web-call
+      proofs: camera-share long-call chat-upload leave-chalk-sfu latency-smoke web-call
       image_source: manifest
     secrets: inherit
   record:
