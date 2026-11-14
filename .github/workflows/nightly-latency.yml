@@ -51,6 +51,7 @@ jobs:
     needs: target
     if: needs.target.outputs.sha != ''
     permissions:
+      actions: read
       contents: read
       id-token: write
     uses: ./.github/workflows/nightly-proofs.yml
@@ -105,9 +106,11 @@ jobs:
           # shellcheck disable=SC2086
           features/scorecard/nightly.sh $cards
       - name: Record the verdict for Promote
-        if: always()
+        # A run with fewer samples than the full 60 is a trial and records nothing.
+        if: always() && (inputs.samples || '60') == '60'
         env:
           GH_TOKEN: ${{ github.token }}
+          LATENCY_SAMPLES: ${{ inputs.samples || '60' }}
           TARGET_SHA: ${{ needs.target.outputs.sha }}
           LATENCY_RESULT: ${{ needs.latency.result == 'success' && needs.latency.outputs.result || 'failed' }}
           SCORECARD_RESULT: ${{ steps.evaluate.outputs.result }}

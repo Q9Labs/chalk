@@ -16,7 +16,7 @@ from pathlib import Path
 
 import seal
 
-CUT_GAP = timedelta(hours=6)
+CUT_GAP = timedelta(minutes=15)
 
 
 def require(condition, message):
@@ -70,7 +70,7 @@ def cut_decision(target, deployments, now, manual=False):
     if any(payload(item).get('channel') in ('nightly-attempt', 'nightly-cut')
            and now - datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')) < CUT_GAP
            for item in cooldown_records):
-        return False, 'cut attempted in the last 6 hours'
+        return False, 'cut attempted in the last 15 minutes'
     completed = held_candidates(deployments, held=False)
     if not completed:
         return True, 'first completed cut'

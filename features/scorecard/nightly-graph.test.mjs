@@ -54,6 +54,29 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
 });
 
+test("Cut nightly starts on a push to master, because the merge queue lands a commit only after its Gate passed", () => {
+  assert.deepEqual(nightly.on.push, { branches: ["master"] });
+  assert.equal(nightly.on.workflow_run, undefined);
+});
+
+test("The proof lanes can read the cut's manifest artifact, and a trial latency run records nothing", () => {
+  for (const [name, job] of [
+    ["nightly-proofs.yml", workflow("nightly-proofs.yml")],
+    ["nightly.yml proof", nightly.jobs.proof],
+    ["nightly-latency.yml latency", workflow("nightly-latency.yml").jobs.latency],
+  ])
+    assert.equal(job.permissions.actions, "read", `${name} needs actions: read for the REST artifact download`);
+  const record = workflow("nightly-latency.yml").jobs.record.steps.find((step) => step.name === "Record the verdict for Promote");
+  assert.match(record.if, /inputs\.samples \|\| '60'\) == '60'/);
+});
+
+test("The SFU bench reaper deletes the SSH key of a finished latency run", () => {
+  const reaper = workflow("sfu-bench-reaper.yml");
+  const step = reaper.jobs.reap.steps.find((item) => item.name === "Delete SSH keys of finished latency runs");
+  assert.match(step.run, /chalk-sfu-bench-latency-/);
+  assert.equal(reaper.permissions.actions, "read");
+});
+
 test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
   const latencyWorkflow = workflow("nightly-latency.yml");
   assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");

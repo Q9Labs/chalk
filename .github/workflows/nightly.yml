@@ -1,9 +1,8 @@
 name: Cut nightly
 on:
-  # A green Gate on master starts a cut at once; the hourly run is the safety net for a cut the 6-hour gap deferred.
-  workflow_run:
-    workflows: [Gate]
-    types: [completed]
+  # The merge queue lands a commit on master only after its Gate passed, so a push to master starts a cut at once (the plan
+  # reads the landed Gate). The hourly run is the safety net for a cut the cooldown deferred.
+  push:
     branches: [master]
   schedule:
     - cron: "17 * * * *"
@@ -18,8 +17,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   plan:
-    # A Gate run that did not pass on master cuts nothing.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       actions: write
@@ -85,6 +82,7 @@ jobs:
     # The gate. Each proof is a lane on its own runner with its own throwaway stack (scripts/nightly-stack), so the lanes
     # run side by side and the first failed lane cancels the rest. The web call proof is one of them.
     permissions:
+      actions: read
       contents: read
       id-token: write
     needs: [plan, release]

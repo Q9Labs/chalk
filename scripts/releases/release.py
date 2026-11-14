@@ -66,8 +66,12 @@ def recording_changed(previous, target):
     return paths_changed(previous, target, recording_paths())
 
 
+LATENCY_SAMPLES = 60
+
+
 # What decides the Chalk SFU's media speed: the `media` paths in features.json, the latency kit and the stack it measures on.
-LATENCY_EXTRA_PATHS = ('features/scorecard', 'scripts/nightly-stack', '.github/workflows/nightly-latency.yml')
+LATENCY_EXTRA_PATHS = ('features/scorecard', 'perf/budgets.json', 'scripts/nightly-stack', 'scripts/prod-proof',
+                       '.github/workflows/nightly-latency.yml', '.github/workflows/nightly-proofs.yml')
 
 
 def latency_paths():
@@ -458,6 +462,8 @@ def record_latency(github, args):
                 f"scorecard identity does not match SHA {sha} and latency run {env('GITHUB_RUN_ID')}")
     scorecard_result = scorecard.get('result', 'missing')
     latency_result = os.environ.get('LATENCY_RESULT', 'failed')
+    # A shorter run has a weaker p95 and is for trying the workflow; it never becomes promotion evidence.
+    require(os.environ.get('LATENCY_SAMPLES', str(LATENCY_SAMPLES)) == str(LATENCY_SAMPLES), f'a latency record needs the full {LATENCY_SAMPLES} samples')
     info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
                 result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
                 scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),

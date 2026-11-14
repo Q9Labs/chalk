@@ -268,6 +268,18 @@ class ChalkSfuPromotionTests(unittest.TestCase):
             release.record_latency(api, None)
             self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
 
+    def test_record_latency_refuses_a_run_with_fewer_than_the_full_samples(self):
+        api = Mock(spec=GitHub)
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='', LATENCY_SAMPLES='3')):
+            with self.assertRaises(ValueError):
+                release.record_latency(api, None)
+        api.record_latency.assert_not_called()
+
+    def test_every_input_of_the_latency_measurement_decides_whether_a_record_still_covers(self):
+        paths = release.latency_paths()
+        for changed in ('scripts/prod-proof/latency.mjs', 'perf/budgets.json', '.github/workflows/nightly-proofs.yml', 'features/scorecard/evaluate.mjs'):
+            self.assertTrue(any(changed == prefix or changed.startswith(prefix + '/') for prefix in paths), changed)
+
     def test_record_latency_refuses_a_sha_that_is_not_on_master(self):
         api = Mock(spec=GitHub)
         with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
