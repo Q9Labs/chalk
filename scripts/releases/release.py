@@ -599,8 +599,8 @@ def verify_images(github, args):
     for component, image in images.items():
         match = re.fullmatch(r'([0-9]{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?/([a-z0-9._/-]+)@(sha256:[0-9a-f]{64})', image)
         if not match:
-            require(component in ('redis', 'cloudflared') and re.fullmatch(r'docker.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}', image),
-                    f'{component}: expected a digest-addressed release image')
+            require(re.fullmatch(r'ghcr\.io/q9labs/chalk-[a-z0-9-]+@sha256:[0-9a-f]{64}', image) or component in ('redis', 'cloudflared')
+                    and re.fullmatch(r'docker.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}', image), f'{component}: expected a digest-addressed release image')
             try:
                 subprocess.run(['docker', 'manifest', 'inspect', image], check=True, capture_output=True, timeout=60)
             except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
