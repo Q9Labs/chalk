@@ -451,6 +451,7 @@
         ".github/workflows/hotfix.yml",
         ".github/workflows/nightly-cf-latency.yml",
         ".github/workflows/nightly.yml",
+        ".github/workflows/nightly-proofs.yml",
         ".github/workflows/npm-publish.yml",
         ".github/workflows/osv-daily.yml",
         ".github/workflows/promote.yml",
@@ -463,6 +464,7 @@
         "infrastructure/README.md",
         "scripts/deploy",
         "scripts/gates",
+        "scripts/nightly-stack",
         "scripts/releases"
       ]
     },
