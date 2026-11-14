@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
+# Builds the verified nightly revision and publishes it to the Play internal track.
+#   publish-nightly-android.sh decide   writes build=true|false to $GITHUB_OUTPUT (false: nothing under the app paths changed since the last release)
+#   publish-nightly-android.sh publish  builds, signs, publishes and checks the release
 set -euo pipefail
 
+mode=${1:?usage: publish-nightly-android.sh decide|publish}
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)
+source "$repo_root/apps/mobile/scripts/release/nightly-app-paths.sh"
+app_paths=("${nightly_app_paths[@]}" .github/workflows/mobile-nightly-android.yml)
 package=ai.q9labs.chalk.mobile
 release_name="nightly-$SOURCE_RUN"
 require_current_cut() {
@@ -35,8 +42,28 @@ edit=$(gplay edits create --package "$package" | jq -er '.id')
 track=$(gplay tracks get --package "$package" --edit "$edit" --track internal)
 if jq -e --arg name "$release_name" 'any(.releases[]?; .name == $name and .status == "completed")' <<< "$track" >/dev/null; then
   echo "Internal track already contains $release_name."
+  [[ "$mode" == decide ]] && echo 'build=false' >> "$GITHUB_OUTPUT"
   exit 0
 fi
+if [[ "$mode" == decide ]]; then
+  # A release is named nightly-<cut run id>, and the cut's deployment record maps that run to its revision.
+  build=true
+  last_run=$(jq -r '[.releases[]? | select(.status == "completed") | .name | capture("^nightly-(?<run>[0-9]+)$").run | tonumber] | max // empty' <<< "$track")
+  last_sha=''
+  if [[ -n "$last_run" ]]; then
+    last_sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=100" \
+      --jq ".[] | select(.payload.proof_run_id == \"$last_run\") | .sha" | head -n 1)
+  fi
+  if [[ "$last_sha" =~ ^[0-9a-f]{40}$ ]] && git fetch --no-tags --depth=1 --filter=blob:none origin "$last_sha" 2>/dev/null; then
+    if [[ -z $(git diff --no-renames --name-only "$last_sha" "$SOURCE_SHA" -- "${app_paths[@]}") ]]; then
+      echo "Nothing under the app paths changed since the last release (${last_sha:0:12})."
+      build=false
+    fi
+  fi
+  echo "build=$build" >> "$GITHUB_OUTPUT"
+  exit 0
+fi
+[[ "$mode" == publish ]] || { echo "Unknown mode $mode." >&2; exit 1; }
 gplay edits delete --package "$package" --edit "$edit" --confirm >/dev/null
 edit=''
 version_code=$(bash apps/mobile/scripts/release/next-play-version-code.sh "$package")

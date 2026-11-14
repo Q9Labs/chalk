@@ -10,8 +10,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)
 manifest="$repo_root/release/manifest.json"
 # shellcheck source=op-retry.sh
 source "$(dirname "${BASH_SOURCE[0]}")/op-retry.sh"
-# A change under these paths can change the app. Everything else is web, API, sync or docs only.
-app_paths=(apps/mobile packages sdks/typescript/client sdks/typescript/react-native release/manifest.json pnpm-lock.yaml .tool-versions .github/workflows/mobile-nightly-ios.yml)
+source "$repo_root/apps/mobile/scripts/release/nightly-app-paths.sh"
+app_paths=("${nightly_app_paths[@]}" .github/workflows/mobile-nightly-ios.yml)
 
 require_current_cut() {
   gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=1" |
