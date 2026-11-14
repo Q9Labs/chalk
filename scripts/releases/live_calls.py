@@ -30,18 +30,33 @@ class Unknown:
 LIVE_CALL_WAIT_MINUTES = 20
 
 
-def read_live_calls(api_url, fetch=None):
-    """Read the live participant count that the production API reports on /readyz. Only the count leaves this function."""
-    if not api_url.startswith('https://'):
-        return Unknown('the API URL is missing or is not https')
-    fetch = fetch or (lambda url: urllib.request.urlopen(
-        urllib.request.Request(url, headers={'User-Agent': 'chalk-release'}), timeout=15).read())
+# A deploy starts this long after the guard passes: runner queues and the gate check took about 4 minutes in
+# Promote on 14 November 2026, and 15 leaves room for three times that.
+DEPLOY_MARGIN_MINUTES = 15
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The operator token goes only to the URL it was given."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def fetch_readiness(url, token):
+    request = urllib.request.Request(url, headers={'User-Agent': 'chalk-release', 'Authorization': f'Bearer {token}'})
+    return urllib.request.build_opener(NoRedirect).open(request, timeout=15).read()
+
+
+def read_live_calls(api_url, token, fetch=fetch_readiness):
+    """Read the live participant count that the production API shows an operator on /readyz. Only the count leaves this function."""
+    if not api_url.startswith('https://') or not token:
+        return Unknown('the API URL or the operator read token is missing')
     try:
-        count = json.loads(fetch(api_url.rstrip('/') + '/readyz')).get('live_participants')
+        count = json.loads(fetch(api_url.rstrip('/') + '/readyz', token)).get('live_participants')
     except (OSError, ValueError, AttributeError) as error:
         return Unknown(f'the API did not answer with a readiness body ({type(error).__name__})')
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-        return Unknown('the API does not report live_participants yet')
+        return Unknown('the API does not report live_participants (it predates the field, or it does not accept the token)')
     return Busy(count) if count else Quiet()
 
 
@@ -59,7 +74,7 @@ def await_quiet(read, sleep, *, wait_minutes=LIVE_CALL_WAIT_MINUTES, allow_live_
     allowed it) or the deadline, the end of an automatic release's quiet window, has passed."""
     def require_open():
         if deadline and now() >= deadline:
-            raise ValueError(f'the quiet window closed at {deadline:%H:%M}Z; the next quiet-window tick tries again')
+            raise ValueError(f'too late to deploy inside the quiet window: the guard refuses from {deadline:%H:%M}Z; the next quiet-window tick tries again')
 
     for minute in range(wait_minutes + 1):
         require_open()
@@ -98,7 +113,7 @@ def window_end():
 
 
 def read_configured():
-    return read_live_calls(os.environ.get('LIVE_CALLS_API_URL', ''))
+    return read_live_calls(os.environ.get('LIVE_CALLS_API_URL', ''), os.environ.get('LIVE_CALLS_API_TOKEN', ''))
 
 
 def require_quiet_window():
@@ -111,11 +126,16 @@ def require_quiet_window():
         raise ValueError(f'{describe(calls)}; a quiet-window tick tries again')
 
 
+def last_start(deploy_before):
+    """The guard refuses from here: a deploy that starts later could finish starting after deploy_before."""
+    return datetime.fromisoformat(deploy_before) - timedelta(minutes=DEPLOY_MARGIN_MINUTES)
+
+
 def main():
     try:
-        deadline = os.environ.get('DEPLOY_BEFORE')
+        deploy_before = os.environ.get('DEPLOY_BEFORE')
         await_quiet(read_configured, time.sleep, allow_live_calls=os.environ.get('ALLOW_LIVE_CALLS') == 'true',
-                    deadline=datetime.fromisoformat(deadline) if deadline else None)
+                    deadline=last_start(deploy_before) if deploy_before else None)
     except ValueError as error:
         sys.exit(f'Release refused: {error}')
 

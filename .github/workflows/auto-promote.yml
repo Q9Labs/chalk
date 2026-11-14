@@ -58,6 +58,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          LIVE_CALLS_API_TOKEN: ${{ secrets.CHALK_OPERATOR_READ_TOKEN }}
         run: python3 scripts/releases/release.py auto_promote
       - name: Skip a SHA that Promote already ran for
         id: tried

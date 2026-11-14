@@ -591,11 +591,11 @@ func run() error {
 			AllowedOrigins: cfg.API.CORSAllowedOrigins,
 			TenantOrigins:  tenantService,
 		},
-		LocalSystemToken: cfg.API.LocalSystemToken,
-		ServicePrincipal: cfg.API.ServicePrincipal,
-
-		RateLimit: rateLimitOptions,
-		Readiness: postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		LocalSystemToken:        cfg.API.LocalSystemToken,
+		ServicePrincipal:        cfg.API.ServicePrincipal,
+		OperatorReadTokenSHA256: config.OperatorReadTokenSHA256(),
+		RateLimit:               rateLimitOptions,
+		Readiness:               postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
 		RetirementBacklog: func() (int, time.Duration, bool) {
 			backlog, observed := mediaPlaneRegistry.RetirementBacklog()
 			return backlog.Count, backlog.Oldest, observed
