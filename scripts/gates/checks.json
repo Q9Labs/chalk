@@ -41,6 +41,16 @@
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:release-contracts",
+      "owner": "Release chain",
+      "catches": "A change to the release scripts, the managed-host controller or the scorecard breaks a release test or a plan contract, which would otherwise fail the cut.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "New in this change; no history."
+    },
+    {
       "id": "gate:register",
       "owner": "Gate",
       "catches": "A workflow job, Gate lane, hook command or budget group exists without a purpose, owner and consequence in the register, or an entry outlives its check.",
@@ -628,8 +638,8 @@
     {
       "id": "workflow:ci.yml#require-gate",
       "owner": "Release chain",
-      "catches": "A deploy of a commit that has no green master Gate.",
-      "runs": ["cut", "promote"],
+      "catches": "A deploy of a commit that has no green master Gate. A cut skips it because nightly plan made the same check on the same target.",
+      "runs": ["promote"],
       "blocks": "release",
       "minutes": 0.1,
       "record": "never-failed",
@@ -882,7 +892,7 @@
     {
       "id": "workflow:nightly.yml#plan",
       "owner": "Release chain",
-      "catches": "A cut of the wrong revision, or a cut when nothing new is on master.",
+      "catches": "A cut of the wrong revision, a cut when nothing new is on master, or a cut of a commit with no green master Gate.",
       "runs": ["cut"],
       "blocks": "release",
       "minutes": 0.3,
@@ -1131,6 +1141,28 @@
       "record": "caught",
       "sample": "2 real catches in 29 pull request runs; 1 unexplained failure in 6 nightly runs.",
       "reason": "The Gate runs the packed consumer in Chromium on every SDK change; this workflow adds Firefox and WebKit nightly and runs on a pull request only when its own setup changes."
+    },
+    {
+      "id": "workflow:ui-check.yml#ui-check",
+      "owner": "Web",
+      "catches": "A change to the call or pre-join screens that breaks their layout: overflow, clipped or overlapping content, a control that cannot be reached, a journey that no longer runs.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": 5.2,
+      "record": "unmeasured",
+      "sample": "Four hosted runs on its own pull request took 304 to 375 seconds and found no false alarm; no history on other pull requests yet.",
+      "reason": "Not a required context yet: it becomes required after it has run on 10 UI-changing pull requests with 0 false alarms. It always reports, and a pull request that changes no UI path passes it in seconds, so requiring it later cannot hold such a pull request in expected."
+    },
+    {
+      "id": "workflow:ui-check.yml#report",
+      "owner": "Web",
+      "catches": "The UI check's result missing from the pull request: it posts the sticky comment and the images the comment points at.",
+      "runs": ["pull_request"],
+      "blocks": "advisory",
+      "minutes": 0.2,
+      "record": "unmeasured",
+      "sample": "6 to 10 seconds on each run of its own pull request; no history on other pull requests yet.",
+      "reason": "Not a required context, and never to become one: it only reports the UI check job, which carries the verdict. It has write permissions, so it runs no code from the branch."
     },
     {
       "id": "workflow:sfu-bench-reaper.yml#reap",

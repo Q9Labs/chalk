@@ -106,7 +106,7 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
   const client = new CloudflareSFUClient({
     bootstrap,
     participantId: subject.participantId,
-    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
@@ -153,10 +153,14 @@ type BoundMediaClient = Pick<
   | "clearPreparedLocalTrack"
   | "getSnapshot"
   | "subscribe"
-> & { readonly prepareLocalPublicationTarget: NonNullable<ConnectionMediaClient["prepareLocalPublicationTarget"]> };
+> & {
+  readonly prepareLocalPublicationTarget: NonNullable<ConnectionMediaClient["prepareLocalPublicationTarget"]>;
+  readonly cancelPreparedLocalPublicationTarget: NonNullable<ConnectionMediaClient["cancelPreparedLocalPublicationTarget"]>;
+};
 export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
+    cancelPreparedLocalPublicationTarget: client.cancelPreparedLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     ...(client.pauseLocalCapture ? { pauseLocalCapture: client.pauseLocalCapture.bind(client) } : {}),
     ...(client.setLocalSourceIntent ? { setLocalSourceIntent: client.setLocalSourceIntent.bind(client) } : {}),

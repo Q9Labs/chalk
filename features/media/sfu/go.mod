@@ -1,6 +1,6 @@
 module github.com/q9labs/chalk/features/media/sfu
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/pion/ice/v4 v4.4.8
