@@ -34,10 +34,14 @@ export const workflowGraphNodeTests = [
 // The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including own-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
-// What the proof tests run or read: the proof scripts, the scorecard modules, budgets and workflow they import, the API access-grant types, the web routes, docs manifest and public association files they read, and the client sources and dependencies they bundle.
+// What the proof tests run or read: the proof scripts, the media analyzer and its helpers, the scorecard modules, budgets and workflow they import, the API access-grant types, the web routes, docs manifest and public association files they read, and the client sources and dependencies they bundle.
 const proofTestRoots = [
   "scripts/prod-proof",
   "scripts/web-proof",
+  "scripts/recorder/analyze-media.mjs",
+  "scripts/recorder/file-sha256.mjs",
+  "scripts/recorder/parse-option-value.mjs",
+  "scripts/recorder/run-bounded-command.mjs",
   "features/scorecard",
   "perf/budgets.json",
   ".github/workflows/real-call-proof.yml",
