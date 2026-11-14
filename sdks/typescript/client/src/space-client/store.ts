@@ -8,7 +8,7 @@ const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["conne
 
 const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({
-  connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false }),
+  connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false }),
   self: empty({ participantId: null, displayName: null, role: null, capabilities: empty([]), handRaised: false, can: () => false }),
   participants: empty({ roster: empty([]), admissionQueue: empty([]) }),
   media: empty({
@@ -59,6 +59,7 @@ export class SpaceStore {
       episodeEnded: snapshot.episodeEnded ?? false,
       episodeEndReason: snapshot.episodeEndReason,
       removedByHost: snapshot.removedByHost ?? false,
+      timedOut: snapshot.timedOut ?? false,
     };
     this.update("connection", empty(next));
   }

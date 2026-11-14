@@ -17,6 +17,8 @@ export const state = (v) => {
       return v.seat === "held" ? "Connection lost, seat still held" : "Connection lost, seat given up";
     case "left":
       return v.pressedLeave ? "You left (you pressed Leave)" : "You left (you did not press Leave)";
+    case "timedOut":
+      return "Disconnected (your seat timed out)";
     default:
       return v.screen;
   }
@@ -28,6 +30,7 @@ const groups = {
   frozen: "Away",
   lost: "Away",
   left: "Out of the call",
+  timedOut: "Out of the call",
 };
 
 export const group = (v) => groups[v.screen];

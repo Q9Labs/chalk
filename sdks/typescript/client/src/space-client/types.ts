@@ -103,6 +103,8 @@ export type ConnectionSlice = {
   readonly episodeEndReason?: import("../sync/v1-types").V1ControlState["endReason"];
   /** The server removed this person from the call; a person's own leave never sets this. */
   readonly removedByHost: boolean;
+  /** The server let this person's seat go after the connection was lost; a person's own leave never sets this. */
+  readonly timedOut: boolean;
 };
 export type SelfSlice = {
   readonly participantId: string | null;

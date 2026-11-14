@@ -115,6 +115,7 @@ type Model = {
   episodeEndConfirmed: boolean;
   episodeEndReason: EpisodeControl["endReason"];
   removedByHost: boolean;
+  timedOut: boolean;
   activeScope: Scope.Closeable | null;
   syncBindingCleanup: (() => void) | null;
   mediaBindingCleanup: (() => void) | null;
@@ -220,6 +221,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         episodeEndConfirmed: false,
         episodeEndReason: undefined,
         removedByHost: false,
+        timedOut: false,
         activeScope: null,
         syncBindingCleanup: null,
         mediaBindingCleanup: null,
@@ -549,6 +551,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           model.episodeEndConfirmed = false;
           model.episodeEndReason = undefined;
           model.removedByHost = false;
+          model.timedOut = false;
           yield* transition("joining");
           const span = diagnostics.startSpan({ step: "join", state: model.state, epoch: model.epoch });
           const scope = yield* Scope.make("sequential");
@@ -949,16 +952,22 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });
+      /** What a terminal snapshot says about how this seat ended. A seat the server let go while this client was still in the call (nobody pressed Leave) is timed out. */
+      const recordSeatEnd = (snapshot: V1EpisodeSnapshot, ended: boolean): boolean => {
+        const reason = snapshot.connection.terminalReason;
+        const removed = reason === "participant_removed";
+        const inactive = reason === "participant_inactive";
+        if (inactive && active(model)) model.timedOut = true;
+        if (ended) {
+          model.episodeEndConfirmed = true;
+          model.episodeEndReason = snapshot.control?.endReason;
+        }
+        if (removed) model.removedByHost = true;
+        return ended || removed || inactive;
+      };
       const settleTerminalSnapshot = (snapshot: V1EpisodeSnapshot): Effect.Effect<boolean> =>
         Effect.gen(function* () {
-          const ended = episodeEnded(snapshot);
-          const removed = snapshot.connection.terminalReason === "participant_removed";
-          if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
-            if (ended) {
-              model.episodeEndConfirmed = true;
-              model.episodeEndReason = snapshot.control?.endReason;
-            }
-            if (removed) model.removedByHost = true;
+          if (recordSeatEnd(snapshot, episodeEnded(snapshot))) {
             yield* finishTerminalSnapshot();
             return true;
           }
@@ -1329,6 +1338,7 @@ function snapshotFor(model: Model, access: ParsedAccessGrant | null): Connection
     episodeEnded: model.episodeEndConfirmed,
     episodeEndReason: model.episodeEndReason,
     removedByHost: model.removedByHost,
+    timedOut: model.timedOut,
   });
 }
 function subjectFor(access: ParsedAccessGrant | null): ConnectionLifecycleSnapshot["subject"] {
