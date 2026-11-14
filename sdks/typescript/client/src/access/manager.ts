@@ -156,7 +156,7 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
 }
 // Callers queue on the state, so one that asked to replace a binding another has since replaced would replace the new one.
 function replacedSinceObserved(input: FetchInput, current: ParsedAccessGrant): boolean {
-  return input.observedBinding !== undefined && mediaBinding(current) !== input.observedBinding;
+  return input.observedBinding !== undefined && current.media.clientPayload.connectionId !== input.observedBinding;
 }
 function unchanged(access: ParsedAccessGrant): FetchResult {
   return { access, automaticMediaReplacement: false, created: false };
