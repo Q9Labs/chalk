@@ -232,3 +232,55 @@ func TestUnmuteRacingTheLeaveForwardsNothing(t *testing.T) {
 	}
 	m.assertFrozen(t, "an unmute that raced the leave")
 }
+
+// A viewer who joins while the microphone is parked pulls it like any other publication, hears nothing
+// while it is parked, and hears it on the resume with no further signalling. The API lists a parked
+// microphone so that every viewer, late or not, holds its subscription before the unmute.
+func TestViewerThatPullsAParkedMicrophoneHearsItOnResume(t *testing.T) {
+	m := newParkedMic(t)
+	eventually(t, "the publisher's media to reach the node", 20*time.Second, func() bool { return len(m.svc.inspect(t, m.connA, scopeA)) == 1 })
+	if held := m.update(m.audioMid, true); len(held.TrackErrors) != 0 || !held.Tracks[0].Paused {
+		t.Fatalf("hold response: %+v", held)
+	}
+	m.pull()
+	m.assertFrozen(t, "a parked microphone pulled by a late viewer")
+
+	m.update(m.audioMid, false)
+	resumedFrom := m.received.count(webrtc.RTPCodecTypeAudio)
+	eventually(t, "media to the viewer that pulled the parked microphone", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= resumedFrom+30 })
+}
+
+// The SDK resumes a parked microphone before Sync answers its unmute, so the lease has to be what decides
+// that audio. A mute leaves the lease standing, so the resume forwards at once with no grant after it. A
+// revoke, which a role change, a removal and the end of the Episode end in, stops the resumed microphone at
+// once. Until the SDK sees Sync's result the microphone may forward under a standing lease; on a refusal
+// the SDK closes at once.
+// TestParkedPublicationKeepsItsTrackAndForwardsNothing covers the other order, where the lease is closed
+// at the resume and the grant comes after it: nothing forwards until the grant.
+func TestResumeUnderAStandingLeaseForwardsAtOnceAndARevokeStopsIt(t *testing.T) {
+	m := newParkedMic(t)
+	m.pull()
+	eventually(t, "media before the hold", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= 30 })
+	if held := m.update(m.audioMid, true); len(held.TrackErrors) != 0 || !held.Tracks[0].Paused {
+		t.Fatalf("hold response: %+v", held)
+	}
+	m.assertFrozen(t, "a parked publication under a standing lease")
+
+	m.update(m.audioMid, false)
+	resumedFrom := m.received.count(webrtc.RTPCodecTypeAudio)
+	eventually(t, "media within 2 s of a resume under a standing lease", 2*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= resumedFrom+10 })
+
+	// A revoke of a live publication closes it on the node, unlike a revoke of a parked one.
+	var revoked protocol.SourceControlResponse
+	m.svc.mustCall(t, "/v1/episodes/sources", protocol.SourceControlRequest{
+		TenantID: scopeA.TenantID, EpisodeID: scopeA.EpisodeID,
+		Controls: []protocol.SourceControl{{ParticipantID: scopeA.ParticipantID, Source: "microphone", Action: protocol.SourceRevoke, Revision: 2}},
+	}, &revoked)
+	if len(revoked.Results) != 1 || !revoked.Results[0].Applied || len(revoked.Results[0].Closed) != 1 || revoked.Results[0].Closed[0].SessionID != m.connA {
+		t.Fatalf("revoke response: %+v", revoked)
+	}
+	m.assertFrozen(t, "a resumed publication after a revoke")
+	if tracks := m.svc.inspect(t, m.connA, scopeA); len(tracks) != 0 {
+		t.Fatalf("%d tracks inspected after the revoke, want none", len(tracks))
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"io"
 	"log/slog"
 	"net/http"
@@ -256,7 +257,7 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 
 // failureAttributes labels one failure. The operation is the route with a session ID cut out.
 func failureAttributes(path, stage string, detail ...attribute.KeyValue) []attribute.KeyValue {
-	operation := strings.TrimPrefix(path, "/v1/")
+	operation := strings.TrimPrefix(path, protocol.Prefix+"/")
 	if rest, ok := strings.CutPrefix(operation, "sessions/"); ok {
 		_, action, _ := strings.Cut(rest, "/")
 		operation = "sessions/" + action
@@ -282,26 +283,26 @@ func statusClass(status int) string {
 // ready reads the node's readiness: its packet budget and the part live Episodes
 // reserve. A draining node answers 503 with its state, which is a ready result
 // with Draining set. Any other reply but 200 is not ready.
-func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath("/readyz").String(), nil)
+func (a *Adapter) ready(ctx context.Context) (protocol.ReadyResponse, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath(protocol.RouteReady).String(), nil)
 	if err != nil {
-		return wireReady{}, err
+		return protocol.ReadyResponse{}, err
 	}
 	request.Header.Set("Accept", "application/json")
 	reply, err := a.client.Do(request)
 	if err != nil {
-		return wireReady{}, err
+		return protocol.ReadyResponse{}, err
 	}
 	defer reply.Body.Close()
 	if reply.StatusCode != http.StatusOK && reply.StatusCode != http.StatusServiceUnavailable {
-		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
+		return protocol.ReadyResponse{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
-	var ready wireReady
+	var ready protocol.ReadyResponse
 	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&ready); err != nil {
-		return wireReady{}, fmt.Errorf("decode readiness (status %d): %w", reply.StatusCode, err)
+		return protocol.ReadyResponse{}, fmt.Errorf("decode readiness (status %d): %w", reply.StatusCode, err)
 	}
 	if reply.StatusCode == http.StatusServiceUnavailable && !ready.Draining {
-		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
+		return protocol.ReadyResponse{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
 	return ready, nil
 }
@@ -329,16 +330,16 @@ var errStaleGeneration = errors.New("sfu session generation is stale")
 // classify turns an SFU error reply into the port's errors. A gone session is
 // the one case callers act on: it means the connection no longer exists.
 func classify(status int, payload []byte) error {
-	var envelope wireError
+	var envelope protocol.ErrorResponse
 	_ = json.Unmarshal(payload, &envelope)
 	code := envelope.Error.Code
 	upstream := mediaplane.UpstreamFailure{Status: status, Code: code}
 	switch {
-	case status == http.StatusNotFound || code == "session_gone":
+	case status == http.StatusNotFound || code == protocol.CodeSessionGone:
 		return fmt.Errorf("%w: %w", mediaplane.ErrConnectionNotFound, upstream)
 	case status == http.StatusBadRequest:
 		return fmt.Errorf("%w: %w", mediaplane.ErrInvalidSignalRequest, upstream)
-	case code == "stale_generation":
+	case code == protocol.CodeStaleGeneration:
 		return fmt.Errorf("%w: %w: %w", mediaplane.ErrProviderFailed, errStaleGeneration, upstream)
 	case status == http.StatusTooManyRequests:
 		return fmt.Errorf("%w: %w: %w", mediaplane.ErrProviderFailed, mediaplane.ErrProviderRateLimited, upstream)
@@ -351,15 +352,15 @@ func classify(status int, payload []byte) error {
 	}
 }
 
-func wireScopeOf(scope mediaplane.Scope) wireScope {
-	return wireScope{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, ParticipantID: scope.ParticipantID, Generation: scope.Generation}
+func wireScopeOf(scope mediaplane.Scope) protocol.Scope {
+	return protocol.Scope{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, ParticipantID: scope.ParticipantID, Generation: scope.Generation}
 }
 
 func sessionPath(connectionID, action string) (string, error) {
 	if strings.TrimSpace(connectionID) == "" || connectionID != strings.TrimSpace(connectionID) || strings.ContainsAny(connectionID, "/?#") {
 		return "", mediaplane.ErrInvalidConnectionRef
 	}
-	return "/v1/sessions/" + url.PathEscape(connectionID) + "/" + action, nil
+	return protocol.SessionActionRoute(connectionID, action), nil
 }
 
 func (a *Adapter) EnsureEpisode(_ context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
@@ -406,9 +407,9 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	if err != nil {
 		return mediaplane.Join{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
-	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
-	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
+	var created protocol.CreateSessionResponse
+	request := protocol.CreateSessionRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
+	if err := a.call(ctx, protocol.RouteSessions, request, &created); err != nil {
 		return mediaplane.Join{}, a.explainStale(ctx, err)
 	}
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
@@ -443,10 +444,10 @@ func (a *Adapter) explainStale(ctx context.Context, err error) error {
 // discardStaleSession closes a session a join or capture created and then refused, and returns its error. A close
 // that fails is joined to it, so the caller sees that the session may still be live; the
 // Participant's next join replaces it and the Episode's end cleans the retired allocation.
-func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope wireScope, cause error) error {
-	path, err := sessionPath(connectionID, "remove")
+func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope protocol.Scope, cause error) error {
+	path, err := sessionPath(connectionID, protocol.ActionRemove)
 	if err == nil {
-		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: scope}, nil)
+		err = a.call(context.WithoutCancel(ctx), path, protocol.RemoveSessionRequest{Scope: scope}, nil)
 	}
 	if err != nil {
 		return errors.Join(cause, fmt.Errorf("close the session on node %q: %w", a.node, err))
@@ -478,7 +479,7 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 }
 
 func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
-	path, err := sessionPath(input.ConnectionID, "tracks")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionTracks)
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -486,13 +487,13 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 	if err != nil {
 		return mediaplane.TracksResponse{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
-	request := wireTracksRequest{
+	request := protocol.TracksRequest{
 		OperationID:        operationID,
 		Scope:              wireScopeOf(input.Scope),
 		SessionDescription: wireDescriptionOf(input.SessionDescription),
 		Tracks:             wireTracksOf(input.Tracks),
 	}
-	var response wireTracksResponse
+	var response protocol.TracksResponse
 	if err := a.call(ctx, path, request, &response); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -511,7 +512,7 @@ func (a *Adapter) HoldsPublications() {}
 // UpdateTracks changes a subscription's layer ceiling or pauses and resumes it in
 // place. The MID and track stay, so no renegotiation follows.
 func (a *Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
-	path, err := sessionPath(input.ConnectionID, "tracks/update")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionUpdateTrack)
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -519,8 +520,8 @@ func (a *Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTrack
 	if err != nil {
 		return mediaplane.TracksResponse{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
-	request := wireUpdateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), Tracks: wireTracksOf(input.Tracks)}
-	var response wireTracksResponse
+	request := protocol.UpdateTracksRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), Tracks: wireTracksOf(input.Tracks)}
+	var response protocol.TracksResponse
 	if err := a.call(ctx, path, request, &response); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -528,7 +529,7 @@ func (a *Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTrack
 }
 
 func (a *Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateRequest) error {
-	path, err := sessionPath(input.ConnectionID, "renegotiate")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionRenegotiate)
 	if err != nil {
 		return err
 	}
@@ -536,10 +537,10 @@ func (a *Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateR
 	if err != nil {
 		return fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
-	request := wireRenegotiateRequest{
+	request := protocol.RenegotiateRequest{
 		OperationID:        operationID,
 		Scope:              wireScopeOf(input.Scope),
-		SessionDescription: wireDescription{SDP: input.SessionDescription.SDP, Type: input.SessionDescription.Type},
+		SessionDescription: protocol.SessionDescription{SDP: input.SessionDescription.SDP, Type: input.SessionDescription.Type},
 	}
 	return a.call(ctx, path, request, nil)
 }
@@ -547,7 +548,7 @@ func (a *Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateR
 // CloseTracks closes tracks by MID. A forced close of a session the SFU no longer
 // holds counts as done, because cleanup only needs the tracks gone.
 func (a *Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
-	path, err := sessionPath(input.ConnectionID, "tracks/close")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionCloseTracks)
 	if err != nil {
 		return mediaplane.CloseTracksResponse{}, err
 	}
@@ -555,11 +556,11 @@ func (a *Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksR
 	if err != nil {
 		return mediaplane.CloseTracksResponse{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
-	closing := make([]wireCloseTrack, 0, len(input.Tracks))
+	closing := make([]protocol.CloseTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		closing = append(closing, wireCloseTrack{Mid: track.Mid})
+		closing = append(closing, protocol.CloseTrack{Mid: track.Mid})
 	}
-	request := wireCloseRequest{
+	request := protocol.CloseTracksRequest{
 		OperationID:        operationID,
 		Scope:              wireScopeOf(input.Scope),
 		Tracks:             closing,
@@ -570,7 +571,7 @@ func (a *Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksR
 	if input.ReceiveOnly {
 		request.SessionDescription = nil
 	}
-	var response wireCloseResponse
+	var response protocol.CloseTracksResponse
 	if err := a.call(ctx, path, request, &response); err != nil {
 		if request.Force && errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			return mediaplane.CloseTracksResponse{AlreadyClosed: true, Tracks: input.Tracks}, nil
@@ -591,12 +592,12 @@ func (a *Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksR
 // InspectSession reports a session's tracks. A gone session is a normal answer
 // (Found false), not an error, because callers use it to decide cleanup.
 func (a *Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSessionRequest) (mediaplane.SessionState, error) {
-	path, err := sessionPath(input.ConnectionID, "inspect")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionInspect)
 	if err != nil {
 		return mediaplane.SessionState{}, err
 	}
-	var response wireInspectResponse
-	request := wireInspectRequest{Scope: wireScopeOf(input.Scope), Peer: input.Peer}
+	var response protocol.InspectResponse
+	request := protocol.InspectRequest{Scope: wireScopeOf(input.Scope), Peer: input.Peer}
 	if err := a.call(ctx, path, request, &response); err != nil {
 		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			return mediaplane.SessionState{Found: false}, nil
@@ -614,17 +615,17 @@ func (a *Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSe
 // caller's own session. A state or reason this adapter does not know fails the
 // read, because the SDK would otherwise act on a guess.
 func (a *Adapter) SubscriptionStates(ctx context.Context, input mediaplane.SubscriptionStatesRequest) ([]mediaplane.SubscriptionState, error) {
-	path, err := sessionPath(input.ConnectionID, "inspect")
+	path, err := sessionPath(input.ConnectionID, protocol.ActionInspect)
 	if err != nil {
 		return nil, err
 	}
-	var response wireInspectResponse
-	if err := a.call(ctx, path, wireInspectRequest{Scope: wireScopeOf(input.Scope)}, &response); err != nil {
+	var response protocol.InspectResponse
+	if err := a.call(ctx, path, protocol.InspectRequest{Scope: wireScopeOf(input.Scope)}, &response); err != nil {
 		return nil, err
 	}
 	states := make([]mediaplane.SubscriptionState, 0, len(response.Tracks))
 	for _, track := range response.Tracks {
-		if track.Location != "remote" || track.Subscription == nil {
+		if track.Location != protocol.LocationRemote || track.Subscription == nil {
 			continue
 		}
 		state := track.Subscription
@@ -662,7 +663,7 @@ func (a *Adapter) EndEpisode(ctx context.Context, input mediaplane.EndEpisodeInp
 	if input.Provider != mediaplane.ProviderChalkSFU {
 		return mediaplane.ErrInvalidProvider
 	}
-	return a.call(ctx, "/v1/episodes/end", wireEndRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeRef}, nil)
+	return a.call(ctx, protocol.RouteEpisodesEnd, protocol.EndEpisodeRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeRef}, nil)
 }
 
 // maxSourceControls is the node's limit on one source control request.
@@ -676,12 +677,12 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
 	for start := 0; start < len(input.Controls); start += maxSourceControls {
 		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
-		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]wireSourceControl, len(batch))}
+		request := protocol.SourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]protocol.SourceControl, len(batch))}
 		for index, control := range batch {
-			request.Controls[index] = wireSourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
+			request.Controls[index] = protocol.SourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
 		}
-		var response wireSourceControlResponse
-		if err := a.call(ctx, "/v1/episodes/sources", request, &response); err != nil {
+		var response protocol.SourceControlResponse
+		if err := a.call(ctx, protocol.RouteEpisodesSources, request, &response); err != nil {
 			return nil, err
 		}
 		if len(response.Results) != len(batch) {
@@ -706,33 +707,33 @@ func (a *Adapter) EpisodeUsage(_ context.Context, input mediaplane.EpisodeUsageI
 	return mediaplane.Usage{Metadata: a.metadata()}, nil
 }
 
-func wireDescriptionOf(description *mediaplane.SessionDescription) *wireDescription {
+func wireDescriptionOf(description *mediaplane.SessionDescription) *protocol.SessionDescription {
 	if description == nil {
 		return nil
 	}
-	return &wireDescription{SDP: description.SDP, Type: description.Type}
+	return &protocol.SessionDescription{SDP: description.SDP, Type: description.Type}
 }
 
-func descriptionOf(description *wireDescription) *mediaplane.SessionDescription {
+func descriptionOf(description *protocol.SessionDescription) *mediaplane.SessionDescription {
 	if description == nil {
 		return nil
 	}
 	return &mediaplane.SessionDescription{SDP: description.SDP, Type: description.Type}
 }
 
-func wireTracksOf(tracks []mediaplane.Track) []wireTrack {
-	out := make([]wireTrack, 0, len(tracks))
+func wireTracksOf(tracks []mediaplane.Track) []protocol.Track {
+	out := make([]protocol.Track, 0, len(tracks))
 	for _, track := range tracks {
-		wired := wireTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source, Paused: track.Paused != nil && *track.Paused}
+		wired := protocol.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source, Paused: track.Paused != nil && *track.Paused}
 		if track.Simulcast != nil {
-			wired.Simulcast = &wireSimulcast{PreferredRID: track.Simulcast.PreferredRID, PriorityOrdering: track.Simulcast.PriorityOrdering, RIDNotAvailable: track.Simulcast.RIDNotAvailable}
+			wired.Simulcast = &protocol.Simulcast{PreferredRID: track.Simulcast.PreferredRID, PriorityOrdering: track.Simulcast.PriorityOrdering, RIDNotAvailable: track.Simulcast.RIDNotAvailable}
 		}
 		out = append(out, wired)
 	}
 	return out
 }
 
-func tracksResponseOf(connectionID string, response wireTracksResponse) mediaplane.TracksResponse {
+func tracksResponseOf(connectionID string, response protocol.TracksResponse) mediaplane.TracksResponse {
 	out := mediaplane.TracksResponse{
 		SessionDescription:             descriptionOf(response.SessionDescription),
 		RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation,
@@ -747,7 +748,7 @@ func tracksResponseOf(connectionID string, response wireTracksResponse) mediapla
 		if owner == "" {
 			owner = connectionID
 		}
-		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: owner, TrackName: failed.TrackName, Code: failed.Code, PublicationMissing: failed.Code == "track_not_found"})
+		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: owner, TrackName: failed.TrackName, Code: failed.Code, PublicationMissing: failed.Code == protocol.TrackCodeNotFound})
 	}
 	return out
 }

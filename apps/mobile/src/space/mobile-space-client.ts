@@ -19,27 +19,3 @@ export function createMobileSpaceClient({ apiBaseURL, defaults, getAccess, space
     storage: AsyncStorage,
   });
 }
-
-export type MobileSpaceClientOwner = {
-  readonly release: () => Promise<void>;
-};
-
-/** Releases a supplied client exactly once. Chalk only disposes clients it creates itself. */
-export function ownMobileSpaceClient(client: SpaceClient): MobileSpaceClientOwner {
-  let released = false;
-
-  return {
-    async release() {
-      if (released) return;
-      released = true;
-
-      try {
-        if (client.getSnapshot().connection.status !== "left") await client.leave();
-      } catch {
-        // Disposal must still release device resources after a failed leave.
-      } finally {
-        client.dispose();
-      }
-    },
-  };
-}

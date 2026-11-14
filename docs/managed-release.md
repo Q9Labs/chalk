@@ -15,7 +15,7 @@ Three workflows ship the managed backend and web: `Release` (`.github/workflows/
 
 `Cut nightly` runs hourly and at most once per six hours. The six-hour gap starts when an attempt is reserved, not when it ends. A cut ships the newest master commit whose push Gate passed. A manual dispatch always attempts a cut, but still requires the Gate of the pinned SHA to pass. Both workflows refuse a non-master ref.
 
-A cut becomes held only when the own-SFU (`chalk_sfu`) real-call proof and the web-call proof both pass on the freshly deployed nightly. The staging latency run is not part of the cut: `.github/workflows/staging-sfu-latency.yml` measures the newest held nightly when a cut finishes (about 33 minutes later; also daily and on dispatch) and records a verdict bound to that SHA, and Promote refuses a SHA with no passing verdict (`own_sfu_proof_result=latency-missing`), so Promote waits for that run. Each nightly write records a durable marker under the nightly lock and invalidates older held releases, so retrying an old record job cannot revive it.
+A cut becomes held only when the own-SFU (`chalk_sfu`) real-call proof and the web-call proof both pass on the freshly deployed nightly. The staging latency run is not part of the cut: `.github/workflows/staging-sfu-latency.yml` measures the newest held nightly when a cut finishes (about 50 minutes later, for 60 cycles of about 45 seconds; also daily and on dispatch) and records a verdict bound to that SHA, and Promote refuses a SHA with no passing verdict (`own_sfu_proof_result=latency-missing`), so Promote waits for that run. The measurement runs the cut's own `features/scorecard/staging-latency.mjs`, so a fix to it reaches a cut only through a new cut; the verdict is recorded only while staging still runs that cut. Each nightly write records a durable marker under the nightly lock and invalidates older held releases, so retrying an old record job cannot revive it.
 
 If the saved build baseline has expired, the cut rebuilds the saved set of enabled components. A baseline too old to say which components were enabled fails closed instead of turning recording off. Fix it with a new explicit `Release` baseline.
 
@@ -33,6 +33,12 @@ Promote blocks, naming the SHA and nightly run, when:
 - a `gate: true` budget in `perf/budgets.json` is breached, or its evidence is missing. The budgets come from the scored SHA, not the newer workflow checkout.
 
 `scorecard_override` accepts a written reason for those two checks only. It cannot bypass SHA, artifact, Gate or rollback-source validation. The run summary and release record keep the reason and actor.
+
+### Automatic promotion
+
+`.github/workflows/auto-promote.yml` dispatches Promote with no person involved, behind the repository variable `CHALK_AUTO_PROMOTE`. It ships off, and an off run skips every job. Turn it on with `gh variable set CHALK_AUTO_PROMOTE --body true` and off with `gh variable delete CHALK_AUTO_PROMOTE`. A Promote already running is not stopped by the switch; it finishes, or rolls back by itself when the production call fails.
+
+It starts after each successful Staging SFU latency run, because that verdict is the last input Promote waits for. It runs the same selection as Promote (`release.py auto_promote`) and dispatches only when the newest held nightly passes every check and production does not already run it. It never applies a `scorecard_override`. Each SHA is tried once; Promote's run name carries the SHA, so a rolled-back SHA is not tried again by the next latency run. Retrying it is a person's decision: dispatch Promote by hand. The Auto-promote run follows Promote to its end and is red when production was rolled back.
 
 Promote's production proof runs on `chalk_sfu` through the two Spaces `promote-proof-chalk-sfu` and `promote-proof-chalk-sfu-automatic`. The `own-sfu-spaces` job moves them to `chalk_sfu` while the old release still runs. If the API refuses, an operator adds both Spaces to `CHALK_SFU_ALLOWED_SPACES`. Live Spaces keep their plane.
 

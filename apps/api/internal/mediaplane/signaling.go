@@ -68,7 +68,9 @@ type TracksResponse struct {
 	Publications *PublicationList `json:"publications,omitempty"`
 }
 
-// PublicationList is the Episode's enabled publications at one registry position. It is also the body of the list route.
+// PublicationList is the Episode's listed publications at one registry position: the enabled ones, and a microphone its
+// owner muted in place, which a listener keeps subscribed so that the unmute reaches it with no signalling. It is also the
+// body of the list route.
 type PublicationList struct {
 	Incarnation  int64               `json:"incarnation"`
 	Sequence     int64               `json:"sequence"`
@@ -79,6 +81,8 @@ type ListedPublication struct {
 	ParticipantID string `json:"participant_id"`
 	Source        string `json:"source"`
 	PublicationID string `json:"publication_id"`
+	// Paused marks a publication its owner muted in place. It sends nothing until the owner resumes it.
+	Paused bool `json:"paused,omitempty"`
 }
 
 type TrackError struct {

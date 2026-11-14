@@ -9,7 +9,8 @@ export { ConnectionPlatformService, makeConnectionPlatformLayer, makeFakeConnect
 export { makeProductionConnectionPlatformLayer } from "./connection/production";
 export { SpaceStoreService, makeSpaceStoreLayer, makeFakeSpaceStoreLayer } from "./space-client/store";
 export { SpaceClientCoreService, makeSpaceClientCoreLayer, makeSpaceClientCoreLayerFromServices } from "./space-client/core";
-export { defaultSyncUrl } from "./space-client/urls";
+export * as apiUrls from "./api-urls";
+export { DEFAULT_API_BASE_URL, defaultSyncUrl, MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "./urls";
 export type { EffectChatController, EffectMediaController, EffectParticipantsController, EffectReactionsController, EffectSpaceClient, EffectWhiteboardController, SpaceClientPlatform } from "./space-client/effect";
 export type { ConnectionAccessEffectProvider, ConnectionAccessEffectService } from "./access/manager";
 export type { ConnectionLifecycleCapability } from "./connection";

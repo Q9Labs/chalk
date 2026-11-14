@@ -90,6 +90,8 @@ export type CloudflareSFUPublication = {
   readonly participantId: string;
   readonly source: MediaPublicationSource;
   readonly publicationId: string;
+  /** The owner muted it in place: it stays listed and subscribed, and sends nothing until it resumes. */
+  readonly paused?: boolean;
 };
 export type CloudflareSFUPublicationSnapshot = {
   readonly incarnation: number;
@@ -169,7 +171,8 @@ export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly participantId: string;
   readonly transport: CloudflareSFUSignalingTransport;
-  readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
+  /** Asks for a fresh connection. The argument is the connection this client runs on, so a replacement made since then is not replaced again. */
+  readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
   /**
    * How long an unreported video publication waits for `setVideoTileVisibility` before it is pulled. Defaults to 250 ms;

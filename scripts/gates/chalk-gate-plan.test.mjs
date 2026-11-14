@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, shareProvenGroups } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, laneResult, selectCiJobs, shareProvenGroups, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
+import { RegisterError } from "./register.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -72,7 +74,7 @@ test("a test-only change skips the dashboard engine and the call lanes on a pull
   );
   assert.deepEqual(
     jobs(files, "merge_group").rootGroups.filter((group) => group.startsWith("dashboard-") || group.startsWith("call-leaks-")),
-    ["dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
+    ["dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
   );
 });
 
@@ -95,7 +97,7 @@ test("an API test-only change still runs the API gate", () => {
 });
 
 test("the merge queue selects the dashboard engine and every leak shard for any change beyond documentation", () => {
-  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
+  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
   assert.deepEqual(jobs(["docs/observability.md"], "merge_group").rootGroups, ["checks"]);
 });
 
@@ -115,6 +117,53 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(selected(["features/scorecard/budgets.mjs"], "pull_request").includes("workflow-graph"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "workflow-graph").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
+});
+
+test("a change to the release scripts, the managed-host controller or the scorecard runs the release contracts in the checks group", () => {
+  for (const file of [
+    "scripts/releases/test_release.py",
+    "scripts/releases/release.py",
+    "infrastructure/managed-episode/controller/chalk-deployment-controller",
+    "features/scorecard/evaluate.mjs",
+    "perf/budgets.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/nightly.yml",
+    "scripts/recorder/release.py",
+    "infrastructure/nightly/transcription/main.tf",
+    "apps/api/go.mod",
+    "apps/api/db/migrations/20261101000000_example.sql",
+    "apps/api/internal/httpapi/router.go",
+    "apps/api/cmd/recorder-render/main.go",
+  ]) {
+    assert.ok(selected([file], "pull_request").includes("release-contracts"), file);
+    assert.ok(selected([file], "merge_group").includes("release-contracts"), file);
+  }
+  assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "release-contracts").selected);
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["scripts/recorder/compare-frames.mjs"], "pull_request").includes("release-contracts"));
+  assert.ok(!selected(["apps/api/internal/httpapi/router_test.go"], "pull_request").includes("release-contracts"));
+  assert.equal(laneGroup("release-contracts"), "checks");
+});
+
+test("a pull request that edits only a workflow skips the SFU lane and still runs the whole staging-lease test file", () => {
+  const files = [".github/workflows/ci.yml"];
+  const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+  assert.ok(!plan.tasks.find((task) => task.id === "sfu").selected);
+  const graph = plan.tasks.find((task) => task.id === "workflow-graph");
+  assert.ok(graph.selected);
+  assert.match(graph.command.join(" "), /python3 scripts\/staging-sfu\/test_staging_lock\.py$/);
+});
+
+test("a test of the workflow-graph lane reads only paths that lane selects", () => {
+  const repositoryPath = /(?:\.github|scripts|features|apps|sdks|packages|infrastructure|docs)\/[\w./-]*\w/gu;
+  for (const file of [...workflowGraphNodeTests, workflowGraphPythonTest]) {
+    const outside = [...new Set(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8").match(repositoryPath))].filter((path) => !workflowGraphRoots.some((root) => path.startsWith(root)));
+    assert.deepEqual(outside, [], `${file} reads paths that do not select the workflow-graph lane`);
+  }
+  for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock", "scripts/staging-sfu/gate-lease", "scripts/prod-proof/cleanup.mjs", "scripts/deploy/deploy-managed-release.mjs"]) {
+    assert.ok(selected([file], "pull_request").includes("workflow-graph"), file);
+  }
 });
 
 const queueJobs = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"], full: false };
@@ -177,4 +226,110 @@ test("q9gate's own gate-behavior classification does not widen a pull request th
   const context = { scope: "branch", classification: { fullRequired: true } };
   assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
   assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
+});
+
+test("a gate task with no register entry stops the selection, because running every job would fail on the same throw", () => {
+  assert.throws(
+    () =>
+      selectCiJobs("HEAD", () => {
+        throw new RegisterError('Gate task "new-lane" has no entry in scripts/gates/checks.json.');
+      }),
+    RegisterError,
+  );
+  assert.throws(
+    () =>
+      selectCiJobs("--full", () => {
+        throw new RegisterError("no entry");
+      }),
+    RegisterError,
+  );
+});
+
+test("a selection that fails for another reason runs every job in full", () => {
+  const plan = (files, options) => {
+    if (!options.full) throw new Error("bad revision 'origin/nothing'");
+    return { api: true, sync: true, rootGroups: ["checks"] };
+  };
+  assert.deepEqual(selectCiJobs("origin/nothing-resolves", plan), { api: true, sync: true, rootGroups: ["checks"], full: true });
+});
+
+test("the mock-call ratchet runs for every kind of test file it counts, not only TypeScript", () => {
+  const files = [
+    "sdks/typescript/client/src/media/client.test.js",
+    "sdks/typescript/client/src/media/client.spec.mjs",
+    "sdks/typescript/client/src/media/client.test.cjs",
+    "sdks/typescript/react/src/components/Panel.test.jsx",
+    "sdks/typescript/client/src/media/client.test.mts",
+    "sdks/typescript/client/src/__tests__/client.js",
+  ];
+  for (const file of files) {
+    const plan = createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+    assert.equal(plan.full, false, file);
+    assert.ok(selected([file], "pull_request").includes("mock-calls"), file);
+  }
+  assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
+});
+
+test("a change to a proof script, its test inputs or the client sources runs the proof tests", () => {
+  for (const file of [
+    "scripts/prod-proof/webhooks.mjs",
+    "scripts/prod-proof/proof-server.test.mjs",
+    "scripts/web-proof/guest.mjs",
+    "scripts/recorder/analyze-media.mjs",
+    "scripts/recorder/file-sha256.mjs",
+    "scripts/recorder/parse-option-value.mjs",
+    "scripts/recorder/run-bounded-command.mjs",
+    "features/scorecard/schema.mjs",
+    ".github/workflows/real-call-proof.yml",
+    "apps/api/internal/accessgrants/types.go",
+    "sdks/typescript/client/src/index.ts",
+    "sdks/typescript/client/package.json",
+    "sdks/typescript/client/tsconfig.json",
+    "perf/budgets.json",
+    "apps/web/public/.well-known/apple-app-site-association",
+    "apps/web/src/routeTree.gen.ts",
+    "apps/web/src/docs/manifest.ts",
+    "pnpm-lock.yaml",
+  ]) {
+    assert.ok(selected([file], "pull_request").includes("proof-bundle"), file);
+    assert.ok(selected([file], "merge_group").includes("proof-bundle"), file);
+  }
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("proof-bundle"));
+  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("proof-bundle"));
+});
+
+test("the board proofs run for web and board proof inputs, and for the queue", () => {
+  const board = (files, event) => jobs(files, event).rootGroups.includes("dashboard-board");
+  for (const file of ["tests/board.e2e.ts", "e2e.config.ts", "scripts/web-proof/guest.mjs", "apps/web/tests/dashboard/browser-fixture.mjs", "apps/web/tests/dashboard/real-engine.sh", "apps/web/src/components/space/Controls.tsx", "packages/whiteboard/src/index.ts"]) {
+    assert.equal(board([file], "pull_request"), true, file);
+  }
+  assert.equal(board(["apps/api/internal/httpapi/router.go"], "pull_request"), false);
+  assert.equal(board(["docs/observability.md"], "pull_request"), false);
+  assert.equal(board(["apps/api/internal/httpapi/router.go"], "merge_group"), true);
+  assert.equal(board(["docs/observability.md"], "merge_group"), false);
+  assert.ok(ciJobs([], { full: true }).rootGroups.includes("dashboard-board"));
+  assert.equal(laneGroup("board-local"), "dashboard-board");
+});
+
+test("a demoted check keeps running, wrapped so that its failure is a warning", () => {
+  const plan = createGatePlan(["apps/web/src/call-states/camera-backgrounds.test.ts"], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+  const camera = plan.tasks.find((task) => task.id === "camera-proof");
+  assert.ok(camera?.selected);
+  assert.deepEqual(camera.command.slice(0, 4), ["node", "scripts/gates/demoted.mjs", "gate:camera-proof", "--"]);
+  assert.ok(!plan.tasks.find((task) => task.id === "browser-tests").command.includes("scripts/gates/demoted.mjs"));
+});
+
+test("a passing lane prints a demoted check's warning, because q9gate drops a passing lane's output", () => {
+  const warning = "::warning title=Demoted check gate:camera-proof failed::gate:camera-proof failed and is demoted";
+  const logged = [];
+  const log = console.log;
+  console.log = (line) => logged.push(line);
+  try {
+    assert.deepEqual(laneResult("camera-proof", { failed: false, stdout: `noise\n${warning}\nmore` }), { status: "passed" });
+    assert.deepEqual(laneResult("browser-tests", { failed: false, stdout: "noise" }), { status: "passed" });
+    assert.deepEqual(logged, [warning]);
+  } finally {
+    console.log = log;
+  }
 });
