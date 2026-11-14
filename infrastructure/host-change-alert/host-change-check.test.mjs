@@ -60,3 +60,27 @@ test("the check posts to Oncall and fails the run when something paged", async (
   assert.equal(await check({ env, fetchImpl, awsImpl, now: at(60), log: () => {} }), 1);
   assert.equal(posts[0].incidents[0].app, "chalk");
 });
+
+test("a refused Axiom query reports its error code and never the provider's text", async () => {
+  const fetchImpl = async (url) => (url.includes("axiom") ? { ok: false, status: 400, json: async () => ({ code: "bad_request", message: "unable to find dataset 'private-name'" }) } : { ok: true, json: async () => [] });
+  const env = { ONCALL_WEBHOOK_URL: "https://oncall.test", CHALK_AXIOM_QUERY_TOKEN: "t", CHALK_AXIOM_LOG_DATASET: "d", PRODUCTION_INSTANCE_ID: instance, GITHUB_TOKEN: "g", GITHUB_REPOSITORY: "o/r" };
+  const failure = await check({ env, fetchImpl, awsImpl: async () => JSON.stringify({ Events: [] }), now: at(60), log: () => {} }).catch((error) => error);
+  assert.match(failure.message, /HTTP 400: bad_request$/);
+  assert.doesNotMatch(failure.message, /private-name/);
+});
+
+test("a start from seven hours ago still pages, because GitHub can leave that long between runs", async () => {
+  const start = new Date(at(60).getTime() - 7 * 60 * 60 * 1000);
+  const queries = [];
+  const fetchImpl = async (url, init) => {
+    if (url.includes("axiom")) {
+      queries.push(JSON.parse(init.body));
+      return { ok: true, json: async () => ({ tables: [{ fields: [{ name: "_time" }], columns: [[start.toISOString()]] }] }) };
+    }
+    if (url.includes("github")) return { ok: true, json: async () => [] };
+    return { ok: true };
+  };
+  const env = { ONCALL_WEBHOOK_URL: "https://oncall.test", CHALK_AXIOM_QUERY_TOKEN: "t", CHALK_AXIOM_LOG_DATASET: "d", PRODUCTION_INSTANCE_ID: instance, GITHUB_TOKEN: "g", GITHUB_REPOSITORY: "o/r" };
+  assert.equal(await check({ env, fetchImpl, awsImpl: async () => JSON.stringify({ Events: [] }), now: at(60), log: () => {} }), 1);
+  assert.ok(new Date(queries[0].startTime) <= start, "the query window reaches back past the start");
+});
