@@ -32,4 +32,4 @@ Preconditions:
 - The whiteboard WebSocket (`/v1/whiteboard`) is Sync's. A dev stack behind one public origin (an Orb) must proxy it to Sync as it does `/v1/sync` (`apps/web/vite.config.ts`), or the `Board` button never appears.
 - `tests/board.e2e.ts` creates its own Space through `/space/` and targets `CHALK_PROOF_WEB_URL`. Set that variable to the local web origin to run it against this stack. It needs the same SFU credentials as a call.
 - Wait for the stage animations to settle before you measure pixels. The spec's `settleStage` shows how.
-- `scripts/board-draw.mjs` drives this journey with a host who started the call and a guest who joined by its link; the steps come from the spec.
+- `.agents/skills/verify-chalk/scripts/board-draw.mjs` drives this journey with a host who started the call and a guest who joined by its link; the steps come from the spec.
