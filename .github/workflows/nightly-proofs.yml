@@ -215,9 +215,10 @@ jobs:
           read -r id ip < "$RUNNER_TEMP/host"
           echo "id=$id" >> "$GITHUB_OUTPUT"
           echo "ip=$ip" >> "$GITHUB_OUTPUT"
-          until ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 "root@$ip" 'docker info > /dev/null 2>&1'; do sleep 5; done
-          # The image ships a firewall that lets only SSH through; the Chalk SFU's control and media ports must be reachable.
-          ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@$ip" 'ufw --force disable'
+          # First boot restarts sshd, so wait for cloud-init to finish. The image ships a firewall that lets only SSH through;
+          # the Chalk SFU's control and media ports must be reachable.
+          until ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=5 "root@$ip" \
+            'cloud-init status --wait > /dev/null 2>&1; docker info > /dev/null 2>&1 && ufw --force disable > /dev/null'; do sleep 5; done
       - name: Boot the stack
         env:
           API_IMAGE: ${{ steps.images.outputs.api }}
