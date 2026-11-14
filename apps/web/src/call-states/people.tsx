@@ -56,7 +56,7 @@ export const PEOPLE_STATES: readonly CallState[] = (["dark", "light"] as const).
     return {
       id: `people-${variant.id}-${scheme}`,
       title: `${variant.title} (${scheme})`,
-      actions: panel ? [{ click: "Participants" }] : undefined,
+      actions: panel ? [{ click: "People" }] : undefined,
       render: () => <PeopleState scheme={scheme} others={variant.others} host={"host" in variant ? variant.host : true} knocks={"knocks" in variant ? variant.knocks : 0} />,
     };
   }),
@@ -64,8 +64,10 @@ export const PEOPLE_STATES: readonly CallState[] = (["dark", "light"] as const).
 
 const guestScreens = {
   waiting: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." joiningAs="Rania Aziz" action={{ label: "Cancel", onClick: () => undefined }} />,
-  declined: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="The host declined your request to join." glyph="declined" action={{ label: "Ask again", onClick: () => undefined }} />,
-  expired: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="Your request to join expired or is no longer available." glyph="expired" action={{ label: "Ask again", onClick: () => undefined }} />,
+  declined: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="The host didn’t let you in" glyph="declined" action={{ label: "Go to Chalk", onClick: () => undefined }} secondaryAction={{ label: "Ask again", onClick: () => undefined }} />,
+  expired: (scheme: Scheme) => (
+    <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="Your request to join expired or is no longer available." glyph="expired" action={{ label: "Go to Chalk", onClick: () => undefined }} secondaryAction={{ label: "Ask again", onClick: () => undefined }} />
+  ),
   entering: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message={`Joining ${SPACE_NAME}…`} />,
 } as const;
 

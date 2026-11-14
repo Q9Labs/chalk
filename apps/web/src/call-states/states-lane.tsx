@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
+import { Chalk, CallLimbo, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
 import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../../../sdks/typescript/react/src/bindings/context";
 import { useSoundCues } from "../../../../sdks/typescript/react/src/internal/useSoundCues";
-import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { ConnectionStatus } from "../../../../sdks/typescript/react/src/components/connection-status/ConnectionStatus";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
@@ -97,20 +96,6 @@ function StatesCall({
     </div>
   );
 }
-function CallLinkFixture() {
-  const [alone, setAlone] = useState(true);
-  const callLink = useCallLink(alone);
-  return (
-    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: "var(--type-body)", lineHeight: 1.4 }}>
-      <button data-call-link-trigger aria-pressed={callLink.open} onClick={callLink.toggle}>
-        {callLink.open ? "Hide call link" : "Show call link"}
-      </button>
-      <button onClick={() => setAlone(false)}>Someone joins</button>
-      <button onClick={() => setAlone(true)}>Everyone leaves</button>
-      <CallReady open={callLink.open} onClose={callLink.close} link="https://chalk.example/join/example" />
-    </main>
-  );
-}
 function ReconnectingInputFixture() {
   return (
     <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]">
@@ -183,15 +168,14 @@ function CommandFailureFixture() {
 }
 export const STATES_LANE: readonly CallState[] = [
   { id: "states-reconnecting-input", title: "Reconnecting keeps input usable", render: () => <ReconnectingInputFixture /> },
-  { id: "states-link-controls", title: "Controlled call link", render: () => <CallLinkFixture /> },
   { id: "states-command-failures", title: "Typed command failures", render: () => <CommandFailureFixture /> },
   { id: "states-failure-sounds", title: "Failure cue ownership", render: () => <FailureSoundFixture /> },
   { id: "states-ended-join", title: "Already-ended join", render: () => <StatesCall terminal="failed" endedJoin /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
-  { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
-  { id: "states-ready-qr", title: "Ready card QR regression", render: () => <StatesCall ready shareUrl="https://chalk.example/join/example" /> },
-  { id: "states-ready-qr-light", title: "Ready card QR, Light", render: () => <StatesCall ready light shareUrl="https://chalk.example/join/example" /> },
-  { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
+  { id: "states-ready", title: "Alone at call start", render: () => <StatesCall ready /> },
+  { id: "states-ready-qr", title: "Alone at call start, QR", render: () => <StatesCall ready shareUrl="https://chalk.example/join/example" /> },
+  { id: "states-ready-qr-light", title: "Alone at call start, QR, Light", render: () => <StatesCall ready light shareUrl="https://chalk.example/join/example" /> },
+  { id: "states-ready-light", title: "Alone at call start, Light", render: () => <StatesCall ready light /> },
   {
     id: "states-joining",
     title: "Joining",
@@ -227,11 +211,11 @@ export const STATES_LANE: readonly CallState[] = [
       ["hand", "Nora raised a hand", false],
       ["recording", "Recording started. Everyone in the call can see it.", false],
       ["recording-failed", "Recording isn’t available in this call yet.", true],
-      ["camera", "Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.", true],
+      ["camera", "Your camera is blocked. Allow it from the icon in the address bar.", true],
       ["host", "Nora left. You’re now the host.", false],
       ["device", "AirPods Pro disconnected. Switched to MacBook Air Microphone", false],
       ["muted", "Nora muted you. Unmute when you’re ready.", false],
-      ["share-blocked", "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again.", true],
+      ["share-blocked", "Screen sharing is blocked. Allow it for your browser in System Settings.", true],
     ] as const
   ).flatMap(([id, message, error]) => {
     const renderToast = (light: boolean) => {

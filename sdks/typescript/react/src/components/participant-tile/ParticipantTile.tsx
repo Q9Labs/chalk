@@ -1,5 +1,5 @@
 import { Facehash } from "@q9labsai/facehash/react";
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
@@ -7,7 +7,7 @@ import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
+import { TileOptions, TileOptionsSheet, type TileAction } from "./TileOptions";
 import { TileShell } from "./TileShell";
 import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
@@ -123,6 +123,10 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const followLabel = following ? "Stop following" : "Follow";
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
+  const actions: readonly TileAction[] = [...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])];
+  // On a phone a tap on the tile opens its options, so no tile carries its own "..." button.
+  const tapForOptions = phone && actions.length > 0;
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   return (
     <TileShell
@@ -134,7 +138,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       lift={!primary}
       speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
       audioLevel={participant.audioLevel}
-      onClick={onClick}
+      onClick={tapForOptions ? () => setOptionsOpen(true) : onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
       style={style}
@@ -148,22 +152,10 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               Video paused for network
             </span>
           ) : null}
-          {onClick || onFollow ? (
-            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
-              <ChalkMenu
-                trigger={
-                  <button
-                    type="button"
-                    aria-label={`More options for ${participant.displayName}`}
-                    className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
-                  >
-                    <StageIcon name="more" size={18} />
-                  </button>
-                }
-              >
-                {onClick ? <ChalkMenuItem onClick={onClick}>{actionLabel}</ChalkMenuItem> : null}
-                {onFollow ? <ChalkMenuItem onClick={onFollow}>{followLabel}</ChalkMenuItem> : null}
-              </ChalkMenu>
+          {tapForOptions ? <TileOptionsSheet name={participant.displayName} actions={actions} open={optionsOpen} onOpenChange={setOptionsOpen} /> : null}
+          {actions.length && !tapForOptions ? (
+            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+              <TileOptions name={participant.displayName} actions={actions} />
             </span>
           ) : null}
         </>
@@ -175,7 +167,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-(--space-1-5) overflow-hidden">
               {showName && (
                 <>
-                  <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full shrink-0 items-center [unicode-bidi:plaintext]" title={participant.displayName}>
+                  <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full items-center [unicode-bidi:plaintext]" title={participant.displayName}>
                     <span className="min-w-0 truncate">{participant.displayName}</span>
                     {participant.isLocal && participant.displayName !== "You" && (
                       <span data-part="tile-self-label" className="shrink-0 whitespace-pre text-[var(--chalk-on-overlay)]">

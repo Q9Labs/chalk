@@ -1,5 +1,5 @@
 import type { SpaceClient } from "@q9labsai/chalk-client";
-import { Chalk } from "@q9labsai/chalk-react";
+import { CallLimbo, Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -8,8 +8,9 @@ import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./language-choice";
+import { joiningCallName } from "./join-call";
 
-import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
+import { problemReporter, reportUnavailableReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { ownerAccess } from "./owner-seat";
@@ -59,16 +60,15 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
         </div>
       </SiteRoot>
     );
-  if (!profile || state.kind !== "ready" || !client)
+  if (!profile || state.kind !== "ready" || !client) {
+    // The same stand-in call and card that Chalk shows while it joins, so opening and joining read as one step.
+    const callName = state.kind === "ready" ? state.data.call.name : joiningCallName(spaceId);
     return (
-      <SiteRoot>
-        <div className="dash">
-          <div className="wrap">
-            <p role="status">Opening your call…</p>
-          </div>
-        </div>
-      </SiteRoot>
+      <div style={{ position: "absolute", inset: 0 }}>
+        <CallLimbo theme={{ colorScheme: theme }} spaceName={callName ?? "Your call"} message={`Joining ${callName ?? "your call"}…`} />
+      </div>
     );
+  }
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       {startError ? (
@@ -181,8 +181,8 @@ function OwnerCallSurface({
         action: deadline && ceiling && !atCeiling && extension !== "pending" ? { label: "Add 30 min", onClick: () => void extend() } : undefined,
         endAction: { label: "Start a new call", onClick: onStartNewCall },
       }}
-      onReportProblem={reportsAvailable ? onReportProblem : undefined}
-      reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+      onReportProblem={onReportProblem}
+      reportUnavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
     />
   );
 }

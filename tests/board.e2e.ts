@@ -87,7 +87,7 @@ async function joinBoardParticipants(contexts: BrowserContext[]) {
   expect((await created).status()).toBe(201);
   await a.getByRole("button", { name: "Video tile for BoardA", exact: true }).waitFor();
   await expect.poll(() => a.getByRole("button", { name: /^Video tile for / }).count()).toBe(1);
-  await a.getByRole("button", { name: "Close call link", exact: true }).click();
+  await a.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true }).click();
   await b.goto(a.url());
   await b.getByLabel("Your name", { exact: true }).fill("BoardB");
   await b.getByRole("button", { name: "Join call", exact: true }).click();
@@ -290,16 +290,26 @@ async function captureZoomProof(pages: Page[], directory: string, name: string) 
   for (const [index, page] of pages.entries()) await page.screenshot({ path: `${directory}/${name}-${index}.png` });
 }
 
+// A desktop tile has a More button and a menu; a phone has no button, so a tap on the tile opens its options sheet.
+async function chooseTileOption(page: Page, name: string, option: string) {
+  const more = page.getByLabel(`More options for ${name}`, { exact: true });
+  if (await more.count()) {
+    await more.click();
+    await page.getByRole("menuitem", { name: option, exact: true }).click();
+    return;
+  }
+  await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).click();
+  await page.getByRole("button", { name: option, exact: true }).click();
+}
+
 async function followEdgeStrokes(a: Page, b: Page, directory: string) {
   // The first small remote drawing must not trigger automatic fit.
   await drawStroke(a, { x: 0.49, y: 0.45 }, { x: 0.51, y: 0.46 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("1");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await b.evaluate(trackProofZoom);
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Stop following", exact: true }).click();
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
+  await chooseTileOption(b, "BoardA", "Stop following");
+  await chooseTileOption(b, "BoardA", "Follow");
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   // Each new stroke must arrive visibly in the middle of the phone canvas.
   for (const [index, point] of [
@@ -351,8 +361,7 @@ async function checkManualZoom(a: Page, b: Page) {
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
   await zoomIn(b);
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
-  await b.getByLabel("More options for BoardA", { exact: true }).click();
-  await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
+  await chooseTileOption(b, "BoardA", "Follow");
   await b.locator(".chalk-board-chip").filter({ hasText: "Following BoardA" }).waitFor();
   await drawStroke(a, { x: 0.7, y: 0.3 }, { x: 0.72, y: 0.32 });
   await expect.poll(() => b.locator(".chalk-board").getAttribute("data-elements")).toBe("5");

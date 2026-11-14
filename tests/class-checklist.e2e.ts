@@ -151,7 +151,7 @@ async function classroom(scenario: string, check: (pages: Page[], contexts: Brow
       pages.push(role.page);
     }
     await join(pages[0], "Teacher", `${process.env.CHALK_PROOF_WEB_URL}/space/`);
-    const closeLink = pages[0].getByRole("button", { name: "Close call link", exact: true });
+    const closeLink = pages[0].getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Close", exact: true });
     if (await closeLink.count()) await closeLink.click();
     const url = pages[0].url();
     await join(pages[1], "Student", url);

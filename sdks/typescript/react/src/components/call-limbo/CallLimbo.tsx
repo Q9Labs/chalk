@@ -19,6 +19,8 @@ export interface CallLimboProps {
   /** A neutral symbol for a request that ended, so declined and expired look different from waiting before they are read. */
   readonly glyph?: "declined" | "expired";
   readonly action?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean };
+  /** A second, quieter way forward beside `action`, such as asking again after a refusal. `action` then becomes the solid one. */
+  readonly secondaryAction?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean };
   readonly children?: ReactNode;
   /** Overlay the admitted call instead of rendering the privacy-safe stand-in. */
   readonly overlay?: boolean;
@@ -32,7 +34,7 @@ export interface CallLimboProps {
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, secondaryAction, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -82,7 +84,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       data-call-limbo
       data-covered={covered}
       aria-hidden={!active}
-      className={cn("absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]", blocking && "bg-[var(--chalk-app-canvas)]")}
+      className={cn("absolute inset-0 z-50 flex items-center justify-center px-6 text-[var(--chalk-app-text)]", blocking && (overlay ? "bg-[var(--chalk-app-canvas)]" : "bg-[color-mix(in_srgb,var(--chalk-app-canvas)_45%,transparent)]"))}
       style={{
         pointerEvents: active && blocking ? "auto" : "none",
         opacity: covered ? 1 : 0,
@@ -121,14 +123,15 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
             </span>
           </span>
         ) : null}
-        {recorded ? (
-          <p className="mt-1 flex items-center gap-1.5 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
+        {/* The recording line arrives with the call details, so it opens its row instead of popping in. */}
+        <div aria-hidden={!recorded} className="grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none" style={{ gridTemplateRows: recorded ? "1fr" : "0fr", opacity: recorded ? 1 : 0 }}>
+          <p className="flex min-h-0 items-center gap-1.5 overflow-hidden pt-1 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
             <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">
               <CallEventIcon kind="recording" error />
             </span>
             This call is recorded. By joining, you agree to be recorded.
           </p>
-        ) : null}
+        </div>
         {stacked === "waiting" ? (
           <span aria-hidden="true" className="mt-3 flex gap-1.5">
             {[0, 1, 2].map((dot) => (
@@ -137,7 +140,16 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
           </span>
         ) : null}
         {children}
-        {action ? (
+        {action && secondaryAction ? (
+          <span className={cn("mt-6 flex gap-2", stacked && "w-full")}>
+            <ChalkButton className="!h-11 flex-1" variant="outline" onClick={secondaryAction.onClick} disabled={secondaryAction.disabled}>
+              {secondaryAction.label}
+            </ChalkButton>
+            <ChalkButton className="!h-11 flex-1" variant="solid" onClick={action.onClick} disabled={action.disabled}>
+              {action.label}
+            </ChalkButton>
+          </span>
+        ) : action ? (
           <ChalkButton className={cn("mt-6 !h-11", stacked && "w-full")} variant="outline" onClick={action.onClick} disabled={action.disabled}>
             {action.label}
           </ChalkButton>
@@ -148,10 +160,26 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   if (overlay) return layer;
   return (
     <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={{ ...chalkThemeStyle(theme), fontSize: "var(--type-body)", lineHeight: 1.4 }}>
-      <div aria-hidden="true" className="absolute left-5 top-5 text-sm font-medium text-[var(--chalk-muted-text)]">
-        {spaceName}
-      </div>
+      <StandInCall spaceName={spaceName} />
       {layer}
+    </div>
+  );
+}
+
+/** The call as it will look, with nothing real in it: the header with the call name, one empty tile and the dock outline, under a static blur. */
+function StandInCall({ spaceName }: { readonly spaceName: string }) {
+  return (
+    <div aria-hidden="true" inert className="absolute inset-0 flex flex-col gap-3 p-5 [filter:blur(18px)]">
+      <div className="flex h-10 items-center justify-between">
+        <span className="text-(length:--type-body-lg) font-semibold text-[var(--chalk-text)]">{spaceName}</span>
+        <span className="h-10 w-20 rounded-full bg-[var(--chalk-raised)]" />
+      </div>
+      <div className="min-h-0 flex-1 rounded-[var(--corner-2xl)] bg-[var(--chalk-tile)]" />
+      <div className="flex h-14 items-center justify-center gap-2">
+        {[0, 1, 2, 3, 4].map((slot) => (
+          <span key={slot} className="h-12 w-12 rounded-full bg-[var(--chalk-raised)]" />
+        ))}
+      </div>
     </div>
   );
 }

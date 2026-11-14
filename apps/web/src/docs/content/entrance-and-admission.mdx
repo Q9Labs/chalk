@@ -12,6 +12,12 @@ await client.participants.admit(requestId);
 await client.participants.deny(requestId);
 ```
 
+The current policy is in `participants.admissionPolicy`, and it is `null` until Sync sends the call's state. A Participant with `manageAdmission` can switch it between `open` and `knock` during the call. The call's People panel shows this as "Who can join".
+
+```ts
+await client.participants.setAdmissionPolicy("knock");
+```
+
 Admission is distinct from identity. A Guest can be admitted to the current Episode without becoming a Member. A Member keeps standing Space access across Episodes.
 
 <Callout tone="note" title="One entry surface">

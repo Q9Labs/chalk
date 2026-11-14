@@ -1,6 +1,6 @@
 import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { Loading01Icon } from "@q9labsai/chalk-react/utils";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
@@ -9,29 +9,6 @@ import { PreviewTile } from "./PreviewTile";
 
 /** One column on phones and tablets, two columns when the preview and the form fit side by side. */
 const STACKED = "(max-width: 1023px)";
-
-/** Only exceptions get words: with everything on, the line stays empty. */
-function joinNote({ microphone, camera }: PreJoinJoinOptions): ReactNode {
-  if (!microphone && !camera)
-    return (
-      <>
-        You&rsquo;ll join with <b className="font-semibold text-[var(--chalk-text)]">mic and camera off</b>.
-      </>
-    );
-  if (!microphone)
-    return (
-      <>
-        You&rsquo;ll join <b className="font-semibold text-[var(--chalk-text)]">muted</b>.
-      </>
-    );
-  if (!camera)
-    return (
-      <>
-        You&rsquo;ll join with your <b className="font-semibold text-[var(--chalk-text)]">camera off</b>.
-      </>
-    );
-  return null;
-}
 
 export type PreJoinProps = {
   readonly spaceName?: string;
@@ -96,7 +73,18 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         className={`h-12 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) ${joining ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-app-text)]"} outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]`}
       />
       <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pt-3" : "grid gap-2"} style={stacked ? SAFE_BOTTOM : undefined}>
-        <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 w-full" style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }} disabled={!ready} aria-busy={joining || undefined}>
+        <button
+          ref={joinButton}
+          type="submit"
+          data-part="pill-button"
+          data-chalk-variant="solid"
+          data-chalk-tone="neutral"
+          className="chalk-pill-button mt-1 w-full"
+          style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }}
+          disabled={!ready}
+          aria-describedby={named ? undefined : "join-hint"}
+          aria-busy={joining || undefined}
+        >
           {joining ? (
             <>
               <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -106,8 +94,9 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
             "Join call"
           )}
         </button>
-        <p role="status" style={{ minHeight: "var(--space-5)" }} className="text-center text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">
-          {joining ? null : joinNote(devices.joinOptions)}
+        {/* The preview's slashed mic and camera already say how you'll join, so the only words here explain a disabled Join. */}
+        <p id="join-hint" role="status" style={{ minHeight: "var(--space-5)" }} className="text-center text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">
+          {named || joining ? null : "Add your name to join."}
         </p>
       </div>
     </form>

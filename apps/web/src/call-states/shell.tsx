@@ -170,7 +170,7 @@ function ShellSeams() {
       <ChalkProvider client={client}>
         <SpaceHeader spaceName="Shell seams" callLinkOpen={open} onCallLinkToggle={toggle} />
         <div className="chalk-frame-dock">
-          <ControlBar buttons={["mic", "video", "screenshare"]} callLinkOpen={open} onCallLinkToggle={toggle} onCommandError={(error, source) => setFailure(error ? { code: error.code, message: error.message, recoverable: error.recoverable, source } : null)} />
+          <ControlBar buttons={["mic", "video", "screenshare"]} onCommandError={(error, source) => setFailure(error ? { code: error.code, message: error.message, recoverable: error.recoverable, source } : null)} />
         </div>
       </ChalkProvider>
       <output aria-label="Shell failure" className="sr-only">

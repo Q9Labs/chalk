@@ -28,7 +28,7 @@ const SOURCES = [
     slug: "",
     title: "Why Chalk",
     navLabel: "Why Chalk",
-    description: "A durable Space and bounded Episodes for live collaboration.",
+    description: "Video calls inside your product, with chat and a whiteboard that last past the call.",
     groupId: "start",
     keywords: ["collaboration", "communication", "Space", "Episode", "durable"],
   },

@@ -8,7 +8,14 @@ import { backoffMs } from "./backoff";
 const apiFetch = withRequestContext();
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
 type ReportConnection = Pick<ReturnType<SpaceClient["getSnapshot"]>["connection"], "lastError"> & { readonly status: string };
-export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
+const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
+const reportsOffReason = "Reporting is temporarily unavailable. Your draft is kept here.";
+
+/** Why a report cannot be sent right now, or nothing. "Report a problem" stays visible either way, and the dialog says why it cannot send. */
+export function reportUnavailableReason(reportsAvailable: boolean, credentialExpired: boolean): string | undefined {
+  if (credentialExpired) return reportCredentialExpiredReason;
+  return reportsAvailable ? undefined : reportsOffReason;
+}
 const parseAvailability = Schema.decodeUnknownSync(Schema.Struct({ available: Schema.Boolean }));
 
 export function useReportCredentialExpired(expiresAt: number | undefined) {
@@ -22,8 +29,8 @@ export function useReportCredentialExpired(expiresAt: number | undefined) {
 }
 
 /**
- * Whether the call should offer "Report a problem". It stays true until the server answers that reports are
- * off, so a slow or failed probe never hides the item. A failed probe retries, and a send that fails shows its own error.
+ * Whether reports can be sent. It stays true until the server answers that reports are off, so a slow or
+ * failed probe never blocks a send. A failed probe retries, and a send that fails shows its own error.
  */
 export function useProblemReports(baseURL: string, tenantId: string | undefined) {
   const [refused, setRefused] = useState(false);

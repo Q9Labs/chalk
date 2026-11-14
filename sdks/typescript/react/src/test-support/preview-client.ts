@@ -1,4 +1,4 @@
-import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { ActiveReaction, AdmissionPolicyTarget, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
 import { callEvents, createSpaceClient } from "@q9labsai/chalk-client";
 
@@ -27,6 +27,7 @@ export type PreviewClientCommand =
   | { readonly type: "remove"; readonly participantId: string }
   | { readonly type: "admit"; readonly requestId: string }
   | { readonly type: "deny"; readonly requestId: string }
+  | { readonly type: "setAdmissionPolicy"; readonly policy: AdmissionPolicyTarget }
   | { readonly type: "raiseHand" }
   | { readonly type: "lowerHand" }
   | { readonly type: "renameSelf"; readonly displayName: string }
@@ -149,6 +150,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       remove: (participantId: string) => dispatch({ type: "remove", participantId }),
       admit: (requestId: string) => dispatch({ type: "admit", requestId }),
       deny: (requestId: string) => dispatch({ type: "deny", requestId }),
+      setAdmissionPolicy: (policy: AdmissionPolicyTarget) => dispatch({ type: "setAdmissionPolicy", policy }),
       raiseHand: () => dispatch({ type: "raiseHand" }),
       lowerHand: () => dispatch({ type: "lowerHand" }),
       renameSelf: (displayName: string) => dispatch({ type: "renameSelf", displayName }),
@@ -201,7 +203,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
   return {
     connection: { status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false },
     self: { participantId: null, displayName: null, role: null, capabilities, handRaised: false, can: (capability) => capabilities.includes(capability) },
-    participants: { roster: [], admissionQueue: [] },
+    participants: { roster: [], admissionQueue: [], admissionPolicy: null },
     media: {
       devices: {
         ...createPreviewMediaDevices(),
@@ -297,6 +299,8 @@ function applyPreviewCommand(snapshot: SpaceSnapshot, command: PreviewClientComm
     case "admit":
     case "deny":
       return { ...snapshot, participants: { ...snapshot.participants, admissionQueue: snapshot.participants.admissionQueue.filter((request) => request.requestId !== command.requestId) } };
+    case "setAdmissionPolicy":
+      return { ...snapshot, participants: { ...snapshot.participants, admissionPolicy: command.policy } };
     case "raiseHand":
       return { ...snapshot, self: { ...snapshot.self, handRaised: true } };
     case "lowerHand":
