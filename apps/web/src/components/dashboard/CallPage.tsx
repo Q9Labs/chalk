@@ -8,13 +8,13 @@ import { keptRecording, videoState, workingRecording } from "../../lib/dashboard
 import { clock, displayLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { RenameDialog } from "./HomePage";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { LanguagePicker } from "./LanguagePicker";
-import { rememberLanguage, type NewCallLanguage } from "./transcript-languages";
+import { rememberLanguage, type NewCallLanguage } from "./language-choice";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { DOCS_GROUPS, findDocsPage } from "../../docs/manifest";
 import { Icon } from "../site/Icon";
 import { SiteRoot } from "../site/theme";
-import { trapDialogFocus } from "./dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { DocsHeader } from "./DocsHeader";
 import { DocsSidebar } from "./DocsSidebar";
 import { SearchDialog } from "./SearchDialog";

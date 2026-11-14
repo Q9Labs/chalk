@@ -1,4 +1,4 @@
-export const SITE_ORIGIN = "https://chalkmeet.com";
+import { SITE_ORIGIN } from "./site-origin";
 
 // Vite exposes the build's public URL as `import.meta.env`; the docs prerender script runs under tsx, where only `process.env` has it.
 const appUrl = new URL((import.meta.env ?? process.env).VITE_PUBLIC_APP_URL || SITE_ORIGIN);

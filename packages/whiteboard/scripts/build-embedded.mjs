@@ -4,18 +4,21 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { EXCALIDRAW_VERSION, MATHJAX_VERSION, RENDERER_BUILD_ID } from "../src/pins.ts";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 const outputRoot = join(packageRoot, "dist", "embedded", "chalk-whiteboard");
 const compatibilityManifestPath = join(packageRoot, "src", "embedded", "compatibility-manifest.json");
 const compatibilityManifest = JSON.parse(await readFile(compatibilityManifestPath, "utf8"));
-if (compatibilityManifest.rendererBuildId !== "chalk-excalidraw-0.18.1-r1" || compatibilityManifest.bridge?.current !== 1 || compatibilityManifest.excalidraw?.version !== "0.18.1") {
+if (compatibilityManifest.bridge?.current !== 1) {
   throw new Error("embedded whiteboard compatibility manifest does not match the renderer build");
 }
 const excalidrawRoot = await findPackageRoot(require.resolve("@excalidraw/excalidraw"), "@excalidraw/excalidraw");
 const excalidrawProd = join(excalidrawRoot, "dist", "prod");
 const mathJaxRoot = await findPackageRoot(require.resolve("mathjax"), "mathjax");
+await assertInstalledVersion(excalidrawRoot, EXCALIDRAW_VERSION);
+await assertInstalledVersion(mathJaxRoot, MATHJAX_VERSION);
 
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(join(outputRoot, "mathjax"), { recursive: true });
@@ -54,11 +57,23 @@ await Promise.all([
   cp(join(excalidrawProd, "fonts"), join(outputRoot, "fonts"), { recursive: true }),
   cp(join(excalidrawProd, "index.css"), join(outputRoot, "index.css")),
   cp(join(mathJaxRoot, "tex-svg.js"), join(outputRoot, "mathjax", "tex-svg.js")),
-  cp(compatibilityManifestPath, join(outputRoot, "compatibility-manifest.json")),
   cp(join(packageRoot, "../../apps/mobile/assets/fonts/OFL.txt"), join(outputRoot, "licenses", "Figtree.txt")),
   copyWhenPresent(join(mathJaxRoot, "LICENSE"), join(outputRoot, "licenses", "MathJax.txt")),
 ]);
 
+await writeFile(
+  join(outputRoot, "compatibility-manifest.json"),
+  `${JSON.stringify(
+    {
+      ...compatibilityManifest,
+      rendererBuildId: RENDERER_BUILD_ID,
+      excalidraw: { ...compatibilityManifest.excalidraw, version: EXCALIDRAW_VERSION, restoreImplementation: `${compatibilityManifest.excalidraw.package}@${EXCALIDRAW_VERSION}` },
+      assets: { ...compatibilityManifest.assets, math: `mathjax@${MATHJAX_VERSION}` },
+    },
+    null,
+    2,
+  )}\n`,
+);
 await writeFile(join(outputRoot, "mathjax-config.js"), `window.MathJax={options:{enableMenu:false},startup:{typeset:false},svg:{fontCache:"none"}};\n`);
 await writeFile(
   join(outputRoot, "licenses", "Excalidraw.txt"),
@@ -134,13 +149,13 @@ const notices = {
   artifacts: [
     {
       name: "@excalidraw/excalidraw",
-      version: "0.18.1",
+      version: EXCALIDRAW_VERSION,
       license: "MIT",
       source: "https://github.com/excalidraw/excalidraw",
     },
     {
       name: "mathjax",
-      version: "4.1.3",
+      version: MATHJAX_VERSION,
       license: "Apache-2.0",
       source: "https://github.com/mathjax/MathJax-src",
     },
@@ -153,9 +168,9 @@ await writeFile(
   join(outputRoot, "asset-manifest.json"),
   `${JSON.stringify(
     {
-      rendererBuildId: "chalk-excalidraw-0.18.1-r1",
+      rendererBuildId: RENDERER_BUILD_ID,
       bridgeVersion: 1,
-      excalidrawVersion: "0.18.1",
+      excalidrawVersion: EXCALIDRAW_VERSION,
       offlineOnly: true,
       files: manifest,
     },
@@ -210,4 +225,9 @@ async function findPackageRoot(entryPoint, expectedName) {
     if (parent === directory) throw new Error(`Unable to resolve package root for ${expectedName}`);
     directory = parent;
   }
+}
+
+async function assertInstalledVersion(packageRoot, pinned) {
+  const { name, version } = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  if (version !== pinned) throw new Error(`${name} ${version} is installed, but src/pins.ts pins ${pinned}`);
 }

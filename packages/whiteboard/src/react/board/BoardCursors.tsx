@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { WHITEBOARD_CURSOR_TTL_MS } from "../../collab/wire-limits";
 import type { ReactNode } from "react";
 import { BoardIcon, CursorArrow } from "./BoardIcon";
 import { springStep, type Camera, type Viewport } from "./board-model";
@@ -9,7 +10,6 @@ export type RemoteCursor = { readonly participantId: string; readonly displayNam
 type Tracked = { name: string; x: number; y: number; vx: number; vy: number; tx: number; ty: number; tag: { width: number; height: number } | null };
 
 const REST_RATE = 16;
-const STALE_MS = 10_000;
 /** Slide limits for the off-screen chips: clear of the board menu, the zoom and the island, and of the chips at the top. */
 const EDGE_INSETS = { top: 56, right: 64, bottom: 80, left: 64 } as const;
 const HOVER_PX = 26;
@@ -19,9 +19,9 @@ const NAME_INDENT_PX = 14;
 /** Pruning belongs to receipt too: grid boards do not mount the cursor layer. */
 export function rememberCursor(cursors: Map<string, RemoteCursor>, cursor: RemoteCursor): void {
   const now = Date.now();
-  for (const [id, previous] of cursors) if (now - Date.parse(previous.occurredAt) > STALE_MS) cursors.delete(id);
+  for (const [id, previous] of cursors) if (now - Date.parse(previous.occurredAt) > WHITEBOARD_CURSOR_TTL_MS) cursors.delete(id);
   cursors.delete(cursor.participantId);
-  if (now - Date.parse(cursor.occurredAt) <= STALE_MS) cursors.set(cursor.participantId, cursor);
+  if (now - Date.parse(cursor.occurredAt) <= WHITEBOARD_CURSOR_TTL_MS) cursors.set(cursor.participantId, cursor);
   if (cursors.size > 256) {
     const oldest = cursors.keys().next().value;
     if (oldest !== undefined) cursors.delete(oldest);
@@ -60,7 +60,7 @@ export function BoardCursors({
       const roster = cursorsRef.current;
       let rosterChanged = false;
       for (const [id, cursor] of roster) {
-        if (Date.now() - Date.parse(cursor.occurredAt) > STALE_MS) {
+        if (Date.now() - Date.parse(cursor.occurredAt) > WHITEBOARD_CURSOR_TTL_MS) {
           roster.delete(id);
           continue;
         }

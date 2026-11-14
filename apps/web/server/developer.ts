@@ -5,7 +5,7 @@ import type { Engine } from "./engine";
 import { run } from "./engine";
 import { DashboardError } from "./http";
 import { keyDTO, webhookDTO } from "./dto";
-import type { RecordingRenderSettingsDTO, AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
+import type { ActionResult, RecordingRenderSettingsDTO, AllowedWebsitesDTO, DeliveryDTO, DeveloperAction, DeveloperDTO, SecretDTO } from "../src/lib/dashboard/contracts";
 export async function developerPage(engine: Engine, cursors: { keyCursor?: string; webhookCursor?: string }): Promise<DeveloperDTO> {
   const params = { tenant_id: engine.tenantId };
   const [keys, webhooks, tenant] = await Promise.all([
@@ -33,7 +33,7 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
   };
 }
 
-export async function developerMutation(engine: Engine, action: DeveloperAction) {
+export async function developerMutation(engine: Engine, action: DeveloperAction): Promise<ActionResult<DeveloperAction>> {
   const api = engine.api.default;
   const params = { tenant_id: engine.tenantId };
   switch (action.action) {

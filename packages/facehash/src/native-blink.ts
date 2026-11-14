@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import { BLINK_CLOSED_SCALE_Y } from "./core/blink-scale";
 import type { EyeAnchor, FacehashBlinkTiming } from "./core/index";
 
-const CLOSED_SCALE_Y = 0.05;
 const BLINK_CLOSED_MS = 85;
 
 export function buildEyeTransform(anchor: EyeAnchor, scaleY: number): string {
@@ -26,7 +26,7 @@ export function useBlinkTransform(enableBlink: boolean | undefined, timing: Face
       if (cancelled) {
         return;
       }
-      setScaleY(CLOSED_SCALE_Y);
+      setScaleY(BLINK_CLOSED_SCALE_Y);
       openTimeout = setTimeout(() => {
         if (!cancelled) {
           setScaleY(1);

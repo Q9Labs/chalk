@@ -2,7 +2,7 @@ import { createFileRoute, useLocation, useMatch } from "@tanstack/react-router";
 import { useCallback, useEffect } from "react";
 
 import { SpacePage } from "../components/space/SpacePage";
-import { SITE_ORIGIN } from "../lib/site-head";
+import { SITE_ORIGIN } from "../lib/site-origin";
 
 export const Route = createFileRoute("/_space")({
   head: ({ match }) => ({

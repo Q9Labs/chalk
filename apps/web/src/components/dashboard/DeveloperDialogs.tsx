@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 
 import type { DeveloperAction, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
-import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
+import { SITE_ORIGIN } from "../../lib/site-origin";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
@@ -481,7 +481,7 @@ export function AddWebsiteDialog({ origins, onClose, onSaved }: { readonly origi
     const problem =
       !HTTPS_ORIGIN.test(origin) && !LOCAL_ORIGIN.test(origin)
         ? "Use a website like https://app.example.com, with no path. For local work, use http://localhost with a port."
-        : origin === dashboardWebsiteOrigin
+        : origin === SITE_ORIGIN
           ? "chalkmeet.com is always allowed."
           : origins.includes(origin)
             ? "That website is already on the list."

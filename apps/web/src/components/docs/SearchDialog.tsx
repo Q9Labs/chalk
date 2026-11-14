@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Icon } from "../site/Icon";
-import { trapDialogFocus } from "./dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { searchDocs } from "./search";
 
 function highlight(text: string, query: string): ReactNode {

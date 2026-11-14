@@ -78,6 +78,7 @@
     "apps/web/functions/**/*.ts",
     "apps/web/server/vendor-assets.ts",
     "apps/web/tests/dashboard/fixture-entry.ts",
+    "packages/whiteboard/tests/types/*.ts",
     "apps/web/tests/dashboard/*.mjs",
     "apps/web/src/lib/dashboard/contracts.ts",
     "apps/mobile/src/space/mobile-space-client.ts",

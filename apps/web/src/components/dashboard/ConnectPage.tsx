@@ -5,7 +5,7 @@ import { act, errorMessage, failureKind, readPage, signOut } from "../../lib/das
 import { Icon } from "../site/Icon";
 import { Lockup } from "../site/Lockup";
 import { AppPair } from "./AppLogo";
-import { useLoad, useSession } from "./AppShell";
+import { useLoad, useSession } from "./use-dashboard";
 import { Seg, Sk } from "./kit";
 
 type Scope = "chalk:read" | "chalk:manage";

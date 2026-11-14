@@ -6,7 +6,7 @@ import { act, errorMessage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { LanguagePicker } from "./LanguagePicker";
 import { Seg, useToast } from "./kit";
-import { rememberLanguage } from "./transcript-languages";
+import { rememberLanguage } from "./language-choice";
 
 type RenderMode = RecordingRenderSettingsDTO["recordingRenderMode"];
 const RENDER_MODES: readonly (readonly [RenderMode, string])[] = [

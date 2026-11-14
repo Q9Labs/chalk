@@ -1,7 +1,9 @@
 import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
+import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
+import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
 
 const id = z.uuid();
@@ -21,6 +23,12 @@ export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(10
 export const callStatusQuery = z.strictObject({ spaceId: id });
 export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id, view: z.enum(["call", "past-session"]).optional() }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
+/** How long a call the dashboard creates may run: the default, the longest, and the wait after the last person leaves. */
+export const CALL_DEFAULT_SECONDS = 3600;
+export const CALL_MAX_SECONDS = 86400;
+export const CALL_LINGER_SECONDS = 60;
+/** The name of a call made without one, and the slug it gets. */
+export const DEFAULT_CALL_NAME = "New call";
 /** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
 export const HOME_STATUS_ROWS = 300;
 const spaceIds = (most: number) =>
@@ -43,8 +51,7 @@ export const recordingsQuery = z.strictObject({ ...listFilters, status: z.enum(r
 export type SessionsQuery = z.infer<typeof sessionsQuery>;
 export type RecordingsQuery = z.infer<typeof recordingsQuery>;
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
-/** The one-time handle the API puts in the consent link. It is a secret until the request is decided. */
-const consentHandle = z.string().regex(/^chalk_oar_[A-Za-z0-9_-]{20,100}$/);
+const consentHandle = z.string().regex(new RegExp(`^${CONSENT_HANDLE_PATTERN}$`));
 export const connectQuery = z.strictObject({ request: consentHandle });
 export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
 export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });
@@ -96,7 +103,6 @@ const eventType = z.enum([
   "space.updated",
 ]);
 const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(14) };
-export const dashboardWebsiteOrigin = "https://chalkmeet.com";
 const websiteOrigin = z
   .string()
   .max(2048)
@@ -115,7 +121,7 @@ const websiteOrigin = z
 const allowedWebsites = z
   .array(websiteOrigin)
   .max(32)
-  .transform((origins) => [...new Set([dashboardWebsiteOrigin, ...origins])])
+  .transform((origins) => [...new Set([SITE_ORIGIN, ...origins])])
   .refine((origins) => origins.length <= 32, "At most 32 origins including chalkmeet.com");
 export const developerAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("set-default-transcript-language"), transcriptLanguage }),
@@ -223,3 +229,67 @@ export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<Epis
 export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };
+
+/** Each dashboard page: what a read takes and returns, and the actions a POST accepts. The server's route table and the browser client are both typed from this. */
+export type DashboardPages = {
+  "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
+  "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
+  "call-invite": { query: { spaceId: string }; data: Pick<CallPageDTO, "inviteUrl">; action: never };
+  "home-status": { query: { spaceIds?: string; home?: "1" }; data: HomeStatusDTO; action: never };
+  home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
+  call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
+  "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
+  sessions: { query: SessionsQuery; data: SessionListDTO; action: never };
+  recordings: { query: RecordingsQuery; data: SessionListDTO; action: never };
+  developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
+  connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
+  connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };
+};
+export type DashboardPage = keyof DashboardPages;
+
+type Ok = { ok: true };
+export type DeliveryDetailDTO = { id: string; state: string; eventType: string; attemptCount: number; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
+
+/** What each action returns. */
+export type ActionResults = {
+  "create-call": { call: CallDTO };
+  "rename-call": { call: CallDTO };
+  "set-admission": { call: CallDTO };
+  "set-transcript-language": { call: CallDTO };
+  "set-default-transcript-language": TranscriptLanguageSettingsDTO;
+  "archive-call": { call: CallDTO };
+  "restore-call": { call: CallDTO };
+  join: OwnerAccessDTO;
+  "refresh-access": OwnerAccessDTO;
+  "rotate-link": { inviteUrl: string };
+  "extend-call": Ok;
+  "end-for-everyone": Ok;
+  "approve-knock": Ok;
+  "deny-knock": Ok;
+  "create-transcript": { transcript: TranscriptDTO };
+  "recording-url": ArtifactURLDTO;
+  "export-recording": { recording: RecordingDTO };
+  transcripts: { transcripts: TranscriptDTO[] };
+  "transcript-document": { cues: CueDTO[] };
+  "delete-transcript": Ok;
+  "allowed-websites": AllowedWebsitesDTO;
+  "set-allowed-websites": AllowedWebsitesDTO;
+  "set-recording-render-mode": RecordingRenderSettingsDTO;
+  "create-key": SecretDTO;
+  "rotate-key": SecretDTO;
+  "revoke-key": Ok;
+  "create-webhook": { webhook: WebhookDTO; secret: string };
+  "update-webhook": { webhook: WebhookDTO };
+  "delete-webhook": Ok;
+  "rotate-webhook-secret": SecretDTO;
+  "test-webhook": { deliveryId: string };
+  "webhook-deliveries": { deliveries: DeliveryDTO[]; nextCursor: string | null };
+  "webhook-delivery": DeliveryDetailDTO;
+  "redeliver-webhook": { deliveryId: string };
+  "approve-connection": { redirectUrl: string };
+  "deny-connection": { redirectUrl: string };
+  "revoke-connection": Ok;
+};
+
+/** What the action `A` returns, as a union over the actions it may be. */
+export type ActionResult<A extends { action: string }> = A extends { action: infer K } ? (K extends keyof ActionResults ? ActionResults[K] : never) : never;

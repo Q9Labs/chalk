@@ -1,4 +1,4 @@
-import { Dither } from "../landing/Dither";
+import { Dither } from "./Dither";
 import { GITHUB_URL, SIGN_IN_HREF, START_CALL_HREF } from "./links";
 import { Lockup } from "./Lockup";
 

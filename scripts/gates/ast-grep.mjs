@@ -119,6 +119,19 @@ addSourceRule(
 );
 
 addSourceRule(
+  "forbid-empty-catch",
+  "An empty catch hides the failure. Handle the error, log it with context, or say in a comment inside the catch why dropping it is safe.",
+  {
+    any: [{ kind: "catch_clause", has: { field: "body", regex: "^\\{\\s*\\}$" } }, { all: [pattern("$PROMISE.catch(() => {})"), { not: { regex: "/[/*]" } }] }],
+  },
+  {
+    files: ["apps/web/server/**", "apps/web/src/**", "packages/ui/src/**", "packages/whiteboard/src/**", "packages/facehash/src/**", "packages/transcript-language/src/**", "packages/assets/src/**"],
+    // The call-state harness is a proof fixture owned by the call session work; its two silent catches wait for that change.
+    ignores: [...tests, "**/__tests__/**", "apps/web/src/call-states/**"],
+  },
+);
+
+addSourceRule(
   "forbid-sdk-importing-app-code",
   "SDK packages must not import app-only modules.",
   {
