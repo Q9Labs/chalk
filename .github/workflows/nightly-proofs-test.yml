@@ -4,6 +4,8 @@ on:
   push:
     branches: [ci/nightly-stack-boot]
     paths:
+      - scripts/nightly-stack/**
+      - scripts/prod-proof/**
       - .github/workflows/nightly-proofs.yml
       - .github/workflows/nightly-proofs-test.yml
 
