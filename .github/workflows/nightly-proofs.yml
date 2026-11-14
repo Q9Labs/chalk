@@ -4,6 +4,9 @@ name: Nightly proofs
 # images and a Chalk SFU built from the cut (scripts/nightly-stack), runs the proof against it, and throws everything away.
 # Lanes share nothing, so they run side by side with no lease, and the first failed lane cancels the others.
 #
+# The cloudflare-plane lane runs the camera-share proof on a Cloudflare Space with the real Nightly Cloudflare credentials. They
+# are secrets of the nightly environment, which accepts master only, and only this lane's boot step receives them.
+#
 # Two lanes differ from the rest. latency-smoke runs the latency kit for a few cycles on the stack and checks that it emits
 # every gated action metric. latency measures speed: its Chalk SFU runs on a DigitalOcean host created for the run, of the size
 # the production node table gives a primary, and deleted when the lane ends. Its runner is x86 because the host is, so it builds
@@ -215,6 +218,12 @@ jobs:
           API_IMAGE: ${{ steps.images.outputs.api }}
           SYNC_IMAGE: ${{ steps.images.outputs.sync }}
           HOST_IP: ${{ steps.host.outputs.ip }}
+          # Only the Cloudflare plane lane receives the real Nightly credentials; every other lane boots with unused ones.
+          CHALK_STACK_CLOUDFLARE_ACCOUNT_ID: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_ACCOUNT_ID || '' }}
+          CHALK_STACK_CLOUDFLARE_REALTIME_APP_ID: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_REALTIME_APP_ID || '' }}
+          CHALK_STACK_CLOUDFLARE_REALTIME_APP_SECRET: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_REALTIME_APP_SECRET || '' }}
+          CHALK_STACK_CLOUDFLARE_TURN_KEY_ID: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_TURN_KEY_ID || '' }}
+          CHALK_STACK_CLOUDFLARE_TURN_API_TOKEN: ${{ matrix.proof == 'cloudflare-plane' && secrets.CHALK_CLOUDFLARE_TURN_API_TOKEN || '' }}
         run: |
           web=()
           if [ "$PROOF" = web-call ]; then web=(--web-root "$GITHUB_WORKSPACE/apps/web/dist/client"); fi
@@ -245,6 +254,10 @@ jobs:
           elif [ "$PROOF" = latency ]; then
             # The full run: the budgets in perf/budgets.json gate it, and Promote reads its record.
             pnpm prod:latency --samples "$LATENCY_SAMPLES" --planes chalk_sfu --environment nightly --tier nightly --region github-hosted --size ubuntu-24-04 || status=$?
+          elif [ "$PROOF" = cloudflare-plane ]; then
+            # The default plane of production Spaces: the camera-share proof on a Cloudflare Space, through the real Cloudflare services.
+            unset CHALK_PROOF_SPACE_ID_CHALK_SFU
+            CHALK_PROOF_MEDIA_PLANE=cf_sfu pnpm prod:proof camera-share || status=$?
           elif [ "$PROOF" = latency-smoke ]; then
             # A runner shares its CPU, so this run checks that the kit emits every gated action metric, not how fast they are.
             # The speed check is nightly-latency.yml on a host of its own.

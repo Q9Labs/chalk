@@ -40,7 +40,7 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.equal(release.with.build_web, true, "the cut keeps the production web archive");
   assert.equal(gate.uses, "./.github/workflows/nightly-proofs.yml");
   assert.equal(gate.with.image_source, "manifest");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "latency-smoke", "web-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "long-call", "chat-upload", "leave-chalk-sfu", "cloudflare-plane", "latency-smoke", "web-call"]);
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
   for (const name of ["release", "proof", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
   assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);
@@ -52,6 +52,16 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.equal(env.RELEASE_RESULT, "${{ needs.release.result }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
+});
+
+test("Only the Cloudflare plane lane receives the real Cloudflare credentials", () => {
+  const lane = workflow("nightly-proofs.yml").jobs.lane;
+  const boot = lane.steps.find((item) => item.name === "Boot the stack");
+  const names = Object.keys(boot.env).filter((name) => name.startsWith("CHALK_STACK_CLOUDFLARE_"));
+  assert.equal(names.length, 5);
+  for (const name of names) assert.match(boot.env[name], /^\$\{\{ matrix\.proof == 'cloudflare-plane' && secrets\.CHALK_CLOUDFLARE_[A-Z_]+ \|\| '' \}\}$/);
+  const others = JSON.stringify(lane.steps.filter((item) => item !== boot));
+  assert.doesNotMatch(others, /secrets\.CHALK_CLOUDFLARE_/);
 });
 
 test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
