@@ -20,6 +20,10 @@ type ReadinessChecker interface {
 	Check(ctx context.Context) error
 }
 
+type liveParticipantCounter interface {
+	LiveParticipants(ctx context.Context) (int64, error)
+}
+
 type RecorderHealthChecker interface {
 	CheckRecorderPool(ctx context.Context, role workeridentity.Role) error
 }
@@ -49,7 +53,9 @@ type Options struct {
 	Readiness  ReadinessChecker
 	// RetirementBacklog reports the own-SFU retirement debt for /readyz. It never fails readiness:
 	// a node that stays silent must not take the API out of service. It is nil without the own SFU.
-	RetirementBacklog          func() (count int, oldest time.Duration, observed bool)
+	RetirementBacklog func() (count int, oldest time.Duration, observed bool)
+	// OperatorReadTokenSHA256 is the hash of the token that lets /readyz show private figures. Empty shows none.
+	OperatorReadTokenSHA256    []byte
 	RecorderHealth             RecorderHealthChecker
 	RecorderWorker             RecorderWorkerService
 	RecorderCapturePlans       RecorderCapturePlanService
@@ -149,7 +155,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog))
+	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog, options.OperatorReadTokenSHA256))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -181,7 +187,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlog func() (int, time.Duration, bool)) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlog func() (int, time.Duration, bool), operatorReadTokenSHA256 []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
 			writeReadinessError(w, capabilities, "postgres")
@@ -205,6 +211,16 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 		if backlog != nil {
 			if count, oldest, observed := backlog(); observed {
 				body["sfu_retirement_debts"] = map[string]int64{"count": int64(count), "oldest_age_seconds": int64(oldest.Seconds())}
+			}
+		}
+		// A release waits for the live participant count to reach zero before it restarts production. The count is usage
+		// data, so only a request with the operator read token sees it. Like the backlog, it never fails readiness: an
+		// unreadable count is left out, so the reader sees "unknown" and never a made-up zero.
+		if live, ok := checker.(liveParticipantCounter); ok && operatorReadAuthorized(r, operatorReadTokenSHA256) {
+			if count, err := live.LiveParticipants(ctx); err != nil {
+				slog.Warn("count live participants for readiness", "error", err)
+			} else {
+				body["live_participants"] = count
 			}
 		}
 		writeJSON(w, http.StatusOK, body)

@@ -177,7 +177,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         release.select(self.github(held()), None)
 
     def promoted_sha(self, github):
-        release.auto_promote(github, None)
+        with patch.object(release.live_calls, 'require_quiet_window'): release.auto_promote(github, None)  # The window and live calls have their own tests.
         line = [line for line in self.output.read_text().splitlines() if line.startswith('sha=')][-1]
         return line.removeprefix('sha=')
 

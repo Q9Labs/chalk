@@ -15,6 +15,14 @@ on:
         description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
         required: false
+      deploy_before:
+        description: Set by Auto-promote. An ISO time (UTC) after which the live-call guard refuses instead of deploying; leave blank for a person's run
+        type: string
+        required: false
+      allow_live_calls:
+        description: Deploy even while participants are in calls, or when the live count cannot be read. A deploy restarts the API and Sync, which drops live calls
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -125,13 +133,30 @@ jobs:
       proofs: own-sfu-spaces
       media_plane: chalk_sfu
     secrets: inherit
+  live-calls:
+    # A deploy restarts the API and Sync and drops every live call. Wait for calls to end, then refuse; the count comes from the production API's /readyz.
+    needs: [select, approve, own-sfu-spaces]
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      deployment: false
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Wait for live calls to end
+        env:
+          LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
+          LIVE_CALLS_API_TOKEN: ${{ secrets.CHALK_OPERATOR_READ_TOKEN }}
+          ALLOW_LIVE_CALLS: ${{ inputs.allow_live_calls }}
+          DEPLOY_BEFORE: ${{ inputs.deploy_before }}
+        run: python3 scripts/releases/live_calls.py
   release:
     permissions:
       contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
       actions: read
       deployments: write
       id-token: write
-    needs: [select, approve, own-sfu-spaces]
+    needs: [select, approve, own-sfu-spaces, live-calls]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}

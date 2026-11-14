@@ -11,7 +11,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import seal
+import live_calls, seal
 from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
 
@@ -387,19 +387,19 @@ def select(github, args):
 
 
 def auto_promote(github, args):
-    """Name the SHA Promote takes now, or nothing. Not ready is an answer, not a failure: the next latency verdict asks again."""
+    """Name the SHA Promote takes now, or nothing. Not ready is an answer, not a failure: the next latency verdict or quiet-window tick asks again."""
     os.environ.pop('EXPECTED_RELEASE_SHA', None)
     os.environ.pop('SCORECARD_OVERRIDE', None)  # Only a person accepts a failed gate.
     try:
         result = choose(github)
         sha = result['selection']['target_sha']
         require(result['previous']['target_sha'] != sha, f'production already runs {sha}')
-        reason = f'promoting {sha}'
+        until = live_calls.require_quiet_window().isoformat()
     except ValueError as error:
-        sha, reason = '', str(error)
-    outputs({'sha': sha})
+        sha, reason, until = '', str(error), ''
+    outputs({'sha': sha, 'until': until})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
-        summary.write(f'## Automatic promotion\n\n{"Promoting" if sha else "Not promoting"}: {reason}\n')
+        summary.write(f'## Automatic promotion\n\n{"Promoting " + sha if sha else "Not promoting: " + reason}\n')
 
 
 def deployed_cut(github):
