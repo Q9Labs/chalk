@@ -146,7 +146,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     end
   end
 
-  defp tally(result, candidate, event_bytes, deleted) do
+  defp tally(%Result{} = result, candidate, event_bytes, deleted) do
     %Result{
       result
       | episodes: result.episodes + 1,
