@@ -2,7 +2,8 @@ name: Host change check
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # GitHub runs this far less often than asked; the check looks back eight hours to cover the gaps.
+    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       drill:

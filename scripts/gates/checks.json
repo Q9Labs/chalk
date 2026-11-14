@@ -609,12 +609,12 @@
     {
       "id": "workflow:host-change-check.yml#check",
       "owner": "Monitoring",
-      "catches": "A change to the node that no release made, read from CloudTrail every five minutes and sent to Oncall.",
+      "catches": "A change to the node that no release made, read from CloudTrail and Axiom over the last eight hours and sent to Oncall.",
       "runs": ["daily"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Runs on a five-minute schedule; no failure history recorded yet."
+      "minutes": 0.5,
+      "record": "noise",
+      "sample": "The first 5 of 7 runs, from 12 to 13 November, failed with an Axiom HTTP 400 (the log did not say why; the query is valid against the production dataset) and the 2 since 14 November passed. GitHub ran the five-minute cron only 7 times in 2.5 days."
     },
     {
       "id": "workflow:hotfix.yml#plan",

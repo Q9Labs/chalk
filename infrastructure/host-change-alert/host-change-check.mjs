@@ -4,8 +4,11 @@ import { promisify } from "node:util";
 const run = promisify(execFile);
 const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
 const HOST_CALLS = new Set(["StopInstances", "StartInstances", "RebootInstances"]);
-const CLOUDTRAIL_WINDOW_MS = 30 * 60 * 1000;
-const START_WINDOW_MS = 10 * 60 * 1000;
+// GitHub drops most scheduled runs of a frequent cron: the runs of this check were 5 to 8 hours apart in November 2026.
+// Each run therefore looks back far enough to cover the longest gap seen, and Oncall dedupes on the incident key, so a repeat page is harmless.
+const LOOKBACK_MS = 8 * 60 * 60 * 1000;
+const CLOUDTRAIL_WINDOW_MS = LOOKBACK_MS;
+const START_WINDOW_MS = LOOKBACK_MS;
 // A deploy record is created before the API container restarts, so it explains a start from its creation until the deploy completes.
 // A record that never completed (a failed attempt) has no end time and explains starts for this long.
 const DEPLOY_LEAD_MS = 30 * 60 * 1000;
@@ -53,6 +56,11 @@ export function oncallPayload(incidents, { drill }) {
   return { source: "oncall-poller", ...(drill ? { drill: true } : {}), incidents: incidents.map((incident) => ({ app: "chalk", kind: "new", ...incident })) };
 }
 
+// The service says why it refused (a wrong dataset name, a bad window), and that text carries no secret.
+async function bodyExcerpt(response) {
+  return (await response.text().catch(() => "")).slice(0, 300);
+}
+
 async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
   const response = await fetchImpl(AXIOM_URL, {
     method: "POST",
@@ -61,7 +69,7 @@ async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
   }).catch(() => {
     throw new Error("Axiom query request failed");
   });
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
   return parseStarts(await response.json());
 }
 
@@ -71,7 +79,7 @@ async function githubJson({ fetchImpl, token, path }) {
   }).catch(() => {
     throw new Error("GitHub request failed");
   });
-  if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
   return response.json();
 }
 
@@ -120,7 +128,7 @@ export async function check({ env, fetchImpl = fetch, awsImpl = aws, now = new D
   const response = await fetchImpl(env.ONCALL_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(oncallPayload(incidents, { drill })) }).catch(() => {
     throw new Error("Oncall webhook request failed");
   });
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}: ${await bodyExcerpt(response)}`);
   // A fired alert fails the run so GitHub also emails the failure.
   return drill ? 0 : 1;
 }
