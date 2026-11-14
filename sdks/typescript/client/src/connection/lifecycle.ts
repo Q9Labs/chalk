@@ -983,19 +983,22 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (syncNeedsRecovery(snapshot)) yield* recover("sync");
           yield* publish();
         });
+      /** What a terminal snapshot says about how this seat ended. A seat the server let go while this client was still in the call (nobody pressed Leave) is timed out. */
+      const recordSeatEnd = (snapshot: V1EpisodeSnapshot, ended: boolean): boolean => {
+        const reason = snapshot.connection.terminalReason;
+        const removed = reason === "participant_removed";
+        const inactive = reason === "participant_inactive";
+        if (inactive && active(model)) model.timedOut = true;
+        if (ended) {
+          model.episodeEndConfirmed = true;
+          model.episodeEndReason = snapshot.control?.endReason;
+        }
+        if (removed) model.removedByHost = true;
+        return ended || removed || inactive;
+      };
       const settleTerminalSnapshot = (snapshot: V1EpisodeSnapshot): Effect.Effect<boolean> =>
         Effect.gen(function* () {
-          const ended = episodeEnded(snapshot);
-          const removed = snapshot.connection.terminalReason === "participant_removed";
-          // A seat the server let go while this client was still in the call: nobody pressed Leave.
-          const timedOut = snapshot.connection.terminalReason === "participant_inactive" && active(model);
-          if (ended || removed || snapshot.connection.terminalReason === "participant_inactive") {
-            if (ended) {
-              model.episodeEndConfirmed = true;
-              model.episodeEndReason = snapshot.control?.endReason;
-            }
-            if (removed) model.removedByHost = true;
-            if (timedOut) model.timedOut = true;
+          if (recordSeatEnd(snapshot, episodeEnded(snapshot))) {
             yield* finishTerminalSnapshot();
             return true;
           }

@@ -14,7 +14,7 @@ export type ArrivedSpace = {
 // One Start call is one request key until the call is created, so a double press or a retry after a lost answer reaches the same Space.
 let startCall: { readonly displayName: string; readonly key: string } | undefined;
 function startCallKey(displayName: string): string {
-  if (startCall?.displayName !== displayName) startCall = { displayName, key: globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 32) };
+  if (startCall?.displayName !== displayName) startCall = { displayName, key: globalThis.crypto.randomUUID().replaceAll("-", "") };
   return startCall.key;
 }
 
