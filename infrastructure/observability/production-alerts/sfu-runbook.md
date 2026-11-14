@@ -1,6 +1,6 @@
 # Chalk SFU on-call runbook
 
-This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert means, how to check it, and the fix. Real addresses, instance ids and webhook URLs stay in private configuration and 1Password, never here. Operator access to a node is by SSH key and the deploy tunnel (see [Own-SFU nodes](../../sfu/README.md)); `<env>` below is `production` or `staging`.
+This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert means, how to check it, and the fix. Real addresses, instance ids and webhook URLs stay in private configuration and 1Password, never here. Operator access to a node is by SSH key and the deploy tunnel (see [Chalk SFU nodes](../../sfu/README.md)); `<env>` below is `production` or `staging`.
 
 ## Where alerts come from and where they go
 
@@ -15,7 +15,7 @@ DigitalOcean to Discord was proved at the Discord API only (DigitalOcean's own P
 
 ## The readiness probe on the production host
 
-The collector's `/readyz` probe is on for the production node. It runs every minute as part of `chalk-alert-state.service`, which runs as the `chalk` user with `/run/chalk/env/api.env` and, when present, `/etc/chalk-alerts/collector.env`. The variables and what the probe reports are in [Own SFU readiness](README.md#own-sfu-readiness). Use the steps below to enable it on a new host, to renew its certificate copies, or to see how it was set up. Run them as root on the API host (by SSM or SSH).
+The collector's `/readyz` probe is on for the production node. It runs every minute as part of `chalk-alert-state.service`, which runs as the `chalk` user with `/run/chalk/env/api.env` and, when present, `/etc/chalk-alerts/collector.env`. The variables and what the probe reports are in [Chalk SFU readiness](README.md#chalk-sfu-readiness). Use the steps below to enable it on a new host, to renew its certificate copies, or to see how it was set up. Run them as root on the API host (by SSM or SSH).
 
 The probe needs the API's mutual-TLS client certificate, key and CA. On the production host the API reads them from podman secrets mounted only inside its container, so there are no readable host files. Step 2 copies them out of the `chalk` user's podman secret store into `/etc/chalk-alerts/sfu/`. The directories and files belong to root, so a compromised collector cannot change its own settings: `/etc/chalk-alerts` is `root:root 0755`, the `sfu` directory `root:chalk 0750`, and the files `root:chalk 0440`. No value is printed.
 
@@ -176,7 +176,7 @@ A node that restarts or is rebuilt with the same node id keeps its name in the E
 
 ## Rebuild a node
 
-Order: create the Droplet from the cloud-init template, wait for the bootstrap marker, run `deploy <env> <address>`, check `/readyz`, point the API at the node, run the smoke test ([Own-SFU nodes](../../sfu/README.md)). Plan on roughly 10 minutes including finding the operator and updating `CHALK_SFU_NODES`.
+Order: create the Droplet from the cloud-init template, wait for the bootstrap marker, run `deploy <env> <address>`, check `/readyz`, point the API at the node, run the smoke test ([Chalk SFU nodes](../../sfu/README.md)). Plan on roughly 10 minutes including finding the operator and updating `CHALK_SFU_NODES`.
 
 Do not turn on weekly backups or snapshots. The node holds no state of its own (certificates are in 1Password and the private directory, image and config come from deploy), so a rebuild is quicker than restoring a stale image.
 

@@ -211,7 +211,7 @@ describe("join with media on", () => {
     );
   };
 
-  // Chalk's own SFU forwards a source only under a grant, and Sync grants it only for an on it has accepted.
+  // the Chalk SFU forwards a source only under a grant, and Sync grants it only for an on it has accepted.
   it("asks Sync to turn on each source it published at join", async () => {
     const accepted = async () => ({ operationId: "on", name: "set_camera_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
     const setMicrophoneEnabled = vi.fn(accepted);

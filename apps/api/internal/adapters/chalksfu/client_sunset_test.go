@@ -18,7 +18,7 @@ import (
 )
 
 // After the client sunset an allowlisted Space refuses a client that cannot run
-// the own SFU, instead of giving it Cloudflare. Before it, and for a Space off
+// the Chalk SFU, instead of giving it Cloudflare. Before it, and for a Space off
 // the allowlist, nothing changes.
 func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T) {
 	fleet := startSFU(t, nil).fleet(t)
@@ -51,7 +51,7 @@ func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T)
 		{"old client at the sunset is refused", tenants.Tenant{}, everySpace, sunset, sunset, oldClient, "", mediaplane.ErrClientUnsupported},
 		{"old client after the sunset is refused", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), oldClient, "", mediaplane.ErrClientUnsupported},
 		{"no sunset set never refuses", tenants.Tenant{}, everySpace, time.Time{}, sunset.Add(time.Hour), oldClient, mediaplane.ProviderCloudflareSFU, nil},
-		{"declaring client after the sunset gets the own SFU", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), ownSFUClients, mediaplane.ProviderChalkSFU, nil},
+		{"declaring client after the sunset gets the Chalk SFU", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), chalkSFUClients, mediaplane.ProviderChalkSFU, nil},
 		{"old client with tenant media disabled still starts a media-free Episode", disabledMedia, everySpace, sunset, sunset.Add(time.Hour), oldClient, "", nil},
 		{"old client in a Space off the allowlist keeps Cloudflare after the sunset", tenants.Tenant{}, onlyOther, sunset, sunset.Add(time.Hour), oldClient, mediaplane.ProviderCloudflareSFU, nil},
 	}
@@ -105,7 +105,7 @@ func TestConformanceRefuseClientBeforeASpaceExists(t *testing.T) {
 		want    error
 	}{
 		"old client, every Space allowed":          {everySpace, mediaplane.ParseClientProviders(""), mediaplane.ErrClientUnsupported},
-		"declaring client, every Space allowed":    {everySpace, ownSFUClients, nil},
+		"declaring client, every Space allowed":    {everySpace, chalkSFUClients, nil},
 		"old client, a new Space is not on a list": {onlyOther, mediaplane.ParseClientProviders(""), nil},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -82,7 +82,7 @@ const (
 	PlacementStandby PlacementReason = "standby"
 	// PlacementOverflowNoRoom, PlacementOverflowHostGuard,
 	// PlacementOverflowDraining and PlacementOverflowNodeUnavailable bind the
-	// Episode to Cloudflare because no own-SFU node had room. NoRoom: a node
+	// Episode to Cloudflare because no Chalk SFU node had room. NoRoom: a node
 	// that takes new Episodes was out of packet budget. HostGuard: the host
 	// guard refused new Episodes (CPU or scheduler pressure) although packet
 	// budget may be left. Draining: every answering node was draining, a
@@ -103,10 +103,10 @@ const (
 	PlacementNoCapacity PlacementReason = "no_capacity"
 )
 
-// ErrPlacementRefused means a new Episode was refused because no own-SFU node had
+// ErrPlacementRefused means a new Episode was refused because no Chalk SFU node had
 // room and Cloudflare overflow is off. The wrapping error names the overflow
 // placement reason. It is a bounded reason, safe to log.
-var ErrPlacementRefused = errors.New("no own sfu node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled")
+var ErrPlacementRefused = errors.New("no Chalk SFU node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled")
 
 // Placement is where a new Episode goes: a node of a provider that runs several,
 // or none for a provider with one global endpoint.
@@ -150,14 +150,14 @@ func (binding Binding) Placed(placement Placement) (Binding, error) {
 // generation the mover read, because another API replica moved the Episode first.
 var ErrBindingStale = errors.New("episode media plane binding moved to a newer generation")
 
-// ErrRecoveryRefused means a live Episode lost its node and no own-SFU node reserved room for
+// ErrRecoveryRefused means a live Episode lost its node and no Chalk SFU node reserved room for
 // it. The Episode never goes to Cloudflare: its binding stays as it was and the caller may
 // retry. The wrapping error names a bounded reason.
-var ErrRecoveryRefused = errors.New("no own sfu node reserved room for the recovering episode")
+var ErrRecoveryRefused = errors.New("no Chalk SFU node reserved room for the recovering episode")
 
 // Moved returns the binding of an Episode that recovers onto placement: the next generation,
 // the new node and incarnation, and the allocation it leaves remembered for cleanup. A
-// placement on a provider without nodes is refused, because a live own-SFU Episode never
+// placement on a provider without nodes is refused, because a live Chalk SFU Episode never
 // changes provider.
 func (binding Binding) Moved(placement Placement) (Binding, error) {
 	if binding.Node == "" || placement.Node == "" {

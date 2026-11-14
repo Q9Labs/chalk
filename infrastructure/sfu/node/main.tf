@@ -4,7 +4,7 @@ locals {
   control_port = local.table.ports.control
   media_port   = local.table.ports.media
   name         = "chalk-sfu-${var.environment}"
-  # chalk-sfu marks every own-SFU node; the second tag names its environment.
+  # chalk-sfu marks every Chalk SFU node; the second tag names its environment.
   # The droplet creates them by name, so neither environment's state owns them.
   tags = ["chalk-sfu", var.environment == "production" ? "chalk-sfu-prod" : "chalk-sfu-staging"]
 }

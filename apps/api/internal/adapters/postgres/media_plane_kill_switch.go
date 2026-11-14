@@ -10,7 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 )
 
-// KillSwitch is the stored own-SFU kill switch. A flip and its audit row commit together.
+// KillSwitch is the stored Chalk SFU kill switch. A flip and its audit row commit together.
 type KillSwitch struct {
 	pool *pgxpool.Pool
 }

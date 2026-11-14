@@ -167,7 +167,7 @@ func TestPlacementRefusesANodeThatPredatesTheWireProtocolAndSaysWhy(t *testing.T
 		t.Fatalf("placement on a node without the protocol = %+v with room %t, want no room, %s", placement, room, mediaplane.PlacementOverflowNodeProtocol)
 	}
 	telemetry := &placements{}
-	moved, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	moved, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.Node != "" {
 		t.Fatalf("overflow on: %+v, %v, want Cloudflare", moved, err)
 	}
@@ -177,7 +177,7 @@ func TestPlacementRefusesANodeThatPredatesTheWireProtocolAndSaysWhy(t *testing.T
 
 	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, nodes...)
 	refusing.Probe(ctx)
-	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowNodeProtocol)) {
+	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowNodeProtocol)) {
 		t.Fatalf("overflow off: %+v, %v, want the placement refusal naming %s", refused, err, mediaplane.PlacementOverflowNodeProtocol)
 	}
 	if want := []string{"cf_sfu/overflow_node_protocol_too_old", "chalk_sfu/overflow_node_protocol_too_old"}; strings.Join(telemetry.got, ",") != strings.Join(want, ",") {
@@ -295,7 +295,7 @@ func TestReviewColdStartMustNotBindAnUnverifiedOldNode(t *testing.T) {
 
 	check := func(stage string, fleet *chalksfu.Fleet) {
 		t.Helper()
-		started, err := registryOn(fleet, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		started, err := registryOn(fleet, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 		if err != nil || started == nil || started.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || started.Node != "" {
 			t.Fatalf("%s: binding %+v, %v, want an Episode on Cloudflare and none on the node", stage, started, err)
 		}
@@ -307,7 +307,7 @@ func TestReviewColdStartMustNotBindAnUnverifiedOldNode(t *testing.T) {
 	cold := real.fleetWithOverflow(t, ca, clientIdentity, true, nodes...)
 	check("before any probe", cold)
 	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, nodes...)
-	if refused, err := registryOn(refusing, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+	if refused, err := registryOn(refusing, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("overflow off before any probe: %+v, %v, want the placement refusal", refused, err)
 	}
 
@@ -338,7 +338,7 @@ func TestReviewKnownOldNodeWithoutCloudflareMustBeRefused(t *testing.T) {
 		fleet := real.fleetWithOverflow(t, ca, clientIdentity, overflow, nodes...)
 		fleet.Probe(ctx)
 		telemetry := &placements{}
-		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 		if binding != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowNodeProtocol)) {
 			t.Fatalf("overflow %t: %+v, %v, want no binding and the placement refusal naming %s", overflow, binding, err, mediaplane.PlacementOverflowNodeProtocol)
 		}
@@ -381,7 +381,7 @@ func TestReviewMixedFleetCannotBindOldOrUnverifiedFallback(t *testing.T) {
 				fleet := real.fleetWithOverflow(t, ca, clientIdentity, true, first, runtimeconfig.ChalkSFUNode{ID: "sfu-current", ControlURL: current.controlURL})
 				fleet.Probe(context.Background())
 				chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
-				binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
+				binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, chalkSFUClients)
 				switch {
 				case currentFull && (binding != nil || !errors.Is(err, mediaplane.ErrPlacementRefused)):
 					t.Fatalf("no node can take the Episode: %+v, %v, want a refusal", binding, err)
@@ -412,7 +412,7 @@ func TestReviewTransientProbeFailureKeepsWorkingOwnOnlyCalls(t *testing.T) {
 		fleet.Probe(ctx)
 		proxy.failReady.Store(true)
 		fleet.Probe(ctx)
-		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 		proxy.failReady.Store(false)
 		if err != nil || binding == nil || binding.Provider != mediaplane.ProviderChalkSFU.SettingName() || binding.Node != "sfu-flaky" {
 			t.Fatalf("overflow %t, after a lost probe: %+v, %v, want the Episode bound to the node", overflow, binding, err)

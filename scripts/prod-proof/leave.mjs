@@ -106,7 +106,7 @@ function capturedBaseline() {
   return { median: value ? Number(value) : undefined, evidence: process.env.CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256 || null };
 }
 
-// chalk_sfu: the earlier SDK cannot join an own-SFU Episode, so the Leaves are judged on absolute bounds alone.
+// chalk_sfu: the earlier SDK cannot join a Chalk SFU Episode, so the Leaves are judged on absolute bounds alone.
 async function ownLeaveProof(run, receiver) {
   const samples = [];
   for (let index = 0; index < 5; index++) {

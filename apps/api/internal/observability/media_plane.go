@@ -44,7 +44,7 @@ func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionT
 	)
 	placements, _ := meter.Int64Counter(
 		"chalk.api.media_plane.placement_decisions",
-		otelmetric.WithDescription("Own-SFU placement decisions for new Episodes, including ones whose creation later rolls back"),
+		otelmetric.WithDescription("Chalk SFU placement decisions for new Episodes, including ones whose creation later rolls back"),
 		otelmetric.WithUnit("{decision}"),
 	)
 	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration, placements: placements}
@@ -74,7 +74,7 @@ func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, prov
 
 // boundedPlacement maps a placement reason to its node role and a known reason.
 // A no-capacity Episode stays on the primary. A refused Episode, with overflow off,
-// counts under its overflow reason on the own-SFU provider; one that moved to
+// counts under its overflow reason on the Chalk SFU provider; one that moved to
 // Cloudflare counts the same reason under the Cloudflare provider.
 func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) {
 	switch reason {

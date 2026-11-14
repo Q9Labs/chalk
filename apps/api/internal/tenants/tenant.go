@@ -43,7 +43,7 @@ type Tenant struct {
 	DefaultMediaPlane *string
 	// DefaultMediaPlaneApproved is true when an operator wrote DefaultMediaPlane. Any other
 	// writer, including the previous release, leaves it false, and an unapproved value
-	// never selects the own SFU.
+	// never selects the Chalk SFU.
 	DefaultMediaPlaneApproved bool
 	MediaPlaneProviderConfig  json.RawMessage
 	StorageProviderConfig     json.RawMessage

@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-// What one guest's Leave must leave behind on the own SFU, judged from what the pages and the API reported.
+// What one guest's Leave must leave behind on the Chalk SFU, judged from what the pages and the API reported.
 const leaveCeilingMs = 5000;
 const releaseCeilingMs = 10_000;
 
@@ -15,7 +15,7 @@ export async function awaitRelease(sample, began, { now = () => performance.now(
   return { after, ms: Math.round(now() - began) };
 }
 
-export function evaluateOwnSfuLeave(sample) {
+export function evaluateChalkSfuLeave(sample) {
   const { leave, capture, release, survivor, episodeStatus } = sample;
   const failures = [];
   if (!leave.confirmed || leave.deadlineFallback) failures.push("The Sync acknowledgement of the Leave did not arrive before the SDK's deadline");

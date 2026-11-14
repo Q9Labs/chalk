@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Issues own-SFU certificates from the environment's service CA.
+# Issues Chalk SFU certificates from the environment's service CA.
 #
 #   certs <staging|production|bench> ca        create the service CA once; its key goes to 1Password
 #   certs <staging|production> server          the SFU's server certificate (DNS chalk-sfu), 180 days

@@ -117,7 +117,7 @@ defmodule ChalkSync.SourceControlRevisionPostgresTest do
     reservation
   end
 
-  # The own SFU's ordering for one source: a control older than the recorded revision is
+  # The Chalk SFU's ordering for one source: a control older than the recorded revision is
   # stale, and at a tie a revoke wins. A revoke is applied and then answered ambiguously, as
   # when its response is lost on the way back.
   defp sfu_transport(sfu) do

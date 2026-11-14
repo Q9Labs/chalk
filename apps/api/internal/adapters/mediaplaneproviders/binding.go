@@ -13,8 +13,8 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-// A Space outside the own-SFU allowlist gets Cloudflare, so only allowlisted
-// Spaces move, and while the kill switch is on every new Episode gets Cloudflare. An SDK that cannot run the own SFU gets Cloudflare in an
+// A Space outside the Chalk SFU allowlist gets Cloudflare, so only allowlisted
+// Spaces move, and while the kill switch is on every new Episode gets Cloudflare. An SDK that cannot run the Chalk SFU gets Cloudflare in an
 // allowlisted Space too, until the client sunset passes. After it the request
 // fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
 // Cloudflare for good.
@@ -43,19 +43,19 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 	if resolved == nil {
 		// A null binding means an Episode without media. That is correct for
 		// disabled media, but a Space forced to Cloudflare with no Cloudflare
-		// application would join the own SFU Space without media.
+		// application would join the Chalk SFU Space without media.
 		if pin != "" && resolution.ConfigurationSource != providercontracts.ConfigurationSourceDisabled {
 			if !clients.Runs(mediaplane.ProviderChalkSFU) {
-				// An SDK that cannot run the own SFU has no fallback here: tell it to upgrade,
+				// An SDK that cannot run the Chalk SFU has no fallback here: tell it to upgrade,
 				// instead of a media outage that no retry would clear.
 				slog.InfoContext(ctx, "chalk sfu refused a client that cannot run it", "event", "chalk_sfu.client_refused", "reason", "no_fallback")
 				return nil, mediaplane.ErrClientUnsupported
 			}
-			return nil, fmt.Errorf("%w: no Cloudflare application for a Space that cannot start on the own SFU", providercontracts.ErrAdapterUnavailable)
+			return nil, fmt.Errorf("%w: no Cloudflare application for a Space that cannot start on the Chalk SFU", providercontracts.ErrAdapterUnavailable)
 		}
 		return nil, nil
 	}
-	// The own SFU runs several nodes: the Episode stays on the one placed here.
+	// The Chalk SFU runs several nodes: the Episode stays on the one placed here.
 	var placement mediaplane.Placement
 	if resolved.provider == mediaplane.ProviderChalkSFU {
 		var room bool
@@ -130,9 +130,9 @@ func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space
 	return r.refuseAfterSunset(ctx, tenant, space, selected, clients)
 }
 
-// refuseAfterSunset refuses a client that cannot run the own SFU once the client
+// refuseAfterSunset refuses a client that cannot run the Chalk SFU once the client
 // sunset has passed, in a Space that is on the allowlist. Disabled media is left
-// alone: that Episode has no binding, so no client has to run the own SFU.
+// alone: that Episode has no binding, so no client has to run the Chalk SFU.
 func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected mediaplane.Provider, clients mediaplane.ClientProviders) error {
 	if selected != mediaplane.ProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || !r.rollout.SunsetPassed() {
 		return nil

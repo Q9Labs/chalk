@@ -60,16 +60,16 @@
     "planes": ["cf_sfu"],
     "proofs": ["leave"]
   },
-  "leave-own-sfu": {
-    "description": "The current client's Leave on the own SFU: acknowledgement, released capture, removed participant and media.",
+  "leave-chalk-sfu": {
+    "description": "The current client's Leave on the Chalk SFU: acknowledgement, released capture, removed participant and media.",
     "planes": ["cf_sfu", "chalk_sfu"],
-    "proofs": ["leave-own-sfu"]
+    "proofs": ["leave-chalk-sfu"]
   },
-  "own-sfu-spaces": {
-    "description": "Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.",
+  "chalk-sfu-spaces": {
+    "description": "Finds or creates Promote's two Chalk SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.",
     "planes": ["cf_sfu", "chalk_sfu"],
     "flags": { "ensureSpaces": true },
-    "proofs": ["own-sfu-spaces"]
+    "proofs": ["chalk-sfu-spaces"]
   },
   "chat-upload": {
     "description": "A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket.",

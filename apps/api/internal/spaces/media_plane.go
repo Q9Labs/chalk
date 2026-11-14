@@ -6,8 +6,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// ChalkSFUAllowlist names the Spaces that may use the own SFU. The zero value
-// allows none, so a deployment that turns the own SFU on still keeps every other
+// ChalkSFUAllowlist names the Spaces that may use the Chalk SFU. The zero value
+// allows none, so a deployment that turns the Chalk SFU on still keeps every other
 // Space on Cloudflare. The entry "*" allows every Space and is meant for staging.
 type ChalkSFUAllowlist struct {
 	all    bool
@@ -31,7 +31,7 @@ func ParseChalkSFUAllowlist(entries []string) (ChalkSFUAllowlist, error) {
 	return list, nil
 }
 
-// Allows reports whether the Space may start Episodes on the own SFU.
+// Allows reports whether the Space may start Episodes on the Chalk SFU.
 func (a ChalkSFUAllowlist) Allows(spaceID utilities.ID) bool {
 	if a.all {
 		return true

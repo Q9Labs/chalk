@@ -6,7 +6,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
-// The own SFU's unifiedSignaling flag reaches the client payload of an access grant unchanged.
+// The Chalk SFU's unifiedSignaling flag reaches the client payload of an access grant unchanged.
 func TestPublicJoinPayloadCarriesUnifiedSignaling(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		join := mediaplane.Join{Provider: mediaplane.ProviderChalkSFU, ClientPayload: map[string]any{

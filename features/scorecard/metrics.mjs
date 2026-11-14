@@ -37,7 +37,7 @@ for (const device of CALL_DEVICES) {
   }
 }
 
-// sfu.*: "per class" is one class of three Participants on the own SFU. Values are normalised by the classes held.
+// sfu.*: "per class" is one class of three Participants on the Chalk SFU. Values are normalised by the classes held.
 const sfu = {
   "sfu.cpu_work_pct_per_class": { unit: "percent", description: "Node CPU busy minus steal, per class" },
   "sfu.pps_in_per_class": { unit: "pps", description: "Packets per second received by the node, per class" },

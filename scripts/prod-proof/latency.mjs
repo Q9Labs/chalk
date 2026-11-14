@@ -54,7 +54,7 @@ function options() {
   const planes = values.planes.split(",");
   check(Number.isInteger(samples) && samples > 0 && samples <= 60, "--samples must be a whole number from 1 to 60", "configuration");
   for (const plane of planes) check(plane in providers, `Unknown media plane ${plane}`, "configuration");
-  check(values.environment, "--environment must name where the API runs: ci, staging or production", "configuration");
+  check(values.environment, "--environment must name where the API runs: ci, nightly or production", "configuration");
   const lobbyDwellMs = Number(values["lobby-dwell-ms"]);
   check(Number.isInteger(lobbyDwellMs) && lobbyDwellMs >= 0 && lobbyDwellMs <= 15000, "--lobby-dwell-ms must be a whole number from 0 to 15000 (preconnect keeps a socket ready for 16 s after its last call)", "configuration");
   check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");

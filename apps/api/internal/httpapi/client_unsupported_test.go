@@ -19,7 +19,7 @@ import (
 
 const clientUnsupportedBody = `{"error":{"code":"media.client_unsupported","message":"This call needs a newer version of Chalk. Update the app and try again."}}`
 
-// The own SFU refuses a client that does not declare it with one 409 whose
+// The Chalk SFU refuses a client that does not declare it with one 409 whose
 // message says what to do, whichever path the request took.
 func TestClientUnsupportedIs409WithAnUpgradeMessage(t *testing.T) {
 	refusal := fmt.Errorf("resolve episode media binding: %w", mediaplane.ErrClientUnsupported)
@@ -57,7 +57,7 @@ func TestClientUnsupportedIs409WithAnUpgradeMessage(t *testing.T) {
 	}
 	for _, clients := range declared {
 		if clients.Runs(mediaplane.ProviderChalkSFU) {
-			t.Fatal("a request without X-Chalk-Media-Providers must not declare the own SFU")
+			t.Fatal("a request without X-Chalk-Media-Providers must not declare the Chalk SFU")
 		}
 	}
 }
@@ -115,7 +115,7 @@ func (s *clientRecordingEpisodes) CreateEpisode(_ context.Context, input episode
 }
 
 // The hosted MCP tool has no SDK to ask, so the client sunset must not apply to it.
-func TestMCPCreateEpisodeRunsTheOwnSFU(t *testing.T) {
+func TestMCPCreateEpisodeRunsTheChalkSFU(t *testing.T) {
 	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
 	service := &clientRecordingEpisodes{}
 	handler := NewMCPHandler(Options{Episodes: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
@@ -125,6 +125,6 @@ func TestMCPCreateEpisodeRunsTheOwnSFU(t *testing.T) {
 	request.Header.Set("Accept", "application/json, text/event-stream")
 	handler.ServeHTTP(httptest.NewRecorder(), request.WithContext(authentication.ContextWithPrincipal(request.Context(), writer)))
 	if !service.clients.Runs(mediaplane.ProviderChalkSFU) {
-		t.Fatal("MCP create_episode passed a client that cannot run the own SFU")
+		t.Fatal("MCP create_episode passed a client that cannot run the Chalk SFU")
 	}
 }

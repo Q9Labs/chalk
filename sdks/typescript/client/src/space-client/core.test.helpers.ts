@@ -115,9 +115,9 @@ export function opaqueAccessGrant(value: string | number, suffix = String(value)
     media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
   } as unknown as AccessGrant;
 }
-/** A parsed grant for the own SFU, with the capabilities object exactly as the API would send it. */
-export function ownSFUGrant(capabilities: Record<string, unknown>) {
-  const grant: unknown = opaqueAccessGrant("own-sfu");
+/** A parsed grant for the Chalk SFU, with the capabilities object exactly as the API would send it. */
+export function chalkSFUGrant(capabilities: Record<string, unknown>) {
+  const grant: unknown = opaqueAccessGrant("chalk-sfu");
   if (typeof grant !== "object" || grant === null || !("media" in grant) || typeof grant.media !== "object" || grant.media === null) throw new Error("Unexpected grant fixture");
   const media = { ...grant.media, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref", iceServers: [], capabilities } };
   return parseParsedAccessGrant({ ...grant, media });

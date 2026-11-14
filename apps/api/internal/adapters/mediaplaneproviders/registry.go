@@ -28,13 +28,13 @@ type Config struct {
 	ProcessConfig   runtimeconfig.CloudflareRealtimeConfig
 	DefaultProvider mediaplane.Provider
 	Telemetry       providercontracts.Telemetry
-	// ChalkSFU is nil while the own SFU is off, so no Space can reach it.
+	// ChalkSFU is nil while the Chalk SFU is off, so no Space can reach it.
 	ChalkSFU *chalksfu.Fleet
-	// Rollout decides which new Episodes may start on the own SFU. Only a caller that
+	// Rollout decides which new Episodes may start on the Chalk SFU. Only a caller that
 	// binds new Episodes (ResolveBinding, RefuseClient) needs it.
 	Rollout  Rollout
 	Episodes EpisodeReader
-	// Recovery moves a live own-SFU Episode whose node was lost. Without it a lost node
+	// Recovery moves a live Chalk SFU Episode whose node was lost. Without it a lost node
 	// only fails the Episode's calls.
 	Recovery EpisodeRecovery
 }
@@ -171,7 +171,7 @@ type resolvedProviderConfig struct {
 
 // deploymentRuns is true when the deployment's own configuration serves the provider for a
 // Tenant that has none. Startup validation requires the Cloudflare application whenever a
-// platform default is set, so Cloudflare stays available as the fallback beside the own SFU.
+// platform default is set, so Cloudflare stays available as the fallback beside the Chalk SFU.
 func (r Registry) deploymentRuns(provider mediaplane.Provider) bool {
 	switch provider {
 	case mediaplane.ProviderChalkSFU:
@@ -241,7 +241,7 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 	case mediaplane.ModeTenantManaged:
 		if pin == mediaplane.ProviderChalkSFU {
 			// The Tenant switched to its own Cloudflare credentials after this Episode
-			// started on the own SFU. The binding decides where the Episode runs; the
+			// started on the Chalk SFU. The binding decides where the Episode runs; the
 			// document only describes the next one.
 			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
 			resolution.Mode = mediaplane.ModeChalkManaged

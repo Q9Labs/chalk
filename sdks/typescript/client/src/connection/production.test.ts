@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ownSFUGrant } from "../space-client/core.test.helpers";
+import { chalkSFUGrant } from "../space-client/core.test.helpers";
 import { createDefaultConnectionDependencies, bindConnectionMediaClient } from "./production";
 import type { ConnectionMediaClient } from "./dependencies";
 
@@ -81,8 +81,8 @@ describe("direct door", () => {
     });
   });
   afterEach(() => vi.unstubAllGlobals());
-  const advertised = ownSFUGrant({ unifiedSignaling: true, directSignalingUrl: "https://direct.example.test" });
-  const silent = ownSFUGrant({ unifiedSignaling: true });
+  const advertised = chalkSFUGrant({ unifiedSignaling: true, directSignalingUrl: "https://direct.example.test" });
+  const silent = chalkSFUGrant({ unifiedSignaling: true });
   const syncInput = (access: typeof advertised, onTransportPath = vi.fn()) => ({ access, token: async () => "token", media: {} as ConnectionMediaClient, onTransportPath });
   const mediaInput = (access: typeof advertised) => ({ access, credential: async () => "token", onFailure: vi.fn(), onScreenEnded: vi.fn() });
   const noLocalTracks = { getTracks: () => [] } as unknown as MediaStream;

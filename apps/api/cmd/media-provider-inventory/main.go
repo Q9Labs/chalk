@@ -1,5 +1,5 @@
 // media-provider-inventory counts Tenants, Spaces, live Episodes and recording
-// dependencies by media provider for the own-SFU cutover. It is read-only and
+// dependencies by media provider for the Chalk SFU cutover. It is read-only and
 // prints sanitized counts: no identifiers, and counts of 1 to 4 print as "<5".
 package main
 

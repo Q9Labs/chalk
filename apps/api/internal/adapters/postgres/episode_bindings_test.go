@@ -32,8 +32,8 @@ func TestCaptureSupportedFollowsTheOwnCaptureSwitch(t *testing.T) {
 	}{
 		{"Cloudflare Episode", bindingRow{provider: &cloudflare}, false, nil},
 		{"Episode with no binding", bindingRow{}, false, nil},
-		{"own SFU Episode, capture off", bindingRow{provider: &own}, false, recordingpipeline.ErrCaptureUnsupported},
-		{"own SFU Episode, capture on", bindingRow{provider: &own}, true, nil},
+		{"Chalk SFU Episode, capture off", bindingRow{provider: &own}, false, recordingpipeline.ErrCaptureUnsupported},
+		{"Chalk SFU Episode, capture on", bindingRow{provider: &own}, true, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			bindings := NewEpisodeBindings(bindingDB{row: test.row}).WithOwnCapture(test.ownCapture)

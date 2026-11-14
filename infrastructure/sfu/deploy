@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the SFU at the current commit to one own-SFU node.
+# Deploys the SFU at the current commit to one Chalk SFU node.
 #
 #   deploy <staging|production|bench> <node address> [--force|--firewall-only]
 #

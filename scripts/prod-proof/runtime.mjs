@@ -62,7 +62,7 @@ const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "pro
 export function environmentConfig(environment) {
   return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
 }
-export function checkCapabilities(readiness) {
+function checkCapabilities(readiness) {
   check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled", "capability-disabled");
   check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled", "capability-disabled");
 }
@@ -82,7 +82,7 @@ export async function loadConfig({ readiness = true } = {}) {
   return fields;
 }
 // The proof's browser SDK runs both media providers, so an Episode in a Space
-// that chooses the own SFU binds it, as the dashboard's do.
+// that chooses the Chalk SFU binds it, as the dashboard's do.
 export const mediaProviders = { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu" };
 // The Space's media plane; recording runs only on Cloudflare.
 export const mediaPlane = process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu";

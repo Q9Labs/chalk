@@ -75,11 +75,11 @@ function fakeApi({ release, allowed = true, preexisting = [] }) {
 async function runStep(api, env = {}) {
   await new Promise((done) => api.server.listen(0, "127.0.0.1", done));
   const url = `http://127.0.0.1:${api.server.address().port}`;
-  const directory = await mkdtemp(`${tmpdir()}/own-sfu-spaces-`);
-  const runId = "0123456789abcdef0123456789abcdef-own-sfu-spaces";
+  const directory = await mkdtemp(`${tmpdir()}/chalk-sfu-spaces-`);
+  const runId = "0123456789abcdef0123456789abcdef-chalk-sfu-spaces";
   let result;
   try {
-    result = await execute("node", [indexPath, "own-sfu-spaces"], {
+    result = await execute("node", [indexPath, "chalk-sfu-spaces"], {
       cwd: directory,
       env: {
         PATH: process.env.PATH,

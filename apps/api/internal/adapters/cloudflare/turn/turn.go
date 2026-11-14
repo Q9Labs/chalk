@@ -79,7 +79,7 @@ func New(keyID, apiToken string) *Credentials {
 }
 
 // RelayServers returns Cloudflare TURN for a media plane that is not
-// Cloudflare's, such as Chalk's own SFU, from the same cache and backoff.
+// Cloudflare's, such as the Chalk SFU, from the same cache and backoff.
 func (t *Credentials) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
 	return t.Servers(ctx, &http.Client{Transport: sharedTransport()}, defaultEndpoint)
 }

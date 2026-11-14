@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import seal
+from records import payload
 
 CUT_GAP = timedelta(hours=6)
 
@@ -32,11 +33,6 @@ def outputs(values):
     with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
         for key, value in values.items():
             output.write(f'{key}={json.dumps(value) if isinstance(value, (dict, list, bool)) else value}\n')
-
-
-def payload(item):
-    value = item.get('payload') or {}
-    return json.loads(value) if isinstance(value, str) else value
 
 
 def retain(info, name, data):

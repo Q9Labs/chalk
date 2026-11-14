@@ -236,7 +236,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	ctx := context.Background()
 	resolve := func() mediaplane.Binding {
 		t.Helper()
-		binding, err := registry.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		binding, err := registry.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 		if err != nil || binding == nil {
 			t.Fatalf("binding: %+v, %v", binding, err)
 		}
@@ -283,7 +283,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	stranger := primary.fleetOf(t, ca, "someone-else.test", nodes...)
 	stranger.Probe(ctx)
 	unavailable := registryOn(stranger, withCloudflare, nil, telemetry)
-	down, err := unavailable.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	down, err := unavailable.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || down.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || down.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
 		t.Fatalf("no node answers: %+v, %v, want Cloudflare overflow_node_unavailable", down, err)
 	}
@@ -315,14 +315,14 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	overflowOn := draining.fleetWithOverflow(t, ca, clientIdentity, true, nodes[0])
 	overflowOn.Probe(ctx)
 	telemetry := &placements{}
-	moved, err := registryOn(overflowOn, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	moved, err := registryOn(overflowOn, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.Node != "" || moved.PlacementReason != mediaplane.PlacementOverflowDraining {
 		t.Fatalf("draining pool, overflow on: %+v, %v, want Cloudflare overflow_draining", moved, err)
 	}
 
 	overflowOff := draining.fleetWithOverflow(t, ca, clientIdentity, false, nodes[0])
 	overflowOff.Probe(ctx)
-	refused, err := registryOn(overflowOff, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	refused, err := registryOn(overflowOff, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("draining pool, overflow off: %+v, %v, want the placement refusal", refused, err)
 	}
@@ -339,7 +339,7 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, fullNode), scopeOf("ep-1", "alice"))
 	mixed.Probe(ctx)
-	short, err := registryOn(mixed, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	short, err := registryOn(mixed, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || short.PlacementReason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("draining and full nodes: %+v, %v, want overflow_no_room", short, err)
 	}
@@ -373,13 +373,13 @@ func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
 	alone := real.fleetWithOverflow(t, ca, clientIdentity, true, guardedNode)
 	alone.Probe(ctx)
 	telemetry := &placements{}
-	moved, err := registryOn(alone, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	moved, err := registryOn(alone, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.PlacementReason != mediaplane.PlacementOverflowHostGuard {
 		t.Fatalf("guarded pool, overflow on: %+v, %v, want Cloudflare overflow_host_guard", moved, err)
 	}
 	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, guardedNode)
 	refusing.Probe(ctx)
-	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowHostGuard)) {
+	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowHostGuard)) {
 		t.Fatalf("guarded pool, overflow off: %+v, %v, want the placement refusal", refused, err)
 	}
 	if want := []string{"cf_sfu/overflow_host_guard", "chalk_sfu/overflow_host_guard"}; !slices.Equal(telemetry.got, want) {
@@ -395,7 +395,7 @@ func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
 	pool.Probe(ctx)
-	short, err := registryOn(pool, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	short, err := registryOn(pool, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || short.PlacementReason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("guarded and full nodes: %+v, %v, want overflow_no_room", short, err)
 	}
@@ -415,7 +415,7 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	ctx := context.Background()
 
 	fleet.Probe(ctx)
-	bound, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	bound, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if err != nil || bound.Node != "sfu-a" || bound.PlacementReason != mediaplane.PlacementPrimary {
 		t.Fatalf("pool with room: %+v, %v, want the primary", bound, err)
 	}
@@ -426,11 +426,11 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
 	fleet.Probe(ctx)
 
-	refused, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	refused, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if refused != nil || !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("full pool with overflow off: %+v, %v, want the capacity error and no binding", refused, err)
 	}
-	none, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	none, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
 	if none != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("full pool without a Cloudflare application: %+v, %v, want a refusal and no binding", none, err)
 	}

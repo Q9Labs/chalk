@@ -24,16 +24,16 @@ func (r *storedSpaces) CreateSpaceIdempotent(_ context.Context, input spaces.Cre
 	return spaces.Space{ID: input.ID, TenantID: input.TenantID, Name: input.Name, Slug: input.Slug, MediaPlane: input.MediaPlane, MediaPlaneSetting: input.MediaPlaneSetting}, nil
 }
 
-// With the own SFU as the deployment default, Create Space with no media_plane answers 201
+// With the Chalk SFU as the deployment default, Create Space with no media_plane answers 201
 // and the Space inherits, instead of the 400 space.invalid_media_plane it used to give.
-func TestCreateSpaceWithNoPlaneUnderTheOwnSFUDefault(t *testing.T) {
+func TestCreateSpaceWithNoPlaneUnderTheChalkSFUDefault(t *testing.T) {
 	tenant, _ := utilities.NewID()
 	repository := &storedSpaces{}
 	service := spaces.NewServiceWithDefaultProvider(repository, mediaplane.ProviderChalkSFU)
 	endpoint := createSpaceEndpoint(service, allowAllTenants{})
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalAPIKey, TenantID: tenant})
 	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"Team","slug":"team"}`)).WithContext(ctx)
-	request.Header.Set(idempotencyKeyHeader, "own-sfu-default-space-0001")
+	request.Header.Set(idempotencyKeyHeader, "chalk-sfu-default-space-0001")
 	routed := chi.NewRouteContext()
 	routed.URLParams.Add("tenant_id", tenant.String())
 	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, routed))

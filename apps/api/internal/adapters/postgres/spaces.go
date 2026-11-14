@@ -355,7 +355,7 @@ func optionalPlaneSetting(input spaces.OptionalMediaPlaneSetting) pgtype.Text {
 
 // AdoptStoredPlaneSetting moves a Space stored on the plane onto the setting. It reports
 // false when the Space no longer qualifies: it gained a setting, stores another plane, or
-// its Tenant can no longer serve the own SFU. No Space reads differently afterwards, so it
+// its Tenant can no longer serve the Chalk SFU. No Space reads differently afterwards, so it
 // sends no space.updated event.
 func (r SpaceRepository) AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane mediaplane.Provider) (bool, error) {
 	rows, err := r.queries.AdoptSpaceMediaPlaneSetting(ctx, sqlc.AdoptSpaceMediaPlaneSettingParams{
