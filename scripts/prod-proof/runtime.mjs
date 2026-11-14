@@ -62,7 +62,7 @@ const requiredConfigFields = ["api_key", "tenant_id", "api_url", "web_url", "pro
 export function environmentConfig(environment) {
   return Object.fromEntries(requiredConfigFields.map((name) => [name, environment[`CHALK_PROOF_${name.toUpperCase()}`]]));
 }
-export function checkCapabilities(readiness) {
+function checkCapabilities(readiness) {
   check(readiness?.capabilities?.recording === "enabled", "API readiness: Recording is not enabled", "capability-disabled");
   check(readiness?.capabilities?.transcription === "enabled", "API readiness: Transcription is not enabled", "capability-disabled");
 }

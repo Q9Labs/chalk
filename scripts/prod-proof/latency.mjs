@@ -13,13 +13,12 @@
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
 // public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
 // of samples makes the exit code non-zero.
-import { appendFile, mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { cleanupRun, disposeResource, startRun, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
@@ -325,10 +324,7 @@ function table(report) {
 
 async function main() {
   const settings = options();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const { runId, directory } = await startRun();
   const report = { startedAt: new Date().toISOString(), settings, cycles: [] };
   let run;
   try {

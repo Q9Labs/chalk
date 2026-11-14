@@ -12,14 +12,12 @@
 // Result in .private/prod-proof/<run>/recovery.json, per direction: "down" is what guest 2 receives from guest 1 and "up" what guest 1
 // receives from guest 2. Run client-side faults against guest 2 only by giving --guest2-chromium a launcher that starts Chromium in
 // its own network namespace (recovery-rig). Take the staging lease (scripts/staging-sfu/staging-lock) around every run.
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { exec } from "node:child_process";
 import { parseArgs, promisify } from "node:util";
 import { check, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { cleanupRun, startRun, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
@@ -119,10 +117,7 @@ async function callUnderFault(run, origin, settings) {
 
 async function main() {
   const settings = options();
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const { runId, directory } = await startRun();
   const report = { startedAt: new Date().toISOString(), scenario: settings.scenario, environment: settings.environment };
   let run;
   try {

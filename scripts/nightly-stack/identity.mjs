@@ -62,7 +62,13 @@ share("sfu", { "server.crt": sfu.cert, "server.key": sfu.key, "client-ca.crt": c
 
 function env(name, values) {
   const file = join(dir, name);
-  writeFileSync(file, `${Object.entries(values).map(([k, v]) => `${k}=${v}`).join("\n")}\n`, { mode: 0o600 });
+  writeFileSync(
+    file,
+    `${Object.entries(values)
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n")}\n`,
+    { mode: 0o600 },
+  );
 }
 
 env("api.env", {

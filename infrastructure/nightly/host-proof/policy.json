@@ -5,32 +5,20 @@
       "Sid": "LaunchOnlyTaggedHosts",
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
-      "Resource": [
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:volume/*",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:network-interface/*"
-      ],
+      "Resource": ["arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*", "arn:aws:ec2:__REGION__:__ACCOUNT__:volume/*", "arn:aws:ec2:__REGION__:__ACCOUNT__:network-interface/*"],
       "Condition": { "StringEquals": { "aws:RequestTag/chalk-purpose": "nightly-host-proof" } }
     },
     {
       "Sid": "LaunchFromTheProductionImageIntoTheProofNetwork",
       "Effect": "Allow",
       "Action": "ec2:RunInstances",
-      "Resource": [
-        "arn:aws:ec2:__REGION__::image/__AMI__",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:subnet/__SUBNET__",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:security-group/__SECURITY_GROUP__"
-      ]
+      "Resource": ["arn:aws:ec2:__REGION__::image/__AMI__", "arn:aws:ec2:__REGION__:__ACCOUNT__:subnet/__SUBNET__", "arn:aws:ec2:__REGION__:__ACCOUNT__:security-group/__SECURITY_GROUP__"]
     },
     {
       "Sid": "TagOnlyWhileLaunching",
       "Effect": "Allow",
       "Action": "ec2:CreateTags",
-      "Resource": [
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:volume/*",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:network-interface/*"
-      ],
+      "Resource": ["arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*", "arn:aws:ec2:__REGION__:__ACCOUNT__:volume/*", "arn:aws:ec2:__REGION__:__ACCOUNT__:network-interface/*"],
       "Condition": {
         "StringEquals": { "ec2:CreateAction": "RunInstances", "aws:RequestTag/chalk-purpose": "nightly-host-proof" }
       }
@@ -52,10 +40,7 @@
       "Sid": "DeployToTaggedHostsOnly",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": [
-        "arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release",
-        "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*"
-      ],
+      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*"],
       "Condition": {
         "StringEqualsIfExists": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" }
       }

@@ -22,13 +22,10 @@
 // --faults 0 runs joins only, with no fault commands: a post-deploy smoke of a media node.
 // CHALK_CANARY_SPACE_ID reuses one existing Space, as an allowlisted production Space
 // needs, instead of creating a Space for each trial.
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { cleanupRun, startRun, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
 import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
@@ -204,10 +201,7 @@ function conclude(report) {
 async function main() {
   process.once("SIGINT", restoreOnInterrupt);
   process.once("SIGTERM", restoreOnInterrupt);
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const { runId, directory } = await startRun();
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), flags: { joins, faults, faultSeconds: faultMs / 1000, joinLimitMs, recoveryLimitMs }, joins: [], faults: [] };
   let run;
   try {

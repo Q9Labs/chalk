@@ -744,6 +744,7 @@
         "infrastructure/nightly/direct-sync-trial.md",
         "infrastructure/nightly/env",
         "infrastructure/nightly/host-cloud-init.yaml",
+        "infrastructure/nightly/host-proof",
         "packages/assets",
         "packages/facehash",
         "packages/ui",

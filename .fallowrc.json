@@ -1,6 +1,8 @@
 {
   "entry": [
     "gate.config.ts",
+    "scripts/nightly-stack/identity.mjs",
+    "scripts/nightly-stack/seed.mjs",
     "features/scorecard/scorecard.mjs",
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
