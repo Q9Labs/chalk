@@ -57,6 +57,8 @@ jobs:
       actions: read
       deployments: write
       id-token: write
+      packages: write # Release publishes the application images to GHCR.
+      attestations: write
     needs: plan
     if: needs.plan.outputs.should_cut == 'true'
     uses: ./.github/workflows/ci.yml

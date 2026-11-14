@@ -99,6 +99,8 @@ jobs:
       actions: read
       deployments: write
       id-token: write
+      packages: write # Release publishes the application images to GHCR.
+      attestations: write
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ inputs.sha }}
@@ -134,6 +136,8 @@ jobs:
       actions: read
       deployments: write
       id-token: write
+      packages: write # Release publishes the application images to GHCR.
+      attestations: write
     needs: [plan, retain, release, smoke]
     if: >-
       always() && needs.retain.result == 'success' && needs.release.outputs.applied_release_id != '' &&
