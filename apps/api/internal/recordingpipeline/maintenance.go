@@ -9,7 +9,8 @@ import (
 
 const DefaultMaintenanceInterval = time.Minute
 
-// RunMaintenance retires work that can no longer be claimed even when the
+// RunMaintenance is the only place expired leases are recovered and expired
+// reservations are retired; Claim does not do it. It retires work even when the
 // recorder fleet is scaled to zero and no worker is available to drive Claim.
 func (s Service) RunMaintenance(ctx context.Context, interval time.Duration) error {
 	if s.repository == nil {

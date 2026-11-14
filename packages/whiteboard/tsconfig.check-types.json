@@ -10,5 +10,6 @@
       "@q9labsai/facehash": ["../facehash/src/index.ts"]
     }
   },
+  "include": ["src/**/*", "src/**/*.json", "tests/types/**/*.ts"],
   "references": []
 }

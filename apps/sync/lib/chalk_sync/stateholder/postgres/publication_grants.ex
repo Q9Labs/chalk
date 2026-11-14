@@ -2,7 +2,6 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
   @moduledoc false
 
   alias ChalkSync.Stateholder.Postgres.Authority
-  alias ChalkSync.Stateholder.Postgres.RoleTransitionSettlement
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.PublicationGrants, as: SQL
   alias ChalkSync.Stateholder.Postgres.Transaction
@@ -111,10 +110,6 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
     cleanup_required =
       publication_cleanup_required?(connection, episode, policy, participant, reservation)
 
-    if reservation.status == :failed and cleanup_required do
-      satisfy_failed_grant_child(connection, episode, reservation)
-    end
-
     Map.put(reservation, :result, if(cleanup_required, do: :cleanup_required, else: :authorized))
   end
 
@@ -184,24 +179,6 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
 
     capability_denied or
       Postgrex.query!(connection, SQL.publication_fence(), fence_params).rows != []
-  end
-
-  defp satisfy_failed_grant_child(connection, episode, reservation) do
-    params =
-      Scope.episode(episode) ++
-        [
-          Scope.uuid(reservation.participant_id),
-          reservation.participant_generation,
-          Atom.to_string(reservation.source)
-        ]
-
-    case Postgrex.query!(connection, SQL.pending_role_transition_child_for_source(), params).rows do
-      [[child_id]] ->
-        RoleTransitionSettlement.settle_child(connection, episode, UUID.load!(child_id), :applied)
-
-      [] ->
-        :ok
-    end
   end
 
   def capability(:microphone), do: "publishAudio"

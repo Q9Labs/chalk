@@ -65,14 +65,14 @@ func TestClientCheckSeesThePlaneThePublicSpaceWillPin(t *testing.T) {
 		checked = space
 		return mediaplane.ErrClientUnsupported // stops the call here; the check is all this test reads
 	}
-	port, err := NewSpacePort(&countingSpaces{}, managedTenant{}, SpaceConfig{ManagedTenantID: tenantID, DefaultMediaPlane: "cf_sfu", RefuseClient: refusal})
+	port, err := NewSpacePort(&countingSpaces{}, managedTenant{}, SpaceConfig{ManagedTenantID: tenantID, DefaultMediaPlane: mediaplane.ProviderCloudflareSFU, RefuseClient: refusal})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = port.CreatePublicSpace(context.Background(), publicinvites.CreatePublicSpaceInput{DisplayName: "Hana", RequestKey: "client-sunset-space-0002"}); !errors.Is(err, mediaplane.ErrClientUnsupported) {
 		t.Fatal(err)
 	}
-	if checked.MediaPlaneSetting == nil || *checked.MediaPlaneSetting != spaces.MediaPlaneProviderCloudflareSFU {
-		t.Fatalf("the client check saw setting %v, want %q", checked.MediaPlaneSetting, spaces.MediaPlaneProviderCloudflareSFU)
+	if checked.MediaPlaneSetting == nil || *checked.MediaPlaneSetting != mediaplane.ProviderCloudflareSFU {
+		t.Fatalf("the client check saw setting %v, want %q", checked.MediaPlaneSetting, mediaplane.ProviderCloudflareSFU)
 	}
 }

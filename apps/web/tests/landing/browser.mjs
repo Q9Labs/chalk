@@ -63,87 +63,113 @@ async function start(channel) {
   }
 }
 
-try {
-  for (const channel of ["stable", "nightly"]) {
-    const { origin, stop } = await start(channel);
-    const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
-    try {
-      const page = await context.newPage();
-      const errors = [];
-      page.on("pageerror", (error) => errors.push(error.message));
-      await page.goto(origin);
-      const preview = page.getByRole("group", { name: "Interactive Q9 team call preview" });
-      await preview.locator(".xtoast").waitFor({ timeout: 15000 });
-      if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-joined-toast.png`) });
-      await preview.getByRole("button", { name: "Mute microphone", exact: true }).click();
-      assert.equal(await preview.getByRole("button", { name: "Unmute microphone", exact: true }).getAttribute("aria-pressed"), "false");
-      await preview.getByRole("button", { name: "Turn camera off", exact: true }).click();
-      assert.equal(await preview.locator('.xtile[data-cam="false"]').count(), 2);
-      for (const name of ["Share screen", "Raise hand", "Toggle preview light theme"]) {
-        await preview.getByRole("button", { name, exact: true }).click();
-        assert.equal(await preview.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
-      }
-      await preview.getByRole("button", { name: "Open preview chat", exact: true }).click();
-      await preview.getByRole("textbox", { name: "Message the preview call" }).fill("Friday works for me too.");
-      await preview.getByRole("button", { name: "Send preview message" }).click();
-      assert.match(await preview.getByRole("log").textContent(), /Friday works for me too/);
-      if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-chat-controls.png`) });
-      await preview.getByRole("button", { name: "Leave preview call" }).click();
-      await preview.getByRole("button", { name: "Rejoin" }).click();
-      await preview.getByRole("button", { name: "Close preview chat" }).click();
-      await page.getByRole("button", { name: "Recorded 5", exact: true }).click();
-      assert.equal(await page.locator(".sx-row").count(), 5);
-      await page.getByRole("button", { name: "All 7", exact: true }).click();
-      assert.equal(await page.locator(".sx-row").count(), 7);
-      await page.locator(".sx-row").first().click();
-      assert.equal(await page.locator(".sx-row").first().getAttribute("aria-expanded"), "true");
-      await page.getByRole("button", { name: "Seek recording to 01:32: Sofia Lind", exact: true }).click();
-      assert.match(await page.locator(".mp-t").textContent(), /^01:3/);
-      await page.locator(".mplay").click();
-      await page.getByRole("button", { name: "Server", exact: true }).click();
-      await page.getByRole("button", { name: "Copy code", exact: true }).click();
-      assert.match(await page.evaluate(() => navigator.clipboard.readText()), /createChalkServerClient/);
-      await page.getByRole("button", { name: "React", exact: true }).click();
-      await page.locator(".js-go").click();
-      await page.getByRole("button", { name: "Replay", exact: true }).waitFor();
-      assert.equal(await page.locator(".js-t").textContent(), "0.84 s");
-      await page.getByRole("button", { name: "Join", exact: true }).first().click();
-      assert.match(await page.getByRole("alert").textContent(), /isn’t a Chalk link/);
-      assert.equal(await page.locator(".hvis.sky").count(), channel === "nightly" ? 1 : 0);
-      const host = page.locator(".host");
-      await host.getByRole("button", { name: "Raise hand", exact: true }).click();
-      assert.equal(await host.locator('.xtile[data-hand="true"]').count(), 1);
-      // Reset demonstration states before the eight visual snapshots.
-      await page.reload();
-      await page.emulateMedia({ reducedMotion: "reduce" });
-      for (const width of [1440, 390]) {
-        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
-        for (const theme of ["dark", "light"]) {
-          const toggle = page.getByRole("button", { name: `Switch to ${theme} theme`, exact: true });
-          if (await toggle.count()) await toggle.click();
-          assert.equal(await page.locator(".site").getAttribute("data-chalk-theme"), theme);
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
-          const mic = preview.getByRole("button", { name: "Mute microphone", exact: true });
-          const box = await mic.boundingBox();
-          assert(box && box.width >= 44 && box.height >= 44);
-          const speaker = await preview.locator(".spk .xtag").textContent();
-          await page.waitForTimeout(3100);
-          assert.equal(await preview.locator(".spk .xtag").textContent(), speaker);
-          const stage = await preview.locator(".xstage").boundingBox();
-          const dock = await preview.locator(".xdock").boundingBox();
-          assert(stage && dock && stage.y + stage.height <= dock.y - 4, "Dock must not overlap participant tiles");
-          await page.evaluate(() => window.scrollTo(0, 0));
-          await page.keyboard.press("Tab");
-          if (proof) await page.screenshot({ path: resolve(proof, `${channel}-${theme}-${width}.png`), fullPage: true });
-        }
-      }
-      assert.deepEqual(errors, []);
-      console.log(`PASS ${channel}: pointer controls, chat, leave/rejoin, filter/expand, transcript seek, copied tab, simulator, join validation, host preview, both themes/widths, reduced motion`);
-    } finally {
-      await context.close();
-      await stop();
-    }
+/** The call preview: muting, camera, toggles, chat, then leaving and rejoining. */
+async function previewControls(page, preview, channel) {
+  await preview.getByRole("button", { name: "Mute microphone", exact: true }).click();
+  assert.equal(await preview.getByRole("button", { name: "Unmute microphone", exact: true }).getAttribute("aria-pressed"), "false");
+  await preview.getByRole("button", { name: "Turn camera off", exact: true }).click();
+  assert.equal(await preview.locator('.xtile[data-cam="false"]').count(), 2);
+  for (const name of ["Share screen", "Raise hand", "Toggle preview light theme"]) {
+    await preview.getByRole("button", { name, exact: true }).click();
+    assert.equal(await preview.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
   }
+  await preview.getByRole("button", { name: "Open preview chat", exact: true }).click();
+  await preview.getByRole("textbox", { name: "Message the preview call" }).fill("Friday works for me too.");
+  await preview.getByRole("button", { name: "Send preview message" }).click();
+  assert.match(await preview.getByRole("log").textContent(), /Friday works for me too/);
+  if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-chat-controls.png`) });
+  await preview.getByRole("button", { name: "Leave preview call" }).click();
+  await preview.getByRole("button", { name: "Rejoin" }).click();
+  await preview.getByRole("button", { name: "Close preview chat" }).click();
+}
+
+/** The sessions list, the transcript seek, the code tabs and the speed run. */
+async function sessionsAndCode(page) {
+  await page.getByRole("button", { name: "Recorded 5", exact: true }).click();
+  assert.equal(await page.locator(".sx-row").count(), 5);
+  await page.getByRole("button", { name: "All 7", exact: true }).click();
+  assert.equal(await page.locator(".sx-row").count(), 7);
+  await page.locator(".sx-row").first().click();
+  assert.equal(await page.locator(".sx-row").first().getAttribute("aria-expanded"), "true");
+  await page.getByRole("button", { name: "Seek recording to 01:32: Sofia Lind", exact: true }).click();
+  assert.match(await page.locator(".mp-t").textContent(), /^01:3/);
+  await page.locator(".mplay").click();
+  await page.getByRole("button", { name: "Server", exact: true }).click();
+  await page.getByRole("button", { name: "Copy code", exact: true }).click();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /createChalkServerClient/);
+  await page.getByRole("button", { name: "React", exact: true }).click();
+  await page.locator(".js-go").click();
+  await page.getByRole("button", { name: "Replay", exact: true }).waitFor();
+  assert.equal(await page.locator(".js-t").textContent(), "0.84 s");
+}
+
+/** The join-link check and the host preview. */
+async function joinAndHost(page, channel) {
+  await page.getByRole("button", { name: "Join", exact: true }).first().click();
+  assert.match(await page.getByRole("alert").textContent(), /isn’t a Chalk link/);
+  assert.equal(await page.locator(".hvis.sky").count(), channel === "nightly" ? 1 : 0);
+  const host = page.locator(".host");
+  await host.getByRole("button", { name: "Raise hand", exact: true }).click();
+  assert.equal(await host.locator('.xtile[data-hand="true"]').count(), 1);
+}
+
+/** Both themes at both widths, from a reset page. */
+async function themeSweep(page, preview, channel) {
+  // Reset demonstration states before the eight visual snapshots.
+  await page.reload();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const theme of ["dark", "light"]) await checkTheme(page, preview, { channel, theme, width });
+  }
+}
+
+/** One theme at one width: layout, tap target size, a steady speaker and the dock clear of the tiles. */
+async function checkTheme(page, preview, { channel, theme, width }) {
+  const toggle = page.getByRole("button", { name: `Switch to ${theme} theme`, exact: true });
+  if (await toggle.count()) await toggle.click();
+  assert.equal(await page.locator(".site").getAttribute("data-chalk-theme"), theme);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+  const mic = preview.getByRole("button", { name: "Mute microphone", exact: true });
+  const box = await mic.boundingBox();
+  assert(box && box.width >= 44 && box.height >= 44);
+  const speaker = await preview.locator(".spk .xtag").textContent();
+  await page.waitForTimeout(3100);
+  assert.equal(await preview.locator(".spk .xtag").textContent(), speaker);
+  const stage = await preview.locator(".xstage").boundingBox();
+  const dock = await preview.locator(".xdock").boundingBox();
+  assert(stage && dock && stage.y + stage.height <= dock.y - 4, "Dock must not overlap participant tiles");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.keyboard.press("Tab");
+  if (proof) await page.screenshot({ path: resolve(proof, `${channel}-${theme}-${width}.png`), fullPage: true });
+}
+
+/** The whole landing check for one release channel of the app. */
+async function runChannel(channel) {
+  const { origin, stop } = await start(channel);
+  const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
+  try {
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(origin);
+    const preview = page.getByRole("group", { name: "Interactive Q9 team call preview" });
+    await preview.locator(".xtoast").waitFor({ timeout: 15000 });
+    if (proof) await preview.screenshot({ path: resolve(proof, `${channel}-joined-toast.png`) });
+    await previewControls(page, preview, channel);
+    await sessionsAndCode(page);
+    await joinAndHost(page, channel);
+    await themeSweep(page, preview, channel);
+    assert.deepEqual(errors, []);
+    console.log(`PASS ${channel}: pointer controls, chat, leave/rejoin, filter/expand, transcript seek, copied tab, simulator, join validation, host preview, both themes/widths, reduced motion`);
+  } finally {
+    await context.close();
+    await stop();
+  }
+}
+
+try {
+  for (const channel of ["stable", "nightly"]) await runChannel(channel);
 } finally {
   await browser.close();
 }

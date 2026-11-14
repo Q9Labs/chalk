@@ -1,0 +1,37 @@
+name: Client connection recovery model
+
+# Model-checks the SDK connection lifecycle. See
+# .agents/skills/client-recovery-formal/SKILL.md. Keep these paths in step with
+# the skill's coverage record.
+on:
+  pull_request:
+    paths:
+      - sdks/typescript/client/src/connection/lifecycle.ts
+      - sdks/typescript/client/src/access/manager.ts
+      - sdks/typescript/client/src/sync/v1-client.ts
+      - tools/formal/client-recovery/**
+      - tools/formal/tla2tools.sh
+      - .github/workflows/formal-client-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-client-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Client connection recovery model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check the connection lifecycle
+        run: tools/formal/client-recovery/run.sh

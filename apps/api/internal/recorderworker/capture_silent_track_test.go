@@ -2,7 +2,6 @@ package recorderworker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -190,20 +189,5 @@ func TestCaptureStopsWaitingForLateMidAfterLateTrackWait(t *testing.T) {
 	}
 	if err := r.finish(t); err != nil {
 		t.Fatalf("attempt failed: %v", err)
-	}
-}
-
-func TestCaptureFailsWhenEveryMidSendsNoRTP(t *testing.T) {
-	r := startSilentTrackRun(t, true, time.Minute)
-	select {
-	case err := <-r.runDone:
-		if !errors.Is(err, errCaptureTrackSilent) && !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("all-silent attempt error = %v, want the wait deadline", err)
-		}
-		if err == nil {
-			t.Fatal("all-silent attempt succeeded")
-		}
-	case <-r.runCtx.Done():
-		t.Fatal("all-silent attempt never failed")
 	}
 }

@@ -45,9 +45,9 @@ type sfuCloseTracksRequest struct {
 }
 
 type sfuCloseTrackRequest struct {
-	Mid           string `json:"mid"`
-	Source        string `json:"source"`
-	PublicationID string `json:"publication_id"`
+	Mid           string                       `json:"mid"`
+	Source        mediaplane.PublicationSource `json:"source"`
+	PublicationID string                       `json:"publication_id"`
 }
 
 type sfuTracksEndpointRequest struct {
@@ -198,7 +198,7 @@ func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointReq
 	}
 	self := request.ParticipantID.String()
 	for _, publication := range list.Publications {
-		if publication.ParticipantID == self || (publication.Source != "microphone" && publication.Source != "screen_audio") {
+		if publication.ParticipantID == self || !publication.Source.IsAudio() {
 			continue
 		}
 		reference, err := mediapublications.ParseReference(publication.PublicationID)

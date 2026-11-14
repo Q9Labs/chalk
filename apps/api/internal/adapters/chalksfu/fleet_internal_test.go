@@ -1,14 +1,19 @@
 package chalksfu
 
 import (
-	"github.com/q9labs/chalk/features/media/sfu/protocol"
+	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 const (
@@ -304,6 +309,110 @@ func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
 	} {
 		if other == id {
 			t.Errorf("a different %s gave the same operation ID", name)
+		}
+	}
+}
+
+// nodeAnswer is a /readyz answer for the readiness tests.
+func nodeAnswer(incarnation string, mutate func(*protocol.ReadyResponse)) protocol.ReadyResponse {
+	reply := protocol.ReadyResponse{Protocol: minNodeProtocol, Revision: strings.Repeat("a", 40), NodeIncarnation: incarnation, PacketBudget: testPrimaryBudget, NewEpisodePackets: testEpisode}
+	if mutate != nil {
+		mutate(&reply)
+	}
+	return reply
+}
+
+func TestTheLogSaysWhenANodeBecomesReadyOrReturnsToPlacement(t *testing.T) {
+	logged := &strings.Builder{}
+	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{primary("p")}, nil)
+	fleet.log = slog.New(slog.NewTextHandler(logged, nil))
+	at := time.Now()
+	record := func(after time.Duration, reply protocol.ReadyResponse) {
+		fleet.mu.Lock()
+		defer fleet.mu.Unlock()
+		fleet.record(context.Background(), "p", reply, at.Add(after))
+	}
+	readyLines := func() int { return strings.Count(logged.String(), "chalk sfu node is ready for placement") }
+
+	record(0, nodeAnswer("boot-1", nil))
+	if got := readyLines(); got != 1 || !strings.Contains(logged.String(), "incarnation=boot-1") || !strings.Contains(logged.String(), "revision="+strings.Repeat("a", 40)) {
+		t.Fatalf("first answer: %d ready lines, want 1 naming node, incarnation and revision:\n%s", got, logged)
+	}
+	record(time.Second, nodeAnswer("boot-1", nil))
+	if got := readyLines(); got != 1 {
+		t.Errorf("a node that keeps answering: %d ready lines, want still 1", got)
+	}
+	record(time.Second+2*probeFreshness, nodeAnswer("boot-1", nil))
+	if got := readyLines(); got != 2 {
+		t.Errorf("a node back after a silence past the freshness window: %d ready lines, want 2", got)
+	}
+	record(2*time.Second+2*probeFreshness, nodeAnswer("boot-2", nil))
+	if got := readyLines(); got != 3 || !strings.Contains(logged.String(), "incarnation=boot-2") {
+		t.Errorf("a restarted node: %d ready lines, want 3 with the new incarnation", got)
+	}
+	draining := func(r *protocol.ReadyResponse) { r.Draining = true }
+	record(3*time.Second+2*probeFreshness, nodeAnswer("boot-2", draining))
+	if got := readyLines(); got != 3 {
+		t.Errorf("a draining node: %d ready lines, want still 3", got)
+	}
+	record(4*time.Second+2*probeFreshness, nodeAnswer("boot-2", nil))
+	if got := readyLines(); got != 4 {
+		t.Errorf("a node that stopped draining returns to placement: %d ready lines, want 4", got)
+	}
+	record(4*time.Second+3*probeFreshness, nodeAnswer("not a valid incarnation!", nil))
+	record(5*time.Second+3*probeFreshness, nodeAnswer("not a valid incarnation!", nil))
+	if got := readyLines(); got != 5 {
+		t.Errorf("a node with a malformed incarnation that keeps answering: %d ready lines, want 5", got)
+	}
+	record(5*time.Second+2*probeFreshness+4*time.Second, nodeAnswer("boot-2", func(r *protocol.ReadyResponse) { r.Protocol = minNodeProtocol - 1 }))
+	record(6*time.Second+2*probeFreshness, nodeAnswer("boot-2", func(r *protocol.ReadyResponse) { r.Protocol = minNodeProtocol - 1 }))
+	if got := readyLines(); got != 5 {
+		t.Errorf("a node too old for this API: %d ready lines, want still 5", got)
+	}
+}
+
+func TestTheGaugeShowsWhichNodesAndBuildsTheAPISees(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{primary("p"), primary("quiet"), primary("never"), standby("s")}
+	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{"p": ready(testPrimaryBudget, 0), "quiet": {budget: testPrimaryBudget, stale: true}, "s": {budget: testStandbyBudget, draining: true}})
+	fleet.seen["p"] = sighting{at: time.Now(), incarnation: "boot-p", revision: strings.Repeat("b", 40)}
+	reader := sdkmetric.NewManualReader()
+	if err := fleet.observeReadiness(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")); err != nil {
+		t.Fatal(err)
+	}
+	var collected metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &collected); err != nil {
+		t.Fatal(err)
+	}
+	type reading struct {
+		value                 int64
+		incarnation, revision string
+	}
+	got := map[string]reading{}
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "chalk.api.sfu.node.ready" {
+				continue
+			}
+			for _, point := range m.Data.(metricdata.Gauge[int64]).DataPoints {
+				node, _ := point.Attributes.Value("chalk.sfu.node")
+				incarnation, _ := point.Attributes.Value("chalk.sfu.incarnation")
+				revision, _ := point.Attributes.Value("chalk.sfu.revision")
+				got[node.AsString()] = reading{point.Value, incarnation.AsString(), revision.AsString()}
+			}
+		}
+	}
+	want := map[string]reading{
+		"p":     {1, "boot-p", strings.Repeat("b", 40)},
+		"quiet": {0, "boot-quiet", ""},
+		"never": {0, "", ""},
+		"s":     {0, "boot-s", ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("gauge readings %+v, want %+v", got, want)
+	}
+	for node, w := range want {
+		if got[node] != w {
+			t.Errorf("node %s: gauge %+v, want %+v", node, got[node], w)
 		}
 	}
 }

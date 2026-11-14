@@ -1,5 +1,6 @@
 import type { WhiteboardView as ChalkWhiteboardView, WhiteboardViewBounds } from "../../collab/view";
 import type { WhoCanDraw } from "./board-draw-policy";
+import { CANONICAL_INK } from "../../collab/ink";
 
 /** design.md, "The board": every colour, size and key the board's own controls use. */
 export type BoardSurface = "chalkboard" | "paper" | "dots";
@@ -81,7 +82,7 @@ export function isDarkSurface(surface: BoardSurface, theme: CallTheme): boolean 
 /** The surface's own ink, which is what Ink looks like on it. */
 export function surfaceInk(surface: BoardSurface, theme: CallTheme): string {
   if (surface === "chalkboard") return "#f1f0ea";
-  if (surface === "paper") return "#1b1c1f";
+  if (surface === "paper") return CANONICAL_INK;
   return theme === "dark" ? "#ececee" : "#18181b";
 }
 

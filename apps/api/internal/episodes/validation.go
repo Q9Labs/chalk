@@ -233,7 +233,7 @@ func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt
 	return input.Request, nil
 }
 
-func NewMaximumDurationRequest(tenantID, spaceID, episodeID utilities.ID, generation int64) (Request, error) {
+func NewMaximumDurationRequest(tenantID, spaceID, episodeID utilities.ID, generation int64, failedAttempts int) (Request, error) {
 	payload, err := json.Marshal(struct {
 		DeadlineGeneration int64 `json:"deadlineGeneration"`
 	}{DeadlineGeneration: generation})
@@ -241,6 +241,9 @@ func NewMaximumDurationRequest(tenantID, spaceID, episodeID utilities.ID, genera
 		return Request{}, ErrInvalidIntentPayload
 	}
 	request := Request{Key: "maximum-duration-" + strconv.FormatInt(generation, 10), payload: payload}
+	if failedAttempts > 0 {
+		request.Key += "-retry-" + strconv.Itoa(failedAttempts)
+	}
 	request.Fingerprint = lifecycleFingerprint(struct {
 		TenantID           string          `json:"tenant_id"`
 		SpaceID            string          `json:"space_id"`

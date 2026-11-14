@@ -16,7 +16,6 @@ import (
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 // partition is a TCP relay in front of a node's control port. Severing it drops every open
@@ -199,8 +198,8 @@ func TestAFaultAroundTheDebtWriteNeverConfirmsAnEndWithoutTheDebtOrLosesIt(t *te
 			store.mu.Unlock()
 			faulty := &failingDebts{recoveryStore: store, fail: true, afterWrite: afterWrite}
 			registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-				ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
-				ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: store, Recovery: faulty,
+				ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU,
+				ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace}, Episodes: store, Recovery: faulty,
 			})
 
 			err = registry.EndRetiredAllocations(context.Background(), recoveringTenant.ID, recoveringEpisode)

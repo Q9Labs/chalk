@@ -1,5 +1,6 @@
 """GitHub boundary uses gh; the cut and held-selection rules are pure."""
 
+import base64
 import hashlib
 import json
 import os
@@ -12,6 +13,8 @@ import tempfile
 from time import monotonic, sleep as backoff_sleep
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import seal
 
 CUT_GAP = timedelta(hours=6)
 
@@ -34,6 +37,18 @@ def outputs(values):
 def payload(item):
     value = item.get('payload') or {}
     return json.loads(value) if isinstance(value, str) else value
+
+
+def retain(info, name, data):
+    """Keep `data` in a Deployment payload as ciphertext: the payload of a public repository is readable by anyone."""
+    return dict(info, **{name + '_sealed': seal.seal_text(data)})
+
+
+def retained(info, name):
+    """The bytes a payload kept under `name`: sealed, or plain from a record written before sealing."""
+    if info.get(name + '_sealed'):
+        return seal.unseal_text(info[name + '_sealed'])
+    return base64.b64decode(info[name + '_base64'], validate=True)
 
 
 def held_candidates(deployments, held=True):
@@ -287,6 +302,8 @@ class GitHub:
             release = filename.removesuffix('.media.json') if filename.endswith('.media.json') else filename.removesuffix('.json')
             if item['name'] == 'release-manifest-' + release:
                 allowed = {release + '.json', release + '.media.json'}
+            seal.unseal_tree(Path(directory))
+            files = [path for path in Path(directory).rglob('*') if path.is_file()]
             actual = {str(path.relative_to(directory)) for path in files}
             require(filename in actual and actual <= allowed, 'artifact contains unexpected or missing release files')
             data = Path(directory, filename).read_bytes()

@@ -9,8 +9,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// The own SFU forwards a granted source only while its lease lasts (15 s by
-// default). Renewing every 5 s keeps a live grant two renewals clear of expiry.
+// The own SFU forwards a granted source only while its lease lasts (60 s by
+// default). Renewing every 5 s keeps a live grant many renewals clear of expiry,
+// so an API restart that answers again within the lease never stops a call.
 const (
 	SourceLeaseRenewInterval = 5 * time.Second
 	sourceLeasePageSize      = 512
@@ -26,7 +27,7 @@ type SourceGrant struct {
 	Node          string
 	Generation    int64 // the Episode's binding generation
 	ParticipantID utilities.ID
-	Source        string
+	Source        mediaplane.PublicationSource
 	Revision      int64
 }
 
@@ -103,8 +104,8 @@ func (l SourceLeases) renewEpisode(ctx context.Context, grants []SourceGrant, fa
 	for _, grant := range grants {
 		controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: grant.Source, Action: mediaplane.SourceGrant, Revision: grant.Revision})
 		// Tab audio is published with the screen and follows its grant.
-		if grant.Source == "screen" {
-			controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: "screen_audio", Action: mediaplane.SourceGrant, Revision: grant.Revision})
+		if companion, ok := grant.Source.Companion(); ok {
+			controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: companion, Action: mediaplane.SourceGrant, Revision: grant.Revision})
 		}
 	}
 	node, err := l.nodes(first.Node, first.Generation)

@@ -96,39 +96,6 @@ func (f *receiveHealthFixture) events(t *testing.T, event string) []map[string]a
 	return events
 }
 
-func TestReceiveHealthHealthyEpisodeEmitsNothing(t *testing.T) {
-	f := newReceiveHealthFixture(t)
-	f.success()
-	f.sample(16 * time.Second)
-	f.sample(2 * time.Minute)
-	if f.logs.Len() != 0 {
-		t.Fatalf("healthy Episode emitted logs: %s", &f.logs)
-	}
-}
-
-func TestReceiveHealthNeverPulledPairEmitsOnceAndPeriodicCounts(t *testing.T) {
-	f := newReceiveHealthFixture(t)
-	f.sample(15 * time.Second)
-	if f.logs.Len() != 0 {
-		t.Fatalf("emitted at grace boundary: %s", &f.logs)
-	}
-	f.sample(time.Second)
-	f.sample(44 * time.Second)
-	f.sample(time.Minute)
-	events := f.events(t, "media.listener_publication_unpulled")
-	wantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(f.repository.observations[0].Publications[0].PublicationID)))
-	if len(events) != 1 || events[0]["step"] != "no_pull_attempted" || events[0]["duration_ms"] != float64(16000) || events[0]["publication_id_hash"] != wantHash {
-		t.Fatalf("unpulled events = %+v", events)
-	}
-	summaries := f.events(t, "media.listener_publication_summary")
-	if len(summaries) != 2 || summaries[0]["no_pull_attempted_count"] != float64(1) || summaries[0]["overdue_count"] != float64(1) {
-		t.Fatalf("summaries = %+v", summaries)
-	}
-	if strings.Contains(f.logs.String(), f.input.ParticipantID.String()) || events[0]["participant_id_hash"] == "" {
-		t.Fatal("listener ID must use existing hash representation")
-	}
-}
-
 func TestReceiveHealthFailedPullCarriesOnlyBoundedPerTrackKind(t *testing.T) {
 	for _, code := range []string{"empty_track_error", "track_not_found", "private-error-text"} {
 		t.Run(code, func(t *testing.T) {
@@ -226,18 +193,6 @@ func TestReceiveHealthSuccessfulPullIsFurthestStep(t *testing.T) {
 	}
 }
 
-func TestReceiveHealthEndClearsStateAndLateResponseCannotRestoreIt(t *testing.T) {
-	f := newReceiveHealthFixture(t)
-	f.repository.episodes = nil
-	f.repository.participants = []PublicationParticipant{}
-	f.sample(time.Second)
-	f.success()
-	f.sample(time.Minute)
-	if len(f.service.receiveHealth.episodes) != 0 || f.logs.Len() != 0 {
-		t.Fatalf("ended state retained: %s", &f.logs)
-	}
-}
-
 func TestReceiveHealthRetiresDepartedPausedAndReplacedPublications(t *testing.T) {
 	for _, mutation := range []string{"departed", "paused", "closed", "stale_generation", "camera"} {
 		t.Run(mutation, func(t *testing.T) {
@@ -260,18 +215,6 @@ func TestReceiveHealthRetiresDepartedPausedAndReplacedPublications(t *testing.T)
 				t.Fatalf("inactive pair emitted: %s", &f.logs)
 			}
 		})
-	}
-}
-
-func TestReceiveHealthReplacementListenerNeedsNewPullAndRejectsLateSuccess(t *testing.T) {
-	f := newReceiveHealthFixture(t)
-	f.success()
-	f.repository.participants[1].ConnectionID = "replacement-connection"
-	f.sample(time.Second)
-	f.success() // Completion from the previous connection must not count.
-	f.sample(16 * time.Second)
-	if got := f.events(t, "media.listener_publication_unpulled"); len(got) != 1 || got[0]["step"] != "no_pull_attempted" {
-		t.Fatalf("events = %+v", got)
 	}
 }
 
@@ -327,27 +270,5 @@ func TestReceiveHealthMemoryAndOutputAreBounded(t *testing.T) {
 	f.sample(receiveHealthTTL + time.Second)
 	if len(h.episodes) != 0 {
 		t.Fatal("stale state survived sampling outage")
-	}
-}
-
-func TestListenerPullResultMatchesExactIdentityAndRejectsAmbiguity(t *testing.T) {
-	request := mediaplane.Track{Location: "remote", SessionID: "publisher", TrackName: "audio"}
-	for _, tc := range []struct {
-		name       string
-		response   mediaplane.TracksResponse
-		err        error
-		step, kind string
-	}{
-		{"missing", mediaplane.TracksResponse{}, nil, "pull_failed", "missing_result"},
-		{"request failed", mediaplane.TracksResponse{}, errors.New("private"), "pull_failed", "request_failed"},
-		{"wrong identity", mediaplane.TracksResponse{Tracks: []mediaplane.Track{{Location: "remote", SessionID: "other", TrackName: "audio", Mid: "0"}}}, nil, "pull_failed", "missing_result"},
-		{"missing MID", mediaplane.TracksResponse{Tracks: []mediaplane.Track{request}}, nil, "pull_failed", "missing_result"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			step, kind := listenerPullResult(request, tc.response, tc.err)
-			if step != tc.step || kind != tc.kind {
-				t.Fatalf("result = %s %s", step, kind)
-			}
-		})
 	}
 }

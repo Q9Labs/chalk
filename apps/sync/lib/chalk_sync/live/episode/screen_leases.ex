@@ -4,6 +4,7 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
   """
 
   alias ChalkSync.Stateholder
+  alias ChalkSync.Stateholder.Postgres.ScreenShareLease
   alias ChalkSync.UUID
 
   def maybe_release_screen_lease(state, authority, :screen, false, outcome)
@@ -20,16 +21,21 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
 
   def maybe_release_screen_lease(state, _authority, _source, _enabled, _outcome), do: state
 
-  def reconcile_screen_leases(state, media_items, options) do
+  def reconcile_screen_leases(state, media_items, options, absent) do
     case observed_screen_participants(media_items) do
-      [] -> release_absent_screen_leases(state, media_items, options)
-      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options)
-      _conflicting -> {:error, :conflicting_screen_publications}
+      [] ->
+        settle_screen_leases(state, media_items, options, absent)
+
+      [participant_id] ->
+        reconcile_single_screen(state, media_items, participant_id, options, absent)
+
+      _conflicting ->
+        {:error, :conflicting_screen_publications}
     end
   end
 
-  defp reconcile_single_screen(state, media_items, participant_id, options) do
-    with {:ok, state} <- release_absent_screen_leases(state, media_items, options) do
+  defp reconcile_single_screen(state, media_items, participant_id, options, absent) do
+    with {:ok, state} <- settle_screen_leases(state, media_items, options, absent) do
       case Map.fetch(state.screen_leases, participant_id) do
         {:ok, _lease} -> {:ok, state}
         :error -> acquire_observed_screen_lease(state, participant_id, options)
@@ -37,14 +43,19 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
     end
   end
 
-  defp release_absent_screen_leases(state, media_items, options) do
+  defp settle_screen_leases(state, media_items, options, absent) do
     Enum.reduce_while(state.screen_leases, {:ok, state}, fn
       {participant_id, lease}, {:ok, current} ->
         result =
-          if screen_observed?(media_items, participant_id) do
-            reconcile_observed_screen_lease(current, participant_id, lease, options)
-          else
-            {:ok, release_and_forget_screen_lease(current, participant_id, lease)}
+          cond do
+            screen_observed?(media_items, participant_id) ->
+              reconcile_observed_screen_lease(current, participant_id, lease, options)
+
+            absent == :release_absent ->
+              {:ok, release_and_forget_screen_lease(current, participant_id, lease)}
+
+            true ->
+              {:ok, current}
           end
 
         case result do
@@ -67,7 +78,17 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
     end
   end
 
+  # A lease that its hard cap would end before the next look is replaced while the
+  # share still runs, so the lease never lapses under a sharer.
   defp renew_screen_lease(state, participant_id, lease, options) do
+    if ScreenShareLease.outlasts_renewal?(lease, options) do
+      extend_screen_lease(state, participant_id, lease, options)
+    else
+      rotate_screen_lease(state, participant_id, lease, options)
+    end
+  end
+
+  defp extend_screen_lease(state, participant_id, lease, options) do
     case Stateholder.renew_screen_lease(state.episode, lease, options) do
       {:ok, renewed} -> {:ok, put_lease(state, participant_id, renewed)}
       {:error, :lease_expired} -> rotate_screen_lease(state, participant_id, lease, options)
@@ -80,7 +101,7 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
            state.episode,
            participant_id,
            lease.owner_generation,
-           options
+           Keyword.put(options, :replace_own, true)
          ) do
       {:ok, rotated} -> {:ok, put_lease(state, participant_id, rotated)}
       {:error, reason} -> {:error, reason}
@@ -130,7 +151,10 @@ defmodule ChalkSync.Live.Episode.ScreenLeases do
       state.episode,
       authority.participant_id,
       authority.generation,
-      screen_lease_options(operation_id)
+      [
+        {:replace_own, not Map.has_key?(state.screen_leases, authority.participant_id)}
+        | screen_lease_options(operation_id)
+      ]
     )
   end
 

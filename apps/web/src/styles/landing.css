@@ -255,15 +255,6 @@
 .site .sx-item + .sx-item {
   border-top: 1px solid var(--chalk-line);
 }
-.site .sx-f2 {
-  display: flex;
-  align-items: center;
-}
-.site .sx-f2 .more {
-  margin-left: var(--space-2);
-  font-size: var(--type-body-sm);
-  color: var(--chalk-muted-text);
-}
 .site .sx-k {
   display: flex;
   align-items: center;
@@ -470,9 +461,6 @@
 .site .xpill:hover {
   background: var(--x-hover);
 }
-.site .xstack {
-  display: flex;
-}
 .site .xstage {
   position: absolute;
   left: 16px;
@@ -613,20 +601,12 @@
   height: 48px;
   color: var(--x-muted);
 }
-.site .xrb[data-on="false"] .i-on {
-  display: none;
-}
-.site .xrb[data-on="false"] .i-off {
-  display: grid;
-}
 .site .xsplit:has([data-on="false"]) {
   background: var(--site-danger);
   color: var(--site-white);
 }
 .site .xsplit:has([data-on="false"]) .xcaret {
   color: var(--site-white);
-}
-.site .xrb[data-on="true"]:not([data-act="mic"]):not([data-act="cam"]) {
 }
 .site .xrb.active {
   background: var(--x-text);
@@ -731,9 +711,6 @@
 .site .xtoast.show {
   opacity: 1;
   transform: translate(-50%, 0);
-}
-.site .xtav {
-  display: inline-flex;
 }
 .site .xleft {
   position: absolute;

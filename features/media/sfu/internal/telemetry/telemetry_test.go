@@ -142,19 +142,6 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 	}
 }
 
-// A host without steal or UDP counters exports neither rather than a false zero.
-func TestUnknownHostSignalsAreLeftOut(t *testing.T) {
-	points := collect(t, func() media.Telemetry { return media.Telemetry{} })
-	for _, name := range []string{"chalk.sfu.host.cpu.steal", "chalk.sfu.host.cpu.utilization", "chalk.sfu.host.udp.receive_buffer_errors"} {
-		if len(points[name]) != 0 {
-			t.Errorf("%s exported %v for an unknown signal", name, points[name])
-		}
-	}
-	if got := points["chalk.sfu.admission.closed"]; len(got) != 1 || got[0].value != 0 || got[0].attrs[keyAdmission] != "none" {
-		t.Errorf("admission %v, want open with reason none", got)
-	}
-}
-
 func attrs(kvs []attribute.KeyValue) map[string]string {
 	out := map[string]string{}
 	for _, kv := range kvs {

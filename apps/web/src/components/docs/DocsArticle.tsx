@@ -1,5 +1,6 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type RefObject } from "react";
 
+import { docsContent } from "../../docs/content";
 import type { DocsPage } from "../../docs/manifest";
 import { getAdjacentDocsPages } from "../../docs/manifest";
 import { MDX_COMPONENTS } from "../../docs/mdx-components";
@@ -21,12 +22,9 @@ function readHashId(): string {
   }
 }
 
-export function DocsArticle({ page }: { readonly page: DocsPage }) {
-  const articleRef = useRef<HTMLElement>(null);
+function useOutline(articleRef: RefObject<HTMLElement | null>, slug: string) {
   const [outline, setOutline] = useState<readonly OutlineItem[]>([]);
   const [currentId, setCurrentId] = useState<string>();
-  const { previous, next } = getAdjacentDocsPages(page.slug);
-
   useEffect(() => {
     const article = articleRef.current;
     if (!article) return;
@@ -66,9 +64,44 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
       window.removeEventListener("scroll", readPosition);
       cancelAnimationFrame(frame);
     };
-  }, [page.slug]);
+  }, [articleRef, slug]);
+  return { outline, current: currentId ?? outline[0]?.id };
+}
 
-  const current = currentId ?? outline[0]?.id;
+type Neighbour = ReturnType<typeof getAdjacentDocsPages>["previous"];
+
+function PreviousNext({ previous, next }: { readonly previous: Neighbour; readonly next: Neighbour }) {
+  if (!previous && !next) return null;
+  return (
+    <nav className="pn" aria-label="Previous and next">
+      {previous ? (
+        <a href={previous.href}>
+          <small>
+            <Icon name="left" />
+            Previous
+          </small>
+          <b>{previous.navLabel}</b>
+        </a>
+      ) : null}
+      {next ? (
+        <a className="nx" href={next.href}>
+          <small>
+            Next
+            <Icon name="right" />
+          </small>
+          <b>{next.navLabel}</b>
+        </a>
+      ) : null}
+    </nav>
+  );
+}
+
+export function DocsArticle({ page }: { readonly page: DocsPage }) {
+  const articleRef = useRef<HTMLElement>(null);
+  const { outline, current } = useOutline(articleRef, page.slug);
+  const { previous, next } = getAdjacentDocsPages(page.slug);
+  const Content = docsContent(page.slug);
+
   return (
     <div className="dpage">
       <article ref={articleRef} className="art" id="docs-content">
@@ -95,31 +128,10 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
               </p>
             }
           >
-            <page.Content components={MDX_COMPONENTS} />
+            <Content components={MDX_COMPONENTS} />
           </Suspense>
         </div>
-        {previous || next ? (
-          <nav className="pn" aria-label="Previous and next">
-            {previous ? (
-              <a href={previous.href}>
-                <small>
-                  <Icon name="left" />
-                  Previous
-                </small>
-                <b>{previous.navLabel}</b>
-              </a>
-            ) : null}
-            {next ? (
-              <a className="nx" href={next.href}>
-                <small>
-                  Next
-                  <Icon name="right" />
-                </small>
-                <b>{next.navLabel}</b>
-              </a>
-            ) : null}
-          </nav>
-        ) : null}
+        <PreviousNext previous={previous} next={next} />
         <div className="dfoot">
           <a href={`${GITHUB_URL}/edit/master/apps/web/src/docs/content/${page.slug || "why-chalk"}.mdx`}>
             <Icon name="edit" />

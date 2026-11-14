@@ -83,7 +83,7 @@ func addTracksKinds(tracks []mediaplane.Track) []string {
 			kinds = append(kinds, "remote")
 			continue
 		}
-		kinds = append(kinds, track.Source)
+		kinds = append(kinds, string(track.Source))
 	}
 	slices.Sort(kinds)
 	return kinds

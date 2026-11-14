@@ -60,7 +60,7 @@ func TestToolCatalogImportsOnlyTheScopeList(t *testing.T) {
 func TestLegacyDirectionDebtOnlyShrinks(t *testing.T) {
 	legacy := map[string][]string{
 		"config":        {"apikeys", "artifactpolicy", "authentication", "mediaplane", "recordingpipeline", "spaces", "tenantlimits", "tenants"},
-		"observability": {"accessgrants", "adapters/postgres/sqlc", "apikeys", "captureplane", "capturesignaling", "mediaplane", "mediaplaneproviders", "recordingpipeline", "spaces"},
+		"observability": {"accessgrants", "adapters/postgres/sqlc", "apikeys", "captureplane", "capturesignaling", "mediaplane", "mediaplaneproviders", "recordingpipeline"},
 	}
 	for pkg, listed := range legacy {
 		actual := slices.DeleteFunc(goList(t, pkg, `{{join .Imports "\n"}}`), func(name string) bool { return name == "utilities" })

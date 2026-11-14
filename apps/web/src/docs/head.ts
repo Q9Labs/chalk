@@ -1,5 +1,6 @@
 import type { DocsPage } from "./manifest";
-import { SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../lib/site-head";
+import { SOCIAL_IMAGE_URL } from "../lib/site-head";
+import { SITE_ORIGIN } from "../lib/site-origin";
 
 export function docsPageHead(page: DocsPage) {
   const title = `${page.title} | Chalk Docs`;

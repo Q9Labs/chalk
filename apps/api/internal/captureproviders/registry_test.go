@@ -15,15 +15,15 @@ var errUnsupportedTestOperation = errors.New("unsupported test operation")
 func TestRegistryRoutesAuthoritativeEpisodeBindingsToDistinctAdapters(t *testing.T) {
 	firstIdentity := captureIdentity(1)
 	secondIdentity := captureIdentity(2)
-	firstBinding := mustBinding(t, "test_provider_one", "first-test-app")
-	secondBinding := mustBinding(t, "test_provider_two", "second-test-app")
+	firstBinding := mustBinding(t, mediaplane.ProviderCloudflareSFU, "first-test-app")
+	secondBinding := mustBinding(t, mediaplane.ProviderChalkSFU, "second-test-app")
 	source := &bindingSource{bindings: map[utilities.ID]mediaplane.Binding{
 		firstIdentity.EpisodeID:  firstBinding,
 		secondIdentity.EpisodeID: secondBinding,
 	}}
 	registry, err := NewRegistry(source,
-		Registration{Provider: firstBinding.Provider, AdapterFingerprint: firstBinding.AdapterFingerprint, Plane: firstCaptureTestPlane{}},
-		Registration{Provider: secondBinding.Provider, AdapterFingerprint: secondBinding.AdapterFingerprint, Plane: alternateCaptureTestPlane{}},
+		Registration{Binding: firstBinding, Plane: firstCaptureTestPlane{}},
+		Registration{Binding: secondBinding, Plane: alternateCaptureTestPlane{}},
 	)
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -59,12 +59,12 @@ func TestRegistryRoutesAuthoritativeEpisodeBindingsToDistinctAdapters(t *testing
 
 func TestRegistryRejectsUnregisteredProviderWithoutFallingBack(t *testing.T) {
 	identity := captureIdentity(3)
-	managedBinding := mustBinding(t, "cf_sfu", "managed-sfu-test-app")
-	tenantBinding := mustBinding(t, "cf_sfu", "tenant-sfu-test-app")
+	managedBinding := mustBinding(t, mediaplane.ProviderCloudflareSFU, "managed-sfu-test-app")
+	tenantBinding := mustBinding(t, mediaplane.ProviderCloudflareSFU, "tenant-sfu-test-app")
 	source := &bindingSource{bindings: map[utilities.ID]mediaplane.Binding{
 		identity.EpisodeID: tenantBinding,
 	}}
-	registry, err := NewRegistry(source, Registration{Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: firstCaptureTestPlane{}})
+	registry, err := NewRegistry(source, Registration{Binding: managedBinding, Plane: firstCaptureTestPlane{}})
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestRegistryRejectsUnregisteredProviderWithoutFallingBack(t *testing.T) {
 
 func TestRegistryClassifiesMissingAndUnavailableBindingAuthority(t *testing.T) {
 	identity := captureIdentity(4)
-	binding := mustBinding(t, "cf_sfu", "managed-sfu-test-app")
+	binding := mustBinding(t, mediaplane.ProviderCloudflareSFU, "managed-sfu-test-app")
 	tests := []struct {
 		name          string
 		sourceError   error
@@ -91,7 +91,7 @@ func TestRegistryClassifiesMissingAndUnavailableBindingAuthority(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			registry, err := NewRegistry(&bindingSource{err: test.sourceError}, Registration{
-				Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{},
+				Binding: binding, Plane: firstCaptureTestPlane{},
 			})
 			if err != nil {
 				t.Fatalf("new registry: %v", err)
@@ -110,19 +110,19 @@ func TestRegistryClassifiesMissingAndUnavailableBindingAuthority(t *testing.T) {
 
 func TestNewRegistryRejectsInvalidAndDuplicateRegistrations(t *testing.T) {
 	source := &bindingSource{}
-	binding := mustBinding(t, "cf_sfu", "managed-sfu-test-app")
+	binding := mustBinding(t, mediaplane.ProviderCloudflareSFU, "managed-sfu-test-app")
 	tests := []struct {
 		name          string
 		source        BindingSource
 		registrations []Registration
 	}{
-		{name: "missing source", registrations: []Registration{{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}}}},
+		{name: "missing source", registrations: []Registration{{Binding: binding, Plane: firstCaptureTestPlane{}}}},
 		{name: "missing registrations", source: source},
-		{name: "missing plane", source: source, registrations: []Registration{{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint}}},
-		{name: "invalid provider", source: source, registrations: []Registration{{Provider: "UNKNOWN", AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}}}},
+		{name: "missing plane", source: source, registrations: []Registration{{Binding: binding}}},
+		{name: "invalid provider", source: source, registrations: []Registration{{Binding: mediaplane.Binding{Provider: "UNKNOWN", AdapterFingerprint: binding.AdapterFingerprint}, Plane: firstCaptureTestPlane{}}}},
 		{name: "duplicate provider", source: source, registrations: []Registration{
-			{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}},
-			{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: alternateCaptureTestPlane{}},
+			{Binding: binding, Plane: firstCaptureTestPlane{}},
+			{Binding: binding, Plane: alternateCaptureTestPlane{}},
 		}},
 	}
 	for _, test := range tests {
@@ -211,7 +211,7 @@ func operationMetadata(identity captureplane.CaptureIdentity) captureplane.Opera
 	return captureplane.OperationMetadata{Identity: identity, CaptureEpoch: 1, PlanRevision: 1, IdempotencyKey: "capture-provider-test"}
 }
 
-func mustBinding(t *testing.T, provider, applicationID string) mediaplane.Binding {
+func mustBinding(t *testing.T, provider mediaplane.Provider, applicationID string) mediaplane.Binding {
 	t.Helper()
 	binding, err := mediaplane.NewBinding(provider, mediaplane.BindingSourceDeploymentDefault, applicationID)
 	if err != nil {

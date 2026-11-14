@@ -22,7 +22,6 @@ export function SiteNav() {
     return () => window.removeEventListener("keydown", close);
   }, [menuOpen]);
 
-  const closeMenu = () => setMenuOpen(false);
   return (
     <header className="nav">
       <div className="ctn">
@@ -53,21 +52,25 @@ export function SiteNav() {
           </button>
         </div>
       </div>
-      {menuOpen ? (
-        <nav className="navsheet" id="site-menu" aria-label="Site">
-          <a href="/#product" onClick={closeMenu}>
-            Product
-          </a>
-          <a href="/docs">Docs</a>
-          <a href={GITHUB_URL}>GitHub</a>
-          <a className="when-signed-out" href={SIGN_IN_HREF}>
-            Sign in
-          </a>
-          <a className="when-signed-in" href={DASHBOARD_HREF}>
-            Dashboard
-          </a>
-        </nav>
-      ) : null}
+      {menuOpen ? <NavSheet onProduct={() => setMenuOpen(false)} /> : null}
     </header>
+  );
+}
+
+function NavSheet({ onProduct }: { readonly onProduct: () => void }) {
+  return (
+    <nav className="navsheet" id="site-menu" aria-label="Site">
+      <a href="/#product" onClick={onProduct}>
+        Product
+      </a>
+      <a href="/docs">Docs</a>
+      <a href={GITHUB_URL}>GitHub</a>
+      <a className="when-signed-out" href={SIGN_IN_HREF}>
+        Sign in
+      </a>
+      <a className="when-signed-in" href={DASHBOARD_HREF}>
+        Dashboard
+      </a>
+    </nav>
   );
 }

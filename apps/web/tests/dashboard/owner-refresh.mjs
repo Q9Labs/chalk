@@ -5,6 +5,7 @@ import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./o
 import { proveEvictionReload } from "./owner-eviction.mjs";
 import { showCallControls } from "../call-controls.mjs";
 import { leaveOwnerCall } from "./owner-controls.mjs";
+import { startAndJoinCall } from "./call-steps.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
@@ -38,10 +39,7 @@ try {
   await proveEvictionReload(context, origin);
   await proveCookieBudget(context, origin);
   const leaving = await context.newPage();
-  await leaving.goto(`${origin}/dashboard`);
-  await leaving.getByRole("button", { name: "Start a call", exact: true }).first().click();
-  await leaving.getByRole("button", { name: "Join call", exact: true }).click();
-  await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+  await startAndJoinCall(leaving, origin);
   await leaveOwnerCall(leaving, origin);
   await assertNoSeatCookies(context);
   await leaving.close();

@@ -3,10 +3,10 @@ package httpapi
 import (
 	"context"
 	"errors"
-
-	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
@@ -26,10 +26,10 @@ func requireRecorderWorker(verifier RecorderWorkerVerifier, next http.Handler) h
 		identity, err := verifier.Verify(request)
 		if err != nil {
 			if errors.Is(err, recorderfleet.ErrAdmissionClosed) {
-				writeError(w, http.StatusLocked, "worker.admission_closed", "Worker admission is closed")
+				writeError(w, http.StatusLocked, recorderprotocol.CodeWorkerAdmissionClosed, "Worker admission is closed")
 				return
 			}
-			writeError(w, http.StatusUnauthorized, "worker.unauthorized", "Worker authentication required")
+			writeError(w, http.StatusUnauthorized, recorderprotocol.CodeWorkerUnauthorized, "Worker authentication required")
 			return
 		}
 

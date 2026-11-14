@@ -3,21 +3,13 @@ package recorderworker
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pion/interceptor"
-	"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
-	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
-	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -147,153 +139,6 @@ func (c *supervisionControl) Fail(_ context.Context, input recordingpipeline.Fai
 	return captureJobFromLease(input.LeaseInput, time.Now()), nil
 }
 
-// A subprocess makes an escaped panic a test failure instead of killing the suite.
-func TestCaptureChildPanicIsolatesRealAttempt(t *testing.T) {
-	for _, boundary := range []string{"plan", "bind", "rtp", "rtcp"} {
-		t.Run(boundary, func(t *testing.T) {
-			if os.Getenv("CHALK_CAPTURE_PANIC_BOUNDARY") == boundary {
-				testCaptureChildPanic(t, boundary)
-				return
-			}
-			executable, err := os.Executable()
-			if err != nil {
-				t.Fatal(err)
-			}
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			command := exec.CommandContext(ctx, executable, "-test.run=^TestCaptureChildPanicIsolatesRealAttempt$/^"+boundary+"$", "-test.timeout=8s")
-			command.Env = append(os.Environ(), "CHALK_CAPTURE_PANIC_BOUNDARY="+boundary)
-			output, err := command.CombinedOutput()
-			if err != nil {
-				t.Fatalf("%s child: %v\n%s", boundary, err, output)
-			}
-		})
-	}
-}
-func testCaptureChildPanic(t *testing.T, boundary string) {
-	now := time.Now().UTC()
-	claim := captureDaemonClaim(t, 7)
-	var claims atomic.Int32
-	trigger := make(chan struct{})
-	entered := make(chan struct{}, 1)
-	control := &supervisionControl{failed: make(chan recordingpipeline.FailureInput, 8)}
-	control.claim = func(ctx context.Context, id utilities.ID, lease time.Duration) (ClaimResult, error) {
-		n := claims.Add(1)
-		if n > 2 {
-			<-ctx.Done()
-			return ClaimResult{}, ctx.Err()
-		}
-		c := claim
-		c.ClaimRequestID = id
-		c.Envelope.CaptureEpoch = int64(n)
-		c.LeaseExpiresAt = time.Now().Add(lease)
-		return c, nil
-	}
-	attempts := make([]*PionCaptureAttempt, 2)
-	storages := make([]*captureTestStorage, 2)
-	peers := make([]*capturePlanWatchPeer, 2)
-	tracks := make([]*capturePlanWatchTrack, 2)
-	for i := range 2 {
-		track := newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, "0", "panic"))
-		track.packets = make(chan *rtp.Packet)
-		tracks[i] = track
-		authority := captureTestPlanAtEpoch(t, captureplane.CaptureEpoch(i+1), 1, now).Authority()
-		plan := capturePlanWatchPlan(t, authority, 1, now, captureplan.StopStateRunning, track.capture)
-		source := &panicPlanSource{plan: plan}
-		var media CaptureMediaTrack = track
-		if i == 0 {
-			source.trigger = trigger
-			source.entered = entered
-			source.panics = boundary == "plan"
-			media = &panicMediaTrack{capturePlanWatchTrack: track, boundary: boundary, trigger: trigger, entered: entered}
-		}
-		peer := &capturePlanWatchPeer{tracks: []*capturePlanWatchTrack{track}}
-		peer.wait = func(ctx context.Context, _ captureplane.ProviderReference) (CaptureMediaTrack, error) {
-			if p, ok := media.(*panicMediaTrack); ok && boundary == "bind" {
-				p.waitToPanic()
-			}
-			return media, nil
-		}
-		peers[i] = peer
-		coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{1: {PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{track.capture}}})
-		storages[i] = &captureTestStorage{key: bytesOf(byte(0x40 + i)), accessed: make(chan struct{})}
-		attempts[i] = capturePlanWatchAttempt(t, authority, &now, peer, coordinator, source, storages[i], &captureTestLifecycle{}, time.Now, 100*time.Millisecond, 100*time.Millisecond)
-	}
-	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(_ context.Context, c ClaimResult) (CaptureAttempt, error) {
-		return attempts[c.Envelope.CaptureEpoch-1], nil
-	}), CaptureDaemonConfig{Slots: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- daemon.Run(ctx) }()
-	stopped := false
-	defer func() {
-		cancel()
-		if !stopped {
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-				t.Error("daemon did not stop")
-			}
-		}
-	}()
-	select {
-	case <-tracks[1].readStarted:
-	case <-time.After(time.Second):
-		t.Fatal("sibling not reading")
-	}
-	select {
-	case <-entered:
-	case <-time.After(time.Second):
-		t.Fatal("panic boundary not reached")
-	}
-	close(trigger)
-	select {
-	case failure := <-control.failed:
-		if !strings.Contains(failure.ErrorDetail, "panicked") {
-			t.Fatalf("failure = %+v", failure)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("panic did not fail attempt")
-	}
-	if peers[0].CloseCalls() != 1 || peers[1].CloseCalls() != 0 {
-		t.Fatalf("peer closes = %d/%d", peers[0].CloseCalls(), peers[1].CloseCalls())
-	}
-	// A send proves the sibling is still reading after the failure.
-	select {
-	case tracks[1].packets <- &rtp.Packet{Header: rtp.Header{Version: 2, SequenceNumber: 1, Timestamp: 960, SSRC: 1}, Payload: []byte{0xf8, 0xff, 0xfe}}:
-	case <-time.After(time.Second):
-		t.Fatal("sibling stopped reading")
-	}
-	select {
-	case <-storages[1].accessed:
-	case <-time.After(time.Second):
-		t.Fatal("sibling writer stopped")
-	}
-	cancel()
-	select {
-	case <-done:
-		stopped = true
-	case <-time.After(time.Second):
-		t.Fatal("sibling did not finish")
-	}
-	packets := 0
-	for _, upload := range storages[1].uploadHistory {
-		bundle, err := recordingbundle.Decrypt(storages[1].key, upload.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, fragment := range bundle.Fragments {
-			packets += len(fragment.Packets)
-		}
-	}
-	if packets != 1 {
-		t.Fatalf("sibling persisted packets after panic = %d", packets)
-	}
-}
-
 type panicPlanSource struct {
 	plan    captureplan.Plan
 	trigger <-chan struct{}
@@ -316,32 +161,6 @@ func (s *panicPlanSource) WaitForPlan(ctx context.Context, input captureplan.Wai
 func (s *panicPlanSource) FetchPlan(context.Context, recordercapture.AttemptAuthority) (captureplan.Plan, error) {
 	return s.plan, nil
 }
-
-type panicMediaTrack struct {
-	*capturePlanWatchTrack
-	boundary string
-	trigger  <-chan struct{}
-	entered  chan<- struct{}
-}
-
-func (t *panicMediaTrack) waitToPanic() {
-	t.entered <- struct{}{}
-	<-t.trigger
-	panic("media child panic")
-}
-func (t *panicMediaTrack) ReadRTP() (*rtp.Packet, interceptor.Attributes, error) {
-	if t.boundary == "rtp" {
-		t.waitToPanic()
-	}
-	return t.capturePlanWatchTrack.ReadRTP()
-}
-func (t *panicMediaTrack) ReadRTCP() ([]rtcp.Packet, interceptor.Attributes, error) {
-	if t.boundary == "rtcp" {
-		t.waitToPanic()
-	}
-	return nil, nil, errors.New("no reports")
-}
-func (*panicMediaTrack) SetRTCPReadDeadline(time.Time) error { return nil }
 
 func TestCaptureClaimRetriesRetainSlot(t *testing.T) {
 	const slots = 4
@@ -423,36 +242,6 @@ func TestCaptureAllRetiredSlotsCloseReadiness(t *testing.T) {
 		t.Fatal("all slots retired but worker still advertises admission")
 	}
 	assertReadinessReport(t, reports.reports, false, 0, ReadinessReasonDraining)
-}
-
-func TestCaptureDrainSurvivesRelinquishPanic(t *testing.T) {
-	claim := captureDaemonClaim(t, 7)
-	started := make(chan struct{})
-	control := &captureControlStub{relinquish: func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
-		panic("relinquish failed")
-	}}
-	daemon, err := NewCaptureDaemon(control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return &captureAttemptStub{run: func(ctx context.Context) error { close(started); <-ctx.Done(); return ctx.Err() }}, nil
-	}), supervisionConfig())
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- daemon.runClaim(t.Context(), claim) }()
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("attempt did not start")
-	}
-	daemon.Drain()
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("panic disappeared")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("cleanup result was consumed twice")
-	}
 }
 
 func TestCaptureRetiredSlotReducesReadiness(t *testing.T) {

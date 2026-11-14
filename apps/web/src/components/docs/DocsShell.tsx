@@ -1,13 +1,72 @@
 import { Outlet, useRouterState } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { DOCS_GROUPS, findDocsPage } from "../../docs/manifest";
 import { Icon } from "../site/Icon";
 import { SiteRoot } from "../site/theme";
-import { trapDialogFocus } from "./dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { DocsHeader } from "./DocsHeader";
 import { DocsSidebar } from "./DocsSidebar";
 import { SearchDialog } from "./SearchDialog";
+
+/** Ctrl or Cmd with K, or a slash outside a text field, opens search. */
+function useSearchShortcut(open: () => void) {
+  const latest = useRef(open);
+  latest.current = open;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const typing = event.target instanceof HTMLElement && event.target.matches("input, textarea, select, [contenteditable='true']");
+      if ((event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) || (event.key === "/" && !typing && !event.metaKey && !event.ctrlKey && !event.altKey)) {
+        event.preventDefault();
+        latest.current();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+}
+
+/** Scrolls the sidebar so the current page is in view when it starts below the fold. */
+function useKeepCurrentVisible(sidebar: RefObject<HTMLElement | null>, currentSlug: string) {
+  useEffect(() => {
+    const nav = sidebar.current;
+    const current = nav?.querySelector<HTMLElement>("[aria-current='page']");
+    if (!nav || !current || current.offsetTop + current.offsetHeight <= nav.clientHeight) return;
+    nav.scrollTop = current.offsetTop - nav.clientHeight / 2;
+  }, [sidebar, currentSlug]);
+}
+
+function useScrollLock(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [locked]);
+}
+
+type MenuSheetProps = { readonly currentSlug: string; readonly closeRef: RefObject<HTMLButtonElement | null>; readonly onClose: () => void; readonly onNavigate: () => void };
+
+function MenuSheet({ currentSlug, closeRef, onClose, onNavigate }: MenuSheetProps) {
+  return (
+    <div
+      className="dsheet"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div id="docs-menu" role="dialog" aria-modal="true" aria-label="Docs menu" onKeyDown={trapDialogFocus}>
+        <button ref={closeRef} type="button" className="ib x" aria-label="Close menu" onClick={onClose}>
+          <Icon name="x" />
+        </button>
+        <DocsSidebar currentSlug={currentSlug} onNavigate={onNavigate} />
+      </div>
+    </div>
+  );
+}
 
 export function DocsShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -20,25 +79,12 @@ export function DocsShell() {
   const page = findDocsPage(currentSlug);
   const group = DOCS_GROUPS.find((candidate) => candidate.id === page?.groupId);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const typing = event.target instanceof HTMLElement && event.target.matches("input, textarea, select, [contenteditable='true']");
-      if ((event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) || (event.key === "/" && !typing && !event.metaKey && !event.ctrlKey && !event.altKey)) {
-        event.preventDefault();
-        setMenuOpen(false);
-        setSearchOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  useSearchShortcut(() => {
+    setMenuOpen(false);
+    setSearchOpen(true);
+  });
 
-  useEffect(() => {
-    const nav = sidebar.current;
-    const current = nav?.querySelector<HTMLElement>("[aria-current='page']");
-    if (!nav || !current || current.offsetTop + current.offsetHeight <= nav.clientHeight) return;
-    nav.scrollTop = current.offsetTop - nav.clientHeight / 2;
-  }, [currentSlug]);
+  useKeepCurrentVisible(sidebar, currentSlug);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -50,14 +96,7 @@ export function DocsShell() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (!searchOpen && !menuOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [menuOpen, searchOpen]);
+  useScrollLock(searchOpen || menuOpen);
 
   function closeMenu() {
     setMenuOpen(false);
@@ -86,22 +125,7 @@ export function DocsShell() {
           <Outlet />
         </main>
       </div>
-      {menuOpen ? (
-        <div
-          className="dsheet"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeMenu();
-          }}
-        >
-          <div id="docs-menu" role="dialog" aria-modal="true" aria-label="Docs menu" onKeyDown={trapDialogFocus}>
-            <button ref={menuClose} type="button" className="ib x" aria-label="Close menu" onClick={closeMenu}>
-              <Icon name="x" />
-            </button>
-            <DocsSidebar currentSlug={currentSlug} onNavigate={() => setMenuOpen(false)} />
-          </div>
-        </div>
-      ) : null}
+      {menuOpen ? <MenuSheet currentSlug={currentSlug} closeRef={menuClose} onClose={closeMenu} onNavigate={() => setMenuOpen(false)} /> : null}
       {searchOpen ? <SearchDialog onClose={() => setSearchOpen(false)} /> : null}
     </SiteRoot>
   );

@@ -42,7 +42,7 @@ func recoveringEpisode(t *testing.T) (context.Context, *pgxpool.Pool, EpisodeRec
 		t.Skipf("postgres unavailable: %v", err)
 	}
 	tenantID, spaceID, episodeID := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
-	binding, err := mediaplane.NewBinding("chalk_sfu", mediaplane.BindingSourceDeploymentDefault, "pool-a")
+	binding, err := mediaplane.NewBinding(mediaplane.ProviderChalkSFU, mediaplane.BindingSourceDeploymentDefault, "pool-a")
 	if err != nil {
 		t.Fatal(err)
 	}

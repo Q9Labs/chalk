@@ -8,8 +8,8 @@ import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
 import { getWhiteboardAssets, resolveExcalidrawAssetPath } from "../assets";
+import { EXCALIDRAW_CDN_CSS } from "../pins";
 
-const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
@@ -127,7 +127,7 @@ interface WhiteboardCollaboration {
   apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>;
   engineRef: MutableRefObject<ExcalidrawCollabEngine | null>;
   handleApiReady: (api: ExcalidrawImperativeAPI) => void;
-  handleChange: (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => void;
+  handleChange: () => void;
   handlePointerUpdate: (payload: { pointer: { x: number; y: number } }) => void;
   syncScene: () => void;
 }
@@ -160,7 +160,7 @@ function useWhiteboardCanvasConfiguration(props: WhiteboardCanvasProps): Whitebo
     canDraw,
     headless: props.headless === true,
     classNames,
-    excalidrawCssPath: valueOr(props.excalidrawCssPath, getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS),
+    excalidrawCssPath: valueOr(props.excalidrawCssPath, getWhiteboardAssets()?.excalidrawCssPath ?? EXCALIDRAW_CDN_CSS),
     icons: valueOr(props.icons, {}),
     isCollaborating: Boolean(props.collab),
     isVisible: valueOr(props.isVisible, true),
@@ -176,7 +176,7 @@ function valueOr<T>(value: T | undefined, fallback: T): T {
 const STYLESHEET_ID = "chalk-excalidraw-styles";
 
 /** Starts loading the board's stylesheet before anyone opens the board, so the board opens without waiting for it. */
-export function preloadWhiteboardStylesheet(href: string = getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS): void {
+export function preloadWhiteboardStylesheet(href: string = getWhiteboardAssets()?.excalidrawCssPath ?? EXCALIDRAW_CDN_CSS): void {
   if (typeof document !== "undefined") boardStylesheet(href);
 }
 
@@ -383,13 +383,10 @@ function useExcalidrawApiReady(apiRef: MutableRefObject<ExcalidrawImperativeAPI 
 }
 
 function useExcalidrawSceneHandlers(apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, onSelectedLatexChange: (latex: string | null) => void) {
-  const handleChange = useCallback(
-    (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
-      engineRef.current?.handleChange(elements, appState, files);
-      onSelectedLatexChange(selectedMathLatex(apiRef.current));
-    },
-    [apiRef, engineRef, onSelectedLatexChange],
-  );
+  const handleChange = useCallback(() => {
+    engineRef.current?.handleChange();
+    onSelectedLatexChange(selectedMathLatex(apiRef.current));
+  }, [apiRef, engineRef, onSelectedLatexChange]);
   const handlePointerUpdate = useCallback(
     (payload: { pointer: { x: number; y: number } }) => {
       engineRef.current?.handlePointerUpdate(payload);
@@ -400,7 +397,7 @@ function useExcalidrawSceneHandlers(apiRef: MutableRefObject<ExcalidrawImperativ
     const api = apiRef.current;
     if (!api) return;
 
-    engineRef.current?.handleChange(api.getSceneElementsIncludingDeleted(), api.getAppState(), api.getFiles());
+    engineRef.current?.handleChange();
   }, [apiRef, engineRef]);
 
   return { handleChange, handlePointerUpdate, syncScene };
@@ -538,8 +535,8 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
     [handleApiReady],
   );
   const onChange = useCallback(
-    (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
-      handleChange(elements, appState, files);
+    (_elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+      handleChange();
       if (!appState.isLoading) setLoaded(true);
       // A shared background from an older board must not cover the surface its host paints.
       if (headless && appState.viewBackgroundColor !== TRANSPARENT) api?.updateScene({ appState: { viewBackgroundColor: TRANSPARENT } });

@@ -1,18 +1,17 @@
-import type { WhoCanDraw } from "../react/board/board-draw-policy";
+import { EXCALIDRAW_VERSION, RENDERER_BUILD_ID } from "../pins";
+import type { DrawPerson, DrawPolicy } from "../collab/draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
 import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
 export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
-export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = "0.18.1" as const;
-export const CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID = "chalk-excalidraw-0.18.1-r1" as const;
+export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = EXCALIDRAW_VERSION;
+export const CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID = RENDERER_BUILD_ID;
 export const CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES = 32 * 1024 * 1024;
+/** How many message ids each side of the bridge remembers to drop duplicates. */
+export const CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS = 2_048;
 
 export type ChalkEmbeddedWhiteboardTheme = "light" | "dark";
-export type ChalkEmbeddedWhiteboardViewport = {
-  readonly width: number;
-  readonly height: number;
-  readonly scale: number;
-};
+export type ChalkEmbeddedWhiteboardViewport = { readonly width: number; readonly height: number; readonly scale: number };
 
 export type ChalkEmbeddedWhiteboardOperationResult = { readonly requestId: string; readonly ok: true; readonly result?: unknown } | { readonly requestId: string; readonly ok: false; readonly error: { readonly code: string; readonly message: string; readonly recoverable: boolean } };
 
@@ -30,7 +29,7 @@ export type ChalkEmbeddedBoardContext = {
   readonly sceneStatus: string;
   readonly connectionStatus: string;
   readonly viewsAvailable: boolean;
-  readonly whoCanDraw?: Pick<WhoCanDraw, "policy" | "people">;
+  readonly whoCanDraw?: { readonly policy: DrawPolicy; readonly people: readonly DrawPerson[] };
   readonly colors: {
     readonly canvas: string;
     readonly surface: string;
@@ -138,7 +137,7 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
   | { readonly type: "view"; readonly payload: WhiteboardView & { readonly requestId: string } }
   | { readonly type: "notice"; readonly payload: ChalkEmbeddedBoardNotice | null }
   | { readonly type: "follow"; readonly payload: { readonly participantId: string | null } }
-  | { readonly type: "set_draw_policy"; readonly payload: { readonly requestId: string; readonly policy: WhoCanDraw["policy"] } }
+  | { readonly type: "set_draw_policy"; readonly payload: { readonly requestId: string; readonly policy: DrawPolicy } }
   | { readonly type: "set_draw_permission"; readonly payload: { readonly requestId: string; readonly participantId: string; readonly canDraw: boolean } }
   | { readonly type: "close_board"; readonly payload: {} }
   | { readonly type: "camera"; readonly payload: { readonly scrollX: number; readonly scrollY: number; readonly zoom: number } }

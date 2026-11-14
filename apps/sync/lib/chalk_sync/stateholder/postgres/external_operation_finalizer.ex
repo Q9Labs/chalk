@@ -148,7 +148,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          connection,
          episode,
          %{name: :role_transition_source_stop} = external,
-         reason
+         _reason
        ),
        do:
          Outcomes.finalize_pending_operation(
@@ -156,7 +156,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
            episode,
            external,
            nil,
-           {:failed, reason}
+           {:confirmed, :provider}
          )
 
   defp settle_obsolete(connection, episode, external, reason) do

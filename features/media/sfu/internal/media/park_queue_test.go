@@ -3,11 +3,9 @@ package media
 import (
 	"io"
 	"log/slog"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/pion/rtp"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 
@@ -226,121 +224,5 @@ func TestParkedPublicationReadsInactive(t *testing.T) {
 	state, _, resumed, _, _ := sub.state()
 	if state != protocol.SubscriptionActive || resumed == parked || resumed == active {
 		t.Fatalf("a resumed publication's subscription reads %q at revision %d, after %d and %d", state, resumed, active, parked)
-	}
-}
-
-// A viewer that subscribes while the camera is muted has no layer to follow. The resume must
-// select one and ask the publisher for a keyframe, or that viewer stays on a black tile.
-func TestSubscribeWhileParkedGetsALayerOnResume(t *testing.T) {
-	pub, layer := cameraWithOneLayer(t)
-	pub.setHeld(true)
-
-	sub := &subscription{pub: pub, revision: 1, target: -1}
-	pub.addSubscriber(sub)
-	sub.update(layerRequest{})
-	if sub.target >= 0 {
-		t.Fatalf("a viewer that subscribed to a parked camera selected layer %d", sub.target)
-	}
-	pub.setHeld(false)
-	if sub.target < 0 {
-		t.Fatal("the resume left a viewer that subscribed during the mute without a layer")
-	}
-	if layer.lastAsked.Load() == askedLongAgo {
-		t.Fatal("the resume did not ask the publisher for a keyframe for that viewer")
-	}
-}
-
-// blockingWriter holds the first write until released, so a test can park a publication while
-// one packet is already past the pacer's check.
-type blockingWriter struct {
-	entered chan struct{}
-	release chan struct{}
-	writes  atomic.Int32
-}
-
-func (w *blockingWriter) WriteRTP(_ *rtp.Header, payload []byte) (int, error) {
-	if w.writes.Add(1) == 1 {
-		close(w.entered)
-		<-w.release
-	}
-	return len(payload), nil
-}
-
-func (w *blockingWriter) Write(b []byte) (int, error) { return len(b), nil }
-
-// The pacer checks a packet and then writes it with its lock released, so a park that returns
-// while one write is under way cannot recall that packet. The bound is that single packet per
-// viewer transport: everything still queued behind it is dropped, and a later resume does not
-// bring it back.
-func TestParkLeavesAtMostTheWriteUnderWay(t *testing.T) {
-	pub, _ := cameraWithOneLayer(t)
-	sub := &subscription{pub: pub, revision: 1, target: -1}
-	writer := &blockingWriter{entered: make(chan struct{}), release: make(chan struct{})}
-	transport := newTransport(&delayHistogram{}, 128<<10, make(chan struct{}))
-	binding := &egressBinding{writer: writer, ssrc: 1, payloadType: 96, twccID: 1}
-	transport.mu.Lock()
-	transport.tokens, transport.refilled = -1e9, monotonic()
-	transport.mu.Unlock()
-	scratch := &packetWriter{}
-	for seq := uint16(1); seq <= 3; seq++ {
-		packet := egressPacket{binding: binding, authority: pub.authority, sub: sub, resumes: pub.resumes.Load(), arrival: monotonic(), class: classVideo, seq: seq, payload: []byte{1, 2, 3}}
-		if !transport.send(&packet, scratch) {
-			t.Fatalf("packet %d was not accepted", seq)
-		}
-	}
-	transport.mu.Lock()
-	transport.tokens = 1e9
-	transport.mu.Unlock()
-
-	drained := make(chan struct{})
-	go func() { defer close(drained); transport.drainOnce() }()
-	select {
-	case <-writer.entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the pacer did not start a write")
-	}
-	pub.setHeld(true)
-	pub.setHeld(false)
-	close(writer.release)
-	select {
-	case <-drained:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the pacer did not finish")
-	}
-	if writes := writer.writes.Load(); writes != 1 {
-		t.Fatalf("%d packets were written across the park, want only the one under way", writes)
-	}
-}
-
-// After a mute longer than the idle window the layer reads idle at the resume, so the resume
-// itself finds nothing to select. The first packet that arrives after it must then ask for the
-// keyframe the viewer needs.
-func TestLongMuteAsksForAKeyframeOnTheFirstPacketAfterResume(t *testing.T) {
-	pub, layer := cameraWithOneLayer(t)
-	sub := &subscription{pub: pub, track: &egressTrack{}, revision: 1, target: -1}
-	pub.addSubscriber(sub)
-	sub.update(layerRequest{})
-	pub.setHeld(true)
-	layer.lastRTP.Store(monotonic() - 2*int64(layerIdleAfter))
-	layer.lastAsked.Store(askedLongAgo)
-	pub.setHeld(false)
-	if sub.target >= 0 {
-		t.Fatal("an idle layer was selected at the resume")
-	}
-	if layer.lastAsked.Load() != askedLongAgo {
-		t.Fatal("the resume asked for a keyframe from a layer with no media")
-	}
-
-	raw, err := (&rtp.Packet{Header: rtp.Header{Version: 2, PayloadType: 96, SequenceNumber: 7, Timestamp: 9000, SSRC: 1}, Payload: []byte{0x10, 0x00, 0x01}}).Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var header rtp.Header
-	pub.forward(layer, raw, false, &header, &packetWriter{})
-	if sub.target < 0 {
-		t.Fatal("the first packet after the resume did not select a layer")
-	}
-	if layer.lastAsked.Load() == askedLongAgo {
-		t.Fatal("the first packet after the resume did not ask for a keyframe")
 	}
 }

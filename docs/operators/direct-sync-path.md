@@ -61,8 +61,9 @@ change to both.
    a flag with no proxy makes every first attempt wait 2.5 seconds.
 3. Set `CHALK_API_DIRECT_URL` (an https origin, no path) in the API environment
    and restart the API.
-4. Set the repository variable `CHALK_NIGHTLY_SYNC_DIRECT_URL` to
-   `wss://<hostname>/v1/sync` and cut a nightly web release. Native apps pass
+4. Set the repository secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (a secret, so the
+   hostname stays out of public logs) to `wss://<hostname>/v1/sync` with
+   `gh secret set`, and cut a nightly web release. Native apps pass
    `syncDirectUrl` to `createNativeSpaceClient`.
 5. Join from a real network. The Sync socket should open on the direct hostname
    and `sync.websocket.handshake` should carry `ingress=direct`.
@@ -93,12 +94,12 @@ production web build, and the grant door does not need it. Keep that guard.
 
 Use the first row that fits. The fallback is what makes the no-deploy rows safe.
 
-| Goal                                 | Action                                                                                                                                                  | Deploy |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off. | no     |
-| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                   | no     |
-| Turn the flag off for new page loads | Unset `CHALK_NIGHTLY_SYNC_DIRECT_URL` and cut a web release. Loaded pages keep trying and fall back, so also do the row above.                          | yes    |
-| Remove everything                    | `direct-sync-proxy remove --purge`, then `tofu destroy`                                                                                                 | no     |
+| Goal                                 | Action                                                                                                                                                          | Deploy |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off.         | no     |
+| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                           | no     |
+| Turn the flag off for new page loads | Delete the secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (`gh secret delete`) and cut a web release. Loaded pages keep trying and fall back, so also do the row above. | yes    |
+| Remove everything                    | `direct-sync-proxy remove --purge`, then `tofu destroy`                                                                                                         | no     |
 
 ## What to watch
 

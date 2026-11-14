@@ -105,8 +105,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
-      external.external_operation_id,
-      :applied
+      external.external_operation_id
     )
 
     ExternalOperationDecision.build(%{external | status: :applied}, :original)
@@ -122,33 +121,22 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
     RoleTransitionSettlement.settle_child(
       connection,
       episode,
-      external.external_operation_id,
-      :applied
+      external.external_operation_id
     )
 
     ExternalOperationDecision.build(%{external | status: :applied}, :original)
   end
 
+  # The role change has already taken effect, so a source stop that failed would leave the host
+  # reading "failed" about a change that happened and the source live.
   def finalize_pending_operation(
         connection,
-        episode,
-        %{name: :role_transition_source_stop} = external,
+        _episode,
+        %{name: :role_transition_source_stop},
         _state,
-        {:failed, reason}
-      )
-      when is_atom(reason) do
-    RoleTransitionSettlement.settle_child(
-      connection,
-      episode,
-      external.external_operation_id,
-      {:failed, reason}
-    )
-
-    ExternalOperationDecision.build(
-      %{external | status: :failed, last_error_code: reason},
-      :original
-    )
-  end
+        {:failed, _reason}
+      ),
+      do: Postgrex.rollback(connection, {:error, :source_stop_cannot_fail})
 
   def finalize_pending_operation(connection, episode, external, state, {:failed, reason})
       when is_atom(reason) do

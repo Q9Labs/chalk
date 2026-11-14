@@ -9,6 +9,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -380,7 +381,7 @@ var spaceRules = errorRules{
 
 // SpacePlaneService reports the plane a new Episode would start on in each Space.
 type SpacePlaneService interface {
-	EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID, list []spaces.Space) ([]*spaces.MediaPlaneProvider, error)
+	EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID, list []spaces.Space) ([]*mediaplane.Provider, error)
 }
 
 func newSpaceListResponse(ctx context.Context, service SpaceService, tenantID utilities.ID, list spaces.SpaceList) (spaceListResponse, error) {
@@ -404,7 +405,7 @@ func singleSpaceResponse(ctx context.Context, service SpaceService, tenantID uti
 }
 
 func newSpaceResponses(ctx context.Context, service SpaceService, tenantID utilities.ID, list []spaces.Space) ([]spaceResponse, error) {
-	effective := make([]*spaces.MediaPlaneProvider, len(list))
+	effective := make([]*mediaplane.Provider, len(list))
 	if planes, ok := service.(SpacePlaneService); ok {
 		var err error
 		if effective, err = planes.EffectiveMediaPlanes(ctx, tenantID, list); err != nil {
@@ -414,18 +415,10 @@ func newSpaceResponses(ctx context.Context, service SpaceService, tenantID utili
 	responses := make([]spaceResponse, 0, len(list))
 	for i, space := range list {
 		response := newSpaceResponse(space)
-		response.EffectiveMediaPlane = planeString(effective[i])
+		response.EffectiveMediaPlane = mediaplane.OptionalSettingName(effective[i])
 		responses = append(responses, response)
 	}
 	return responses, nil
-}
-
-func planeString(plane *spaces.MediaPlaneProvider) *string {
-	if plane == nil {
-		return nil
-	}
-	value := string(*plane)
-	return &value
 }
 
 func newSpaceResponse(space spaces.Space) spaceResponse {
@@ -439,7 +432,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		TenantID:                      space.TenantID.String(),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
-		MediaPlaneSetting:             planeString(space.MediaPlaneSetting),
+		MediaPlaneSetting:             mediaplane.OptionalSettingName(space.MediaPlaneSetting),
 		RecordingPolicy:               space.RecordingPolicy,
 		TranscriptionPolicy:           space.TranscriptionPolicy,
 		TranscriptLanguage:            transcriptLanguageString(space.TranscriptLanguage),

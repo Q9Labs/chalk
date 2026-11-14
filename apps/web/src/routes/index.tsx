@@ -10,7 +10,8 @@ import { SpeedSection } from "../components/landing/SpeedSection";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { SiteNav } from "../components/site/SiteNav";
 import { SiteRoot } from "../components/site/theme";
-import { buildPublicSiteHead, SITE_ORIGIN, SOCIAL_IMAGE_URL } from "../lib/site-head";
+import { buildPublicSiteHead, SOCIAL_IMAGE_URL } from "../lib/site-head";
+import { SITE_ORIGIN } from "../lib/site-origin";
 import landingCss from "../styles/landing.css?url";
 
 const title = "Chalk | Calls for your team, and inside your product";

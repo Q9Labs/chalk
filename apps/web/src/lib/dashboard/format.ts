@@ -62,11 +62,6 @@ function shortDate(iso: string, now = Date.now()): string {
   return (date.getFullYear() === new Date(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date)).replace("Sept", "Sep");
 }
 
-/** "3 Nov", for a range of days. */
-export function rangeDay(date: Date): string {
-  return dayMonth.format(date).replace("Sept", "Sep");
-}
-
 /** "2 Sep 2027" */
 export function fullDate(iso: string): string {
   return dayMonthYear.format(new Date(iso)).replace("Sept", "Sep");

@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -37,7 +38,7 @@ type providerOperationRequest struct {
 	EpisodeID             string                               `json:"episode_id"`
 	ParticipantID         *string                              `json:"participant_id,omitempty"`
 	ParticipantGeneration *int64                               `json:"participant_generation,omitempty"`
-	PublicationSource     *string                              `json:"publication_source,omitempty"`
+	PublicationSource     *mediaplane.PublicationSource        `json:"publication_source,omitempty"`
 	ControlRevision       *int64                               `json:"control_revision,omitempty"`
 	RecordingID           *string                              `json:"recording_id,omitempty"`
 	RecordingReservation  *providerRecordingReservationRequest `json:"recording_reservation,omitempty"`
@@ -65,10 +66,10 @@ type providerObservationResponse struct {
 }
 
 type providerPublicationResponse struct {
-	ParticipantID string  `json:"participant_id"`
-	Source        string  `json:"source"`
-	Enabled       bool    `json:"enabled"`
-	PublicationID *string `json:"publication_id"`
+	ParticipantID string                       `json:"participant_id"`
+	Source        mediaplane.PublicationSource `json:"source"`
+	Enabled       bool                         `json:"enabled"`
+	PublicationID *string                      `json:"publication_id"`
 }
 
 type providerObservationCursorResponse struct {

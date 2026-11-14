@@ -679,7 +679,7 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
 		request := protocol.SourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]protocol.SourceControl, len(batch))}
 		for index, control := range batch {
-			request.Controls[index] = protocol.SourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
+			request.Controls[index] = protocol.SourceControl{ParticipantID: control.ParticipantID, Source: string(control.Source), Action: string(control.Action), Revision: control.Revision}
 		}
 		var response protocol.SourceControlResponse
 		if err := a.call(ctx, protocol.RouteEpisodesSources, request, &response); err != nil {
@@ -724,7 +724,7 @@ func descriptionOf(description *protocol.SessionDescription) *mediaplane.Session
 func wireTracksOf(tracks []mediaplane.Track) []protocol.Track {
 	out := make([]protocol.Track, 0, len(tracks))
 	for _, track := range tracks {
-		wired := protocol.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source, Paused: track.Paused != nil && *track.Paused}
+		wired := protocol.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: string(track.Source), Paused: track.Paused != nil && *track.Paused}
 		if track.Simulcast != nil {
 			wired.Simulcast = &protocol.Simulcast{PreferredRID: track.Simulcast.PreferredRID, PriorityOrdering: track.Simulcast.PriorityOrdering, RIDNotAvailable: track.Simulcast.RIDNotAvailable}
 		}
@@ -739,7 +739,7 @@ func tracksResponseOf(connectionID string, response protocol.TracksResponse) med
 		RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation,
 	}
 	for _, track := range response.Tracks {
-		out.Tracks = append(out.Tracks, mediaplane.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source})
+		out.Tracks = append(out.Tracks, mediaplane.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: mediaplane.PublicationSource(track.Source)})
 	}
 	for _, failed := range response.TrackErrors {
 		// A pull error names the publisher's connection, as Cloudflare's does, so

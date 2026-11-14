@@ -34,6 +34,8 @@ jobs:
       vars.CHALK_AUTO_PROMOTE == 'true' &&
       (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     timeout-minutes: 120
     steps:
       - name: Refuse non-master runs before checkout

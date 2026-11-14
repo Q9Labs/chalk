@@ -18,8 +18,7 @@ const (
 var ErrInvalidBinding = errors.New("invalid immutable media plane binding")
 
 // Binding freezes the selected provider application, never its credentials.
-// Provider uses the Space selector vocabulary so another adapter can register
-// without changing the Recording contract.
+// Provider is the provider's SettingName, the spelling stored on Spaces.
 type Binding struct {
 	SchemaVersion       string `json:"schema_version"`
 	Provider            string `json:"provider"`
@@ -52,6 +51,20 @@ const maxPreviousAllocations = 4
 type Allocation struct {
 	Node        string `json:"node"`
 	Incarnation string `json:"incarnation,omitempty"`
+}
+
+// ProviderID is the media plane provider the binding names.
+func (binding Binding) ProviderID() (Provider, error) {
+	provider, err := ParseSettingName(binding.Provider)
+	if err != nil {
+		return "", ErrInvalidBinding
+	}
+	return provider, nil
+}
+
+// Is reports whether the binding names the provider.
+func (binding Binding) Is(provider Provider) bool {
+	return binding.Provider == provider.SettingName()
 }
 
 // Current is the allocation the binding places the Episode on.
@@ -103,12 +116,12 @@ type Placement struct {
 	Reason      PlacementReason
 }
 
-func NewBinding(provider, source, applicationID string) (Binding, error) {
+func NewBinding(provider Provider, source, applicationID string) (Binding, error) {
 	fingerprint, err := AdapterFingerprint(provider, applicationID)
 	if err != nil {
 		return Binding{}, err
 	}
-	binding := Binding{SchemaVersion: BindingSchemaVersion, Provider: provider, ConfigurationSource: source, AdapterFingerprint: fingerprint}
+	binding := Binding{SchemaVersion: BindingSchemaVersion, Provider: provider.SettingName(), ConfigurationSource: source, AdapterFingerprint: fingerprint}
 	if err := binding.Validate(); err != nil {
 		return Binding{}, err
 	}
@@ -185,16 +198,16 @@ func ValidNodeID(node string) bool {
 
 // AdapterFingerprint excludes tokens and secrets: rotating a credential must
 // not move an existing Episode to another provider application.
-func AdapterFingerprint(provider, applicationID string) (string, error) {
-	if !validBindingProvider(provider) || applicationID == "" || len(applicationID) > 512 || strings.TrimSpace(applicationID) != applicationID || strings.ContainsRune(applicationID, 0) {
+func AdapterFingerprint(provider Provider, applicationID string) (string, error) {
+	if !validProvider(provider) || applicationID == "" || len(applicationID) > 512 || strings.TrimSpace(applicationID) != applicationID || strings.ContainsRune(applicationID, 0) {
 		return "", ErrInvalidBinding
 	}
-	digest := sha256.Sum256([]byte(provider + "\x00" + applicationID))
+	digest := sha256.Sum256([]byte(provider.SettingName() + "\x00" + applicationID))
 	return hex.EncodeToString(digest[:]), nil
 }
 
 func (binding Binding) Validate() error {
-	if binding.SchemaVersion != BindingSchemaVersion || !validBindingProvider(binding.Provider) {
+	if binding.SchemaVersion != BindingSchemaVersion || !KnownSettingName(binding.Provider) {
 		return ErrInvalidBinding
 	}
 	switch binding.ConfigurationSource {
@@ -237,19 +250,6 @@ func ValidIncarnation(incarnation string) bool {
 	}
 	for _, char := range incarnation {
 		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-' {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
-func validBindingProvider(provider string) bool {
-	if len(provider) == 0 || len(provider) > 64 || provider[0] < 'a' || provider[0] > 'z' {
-		return false
-	}
-	for _, char := range provider {
-		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' {
 			continue
 		}
 		return false

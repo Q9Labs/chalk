@@ -330,13 +330,6 @@ func recordingReadErrors(extra ...APIError) []APIError {
 var recordingRules = errorRules{
 	ruleFor(apiErrorInvalidTenantID, recordings.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidRecordingID, recordings.ErrInvalidRecordingID),
-	ruleFor(apiErrorInvalidSpaceID, recordings.ErrInvalidSpaceID),
-	ruleFor(apiErrorInvalidEpisodeID, recordings.ErrInvalidEpisodeID),
-	ruleFor(apiErrorInvalidRecordingStatus, recordings.ErrInvalidRecordingStatus),
-	ruleFor(apiErrorInvalidStorageProvider, recordings.ErrInvalidStorageProvider),
-	ruleFor(apiErrorInvalidStorageKey, recordings.ErrInvalidStorageKey),
-	ruleFor(apiErrorInvalidRecordingField, recordings.ErrInvalidRecordingField),
-	ruleFor(apiErrorEpisodeNotFound, recordings.ErrEpisodeNotFound),
 	ruleFor(apiErrorRecordingNotFound, recordings.ErrRecordingNotFound),
 	ruleFor(apiErrorInvalidTenantID, recordingpipeline.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidRecordingID, recordingpipeline.ErrInvalidRecordingID),

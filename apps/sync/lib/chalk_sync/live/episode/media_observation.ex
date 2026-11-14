@@ -32,21 +32,26 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
         {:ok, state, []}
 
       :equal ->
-        apply_equal_media_observation(state, observation.publications)
+        apply_equal_media_observation(state, observation.publications, options)
 
       :newer ->
         apply_newer_media_observation(state, cursor, observation.publications, options)
     end
   end
 
-  defp apply_equal_media_observation(state, publications) do
+  defp apply_equal_media_observation(state, publications, options) do
     observed_items = normalize_media_items(publications)
 
     if observed_items == state.media_observed_items do
-      reconcile_observed_media(
-        state,
-        apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
-      )
+      {_pauses, media_items} =
+        projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
+
+      # Every look renews the lease of a share that still runs, even when nothing changed. An unchanged
+      # observation is no evidence that a share ended, so a lease whose share has not appeared yet stays.
+      with {:ok, next} <-
+             ScreenLeases.reconcile_screen_leases(state, media_items, options, :keep_absent) do
+        reconcile_observed_media(next, projection)
+      end
     else
       {:error, :dependency_unavailable}
     end
@@ -58,7 +63,8 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     {_pauses, media_items} =
       projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
 
-    with {:ok, next} <- ScreenLeases.reconcile_screen_leases(state, media_items, options) do
+    with {:ok, next} <-
+           ScreenLeases.reconcile_screen_leases(state, media_items, options, :release_absent) do
       next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
       reconcile_observed_media(next, projection)
     end
