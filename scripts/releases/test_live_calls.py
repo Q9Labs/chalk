@@ -20,7 +20,7 @@ class LiveCallsTests(unittest.TestCase):
 
     def test_the_count_is_read_from_the_readiness_body_and_never_defaults_to_zero(self):
         self.assertEqual(self.read(b'{"live_participants": 0}'), live_calls.Quiet())
-        self.assertEqual(self.read(b'{"live_participants": 3}'), live_calls.Busy(3))
+        self.assertEqual(self.read(b'{"live_participants": 3}'), live_calls.Busy())
         for body in (b'{}', b'{"live_participants": -1}', b'{"live_participants": true}', b'{"live_participants": "0"}', b'[]', b'not json'):
             with self.subTest(body=body):
                 self.assertIsInstance(self.read(body), live_calls.Unknown)
@@ -46,23 +46,23 @@ class LiveCallsTests(unittest.TestCase):
 
     def test_promote_deploys_at_once_when_no_call_runs_and_waits_for_calls_to_end(self):
         self.assertEqual(self.await_quiet([live_calls.Quiet()])[0], [])
-        naps, said = self.await_quiet([live_calls.Busy(5), live_calls.Busy(2), live_calls.Quiet()])
+        naps, said = self.await_quiet([live_calls.Busy(), live_calls.Busy(), live_calls.Quiet()])
         self.assertEqual(naps, [60, 60])
         self.assertEqual(said[-1], 'No live calls. Continuing.')
 
-    def test_promote_refuses_when_calls_outlast_the_wait_and_prints_only_the_count(self):
+    def test_promote_refuses_when_calls_outlast_the_wait_and_never_prints_the_count(self):
         naps, said = [], []
         with self.assertRaises(ValueError) as error:
-            live_calls.await_quiet(lambda: live_calls.Busy(4), naps.append, wait_minutes=3, say=said.append)
+            live_calls.await_quiet(lambda: live_calls.Busy(), naps.append, wait_minutes=3, say=said.append)
         self.assertEqual(naps, [60, 60, 60])
-        self.assertIn('4 participant(s) in live calls after waiting 3 minutes', str(error.exception))
+        self.assertIn('participants are in live calls after waiting 3 minutes', str(error.exception))
         self.assertIn('allow_live_calls', str(error.exception))
 
     def test_promote_treats_an_unreadable_count_as_busy_and_a_person_can_allow_it(self):
         with self.assertRaises(ValueError) as error:
             live_calls.await_quiet(lambda: live_calls.Unknown('no answer'), lambda seconds: None, wait_minutes=2, say=lambda line: None)
         self.assertIn('live calls unknown: no answer', str(error.exception))
-        for reading in (live_calls.Busy(7), live_calls.Unknown('no answer')):
+        for reading in (live_calls.Busy(), live_calls.Unknown('no answer')):
             naps, said = self.await_quiet([reading], allow_live_calls=True)
             self.assertEqual(naps, [])
             self.assertTrue(said[0].startswith('allow_live_calls=true: continuing with '))
@@ -71,12 +71,12 @@ class LiveCallsTests(unittest.TestCase):
         clock = iter([at(0, 59, day=16)] * 2 + [at(1, 5, day=16)])
         naps = []
         with self.assertRaises(ValueError) as error:
-            live_calls.await_quiet(lambda: live_calls.Busy(1), naps.append, deadline=at(1, day=16), now=lambda: next(clock), say=lambda line: None)
+            live_calls.await_quiet(lambda: live_calls.Busy(), naps.append, deadline=at(1, day=16), now=lambda: next(clock), say=lambda line: None)
         self.assertEqual(naps, [60])
         self.assertIn('too late to deploy inside the quiet window', str(error.exception))
 
     def test_the_guard_refuses_from_fifteen_minutes_before_the_end_of_the_window(self):
-        limit = live_calls.last_start('2026-11-16T01:00:00+00:00')
+        limit = live_calls.last_start(at(1, day=16))
         self.assertEqual(limit, at(0, 45, day=16))
         for now, passes in ((at(0, 44, 59, day=16), True), (at(0, 45, day=16), False), (at(0, 59, day=16), False)):
             with self.subTest(now=f'{now:%H:%M:%S}'):
@@ -108,19 +108,30 @@ class AutoPromoteWindowTests(unittest.TestCase):
         return dict(line.split('=', 1) for line in output.read_text().splitlines())
 
     def test_it_waits_for_the_quiet_window(self):
-        for now, promotes in ((at(20, 59), False), (at(21), True), (at(23, 59), True), (at(0, 59, day=16), True),
+        for now, promotes in ((at(20, 59), False), (at(21), True), (at(23, 59), True), (at(0, 44, day=16), True),
+                              (at(0, 45, day=16), False), (at(0, 59, day=16), False),
                               (at(1, day=16), False), (at(12), False)):
             with self.subTest(now=f'{now:%H:%M}'):
                 self.assertEqual(self.promoted(now)['sha'], 'a' * 40 if promotes else '')
 
     def test_it_holds_while_calls_run_or_the_count_is_unknown(self):
-        for calls in (live_calls.Busy(2), live_calls.Unknown('no answer')):
+        for calls in (live_calls.Busy(), live_calls.Unknown('no answer')):
             with self.subTest(calls=calls):
                 self.assertEqual(self.promoted(at(22, 5), calls)['sha'], '')
+
+    def test_a_slow_read_that_crosses_the_end_of_the_window_promotes_nothing(self):
+        for first, second in ((at(0, 59, 59, day=16), at(1, 0, 1, day=16)), (at(0, 44, 59, day=16), at(0, 45, day=16))):
+            with self.subTest(read_ends=f'{second:%H:%M:%S}'):
+                self.enterContext(patch.object(live_calls, 'now', side_effect=[first, second]))
+                self.enterContext(patch.object(live_calls, 'read_configured', return_value=live_calls.Quiet()))
+                with self.assertRaises(ValueError) as error:
+                    live_calls.require_quiet_window()
+                self.assertIn('too late to dispatch', str(error.exception))
 
     def test_it_hands_promote_the_end_of_the_window(self):
         self.assertEqual(self.promoted(at(22, 5))['until'], '2026-11-16T01:00:00+00:00')
         self.assertEqual(self.promoted(at(0, 5, day=16))['until'], '2026-11-16T01:00:00+00:00')
+        self.assertEqual(self.promoted(at(0, 50, day=16))['until'], '')  # Inside the last 15 minutes the guard would refuse, so nothing is dispatched.
 
 
 if __name__ == '__main__':

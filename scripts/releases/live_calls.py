@@ -16,7 +16,7 @@ class Quiet:
 
 @dataclass(frozen=True)
 class Busy:
-    count: int
+    """At least one participant is in a call. The count is usage data and these logs are public, so it never leaves read_live_calls."""
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ def fetch_readiness(url, token):
 
 
 def read_live_calls(api_url, token, fetch=fetch_readiness):
-    """Read the live participant count that the production API shows an operator on /readyz. Only the count leaves this function."""
+    """Read the live participant count that the production API shows an operator on /readyz. Only whether anyone is in a call leaves this function."""
     if not api_url.startswith('https://') or not token:
         return Unknown('the API URL or the operator read token is missing')
     try:
@@ -57,14 +57,14 @@ def read_live_calls(api_url, token, fetch=fetch_readiness):
         return Unknown(f'the API did not answer with a readiness body ({type(error).__name__})')
     if isinstance(count, bool) or not isinstance(count, int) or count < 0:
         return Unknown('the API does not report live_participants (it predates the field, or it does not accept the token)')
-    return Busy(count) if count else Quiet()
+    return Busy() if count else Quiet()
 
 
 def describe(result):
     if isinstance(result, Quiet):
         return 'no live calls'
     if isinstance(result, Busy):
-        return f'{result.count} participant(s) in live calls'
+        return 'participants are in live calls'
     return f'live calls unknown: {result.reason}'
 
 
@@ -107,35 +107,41 @@ def in_window(at):
     return at.hour >= QUIET_FROM_HOUR_UTC or at.hour < QUIET_UNTIL_HOUR_UTC
 
 
-def window_end():
-    end = now().replace(hour=QUIET_UNTIL_HOUR_UTC, minute=0, second=0, microsecond=0)
-    return end if now().hour < QUIET_UNTIL_HOUR_UTC else end + timedelta(days=1)
+def window_end(at):
+    end = at.replace(hour=QUIET_UNTIL_HOUR_UTC, minute=0, second=0, microsecond=0)
+    return end if at.hour < QUIET_UNTIL_HOUR_UTC else end + timedelta(days=1)
 
 
 def read_configured():
     return read_live_calls(os.environ.get('LIVE_CALLS_API_URL', ''), os.environ.get('LIVE_CALLS_API_TOKEN', ''))
 
 
+def last_start(deploy_before):
+    """The guard refuses from here: a deploy that starts later could finish starting after deploy_before."""
+    return deploy_before - timedelta(minutes=DEPLOY_MARGIN_MINUTES)
+
+
 def require_quiet_window():
-    """Auto-promote deploys only inside the window and only while no call runs."""
-    if not in_window(now()):
-        raise ValueError(f'{now():%H:%M}Z is outside the quiet window ({QUIET_FROM_HOUR_UTC}:00 to 0{QUIET_UNTIL_HOUR_UTC}:00Z); '
+    """Auto-promote deploys only inside the window and only while no call runs. Returns the end of the window it
+    started in, fixed before the read, so a slow read cannot pass into the next day's window."""
+    start = now()
+    if not in_window(start):
+        raise ValueError(f'{start:%H:%M}Z is outside the quiet window ({QUIET_FROM_HOUR_UTC}:00 to 0{QUIET_UNTIL_HOUR_UTC}:00Z); '
                          'a quiet-window tick promotes the held cut')
+    end = window_end(start)
     calls = read_configured()
     if not isinstance(calls, Quiet):
         raise ValueError(f'{describe(calls)}; a quiet-window tick tries again')
-
-
-def last_start(deploy_before):
-    """The guard refuses from here: a deploy that starts later could finish starting after deploy_before."""
-    return datetime.fromisoformat(deploy_before) - timedelta(minutes=DEPLOY_MARGIN_MINUTES)
+    if now() >= last_start(end):
+        raise ValueError(f'too late to dispatch inside the quiet window: the guard refuses from {last_start(end):%H:%M}Z; the next quiet-window tick tries again')
+    return end
 
 
 def main():
     try:
         deploy_before = os.environ.get('DEPLOY_BEFORE')
         await_quiet(read_configured, time.sleep, allow_live_calls=os.environ.get('ALLOW_LIVE_CALLS') == 'true',
-                    deadline=last_start(deploy_before) if deploy_before else None)
+                    deadline=last_start(datetime.fromisoformat(deploy_before)) if deploy_before else None)
     except ValueError as error:
         sys.exit(f'Release refused: {error}')
 

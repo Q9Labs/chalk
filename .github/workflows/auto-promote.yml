@@ -14,7 +14,7 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # It dispatches Promote, which already retains the live Pages deployment and media pins, deploys the held release,
 # proves a real call on production, and rolls back to the retained release when that call does not pass. This run
 # then follows Promote to its end, so it turns red when production was rolled back or Promote failed.
-# It promotes only from 21:00 to 01:00 UTC (01:00 to 05:00 in Dubai) and only while no participant is in a call. A
+# It promotes only from 21:00 to 00:45 UTC (01:00 to 04:45 in Dubai) and only while no participant is in a call. A
 # verdict that lands outside the window, or while calls run, promotes nothing; a tick at 21:05, 22:05, 23:05 and 00:05
 # UTC picks up the held cut instead.
 # A SHA is tried automatically once: a second attempt is a person's call, because Promote is named by its SHA and a
