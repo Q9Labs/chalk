@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
+import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check } from "../prod-proof/runtime.mjs";
 import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
@@ -32,8 +32,8 @@ const report = { result: "failed", cleanup: "not-started" };
 let reusedInviteSpace;
 try {
   check(process.env.CHALK_PROOF_CONFIG_SOURCE === "env", "Web proof requires environment configuration", "configuration");
-  const config = await loadConfig({ readiness: false });
-  await request(config, "GET", "/readyz");
+  // Readiness is checked here; the recorder fleet is not this proof's business, and a stack without Transcription has no Transcripts to clean up.
+  const config = await loadConfig({ capabilities: false });
   run = await createRun(config, directory, undefined, runId);
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
