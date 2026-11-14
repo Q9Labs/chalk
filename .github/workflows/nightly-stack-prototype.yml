@@ -83,7 +83,9 @@ jobs:
       - name: Stack logs when the proof failed
         if: failure()
         run: |
-          for name in api sync sfu; do echo "== $name"; docker logs --tail 40 "chalk-stack-$name" 2>&1 | cut -c1-300; done
+          for name in api sync sfu; do echo "== $name"; docker logs --tail 60 "chalk-stack-$name" 2>&1 | grep -v '"/v1/sync"' | cut -c1-2500; done
+          echo "== evidence"; find .private/prod-proof -maxdepth 3 -type f 2>/dev/null | head -30
+          for f in $(find .private/prod-proof -name '*.json' -o -name '*.log' -o -name '*.txt' 2>/dev/null | head -8); do echo "-- $f"; head -c 1500 "$f"; echo; done
       - name: Stop the stack
         if: always()
         run: bash scripts/nightly-stack/boot down
