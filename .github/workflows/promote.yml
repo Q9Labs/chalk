@@ -148,7 +148,7 @@ jobs:
           LIVE_CALLS_API_URL: ${{ secrets.CHALK_PROOF_API_URL }}
           ALLOW_LIVE_CALLS: ${{ inputs.allow_live_calls }}
           DEPLOY_BEFORE: ${{ inputs.deploy_before }}
-        run: python3 scripts/releases/release.py live_calls
+        run: python3 scripts/releases/live_calls.py
   release:
     permissions:
       contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.

@@ -176,9 +176,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.assert_blocked(lambda: release.select(self.github(held(), latency='failed'), None), 'failed')
         release.select(self.github(held()), None)
 
-    def promoted_sha(self, github, now=None, calls=None):
-        release.auto_promote(github, None, now=now or datetime(2026, 11, 15, 22, 5, tzinfo=timezone.utc),
-                             read=lambda: calls or release.Quiet())
+    def promoted_sha(self, github):
+        with patch.object(release.live_calls, 'require_quiet_window'): release.auto_promote(github, None)  # The window and live calls have their own tests.
         line = [line for line in self.output.read_text().splitlines() if line.startswith('sha=')][-1]
         return line.removeprefix('sha=')
 
@@ -195,83 +194,6 @@ class OwnSfuPromotionTests(unittest.TestCase):
     def test_automatic_promotion_skips_what_production_already_runs(self):
         self.previous['target_sha'] = SHA
         self.assertEqual(self.promoted_sha(self.github(held())), '')
-
-    def test_automatic_promotion_waits_for_the_quiet_window(self):
-        def at(hour, minute):
-            return datetime(2026, 11, 15, hour, minute, tzinfo=timezone.utc)
-        for now, promotes in ((at(20, 59), False), (at(21, 0), True), (at(23, 59), True), (at(0, 59), True),
-                              (at(1, 0), False), (at(12, 0), False)):
-            with self.subTest(now=f'{now:%H:%M}'):
-                self.assertEqual(self.promoted_sha(self.github(held()), now=now), SHA if promotes else '')
-
-    def test_automatic_promotion_hands_promote_the_end_of_the_window(self):
-        for now, end in ((datetime(2026, 11, 15, 22, 5, tzinfo=timezone.utc), '2026-11-16T01:00:00+00:00'),
-                         (datetime(2026, 11, 16, 0, 5, tzinfo=timezone.utc), '2026-11-16T01:00:00+00:00')):
-            self.promoted_sha(self.github(held()), now=now)
-            self.assertIn(f'until={end}', self.output.read_text().splitlines())
-
-    def test_promote_refuses_once_the_quiet_window_has_closed(self):
-        clock = iter([datetime(2026, 11, 16, 0, 59, tzinfo=timezone.utc)] * 2 + [datetime(2026, 11, 16, 1, 5, tzinfo=timezone.utc)])
-        deadline = datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc)
-        naps = []
-        with self.assertRaises(ValueError) as error:
-            release.await_quiet(lambda: release.Busy(1), naps.append, deadline=deadline, now=lambda: next(clock), say=lambda line: None)
-        self.assertEqual(naps, [60])
-        self.assertIn('quiet window closed', str(error.exception))
-
-    def test_a_quiet_read_that_ends_after_the_window_closed_does_not_approve(self):
-        clock = iter([datetime(2026, 11, 16, 0, 59, 59, tzinfo=timezone.utc), datetime(2026, 11, 16, 1, 0, 1, tzinfo=timezone.utc)])
-        with self.assertRaises(ValueError):
-            release.await_quiet(lambda: release.Quiet(), lambda seconds: None, now=lambda: next(clock), say=lambda line: None,
-                                deadline=datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc))
-
-    def test_automatic_promotion_holds_while_calls_run_or_the_count_is_unknown(self):
-        for calls in (release.Busy(2), release.Unknown('no answer')):
-            with self.subTest(calls=calls):
-                self.assertEqual(self.promoted_sha(self.github(held()), calls=calls), '')
-
-    def test_the_live_call_count_is_read_from_the_readiness_body_and_never_defaults_to_zero(self):
-        def read(body):
-            return release.read_live_calls('https://api.example/', lambda url: body if url.endswith('/readyz') else b'')
-        self.assertEqual(read(b'{"live_participants": 0}'), release.Quiet())
-        self.assertEqual(read(b'{"live_participants": 3}'), release.Busy(3))
-        for body in (b'{}', b'{"live_participants": -1}', b'{"live_participants": true}', b'{"live_participants": "0"}', b'[]', b'not json'):
-            with self.subTest(body=body):
-                self.assertIsInstance(read(body), release.Unknown)
-
-        def refuse(url):
-            raise OSError('connection refused')
-        self.assertIsInstance(release.read_live_calls('https://api.example', refuse), release.Unknown)
-        for url in ('', 'http://api.example'):
-            self.assertIsInstance(release.read_live_calls(url, lambda url: b'{"live_participants": 0}'), release.Unknown)
-
-    def await_quiet(self, readings, **options):
-        remaining, naps, said = list(readings), [], []
-        release.await_quiet(lambda: remaining.pop(0) if len(remaining) > 1 else remaining[0], naps.append, say=said.append, **options)
-        return naps, said
-
-    def test_promote_deploys_at_once_when_no_call_runs_and_waits_for_calls_to_end(self):
-        self.assertEqual(self.await_quiet([release.Quiet()])[0], [])
-        naps, said = self.await_quiet([release.Busy(5), release.Busy(2), release.Quiet()])
-        self.assertEqual(naps, [60, 60])
-        self.assertEqual(said[-1], 'No live calls. Continuing.')
-
-    def test_promote_refuses_when_calls_outlast_the_wait_and_prints_only_the_count(self):
-        naps, said = [], []
-        with self.assertRaises(ValueError) as error:
-            release.await_quiet(lambda: release.Busy(4), naps.append, wait_minutes=3, say=said.append)
-        self.assertEqual(naps, [60, 60, 60])
-        self.assertIn('4 participant(s) in live calls after waiting 3 minutes', str(error.exception))
-        self.assertIn('allow_live_calls', str(error.exception))
-
-    def test_promote_treats_an_unreadable_count_as_busy_and_a_person_can_allow_it(self):
-        with self.assertRaises(ValueError) as error:
-            release.await_quiet(lambda: release.Unknown('no answer'), lambda seconds: None, wait_minutes=2)
-        self.assertIn('live calls unknown: no answer', str(error.exception))
-        for reading in (release.Busy(7), release.Unknown('no answer')):
-            naps, said = self.await_quiet([reading], allow_live_calls=True)
-            self.assertEqual(naps, [])
-            self.assertTrue(said[0].startswith('allow_live_calls=true: continuing with '))
 
     def test_a_failed_proof_keeps_its_own_result_whatever_the_latency_says(self):
         self.assert_blocked(lambda: release.select(self.github(held('failed')), None), 'failed')

@@ -20,6 +20,10 @@ type ReadinessChecker interface {
 	Check(ctx context.Context) error
 }
 
+type liveParticipantCounter interface {
+	LiveParticipants(ctx context.Context) (int64, error)
+}
+
 type RecorderHealthChecker interface {
 	CheckRecorderPool(ctx context.Context, role workeridentity.Role) error
 }
@@ -49,11 +53,7 @@ type Options struct {
 	Readiness  ReadinessChecker
 	// RetirementBacklog reports the own-SFU retirement debt for /readyz. It never fails readiness:
 	// a node that stays silent must not take the API out of service. It is nil without the own SFU.
-	RetirementBacklog func() (count int, oldest time.Duration, observed bool)
-	// LiveParticipants counts the participants with an unexpired presence lease, for /readyz. A release
-	// waits for it to reach zero before it restarts production. It never fails readiness: when the count
-	// cannot be read, /readyz leaves the field out.
-	LiveParticipants           func(ctx context.Context) (int64, error)
+	RetirementBacklog          func() (count int, oldest time.Duration, observed bool)
 	RecorderHealth             RecorderHealthChecker
 	RecorderWorker             RecorderWorkerService
 	RecorderCapturePlans       RecorderCapturePlanService
@@ -153,7 +153,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog, options.LiveParticipants))
+	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -185,7 +185,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlog func() (int, time.Duration, bool), liveParticipants func(context.Context) (int64, error)) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlog func() (int, time.Duration, bool)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
 			writeReadinessError(w, capabilities, "postgres")
@@ -211,8 +211,12 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 				body["sfu_retirement_debts"] = map[string]int64{"count": int64(count), "oldest_age_seconds": int64(oldest.Seconds())}
 			}
 		}
-		if liveParticipants != nil {
-			if count, err := liveParticipants(ctx); err == nil {
+		// A release waits for the live participant count to reach zero before it restarts production. Like the backlog,
+		// it never fails readiness: an unreadable count is left out, so the reader sees "unknown" and never a made-up zero.
+		if live, ok := checker.(liveParticipantCounter); ok {
+			if count, err := live.LiveParticipants(ctx); err != nil {
+				slog.Warn("count live participants for readiness", "error", err)
+			} else {
 				body["live_participants"] = count
 			}
 		}
