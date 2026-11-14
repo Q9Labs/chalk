@@ -81,11 +81,13 @@ export function choosePrimary(items: readonly StageItem[], context: PrimaryConte
   if (pinned) return pinned;
   const content = firstScreenShare(eligible, context.seenAt) ?? eligible.find((item) => item.kind === "whiteboard");
   if (content) return content;
+  // Someone reconnecting is not in the call right now, so they never lead the stage unless pinned or nobody else is there.
+  const present = (participant: Participant) => participant.isReconnecting !== true;
   return (
-    participantWhere(eligible, (participant) => participant.isActiveSpeaker === true) ??
-    participantWhere(eligible, (participant) => participant.isSpeaking === true) ??
-    (context.lastSpeakerId ? eligible.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined) ??
-    participantWhere(eligible, (participant) => !participant.isLocal) ??
+    participantWhere(eligible, (participant) => present(participant) && participant.isActiveSpeaker === true) ??
+    participantWhere(eligible, (participant) => present(participant) && participant.isSpeaking === true) ??
+    (context.lastSpeakerId ? eligible.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId && present(item.participant)) : undefined) ??
+    participantWhere(eligible, (participant) => present(participant) && !participant.isLocal) ??
     participantWhere(eligible, () => true) ??
     eligible[0] ??
     null

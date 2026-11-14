@@ -15,7 +15,6 @@ export { ReportProblemDialog, StatusSurface } from "@q9labsai/chalk-react";
 
 export function LocalSpace({
   admission,
-  reportsAvailable,
   reportUnavailableReason,
   onOpenReportProblem,
   displayName,
@@ -25,7 +24,6 @@ export function LocalSpace({
   onEnded,
 }: {
   readonly admission: PublicSpaceAdmission;
-  readonly reportsAvailable: boolean;
   readonly reportUnavailableReason?: string;
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
   readonly displayName: string;
@@ -131,7 +129,7 @@ export function LocalSpace({
           theme={{ colorScheme: mode }}
           onColorSchemeChange={setPreference}
           client={client}
-          onReportProblem={reportsAvailable ? reportProblem : undefined}
+          onReportProblem={reportProblem}
           reportUnavailableReason={reportUnavailableReason}
           onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
           displayName={displayName}

@@ -2,7 +2,6 @@
 import { useState } from "react";
 import type React from "react";
 import type { SpaceClient } from "@q9labsai/chalk-client";
-import { CommandErrorAlert } from "../components/composite/CommandErrorAlert";
 import type { SpaceLayout } from "../components/chalk/Chalk";
 import { SpaceView, type SpacePanel, type SpaceViewProps } from "../components/space-view/SpaceView";
 import { ChalkProvider } from "../bindings/context";
@@ -36,5 +35,4 @@ export function PreviewJoiningScreen({ displayName, message, supportingMessages 
     </main>
   );
 }
-export { CommandErrorAlert };
 export type { SpaceLayout, SpacePanel, SpaceViewProps };

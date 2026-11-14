@@ -49,7 +49,7 @@ export function useStageRefit(root: RefObject<HTMLElement | null>): void {
 }
 // Folded notices count as an open layer, because the header's notice button is the only way to reach them.
 const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-part="notice-button"],[data-part="access-waiting"],[data-chalk-drawer]';
-/** Chrome stays visible while a layer is open, on touch, and for keyboard focus. */
+/** Chrome stays visible while a layer is open, while the pointer rests on it, on touch, and for keyboard focus. */
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);
   const fine = useMediaQuery("(pointer:fine) and (min-width:641px)");
@@ -63,12 +63,13 @@ export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: bool
       clearTimeout(timer);
       timer = setTimeout(() => {
         const layer = element.querySelector(ACTIVE_LAYERS);
-        const focused = element.querySelector(".chalk-frame-header :focus-visible,.chalk-frame-dock :focus-visible");
-        if (!layer && !focused) setIdle(true);
+        const held = element.querySelector(".chalk-frame-header :focus-visible,.chalk-frame-dock :focus-visible,.chalk-frame-header:hover,.chalk-frame-dock:hover");
+        if (!layer && !held) setIdle(true);
         else poke();
       }, 3000);
     };
-    for (const event of ["pointermove", "pointerdown", "keydown", "focusin"]) element.addEventListener(event, poke);
+    // Capture, so a click on a tile or the board wakes the chrome even when its handler stops propagation.
+    for (const event of ["pointermove", "pointerdown", "keydown", "focusin"]) element.addEventListener(event, poke, true);
     const observer = new MutationObserver((records) => {
       if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element && (node.matches(ACTIVE_LAYERS) || node.querySelector(ACTIVE_LAYERS))))) poke();
     });
@@ -77,7 +78,7 @@ export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: bool
     return () => {
       observer.disconnect();
       clearTimeout(timer);
-      for (const event of ["pointermove", "pointerdown", "keydown", "focusin"]) element.removeEventListener(event, poke);
+      for (const event of ["pointermove", "pointerdown", "keydown", "focusin"]) element.removeEventListener(event, poke, true);
     };
   }, [root, enabled, fine]);
   return enabled && fine && idle;

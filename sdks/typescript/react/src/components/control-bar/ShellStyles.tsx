@@ -81,13 +81,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   height: 16px;
 }
 .chalk-shell-muted-hint.chalk-shell-background-hint {inset-inline-start:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);white-space:normal;}
-[data-chalk] .chalk-shell-split button:focus {
-  outline: 0;
-  box-shadow: none;
-}
-.chalk-shell-split:has(button:focus-visible) {
-  outline: 2px solid var(--chalk-focus);
-  outline-offset: 3px;
+[data-chalk] .chalk-shell-split button:focus-visible {
+  outline-offset: -2px;
 }
 .chalk-shell-split button:hover,
 .chalk-shell-caret[aria-expanded="true"] {
@@ -102,6 +97,22 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 }
 .chalk-shell-split[data-active="true"] .chalk-shell-caret {
   color: inherit;
+}
+/* The inverted pill keeps its glyph in the canvas colour, so both halves darken the light fill instead of taking the dock's hover. */
+.chalk-shell-split[data-active="true"] button:hover,
+.chalk-shell-split[data-active="true"] .chalk-shell-caret[aria-expanded="true"] {
+  background: color-mix(in oklab, var(--chalk-text) 88%, var(--chalk-canvas));
+}
+.chalk-shell-split[data-active="true"] button:active {
+  background: color-mix(in oklab, var(--chalk-text) 80%, var(--chalk-canvas));
+}
+.chalk-menu.chalk-shell-leave-menu {
+  width: 240px;
+  min-width: 0;
+}
+/* A pointer press, or a menu it opened handing focus back, draws no ring; the next key press brings it back. */
+[data-chalk] .chalk-shell-dock[data-input="pointer"] :focus-visible {
+  outline: none;
 }
 .chalk-shell-split[data-off="true"] .chalk-shell-main {
   color: var(--chalk-danger-text);
@@ -226,21 +237,47 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   bottom: 0;
   pointer-events: auto;
 }
-.chalk-shell-people {
-  inset-inline-start: 20px;
+.chalk-shell-dock .chalk-icon-button {
+  transition:
+    transform 0.15s ease-out,
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    opacity 0.25s ease-out;
 }
-.chalk-shell-record {
-  inset-inline-start: 72px;
+/* Leave is the dock's only solid red. While recording, Record keeps its neutral fill and only its glyph turns red. */
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"] {
+  background: var(--chalk-raised);
+  color: var(--chalk-danger-text);
 }
-@media (min-width: 641px) and (max-width: 800px) {
-  .chalk-shell-record {
-    inset-inline-start: 20px;
-    bottom: 52px;
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"]:hover {
+  background: var(--chalk-hover);
+}
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"]:active {
+  background: var(--chalk-pressed);
+}
+/* Leave sits one step apart from the controls, so a reach for the last control never lands on it. */
+.chalk-shell-dock .chalk-shell-leave {
+  margin-inline-start: var(--space-2);
+}
+/* Starting or stopping: the glyph breathes until the server answers, so a click never looks missed. */
+.chalk-shell-record[data-pending] .chalk-icon-button svg {
+  animation: chalk-shell-record-pending 0.6s ease-in-out infinite alternate;
+}
+@keyframes chalk-shell-record-pending {
+  to {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chalk-shell-record[data-pending] .chalk-icon-button svg {
+    animation: none;
+    opacity: 0.6;
   }
 }
 .chalk-shell-chat {
   inset-inline-end: 20px;
 }
+.chalk-call-timer {transition: color 0.2s ease-out;}
 .chalk-shell-phone {
   display: none;
 }
@@ -304,7 +341,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-menu-switch .chalk-switch {display:block;}
 .chalk-shell-more-group .chalk-sheet-row + .chalk-sheet-row {box-shadow: var(--elevation-divider-top);}
 .chalk-shell-sheet-end {margin-inline-start:auto;color:var(--chalk-muted-text);}
-.chalk-invite-link,.chalk-shell-detail-action,.chalk-details-row {
+.chalk-shell-detail-action,.chalk-details-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -315,21 +352,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-size: var(--type-body);
   text-align: start;
 }
-.chalk-invite-link:hover,.chalk-shell-detail-action:hover,.chalk-shell-detail-action[aria-expanded="true"],.chalk-invite-link[data-copied="true"] {background:var(--chalk-hover);}
-.chalk-shell-detail-lead,.chalk-invite-link-lead {width:18px;display:grid;place-items:center;flex:none;color:var(--chalk-muted-text);}
-.chalk-shell-detail-label,.chalk-invite-link-label {flex:1;min-width:0;}
-.chalk-shell-detail-trail,.chalk-invite-link-end {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);}
-.chalk-invite-link[data-copied="true"] .chalk-invite-link-end {color:var(--chalk-positive);}
-.chalk-invite-link[data-variant="card"] {
-  height: 48px;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  border-radius: var(--corner-2xl);
-  background: var(--chalk-hover);
-  font-weight: 500;
-}
-.chalk-invite-link[data-variant="card"]:hover {background:var(--chalk-pressed);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] {background:var(--chalk-hover);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] .chalk-invite-link-label {color:var(--chalk-positive);}
+.chalk-shell-detail-action:hover,.chalk-shell-detail-action[aria-expanded="true"] {background:var(--chalk-hover);}
+.chalk-shell-detail-lead {width:18px;display:grid;place-items:center;flex:none;color:var(--chalk-muted-text);}
+.chalk-shell-detail-label {flex:1;min-width:0;}
+.chalk-shell-detail-trail {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);}
 .chalk-details .chalk-switch,.chalk-shell-report .chalk-switch {width:40px;height:24px;}
 .chalk-details .chalk-switch > span:first-child,.chalk-shell-report .chalk-switch > span:first-child {width:18px;height:18px;}
 .chalk-details .chalk-switch[aria-checked="true"] > span:first-child,.chalk-shell-report .chalk-switch[aria-checked="true"] > span:first-child {transform:translateX(16px);}
@@ -338,12 +364,9 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-details-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-1) var(--space-3) var(--space-3);}
 .chalk-shell-details-heading h2 {font-size:var(--type-body-lg);font-weight:600;line-height:1.3;margin:0;}
 .chalk-shell-details-sub {display:flex;align-items:center;gap:var(--space-1-5);margin:var(--space-0-5) 0 0;color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
-.chalk-shell-details-sub i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
-.chalk-shell-diagnostics-copy {margin:0 0 var(--space-2) var(--space-2);}
-.chalk-shell-diagnostics-copy .chalk-copy {display:inline-flex;width:auto;height:32px;padding:0 var(--space-3);gap:var(--space-1-5);border-radius:var(--corner-pill);background:var(--chalk-hover);font-weight:500;}
-.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-pressed);}
-.chalk-shell-diagnostics-copy .chalk-copy-label {font-size:var(--type-caption);}
-.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:14px;height:14px;}
+.chalk-copy.chalk-shell-diagnostics-copy {display:grid;place-items:center;width:32px;height:32px;margin:calc(var(--space-1) * -1) var(--space-2) var(--space-2) auto;border-radius:var(--corner-pill);color:var(--chalk-muted-text);transition:background-color 150ms ease-out,color 150ms ease-out;}
+.chalk-copy.chalk-shell-diagnostics-copy:hover {background:var(--chalk-hover);color:var(--chalk-text);}
+.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:16px;height:16px;}
 .chalk-shell-quality {
   display: inline-flex;
   align-items: flex-end;
@@ -451,9 +474,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   box-shadow: var(--chalk-shadow);
 }
 ${phoneRules(`
-  .chalk-shell-details-heading {display:none;}
-  .chalk-shell-detail-action,.chalk-invite-link[data-variant="menu"],.chalk-details-row {min-height:48px;}
-  .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
+  .chalk-shell-details-heading {padding:0 var(--space-3) var(--space-2);}
+  .chalk-shell-details-heading :is(h2, .chalk-icon-button) {display:none;}
+  .chalk-shell-detail-action,.chalk-details-row {min-height:48px;}
+  .chalk-copy.chalk-shell-diagnostics-copy {width:44px;height:44px;}
+  .chalk-shell-dock .chalk-shell-leave {margin-inline-start:0;}
   .chalk-shell-dock {
     height: 52px;
     justify-content: space-between;
@@ -503,6 +528,25 @@ ${phoneRules(`
     min-height: 48px;
   }
 `)}
+/* A call under 300 CSS px wide is a phone at 200% zoom, where a 32px button is still about 64 device pixels, so all five dock buttons, Leave included, fit in the dock. */
+@container chalk-call (max-width: 300px) {
+  .chalk-shell-dock {
+    padding-inline: var(--space-1-5);
+  }
+  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + var(--space-1-5) * 2);margin-inline:calc(var(--space-1-5) * -1);}
+  .chalk-shell-split,
+  .chalk-shell-split .chalk-shell-main,
+  .chalk-shell-dock .chalk-icon-button,
+  .chalk-shell-dock .chalk-icon-button[data-chalk-size] {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+  .chalk-shell-dock {
+    height: 32px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-split button,
   .chalk-shell-split > .chalk-shell-main,
@@ -527,23 +571,6 @@ ${phoneRules(`
   gap: var(--space-2);
   padding: var(--space-2);
 }
-.chalk-shell-recording {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  font-size: var(--type-body-sm);
-}
-.chalk-shell-recording i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--chalk-danger);
-}
-${phoneRules(`
-  .chalk-shell-recording {
-    display: none;
-  }
-`)}
 .chalk-shell-people-pill {
   display: flex;
   align-items: center;
@@ -606,8 +633,12 @@ ${phoneRules(`
   place-items: center;
   transition: transform 0.12s ease-out;
 }
-.chalk-shell-emoji:hover {
+.chalk-shell-emoji:hover:not(:disabled) {
   background: var(--chalk-hover);
+}
+.chalk-shell-emoji:disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 .chalk-shell-emoji:active {
   transform: scale(0.9);
@@ -623,7 +654,7 @@ ${phoneRules(`
   line-height: 1;
   transform-origin: 50% 60%;
 }
-.chalk-shell-emoji:hover > span {
+.chalk-shell-emoji:hover:not(:disabled) > span {
   animation: var(--chalk-shell-emoji-move, chalk-shell-emoji-pop) 0.9s cubic-bezier(0.3, 1.3, 0.5, 1) infinite;
 }
 .chalk-shell-emoji[data-move="nod"] {--chalk-shell-emoji-move: chalk-shell-emoji-nod;}
@@ -664,6 +695,7 @@ ${phoneRules(`
 }
 .chalk-shell-raise {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   height: 40px;
