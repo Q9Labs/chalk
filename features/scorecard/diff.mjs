@@ -88,3 +88,34 @@ export function renderTable(diff, { title, baselineLabel, dropped = [] }) {
   if (drops.length > 0) lines.push(`Dropped: ${drops.join("; ")}.`);
   return `${lines.join("\n")}\n`;
 }
+
+/**
+ * expectedMetricRows has one row per metric the run must measure: its samples, the budget it is held to, its current value and a
+ * verdict. A metric with no samples is missing, one under the floor has too few, and the rest are over budget or ok.
+ * @param {string[]} ids  The metric ids the run must have measured.
+ * @param {any[]} metrics  The run's metrics.
+ * @param {Record<string, any>} budgets  The budgets object of perf/budgets.json for the plane.
+ * @param {number} floor  The fewest samples a metric may have.
+ */
+export function expectedMetricRows(ids, metrics, budgets, floor) {
+  const byId = new Map(metrics.map((metric) => [metric.id, metric]));
+  return ids.map((id) => {
+    const metric = byId.get(id);
+    const budget = budgets[id];
+    const samples = metric?.n ?? 0;
+    const row = { id, samples, floor, budget, now: metric && samples > 0 ? primary(metric, budget) : undefined, unit: metric?.unit ?? "ms" };
+    if (samples === 0) return { ...row, verdict: "missing" };
+    if (samples < floor) return { ...row, verdict: "too few samples" };
+    return { ...row, verdict: overBudget(metric, budget) ? "over budget" : "ok" };
+  });
+}
+
+/** renderExpectedMetrics writes every expected metric as a Markdown table, so a missing one shows as a row, not as an absence. */
+export function renderExpectedMetrics(rows, title) {
+  const lines = [`### ${title}`, "", "| Metric | Samples | Budget | Current | Verdict |", "|---|---|---|---|---|"];
+  for (const row of rows) {
+    const mark = row.verdict === "ok" ? "✅" : "❌";
+    lines.push(`| \`${row.id}\` | ${row.samples} (floor ${row.floor}) | ${limitText(row.budget)} | ${row.now === undefined ? "–" : `${formatNumber(row.now)} ${row.unit}`} | ${mark} ${row.verdict} |`);
+  }
+  return `${lines.join("\n")}\n`;
+}
