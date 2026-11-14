@@ -227,11 +227,11 @@ export const STATES_LANE: readonly CallState[] = [
       ["hand", "Nora raised a hand", false],
       ["recording", "Recording started. Everyone in the call can see it.", false],
       ["recording-failed", "Recording isn’t available in this call yet.", true],
-      ["camera", "Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.", true],
+      ["camera", "Your camera is blocked. Allow it from the icon in the address bar.", true],
       ["host", "Nora left. You’re now the host.", false],
       ["device", "AirPods Pro disconnected. Switched to MacBook Air Microphone", false],
       ["muted", "Nora muted you. Unmute when you’re ready.", false],
-      ["share-blocked", "Your screen couldn’t be shared. Allow screen recording for your browser in System Settings, then try again.", true],
+      ["share-blocked", "Screen sharing is blocked. Allow it for your browser in System Settings.", true],
     ] as const
   ).flatMap(([id, message, error]) => {
     const renderToast = (light: boolean) => {

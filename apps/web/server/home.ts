@@ -15,8 +15,8 @@ async function activity(engine: Engine, spaceIds: readonly string[]): Promise<Ac
     call: { id: row.space_id, archived: row.archived, lastActiveAt: row.latest_episode ? (row.latest_episode.ended_at ?? row.latest_episode.started_at) : null, recentPeople: row.recent_participants.map((p) => ({ id: p.participant_id, name: p.display_name })) },
   }));
 }
-/** One tenant read: five unarchived Spaces, newest first, from `cursor`. */
-const listSpaces = (engine: Engine, cursor?: string) => run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 5, cursor, archived: false } }));
+/** One tenant read: 25 unarchived Spaces, the most recently used first, from `cursor`. Home shows five of them at first. */
+const listSpaces = (engine: Engine, cursor?: string) => run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: 25, cursor, archived: false, order: "active" } }));
 // One more tenant read: the listed Spaces' activity.
 async function pageOf(engine: Engine, result: Awaited<ReturnType<typeof listSpaces>>): Promise<HomeDTO> {
   const rows = await activity(
@@ -36,9 +36,9 @@ export async function homePage(engine: Engine, cursor?: string): Promise<HomeDTO
 }
 /**
  * Home's check: every listed Space's live state, whether it is archived, its last active time and recent people in one
- * tenant read. One more read lists the five newest calls, and when any of them isn't listed the answer carries them as
- * the first page, with one more read for their activity: a call made in this tab can be newest while one made
- * elsewhere just before it is still missing. Without `home`, this is the call page's roster check, which needs the full
+ * tenant read. One more read lists the most recently used page of calls, and when any of them isn't listed the answer
+ * carries them as the first page, with one more read for their activity: a call made or used elsewhere moves to the top
+ * while this tab still holds the older order. Without `home`, this is the call page's roster check, which needs the full
  * live roster rather than Home's five faces.
  */
 export async function homeStatus(engine: Engine, query: HomeStatusQuery): Promise<HomeStatusDTO> {

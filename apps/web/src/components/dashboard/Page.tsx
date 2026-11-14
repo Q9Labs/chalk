@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Icon, type IconName } from "../site/Icon";
-
 /** The frame the Developer and session pages share: an optional side nav beside a heading and the page's panels. */
-export function Page({ icon, title, intro, end, nav, crumb, children }: { readonly icon: IconName; readonly title: ReactNode; readonly intro: ReactNode; readonly end?: ReactNode; readonly nav?: ReactNode; readonly crumb?: ReactNode; readonly children: ReactNode }) {
+export function Page({ title, intro, end, nav, crumb, children }: { readonly title: ReactNode; readonly intro: ReactNode; readonly end?: ReactNode; readonly nav?: ReactNode; readonly crumb?: ReactNode; readonly children: ReactNode }) {
   return (
     <div className="dev">
       <div className={nav ? "dshell" : "dshell wide"}>
@@ -11,31 +9,15 @@ export function Page({ icon, title, intro, end, nav, crumb, children }: { readon
         <div className="dmain">
           {crumb}
           <div className="pagehead">
-            <span className="tile">
-              <Icon name={icon} size={20} />
-            </span>
             <div>
               <h1>{title}</h1>
-              <p>{intro}</p>
+              {intro ? <p>{intro}</p> : null}
             </div>
             {end}
           </div>
           {children}
         </div>
       </div>
-    </div>
-  );
-}
-
-export function Stat({ icon, label, value, children }: { readonly icon: IconName; readonly label: string; readonly value: ReactNode; readonly children: ReactNode }) {
-  return (
-    <div className="stat">
-      <div className="l">
-        <Icon name={icon} size={14} />
-        {label}
-      </div>
-      <div className="v">{value}</div>
-      <div className="s">{children}</div>
     </div>
   );
 }

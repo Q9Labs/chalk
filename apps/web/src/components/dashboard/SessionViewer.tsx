@@ -3,7 +3,7 @@ import { useRef, useState, type ReactNode, type RefObject } from "react";
 
 import type { RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
-import { VIDEO, videoState } from "../../lib/dashboard/recording";
+import { completedTranscript, VIDEO, videoState } from "../../lib/dashboard/recording";
 import { selection, transcriptView, type Attempt, type TranscriptView } from "../../lib/dashboard/tracking";
 import { clock } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
@@ -18,6 +18,8 @@ export type Parts = {
   readonly recording: RecordingDTO | undefined;
   readonly playable: boolean;
   readonly downloadableTranscript: TranscriptDTO | null;
+  /** The finished transcript the panel stands for, even when its lines can't be read, so it can still be deleted. */
+  readonly shownTranscript: TranscriptDTO | null;
   readonly transcript: TranscriptView["kind"];
   readonly media: ReactNode;
   readonly panel: ReactNode;
@@ -42,7 +44,8 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
   const downloadableTranscript = transcript.kind === "ready" ? transcript.transcript : null;
-  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null });
+  const shownTranscript = transcribed?.recording.transcripts?.find(completedTranscript) ?? null;
+  if (!recording) return render({ recording, playable, downloadableTranscript, shownTranscript, transcript: transcript.kind, media: null, panel: null });
 
   async function prepareRecording(target: RecordingDTO) {
     if (exporting) return;
@@ -79,7 +82,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
     ) : (
       <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
-  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel });
+  return render({ recording, playable, downloadableTranscript, shownTranscript, transcript: transcript.kind, media, panel });
 }
 
 type MediaProps = {
@@ -150,10 +153,10 @@ function RecordingMedia({ ids, recording, unreadable, newer, exporting, onTime, 
   return (
     <div className="pnote" role={ALERTING.has(video) ? "alert" : "status"}>
       <div>
-        {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
+        {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : video === "capture_failed" || video === "export_failed" ? <Icon name="alert" className="bad" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
         <b>{note.title}</b>
-        <p>{recording.failureMessage || note.detail}</p>
-        {note.action === "prepare" || note.action === "retry" ? <PrepareButton action={note.action} exporting={exporting} onClick={() => onPrepare(recording)} /> : video === "capture_failed" || video === "export_failed" ? <ContactSupport problem={note.title} size="lg" /> : null}
+        <p>{note.detail}</p>
+        {note.action === "prepare" || note.action === "retry" ? <PrepareButton action={note.action} exporting={exporting} onClick={() => onPrepare(recording)} /> : video === "capture_failed" || video === "export_failed" ? <ContactSupport problem={note.title} /> : null}
         {video === "preparable" ? (
           <p className="pnote-more">
             <Link to="/dashboard/developer" hash="recording-videos">
@@ -184,9 +187,9 @@ export function DownloadMenu({ ids, recording, video, transcript }: { readonly i
     <Menu
       label="Download"
       trigger={({ open, toggle }) => (
-        <button type="button" className="btn sec" aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+        <button type="button" className="btn sec dlb" aria-label="Download" aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
           <Icon name="dl" />
-          Download
+          <span className="dlb-label">Download</span>
           <Icon name="down" />
         </button>
       )}

@@ -3,11 +3,12 @@ import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
-import { clock } from "../../lib/dashboard/format";
+import { clock, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import { RenameDialog } from "./HomeDialogs";
+import { RecordingSettingsLink } from "./ListParts";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
@@ -52,7 +53,8 @@ function CallLoaded({ spaceId, data, back, refresh, update }: CallLoadedProps) {
   const toast = useToast();
   const navigate = useNavigate();
   const intents = useIntentKeys();
-  const { call, inviteUrl, episodes, live, nextCursor, knocks } = data;
+  const { call, episodes, live, nextCursor, knocks } = data;
+  const inviteUrl = shareableLink(data.inviteUrl);
   const current = episodes.find((episode) => episode.status === "active");
   const past = episodes.filter((episode) => episode !== current);
 
@@ -145,6 +147,7 @@ function PastSessions({ spaceId, past, nextCursor, refresh, update }: PastSessio
     <>
       <div className="secth">
         <h2>Past sessions</h2>
+        <RecordingSettingsLink />
       </div>
       {past.length === 0 ? (
         <div className="list">

@@ -15,33 +15,48 @@ import { useSession } from "./use-dashboard";
 /** The signed-in dashboard: checks the session, then draws the top bar around the page. */
 export function AppShell({ children }: { readonly children: ReactNode }) {
   const { profile, failure, retry } = useSession();
+  // The router moves its location first and draws the next page once that page's code has loaded.
+  const pending = useRouterState({ select: (state) => state.resolvedLocation !== undefined && state.location.pathname !== state.resolvedLocation.pathname });
+  // The page draws its header and placeholders while the session check runs, so the first frame is never blank. Its
+  // own reads wait on the same cookie, and a signed-out answer to either goes to sign-in.
   return (
     <div className="app">
-      <TopBar profile={profile} />
-      <main className="main">
-        {profile ? (
+      <TopBar profile={profile} dim={Boolean(failure)} />
+      <main className="main" data-pending={pending || undefined} aria-busy={pending || undefined}>
+        {failure ? (
+          <div className="wrap">
+            <ErrorPanel
+              title="We couldn’t check your sign-in"
+              detail="Try again, or sign in again."
+              onRetry={retry}
+              more={
+                <a className="btn ol sm" href="/dashboard/sign-in">
+                  Sign in
+                </a>
+              }
+            />
+          </div>
+        ) : (
           <>
-            <div className="wrap">
-              <PrivacyNotice />
-            </div>
+            {profile ? (
+              <div className="wrap">
+                <PrivacyNotice />
+              </div>
+            ) : null}
             {children}
           </>
-        ) : failure ? (
-          <div className="wrap">
-            <ErrorPanel title="Couldn’t open your dashboard" detail={errorMessage(failure)} onRetry={retry} />
-          </div>
-        ) : null}
+        )}
       </main>
     </div>
   );
 }
 
-function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
+function TopBar({ profile, dim }: { readonly profile: ProfileDTO | null; readonly dim: boolean }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   // A call, its sessions and their recordings all live under Home.
   const section = pathname.startsWith("/dashboard/developer") ? "developer" : pathname.startsWith("/dashboard/apps") ? "apps" : "home";
   return (
-    <header className="topb">
+    <header className={dim ? "topb dim" : "topb"}>
       <Link to="/dashboard" activeOptions={{ exact: true }} aria-label="Chalk, Home">
         <Lockup />
       </Link>

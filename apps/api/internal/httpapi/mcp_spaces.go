@@ -7,6 +7,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 func bindMCPSpaceTools(registry *mcptools.Registry, o Options) {
@@ -18,7 +19,7 @@ func bindMCPSpaceTools(registry *mcptools.Registry, o Options) {
 		case "invite":
 			return mcpInvoke(b, getSpacePublicInviteEndpoint(o.PublicInvites, o.TenantAuthz), publicInvitePathRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID)})
 		default:
-			return mcpInvoke(b, listSpacesEndpoint(o.Spaces, o.TenantAuthz), listSpacesRequest{TenantID: b.tenant, Page: b.page(i.PageInput), Archived: i.Archived})
+			return mcpInvoke(b, listSpacesEndpoint(o.Spaces, o.TenantAuthz), listSpacesRequest{TenantID: b.tenant, Page: b.page(i.PageInput), Options: spaces.ListOptions{Archived: i.Archived}})
 		}
 	})
 	bindMCPEndpoint(registry, mcptools.CreateSpace, createSpaceEndpoint(o.Spaces, o.TenantAuthz), func(b *mcpRequest, i mcptools.BodyInput[createSpaceRequest]) createSpaceEndpointRequest {

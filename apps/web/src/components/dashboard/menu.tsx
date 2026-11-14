@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Icon, type IconName } from "../site/Icon";
+import { useOutsidePress } from "./use-outside-press";
 
 /* ---------- popover menus: arrow keys move, Esc closes and returns focus ---------- */
 
@@ -22,14 +23,9 @@ export function Menu({ label, trigger, icon = "more", align, children }: MenuPro
     wrap.current?.querySelector<HTMLElement>("[aria-haspopup=menu]")?.focus();
     setOpen(false);
   }, []);
+  useOutsidePress(open, wrap, () => setOpen(false));
   useEffect(() => {
-    if (!open) return;
-    wrap.current?.querySelector<HTMLElement>("[role=menu] [role^=menuitem]")?.focus();
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !wrap.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    if (open) wrap.current?.querySelector<HTMLElement>("[role=menu] [role^=menuitem]")?.focus();
   }, [open]);
 
   function onKeyDown(event: KeyboardEvent<HTMLSpanElement>) {
@@ -77,7 +73,7 @@ export function MenuItem({ icon, danger, onSelect, children }: { readonly icon?:
 }
 
 /** The rename and archive entries every call menu ends with. */
-export function RenameArchiveItems({ close, onRename, onArchive }: { readonly close: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+export function RenameArchiveItems({ close, onRename, onArchive, archiveIcon = "trash" }: { readonly close: () => void; readonly onRename: () => void; readonly onArchive: () => void; readonly archiveIcon?: IconName }) {
   return (
     <>
       <MenuItem
@@ -91,7 +87,7 @@ export function RenameArchiveItems({ close, onRename, onArchive }: { readonly cl
       </MenuItem>
       <div className="msep" />
       <MenuItem
-        icon="trash"
+        icon={archiveIcon}
         danger
         onSelect={() => {
           close();

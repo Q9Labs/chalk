@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type HomeCallDTO, type LiveDTO } from "../../lib/dashboard/contracts";
-import { displayLink, lastActive } from "../../lib/dashboard/format";
+import { lastActive, shareableLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
-import { CopyAction, usePhone, useToast } from "./kit";
+import { CopyAction, LinkText, usePhone, useToast } from "./kit";
 import { Menu, MenuItem, RenameArchiveItems } from "./menu";
 import { inviteLink } from "./home-rows";
 
@@ -20,18 +20,18 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
   );
   const label = live ? `${call.name}, live now with ${live.count} people` : `${call.name}, last active ${lastActive(call.lastActiveAt ?? call.createdAt)}`;
   const faces = live ? live.participants.map((person) => person.name) : call.recentPeople.map((person) => person.name);
+  // The faces column holds three circles; when people overflow it, the count takes the last one.
+  const shown = faces.length > 3 ? 2 : 3;
   return (
     <div className="row">
       <Link className="ra" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} aria-label={label} />
+      {/* The people come first and sit right against the name, so a row reads as who and what together. */}
+      {/* A call nobody has joined keeps one quiet empty face, so its name starts where every other name does. */}
+      <span className="fcol np">{faces.length ? <Faces names={faces} size={28} max={shown} /> : <span className="noface" />}</span>
       <span className="rt np">
         <b>{call.name}</b>
-        {phone ? <span>{status}</span> : call.inviteUrl ? <span className="mono">{displayLink(call.inviteUrl)}</span> : null}
+        {phone ? <span>{status}</span> : call.inviteUrl ? <LinkText link={shareableLink(call.inviteUrl)} className="mono" /> : null}
       </span>
-      {faces.length ? (
-        <span className="fcol np">
-          <Faces names={faces} size={28} max={phone ? 2 : 3} />
-        </span>
-      ) : null}
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
@@ -47,6 +47,7 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
 }
 
 function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCallDTO; readonly onJoin: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+  const phone = usePhone();
   return (
     <Menu label={`More actions for ${call.name}`}>
       {(close) => (
@@ -60,8 +61,8 @@ function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCal
           >
             Join call
           </MenuItem>
-          <CopyMenuItem call={call} onDone={close} />
-          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} />
+          {phone ? <CopyMenuItem call={call} onDone={close} /> : null}
+          <RenameArchiveItems close={close} onRename={onRename} onArchive={onArchive} archiveIcon="archive" />
         </>
       )}
     </Menu>

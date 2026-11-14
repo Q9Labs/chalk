@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from "react";
 
 import { Avatar } from "../site/Avatar";
+import { useSiteTheme } from "../site/theme";
 import { PreviewChat, initialMessages } from "./PreviewChat";
 import { PreviewDock, type ToggleKey, type Toggles } from "./PreviewDock";
 import { PreviewHeader, PreviewStage, type CallPerson } from "./PreviewStage";
@@ -40,14 +41,19 @@ function JoinToast({ name }: { readonly name: string }) {
 }
 
 export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still = false }: { readonly label: string; readonly name?: string; readonly people?: readonly CallPerson[]; readonly still?: boolean }) {
-  const [on, setOn] = useState(INITIAL);
+  const [toggles, setToggles] = useState(INITIAL);
+  // Unset follows the site's theme; the preview's own sun button pins it. A recording still is video, so it stays dark.
+  const [pinned, setPinned] = useState<"light" | "dark" | undefined>(still ? "dark" : undefined);
+  const { theme: siteTheme } = useSiteTheme();
+  const light = (pinned ?? siteTheme) === "light";
+  const on = { ...toggles, light };
   const [left, setLeft] = useState(false);
   const [messages, setMessages] = useState(() => initialMessages(name === "Q9 team"));
   const [draft, setDraft] = useState("");
   const rejoin = useRef<HTMLButtonElement>(null);
   const leave = useRef<HTMLButtonElement>(null);
   const { seconds, speaker, toast, clearToast } = usePreviewClock({ people, team: name === "Q9 team", run: !still && !left });
-  const flip = (key: ToggleKey) => setOn((value) => ({ ...value, [key]: !value[key] }));
+  const flip = (key: ToggleKey) => (key === "light" ? setPinned(light ? "dark" : "light") : setToggles((value) => ({ ...value, [key]: !value[key] })));
   const live = !still && !left;
 
   useEffect(() => {
@@ -62,7 +68,7 @@ export function CallPreview({ label, name = "Q9 team", people = TEAM_CALL, still
 
   return (
     <div className={`xwrap${still ? " still" : ""}`} role="group" aria-label={label}>
-      <div className={`xcall${on.chat ? " chat" : ""}${on.sharing ? " sharing" : ""}`} data-theme={on.light ? "light" : "dark"}>
+      <div className={`xcall${on.chat ? " chat" : ""}${on.sharing ? " sharing" : ""}`} data-theme={pinned}>
         {live ? <PreviewHeader name={name} seconds={seconds} sharing={on.sharing} people={people} /> : null}
         {!left ? <PreviewStage people={people} still={still} speaker={speaker} controls={on} /> : null}
         {live ? (
