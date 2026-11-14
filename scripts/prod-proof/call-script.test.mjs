@@ -79,6 +79,7 @@ test("a Recording that plays the script passes every check", () => {
   assert.equal(measurements.markers.length, 6);
   assert.ok(measurements.markers.every((marker) => Math.abs(marker.avOffsetMs) <= 100));
   assert.ok(measurements.holds.every((hold) => hold.endedAfterMs <= 1000));
+  assert.ok(Math.abs(measurements.runOnMs) <= bounds.endMs);
 });
 
 test("the silence bound comes from the script's own longest gap", () => {

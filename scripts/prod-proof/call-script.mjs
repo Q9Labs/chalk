@@ -251,5 +251,5 @@ export function judgeScript(script, signals, durationSeconds) {
   if (runOnMs > bounds.endMs) failures.push(`Recording runs ${Math.round(runOnMs)} ms past the host stop, beyond ${bounds.endMs} ms`);
 
   if (script.restart && !script.restart.resumed) failures.push("Capture did not resume after the capture-node restart");
-  return { failures, measurements: { markers, holds, silenceBoundMs: Math.round(bound), longestSilenceMs: Math.round(longest) } };
+  return { failures, measurements: { markers, holds, runOnMs: Math.round(runOnMs), silenceBoundMs: Math.round(bound), longestSilenceMs: Math.round(longest) } };
 }
