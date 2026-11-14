@@ -1389,6 +1389,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
 }
 

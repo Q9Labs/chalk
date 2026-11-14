@@ -1,6 +1,5 @@
 import { whisperLanguageCodes, type WhisperLanguage } from "@chalk/transcript-language";
 
-
 /** The country whose flag stands for each language: the one with the most speakers, or the one that holds it as its own. Tibetan and Yiddish have none, so they show their code. */
 const flagCountry: Record<WhisperLanguage, string | null> = {
   af: "ZA",
