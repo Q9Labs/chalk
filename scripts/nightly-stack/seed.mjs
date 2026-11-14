@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, apiOrigin, proofOrigin] = process.argv.slice(2);
+const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 
 async function call(method, path, body) {
@@ -29,8 +29,8 @@ const key = await call("POST", `/v1/tenants/${tenant.id}/api-keys`, { name: "Nig
 
 const values = {
   CHALK_PROOF_CONFIG_SOURCE: "env",
-  CHALK_PROOF_API_URL: apiOrigin,
-  CHALK_PROOF_WEB_URL: apiOrigin,
+  CHALK_PROOF_API_URL: publicOrigin,
+  CHALK_PROOF_WEB_URL: publicOrigin,
   CHALK_PROOF_PROOF_ORIGIN: proofOrigin,
   // The proofs that run on this stack send no webhooks; the harness still requires both values.
   CHALK_PROOF_WEBHOOK_SERVICE_URL: proofOrigin,
