@@ -68,7 +68,7 @@ env("api.env", {
   CHALK_API_ENV: "local",
   CHALK_API_LOCAL_SYSTEM_TOKEN: systemToken,
   CHALK_API_REQUEST_LOGS: "errors",
-  CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${apiPort},${proofOrigin}`,
+  CHALK_API_CORS_ALLOWED_ORIGINS: `http://127.0.0.1:${apiPort},http://127.0.0.1:${frontPort},${proofOrigin}`,
   CHALK_DATABASE_URL: databaseUrl,
   CHALK_REDIS_URL: "redis://127.0.0.1:6379/0",
   CHALK_R2_ENDPOINT: `http://127.0.0.1:${storagePort}`,
