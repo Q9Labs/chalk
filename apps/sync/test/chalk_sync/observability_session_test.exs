@@ -3,6 +3,7 @@ defmodule ChalkSync.ObservabilitySessionTest do
 
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Observability
+  alias ChalkSync.Observability.Sink
   alias ChalkSync.ProtocolV1
 
   @session_id "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
@@ -135,8 +136,8 @@ defmodule ChalkSync.ObservabilitySessionTest do
       with_session = metadata(context)
       without_session = metadata(Observability.merge(nil, nil))
 
-      assert Observability.span_attributes(with_session, %{})["session.id"] == @session_id
-      refute Map.has_key?(Observability.span_attributes(without_session, %{}), "session.id")
+      assert Sink.span_attributes(with_session, %{})["session.id"] == @session_id
+      refute Map.has_key?(Sink.span_attributes(without_session, %{}), "session.id")
     end
 
     test "telemetry events and stdout lifecycle lines carry the session", %{context: context} do

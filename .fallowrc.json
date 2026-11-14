@@ -2,6 +2,7 @@
   "entry": [
     "gate.config.ts",
     "features/scorecard/scorecard.mjs",
+    "scripts/diagnose-call/make-fixtures.mjs",
     "tools/formal/media-control/trace-diff.mjs",
     "tools/formal/public-invite-access/PublicInviteAccess.view.mjs",
     "tools/formal/recording-pipeline/RecordingPipeline.view.mjs",

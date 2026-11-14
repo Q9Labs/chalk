@@ -50,6 +50,9 @@ var ErrInvalidRequestKey = ErrInvalidIdempotencyKey
 
 const (
 	PublicRoleCollaborator = "collaborator"
+	// PublicRoleOwner is the role of the person who starts a public call: only
+	// it carries endEpisode.
+	PublicRoleOwner = "owner"
 
 	DefaultArrivalLifetime   = 15 * time.Minute
 	AdmissionRequestLifetime = 5 * time.Minute
@@ -331,6 +334,8 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
+	// Role is the role of a new Participant. Empty means PublicRoleCollaborator.
+	Role string
 	// RequireAdmission names the admission mode the Space must be in when the pending arrival is allocated; empty fences nothing.
 	RequireAdmission       AdmissionMode
 	Admission              *AdmissionBinding

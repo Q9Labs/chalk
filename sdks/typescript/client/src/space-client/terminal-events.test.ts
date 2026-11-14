@@ -71,6 +71,28 @@ describe("SpaceClient terminal callbacks", () => {
     }
   });
 
+  it("marks a seat the server let go as timed out, and a person's own Leave as not", async () => {
+    const dropped = terminalTestPlatform();
+    const droppedHarness = terminalTestClient(dropped);
+    const left = terminalTestPlatform();
+    const leftHarness = terminalTestClient(left);
+    try {
+      await joinWithTerminalControl(droppedHarness.client, dropped);
+      dropped.emitSync({ ...dropped.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" }, control: null });
+      await vi.waitFor(() => expect(droppedHarness.client.getSnapshot().connection.status).toBe("left"));
+      expect(droppedHarness.client.getSnapshot().connection.timedOut).toBe(true);
+
+      await joinWithTerminalControl(leftHarness.client, left);
+      await leftHarness.client.leave();
+      left.emitSync({ ...left.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_inactive" }, control: null });
+      expect(leftHarness.client.getSnapshot().connection.status).toBe("left");
+      expect(leftHarness.client.getSnapshot().connection.timedOut).toBe(false);
+    } finally {
+      droppedHarness.client.dispose();
+      leftHarness.client.dispose();
+    }
+  });
+
   it("closes from an acknowledged end even without a final control event", async () => {
     const platform = terminalTestPlatform();
     platform.endEpisode.mockResolvedValue({ type: "ack", command_id: "end", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" });

@@ -16,10 +16,15 @@ on:
       - apps/api/internal/recordingorchestrator/**
       - apps/api/internal/providerbridge/sfu_executor.go
       - apps/sync/lib/chalk_sync/episodes/reducer.ex
+      - apps/sync/lib/chalk_sync/episodes/reducer/**
       - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/recording/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
       - tools/formal/recording-pipeline/**

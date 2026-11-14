@@ -13,9 +13,9 @@ NodeComplete	apps/api/db/queries/recording_pipeline.sql	and recording_jobs.lease
 Recover	apps/api/db/queries/recording_pipeline.sql	or (jobs.kind = 'capture' and jobs.state = 'pending' and pipelines.stop_requested_at is not null
 Recover	apps/api/db/queries/recording_pipeline.sql	(expired.capture_stopped and (not expired.completion_only or expired.completion_attempts >= 3))
 ExpireReservation	apps/api/db/queries/recording_pipeline.sql	and recording_jobs.state = 'pending' and recording_jobs.attempt_count = 0
-DispatchEndStop	apps/sync/lib/chalk_sync/external_operation_consumer.ex	end_recording_call(recording_plane, episode, operation)
+DispatchEndStop	apps/sync/lib/chalk_sync/external_operation_consumer/dispatch.ex	end_recording_call(recording_plane, episode, operation)
 DispatchEndStop	apps/api/internal/providerbridge/sfu_executor.go	errors.Is(err, recordingpipeline.ErrPipelineNotFound),
-FinalizeEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	SQL.complete_external_episode_recordings(),
+FinalizeEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/products.ex	SQL.complete_external_episode_recordings(),
 FinalizeEnd	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex	update sync_recordings set status = 'stopped', completed_at = now(), updated_at = now() where tenant_id = $1 and space_id = $2 and episode_id = $3 and status in ('starting', 'recording', 'stopping')
 CaptureReadyFact	apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex	def capture_source_pending?(connection, episode, %{name: name, payload: payload})
-ApplyCaptureStopped	apps/sync/lib/chalk_sync/episodes/reducer.ex	defp valid_recording_transition(nil, %{"status" => "starting"}), do: :ok
+ApplyCaptureStopped	apps/sync/lib/chalk_sync/episodes/reducer/events.ex	defp valid_recording_transition(nil, %{"status" => "starting"}), do: :ok

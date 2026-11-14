@@ -1,20 +1,19 @@
 import { Schema } from "effect";
 import { ChatReactionSetFrameSchema } from "../generated/sync";
-import { Context, Effect, Layer, Scope } from "effect";
+import { Effect, Scope } from "effect";
 import type { ChalkChatFileTransport } from "../chat-files";
 import { storeUpload } from "../chat-files/types";
 import { reportUploadFailure } from "./chat-upload-report";
 import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
-import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
+import { makeScopedFork, type ScopedFork } from "./scoped-fork";
+import { foreign, failureFromError, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
 import * as apiUrls from "../api-urls";
 import { DEFAULT_API_BASE_URL } from "../urls";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
-type Fork = (effect: Effect.Effect<void, unknown>) => void;
 export type ChatControllerEffects = {
   readonly react: (input: ChatReactionInput) => ClientEffect<ChatReactions>;
   readonly send: (input: ChatSendInput) => ClientEffect<ChatMessage>;
@@ -25,7 +24,6 @@ export type ChatControllerEffects = {
   readonly resolveUrl: (attachment: ChatAttachment) => ClientEffect<string>;
   readonly dispose: () => void;
 };
-export class ChatControllerService extends Context.Service<ChatControllerService, ChatControllerEffects>()("@chalk/client/ChatController") {}
 /** Scoped owner of chat subscriptions and catch-up fibers. */
 export const makeChatController = (input: {
   readonly connection: ConnectionLifecycleCapability;
@@ -36,28 +34,20 @@ export const makeChatController = (input: {
   readonly offline?: OfflineActionsHold;
 }): Effect.Effect<ChatControllerEffects, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const scope = yield* Effect.scope;
+    const fork = yield* makeScopedFork();
     const context = yield* Effect.context<never>();
-    const fork: Fork = (effect) => {
-      void Effect.runForkWith(context)(Effect.forkIn(effect, scope).pipe(Effect.asVoid) as Effect.Effect<void>);
-    };
-    const controller = yield* Effect.sync(() => {
-      let instance: ChatControllerRuntime | null = null;
-      const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? DEFAULT_API_BASE_URL, input.fetch ?? globalThis.fetch, fork, input.offline);
-      return instance;
-    });
+    const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
+    const controller = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? DEFAULT_API_BASE_URL, input.fetch ?? globalThis.fetch, fork, input.offline);
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
     return controller;
   });
-export const makeChatControllerLayer = (input: Parameters<typeof makeChatController>[0]) => Layer.effect(ChatControllerService, makeChatController(input));
 class ChatControllerRuntime implements ChatControllerEffects {
   readonly #apiBaseUrl: string;
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #transport: ChalkChatFileTransport | null;
   readonly #fetch: typeof globalThis.fetch;
-  readonly #fork: Fork;
+  readonly #fork: ScopedFork;
   readonly #offline: OfflineActionsHold | undefined;
   readonly #reactionStates = new Map<string, ChatReactions>();
   #catchUpRunning = false;
@@ -78,7 +68,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeEvents: (() => void) | null = null;
   #unsubscribeSnapshot: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, offline?: OfflineActionsHold) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: ScopedFork, offline?: OfflineActionsHold) {
     this.#offline = offline;
     this.#apiBaseUrl = apiBaseUrl;
     this.#connection = connection;
@@ -96,11 +86,10 @@ class ChatControllerRuntime implements ChatControllerEffects {
         const sendNow = () => Effect.sync(() => this.#upsertPending(clientMessageId, input.text, attachments, "sending", null)).pipe(Effect.andThen(command));
         const held = this.#offline?.hold({ kind: "chat_message", text: input.text, clientMessageId, attachments }, sendNow);
         if (held) this.#upsertPending(clientMessageId, input.text, attachments, "queued", null);
-        return (held ?? sendNow()).pipe(Effect.tap(() => Effect.void)).pipe(
+        return (held ?? sendNow()).pipe(
           Effect.map(chatMessageFor),
           Effect.tap(() => Effect.sync(() => this.#removePending(clientMessageId))),
           Effect.map((message) => this.#observeMessage(message, false)),
-
           Effect.catch((cause) => {
             const error = normalizeClientError(cause, "chat.payload_invalid");
             return Effect.sync(() => {
@@ -138,13 +127,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
             this.#applyPage(result);
           }),
         ),
-        Effect.mapError((cause) => {
-          const error = normalizeClientError(cause, "chat.payload_invalid");
-          this.#status = "failed";
-          this.#lastError = failureFromError(error);
-          this.#publish();
-          return error;
-        }),
+        Effect.mapError((cause) => this.#fail(cause)),
       );
   };
   markRead = (messageId: string): ClientEffect<ChatReadReceipt | null> => {
@@ -163,7 +146,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
         .pipe(
           Effect.map(chatReceiptFor),
           Effect.tap((receipt) => Effect.sync(() => this.#mergeReceipt(receipt))),
-
           Effect.mapError(normalizeClientError),
         );
     });
@@ -234,6 +216,13 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#scheduleCatchUp();
     this.#publish();
   }
+  #fail(cause: unknown): SpaceClientError {
+    const error = normalizeClientError(cause, "chat.payload_invalid");
+    this.#status = "failed";
+    this.#lastError = failureFromError(error);
+    this.#publish();
+    return error;
+  }
   #refreshLoaded(ports: ConnectionPorts): void {
     const first = this.#messages[0];
     const last = this.#messages.at(-1);
@@ -278,10 +267,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
         Effect.catch((cause) =>
           Effect.sync(() => {
             if (this.#ports !== ports) return;
-            const error = normalizeClientError(cause, "chat.payload_invalid");
-            this.#status = "failed";
-            this.#lastError = failureFromError(error);
-            this.#publish();
+            this.#fail(cause);
           }),
         ),
         Effect.ensuring(
@@ -460,7 +446,8 @@ class ChatControllerRuntime implements ChatControllerEffects {
     this.#publish();
   }
   #publish(): void {
-    this.#store.updateChat(
+    this.#store.update(
+      "chat",
       Object.freeze({
         status: this.#status,
         messages: this.#messages,
@@ -472,9 +459,6 @@ class ChatControllerRuntime implements ChatControllerEffects {
       }),
     );
   }
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function validate(input: ChatSendInput): readonly ChatAttachment[] {
   const validation = validateChatMessage(input);

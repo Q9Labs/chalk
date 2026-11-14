@@ -3,6 +3,7 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
 
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.ExternalOperationConsumer.Execution
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Live.Projection
@@ -207,7 +208,7 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
     {:ok, adapter} = MediaPlaneTestAdapter.start_link()
 
     assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
+             Execution.execute_operation(
                episode,
                external,
                {MediaPlaneTestAdapter, adapter},

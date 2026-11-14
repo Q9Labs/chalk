@@ -1,4 +1,5 @@
 import { ChalkWhiteboardV1Error, type ChalkWhiteboardV1Failure, type ChalkWhiteboardV1FileTransport } from "./types";
+import { isDownloadResponse } from "../chat-files/http-transport";
 import { withRequestContext } from "../session";
 import * as apiUrls from "../api-urls";
 
@@ -50,29 +51,4 @@ async function responseError(response: Response, operation: ChalkWhiteboardV1Fai
 
 function whiteboardError(operation: ChalkWhiteboardV1Failure["operation"], code: ChalkWhiteboardV1Failure["code"], recoverable: boolean, message: string): ChalkWhiteboardV1Error {
   return new ChalkWhiteboardV1Error({ operation, code, recoverable, message });
-}
-
-function isDownloadResponse(value: unknown): value is {
-  readonly downloadUrl: string;
-  readonly expiresAt: string;
-} {
-  return isExactObject(value, ["downloadUrl", "expiresAt"]) && isHttpUrl(value.downloadUrl) && isDate(value.expiresAt);
-}
-
-function isExactObject(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-
-function isHttpUrl(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isDate(value: unknown): value is string {
-  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }

@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
-import { CloudflareSFUClient, CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
-import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import { CloudflareSFUError } from "./cloudflare-sfu";
+import type { CloudflareSFUBootstrap, CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
+import { bootstrap, createSfuHarness, failAddTracks, FakeTrack, fakeStream, publicationSnapshot, receiverExpired, versionedPublicationID, type HarnessOptions } from "./cloudflare-sfu.test.helpers";
 it("does not publish a microphone muted during remote connection replacement", async () => {
   const replacementStarted = Promise.withResolvers<void>();
   const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
@@ -17,13 +17,7 @@ it("does not publish a microphone muted during remote connection replacement", a
       const track = new FakeTrack("local-microphone", "audio");
       h.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
       h.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
-      const addTracks = h.transport.addTracks.bind(h.transport);
-      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
-        if (input.connectionId === "connection-1") {
-          throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
-        }
-        return addTracks(input);
-      });
+      failAddTracks(h.transport, (input) => input.connectionId === "connection-1", receiverExpired);
 
       const pulling = h.client.refreshRemotePublications();
       await replacementStarted.promise;
@@ -406,7 +400,7 @@ describe("pulling many remote publications", () => {
     sequence: 1,
     publications: Array.from({ length: size }, (_, index) => ({ participantId: `participant-${index + 2}`, source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", `microphone-${index}`) })),
   });
-  const remotePulls = (h: ReturnType<typeof createHarness>) => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"));
+  const remotePulls = (h: Harness) => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote"));
 
   it("pulls at most 16 tracks per request", async () => {
     await withTimedHarness(async (h) => {
@@ -453,7 +447,7 @@ describe("pulling many remote publications", () => {
 
 const CAMERA_ON = { operationId: "camera-on", participantId: "participant-1", source: "camera", enabled: true } as const;
 
-async function startDormantWithCamera(h: ReturnType<typeof createHarness>): Promise<FakeTrack> {
+async function startDormantWithCamera(h: Harness): Promise<FakeTrack> {
   await h.client.start(fakeStream());
   await vi.advanceTimersByTimeAsync(0);
   const track = new FakeTrack("local-camera", "video");
@@ -705,11 +699,10 @@ describe("pull-published first poll", () => {
   }
 });
 
-const SYNC_PULL_CAPABILITIES = { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } as const;
 const remoteMicrophone = (connectionId: string, trackName: string) => ({ participantId: "participant-2", source: "microphone", publicationId: versionedPublicationID(connectionId, "0", trackName) }) as const;
 
 // Records the SFU requests in the order the client sends them.
-function recordSfuRequests(h: ReturnType<typeof createHarness>): string[] {
+function recordSfuRequests(h: Harness): string[] {
   const calls: string[] = [];
   const addTracks = h.transport.addTracks.bind(h.transport);
   vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
@@ -724,7 +717,17 @@ function recordSfuRequests(h: ReturnType<typeof createHarness>): string[] {
   return calls;
 }
 
-async function startReceiver(h: ReturnType<typeof createHarness>): Promise<string[]> {
+const syncPullBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } };
+
+// A started receiver whose roster lists one remote microphone, with the SFU requests it sends recorded.
+async function receiverListing(h: Harness) {
+  const calls = await startReceiver(h);
+  const publication = remoteMicrophone("remote-connection", "microphone-1");
+  h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+  return { calls, publication };
+}
+
+async function startReceiver(h: Harness): Promise<string[]> {
   await h.client.start(fakeStream());
   await vi.advanceTimersByTimeAsync(0);
   h.client.remoteParticipantsChanged(["participant-2"]);
@@ -736,9 +739,7 @@ async function startReceiver(h: ReturnType<typeof createHarness>): Promise<strin
 it("pulls a publication named by a Sync media item before listing publications", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
       await vi.advanceTimersByTimeAsync(0);
@@ -746,7 +747,7 @@ it("pulls a publication named by a Sync media item before listing publications",
       expect(calls).toEqual(["pull", "list"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -766,15 +767,13 @@ it("leaves a Sync-advertised pull to the listing when the offer is over the size
       expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES }, replaceMediaConnection },
+    { bootstrap: syncPullBootstrap, replaceMediaConnection },
   );
 });
 
 it("lists before pulling when the plane does not advertise subscription state", async () => {
   await withTimedHarness(async (h) => {
-    const calls = await startReceiver(h);
-    const publication = remoteMicrophone("remote-connection", "microphone-1");
-    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    const { calls, publication } = await receiverListing(h);
 
     h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
     await vi.advanceTimersByTimeAsync(0);
@@ -786,9 +785,7 @@ it("lists before pulling when the plane does not advertise subscription state", 
 it("lists before pulling when the Sync item names no publication", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ participantId: "participant-2", source: "microphone", enabled: true, publicationId: null }]);
       await vi.advanceTimersByTimeAsync(0);
@@ -796,7 +793,7 @@ it("lists before pulling when the Sync item names no publication", async () => {
       expect(calls).toEqual(["list", "pull"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([publication.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -815,16 +812,14 @@ it("falls back to the listed publication when the Sync item names a stale one", 
       expect(calls).toEqual(["pull", "list", "pull"]);
       expect(h.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([current.publicationId]);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
 it("pulls a Sync-advertised publication once when the same item arrives twice", async () => {
   await withTimedHarness(
     async (h) => {
-      const calls = await startReceiver(h);
-      const publication = remoteMicrophone("remote-connection", "microphone-1");
-      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      const { calls, publication } = await receiverListing(h);
 
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
       h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
@@ -834,7 +829,7 @@ it("pulls a Sync-advertised publication once when the same item arrives twice", 
       expect(calls.filter((call) => call === "pull")).toHaveLength(1);
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -855,7 +850,7 @@ it("retires the receiver a newer Sync-advertised publication of the same source 
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
       expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(149);
     },
-    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+    { bootstrap: syncPullBootstrap },
   );
 });
 
@@ -1024,272 +1019,8 @@ it("publishes a new microphone when the SFU no longer holds the parked one", asy
   );
 });
 
-function bootstrap(connectionId: string): CloudflareSFUBootstrap {
-  return { connectionId, stunServer: "stun:example.test" };
-}
-
-function publicationSnapshot(incarnation: number, sequence: number, publicationId: string): CloudflareSFUPublicationSnapshot {
-  return { incarnation, sequence, publications: [{ participantId: "participant-2", source: "camera", publicationId }] };
-}
-
-function versionedPublicationID(connectionId: string, mid: string, trackName: string): string {
-  const payload = JSON.stringify({ c: connectionId, m: mid, t: trackName, g: 1 });
-  return `chalk_pub_v1.${globalThis.btoa(payload).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "")}`;
-}
-
-function fakeStream(...tracks: readonly FakeTrack[]): MediaStream {
-  return { getTracks: () => tracks as unknown as MediaStreamTrack[] } as MediaStream;
-}
-
-function createHarness(
-  options: {
-    readonly autoConnect?: boolean;
-    /** Decides per peer, by creation index, whether it ever connects. */
-    readonly connectsPeer?: (index: number) => boolean;
-    readonly onError?: (error: unknown, binding: string) => void;
-    readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
-    readonly onScreenEnded?: () => void;
-    readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
-    readonly pollIntervalMs?: number;
-    readonly unreportedVideoTileWaitMs?: number;
-    readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
-    readonly bootstrap?: CloudflareSFUBootstrap;
-    readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
-  } = {},
-) {
-  const peers: FakePeerConnection[] = [];
-  const transport = new FakeTransport(() => peers.at(-1));
-  const peerConnectionFactory = vi.fn(() => {
-    const peer = new FakePeerConnection(options.connectsPeer?.(peers.length) ?? options.autoConnect ?? true);
-    peers.push(peer);
-    return peer as unknown as RTCPeerConnection;
-  });
-  const client = new CloudflareSFUClient({
-    bootstrap: options.bootstrap ?? bootstrap("connection-1"),
-    participantId: "participant-1",
-    transport,
-    replaceMediaConnection: options.replaceMediaConnection,
-    pollIntervalMs: options.pollIntervalMs ?? 60000,
-    // Most tests never report tiles and expect video in the first pull.
-    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
-    onError: options.onError,
-    onDiagnostic: options.onDiagnostic,
-    onScreenEnded: options.onScreenEnded,
-    onReceiveHealth: options.onReceiveHealth,
-    onRemoteTrack: options.onRemoteTrack,
-    peerConnectionFactory,
-  });
-  return { client, peers, transport, peerConnectionFactory };
-}
-
-class FakeTransport implements CloudflareSFUSignalingTransport {
-  uniqueRemoteMids = false;
-  #nextRemoteMid = 0;
-  #localPublicationRevision = 0;
-  readonly addInputs: {
-    readonly connectionId: string;
-    readonly sessionDescription?: CloudflareSFUSessionDescription;
-    readonly tracks: readonly CloudflareSFUTrackRequest[];
-  }[] = [];
-  readonly closeInputs: {
-    readonly connectionId: string;
-    readonly sessionDescription?: CloudflareSFUSessionDescription;
-    readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
-    readonly force: boolean;
-  }[] = [];
-  blockPublicationList = false;
-  uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
-  listSubscriptions: CloudflareSFUSignalingTransport["listSubscriptions"];
-  readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
-  failNextLocalPublish = false;
-  nextLocalPublishFailure: Error | null = null;
-  localPublishFailure: Error | null = null;
-  failNextStaleLocalPublish = false;
-  failNextRemotePull = false;
-  readonly omittedRemoteTrackNames = new Set<string>();
-  readonly failedRemoteTrackNames = new Map<string, string>();
-  readonly #withdrawnRemoteTrackKeys = new Set<string>();
-  readonly #withdrawnLocalPublications = new Set<string>();
-  reverseRemoteTracks = false;
-  failRemotePullCount = 0;
-  failCloseCount = 0;
-  readonly remotePullFailures: unknown[] = [];
-  readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
-  failRenegotiation = false;
-  immediateRenegotiation = false;
-  listPublicationCalls = 0;
-  readonly publicationListSnapshots: CloudflareSFUPublicationSnapshot[] = [];
-  maxLocalMids: number | null = null;
-  snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
-  readonly #blockedConnections = new Map<string, () => void>();
-  readonly #localMids = new Set<string>();
-  readonly #publicationListResolvers: (() => void)[] = [];
-  readonly #peer: () => FakePeerConnection | undefined;
-  constructor(peer: () => FakePeerConnection | undefined) {
-    this.#peer = peer;
-  }
-  async addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
-    this.addInputs.push(input);
-    const unblock = this.#blockedConnections.get(input.connectionId);
-    if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
-    if (input.tracks.some((track) => track.location === "remote")) {
-      if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
-      if (this.failRemotePullCount > 0) {
-        this.failRemotePullCount--;
-        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
-      }
-      if (this.failNextRemotePull) {
-        this.failNextRemotePull = false;
-        throw new CloudflareSFUError("remote pull failed", "signaling_failed");
-      }
-      const tracks = input.tracks
-        .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`))
-        .map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
-      const trackErrors = input.tracks.flatMap((track) => {
-        const code = this.failedRemoteTrackNames.get(track.trackName) ?? (this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`) ? "publication_unavailable" : undefined);
-        return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
-      });
-      if (this.reverseRemoteTracks) tracks.reverse();
-      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${this.uniqueRemoteMids ? track.mid : index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
-      const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
-      return {
-        tracks,
-        trackErrors,
-        requiresImmediateRenegotiation,
-        sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: "remote-offer" } : undefined,
-      };
-    }
-    if (this.failNextLocalPublish) {
-      this.failNextLocalPublish = false;
-      throw new CloudflareSFUError("local publish failed", "signaling_failed");
-    }
-    if (this.localPublishFailure) throw this.localPublishFailure;
-    if (this.nextLocalPublishFailure) {
-      const failure = this.nextLocalPublishFailure;
-      this.nextLocalPublishFailure = null;
-      throw failure;
-    }
-    if (this.failNextStaleLocalPublish) {
-      this.failNextStaleLocalPublish = false;
-      throw new CloudflareSFUError("stale local publish failed", "signaling_failed", { status: 410, retryableConnection: true });
-    }
-    const localMids = input.tracks.flatMap((track) => (track.location === "local" && track.mid !== undefined ? [track.mid] : []));
-    const nextLocalMids = new Set([...this.#localMids, ...localMids]);
-    if (this.maxLocalMids !== null && nextLocalMids.size > this.maxLocalMids) throw new CloudflareSFUError("local media-section budget exceeded", "signaling_failed");
-    for (const mid of localMids) this.#localMids.add(mid);
-    const tracks = input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) }));
-    for (const track of tracks) {
-      if (track.source) {
-        this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
-        this.#withdrawnLocalPublications.delete(track.publicationId);
-        this.#localPublicationRevision++;
-      }
-    }
-    return {
-      sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
-      tracks,
-    };
-  }
-  async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
-    this.closeInputs.push(input);
-    if (this.failCloseCount > 0) {
-      this.failCloseCount--;
-      throw new CloudflareSFUError("close unavailable", "signaling_failed", { status: 503 });
-    }
-    if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
-      throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
-    }
-    for (const track of input.tracks) {
-      if (this.localPublications.delete(track.publicationId)) this.#localPublicationRevision++;
-    }
-    return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
-  }
-  withdrawPublication(publicationId: string): void {
-    const publication = this.localPublications.get(publicationId);
-    if (!publication) return;
-    const { connectionId, trackName } = parseCloudflareSFUPublicationID(publicationId);
-    this.localPublications.delete(publicationId);
-    this.#localPublicationRevision++;
-    this.#withdrawnLocalPublications.add(publicationId);
-    this.#withdrawnRemoteTrackKeys.add(`${connectionId}|${trackName}`);
-  }
-  readonly updateInputs: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0][] = [];
-  failTrackUpdates = false;
-  trackUpdateGate: Promise<void> | null = null;
-  async updateTracks(input: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0]): Promise<CloudflareSFUTracksResponse> {
-    this.updateInputs.push(input);
-    await this.trackUpdateGate;
-    if (this.failTrackUpdates) throw new CloudflareSFUError("layer switch rejected", "signaling_failed");
-    return { tracks: input.tracks };
-  }
-  async renegotiate(input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }): Promise<void> {
-    this.renegotiateInputs.push(input);
-    if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
-  }
-  pullPublishedCalls = 0;
-  async pullPublishedAudio(input: { readonly connectionId: string }): ReturnType<NonNullable<CloudflareSFUSignalingTransport["pullPublishedAudio"]>> {
-    this.pullPublishedCalls++;
-    const snapshot = this.#currentSnapshot();
-    const audio = snapshot.publications.filter((publication) => publication.participantId !== "participant-1" && (publication.source === "microphone" || publication.source === "screen_audio"));
-    if (audio.length === 0) return { snapshot, response: {} };
-    const tracks = audio.map((publication): CloudflareSFUTrackRequest => {
-      const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
-      return { location: "remote", sessionId: connectionId, trackName };
-    });
-    return { snapshot, response: await this.addTracks({ connectionId: input.connectionId, tracks, allowPartialRemoteTracks: true }) };
-  }
-  async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
-    this.listPublicationCalls++;
-    const next = this.publicationListSnapshots.shift();
-    if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
-    return next ?? this.#currentSnapshot();
-  }
-  #currentSnapshot(): CloudflareSFUPublicationSnapshot {
-    return { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
-  }
-  blockConnection(connectionId: string): void {
-    this.#blockedConnections.set(connectionId, () => undefined);
-  }
-  releaseConnection(connectionId: string): void {
-    this.#blockedConnections.get(connectionId)?.();
-    this.#blockedConnections.delete(connectionId);
-  }
-  releasePublicationList(): void {
-    this.#publicationListResolvers.shift()?.();
-  }
-}
-
-class FakeTrack extends EventTarget {
-  enabled = true;
-  readyState: MediaStreamTrackState = "live";
-  stopCalls = 0;
-  readonly id: string;
-  readonly kind: "audio" | "video";
-  readonly #throwOnStop: boolean;
-  constructor(id: string, kind: "audio" | "video", throwOnStop = false) {
-    super();
-    this.id = id;
-    this.kind = kind;
-    this.#throwOnStop = throwOnStop;
-  }
-  getSettings(): MediaTrackSettings {
-    return {};
-  }
-  async applyConstraints(): Promise<void> {}
-  clone(): FakeTrack {
-    const track = new FakeTrack(`${this.id}-clone`, this.kind);
-    track.enabled = this.enabled;
-    return track;
-  }
-  stop(): void {
-    this.stopCalls++;
-    this.readyState = "ended";
-    if (this.#throwOnStop) throw new Error("track stop failed");
-  }
-  endFromBrowser(): void {
-    this.readyState = "ended";
-    this.dispatchEvent(new Event("ended"));
-  }
+function createHarness(options: HarnessOptions = {}) {
+  return createSfuHarness(options, (autoConnect) => new FakePeerConnection(autoConnect));
 }
 
 class FakePeerConnection extends EventTarget {
@@ -1445,14 +1176,7 @@ class FakePeerConnection extends EventTarget {
   }
 }
 
-async function withTimedHarness(exercise: (harness: ReturnType<typeof createHarness>) => Promise<void>, options: Parameters<typeof createHarness>[0] = {}): Promise<void> {
+async function withTimedHarness(exercise: (harness: Harness) => Promise<void>, options: HarnessOptions = {}): Promise<void> {
   vi.useFakeTimers();
-  const harness = createHarness(options);
-  try {
-    await exercise(harness);
-  } finally {
-    harness.client.stop();
-    vi.restoreAllMocks();
-    vi.useRealTimers();
-  }
+  await exercise(createHarness(options));
 }

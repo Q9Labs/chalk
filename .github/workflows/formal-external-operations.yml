@@ -7,9 +7,12 @@ on:
   pull_request:
     paths:
       - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner/**
       - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex
       - apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex

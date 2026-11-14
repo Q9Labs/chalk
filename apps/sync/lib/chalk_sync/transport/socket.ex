@@ -5,34 +5,28 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   require Logger
 
-  alias ChalkSync.Auth.Claims
   alias ChalkSync.Auth.TokenVerifier
-  alias ChalkSync.Chat
-  alias ChalkSync.Episodes.CommandIntake
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Observability
   alias ChalkSync.ProtocolV1
-  alias ChalkSync.ProviderCall
-  alias ChalkSync.Reactions
   alias ChalkSync.Stateholder
-  alias ChalkSync.Stateholder.Command
-  alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Operation
-  alias ChalkSync.Telemetry
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.DirectLimits
+  alias ChalkSync.Transport.Socket.Acknowledgements
+  alias ChalkSync.Transport.Socket.Collaboration
+  alias ChalkSync.Transport.Socket.Commands
+  alias ChalkSync.Transport.Socket.Frames
+  alias ChalkSync.Transport.Socket.Hello
+  alias ChalkSync.Transport.Socket.Lifecycle
+  alias ChalkSync.Transport.Socket.LiveRequests
+  alias ChalkSync.Transport.Socket.Outbound
+  alias ChalkSync.Transport.Socket.State
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
-  alias ChalkSync.UUID
 
-  @hello_timeout_ms 5_000
-  @heartbeat_interval_ms 20_000
   # Hidden, silent Chromium tabs can wake chained timers only once per minute.
   # Five checks leave at least 80 seconds since the last incoming frame.
   @missed_heartbeat_limit 5
-  @terminal_ack_timeout_ms 5_000
-  @entry_timeout_ms 120_000
 
   @impl true
   def init(opts) do
@@ -44,74 +38,28 @@ defmodule ChalkSync.Transport.SocketV1 do
       send(self(), :direct_denied)
     end
 
-    {:ok, awaiting_hello_state(opts, direct)}
-  end
-
-  defp awaiting_hello_state(opts, direct) do
-    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
-
-    connection_attributes =
-      opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
-
-    observability = opts |> Map.get(:observability) |> Observability.merge(nil)
-    Observability.bind_logger(observability)
-
-    observability =
-      Observability.root(
-        observability,
-        "sync.websocket.handshake",
-        Map.merge(connection_attributes, %{transport: "websocket", protocol: 1})
-      )
-
-    %{
-      phase: :awaiting_hello,
-      direct: direct,
-      terminal: nil,
-      hello_timer: timer,
-      heartbeat_timer: nil,
-      entry_timer: nil,
-      entry_confirmation: Map.get(opts, :entry_confirmation, false),
-      participant_self_identity: Map.get(opts, :participant_self_identity, false),
-      media_off_reason: Map.get(opts, :media_off_reason, false),
-      connection_quality: Map.get(opts, :connection_quality, false),
-      participant_devices: Map.get(opts, :participant_devices, false),
-      participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
-      requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
-      terminal_ack_timer: nil,
-      terminal_head: nil,
-      missed_heartbeats: 0,
-      opened_at_ms: System.monotonic_time(:millisecond),
-      last_heartbeat_at_ms: nil,
-      identity: nil,
-      coordinator: nil,
-      commands: %{},
-      collaboration_negotiated: false,
-      collaboration_version: nil,
-      collaboration_queue: CollaborationQueue.new(),
-      connection_attributes: connection_attributes,
-      observability: observability
-    }
+    {:ok, State.awaiting_hello(opts, direct)}
   end
 
   @impl true
   def handle_in({text, [opcode: :text]}, state) do
     case ProtocolV1.decode(text) do
       {:ok, frame} -> handle_frame(frame, %{state | missed_heartbeats: 0})
-      {:error, reason} -> close_invalid_frame(reason, state)
+      {:error, reason} -> Frames.close_invalid_frame(reason, state)
     end
   end
 
   def handle_in({_payload, _opts}, state),
-    do: stop(state, 1009, "text frames only", :protocol_error)
+    do: Lifecycle.stop(state, 1009, "text frames only", :protocol_error)
 
   @impl true
   def handle_info(:hello_timeout, %{phase: :awaiting_hello} = state),
-    do: stop(state, 1008, "hello timeout", :hello_timeout)
+    do: Lifecycle.stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
 
   def handle_info(:direct_denied, state),
-    do: stop(state, 1013, "try again later", :direct_limit)
+    do: Lifecycle.stop(state, 1013, "try again later", :direct_limit)
 
   def handle_info(:entry_timeout, %{phase: :live, entry_timer: timer, identity: identity} = state)
       when not is_nil(timer) do
@@ -120,9 +68,14 @@ defmodule ChalkSync.Transport.SocketV1 do
            identity.participant_id,
            identity.participant_generation
          ) do
-      {:ok, _authority} -> {:ok, %{state | entry_timer: nil}}
-      {:retryable, _reason} -> stop(state, 1012, "service restart", :dependency_unavailable)
-      {:error, _reason} -> stop(state, 1008, "entry timeout", :entry_timeout)
+      {:ok, _authority} ->
+        {:ok, %{state | entry_timer: nil}}
+
+      {:retryable, _reason} ->
+        Lifecycle.stop(state, 1012, "service restart", :dependency_unavailable)
+
+      {:error, _reason} ->
+        Lifecycle.stop(state, 1008, "entry timeout", :entry_timeout)
     end
   end
 
@@ -132,13 +85,13 @@ defmodule ChalkSync.Transport.SocketV1 do
     missed = state.missed_heartbeats + 1
 
     if missed >= @missed_heartbeat_limit do
-      cancel_timer(state.heartbeat_timer)
-      stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
+      Lifecycle.cancel_timer(state.heartbeat_timer)
+      Lifecycle.stop(%{state | heartbeat_timer: nil}, 1001, "heartbeat timeout", :timeout)
     else
       {:ok,
        state
        |> Map.put(:missed_heartbeats, missed)
-       |> schedule_heartbeat()}
+       |> Lifecycle.schedule_heartbeat()}
     end
   end
 
@@ -147,7 +100,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   def handle_info(:renew_presence, %{phase: :live, identity: identity} = state) do
     case Stateholder.renew_presence(identity) do
       :ok -> {:ok, state}
-      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
+      _ -> Lifecycle.stop(state, 1012, "service restart", :dependency_unavailable)
     end
   end
 
@@ -155,7 +108,7 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
     do:
-      stop(
+      Lifecycle.stop(
         %{state | terminal_ack_timer: nil},
         1012,
         "terminal acknowledgement timeout",
@@ -172,7 +125,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     case Map.pop(commands, lease) do
       {^command_id, remaining} ->
         next = %{state | commands: remaining}
-        command_result(command_id, result, next)
+        Commands.result(command_id, result, next)
 
       {nil, _remaining} ->
         {:ok, state}
@@ -183,70 +136,39 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:sync_outbound_ready, coordinator},
         %{phase: :recovering, coordinator: coordinator} = state
       ) do
-    pop_outbound(state)
+    Outbound.pop(state)
   end
 
   def handle_info(
         {:sync_v1_live_frame, coordinator, frame},
         %{coordinator: coordinator} = state
       ) do
-    {:push, {:text, encode_with_context(state, frame)}, mark_control_checked(state)}
+    {:push, {:text, Frames.encode_with_context(state, frame)},
+     Lifecycle.mark_control_checked(state)}
   end
 
   def handle_info(
         {:directed_request, frame},
         %{phase: :live} = state
       ) do
-    {:push, {:text, encode_with_context(state, frame)}, mark_control_checked(state)}
+    {:push, {:text, Frames.encode_with_context(state, frame)},
+     Lifecycle.mark_control_checked(state)}
   end
 
-  def handle_info(
-        {:collaboration_frame, %{"type" => "chat_reactions"}},
-        %{collaboration_version: version} = state
-      )
-      when version != 2, do: {:ok, state}
+  def handle_info({:collaboration_frame, frame}, state), do: Collaboration.frame(frame, state)
 
-  def handle_info(
-        {:collaboration_frame, %{"type" => "reaction", "reaction" => emoji}},
-        %{collaboration_version: 1} = state
-      )
-      when emoji not in ["👍", "❤️", "😂", "😮", "😢", "🎉"], do: {:ok, state}
-
-  def handle_info(
-        {:collaboration_frame, %{"type" => "chat_read_receipt"}},
-        %{collaboration_version: version} = state
-      )
-      when version not in [1, 2],
-      do: {:ok, state}
-
-  def handle_info(
-        {:collaboration_frame, frame},
-        %{phase: :live, collaboration_negotiated: true} = state
-      ),
-      do: enqueue_collaboration(frame, state)
-
-  def handle_info(
-        {:collaboration_frame, %{"type" => type} = frame},
-        %{
-          phase: :recovering,
-          collaboration_negotiated: true,
-          collaboration_version: version
-        } = state
-      )
-      when version in [1, 2] and type in ["chat_read_receipt", "chat_reactions"],
-      do: buffer_collaboration(frame, state)
-
-  def handle_info({:collaboration_frame, _frame}, state), do: {:ok, state}
-
-  def handle_info(:collaboration_drain, state), do: push_collaboration(state)
+  def handle_info(:collaboration_drain, state), do: Collaboration.push_collaboration(state)
 
   def handle_info(
         {:sync_recovery_advance, coordinator},
         %{phase: :recovering, coordinator: coordinator} = state
       ) do
     case Coordinator.advance_recovery(coordinator, self()) do
-      :ok -> {:ok, state}
-      {:error, _reason} -> stop(state, 1012, "delivery recovery required", :delivery_failure)
+      :ok ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        Lifecycle.stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -256,7 +178,7 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:sync_outbound_ready, coordinator},
         %{phase: :live, coordinator: coordinator} = state
       ) do
-    pop_outbound(state)
+    Outbound.pop(state)
   end
 
   def handle_info(
@@ -264,400 +186,77 @@ defmodule ChalkSync.Transport.SocketV1 do
         state
       ) do
     Logger.warning("sync v1 delivery recovery required: reason=#{reason}")
-    stop(state, 1012, "delivery recovery required", :delivery_failure)
+    Lifecycle.stop(state, 1012, "delivery recovery required", :delivery_failure)
   end
 
   def handle_info({:sync_server_drained, coordinator}, %{coordinator: coordinator} = state) do
-    stop(%{state | phase: :draining}, 1012, "server draining", :server_shutdown)
+    Lifecycle.stop(%{state | phase: :draining}, 1012, "server draining", :server_shutdown)
   end
 
   @impl true
-  def terminate(reason, %{coordinator: coordinator} = state) when is_pid(coordinator) do
-    cancel_timer(state.heartbeat_timer)
-    cancel_timer(state.entry_timer)
-    cancel_timer(state.terminal_ack_timer)
-    unsubscribe_collaboration(state)
-    CollaborationQueue.close(state.collaboration_queue)
-    Coordinator.unsubscribe(coordinator, self())
-
-    Observability.terminal(
-      state.observability,
-      "sync.websocket.closed",
-      %{
-        protocol: 1,
-        phase: state.phase
-      }
-      |> Map.merge(state.connection_attributes)
-      |> Map.merge(SocketClose.attributes(reason, state.terminal))
-      |> Map.merge(heartbeat_attributes(state))
-    )
-
-    :ok
-  end
-
   def terminate(reason, state) do
-    cancel_timer(state.heartbeat_timer)
-    cancel_timer(state.entry_timer)
-    cancel_timer(state.terminal_ack_timer)
-    unsubscribe_collaboration(state)
+    Lifecycle.cancel_timer(state.heartbeat_timer)
+    Lifecycle.cancel_timer(state.entry_timer)
+    Lifecycle.cancel_timer(state.terminal_ack_timer)
+    Collaboration.unsubscribe_collaboration(state)
     CollaborationQueue.close(state.collaboration_queue)
+    if is_pid(state.coordinator), do: Coordinator.unsubscribe(state.coordinator, self())
 
     Observability.terminal(
       state.observability,
       "sync.websocket.closed",
-      %{
-        protocol: 1,
-        phase: state.phase
-      }
+      %{protocol: 1, phase: state.phase}
       |> Map.merge(state.connection_attributes)
       |> Map.merge(SocketClose.attributes(reason, state.terminal))
-      |> Map.merge(heartbeat_attributes(state))
+      |> Map.merge(Lifecycle.heartbeat_attributes(state))
     )
 
     :ok
-  end
-
-  defp heartbeat_attributes(state) do
-    now = System.monotonic_time(:millisecond)
-
-    %{
-      socket_age_ms: now - state.opened_at_ms,
-      heartbeat_gap_ms: if(state.last_heartbeat_at_ms, do: now - state.last_heartbeat_at_ms)
-    }
-  end
-
-  defp admit_direct_tenant(%{direct: nil}, _identity), do: :ok
-
-  defp admit_direct_tenant(_state, identity) do
-    case DirectLimits.authenticated(identity.episode.tenant_id) do
-      :ok -> :ok
-      {:error, _denial} -> {:error, :direct_limit}
-    end
-  end
-
-  defp stop(state, close_code, message, reason) do
-    {:stop, :normal, {close_code, message},
-     %{state | terminal: %{close_code: close_code, reason: reason}}}
   end
 
   defp handle_frame(
          {:hello, %{token: token, cursor: cursor} = hello},
          %{phase: :awaiting_hello} = state
        ) do
-    state = merge_hello_observability(state, Map.get(hello, :correlation, %{}))
+    state = Lifecycle.merge_hello_observability(state, Map.get(hello, :correlation, %{}))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, identity} <- identity(claims),
-         :ok <- admit_direct_tenant(state, identity) do
-      authenticated_hello(SocketContext.authenticated(state, identity), identity, cursor, hello)
+         {:ok, identity} <- Hello.identity(claims),
+         :ok <- Hello.admit_direct_tenant(state, identity) do
+      Hello.authenticated_hello(
+        SocketContext.authenticated(state, identity),
+        identity,
+        cursor,
+        hello
+      )
     else
-      {:error, :direct_limit} -> stop(state, 1013, "try again later", :direct_limit)
-      {:error, _reason} -> stop(state, 1008, "invalid token", :admission_rejected)
+      {:error, :direct_limit} -> Lifecycle.stop(state, 1013, "try again later", :direct_limit)
+      {:error, _reason} -> Lifecycle.stop(state, 1008, "invalid token", :admission_rejected)
     end
   end
 
-  defp handle_frame({:hello, _hello}, state), do: protocol_error(:already_authenticated, state)
+  defp handle_frame({:hello, _hello}, state),
+    do: Frames.protocol_error(:already_authenticated, state)
 
-  defp handle_frame(:entered, %{phase: :live, entry_confirmation: false} = state),
-    do: protocol_error(:entry_confirmation_not_negotiated, state)
+  defp handle_frame(:entered, %{phase: :live} = state), do: Acknowledgements.entered(state)
+  defp handle_frame(:entered, state), do: Frames.protocol_error(:recovery_required, state)
 
-  defp handle_frame(:entered, %{phase: :live, identity: identity} = state) do
-    case Stateholder.confirm_admission(identity) do
-      {:ok, %{result: result}} when result in [:applied, :already_applied] ->
-        cancel_timer(state.entry_timer)
+  defp handle_frame({:delivery_ack, ack}, state), do: Acknowledgements.delivery_ack(ack, state)
+  defp handle_frame({:recovery_ack, ack}, state), do: Acknowledgements.recovery_ack(ack, state)
+  defp handle_frame({:request_ack, id}, state), do: Acknowledgements.request_ack(id, state)
 
-        {:push, {:text, encode_with_context(state, ProtocolV1.entered_ack())},
-         %{state | entry_timer: nil}}
+  defp handle_frame({:command, command}, state), do: Commands.command(command, state)
+  defp handle_frame({:operation, operation}, state), do: Commands.operation(operation, state)
 
-      {:ok, %{result: :superseded, reason: :entry_expired}} ->
-        stop(state, 1008, "entry timeout", :entry_timeout)
+  defp handle_frame({:live_target, target}, state), do: LiveRequests.live_target(target, state)
 
-      {:ok, %{result: :superseded}} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
+  defp handle_frame({:directed_request, request}, state),
+    do: LiveRequests.directed_request(request, state)
 
-      {:error, :entry_expired} ->
-        stop(state, 1008, "entry timeout", :entry_timeout)
+  defp handle_frame({:connection_quality_set, quality}, state),
+    do: LiveRequests.connection_quality(quality, state)
 
-      {:error, reason}
-      when reason in [:stale_participant_generation, :invalid_admission_intent] ->
-        stop(state, 1008, "invalid token", :admission_rejected)
-
-      {outcome, reason} when outcome in [:error, :retryable] ->
-        Logger.warning("sync v1 entered failed: reason=#{reason}")
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-    end
-  end
-
-  defp handle_frame(:entered, state), do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
-         %{
-           phase: :terminal,
-           coordinator: coordinator,
-           terminal_head: %{revision: revision, state_digest: state_digest}
-         } = state
-       ) do
-    case Coordinator.acknowledge(coordinator, revision, state_digest, self()) do
-      :ok ->
-        cancel_timer(state.terminal_ack_timer)
-
-        stop(%{state | terminal_ack_timer: nil}, 1000, "terminal event acknowledged", :normal)
-
-      {:error, _reason} ->
-        stop(state, 1012, "delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp handle_frame(
-         {:delivery_ack, %{stream: :control, revision: revision, state_digest: state_digest}},
-         %{phase: :live, coordinator: coordinator} = state
-       ) do
-    case Coordinator.acknowledge(coordinator, revision, state_digest, self()) do
-      :ok ->
-        {:ok, state}
-
-      {:error, _reason} ->
-        stop(state, 1012, "delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp handle_frame({:delivery_ack, _ack}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:recovery_ack,
-          %{
-            recovery_id: recovery_id,
-            revision: revision,
-            state_digest: state_digest
-          }},
-         %{phase: :recovering, coordinator: coordinator} = state
-       ) do
-    case Coordinator.acknowledge_recovery(
-           coordinator,
-           recovery_id,
-           revision,
-           state_digest,
-           self()
-         ) do
-      :ok -> {:ok, state}
-      {:error, _reason} -> stop(state, 1012, "delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp handle_frame({:recovery_ack, ack}, %{phase: :live, coordinator: coordinator} = state) do
-    case Coordinator.acknowledge_recovery(
-           coordinator,
-           ack.recovery_id,
-           ack.revision,
-           ack.state_digest,
-           self()
-         ) do
-      :ok -> {:ok, state}
-      {:error, _reason} -> protocol_error(:recovery_required, state)
-    end
-  end
-
-  defp handle_frame({:recovery_ack, _ack}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame({:command, command}, %{phase: :live, identity: identity} = state) do
-    observed = Observability.observed_operation_context(state.observability)
-
-    with {:ok, durable_command} <-
-           Command.new(command.command_id, command.name, command.payload),
-         durable_command = Command.observe(durable_command, observed),
-         {:ok, lease} <- CommandIntake.submit(identity, durable_command) do
-      {:ok, %{state | commands: Map.put(state.commands, lease, command.command_id)}}
-    else
-      {:error, :overloaded} ->
-        {:push,
-         {:text,
-          encode_with_context(state, ProtocolV1.retryable(command.command_id, :overloaded))},
-         state}
-
-      {:error, :server_draining} ->
-        {:push,
-         {:text,
-          encode_with_context(state, ProtocolV1.retryable(command.command_id, :server_draining))},
-         state}
-
-      {:error, reason} ->
-        protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:command, _command}, state), do: protocol_error(:recovery_required, state)
-
-  defp handle_frame({:operation, operation}, %{phase: :live, identity: identity} = state) do
-    observed = Observability.observed_operation_context(state.observability)
-
-    with {:ok, durable} <- Operation.new(operation.command_id, operation.name, operation.payload),
-         durable = Operation.observe(durable, observed),
-         {:ok, decision} <- Stateholder.begin_operation(identity, durable) do
-      {:push, {:text, encode_with_context(state, ProtocolV1.operation_decision(decision))}, state}
-    else
-      {:retryable, reason} ->
-        {:push,
-         {:text, encode_with_context(state, ProtocolV1.retryable(operation.command_id, reason))},
-         state}
-
-      {:error, reason} ->
-        protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:operation, _operation}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:live_target, target},
-         %{
-           phase: :live,
-           coordinator: coordinator,
-           identity: identity
-         } = state
-       ) do
-    case Coordinator.live_target(coordinator, identity, target, self()) do
-      {:ok, result} -> {:push, {:text, encode_with_context(state, result)}, state}
-      {:error, reason} -> protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:live_target, _target}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:directed_request, request},
-         %{
-           phase: :live,
-           coordinator: coordinator,
-           identity: identity
-         } = state
-       ) do
-    case Coordinator.directed_request(coordinator, identity, request, self()) do
-      {:ok, result} -> {:push, {:text, encode_with_context(state, result)}, state}
-      {:error, reason} -> protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:directed_request, _request}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:request_ack, request_id},
-         %{
-           phase: :live,
-           coordinator: coordinator,
-           identity: identity
-         } = state
-       ) do
-    case Coordinator.acknowledge_request(coordinator, identity, request_id, self()) do
-      :ok -> {:ok, state}
-      {:error, reason} -> protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:request_ack, _request_id}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:connection_quality_set, quality},
-         %{
-           phase: :live,
-           coordinator: coordinator,
-           identity: identity,
-           connection_quality: true
-         } = state
-       ) do
-    case Coordinator.set_connection_quality(coordinator, identity, quality, self()) do
-      :ok -> {:ok, state}
-      {:error, reason} -> protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({:connection_quality_set, _quality}, %{phase: :live} = state),
-    do: protocol_error(:connection_quality_not_negotiated, state)
-
-  defp handle_frame({:connection_quality_set, _quality}, state),
-    do: protocol_error(:recovery_required, state)
-
-  defp handle_frame(
-         {:reaction_send, input},
-         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
-       ) do
-    with {:ok, frame} <- Reactions.send(identity, input, version: state.collaboration_version) do
-      state = observe_collaboration(state, "reaction.send", frame["outcome"])
-      enqueue_collaboration(frame, state)
-    end
-  end
-
-  defp handle_frame(
-         {:chat_read_set, input},
-         %{
-           phase: :live,
-           identity: identity,
-           collaboration_negotiated: true,
-           collaboration_version: version
-         } = state
-       )
-       when version in [1, 2] do
-    with {:ok, frame} <-
-           Chat.mark_chat_read(identity, input, observability: state.observability) do
-      state = observe_collaboration(state, "chat.read", frame["outcome"])
-      enqueue_collaboration(frame, state)
-    end
-  end
-
-  defp handle_frame(
-         {:chat_reaction_set, input},
-         %{
-           phase: :live,
-           identity: identity,
-           collaboration_negotiated: true,
-           collaboration_version: 2
-         } = state
-       ) do
-    with {:ok, frame} <- Chat.react(identity, input, observability: state.observability) do
-      state = observe_collaboration(state, "chat.react", frame["error_code"] || frame["outcome"])
-      enqueue_collaboration(frame, state)
-    end
-  end
-
-  defp handle_frame(
-         {:chat_send, input},
-         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
-       ) do
-    with {:ok, frame} <-
-           Chat.send_chat(identity, input,
-             version: state.collaboration_version,
-             observability: state.observability
-           ) do
-      state = observe_collaboration(state, "chat.send", frame["error_code"] || frame["outcome"])
-      enqueue_collaboration(frame, state)
-    end
-  end
-
-  defp handle_frame(
-         {:chat_page_request, input},
-         %{phase: :live, identity: identity, collaboration_negotiated: true} = state
-       ) do
-    case Chat.read_chat_page(identity, input,
-           version: state.collaboration_version,
-           observability: state.observability
-         ) do
-      {:ok, frame} ->
-        state = observe_collaboration(state, "chat.page", frame["outcome"])
-        enqueue_collaboration(frame, state, :chat_page)
-
-      {:error, reason} ->
-        state = observe_collaboration(state, "chat.page", "failed")
-        protocol_error(reason, state)
-    end
-  end
-
-  defp handle_frame({name, _input}, state)
+  defp handle_frame({name, input}, state)
        when name in [
               :reaction_send,
               :chat_send,
@@ -665,7 +264,7 @@ defmodule ChalkSync.Transport.SocketV1 do
               :chat_read_set,
               :chat_reaction_set
             ],
-       do: protocol_error(:collaboration_not_negotiated, state)
+       do: Collaboration.client_frame(name, input, state)
 
   defp handle_frame(:ping, %{phase: :live} = state) do
     state = %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}
@@ -673,452 +272,9 @@ defmodule ChalkSync.Transport.SocketV1 do
     # The pong leaves before the Postgres renewal so the client-measured ping is not
     # inflated by a database round trip. The renewal runs from the mailbox next.
     send(self(), :renew_presence)
-    {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
+    {:push, {:text, Frames.encode_with_context(state, ProtocolV1.pong())}, state}
   end
 
   defp handle_frame(:ping, state),
-    do: {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
-
-  defp confirm_legacy_entry(_identity, true), do: :ok
-
-  defp confirm_legacy_entry(identity, false) do
-    case Stateholder.confirm_admission(identity) do
-      {:ok, %{result: result}} when result in [:applied, :already_applied] -> :ok
-      {:ok, %{result: :superseded}} -> {:error, :invalid_admission_intent}
-      error -> error
-    end
-  end
-
-  defp start_registered_recovery(
-         state,
-         identity,
-         recovery,
-         coordinator,
-         collaboration_negotiated,
-         collaboration_version
-       ) do
-    activated =
-      entry_stage(:activate, fn ->
-        Coordinator.activate_recovery(coordinator, recovery, self(), ProviderCall.deadline_ms())
-      end)
-
-    case activated do
-      :ok ->
-        Process.cancel_timer(state.hello_timer)
-
-        {:ok,
-         %{
-           state
-           | phase: :recovering,
-             hello_timer: nil,
-             identity: identity,
-             coordinator: coordinator,
-             collaboration_negotiated: collaboration_negotiated,
-             collaboration_version: collaboration_version
-         }
-         |> observe_collaboration(
-           "extension.negotiate",
-           negotiation_outcome(collaboration_negotiated)
-         )}
-
-      {:error, reason} ->
-        Coordinator.unsubscribe(coordinator, self())
-        Logger.warning("sync v1 recovery failed: reason=#{reason}")
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-
-      {:retryable, reason} ->
-        Coordinator.unsubscribe(coordinator, self())
-        Logger.warning("sync v1 recovery retryable: #{reason}")
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-    end
-  end
-
-  defp command_result(command_id, result, state) do
-    case result do
-      {:ok, %{result: :pending, event: event}} when is_map(event) ->
-        pending_command_result(command_id, event, state)
-
-      {:ok, decision} ->
-        if is_map(decision.event), do: Coordinator.publish(state.identity.episode, decision.event)
-        {:push, {:text, encode_with_context(state, ProtocolV1.ack(decision))}, state}
-
-      {:retryable, reason} ->
-        {:push, {:text, encode_with_context(state, ProtocolV1.retryable(command_id, reason))},
-         state}
-    end
-  end
-
-  defp pending_command_result(command_id, event, state) do
-    case Coordinator.publish_pending(state.identity.episode, event, self()) do
-      {:ok, event_frames} ->
-        pending = ProtocolV1.operation_pending(command_id)
-        frames = Enum.map(event_frames ++ [pending], &encode_with_context(state, &1))
-        {:push, Enum.map(frames, &{:text, &1}), state}
-
-      {:error, _reason} ->
-        {:push,
-         {:text,
-          encode_with_context(state, ProtocolV1.retryable(command_id, :dependency_unavailable))},
-         state}
-    end
-  end
-
-  defp merge_hello_observability(state, correlation) when is_map(correlation) do
-    observability =
-      Observability.merge(state.observability, Observability.context(correlation))
-
-    Observability.bind_logger(observability)
-    %{state | observability: observability}
-  end
-
-  defp merge_hello_observability(state, _correlation), do: state
-
-  defp encode_with_context(state, encoded) when is_binary(encoded) do
-    encode_with_context(state, JSON.decode!(encoded))
-  end
-
-  defp encode_with_context(state, frame) when is_map(frame) do
-    frame
-    |> own_identity_projection(state)
-    |> device_projection(presence_hint_keys(state))
-    |> media_projection(state)
-    |> Map.merge(Observability.frame_fields(state.observability))
-    |> ProtocolV1.encode!()
-  end
-
-  # The authenticated seat can still be pending when its media startup policy runs.
-  # Send its verified association privately, without making pending seats public.
-  defp own_identity_projection(%{"type" => "welcome", "mode" => mode} = frame, %{
-         participant_self_identity: true,
-         identity: %{identity_id: identity_id}
-       })
-       when mode != "terminal" and is_binary(identity_id),
-       do: Map.put(frame, "participant_identity_id", identity_id)
-
-  defp own_identity_projection(frame, _state), do: frame
-
-  # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
-  defp presence_hint_keys(%{connection_quality: false} = state),
-    do: ["connection_quality" | device_hint_keys(state)]
-
-  defp presence_hint_keys(state), do: device_hint_keys(state)
-
-  defp device_hint_keys(%{participant_devices: false}),
-    do: ["identity_id", "device_type", "admission_revision"]
-
-  defp device_hint_keys(%{participant_device_admissions: false}), do: ["admission_revision"]
-  defp device_hint_keys(_state), do: []
-
-  defp device_projection(%{"stream" => "presence", "items" => items} = frame, keys),
-    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, keys))}
-
-  defp device_projection(%{"stream" => "presence", "item" => item} = frame, keys),
-    do: %{frame | "item" => Map.drop(item, keys)}
-
-  defp device_projection(frame, _keys), do: frame
-
-  # Off reasons are opt-in so earlier SDKs keep their exact media wire shape.
-  @off_reason_keys ["off_reason", "off_revision"]
-
-  defp media_projection(frame, %{media_off_reason: true}), do: frame
-
-  defp media_projection(%{"stream" => "media", "items" => items} = frame, _state),
-    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, @off_reason_keys))}
-
-  defp media_projection(%{"stream" => "media", "item" => item} = frame, _state),
-    do: %{frame | "item" => Map.drop(item, @off_reason_keys)}
-
-  defp media_projection(frame, _state), do: frame
-
-  defp device_type(nil), do: nil
-
-  defp device_type(agent) do
-    cond do
-      String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
-      String.contains?(agent, ["Mobile", "iPhone"]) -> "phone"
-      String.contains?(agent, ["Windows", "Macintosh", "X11"]) -> "computer"
-      true -> nil
-    end
-  end
-
-  defp protocol_error(reason, state),
-    do:
-      {:push,
-       {:text,
-        encode_with_context(state, ProtocolV1.error(:protocol_error, Atom.to_string(reason)))},
-       state}
-
-  defp close_invalid_frame(reason, state) do
-    detail =
-      if(reason == :unsupported_protocol, do: "unsupported protocol", else: "invalid frame")
-
-    code = if(reason == :unsupported_protocol, do: :unsupported_protocol, else: :invalid_frame)
-
-    {:stop, :normal, {1009, detail},
-     {:text, encode_with_context(state, ProtocolV1.error(code, detail))},
-     %{state | terminal: %{close_code: 1009, reason: :protocol_error}}}
-  end
-
-  defp identity(%Claims{} = claims) do
-    with {:ok, _tenant} <- UUID.dump(claims.tenant_id),
-         {:ok, _space} <- UUID.dump(claims.space_id),
-         {:ok, _episode} <- UUID.dump(claims.episode_id),
-         {:ok, _participant} <- UUID.dump(claims.participant_id),
-         {:ok, _intent} <- UUID.dump(claims.admission_lifecycle_intent_id),
-         generation when is_integer(generation) and generation > 0 <-
-           claims.participant_generation,
-         {:ok, authorization} <- identity_authorization(claims) do
-      {:ok,
-       %Identity{
-         episode: %EpisodeKey{
-           tenant_id: String.downcase(claims.tenant_id),
-           space_id: String.downcase(claims.space_id),
-           episode_id: String.downcase(claims.episode_id)
-         },
-         participant_id: String.downcase(claims.participant_id),
-         participant_generation: generation,
-         admission_lifecycle_intent_id: String.downcase(claims.admission_lifecycle_intent_id),
-         protocol_version: 1,
-         role: authorization.role,
-         capabilities: authorization.capabilities
-       }}
-    else
-      _ -> {:error, :invalid_identity}
-    end
-  end
-
-  defp identity_authorization(%Claims{} = claims) do
-    if Claims.valid_authorization?(claims.role, claims.capabilities) do
-      {:ok, %{role: claims.role, capabilities: claims.capabilities}}
-    else
-      {:error, :invalid_authorization}
-    end
-  end
-
-  defp pop_outbound(%{coordinator: coordinator} = state) do
-    case Coordinator.pop(coordinator, self()) do
-      {:ok, encoded, :terminal_welcome} ->
-        {:stop, :normal, {1000, "participant inactive"},
-         {:text, encode_with_context(state, encoded)},
-         %{state | terminal: %{close_code: 1000, reason: :terminal_recovery}}}
-
-      {:ok, encoded, :recovery_complete} ->
-        next = state |> Map.put(:phase, :live) |> start_heartbeat() |> start_entry_deadline()
-        send(self(), :collaboration_drain)
-        {:push, {:text, encode_with_context(next, encoded)}, next}
-
-      {:ok, encoded, false} ->
-        {:push, {:text, encode_with_context(state, encoded)}, mark_control_checked(state)}
-
-      {:ok, encoded, {:terminal, revision, state_digest}} ->
-        cancel_timer(state.heartbeat_timer)
-        timer = Process.send_after(self(), :terminal_ack_timeout, @terminal_ack_timeout_ms)
-
-        {:push, {:text, encode_with_context(state, encoded)},
-         %{
-           state
-           | phase: :terminal,
-             heartbeat_timer: nil,
-             terminal_ack_timer: timer,
-             terminal_head: %{revision: revision, state_digest: state_digest}
-         }}
-
-      :empty ->
-        {:ok, state}
-
-      {:error, _reason} ->
-        stop(state, 1012, "delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp start_entry_deadline(%{entry_confirmation: true} = state) do
-    %{state | entry_timer: Process.send_after(self(), :entry_timeout, @entry_timeout_ms)}
-  end
-
-  defp start_entry_deadline(state), do: state
-
-  defp start_heartbeat(state) do
-    state
-    |> Map.put(:missed_heartbeats, 0)
-    |> schedule_heartbeat()
-  end
-
-  defp schedule_heartbeat(state) do
-    cancel_timer(state.heartbeat_timer)
-    timer = Process.send_after(self(), :heartbeat_check, @heartbeat_interval_ms)
-    %{state | heartbeat_timer: timer}
-  end
-
-  defp cancel_timer(timer) when is_reference(timer), do: Process.cancel_timer(timer)
-  defp cancel_timer(_timer), do: false
-
-  defp negotiate_collaboration(_identity, nil, _observability), do: {:ok, %{}, false, nil}
-
-  defp negotiate_collaboration(identity, chat_cursor, observability) do
-    case Chat.negotiate(identity, chat_cursor, self(), observability: observability) do
-      {:ok, extension} ->
-        {:ok, %{collaboration_extension: extension}, true,
-         if(extension["name"] == "collaboration_v2", do: 2, else: 1)}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp enqueue_collaboration(frame, state, kind \\ :frame) do
-    encoded = encode_with_context(state, frame)
-
-    case CollaborationQueue.push(state.collaboration_queue, encoded, kind: kind) do
-      :ok ->
-        push_collaboration(state)
-
-      {:error, _reason} ->
-        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp buffer_collaboration(frame, state) do
-    encoded = encode_with_context(state, frame)
-
-    case CollaborationQueue.push(state.collaboration_queue, encoded) do
-      :ok ->
-        {:ok, state}
-
-      {:error, _reason} ->
-        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
-    end
-  end
-
-  defp push_collaboration(state) do
-    case CollaborationQueue.take(state.collaboration_queue, false) do
-      {:ok, %{encoded: encoded}} ->
-        case CollaborationQueue.stats(state.collaboration_queue) do
-          {:ok, %{queued_frames: queued}} when queued > 0 ->
-            send(self(), :collaboration_drain)
-
-          _other ->
-            :ok
-        end
-
-        {:push, {:text, encoded}, state}
-
-      :empty ->
-        {:ok, state}
-
-      {:error, _reason} ->
-        stop(state, 1012, "space action delivery recovery required", :delivery_failure)
-
-      :control_required ->
-        {:ok, state}
-    end
-  end
-
-  defp mark_control_checked(state) do
-    _result = CollaborationQueue.control_checked(state.collaboration_queue)
-    state
-  end
-
-  defp unsubscribe_collaboration(%{
-         identity: %Identity{} = identity,
-         collaboration_negotiated: true
-       }) do
-    Chat.unsubscribe(identity, self())
-  end
-
-  defp unsubscribe_collaboration(_state), do: :ok
-
-  defp observe_collaboration(state, operation, outcome) do
-    observability =
-      Observability.phase(state.observability, "sync.collaboration", %{
-        operation: operation,
-        outcome: outcome
-      })
-
-    %{state | observability: observability}
-  end
-
-  defp negotiation_outcome(true), do: "negotiated"
-  defp negotiation_outcome(false), do: "not_requested"
-
-  # Wall time of each hello step, so the nightly `sync_welcome` stage splits into
-  # database work and Episode-coordinator work.
-  defp entry_stage(stage, fun), do: Telemetry.timed([:entry, :stage], stage, fun)
-
-  defp admit_entry(state, identity) do
-    entry_stage(:admit, fn ->
-      Stateholder.admit_socket_entry(
-        %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
-        state.requested_entry_generation
-      )
-    end)
-  end
-
-  defp negotiate_entry(state, identity, recovery, hello) do
-    requested =
-      if recovery.mode == :terminal or recovery.terminal_reason,
-        do: nil,
-        else: Map.get(hello, :collaboration)
-
-    entry_stage(:negotiate, fn ->
-      negotiate_collaboration(identity, requested, state.observability)
-    end)
-  end
-
-  defp begin_entry_recovery(state, identity, protocol_options) do
-    options =
-      protocol_options
-      |> Map.put(:entry_confirmation, state.entry_confirmation)
-      |> Map.put(:media_off_reason, state.media_off_reason)
-      |> Map.put(:connection_quality, state.connection_quality)
-      |> Map.put(
-        :entry_generation,
-        state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)
-      )
-
-    entry_stage(:begin_recovery, fn -> Coordinator.begin_recovery(identity, self(), options) end)
-  end
-
-  defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, identity} <- admit_entry(state, identity),
-         state = %{
-           state
-           | entry_confirmation:
-               state.entry_confirmation && identity.entry_ownership != :compatibility
-         },
-         :ok <-
-           entry_stage(:confirm, fn ->
-             confirm_legacy_entry(identity, state.entry_confirmation)
-           end),
-         {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
-         {:ok, protocol_options, negotiated?, collaboration_version} <-
-           negotiate_entry(state, identity, recovery, hello),
-         {:ok, coordinator} <- begin_entry_recovery(state, identity, protocol_options) do
-      start_registered_recovery(
-        state,
-        identity,
-        recovery,
-        coordinator,
-        negotiated?,
-        collaboration_version
-      )
-    else
-      {:error, :stale_participant_generation} ->
-        stop(state, 1008, "invalid token", :admission_rejected)
-
-      {:error, :invalid_admission_intent} ->
-        stop(state, 1008, "policy violation", :admission_rejected)
-
-      {:error, :entry_expired} ->
-        stop(state, 1008, "entry timeout", :entry_timeout)
-
-      {:error, reason} ->
-        Logger.warning("sync v1 hello failed: reason=#{reason}")
-
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-
-      {:retryable, reason} ->
-        Logger.warning("sync v1 hello retryable: #{reason}")
-        stop(state, 1012, "dependency unavailable", :dependency_unavailable)
-    end
-  end
+    do: {:push, {:text, Frames.encode_with_context(state, ProtocolV1.pong())}, state}
 end

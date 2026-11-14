@@ -60,13 +60,14 @@ export type Space = {
   readonly transcription_policy: TranscriptionPolicy;
   readonly updated_at: string;
 };
+type Pagination = {
+  readonly has_more: boolean;
+  readonly next_cursor: string | null;
+  readonly page_size: number;
+};
 export type SpaceList = {
   readonly spaces: readonly Space[];
-  readonly pagination: {
-    readonly has_more: boolean;
-    readonly next_cursor: string | null;
-    readonly page_size: number;
-  };
+  readonly pagination: Pagination;
 };
 export type ListSpacesInput = {
   readonly archived?: boolean;
@@ -186,11 +187,7 @@ export type APIKey = {
 };
 export type APIKeyList = {
   readonly api_keys: readonly APIKey[];
-  readonly pagination: {
-    readonly has_more: boolean;
-    readonly next_cursor: string | null;
-    readonly page_size: number;
-  };
+  readonly pagination: Pagination;
 };
 export type APIKeyWithSecret = {
   readonly api_key: APIKey;
@@ -278,11 +275,7 @@ export type RecordingExportRequestAcceptedResponse = {
   readonly recording: Recording;
 };
 export type RecordingList = {
-  readonly pagination: {
-    readonly has_more: boolean;
-    readonly next_cursor: string | null;
-    readonly page_size: number;
-  };
+  readonly pagination: Pagination;
   readonly recordings: readonly Recording[];
 };
 export type ListRecordingsInput = {

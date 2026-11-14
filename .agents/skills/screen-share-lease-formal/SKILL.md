@@ -29,7 +29,7 @@ No rule is broken today. `findings` is empty, and `tools/formal/screen-share-lea
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- apps/sync/lib/chalk_sync/live/screen_share_lease.ex apps/sync/lib/chalk_sync/live/episode.ex apps/sync/lib/chalk_sync/episodes/coordinator.ex
+git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex apps/sync/lib/chalk_sync/live/episode.ex apps/sync/lib/chalk_sync/live/episode apps/sync/lib/chalk_sync/episodes/coordinator.ex apps/sync/lib/chalk_sync/episodes/coordinator
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as recording or chat code in the same file, needs no model work. Run the check anyway, because it is cheap.
@@ -38,8 +38,8 @@ If the diff touches a function in the coverage record, read it against the model
 
 Sync commit: `98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
-- `Acquire`, `Renew`, `Release`: `apps/sync/lib/chalk_sync/live/screen_share_lease.ex` (`acquire` with `acquire_query`, `own_live_lease` and `keeps_lease`, `renew`, `outlasts_renewal?`, `release`). The row is an upsert on (tenant, episode). The same active owner keeps the lease id and the hard cap, unless the caller starts a new share (`:replace_own`).
-- `Time`: `@default_renewal_ms` (20 s) and `@default_hard_lifetime_ms` (30 s) in `apps/sync/lib/chalk_sync/live/screen_share_lease.ex`, and `@live_reconcile_interval_ms` (15 s) in `apps/sync/lib/chalk_sync/episodes/coordinator.ex`.
+- `Acquire`, `Renew`, `Release`: `apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex` (`acquire` with `acquire_query`, `own_live_lease` and `keeps_lease`, `renew`, `outlasts_renewal?`, `release`). The row is an upsert on (tenant, episode). The same active owner keeps the lease id and the hard cap, unless the caller starts a new share (`:replace_own`).
+- `Time`: `@default_renewal_ms` (20 s) and `@default_hard_lifetime_ms` (30 s) in `apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex`, and `@live_reconcile_interval_ms` (15 s) in `apps/sync/lib/chalk_sync/episodes/coordinator.ex`.
 - `EnableScreen`: `apps/sync/lib/chalk_sync/live/episode.ex` (`enable_reserved_publication` for `:screen`, `acquire_screen_lease`, `retain_or_release_screen_lease`).
 - `StopCommand`: `apps/sync/lib/chalk_sync/live/episode.ex` (`maybe_release_screen_lease`).
 - `Observe`, `Look`, `Conflict`: `apps/sync/lib/chalk_sync/live/episode.ex` (`apply_media_observation`, `compare_media_cursor`, `apply_equal_media_observation`, `apply_newer_media_observation`, `reconcile_screen_leases`).
