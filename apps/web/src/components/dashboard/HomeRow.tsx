@@ -47,6 +47,7 @@ export function CallRow({ call, live, onRename, onArchive }: { readonly call: Ho
 }
 
 function RowMenu({ call, onJoin, onRename, onArchive }: { readonly call: HomeCallDTO; readonly onJoin: () => void; readonly onRename: () => void; readonly onArchive: () => void }) {
+  const phone = usePhone();
   return (
     <Menu label={`More actions for ${call.name}`}>
       {(close) => (

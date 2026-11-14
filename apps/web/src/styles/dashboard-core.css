@@ -35,6 +35,7 @@
 /* A second way out beside Try again: outlined, so it reads as a real button and not as disabled text. */
 .site .dash .errp-acts .btn.ol {
   background: none;
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
 }
 

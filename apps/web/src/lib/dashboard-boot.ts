@@ -8,7 +8,7 @@
  * The head theme script marks a dashboard path with `data-chalk-dashboard` set to the theme, so this script only reads
  * that. Sign-in, Connect and joining a call stand alone without the dashboard's top bar, so they keep the plain canvas.
  */
-export const DASHBOARD_BOOT_ID = "chalk-dashboard-boot";
+const DASHBOARD_BOOT_ID = "chalk-dashboard-boot";
 
 const row = (width: number) => `<div class="bo-row"><span class="bo-fc"><i class="bo-face"></i></span><span class="bo-tx"><i style="width:${width}%"></i></span><i class="bo-m"></i></div>`;
 const ROWS = [38, 28, 44, 32].map(row).join("");
