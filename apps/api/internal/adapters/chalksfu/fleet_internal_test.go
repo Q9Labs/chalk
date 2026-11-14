@@ -314,8 +314,8 @@ func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
 }
 
 // nodeAnswer is a /readyz answer for the readiness tests.
-func nodeAnswer(incarnation string, mutate func(*wireReady)) wireReady {
-	reply := wireReady{Protocol: minNodeProtocol, Revision: strings.Repeat("a", 40), NodeIncarnation: incarnation, PacketBudget: testPrimaryBudget, NewEpisodePackets: testEpisode}
+func nodeAnswer(incarnation string, mutate func(*protocol.ReadyResponse)) protocol.ReadyResponse {
+	reply := protocol.ReadyResponse{Protocol: minNodeProtocol, Revision: strings.Repeat("a", 40), NodeIncarnation: incarnation, PacketBudget: testPrimaryBudget, NewEpisodePackets: testEpisode}
 	if mutate != nil {
 		mutate(&reply)
 	}
@@ -327,7 +327,7 @@ func TestTheLogSaysWhenANodeBecomesReadyOrReturnsToPlacement(t *testing.T) {
 	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{primary("p")}, nil)
 	fleet.log = slog.New(slog.NewTextHandler(logged, nil))
 	at := time.Now()
-	record := func(after time.Duration, reply wireReady) {
+	record := func(after time.Duration, reply protocol.ReadyResponse) {
 		fleet.mu.Lock()
 		defer fleet.mu.Unlock()
 		fleet.record(context.Background(), "p", reply, at.Add(after))
@@ -350,7 +350,7 @@ func TestTheLogSaysWhenANodeBecomesReadyOrReturnsToPlacement(t *testing.T) {
 	if got := readyLines(); got != 3 || !strings.Contains(logged.String(), "incarnation=boot-2") {
 		t.Errorf("a restarted node: %d ready lines, want 3 with the new incarnation", got)
 	}
-	draining := func(r *wireReady) { r.Draining = true }
+	draining := func(r *protocol.ReadyResponse) { r.Draining = true }
 	record(3*time.Second+2*probeFreshness, nodeAnswer("boot-2", draining))
 	if got := readyLines(); got != 3 {
 		t.Errorf("a draining node: %d ready lines, want still 3", got)
@@ -364,8 +364,8 @@ func TestTheLogSaysWhenANodeBecomesReadyOrReturnsToPlacement(t *testing.T) {
 	if got := readyLines(); got != 5 {
 		t.Errorf("a node with a malformed incarnation that keeps answering: %d ready lines, want 5", got)
 	}
-	record(5*time.Second+2*probeFreshness+4*time.Second, nodeAnswer("boot-2", func(r *wireReady) { r.Protocol = minNodeProtocol - 1 }))
-	record(6*time.Second+2*probeFreshness, nodeAnswer("boot-2", func(r *wireReady) { r.Protocol = minNodeProtocol - 1 }))
+	record(5*time.Second+2*probeFreshness+4*time.Second, nodeAnswer("boot-2", func(r *protocol.ReadyResponse) { r.Protocol = minNodeProtocol - 1 }))
+	record(6*time.Second+2*probeFreshness, nodeAnswer("boot-2", func(r *protocol.ReadyResponse) { r.Protocol = minNodeProtocol - 1 }))
 	if got := readyLines(); got != 5 {
 		t.Errorf("a node too old for this API: %d ready lines, want still 5", got)
 	}
