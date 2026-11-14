@@ -32,6 +32,6 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 - [Join a call by invite](./join-call.md) covers arriving through the invite link, the entrance screen, publishing and receiving video through the SFU, attendance and leaving. Proven by `.agents/skills/verify-chalk/scripts/join-call.mjs`.
 - [Call controls](./call-controls.md) covers microphone, camera, leave and rejoin on the stage. `.agents/skills/verify-chalk/scripts/two-person-media.mjs` proves two people see and hear each other, and `.agents/skills/verify-chalk/scripts/knock-admit.mjs` proves the waiting room.
-- [Whiteboard](./whiteboard.md) covers opening the board in a call, drawing and fitting to content. Proven by `.agents/skills/verify-chalk/scripts/board-draw.mjs`.
+- [Whiteboard](./whiteboard.md) covers opening the board in a call, drawing and fitting to content. `.agents/skills/verify-chalk/scripts/board-draw.mjs` proves open, draw, sync and clear; zoom and fit are covered only by `tests/board.e2e.ts`.
 - [Start a Space as a guest](./start-space.md) covers the `/space/` entry that creates a new Space without an account.
 - [Call state previews](./call-states.md) covers the `apps/web/call-states.html` fixture for layout checks without an API or SFU.
