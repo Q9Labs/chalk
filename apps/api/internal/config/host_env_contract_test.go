@@ -119,7 +119,7 @@ func (keys standInKeyPairs) standIn(key, value string) string {
 	case "CHALK_DATABASE_URL":
 		return "postgres://contract:contract@db.invalid:5432/chalk?sslmode=verify-full"
 	case "CHALK_SFU_NODES":
-		return "contract=https://sfu.invalid:8443"
+		return "contract=https://sfu.invalid"
 	case "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID":
 		return "00000000-0000-4000-8000-000000000001"
 	}
