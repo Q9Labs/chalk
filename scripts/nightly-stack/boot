@@ -2,7 +2,7 @@
 # Boots a throwaway Chalk stack for one Nightly run: Postgres, Redis, the migrator, API, Sync and one Chalk SFU, all on the
 # host network of the runner, with every key, certificate and token generated here and thrown away with the machine.
 #
-#   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> [--dir <state dir>] [--announce-ip <ip>]
+#   boot --api-image <ref> --sync-image <ref> --sfu-image <ref> --migration-target <version> [--dir <state dir>] [--announce-ip <ip>]
 #
 # It writes <dir>/proof.env (the CHALK_PROOF_* values a proof run reads) and prints how long each phase took. The images
 # come from the caller: Nightly passes the digests that the release build just published. `down` removes the containers.
@@ -11,7 +11,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dir="${RUNNER_TEMP:-/tmp}/chalk-nightly-stack"
 announce_ip=127.0.0.1
-api_image="" sync_image="" sfu_image=""
+api_image="" sync_image="" sfu_image="" migration_target=""
 postgres_image="${CHALK_STACK_POSTGRES_IMAGE:-postgres:18.3}"
 redis_image="${CHALK_STACK_REDIS_IMAGE:-redis:8.10}"
 
@@ -24,13 +24,14 @@ while [ "$#" -gt 0 ]; do
     --api-image) api_image=$2 ;;
     --sync-image) sync_image=$2 ;;
     --sfu-image) sfu_image=$2 ;;
+    --migration-target) migration_target=$2 ;;
     --dir) dir=$2 ;;
     --announce-ip) announce_ip=$2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift 2
 done
-: "${api_image:?--api-image is required}" "${sync_image:?--sync-image is required}" "${sfu_image:?--sfu-image is required}"
+: "${api_image:?--api-image is required}" "${sync_image:?--sync-image is required}" "${sfu_image:?--sfu-image is required}" "${migration_target:?--migration-target is required}"
 
 mkdir -p "$dir"
 chmod 700 "$dir"
@@ -40,7 +41,8 @@ phase_start=$(date +%s.%N)
 tick() {
   local now
   now=$(date +%s.%N)
-  printf '%s\t%.1f\n' "$1" "$(echo "$now - $phase_start" | bc)" | tee -a "$timings" | awk -F'\t' '{printf "boot %-22s %6.1fs\n", $1, $2}'
+  awk -v name="$1" -v start="$phase_start" -v now="$now" 'BEGIN { printf "%s\t%.1f\n", name, now - start }' >> "$timings"
+  awk -v name="$1" -v start="$phase_start" -v now="$now" 'BEGIN { printf "boot %-12s %6.1fs\n", name, now - start }'
   phase_start=$now
 }
 boot_start=$phase_start
@@ -73,7 +75,7 @@ tick datastores
 printf '%s' "$db_url" > "$dir/database-url"
 chmod 644 "$dir/database-url"
 docker run --rm --network host -v "$dir:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
-  "$api_image" --database-url-file /run/chalk/stack/database-url > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
+  "$api_image" --database-url-file /run/chalk/stack/database-url --target "$migration_target" > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
 tick migrate
 
 docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \
@@ -100,4 +102,4 @@ tick services
 node "$script_dir/seed.mjs" "$dir" "http://127.0.0.1:$port_api"
 tick seed
 
-printf 'boot total %.1fs\n' "$(echo "$(date +%s.%N) - $boot_start" | bc)"
+awk -v start="$boot_start" -v now="$(date +%s.%N)" 'BEGIN { printf "boot %-12s %6.1fs\n", "total", now - start }'
