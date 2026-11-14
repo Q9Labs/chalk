@@ -5,7 +5,7 @@ import { parseParsedAccessGrant } from "../access/grant";
 import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
 import { opaqueAccessGrant } from "../space-client/core.test.helpers";
-import { mediaRecoveryFixture } from "./media-recovery.test.helpers";
+import { mediaRecoveryFixture } from "../../tests/helpers/media-recovery-fixture";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());

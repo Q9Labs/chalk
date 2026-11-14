@@ -1,11 +1,11 @@
 import { Effect } from "effect";
 import { vi } from "vitest";
-import { ManualClock } from "../../tests/helpers/manual-clock";
-import { parseParsedAccessGrant, requireParsedAccessGrant } from "../access/grant";
-import { ChalkAPIError } from "../server/errors";
-import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
-import type { ConnectionAccessRequest } from "./dependencies";
-import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
+import { ManualClock } from "./manual-clock";
+import { parseParsedAccessGrant, requireParsedAccessGrant } from "../../src/access/grant";
+import { ChalkAPIError } from "../../src/server/errors";
+import { createCoreTestPlatform, opaqueAccessGrant } from "../../src/space-client/core.test.helpers";
+import type { ConnectionAccessRequest } from "../../src/connection/dependencies";
+import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../../src/connection/lifecycle";
 
 /** Sanitized SDK 5.2.4 report timing: the join grant's media token expires 60s after this refresh. */
 export const accessRefreshedAt = 10834;
@@ -22,7 +22,7 @@ export function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSour
     platform.media.emit({ ...snapshot, failure: phase === "failed" ? { code: "peer_connection_failed", recoverable: true } : null, connection: { ...snapshot.connection, phase } });
   };
   const restart = vi.fn(async () => {});
-  const status = vi.fn<NonNullable<import("./dependencies").ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue("active");
+  const status = vi.fn<NonNullable<import("../../src/connection/dependencies").ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue("active");
   const media = platform.dependencies.createMediaClient({ access: parseParsedAccessGrant(opaqueAccessGrant(1)), credential: async () => "unused", onFailure: () => {}, onScreenEnded: () => {} });
   const stopMedia = vi.spyOn(media, "stop");
   const stopSync = vi.spyOn(platform.sync, "stop");
