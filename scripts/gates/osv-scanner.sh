@@ -13,7 +13,7 @@ osv_scanner() {
     osv-scanner "$@"
   elif command -v go >/dev/null 2>&1; then
     # Releases before 2.6.0 read only the first document of pnpm-lock.yaml.
-    go run github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.6.0 "$@"
+    go run "github.com/google/osv-scanner/v2/cmd/osv-scanner@v$("${script_directory}/../lib/tool-version.sh" osv-scanner)" "$@"
   else
     echo "OSV-Scanner is required. Install osv-scanner or Go, then rerun pnpm run security:osv." >&2
     return 127

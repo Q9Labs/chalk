@@ -2,36 +2,10 @@ import { mkdir, readFile, rename, rm, rmdir, unlink, writeFile } from "node:fs/p
 import { randomUUID } from "node:crypto";
 import { dirname, join, relative } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
-
-const sensitiveKey = /(token|secret|password|credential|private.?key|authorization)/i;
+import { writeJsonAtomic } from "./json-file.mjs";
 
 async function ensureDir(path) {
   await mkdir(path, { recursive: true, mode: 0o700 });
-}
-
-function redact(value, key = "") {
-  if (sensitiveKey.test(key)) return "[redacted]";
-  if (Array.isArray(value)) return value.map((entry) => redact(entry));
-  if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([name, entry]) => [name, redact(entry, name)]));
-  }
-  return value;
-}
-
-function redactRecord(value) {
-  return redact(value);
-}
-
-export async function writeJsonAtomic(path, value, { mode = 0o600, redacted = true } = {}) {
-  await ensureDir(dirname(path));
-  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  const body = `${JSON.stringify(redacted ? redact(value) : value, null, 2)}\n`;
-  try {
-    await writeFile(temporary, body, { encoding: "utf8", mode });
-    await rename(temporary, path);
-  } finally {
-    await unlink(temporary).catch(() => {});
-  }
 }
 
 async function readJson(path) {

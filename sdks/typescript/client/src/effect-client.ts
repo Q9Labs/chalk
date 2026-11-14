@@ -32,18 +32,6 @@ export const makeChalkEffectClient = <Id extends string, Groups extends HttpApiG
     Effect.provideService(FetchHttpClient.Fetch, withRequestContext(options.fetch)),
   );
 };
-function requestHeaders(options: ChalkEffectClientOptions): Record<string, string> {
-  return {
-    ...options.headers,
-    ...authHeaders(options.auth),
-  };
-}
-function authHeaders(auth: ChalkAuth | undefined): Record<string, string> {
-  if (!auth) {
-    return {};
-  }
-  switch (auth.type) {
-    case "bearer":
-      return { Authorization: `Bearer ${auth.token}` };
-  }
+function requestHeaders({ headers, auth }: ChalkEffectClientOptions): Record<string, string> {
+  return { ...headers, ...(auth ? { Authorization: `Bearer ${auth.token}` } : {}) };
 }

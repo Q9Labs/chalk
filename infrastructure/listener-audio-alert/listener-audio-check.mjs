@@ -1,3 +1,5 @@
+import { postToOncall } from "../oncall-alert.mjs";
+
 export const EPISODE_THRESHOLD = 1;
 const WINDOW_MS = 10 * 60 * 1000;
 const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
@@ -89,10 +91,6 @@ export function evaluate(rows, { startTime, endTime }) {
     }));
 }
 
-export function oncallPayload(incidents, { drill }) {
-  return { source: "oncall-poller", ...(drill ? { drill: true } : {}), incidents: incidents.map((incident) => ({ app: "chalk", kind: "new", ...incident })) };
-}
-
 export async function readSignals({ fetchImpl = fetch, token, dataset, startTime, endTime }) {
   let response;
   try {
@@ -127,18 +125,12 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
     log(`${incidents.length} Episodes affected, ${rows.reduce((sum, row) => sum + row.events, 0)} events`);
   }
   if (!incidents.length) return 0;
-  let response;
-  try {
-    response = await fetchImpl(env.ONCALL_WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(oncallPayload(incidents, { drill })) });
-  } catch {
-    throw new Error("Oncall webhook request failed");
-  }
-  if (!response.ok) throw new Error(`Oncall webhook answered HTTP ${response.status}`);
+  await postToOncall({ fetchImpl, url: env.ONCALL_WEBHOOK_URL, incidents, drill });
   // A fired alert fails the run so GitHub also emails the failure.
   return drill ? 0 : 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   try {
     process.exitCode = await run({ env: process.env });
   } catch (error) {

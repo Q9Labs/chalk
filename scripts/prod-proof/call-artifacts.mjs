@@ -177,6 +177,8 @@ export async function callArtifactsProof(run, captured) {
     console.log(
       `Script: longest silence ${judged.measurements.longestSilenceMs ?? "unknown"} ms of ${judged.measurements.silenceBoundMs ?? "unknown"} ms allowed; ${judged.measurements.markers?.length ?? 0} markers checked; media ended after mute, unshare, host stop: ${judged.measurements.holds?.map((hold) => `${hold.endedAfterMs} ms`).join(", ") ?? "unknown"}`,
     );
+    // The public log is all a failed nightly leaves (the evidence files are encrypted), so it says where the Recording ends against the host stop and how far every flash sits from its beep.
+    console.log(`Script: Recording ends ${judged.measurements.runOnMs ?? "unknown"} ms after the host stop; flash minus beep per marker (ms): ${judged.measurements.markers?.map((marker) => marker.avOffsetMs ?? "none").join(" ") ?? "unknown"}`);
     const span = (script.stop.stopMs - script.rounds[0].guests[0].startMs) / 1000;
     const failures = [...recordingFailures(evidence, span * 0.8), ...judged.failures, ...verdicts.filter((verdict) => !verdict.ok).map((verdict) => verdict.text)];
     const source = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);

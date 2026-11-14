@@ -1,16 +1,13 @@
-import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ManualClock } from "../../tests/helpers/manual-clock";
 import { AccessGrantError, parseParsedAccessGrant, requireParsedAccessGrant } from "../access/grant";
 import { ConnectionAccessFailure } from "../access/manager";
 import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
-import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
-import type { ConnectionAccessRequest } from "./dependencies";
-import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
+import { opaqueAccessGrant } from "../space-client/core.test.helpers";
+import { accessRefreshedAt, mediaRecoveryFixture } from "../../tests/helpers/media-recovery-fixture";
 
 // Sanitized SDK 5.2.4 report timings. Sync stayed live (heartbeat gap: 311 ms).
-const observed = { live: 1854, accessRefreshed: 10834, disconnected: 47243, reconnecting: 47494, failed: 57234, exhausted: 57502 };
+const observed = { live: 1854, accessRefreshed: accessRefreshedAt, disconnected: 47243, reconnecting: 47494, failed: 57234, exhausted: 57502 };
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -18,7 +15,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("media recovery deadline", () => {
   it.each(["recovers", "keeps failing"] as const)("retries the reported media loss for the full Sync budget when media %s", async (outcome) => {
     const test = mediaRecoveryFixture();
-    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    test.restart.mockRejectedValue(new Error("Transient media failure"));
     await test.run(async (lifecycle) => {
       await test.advanceTo(observed.live);
       expect(lifecycle.getSnapshot().state).toBe("live");
@@ -120,7 +117,7 @@ describe("media recovery deadline", () => {
 
   it("ignores a queued rejection for a binding replaced by a newer recovery grant", async () => {
     const test = mediaRecoveryFixture();
-    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    test.restart.mockRejectedValue(new Error("Transient media failure"));
     await test.run(async (lifecycle) => {
       test.mediaPhase("failed");
       await test.advanceTo(1000);
@@ -146,7 +143,7 @@ describe("media recovery deadline", () => {
 
   it.each(["server", "response"] as const)("preserves a takeover at recovery second 20 with a %s conflict at second 25", async (conflictSource) => {
     const test = mediaRecoveryFixture(undefined, conflictSource);
-    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    test.restart.mockRejectedValue(new Error("Transient media failure"));
     await test.run(async (lifecycle) => {
       test.mediaPhase("failed");
       await test.advanceTo(20000);
@@ -200,7 +197,7 @@ describe("media recovery deadline", () => {
 
   it.each([undefined, [0]])("uses at most twelve replacement grants per minute even with backoff %s", async (backoffMs) => {
     const test = mediaRecoveryFixture(backoffMs);
-    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    test.restart.mockRejectedValue(new Error("Transient media failure"));
     await test.run(async () => {
       test.mediaPhase("failed");
       await test.advanceTo(60000);
@@ -211,84 +208,3 @@ describe("media recovery deadline", () => {
     });
   });
 });
-
-function mediaRecoveryFixture(backoffMs?: readonly number[], conflictSource: "server" | "response" = "server") {
-  const platform = createCoreTestPlatform();
-  const manual = new ManualClock();
-  const startedAt = Date.now();
-  let binding = "connection-1";
-  let generation = 1;
-  const clock = { now: () => startedAt + manual.now(), setTimeout: (callback: () => void, delay: number) => manual.setTimeout(callback, delay), clearTimeout: (handle: unknown) => manual.clearTimeout(handle) };
-  const mediaPhase = (phase: "live" | "recovering" | "failed") => {
-    const snapshot = platform.media.getSnapshot();
-    platform.media.emit({ ...snapshot, failure: phase === "failed" ? { code: "peer_connection_failed", recoverable: true } : null, connection: { ...snapshot.connection, phase } });
-  };
-  const restart = vi.fn(async () => {});
-  const status = vi.fn<NonNullable<import("./dependencies").ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue("active");
-  const media = platform.dependencies.createMediaClient({ access: parseParsedAccessGrant(opaqueAccessGrant(1)), credential: async () => "unused", onFailure: () => {}, onScreenEnded: () => {} });
-  const stopMedia = vi.spyOn(media, "stop");
-  const stopSync = vi.spyOn(platform.sync, "stop");
-  const createSync = vi.fn(platform.dependencies.createSyncClient);
-  let failMedia: (cause: unknown, binding?: string) => void = () => {};
-  const access = vi.fn(async (request: ConnectionAccessRequest) => {
-    if (request.replaceMediaConnection && request.expectedMediaConnectionId !== undefined && request.expectedMediaConnectionId !== binding) {
-      if (conflictSource === "response") return requireParsedAccessGrant(Response.json({ error: { code: "participant.connection_superseded" } }, { status: 409 }));
-      throw new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false });
-    }
-    if (request.replaceMediaConnection) binding = `connection-${++generation}`;
-    const grant = opaqueAccessGrant(generation, String(generation), binding);
-    const expires_at = new Date(startedAt + (request.reason === "join" ? observed.accessRefreshed + 60000 : 3600000)).toISOString();
-    return parseParsedAccessGrant({ ...grant, sync: { ...grant.sync, expires_at }, media: { ...grant.media, expires_at } });
-  });
-  return {
-    startedAt,
-    access,
-    restart,
-    status,
-    stopMedia,
-    stopSync,
-    createSync,
-    mediaPhase,
-    failMedia: (cause: unknown, binding?: string) => failMedia(cause, binding),
-    setBinding: (value: string) => {
-      binding = value;
-    },
-    getBinding: () => binding,
-    advanceTo: async (target: number) => {
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
-      while (manual.now() < target) {
-        manual.advance(Math.min(100, target - manual.now()));
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
-    },
-    run: (exercise: (lifecycle: ConnectionLifecycleCapability) => Promise<void>) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const lifecycle = yield* Effect.service(ConnectionLifecycleService);
-          yield* lifecycle.join();
-          yield* Effect.promise(() => exercise(lifecycle));
-        }).pipe(
-          Effect.scoped,
-          Effect.provide(
-            makeConnectionLifecycleLayer({
-              access,
-              recovery: { backoffMs },
-              apiBaseURL: "https://api.chalk.test",
-              syncURL: "wss://sync.chalk.test/v1/sync",
-              dependencies: {
-                ...platform.dependencies,
-                clock,
-                getEpisodeStatus: status,
-                createSyncClient: createSync,
-                createMediaClient: (input) => {
-                  failMedia = input.onFailure;
-                  return { ...media, restart };
-                },
-              },
-            }),
-          ),
-        ),
-      ),
-  };
-}

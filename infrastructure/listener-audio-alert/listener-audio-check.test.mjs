@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { EPISODE_THRESHOLD, PROVIDERS, SIGNALS, evaluate, mergeEpisodes, oncallPayload, parseTabular, query, readSignals, run } from "./listener-audio-check.mjs";
+import { oncallPayload } from "../oncall-alert.mjs";
+import { EPISODE_THRESHOLD, PROVIDERS, SIGNALS, evaluate, mergeEpisodes, parseTabular, query, readSignals, run } from "./listener-audio-check.mjs";
 
 const fixture = async (name) => JSON.parse(await readFile(new URL(`./testdata/${name}.json`, import.meta.url), "utf8"));
 const id = "11111111-1111-4111-8111-111111111111";

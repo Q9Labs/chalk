@@ -53,7 +53,7 @@ if command -v gitleaks >/dev/null 2>&1; then
 fi
 
 if command -v go >/dev/null 2>&1; then
-  run_gitleaks go run github.com/zricethezav/gitleaks/v8@v8.30.1
+  run_gitleaks go run "github.com/zricethezav/gitleaks/v8@v$("$(dirname "$0")/../lib/tool-version.sh" gitleaks)"
   exit $?
 fi
 

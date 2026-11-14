@@ -12,7 +12,7 @@ import { CONNECTION_STATES } from "./connection";
 import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
 import { PERFORMANCE_STATES } from "./performance";
-import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { callEvents, SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
@@ -77,7 +77,7 @@ export const CALL_STATES: readonly CallState[] = [
       </main>
     ),
   },
-  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
+  { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }} /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -99,7 +99,7 @@ export const CALL_STATES: readonly CallState[] = [
   },
   { id: "joining-complete", title: "Blur lifting on admission", render: () => <JoiningComplete /> },
   { id: "waiting-for-host", title: "Waiting for the host to let you in", render: () => <WaitingForHost /> },
-  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
+  { id: "entering", title: "Entering after access is granted", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }} /> },
 
   { id: "solo", title: "Alone in the call", render: () => <Live snapshot={liveSnapshot()} /> },
   { id: "duo", title: "Two people, default layout", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} /> },
@@ -260,7 +260,10 @@ const LONG_ERROR = "Upload stopped at https://files.example.com/spaces/q9-team/r
 function raiseNotices(client: CallStateClient, kind: string, count: number) {
   if (kind === "join") {
     const next = liveSnapshot({ others: [nora, malik, ...Array.from({ length: count }, (_, index) => ({ id: `long-${index}`, name: `${LONG_NAME}${index || ""}` }))], board: true, capabilities: HOST });
+    const previous = client.getSnapshot();
     client.updateSnapshot((current) => ({ ...current, participants: next.participants, media: next.media }));
+    // The real client announces each change as a callEvent; the preview client does not, so the harness does it.
+    for (const event of callEvents(previous, client.getSnapshot())) client.emit("callEvent", { event });
     return;
   }
   const error = kind === "token" ? ({ code: "media.timeout", message: LONG_ERROR } as const) : ({ code: "media.capture_failed", message: "Your camera could not start." } as const);
@@ -276,7 +279,7 @@ function WaitingForHost() {
 }
 
 function JoiningComplete() {
-  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }));
+  const [client] = useState(() => createCallStateClient({ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false } }));
   return (
     <main className="h-dvh">
       <button hidden data-complete-join onClick={() => client.updateSnapshot(() => liveSnapshot({ self: { camera: false, microphone: false } }))}>

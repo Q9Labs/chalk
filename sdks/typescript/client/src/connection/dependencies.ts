@@ -12,7 +12,7 @@ import type { ConnectionAccessReason, ConnectionAccessRequest } from "../access/
 import { Context, Layer } from "effect";
 export type { ConnectionAccessReason, ConnectionAccessRequest };
 export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
-export type ConnectionClock = {
+type ConnectionClock = {
   readonly now: () => number;
   readonly setTimeout: (callback: () => void, milliseconds: number) => unknown;
   readonly clearTimeout: (handle: unknown) => void;

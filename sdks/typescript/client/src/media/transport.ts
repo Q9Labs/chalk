@@ -53,11 +53,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     const key = `${path}:${fellBack}`;
     if (key === announced) return;
     announced = key;
-    try {
-      options.onPath?.({ plane: "signalling", path, fellBack });
-    } catch {
-      /* Observers cannot interrupt signaling. */
-    }
+    notifyObserver(() => options.onPath?.({ plane: "signalling", path, fellBack }));
   };
   const statsPath = apiUrls.callStats(base, options.tenantId);
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
@@ -65,19 +61,11 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const freshToken = async (op?: SignalOp): Promise<string> => {
     const startedAt = performance.now();
     try {
-      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
-      if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
-      lastToken = token;
-      return token;
+      lastToken = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal)));
+      return lastToken;
     } finally {
       // A user-timing entry shows in a latency run whether the credential provider waits on a network round trip.
-      if (op) {
-        try {
-          performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } });
-        } catch {
-          /* Observers cannot interrupt signaling. */
-        }
-      }
+      if (op) notifyObserver(() => performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } }));
     }
   };
   /**
@@ -108,11 +96,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
             throw error;
           });
           if (!response.ok) {
-            try {
-              options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
-            } catch {
-              /* Observers cannot interrupt signaling. */
-            }
+            notifyObserver(() => options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt }));
             throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
               status: response.status,
               retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
@@ -127,10 +111,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         } catch (error) {
           if (!options.refreshCredential || !(error instanceof CloudflareSFUError) || error.options.status !== 403) throw error;
           const refresh = options.refreshCredential;
-          const regranted = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal));
-          if (!regranted.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
-          token = regranted;
-          lastToken = token;
+          token = lastToken = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal)));
           return await send(origin);
         }
       };
@@ -227,6 +208,18 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };
     },
   };
+}
+/** Observers cannot interrupt signaling. */
+function notifyObserver(observer: () => void): void {
+  try {
+    observer();
+  } catch {
+    /* Dropped on purpose. */
+  }
+}
+function nonEmptyToken(token: string): string {
+  if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+  return token;
 }
 type TracksWireResponse = {
   readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];

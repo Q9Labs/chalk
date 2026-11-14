@@ -22,16 +22,6 @@ export class ManualClock {
     if (typeof handle === "number") this.#timers.delete(handle);
   }
 
-  /** Jumps the time forward in one step, the way a busy main thread does, then runs every timer that is due. */
-  stall(milliseconds: number): void {
-    this.#now += milliseconds;
-    const due = [...this.#timers.entries()].filter(([, timer]) => timer.at <= this.#now);
-    for (const [handle, timer] of due) {
-      this.#timers.delete(handle);
-      timer.callback();
-    }
-  }
-
   advance(milliseconds: number): void {
     const target = this.#now + milliseconds;
     while (true) {

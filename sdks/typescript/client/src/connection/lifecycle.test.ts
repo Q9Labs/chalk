@@ -109,17 +109,11 @@ describe("ConnectionLifecycle Episode snapshot", () => {
   });
   it("leaves Sync recovery and command eligibility unchanged during a brief transport loss", async () => {
     const platform = createCoreTestPlatform();
-    const access = parseParsedAccessGrant({
-      subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
-      sync: { token: credential("chalk-sync"), expires_at: "2030-08-25T10:05:00.000Z" },
-      media: { token: credential("chalk-media"), expires_at: "2030-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
-    });
+    const access = credentialGrant();
     let syncCreations = 0;
     let mediaRestarts = 0;
-    const layer = makeConnectionLifecycleLayer({
+    const layer = lifecycleLayer({
       access: async () => access,
-      apiBaseURL: "https://api.chalk.test",
-      syncURL: "wss://sync.chalk.test/v1/sync",
       dependencies: {
         ...platform.dependencies,
         createSyncClient: () => {
@@ -182,10 +176,8 @@ describe("ConnectionLifecycle Episode snapshot", () => {
   });
   it("retains a redacted dial-timeout diagnostic after Sync recovers without duplicate events", async () => {
     const platform = createCoreTestPlatform();
-    const layer = makeConnectionLifecycleLayer({
+    const layer = lifecycleLayer({
       access: async () => parseParsedAccessGrant(opaqueAccessGrant("dial-diagnostic")),
-      apiBaseURL: "https://api.chalk.test",
-      syncURL: "wss://sync.chalk.test/v1/sync",
       dependencies: platform.dependencies,
     });
     await Effect.runPromise(
@@ -202,16 +194,9 @@ describe("ConnectionLifecycle Episode snapshot", () => {
   });
   it("carries the server Episode start time into the live snapshot", async () => {
     const platform = createCoreTestPlatform();
-    const access = parseParsedAccessGrant({
-      subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
-      episode_started_at: "2026-08-25T10:00:00.000Z",
-      sync: { token: credential("chalk-sync"), expires_at: "2030-08-25T10:05:00.000Z" },
-      media: { token: credential("chalk-media"), expires_at: "2030-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
-    });
-    const layer = makeConnectionLifecycleLayer({
+    const access = credentialGrant("2026-08-25T10:00:00.000Z");
+    const layer = lifecycleLayer({
       access: async () => access,
-      apiBaseURL: "https://api.chalk.test",
-      syncURL: "wss://sync.chalk.test/v1/sync",
       dependencies: platform.dependencies,
     });
     const snapshot = await Effect.runPromise(
@@ -225,6 +210,20 @@ describe("ConnectionLifecycle Episode snapshot", () => {
     expect(snapshot.episode).toMatchObject({ id: "episode-1", startedAt: "2026-08-25T10:00:00.000Z" });
   });
 });
+async function firstGrant() {
+  return parseParsedAccessGrant(opaqueAccessGrant(1));
+}
+function credentialGrant(episodeStartedAt?: string) {
+  return parseParsedAccessGrant({
+    subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 1 },
+    ...(episodeStartedAt ? { episode_started_at: episodeStartedAt } : {}),
+    sync: { token: credential("chalk-sync"), expires_at: "2030-08-25T10:05:00.000Z" },
+    media: { token: credential("chalk-media"), expires_at: "2030-08-25T10:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:test" } },
+  });
+}
+function sfuTransport(fetch: () => Promise<Response>) {
+  return createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost:8080", tenantId: "tenant-1", spaceId: "space-1", episodeId: "episode-1", participantId: "participant-1", credential: async () => "fixture", fetch });
+}
 function credential(audience: "chalk-sync" | "chalk-media"): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   return `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
@@ -293,16 +292,16 @@ function recoveryFixture() {
           const lifecycle = yield* Effect.service(ConnectionLifecycleService);
           yield* lifecycle.join().pipe(Effect.result);
           return yield* Effect.promise(() => exercise(lifecycle));
-        }).pipe(Effect.scoped, Effect.provide(makeConnectionLifecycleLayer({ apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", ...options }))),
+        }).pipe(Effect.scoped, Effect.provide(lifecycleLayer(options))),
       ),
   };
   return fixture;
 }
 
-function admissionLayer(options: Pick<ConnectionOptions, "access" | "dependencies">) {
+function lifecycleLayer(options: Omit<ConnectionOptions, "apiBaseURL" | "syncURL">) {
   return makeConnectionLifecycleLayer({ apiBaseURL: "https://api.chalk.test", syncURL: "wss://sync.chalk.test/v1/sync", ...options });
 }
-function exerciseAdmission<A, E>(layer: ReturnType<typeof admissionLayer>, exercise: (lifecycle: ConnectionLifecycleCapability) => Effect.Effect<A, E>) {
+function exerciseAdmission<A, E>(layer: ReturnType<typeof lifecycleLayer>, exercise: (lifecycle: ConnectionLifecycleCapability) => Effect.Effect<A, E>) {
   return Effect.runPromise(
     Effect.gen(function* () {
       const lifecycle = yield* Effect.service(ConnectionLifecycleService);
@@ -312,8 +311,8 @@ function exerciseAdmission<A, E>(layer: ReturnType<typeof admissionLayer>, exerc
 }
 function blockedAdmission(cancelPendingAdmission: NonNullable<ConnectionOptions["dependencies"]>["cancelPendingAdmission"]) {
   const platform = createCoreTestPlatform();
-  return admissionLayer({
-    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+  return lifecycleLayer({
+    access: firstGrant,
     dependencies: {
       ...platform.dependencies,
       cancelPendingAdmission,
@@ -348,16 +347,8 @@ describe("failed join admission cleanup", () => {
     const platform = createCoreTestPlatform();
     const requests: string[] = [];
     let mediaRequests = 0;
-    const transport = createCloudflareSFUHTTPTransport({
-      apiBaseURL: "http://localhost:8080",
-      tenantId: "tenant-1",
-      spaceId: "space-1",
-      episodeId: "episode-1",
-      participantId: "participant-1",
-      credential: async () => "fixture",
-      fetch: async () => (++mediaRequests === 1 ? new Response(null, { status }) : Response.json({ incarnation: 1, sequence: 0, publications: [] })),
-    });
-    const layer = admissionLayer({
+    const transport = sfuTransport(async () => (++mediaRequests === 1 ? new Response(null, { status }) : Response.json({ incarnation: 1, sequence: 0, publications: [] })));
+    const layer = lifecycleLayer({
       access: async ({ reason }) => {
         requests.push(reason);
         return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
@@ -398,16 +389,8 @@ describe("failed join admission cleanup", () => {
     const platform = createCoreTestPlatform();
     const reports: ConnectionReport[] = [];
     const requests: string[] = [];
-    const transport = createCloudflareSFUHTTPTransport({
-      apiBaseURL: "http://localhost:8080",
-      tenantId: "tenant-1",
-      spaceId: "space-1",
-      episodeId: "episode-1",
-      participantId: "participant-1",
-      credential: async () => "fixture",
-      fetch: async () => new Response(null, { status }),
-    });
-    const layer = admissionLayer({
+    const transport = sfuTransport(async () => new Response(null, { status }));
+    const layer = lifecycleLayer({
       access: async ({ reason }) => {
         requests.push(reason);
         return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
@@ -454,8 +437,8 @@ describe("failed join admission cleanup", () => {
     const reports: ConnectionReport[] = [];
     const audio = track("audio");
     audio.enabled = false;
-    const layer = admissionLayer({
-      access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+    const layer = lifecycleLayer({
+      access: firstGrant,
       dependencies: {
         ...platform.dependencies,
         createConnectionReporter: (access) =>
@@ -504,9 +487,7 @@ describe("failed join admission cleanup", () => {
         throw new TypeError("private URL and token");
       },
     });
-    const layer = makeConnectionLifecycleLayer({
-      apiBaseURL: "https://api.chalk.test",
-      syncURL: "wss://sync.chalk.test/v1/sync",
+    const layer = lifecycleLayer({
       access: async () => {
         grants++;
         if (source === "access" && grants > 1) throw new DOMException("private refresh URL", "NetworkError");
@@ -562,7 +543,7 @@ describe("failed join admission cleanup", () => {
     const platform = createCoreTestPlatform();
     const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
     let cancelled = false;
-    const layer = admissionLayer({
+    const layer = lifecycleLayer({
       access: async ({ reason }) => {
         if (reason === "join") cancelled = false;
         if (cancelled) throw new Error("A cancelled admission cannot refresh access");
@@ -584,10 +565,10 @@ describe("failed join admission cleanup", () => {
     );
   });
 
-  it.each([false, undefined])("replaces rejected legacy access when cancellation is %s", async (cancelled) => {
+  it.each([false, undefined])("replaces rejected access when cancellation is %s", async (cancelled) => {
     const platform = createCoreTestPlatform();
     const requests: { reason: string; replaceMediaConnection: boolean }[] = [];
-    const layer = admissionLayer({
+    const layer = lifecycleLayer({
       access: async ({ reason, replaceMediaConnection }) => {
         requests.push({ reason, replaceMediaConnection });
         return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
@@ -619,7 +600,7 @@ describe("failed join admission cleanup", () => {
     const hello = new Promise<void>((resolve) => {
       confirmHello = resolve;
     });
-    const layer = admissionLayer({
+    const layer = lifecycleLayer({
       access: async () => {
         if (seat === "left") throw new Error("The idempotent join is terminal");
         if (seat === "cancelled") seat = "pending";
@@ -705,10 +686,8 @@ it("confirms entry only after Sync is live and SFU startup has completed", async
     releaseMedia = resolve;
   });
   let entered = 0;
-  const layer = makeConnectionLifecycleLayer({
-    apiBaseURL: "https://api.chalk.test",
-    syncURL: "wss://sync.chalk.test/v1/sync",
-    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+  const layer = lifecycleLayer({
+    access: firstGrant,
     dependencies: {
       ...platform.dependencies,
       createMediaClient: (input) => ({
@@ -747,8 +726,8 @@ it("confirms entry only after Sync is live and SFU startup has completed", async
 it("fails a late entry timeout as retryable without reconnecting the expired seat", async () => {
   const platform = createCoreTestPlatform();
   let syncClients = 0;
-  const layer = admissionLayer({
-    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+  const layer = lifecycleLayer({
+    access: firstGrant,
     dependencies: {
       ...platform.dependencies,
       createSyncClient: () => {
@@ -771,7 +750,7 @@ it("refreshes rejected access during entry confirmation instead of retrying the 
   const platform = createCoreTestPlatform();
   const reasons: string[] = [];
   let attempts = 0;
-  const layer = admissionLayer({
+  const layer = lifecycleLayer({
     access: async ({ reason }) => {
       reasons.push(reason);
       return parseParsedAccessGrant(opaqueAccessGrant(reasons.length));
@@ -801,7 +780,7 @@ it("records access_retry when a cancelled admission retries with fresh access", 
   const platform = createCoreTestPlatform();
   const reasons: string[] = [];
   let attempts = 0;
-  const layer = admissionLayer({
+  const layer = lifecycleLayer({
     access: async ({ reason }) => {
       reasons.push(reason);
       return parseParsedAccessGrant(opaqueAccessGrant(reasons.length));
@@ -828,11 +807,11 @@ it("records access_retry when a cancelled admission retries with fresh access", 
 
 it("joins through a 5.x custom Sync adapter that has no confirmEntered", async () => {
   const platform = createCoreTestPlatform();
-  const { confirmEntered: _confirmEntered, ...legacySync } = platform.sync;
+  const { confirmEntered: _confirmEntered, ...syncWithoutEntryConfirmation } = platform.sync;
   const cancelPendingAdmission = vi.fn(async () => true);
-  const layer = admissionLayer({
-    access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
-    dependencies: { ...platform.dependencies, cancelPendingAdmission, createSyncClient: () => legacySync },
+  const layer = lifecycleLayer({
+    access: firstGrant,
+    dependencies: { ...platform.dependencies, cancelPendingAdmission, createSyncClient: () => syncWithoutEntryConfirmation },
   });
   await exerciseAdmission(layer, (lifecycle) =>
     Effect.gen(function* () {

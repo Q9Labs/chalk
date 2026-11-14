@@ -48,7 +48,7 @@ export function chatReadReceiptFromFrame(frame: ChatReadReceiptFrame): ChalkChat
   };
 }
 
-export function chatReactionsFromWire(groups: readonly { readonly emoji: ChalkChatReaction["emoji"]; readonly participant_ids: readonly string[] }[]): readonly ChalkChatReaction[] {
+function chatReactionsFromWire(groups: readonly { readonly emoji: ChalkChatReaction["emoji"]; readonly participant_ids: readonly string[] }[]): readonly ChalkChatReaction[] {
   return groups.map((group) => ({ emoji: group.emoji, count: group.participant_ids.length, participantIds: [...group.participant_ids] }));
 }
 export function chatReactionsFromFrame(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_reactions" }>): ChalkChatReactions {

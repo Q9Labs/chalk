@@ -4,17 +4,17 @@
 import type { MediaPublicationSource } from "./plane";
 
 /** An offer this large starts the soft replacement path when enough closed sections have accumulated. */
-export const OFFER_BYTES_TRIGGER = 160 * 1024;
+const OFFER_BYTES_TRIGGER = 160 * 1024;
 /** Projected offers above this budget replace without waiting for the cooldown, leaving room below the node's cap. */
-export const OFFER_BYTES_BUDGET = 176 * 1024;
+const OFFER_BYTES_BUDGET = 176 * 1024;
 /** From here the next pull or publish can pass the node's 256 KiB cap, so a smaller amount of closed sections is worth reclaiming. */
-export const OFFER_BYTES_CEILING = 224 * 1024;
+const OFFER_BYTES_CEILING = 224 * 1024;
 /** From here an offer is close to the node's refusal, so the replacement cooldown does not hold the replacement back. */
-export const OFFER_BYTES_HARD_LIMIT = 240 * 1024;
+const OFFER_BYTES_HARD_LIMIT = 240 * 1024;
 /** At or above the ceiling, closed sections must still hold this much, so the fresh connection is clearly smaller. */
-export const OFFER_CLOSED_BYTES_NEAR_CAP = 4 * 1024;
+const OFFER_CLOSED_BYTES_NEAR_CAP = 4 * 1024;
 /** The soft path needs this much in closed sections. A replacement resets them to zero, so live sections cannot cause a replacement loop. */
-export const OFFER_CLOSED_BYTES_MIN = 8 * 1024;
+const OFFER_CLOSED_BYTES_MIN = 8 * 1024;
 
 export interface OfferSize {
   readonly bytes: number;

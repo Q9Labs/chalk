@@ -4,7 +4,7 @@ import type React from "react";
 import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
-export type StatusSurfacePhase = "entering" | "left" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
+export type StatusSurfacePhase = "entering" | "left" | "timed-out" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
 export interface StatusSurfaceProps {
   readonly phase: StatusSurfacePhase;
   readonly callName?: string;
@@ -28,6 +28,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
   const copy = {
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
+    "timed-out": { title: `You were disconnected from ${callName}`, detail: "Your connection was lost for too long, so your seat was released. Rejoin to come back." },
     "episode-ended": episodeEndReason === "maximum_duration" ? { title: "The call reached its time limit", detail: "This call has ended for everyone." } : { title: "The call ended", detail: "" },
     failed: { title: connectionLost ? "Connection lost" : `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
@@ -35,7 +36,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
     elsewhere: { title: "You joined from another tab", detail: `${callName} is open in another tab or window. Use it here instead?` },
   }[phase];
   const retry = onRejoin ?? onRetry;
-  const canRetry = phase === "left" || phase === "failed" || phase === "full" || phase === "elsewhere";
+  const canRetry = phase === "left" || phase === "timed-out" || phase === "failed" || phase === "full" || phase === "elsewhere";
   return (
     <main
       data-chalk
@@ -59,7 +60,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
       ) : null}
       <div data-part="status-actions" className="mt-5 flex gap-7">
         {phase === "episode-ended" && episodeEndReason === "maximum_duration" && endAction ? <StatusAction icon={<StatusIcon retry />} label={endAction.label} onClick={endAction.onClick} /> : null}
-        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" || connectionLost ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
+        {canRetry && retry ? <StatusAction icon={<StatusIcon retry />} label={phase === "elsewhere" ? "Use here" : phase === "left" || phase === "timed-out" || connectionLost ? "Rejoin" : "Try again"} onClick={retry} disabled={rejoinDisabled || retryPending} /> : null}
         {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
       </div>
       {onReportProblem && phase !== "entering" ? (

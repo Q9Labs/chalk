@@ -182,7 +182,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     refreshes,
     signalBytes,
     budgetReplacements,
-    networks, // Each guest's signalling records, in order; toggle-offers.mjs reads the sizes of the offers they sent.
+    networks, // Each guest's signalling records, in order.
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);

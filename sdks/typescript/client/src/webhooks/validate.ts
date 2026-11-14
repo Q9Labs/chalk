@@ -82,7 +82,7 @@ const validatesValueConstraints = (value: unknown, schema: Schema): boolean => {
   return true;
 };
 
-export const validateSchema = (value: unknown, schema: Schema): boolean => {
+const validateSchema = (value: unknown, schema: Schema): boolean => {
   const referenceResult = validatesReference(value, schema);
   if (referenceResult !== undefined) return referenceResult;
   if (!schemaValidators.every((validate) => validate(value, schema))) return false;

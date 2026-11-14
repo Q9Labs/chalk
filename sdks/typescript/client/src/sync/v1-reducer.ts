@@ -82,6 +82,18 @@ export function snapshotToState(snapshot: Snapshot): V1ControlState {
 }
 
 export function assertV1ControlSemantics(state: V1ControlState): void {
+  const participantIds = assertParticipants(state);
+  if (state.status === "ended" && (state.participants.length !== 0 || state.admissionRequests.length !== 0 || state.recording !== null)) {
+    throw new V1ReplicaError("ended control state retains active Episode state");
+  }
+  assertAdmissionRequests(state, participantIds);
+  const recording = state.recording;
+  if (recording && (recording.status === "failed" ? recording.failureCode === null : recording.failureCode !== null)) {
+    throw new V1ReplicaError("recording failure code does not match its status");
+  }
+}
+
+function assertParticipants(state: V1ControlState): Set<string> {
   const participantIds = new Set<string>();
   for (const participant of state.participants) {
     if (participantIds.has(participant.participantId)) throw new V1ReplicaError("duplicate participant ID");
@@ -89,12 +101,12 @@ export function assertV1ControlSemantics(state: V1ControlState): void {
     const capabilities = state.roleCapabilities[participant.role];
     if (!capabilities) throw new V1ReplicaError("participant role has no capability bundle");
     if (!sameStrings(participant.capabilities, capabilities)) throw new V1ReplicaError("participant capabilities do not match the durable role map");
-    if (participant.displayName !== participant.displayName.trim() || participant.displayName.length === 0) throw new V1ReplicaError("participant display name has surrounding whitespace");
+    if (!isTrimmedName(participant.displayName)) throw new V1ReplicaError("participant display name has surrounding whitespace");
   }
-  if (state.status === "ended" && (state.participants.length !== 0 || state.admissionRequests.length !== 0 || state.recording !== null)) {
-    throw new V1ReplicaError("ended control state retains active Episode state");
-  }
+  return participantIds;
+}
 
+function assertAdmissionRequests(state: V1ControlState, participantIds: ReadonlySet<string>): void {
   const requestIds = new Set<string>();
   const pendingParticipantIds = new Set<string>();
   for (const request of state.admissionRequests) {
@@ -102,12 +114,12 @@ export function assertV1ControlSemantics(state: V1ControlState): void {
     if (pendingParticipantIds.has(request.participantId) || participantIds.has(request.participantId)) throw new V1ReplicaError("active and pending participant IDs overlap");
     requestIds.add(request.admissionRequestId);
     pendingParticipantIds.add(request.participantId);
-    if (request.displayName !== request.displayName.trim() || request.displayName.length === 0) throw new V1ReplicaError("admission display name has surrounding whitespace");
+    if (!isTrimmedName(request.displayName)) throw new V1ReplicaError("admission display name has surrounding whitespace");
   }
+}
 
-  if (state.recording?.status === "failed" ? state.recording.failureCode === null : state.recording?.failureCode !== null && state.recording !== null) {
-    throw new V1ReplicaError("recording failure code does not match its status");
-  }
+function isTrimmedName(name: string): boolean {
+  return name === name.trim() && name.length > 0;
 }
 
 export async function computeV1StateDigest(state: V1ControlState): Promise<string> {

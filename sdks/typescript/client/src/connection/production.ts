@@ -4,7 +4,7 @@ import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media"
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
-import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
+import { makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 import { mediaBootstrap } from "../access/media-bootstrap";
@@ -66,19 +66,18 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     },
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, options.directPath ?? "auto", input),
     createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, options.directPath ?? "auto", input),
-    createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
+    createChatFileTransport: (input) => createChalkChatFileHttpTransport({ baseUrl: options.apiBaseURL, token: input.token }),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardUrl(options.syncURL), input),
     subscribeForeground: subscribeBrowserForeground,
-    createId: createBrowserId,
+    createId: () => {
+      const random = globalThis.crypto;
+      if (!random?.randomUUID) throw new TypeError("A secure browser identifier source is required");
+      return random.randomUUID();
+    },
   };
 }
 /** Production foreign-adapter Layer. Tests replace it with makeFakeConnectionPlatformLayer. */
 export const makeProductionConnectionPlatformLayer = (options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }) => makeConnectionPlatformLayer(createDefaultConnectionDependencies(options));
-function createBrowserId(): string {
-  const random = globalThis.crypto;
-  if (!random?.randomUUID) throw new TypeError("A secure browser identifier source is required");
-  return random.randomUUID();
-}
 function subscribeBrowserForeground(listener: () => void): () => void {
   const documentTarget = globalThis.document;
   const windowTarget = globalThis.window;
@@ -92,12 +91,6 @@ function subscribeBrowserForeground(listener: () => void): () => void {
     documentTarget.removeEventListener("visibilitychange", onVisibility);
     windowTarget.removeEventListener("pageshow", listener);
   };
-}
-function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFactoryInput) {
-  return createChalkChatFileHttpTransport({
-    baseUrl: apiBaseURL,
-    token: input.token,
-  });
 }
 function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   const { subject } = input.access;
@@ -129,9 +122,6 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
     onReceiveHealth: input.onTransportDiagnostic,
     onScreenEnded: input.onScreenEnded,
   });
-  return createSFUConnectionMediaClient(client);
-}
-function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
   return bindConnectionMediaClient(client, (input) => client.restart("provider" in input ? mediaBootstrap(input) : input));
 }
 type BoundMediaClient = Pick<
@@ -208,8 +198,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     token: input.token,
     files,
     onWatchdogReplacement: input.onWatchdogReplacement,
-    onSummary: (summary) => {
-      input.onSummary(summary);
-    },
+    onSummary: input.onSummary,
   });
 }

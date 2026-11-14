@@ -93,6 +93,10 @@ test("installed dependencies are not source directories", (t) => {
   assert.equal(result.directoryCount, 2);
 });
 
-test("the required source roots cover the application, SDK, package, infrastructure, workflow, and documentation code", () => {
-  assert.deepEqual(sourceRoots, ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs", "features"]);
+test("the feature map answers for the application, SDK, package, infrastructure, workflow, documentation and tooling code", () => {
+  const required = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", ".github/actions", "docs", "features", "scripts", "tools", "contract", "tests", "perf", "release"];
+  assert.deepEqual(
+    required.filter((root) => !sourceRoots.includes(root)),
+    [],
+  );
 });

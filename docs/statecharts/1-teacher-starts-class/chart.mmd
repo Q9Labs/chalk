@@ -7,26 +7,18 @@ stateDiagram-v2
     lg1: Working
     lg2: Something failed
     lg3: In the call
-    lg4: Breaks OneCallPerPerson or StarterCanEndCall
-    lg5: Path to the OneCallPerPerson or StarterCanEndCall bug
   }
   class lg0 tan
   class lg1 yellow
   class lg2 orange
   class lg3 teal
-  class lg4 breaks
-  class lg5 bugPath
   s0: Home page
   s1: Starting the call
   s2: Start failed, no call made
   s3: Joining the call
   s4: Start failed, but a call was made
   s5: Could not join
-  s6: In the call, no host powers
-  s7: Joining the call, two calls now exist
-  s8: Start failed, but a call was made (a second one)
-  s9: Could not join, two calls now exist
-  s10: In the call, no host powers, two calls now exist
+  s6: In the call
   [*] --> s0
   s0 --> s1: you press Start call
   s1 --> s2: the request is refused or fails
@@ -37,31 +29,10 @@ stateDiagram-v2
   s3 --> s6: the video connects
   s4 --> s1: you press Start call
   s5 --> s3: you press Join again
-  s1 --> s7: the call is created
-  s1 --> s8: the call is created but the answer never arrives
-  s7 --> s9: the video connection fails
-  s7 --> s10: the video connects
-  s9 --> s7: you press Join again
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
   class s0 tan
-  class s0 bugPath
   class s1 yellow
-  class s1 bugPath
   class s2 orange
   class s3 yellow
-  class s3 bugPath
   class s4 orange
-  class s4 bugPath
   class s5 orange
   class s6 teal
-  class s6 breaks
-  class s6 bugPath
-  class s7 yellow
-  class s7 breaks
-  class s7 bugPath
-  class s8 orange
-  class s8 breaks
-  class s9 orange
-  class s9 breaks
-  class s10 teal
-  class s10 breaks

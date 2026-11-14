@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_TIMEOUT_SECONDS, normalizeExclusions, parseArguments, usage } from "./managed-release-arguments.mjs";
 import { buildDeploymentRequest, buildDocumentParameters, buildDryRunProof, CONTROLLER_VERSION, loadAllowedSecretIds, loadDocument, loadManifest, parseControllerResult, runtimeInputsPath } from "./managed-release-contracts.mjs";
 import { awsCommand, ensureDocumentVersion, invocationError, parseCommandId, runCommand, sleepFor, waitForInvocation } from "./managed-release-ssm.mjs";
-import { errorMessage } from "./managed-release-support.mjs";
+import { errorMessage } from "../lib/errors.mjs";
 
 export { DEFAULT_TIMEOUT_SECONDS, normalizeExclusions, parseArguments, usage } from "./managed-release-arguments.mjs";
 export { buildDeploymentRequest, buildDocumentParameters, CONTROLLER_VERSION, parseControllerResult } from "./managed-release-contracts.mjs";
@@ -172,7 +172,7 @@ function encodeManifest(manifestBytes) {
   return manifestBase64;
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = import.meta.main;
 if (isMain) {
   runManagedRelease({ arguments_: process.argv.slice(2) }).catch((error) => {
     console.error(errorMessage(error));

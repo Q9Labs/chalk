@@ -8,9 +8,9 @@ export type LinkQuality = { readonly tier: LinkTier; readonly reason?: LinkReaso
 const GOOD: LinkQuality = Object.freeze({ tier: "good" });
 
 /** A tier shows after this many windows in a row past its line, so one bad window never shows. */
-export const LINK_ENTER_WINDOWS = 2;
+const LINK_ENTER_WINDOWS = 2;
 /** A tier clears after this many windows in a row under its exit line. */
-export const LINK_LEAVE_WINDOWS = 3;
+const LINK_LEAVE_WINDOWS = 3;
 /** Once a tier shows, it stays at least this long. */
 export const LINK_MIN_SHOWN_MS = 30_000;
 

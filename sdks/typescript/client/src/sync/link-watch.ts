@@ -25,7 +25,7 @@
  * On a quiet call the last ping can be up to 20 s older than the loss, so down time can read up to 20 s too long and the
  * effective cutoff is 40 to 60 s. That errs toward turning the source off.
  */
-export const LONG_DROP_MS = 60_000;
+const LONG_DROP_MS = 60_000;
 const ROUND_TRIP_MS = 5_000;
 // A socket whose oldest ping stays unanswered this long is dead: this is the heartbeat timeout of three 20 s heartbeats.
 const UNANSWERED_LIMIT_MS = 60_000;

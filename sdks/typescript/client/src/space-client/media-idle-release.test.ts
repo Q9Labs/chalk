@@ -1,56 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { ManualClock } from "../../tests/helpers/manual-clock";
-import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
+import { mediaStream } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import type { ConnectionDependencies, ConnectionMediaDevices } from "../connection/dependencies";
 import { createSpaceClientForPlatform } from "./space-client";
-
-const IDLE_MS = 30_000;
-type Source = "microphone" | "camera";
-
-/** A capture track that ends the way a real one does: `stop()` marks it ended. */
-function captureTrack(kind: "audio" | "video"): MediaStreamTrack {
-  let readyState: MediaStreamTrackState = "live";
-  const track = Object.assign(mediaTrack(), {
-    kind,
-    stop: vi.fn(() => {
-      readyState = "ended";
-    }),
-  });
-  Object.defineProperty(track, "readyState", { get: () => readyState });
-  return track;
-}
-
-async function rig(source: Source) {
-  const clock = new ManualClock();
-  const base = createCoreTestPlatform();
-  const kind = source === "microphone" ? "audio" : "video";
-  const captured: MediaStreamTrack[] = [];
-  const getUserMedia = vi.fn(async () => {
-    const track = captureTrack(kind);
-    captured.push(track);
-    return mediaStream(track);
-  });
-  const releaseTrack = vi.fn((track: MediaStreamTrack) => track.stop());
-  const prepareLocalTrack = vi.fn<(source: string, track: MediaStreamTrack) => void>();
-  const clearPreparedLocalTrack = vi.fn(async () => undefined);
-  const client = createSpaceClientForPlatform(
-    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-    {
-      ...base,
-      dependencies: {
-        ...base.dependencies,
-        clock: { now: () => clock.now(), setTimeout: (callback, ms) => clock.setTimeout(callback, ms), clearTimeout: (handle) => clock.clearTimeout(handle) },
-        mediaDevices: { getUserMedia, getDisplayMedia: getUserMedia, enumerateDevices: async () => [], releaseTrack },
-        createMediaClient: (input) => ({ ...base.dependencies.createMediaClient(input), prepareLocalTrack, clearPreparedLocalTrack }),
-      },
-    },
-  );
-  const set = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
-  await client.join({ microphone: false, camera: false });
-  await set(true);
-  return { clock, client, set, captured, getUserMedia, releaseTrack, prepareLocalTrack, base };
-}
+import { captureTrack, IDLE_MS, rig, type Source } from "../../tests/helpers/media-idle-release-rig";
 
 describe.each(["microphone", "camera"] as const)("a muted %s", (source) => {
   it("is released 30 s after the mute, not before", async () => {
@@ -61,6 +14,30 @@ describe.each(["microphone", "camera"] as const)("a muted %s", (source) => {
       expect(releaseTrack).not.toHaveBeenCalled();
       clock.advance(1);
       expect(releaseTrack).toHaveBeenCalledExactlyOnceWith(captured[0]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("schedules no release once its capture is already gone", async () => {
+    const { client, set, captured, timers } = await rig(source);
+    try {
+      captured[0]?.stop();
+      timers.clear();
+      await set(false);
+      expect([...timers.values()].filter((ms) => ms === IDLE_MS)).toEqual([]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("schedules no release once the connection has dropped it", async () => {
+    const { client, set, timers } = await rig(source);
+    try {
+      await set(false);
+      expect([...timers.values()]).toContain(IDLE_MS);
+      await client.leave();
+      expect([...timers.values()].filter((ms) => ms === IDLE_MS)).toEqual([]);
     } finally {
       client.dispose();
     }

@@ -1,4 +1,4 @@
-import { noCaptureDevices, stream, track } from "./capture.test.helpers";
+import { stream, track } from "./capture.test.helpers";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserMediaDevices } from "../connection/media-devices";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";

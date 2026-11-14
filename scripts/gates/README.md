@@ -27,6 +27,14 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 **Caches.** Only `.github/workflows/cache-warm.yml`, on pushes to `master`, saves the Go build caches, so pull requests and queue groups start from master's caches and do not evict each other's. The API job sets `-count=1` because a cached Go test result would not see a migration or database change.
 
+## Ready cap
+
+Only a few pull requests against master are ready (not draft) at once, whoever opened them, because every push to a ready pull request reruns the Gate and the merge queue lands about two an hour on hosted runners. `ready-cap.mjs` counts the open, non-draft pull requests against master other than the one named by `--pr` (the merge queue's entries are among them, and the output reports how many) and exits 1 when that count has reached the cap. Run it before `gh pr ready`.
+
+The same script runs as the first job of `.github/workflows/gate.yml` (`Ready cap`) when a pull request is opened non-draft, reopened or marked ready; pushes to an already ready pull request are not counted again. With `--enforce` it sets `capped=true` and comments why. `capped=true` makes `Select gate jobs` and every job after it stand down and makes `Root gate` fail, so a refused pull request cannot merge and costs about a minute of a small runner, not a Gate run. The job cannot convert the pull request to draft itself (the workflow token is refused that mutation), so the comment tells the author to run `gh pr ready --undo`. If the job itself fails (an API error), the Gate runs as before: the cap never blocks a pull request by breaking.
+
+The cap is 6 (`DEFAULT_CAP` in the script). Set the repository variable `CHALK_READY_CAP` to change it; it applies to the next ready event. The `ready-cap-exempt` label lets one pull request through. Two pull requests marked ready in the same second can both pass and reach cap + 1, and the cap is a rule for fleets that cooperate, not a security boundary: whoever can push a branch can edit the workflow.
+
 ## Checks register
 
 `checks.json` is the one list of every check Chalk runs: each Gate lane, each workflow job, the commit hook command and each scorecard budget group. `gate.config.ts` builds its custom lanes from the Gate entries, and the planner throws for a task with no entry, so a lane cannot exist without one. Each entry states the failure it exists to catch in one sentence, its owner (`owner`, a feature or area name, never a person), where it runs (`runs`), what it blocks (`blocks`), its median minutes, and its record in the CI timing audit sample (`caught`, `noise`, `never-failed` or `unmeasured`) with the numbers behind it.

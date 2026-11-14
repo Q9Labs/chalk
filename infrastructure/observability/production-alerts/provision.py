@@ -64,11 +64,24 @@ def api(method, path, payload=None):
         raise RuntimeError(f"Axiom {method} {path} request failed") from None
 
 
+# The rules that have a query of their own, joined to the generic production-state query. A rule named here is
+# evaluated over minute windows by its query, so the generic query leaves it out.
+RULE_BRANCHES = (
+    ("sync-readiness.apl", "sync-readiness"),
+    ("sfu-readiness.apl", "sfu-readiness"),
+    ("sfu-retirement-debt.apl", "sfu-retirement-debt"),
+    ("turn-credentials.apl", None),
+    ("recovery-refused.apl", None),
+    ("sfu-overflow.apl", None),
+    ("deadline-scheduler.apl", None),
+)
+
+
 def monitor_definitions(variables, disabled=False, without_connection_reports=False):
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
     branches = {
-        name: " | union (\n" + Path(__file__).with_name(file).read_text() + "\n)"
-        for name, file in (("SYNC_READINESS_BRANCH", "sync-readiness.apl"), ("SFU_READINESS_BRANCH", "sfu-readiness.apl"), ("SFU_RETIREMENT_DEBT_BRANCH", "sfu-retirement-debt.apl"), ("TURN_CREDENTIALS_BRANCH", "turn-credentials.apl"), ("RECOVERY_REFUSED_BRANCH", "recovery-refused.apl"), ("SFU_OVERFLOW_BRANCH", "sfu-overflow.apl"), ("DEADLINE_SCHEDULER_BRANCH", "deadline-scheduler.apl"))
+        "RULE_BRANCHES": "".join(" | union (\n" + Path(__file__).with_name(file).read_text() + "\n)" for file, _ in RULE_BRANCHES),
+        "WINDOWED_RULES_EXCLUDED": "".join(f" and chalk_alert_rule != '{rule}'" for _, rule in RULE_BRANCHES if rule),
     }
     branch = ""
     if not without_connection_reports:
@@ -113,7 +126,7 @@ def main():
         raise RuntimeError("DISCORD_WEBHOOK_URL is required to enable monitors")
     notifier_ids = []
     if webhook:
-        if not re.fullmatch(r"https://discord\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+", webhook):
+        if not re.fullmatch(r"https://(?:discord|discordapp)\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+", webhook):
             raise RuntimeError("DISCORD_WEBHOOK_URL must be a Discord webhook URL")
         discord = {"customWebhook": {"url": webhook, "headers": {"Content-Type": "application/json"}, "body": Path(__file__).with_name("discord-body.tmpl").read_text()}}
         notifier_ids.append(reconcile_notifier("Chalk production Discord", discord))

@@ -13,7 +13,7 @@ const sfuOnHosted = runnerExpression("ubuntu-24.04", " matrix.group != 'sfu' &&"
 const runsOn = [...workflow.matchAll(/^ {4}runs-on: (.+)$/gmu)].map((match) => match[1]);
 
 test("every Gate job takes its runner from the same expression and falls back to a hosted label", () => {
-  assert.equal(runsOn.length, 7);
+  assert.equal(runsOn.length, 8);
   for (const value of runsOn) {
     const fallback = hostedLabels.find((label) => value === runnerExpression(label));
     assert.ok(fallback || value === sfuOnHosted, `runs-on is not the shared expression: ${value}`);

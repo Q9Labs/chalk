@@ -1,41 +1,35 @@
 import { CHALK_REACTIONS } from "../collaboration/types";
-import { Clock, Context, Effect, Layer, Scope } from "effect";
+import { Clock, Effect, Scope } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { makeScopedFork, type ScopedFork } from "./scoped-fork";
+import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, Reaction } from "./types";
 const MAX_VISIBLE_REACTIONS = 24;
 const REACTIONS = new Set<Reaction>(CHALK_REACTIONS);
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ReactionsControllerEffects = {
   readonly send: (emoji: Reaction) => ClientEffect<ActiveReaction>;
   readonly dispose: () => void;
 };
-export class ReactionsControllerService extends Context.Service<ReactionsControllerService, ReactionsControllerEffects>()("@chalk/client/ReactionsController") {}
 /** Reaction expiry fibers are owned by the active client Scope. */
 export const makeReactionsController = (connection: ConnectionLifecycleCapability, store: SpaceStore): Effect.Effect<ReactionsControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
-    const scope = yield* Effect.scope;
-    const context = yield* Effect.context<Clock.Clock>();
-    const fork = (effect: Effect.Effect<void>) => {
-      void Effect.runForkWith(context)(Effect.forkIn(effect, scope).pipe(Effect.asVoid));
-    };
+    const fork = yield* makeScopedFork<Clock.Clock>();
     const controller = new ReactionsControllerRuntime(connection, store, clock.currentTimeMillisUnsafe, fork);
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));
     return controller;
   });
-export const makeReactionsControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore) => Layer.effect(ReactionsControllerService, makeReactionsController(connection, store));
 class ReactionsControllerRuntime implements ReactionsControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #now: () => number;
-  readonly #fork: (effect: Effect.Effect<void>) => void;
+  readonly #fork: ScopedFork<Clock.Clock>;
   readonly #active = new Map<string, ActiveReaction>();
   readonly #expiryGenerations = new Map<string, number>();
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, now: () => number, fork: (effect: Effect.Effect<void>) => void) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, now: () => number, fork: ScopedFork<Clock.Clock>) {
     this.#connection = connection;
     this.#store = store;
     this.#now = now;
@@ -50,7 +44,6 @@ class ReactionsControllerRuntime implements ReactionsControllerEffects {
       catch: normalizeClientError,
     }).pipe(
       Effect.andThen(this.#connection.runCommand(({ sync }) => foreign(() => sync.sendReaction(emoji)))),
-
       Effect.map(reactionFor),
       Effect.tap((reaction) =>
         Effect.sync(() => {
@@ -109,27 +102,12 @@ class ReactionsControllerRuntime implements ReactionsControllerEffects {
     this.#publish();
   }
   #publish(): void {
-    const active = Object.freeze([...this.#active.values()]);
-    const current = this.#store.getSnapshot().reactions.active;
-    if (sameReactions(current, active)) return;
-    this.#store.updateReactions(Object.freeze({ active }));
+    this.#store.update("reactions", Object.freeze({ active: Object.freeze([...this.#active.values()]) }));
   }
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function reactionFor(reaction: import("../collaboration/types").ChalkReactionEvent): ActiveReaction {
   return Object.freeze({ ...reaction });
 }
 function validReaction(reaction: ActiveReaction): boolean {
   return reaction.eventId.length > 0 && reaction.participantId.length > 0 && reaction.displayName.length > 0 && REACTIONS.has(reaction.reaction) && Number.isFinite(Date.parse(reaction.occurredAt));
-}
-function sameReactions(left: readonly ActiveReaction[], right: readonly ActiveReaction[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((reaction, index) => {
-      const candidate = right[index]!;
-      return reaction.eventId === candidate.eventId && reaction.participantId === candidate.participantId && reaction.displayName === candidate.displayName && reaction.reaction === candidate.reaction && reaction.occurredAt === candidate.occurredAt && reaction.expiresAt === candidate.expiresAt;
-    })
-  );
 }

@@ -1,5 +1,5 @@
 name: Rollback rehearsal
-# Weekly, on nightly: deploy the newest passed cut, roll back to the one before it with the Release job production uses, and roll forward again.
+# Weekly, on nightly: make sure nightly runs the newest passed cut (a deploy, skipped when it already does), roll back to the one before it with the Release job production uses, and roll forward again.
 # The rollback on 23 Oct failed because the older release's controller could not read the pointer the newer one wrote. This run fails when that happens again.
 on:
   schedule:
@@ -22,12 +22,13 @@ jobs:
     outputs:
       current: ${{ steps.plan.outputs.current }}
       previous: ${{ steps.plan.outputs.previous }}
+      baseline: ${{ steps.plan.outputs.baseline }}
     steps:
       - name: Refuse non-master dispatch before checkout
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Pick the two newest passed nightly cuts
@@ -36,7 +37,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/releases/rehearsal.py plan
   deploy-current:
+    # Skipped when nightly already runs the current cut from a finished deploy, which saves about a third of the run.
     needs: plan
+    if: needs.plan.outputs.baseline == 'true'
     permissions:
       contents: write # The nightly deploy holds the staging-SFU lease.
       actions: read
@@ -57,6 +60,7 @@ jobs:
     secrets: inherit
   roll-back:
     needs: [plan, deploy-current]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.deploy-current.result) }}
     permissions:
       contents: write
       actions: read
@@ -104,10 +108,11 @@ jobs:
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require each leg to have applied its own source release
         env:
           GH_TOKEN: ${{ github.token }}
+          BASELINE_NEEDED: ${{ needs.plan.outputs.baseline }}
           CURRENT: ${{ needs.plan.outputs.current }}
           PREVIOUS: ${{ needs.plan.outputs.previous }}
           BASELINE: ${{ toJSON(needs.deploy-current.outputs) }}

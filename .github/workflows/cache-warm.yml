@@ -22,16 +22,16 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Restore Go caches
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -50,7 +50,7 @@ jobs:
           go test -race -vet=off -run '^$' ./...
 
       - name: Save root checks Go cache
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -58,7 +58,7 @@ jobs:
           key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
 
       - name: Save API Go cache
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -66,7 +66,7 @@ jobs:
           key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
 
       - name: Save Sync Go cache
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -79,7 +79,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up OpenTofu
         uses: ./.github/actions/setup-opentofu
@@ -100,14 +100,14 @@ jobs:
 
       - name: Save the managed deploy providers
         if: steps.deploy-providers.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.terraform.d/plugin-cache
           key: ${{ steps.deploy-providers.outputs.key }}
 
       - name: Check for a saved provider cache
         id: saved
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.terraform.d/plugin-cache
           key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
@@ -122,7 +122,7 @@ jobs:
 
       - name: Save providers
         if: steps.saved.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.terraform.d/plugin-cache
           key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
@@ -133,11 +133,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check for saved scanner downloads
         id: saved
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/chalk-scanner-downloads
           key: scanner-downloads-${{ runner.os }}-${{ hashFiles('.github/actions/setup-scanners/action.yml') }}
@@ -149,7 +149,7 @@ jobs:
 
       - name: Save scanner downloads
         if: steps.saved.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/chalk-scanner-downloads
           key: scanner-downloads-${{ runner.os }}-${{ hashFiles('.github/actions/setup-scanners/action.yml') }}
@@ -160,11 +160,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check for saved Mix dependencies
         id: saved
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             apps/sync/deps
@@ -174,7 +174,7 @@ jobs:
 
       - name: Set up Erlang and Elixir
         if: steps.saved.outputs.cache-hit != 'true'
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           version-file: .tool-versions
           version-type: strict
@@ -195,7 +195,7 @@ jobs:
 
       - name: Save Mix dependencies
         if: steps.saved.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             apps/sync/deps

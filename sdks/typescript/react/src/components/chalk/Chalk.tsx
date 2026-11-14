@@ -244,7 +244,7 @@ function SpaceExperience(
   if (connection.status === "leaving" || connection.status === "left")
     return (
       <StatusSurface
-        phase={episodeEnded || connection.episodeEnded ? "episode-ended" : "left"}
+        phase={episodeEnded || connection.episodeEnded ? "episode-ended" : connection.timedOut ? "timed-out" : "left"}
         episodeEndReason={connection.episodeEndReason}
         endAction={props.timeLimit?.endAction}
         callName={callName}

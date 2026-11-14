@@ -20,6 +20,7 @@ export type ConnectionLifecycleSnapshot = {
   readonly episodeEnded?: boolean;
   readonly episodeEndReason?: import("../sync/v1-types").V1ControlState["endReason"];
   readonly removedByHost?: boolean;
+  readonly timedOut?: boolean;
 };
 export type ConnectionPorts = {
   readonly sync: ConnectionSyncClient;

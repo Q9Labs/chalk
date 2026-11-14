@@ -153,14 +153,15 @@ type publicInviteArrivalRequest struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
 	} `json:"-"`
-	RequestKey        string
-	ArrivalHandle     string
-	GuestCredential   string
-	Native            bool
-	LegacyInviteLink  bool
-	AccountID         utilities.ID
-	AccountAuthorized bool
-	MediaClients      mediaplane.ClientProviders
+	RequestKey         string
+	ArrivalHandle      string
+	GuestCredential    string
+	StarterCredentials map[string]string
+	Native             bool
+	LegacyInviteLink   bool
+	AccountID          utilities.ID
+	AccountAuthorized  bool
+	MediaClients       mediaplane.ClientProviders
 }
 
 type publicInviteStatusRequest struct {
@@ -327,7 +328,7 @@ func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Han
 
 func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteArrivalRequest, publicSpaceArrivalResponse] {
 	endpoint := Post("/v1/public/space-invite-arrivals", "arriveBySpacePublicInvite", decodePublicInviteArrivalRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceArrivalResponse, error) {
-		arrival, err := service.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: request.Body.SpaceInviteToken, DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, AccountAuthorized: request.AccountAuthorized, Native: request.Native, MediaClients: request.MediaClients})
+		arrival, err := service.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: request.Body.SpaceInviteToken, DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, StarterCredentials: request.StarterCredentials, AccountID: request.AccountID, AccountAuthorized: request.AccountAuthorized, Native: request.Native, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
@@ -495,7 +496,7 @@ func decodePublicInviteArrivalRequest(r *http.Request) (publicInviteArrivalReque
 		return publicInviteArrivalRequest{}, apiErrorInvalidRequestKey
 	}
 	arrivalHandle := strings.TrimSpace(r.Header.Get(publicInviteTokenHeader))
-	request := publicInviteArrivalRequest{Body: body, RequestKey: requestKey, ArrivalHandle: arrivalHandle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, arrivalHandle), MediaClients: mediaClients(r)}
+	request := publicInviteArrivalRequest{Body: body, RequestKey: requestKey, ArrivalHandle: arrivalHandle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, arrivalHandle), StarterCredentials: starterCredentialsFromRequest(r), MediaClients: mediaClients(r)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 		request.AccountAuthorized = true
@@ -773,7 +774,7 @@ func writePublicSpaceCreated(w http.ResponseWriter, r *http.Request, status int,
 	if credential == "" {
 		credential = response.Arrival.GuestCredential
 	}
-	setGuestCookie(w, response.Arrival.ArrivalHandle, credential)
+	setCreatorCookies(w, response.Arrival.ArrivalHandle, credential, response.LifecycleUntil)
 	response.GuestCredential = ""
 	response.Arrival.GuestCredential = ""
 	writeJSON(w, status, response)
@@ -796,13 +797,6 @@ func writePublicLeave(w http.ResponseWriter, r *http.Request, status int, _ stru
 		}
 	}
 	w.WriteHeader(status)
-}
-
-func setGuestCookie(w http.ResponseWriter, arrivalHandle, credential string) {
-	if arrivalHandle == "" || credential == "" {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: publicGuestCookiePrefix + arrivalHandle, Value: credential, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
 }
 
 func requestHandleParameter() APIParameterContract {

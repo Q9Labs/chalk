@@ -6,13 +6,7 @@ export function bindCameraEffectLifecycle(source: MediaStreamTrack, output: Medi
   const enabled = prototype ? Object.getOwnPropertyDescriptor(prototype, "enabled") : undefined;
   const muted = prototype ? Object.getOwnPropertyDescriptor(prototype, "muted") : undefined;
   const sync = () => {
-    let enabled = false;
-    for (const track of tracks)
-      if (track.enabled) {
-        enabled = true;
-        break;
-      }
-    source.enabled = enabled;
+    source.enabled = [...tracks].some((track) => track.enabled);
   };
   const decorate = (track: MediaStreamTrack) => {
     tracks.add(track);

@@ -18,7 +18,7 @@ export const state = (v) => {
     case "joinFailed":
       return `Could not join${callsNote(v)}`;
     case "live":
-      return `In the call, no host powers${callsNote(v)}`;
+      return `In the call${callsNote(v)}`;
     default:
       return v.screen;
   }

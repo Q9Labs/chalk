@@ -1,0 +1,9 @@
+{
+  "silence_ms": 5000,
+  "starved_floor_kbps": 100,
+  "starved_ms": 30000,
+  "healthy_loss_pct": 2,
+  "healthy_rtt_ms": 300,
+  "early_replacement_ms": 20000,
+  "flag_within_ms": 120000
+}

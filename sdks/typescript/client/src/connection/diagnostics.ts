@@ -15,26 +15,25 @@ type ReportedDiagnosticEventName =
   | "cleanup_unconfirmed"
   | "space_join_span";
 
-export type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
+type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
 
-export type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
+type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
 
 export type ConnectionJoinTraceEvent = ConnectionDiagnostic & {
   readonly event: "space_join_span";
   readonly step: ConnectionJoinTraceStep;
   readonly spanId: string;
-  readonly parentSpanId?: string;
   readonly outcome: ConnectionJoinTraceOutcome;
 };
 
-export type ConnectionJoinTraceSpan = {
+type ConnectionJoinTraceSpan = {
   readonly spanId: string;
   readonly end: (input: ConnectionJoinTraceEnd) => void;
 };
 
-export type ConnectionJoinTraceEnd = {
+type ConnectionJoinTraceEnd = {
   readonly state: ConnectionState;
   readonly epoch: number;
   readonly outcome: Exclude<ConnectionJoinTraceOutcome, "started">;
@@ -130,11 +129,11 @@ export class ConnectionDiagnostics {
     return Object.freeze([...this.#events]);
   }
 
-  startSpan(input: { readonly step: ConnectionJoinTraceStep; readonly state: ConnectionState; readonly epoch: number; readonly parentSpanId?: string }): ConnectionJoinTraceSpan {
+  startSpan(input: { readonly step: ConnectionJoinTraceStep; readonly state: ConnectionState; readonly epoch: number }): ConnectionJoinTraceSpan {
     const spanId = `space-join-span-${++this.#spanSequence}`;
     const startedAt = this.#now();
     let ended = false;
-    this.record({ event: "space_join_span", state: input.state, epoch: input.epoch, step: input.step, spanId, ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}), outcome: "started" });
+    this.record({ event: "space_join_span", state: input.state, epoch: input.epoch, step: input.step, spanId, outcome: "started" });
 
     return {
       spanId,
@@ -147,7 +146,6 @@ export class ConnectionDiagnostics {
           epoch: end.epoch,
           step: input.step,
           spanId,
-          ...(input.parentSpanId ? { parentSpanId: input.parentSpanId } : {}),
           outcome: end.outcome,
           durationMs: Math.max(0, this.#now() - startedAt),
           ...(end.code ? { code: end.code } : {}),

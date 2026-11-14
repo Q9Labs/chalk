@@ -5,17 +5,13 @@ import { encodeV1ClientFrame } from "./v1-codec";
 import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
 import { V1ReplicaError } from "./v1-reducer";
+import { V1TimerMap } from "./v1-timer-map";
 import type { V1CollaborationEvent, V1CollaborationExtensionState, V1SyncClientOptions } from "./v1-types";
 
 const MAX_COLLABORATION_REQUESTS_IN_FLIGHT = 64;
 
 // Reactions expire after five seconds; an absent acknowledgement must not outlive them.
 const REACTION_ACK_TIMEOUT_MS = 5000;
-
-type ReactionDeferred = V1Deferred<ChalkReactionEvent>;
-type ChatSendDeferred = V1Deferred<ChalkChatMessage>;
-type ChatPageDeferred = V1Deferred<ChalkChatPageResult>;
-type ChatReadDeferred = V1Deferred<ChalkChatReadReceipt>;
 
 export type V1CollaborationHelloExtension = {
   readonly name: "collaboration_v1" | "collaboration_v2";
@@ -38,12 +34,12 @@ type V1CollaborationStateOptions = {
 export class V1CollaborationState {
   readonly #options: V1CollaborationStateOptions;
   readonly #listeners = new Set<(event: V1CollaborationEvent) => void>();
-  readonly #reactionTimers = new Map<string, unknown>();
-  readonly #reactions = new Map<string, ReactionDeferred>();
-  readonly #chatSends = new Map<string, ChatSendDeferred>();
-  readonly #chatPages = new Map<string, ChatPageDeferred>();
+  readonly #reactionTimers: V1TimerMap;
+  readonly #reactions = new Map<string, V1Deferred<ChalkReactionEvent>>();
+  readonly #chatSends = new Map<string, V1Deferred<ChalkChatMessage>>();
+  readonly #chatPages = new Map<string, V1Deferred<ChalkChatPageResult>>();
   readonly #chatReactions = new Map<string, V1Deferred<ChalkChatReactions>>();
-  readonly #chatReads = new Map<string, ChatReadDeferred>();
+  readonly #chatReads = new Map<string, V1Deferred<ChalkChatReadReceipt>>();
   #state: V1CollaborationExtensionState;
   #participantCapabilities: Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> = {};
   #chatAfterSequence: string | null;
@@ -51,6 +47,7 @@ export class V1CollaborationState {
 
   constructor(options: V1CollaborationStateOptions) {
     this.#options = options;
+    this.#reactionTimers = new V1TimerMap(options.clock);
     const cursor = options.request === false ? { afterSequence: null, retainedFloorSequence: null } : (options.request?.chatCursor ?? { afterSequence: null, retainedFloorSequence: null });
     this.#chatAfterSequence = cursor.afterSequence;
     this.#requestedVersion = options.request === false ? 0 : options.request?.name === "collaboration_v2" ? 2 : 1;
@@ -62,10 +59,6 @@ export class V1CollaborationState {
       retainedFloorSequence: cursor.retainedFloorSequence,
       readReceipts: [],
     };
-  }
-
-  get requestedVersion(): 0 | 1 | 2 {
-    return this.#requestedVersion;
   }
 
   get helloExtension(): V1CollaborationHelloExtension | null {
@@ -119,15 +112,13 @@ export class V1CollaborationState {
     const operationId = this.#nextRequestId();
     const frame = { type: "reaction_send", operation_id: operationId, reaction } as const;
     const pending = this.#sendTrackedRequest(operationId, frame, this.#reactions);
-    this.#reactionTimers.set(
+    this.#reactionTimers.schedule(
       operationId,
-      this.#options.clock().setTimeout(() => {
-        this.#reactionTimers.delete(operationId);
-        const deferred = this.#reactions.get(operationId);
-        if (!deferred) return;
-        this.#reactions.delete(operationId);
-        rejectV1Deferred(deferred, new V1SyncError("Reaction acknowledgement timed out", "reaction_ack_timeout"));
-      }, REACTION_ACK_TIMEOUT_MS),
+      () => {
+        const deferred = takePending(this.#reactions, operationId);
+        if (deferred) rejectV1Deferred(deferred, new V1SyncError("Reaction acknowledgement timed out", "reaction_ack_timeout"));
+      },
+      REACTION_ACK_TIMEOUT_MS,
     );
     return pending;
   }
@@ -158,13 +149,12 @@ export class V1CollaborationState {
   chatReactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_reaction_result" }>): void {
     this.#requireLive();
     this.#requireNegotiated();
-    const deferred = this.#chatReactions.get(frame.request_id);
+    const deferred = takePending(this.#chatReactions, frame.request_id);
     if (!deferred) return;
-    this.#chatReactions.delete(frame.request_id);
     if (frame.outcome === "accepted") {
       this.chatReactions(frame.state);
       resolveV1Deferred(deferred, chatReactionsFromFrame(frame.state));
-    } else rejectV1Deferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
+    } else rejectCode(deferred, frame.error_code);
   }
 
   markChatRead(sequence: string): Promise<ChalkChatReadReceipt> {
@@ -199,13 +189,11 @@ export class V1CollaborationState {
   reactionResult(frame: Extract<SyncV1ServerFrame, { readonly type: "reaction_result" }>): void {
     this.#requireLive();
     this.#requireNegotiated();
-    const deferred = this.#reactions.get(frame.operation_id);
+    const deferred = takePending(this.#reactions, frame.operation_id);
     if (!deferred) return;
-    this.#options.clock().clearTimeout(this.#reactionTimers.get(frame.operation_id));
-    this.#reactionTimers.delete(frame.operation_id);
-    this.#reactions.delete(frame.operation_id);
+    this.#reactionTimers.cancel(frame.operation_id);
     if (frame.outcome === "accepted") resolveV1Deferred(deferred, reactionFromFrame(frame.reaction));
-    else rejectV1Deferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
+    else rejectCode(deferred, frame.error_code);
   }
 
   chatMessage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_message" }>): void {
@@ -216,24 +204,20 @@ export class V1CollaborationState {
   chatSendResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_send_result" }>): void {
     this.#requireLive();
     this.#requireNegotiated();
-    const deferred = this.#chatSends.get(frame.client_message_id);
+    const deferred = takePending(this.#chatSends, frame.client_message_id);
     if (!deferred) return;
-    this.#chatSends.delete(frame.client_message_id);
     if (frame.outcome === "accepted") {
       this.#assertChatMessageVersion(frame.message);
       const message = chatMessageFromFrame(frame.message);
       this.#rememberChatSequence(message.sequence);
       resolveV1Deferred(deferred, message);
-    } else {
-      rejectV1Deferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
-    }
+    } else rejectCode(deferred, frame.error_code);
   }
 
   chatPage(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_page" }>): void {
     this.#requireNegotiated();
-    const deferred = this.#chatPages.get(frame.request_id);
+    const deferred = takePending(this.#chatPages, frame.request_id);
     if (!deferred) return;
-    this.#chatPages.delete(frame.request_id);
     if (frame.outcome === "cursor_reset") {
       this.#state = { ...this.#state, retainedFloorSequence: frame.retained_floor_sequence };
       const result = { status: "cursor_reset", retainedFloorSequence: frame.retained_floor_sequence } as const;
@@ -263,31 +247,25 @@ export class V1CollaborationState {
   chatReadResult(frame: Extract<SyncV1ServerFrame, { readonly type: "chat_read_result" }>): void {
     this.#requireLive();
     this.#requireNegotiated();
-    const deferred = this.#chatReads.get(frame.request_id);
+    const deferred = takePending(this.#chatReads, frame.request_id);
     if (!deferred) return;
-    this.#chatReads.delete(frame.request_id);
     if (frame.outcome === "accepted") {
       const receipt = chatReadReceiptFromFrame(frame);
       this.#rememberChatReadReceipt(receipt);
       resolveV1Deferred(deferred, receipt);
-    } else {
-      rejectV1Deferred(deferred, new V1SyncError(frame.error_code, frame.error_code));
-    }
+    } else rejectCode(deferred, frame.error_code);
+  }
+
+  #pendingRequests(): readonly Map<string, V1Deferred<never>>[] {
+    return [this.#reactions, this.#chatSends, this.#chatPages, this.#chatReactions, this.#chatReads];
   }
 
   #rejectPending(code: string): void {
-    for (const deferred of this.#reactions.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatSends.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatPages.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
-    for (const deferred of this.#chatReads.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
-    for (const timer of this.#reactionTimers.values()) this.#options.clock().clearTimeout(timer);
-    this.#reactionTimers.clear();
-    this.#reactions.clear();
-    this.#chatSends.clear();
-    this.#chatPages.clear();
-    for (const deferred of this.#chatReactions.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
-    this.#chatReactions.clear();
-    this.#chatReads.clear();
+    for (const pending of this.#pendingRequests()) {
+      for (const deferred of pending.values()) rejectCode(deferred, code);
+      pending.clear();
+    }
+    this.#reactionTimers.cancelAll();
   }
 
   #sendTrackedRequest<Result>(requestId: string, frame: SyncV1ClientFrame, pending: Map<string, V1Deferred<Result>>): Promise<Result> {
@@ -330,11 +308,11 @@ export class V1CollaborationState {
 
   #assertCapacity(): void {
     const maximum = Math.min(this.#options.maxPendingRequests ?? MAX_COLLABORATION_REQUESTS_IN_FLIGHT, MAX_COLLABORATION_REQUESTS_IN_FLIGHT);
-    if (this.#reactions.size + this.#chatSends.size + this.#chatPages.size + this.#chatReads.size + this.#chatReactions.size >= maximum) throw new V1SyncError("collaboration in-flight capacity exceeded", "capacity");
+    if (this.#pendingRequests().reduce((total, pending) => total + pending.size, 0) >= maximum) throw new V1SyncError("collaboration in-flight capacity exceeded", "capacity");
   }
 
   #assertRequestIdAvailable(id: string): void {
-    if (this.#reactions.has(id) || this.#chatSends.has(id) || this.#chatPages.has(id) || this.#chatReads.has(id) || this.#chatReactions.has(id)) throw new V1SyncError("collaboration request ID is already pending", "request_id_conflict");
+    if (this.#pendingRequests().some((pending) => pending.has(id))) throw new V1SyncError("collaboration request ID is already pending", "request_id_conflict");
   }
 
   #nextRequestId(): string {
@@ -354,6 +332,16 @@ export class V1CollaborationState {
   #emit(event: V1CollaborationEvent): void {
     for (const listener of this.#listeners) listener(event);
   }
+}
+
+function takePending<Result>(pending: Map<string, V1Deferred<Result>>, requestId: string): V1Deferred<Result> | undefined {
+  const deferred = pending.get(requestId);
+  pending.delete(requestId);
+  return deferred;
+}
+
+function rejectCode(deferred: V1Deferred<never>, code: string): void {
+  rejectV1Deferred(deferred, new V1SyncError(code, code));
 }
 
 function copyCapabilities(capabilities: Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>>): Readonly<Record<string, readonly ChalkSyncV1CollaborationCapability[]>> {

@@ -53,11 +53,12 @@ describe("SpaceClient.close", () => {
 });
 
 describe("sessionExit", () => {
-  const connection = (patch: Partial<ConnectionSlice>): ConnectionSlice => ({ status: "live", episode: null, lastError: null, episodeEnded: false, removedByHost: false, ...patch });
+  const connection = (patch: Partial<ConnectionSlice>): ConnectionSlice => ({ status: "live", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false, ...patch });
 
   it.each([
     ["an ended Episode", connection({ episodeEnded: true }), "episode-ended"],
     ["a removal by the host", connection({ removedByHost: true }), "removed"],
+    ["a seat the server let go", connection({ timedOut: true }), "timed-out"],
     ["a failed connection", connection({ status: "failed" }), "failed"],
     ["a failure that says the Episode ended", connection({ status: "failed", lastError: { code: "episode.ended" } as ConnectionSlice["lastError"] }), "episode-ended"],
     ["a live call", connection({}), undefined],

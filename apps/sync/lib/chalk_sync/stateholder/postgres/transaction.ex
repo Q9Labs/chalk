@@ -15,26 +15,18 @@ defmodule ChalkSync.Stateholder.Postgres.Transaction do
   end
 
   # TRIPWIRE(owner=sync, by=2027-02-13): the rollout row is an expand-and-contract gate. Once every environment
-  # shows enforced=true, delete the second query, the :compatibility entry ownership mode (JoinSeats.Admit,
+  # shows enforced=true, delete the rollout read in TransactionSettings.sql(:entry), the :compatibility entry ownership mode (JoinSeats.Admit,
   # Identity) and the sync_entry_rollout table with an API migration that keeps the previous release runnable.
-  # Two round trips. The settings query returns the synchronous_commit value Postgres
-  # now applies to this transaction, and the rollout row is read under its share lock.
+  # One round trip. The settings query returns the synchronous_commit value Postgres now applies to
+  # this transaction and the rollout row read under its share lock.
   # Returns whether Sync entry ownership is enforced.
   def configure(connection) do
-    %{rows: [[_writer, _lock_timeout, _statement_timeout, setting]]} =
+    %{rows: [[_writer, _lock_timeout, _statement_timeout, setting, enforced]]} =
       Postgrex.query!(connection, TransactionSettings.sql(:entry), [], timeout: 2_000)
 
     unless durable_synchronous_commit?(setting) do
       Postgrex.rollback(connection, {:retryable, :dependency_unavailable})
     end
-
-    %{rows: [[enforced]]} =
-      Postgrex.query!(
-        connection,
-        "select enforced from sync_entry_rollout where singleton for share",
-        [],
-        timeout: 2_000
-      )
 
     enforced
   end

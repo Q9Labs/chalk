@@ -9,7 +9,7 @@ import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
-import { writeJsonAtomic } from "./ownership.mjs";
+import { writeJsonAtomic } from "./json-file.mjs";
 import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
@@ -119,7 +119,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_SERVICE_SCOPES: dashboardServiceScopes,
         ...dashboardArtifactBindings(config),
         CHALK_API_REQUEST_LOGS: "all",
-        CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.web, config.urls.public])].join(","),
+        // The API builds public invite links from the first origin, so it is the one a browser uses (the public origin when there is one).
+        CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.public, config.urls.web])].join(","),
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.

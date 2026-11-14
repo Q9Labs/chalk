@@ -14,4 +14,4 @@ No rule breaks. Three hold: when the call has ended nothing is still recording i
 
 ## What the chart hides and leaves out
 
-It hides no step except the closing no-op at the end states. It merges "the host presses End" and "the time limit arrives" into one arrow. It leaves out the host extending the time (a late extension makes the old deadline stale, `stale_maximum_duration?` in the finalizer), the capture retries before the end (10 attempts), the transcript, and who can press End: only an owner can, so a Start call starter cannot (see flow 1).
+It hides no step except the closing no-op at the end states. It merges "the host presses End" and "the time limit arrives" into one arrow. It leaves out the host extending the time (a late extension makes the old deadline stale, `stale_maximum_duration?` in the finalizer), the capture retries before the end (10 attempts), the transcript, and who can press End: only an owner can, and a Start call starter is an owner (see flow 1).

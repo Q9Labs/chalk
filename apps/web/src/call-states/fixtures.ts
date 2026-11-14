@@ -144,7 +144,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, person.host ? HOST : GUEST))];
   return {
     ...base,
-    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null, episodeEnded: false, removedByHost: false },
+    connection: { status: options.status ?? "live", episode: { id: "ep_01JC9Q9TEAM", startedAt, deadline: null }, lastError: options.lastError ?? null, episodeEnded: false, removedByHost: false, timedOut: false },
     self: { ...base.self, participantId: SELF_ID, displayName: SELF_NAME, role: capabilities === HOST ? "host" : "guest", handRaised: self.handRaised ?? false },
     participants: {
       roster,

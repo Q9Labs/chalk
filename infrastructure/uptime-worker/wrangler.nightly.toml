@@ -6,7 +6,6 @@ compatibility_date = "2026-07-05"
 crons = ["*/5 * * * *"]
 
 [vars]
-CHALK_ENVIRONMENT = "nightly"
 API_BASE_URL = "https://nightly-api.chalkmeet.com"
 SYNC_BASE_URL = "https://nightly-sync.chalkmeet.com"
 

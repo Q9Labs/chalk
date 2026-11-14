@@ -1,0 +1,9 @@
+{
+  "api": 8080,
+  "sync": 4100,
+  "web": 3070,
+  "metro": 8081,
+  "postgres": 5432,
+  "redis": 6380,
+  "providerBridge": 8444
+}

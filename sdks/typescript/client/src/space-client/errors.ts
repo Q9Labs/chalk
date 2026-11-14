@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
@@ -7,6 +7,13 @@ import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
 
 export class SpaceClientError extends Data.TaggedError("SpaceClientError")<ClientFailure> {}
+
+export type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
+
+/** Lifts a foreign promise into Effect with the raw rejection as the cause, for `normalizeClientError` to classify. */
+export function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
+  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
+}
 
 const CONNECTION_ERROR_CODE_MAP = {
   invalid_access: "access.invalid",

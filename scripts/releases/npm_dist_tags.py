@@ -21,7 +21,7 @@ def package_names():
             "node",
             "--input-type=module",
             "-e",
-            'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(JSON.stringify(releasePackages.map(({ name }) => name)));',
+            'import { releasePackages } from "./scripts/lib/release-packages.mjs"; console.log(JSON.stringify(releasePackages.map(({ name }) => name)));',
         ],
         cwd=ROOT,
         capture_output=True,

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 
-import { fileSHA256 } from "./file-sha256.mjs";
+import { sha256, sha256File } from "../lib/hash.mjs";
 import { parseOptionValue } from "./parse-option-value.mjs";
 import { runBoundedCommand } from "./run-bounded-command.mjs";
 
@@ -147,12 +146,12 @@ try {
       expected: { height: expected.height, width: expected.width },
     },
     expected_frame: {
-      file_sha256: await fileSHA256(expectedPath),
-      rgba_sha256: createHash("sha256").update(expected.bytes).digest("hex"),
+      file_sha256: await sha256File(expectedPath),
+      rgba_sha256: sha256(expected.bytes),
     },
     actual_frame: {
-      file_sha256: await fileSHA256(actualPath),
-      rgba_sha256: createHash("sha256").update(actual.bytes).digest("hex"),
+      file_sha256: await sha256File(actualPath),
+      rgba_sha256: sha256(actual.bytes),
     },
     tolerance: {
       difference_explanation: options.differenceExplanation || null,

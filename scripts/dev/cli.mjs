@@ -126,7 +126,7 @@ function installSignalShutdown(supervisor, source = process) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   const result = await runCli();
   process.exitCode = result.code;
 }

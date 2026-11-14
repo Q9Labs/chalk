@@ -6,9 +6,9 @@ export type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack, Ca
 let assets: CameraEffectsAssets | undefined;
 let provider: CameraEffectsProvider | undefined;
 // The lazily loaded operations write these; the call UI reads them before that code loads.
-export const fallbacks = new Map<string, number>();
+const fallbacks = new Map<string, number>();
 const listeners = new Set<() => void>();
-export function notifyCameraBackground(): void {
+function notifyCameraBackground(): void {
   for (const listener of listeners) listener();
 }
 

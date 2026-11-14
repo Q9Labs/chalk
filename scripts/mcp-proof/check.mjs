@@ -1,5 +1,3 @@
-import { pathToFileURL } from "node:url";
-
 const protocolVersion = "2025-11-25";
 
 function fail(step, detail) {
@@ -119,7 +117,7 @@ function requiredEnv(name) {
   return value;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.main) {
   const passed = await checkMcp({
     apiUrl: requiredEnv("CHALK_PROOF_API_URL"),
     apiKey: requiredEnv("CHALK_PROOF_API_KEY"),

@@ -50,6 +50,9 @@ var ErrInvalidRequestKey = ErrInvalidIdempotencyKey
 
 const (
 	PublicRoleCollaborator = "collaborator"
+	// PublicRoleOwner is the role of the person who starts a public call: only
+	// it carries endEpisode.
+	PublicRoleOwner = "owner"
 
 	DefaultArrivalLifetime   = 15 * time.Minute
 	AdmissionRequestLifetime = 5 * time.Minute
@@ -331,6 +334,8 @@ type AccessPort = Access
 type AccountsPort = Accounts
 
 type PublicAccessInput struct {
+	// Role is the role of a new Participant. Empty means PublicRoleCollaborator.
+	Role string
 	// RequireAdmission names the admission mode the Space must be in when the pending arrival is allocated; empty fences nothing.
 	RequireAdmission       AdmissionMode
 	Admission              *AdmissionBinding
@@ -461,13 +466,13 @@ type PublicInviteArrivalInput struct {
 	DisplayName   string
 	RequestKey    string
 	ArrivalHandle string
-	// GuestCredential is optional for a new guest arrival. Runtime derives a
-	// server-bound credential from the invite and request key when it is absent.
-	GuestCredential   string
-	AccountID         utilities.ID
-	AccountAuthorized bool
-	Native            bool
-	MediaClients      mediaplane.ClientProviders
+	// GuestCredential is optional for a new guest arrival: Runtime derives one from the invite and request key. StarterCredentials are the credentials a browser kept from the calls it started, by arrival handle, so a rejoin knows the starter.
+	GuestCredential    string
+	StarterCredentials map[string]string
+	AccountID          utilities.ID
+	AccountAuthorized  bool
+	Native             bool
+	MediaClients       mediaplane.ClientProviders
 }
 
 type PublicInviteArrivalStatusInput struct {

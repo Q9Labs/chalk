@@ -28,7 +28,7 @@ export function recoveryScenario(source: Source, overrides: Parameters<typeof cr
 }
 
 /** The browser document as the Page Lifecycle API shows it: `freeze` and `resume` events, a visibility state and `wasDiscarded`. */
-export class PageDouble implements PageLifecycle {
+class PageDouble implements PageLifecycle {
   visibilityState: "visible" | "hidden" = "visible";
   wasDiscarded = false;
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -47,7 +47,7 @@ export class PageDouble implements PageLifecycle {
 }
 
 /** A wall clock, a monotonic clock and a page the test moves by hand, behind the real `LinkWatch`. */
-export function linkRig() {
+function linkRig() {
   const clocks = { wall: 1_800_000_000_000, mono: 60_000 };
   const page = new PageDouble();
   const watch = new LinkWatch({ wall: () => clocks.wall, mono: () => clocks.mono }, page);

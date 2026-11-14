@@ -1,12 +1,10 @@
 import { Context, Effect, Exit, Layer, Scope } from "effect";
-import type { ChalkChatPageResult, ChalkDirectedRequestResult } from "../collaboration/types";
+import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ControllerEffects } from "./controller-effects";
 import { SpaceClientCore, SpaceClientCoreService, makeSpaceClientCoreLayer, type SpaceClientPlatform } from "./core";
-import type { SpaceClientError } from "./errors";
-import type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, JoinOptions, MediaRequestKind, Reaction, SpaceClientOptions, SpaceSnapshot } from "./types";
-
-type ClientEffect<T> = Effect.Effect<T, SpaceClientError>;
+import type { ClientEffect } from "./errors";
+import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 
 export type EffectMediaController = ControllerEffects["media"];
 export type EffectChatController = {
@@ -52,7 +50,7 @@ export function createEffectSpaceClient(options: SpaceClientOptions, platform?: 
   });
 }
 
-export function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effect<void, unknown> = () => Effect.sync(() => core.dispose())): EffectSpaceClient {
+function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effect<void, unknown>): EffectSpaceClient {
   return {
     media: core.controllers.media,
     chat: {
@@ -78,4 +76,3 @@ export function effectClientFromCore(core: SpaceClientCore, dispose: () => Effec
 }
 
 export type { SpaceClientPlatform } from "./core";
-export type { ChalkChatPageResult, ChalkDirectedRequestResult, MediaRequestKind, Reaction, ActiveReaction };

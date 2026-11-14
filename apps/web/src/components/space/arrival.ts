@@ -11,6 +11,13 @@ export type ArrivedSpace = {
   readonly spaceName?: string;
 };
 
+// One Start call is one request key until the call is created, so a double press or a retry after a lost answer reaches the same Space.
+let startCall: { readonly displayName: string; readonly key: string } | undefined;
+function startCallKey(displayName: string): string {
+  if (startCall?.displayName !== displayName) startCall = { displayName, key: globalThis.crypto.randomUUID().replaceAll("-", "") };
+  return startCall.key;
+}
+
 /** Joins the Space an invite token names, or creates a new public Space when the visitor has no token. */
 export async function arriveAtSpace(client: ChalkPublicClient, options: { readonly displayName: string; readonly slug: string | undefined; readonly inviteToken: string | undefined }): Promise<ArrivedSpace> {
   const origin = globalThis.location?.origin ?? DEFAULT_INVITE_ORIGIN;
@@ -20,7 +27,8 @@ export async function arriveAtSpace(client: ChalkPublicClient, options: { readon
     if (!canonicalSlug) throw new Error(neutralSpaceError);
     return { arrival, canonicalSlug, inviteLink: canonicalSpaceInviteLink(origin, canonicalSlug, options.inviteToken), spaceName: arrival.space?.name };
   }
-  const created = await client.create({ displayName: options.displayName });
+  const created = await client.create({ displayName: options.displayName }, { idempotencyKey: startCallKey(options.displayName) });
+  startCall = undefined;
   return { arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink: verifiedSpaceInviteLink(origin, created.space.slug, created.invite_link), spaceName: created.space.name };
 }
 

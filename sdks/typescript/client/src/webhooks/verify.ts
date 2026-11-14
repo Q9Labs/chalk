@@ -58,12 +58,11 @@ const decodeSecrets = (secrets: unknown): readonly Uint8Array[] => {
 const decodeSecret = (secret: unknown): Uint8Array => {
   if (typeof secret !== "string") throw new WebhookVerificationError("invalid_secret");
   if (!secret.startsWith("whsec_")) throw new WebhookVerificationError("invalid_secret");
-  return requireSecretBytes(parseBase64(secret.slice(6)));
+  return requireKeyBytes(parseBase64(secret.slice(6)), "invalid_secret");
 };
 
-const requireSecretBytes = (decoded: Uint8Array | undefined): Uint8Array => {
-  if (decoded === undefined) throw new WebhookVerificationError("invalid_secret");
-  if (decoded.length !== 32) throw new WebhookVerificationError("invalid_secret");
+const requireKeyBytes = (decoded: Uint8Array | undefined, code: "invalid_secret" | "malformed_headers"): Uint8Array => {
+  if (decoded?.length !== 32) throw new WebhookVerificationError(code);
   return decoded;
 };
 
@@ -77,13 +76,7 @@ const parseTimestamp = (timestampValue: string): number => {
 const parseSignature = (part: string): Uint8Array => {
   const match = /^v1,([A-Za-z0-9+/]+={0,2})$/u.exec(part);
   if (!match) throw new WebhookVerificationError("malformed_headers");
-  return requireSignatureBytes(parseBase64(match[1] ?? ""));
-};
-
-const requireSignatureBytes = (bytes: Uint8Array | undefined): Uint8Array => {
-  if (bytes === undefined) throw new WebhookVerificationError("malformed_headers");
-  if (bytes.length !== 32) throw new WebhookVerificationError("malformed_headers");
-  return bytes;
+  return requireKeyBytes(parseBase64(match[1] ?? ""), "malformed_headers");
 };
 
 const parseSignatures = (signatureValue: string): readonly Uint8Array[] => {

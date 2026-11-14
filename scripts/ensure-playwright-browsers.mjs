@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
 
 export function ensurePlaywrightBrowsers(runtime, browsers, runProcess = spawnSync) {
   if (!["sdk", "engine"].includes(runtime) || !browsers.length || browsers.some((browser) => !["chromium", "firefox", "webkit"].includes(browser))) {
@@ -52,7 +51,7 @@ export function ensurePlaywrightBrowsers(runtime, browsers, runProcess = spawnSy
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.main) {
   try {
     ensurePlaywrightBrowsers(process.argv[2], process.argv.slice(3));
   } catch (error) {

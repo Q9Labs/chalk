@@ -2,3 +2,6 @@ nodejs 24.21.0
 erlang 28.3.1
 elixir 1.19.5-otp-28
 opentofu 1.12.3
+gitleaks 8.30.1
+osv-scanner 2.6.0
+actionlint 1.7.12

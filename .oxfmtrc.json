@@ -19,6 +19,7 @@
     "**/tests/results/**",
     "**/*.snap",
     "scripts/gates/design-tokens-baseline.json",
+    "scripts/diagnose-call/fixtures/cases.json",
     "**/routeTree.gen.ts",
     "tracker-human.html",
     "tracker-human.md",

@@ -30,35 +30,36 @@ jobs:
         run: |
           result=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/jobs?per_page=100" --jq '.jobs[] | select(.name == "record") | .conclusion')
           if [[ "$result" == success ]]; then echo 'verified=true' >> "$GITHUB_OUTPUT"; fi
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.cut.outputs.verified == 'true'
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+      - name: Skip when nothing in the app changed since the last release
+        id: decide
         if: steps.cut.outputs.verified == 'true'
-        with:
-          version: 12.8.1
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        if: steps.cut.outputs.verified == 'true'
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
-        if: steps.cut.outputs.verified == 'true'
+        env:
+          PLAY_CREDENTIALS: ${{ secrets.GPLAY_SERVICE_ACCOUNT_JSON }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # A cut that started before this script existed has the old publisher, which has no decide mode and would sign without credentials: build it as before.
+          if [[ -f apps/mobile/scripts/release/nightly-app-paths.sh ]]; then bash apps/mobile/scripts/release/publish-nightly-android.sh decide; else echo 'build=true' >> "$GITHUB_OUTPUT"; fi
+      - uses: ./.github/actions/setup-js
+        if: steps.decide.outputs.build == 'true'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        if: steps.decide.outputs.build == 'true'
         with:
           distribution: temurin
           java-version: "17"
-      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb
-        if: steps.cut.outputs.verified == 'true'
-      - name: Install dependencies
-        if: steps.cut.outputs.verified == 'true'
-        run: pnpm install --frozen-lockfile
+      - uses: 1password/install-cli-action@9a0c9dd934086b7ab1d90115d455bda1c53c2bdb # v2.0.2
+        if: steps.decide.outputs.build == 'true'
       - name: Build and publish the verified revision to internal testing
-        if: steps.cut.outputs.verified == 'true'
+        if: steps.decide.outputs.build == 'true'
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
           PLAY_CREDENTIALS: ${{ secrets.GPLAY_SERVICE_ACCOUNT_JSON }}
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ github.event.workflow_run.id }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: bash apps/mobile/scripts/release/publish-nightly-android.sh
+        run: bash apps/mobile/scripts/release/publish-nightly-android.sh publish

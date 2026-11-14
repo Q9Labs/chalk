@@ -2,10 +2,6 @@ import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, DIRECT_PATH_FAILURE_MEMORY_MS, directPa
 import type { SyncClock, SyncSocket, SyncWebSocketFactory } from "./types";
 
 export type { DirectPathMemory };
-/** A blocked direct path costs at most this much before the Tunnel socket opens. */
-export const DIRECT_SYNC_ATTEMPT_TIMEOUT_MS = DIRECT_PATH_ATTEMPT_TIMEOUT_MS;
-/** After a failed direct attempt, later connections skip the direct path for this long. */
-export const DIRECT_SYNC_FAILURE_MEMORY_MS = DIRECT_PATH_FAILURE_MEMORY_MS;
 
 type Clock = Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
 
@@ -44,8 +40,8 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
         options.onPath?.({ plane: "sync", path: "tunnel", fellBack: true });
         return options.inner.connect(tunnelUrl);
       }
-      const markFailed = () => markDirectPathFailed(memory, direct.host, clock.now(), options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS);
-      return new DirectFirstSocket(options.inner, attempt, tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed, options.onPath);
+      const markFailed = () => markDirectPathFailed(memory, direct.host, clock.now(), options.failureMemoryMs ?? DIRECT_PATH_FAILURE_MEMORY_MS);
+      return new DirectFirstSocket(options.inner, attempt, tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_PATH_ATTEMPT_TIMEOUT_MS, markFailed, options.onPath);
     },
   };
 }

@@ -74,4 +74,4 @@ function run() {
   else console.log(`No new explicit any types (${findings.length} existing violations remain across ${files.length} scanned files).`);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run();
+if (import.meta.main) run();

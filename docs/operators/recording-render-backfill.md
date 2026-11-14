@@ -11,8 +11,8 @@ environment, never in arguments or logs.
 ## Inspect, then apply
 
 ```sh
-bash scripts/recording-backfill.sh --batch-size 25
-bash scripts/recording-backfill.sh --batch-size 25 --apply
+(cd apps/api && go run ./cmd/recording-backfill --batch-size 25)
+(cd apps/api && go run ./cmd/recording-backfill --batch-size 25 --apply)
 ```
 
 The default is a dry run on read-only sessions. It checks retention, the capture

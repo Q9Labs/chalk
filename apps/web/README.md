@@ -17,6 +17,6 @@ Keep Cloudflare credentials as `op://...` references in an untracked env file an
 op run --env-file=.private/chalk-web-release.env -- pnpm run release:web
 ```
 
-After a force-killed local release, add `-- --recover-stale-lock` only once no release process runs; the runner refuses to remove a live lock. CI injects `CLOUDFLARE_API_TOKEN` from its secret store and runs `pnpm run release:web:ci -- --sha "$GITHUB_SHA"`.
+After a force-killed local release, add `-- --recover-stale-lock` only once no release process runs; the runner refuses to remove a live lock. CI injects `CLOUDFLARE_API_TOKEN` from its secret store and runs `pnpm run release:web -- --sha "$GITHUB_SHA"`.
 
 The runner passes the full SHA into the build metadata and service worker and always runs the deployment verifier after each upload. Local releases keep the Turbo cache in the main checkout at `.turbo/cache` (override with `CHALK_WEB_TURBO_CACHE_DIR`, a path inside that checkout), so dependency builds are reused across SHAs while the web build still keys on its exact SHA. CI restores the same path.

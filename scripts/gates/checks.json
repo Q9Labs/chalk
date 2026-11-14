@@ -31,6 +31,26 @@
       "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:references",
+      "owner": "Repository",
+      "catches": "A script nothing calls, or a workflow that names a path that no longer exists.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:ratchets",
+      "owner": "Code quality",
+      "catches": "A file over 300 lines that grows, or a copied value (port, provider name, entrypoint check) that is copied once more.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
       "id": "gate:workflow-graph",
       "owner": "Release chain",
       "catches": "A workflow or scorecard edit breaks the cut, proof, Promote or scorecard graph that releases depend on.",
@@ -109,6 +129,36 @@
       "minutes": null,
       "record": "unmeasured",
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:complexity",
+      "owner": "Code quality",
+      "catches": "A function above cyclomatic complexity 15 that is new or gets more complex than its baseline.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:dead-code",
+      "owner": "Code quality",
+      "catches": "A new Go function that no entry point can reach.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
+      "id": "gate:duplication",
+      "owner": "Code quality",
+      "catches": "A new clone of existing code, found by jscpd, that raises the clone count.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
     },
     {
       "id": "gate:ast-grep",
@@ -327,6 +377,16 @@
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:diagnose-call",
+      "owner": "Call",
+      "catches": "A change to the call diagnosis command or its verdict thresholds that no longer joins client, API, Sync and SFU rows by id or no longer names the failing stage.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New lane: no runs recorded yet."
+    },
+    {
       "id": "gate:proof-bundle",
       "owner": "Release chain",
       "catches": "A production or web proof script whose unit test fails, such as the proof origin collision of the nightly cut, or one that no longer bundles against the Leave baseline client.",
@@ -476,6 +536,16 @@
       "reason": "Runs only when a covered file changes, so it cannot be a required context; the model and its code anchors fail the check when they drift."
     },
     {
+      "id": "workflow:gate.yml#ready-cap",
+      "owner": "Gate",
+      "catches": "Too many pull requests ready at once: it sends a newly ready pull request back to draft before the Gate starts.",
+      "runs": ["pull_request"],
+      "blocks": "action",
+      "minutes": 0.3,
+      "record": "unmeasured",
+      "sample": "New with the ready cap; no history yet."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
@@ -537,14 +607,25 @@
       "reason": "It only saves what the pull request already proved. If it fails, the queue runs every group again, which is the safe direction."
     },
     {
+      "id": "workflow:ci-janitor.yml#clean",
+      "owner": "Gate",
+      "catches": "Caches of closed pull requests and landed merge queue groups that push master's caches out of the repository's 10 GiB.",
+      "runs": ["daily"],
+      "blocks": "advisory",
+      "minutes": 0.5,
+      "record": "unmeasured",
+      "sample": "New; no history yet. On 14 November the repository held 10.6 GiB of caches, four of them 930 MiB macOS caches on pull request refs.",
+      "reason": "It only deletes caches that nothing can read, or the least recently used ones past a budget. A failed run leaves the caches in place, and GitHub then evicts by its own rule."
+    },
+    {
       "id": "workflow:host-change-check.yml#check",
       "owner": "Monitoring",
-      "catches": "A change to the node that no release made, read from CloudTrail every five minutes and sent to Oncall.",
+      "catches": "A change to the node that no release made, read from CloudTrail and Axiom over the last eight hours and sent to Oncall.",
       "runs": ["daily"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Runs on a five-minute schedule; no failure history recorded yet."
+      "minutes": 0.5,
+      "record": "noise",
+      "sample": "The first 5 of 7 runs, from 12 to 13 November, failed with an Axiom HTTP 400 (the log did not say why; the query is valid against the production dataset) and the 2 since 14 November passed. GitHub ran the five-minute cron only 7 times in 2.5 days."
     },
     {
       "id": "workflow:hotfix.yml#plan",
@@ -612,9 +693,9 @@
       "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#deploy-current",
@@ -622,9 +703,9 @@
       "catches": "The newest passed cut failing to deploy on nightly.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 13.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28. It is skipped when nightly already runs the current cut."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-back",
@@ -632,9 +713,9 @@
       "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 7.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-forward",
@@ -642,9 +723,9 @@
       "catches": "Rolling forward again after a rollback failing.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 28,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#result",
@@ -652,9 +733,9 @@
       "catches": "A rehearsal whose outcome is not reported.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
     },
     {
       "id": "workflow:gate.yml#sync",
@@ -871,11 +952,11 @@
       "id": "workflow:mcp-production-check.yml#mcp",
       "owner": "Monitoring",
       "catches": "The hosted MCP server rejecting sign-in or tool calls the way a client sees them.",
-      "runs": ["daily", "promote"],
+      "runs": ["promote", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "4 of 21 runs failed on 7 and 8 November; the causes were not reviewed."
+      "sample": "4 of 23 completed runs failed on 7 and 8 November, while it ran every six hours; the causes were not reviewed. It no longer has a timer and runs after each Promote."
     },
     {
       "id": "workflow:mobile-ci.yml#fingerprint",
@@ -913,7 +994,7 @@
     {
       "id": "workflow:mobile-nightly-android.yml#android",
       "owner": "Mobile",
-      "catches": "A nightly Android build that fails after a successful cut.",
+      "catches": "A nightly Android build that fails after a successful cut. It builds only when something under the mobile app paths changed since the last release on the internal track.",
       "runs": ["cut"],
       "blocks": "release",
       "minutes": null,

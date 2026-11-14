@@ -7,12 +7,11 @@ import type { ConnectionDiagnostic } from "../connection/diagnostics";
 import { createDefaultConnectionDependencies } from "../connection/production";
 import { callEvents } from "./call-events";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
-import { normalizeClientError, SpaceClientError } from "./errors";
+import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl, normalizeBaseUrl } from "../urls";
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
 export type SpaceClientPlatform = {
   readonly apiBaseUrl?: string;
@@ -82,7 +81,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
         fetch: platform.fetch,
       });
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, selection, store, controllers)),
+        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers)),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
@@ -99,7 +98,7 @@ export class SpaceClientCore {
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, _selection: MediaDeviceSelection, store: SpaceStore, controllers: ControllerEffects) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects) {
     this.#connection = connection;
     this.#store = store;
     this.controllers = controllers;
@@ -225,9 +224,6 @@ function liveClock(dependencies: ConnectionDependencies) {
         return Effect.sync(() => dependencies.clock.clearTimeout(handle));
       }),
   });
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 async function fetchAccessGrant(input: { readonly request?: ConnectionAccessRequest; readonly options: SpaceClientOptions; readonly platform: SpaceClientPlatform }): Promise<unknown> {
   if (input.platform.connectionAccess) return input.platform.connectionAccess(input.request);

@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 import hotfix
 import rehearsal
 import release
+from github_release import GitHub
 
 SHA = 'a' * 40
 BASE = 'b' * 40
@@ -129,12 +130,37 @@ class Rehearsal(Files):
         with patch.object(rehearsal, 'manifest_bytes'), self.assertRaisesRegex(ValueError, 'two nightly cuts'):
             rehearsal.plan(self.github(self.cut('x-new')), None)
 
-    def judge(self, rollback_source):
+    def judge(self, rollback_source, baseline='x-new', baseline_needed='true'):
         current, previous = self.cut('x-new'), self.cut('z-old')
         leg = lambda source: json.dumps(dict(restored_source_release_id=source, release_id='fresh', applied_release_id='fresh'))
-        variables = dict(CURRENT=json.dumps(current), PREVIOUS=json.dumps(previous), BASELINE=leg('x-new'), ROLLBACK=leg(rollback_source), FORWARD=leg('x-new'))
+        variables = dict(CURRENT=json.dumps(current), PREVIOUS=json.dumps(previous), BASELINE=leg(baseline) if baseline else '{}', ROLLBACK=leg(rollback_source),
+                         FORWARD=leg('x-new'), BASELINE_NEEDED=baseline_needed)
         with patch.dict(os.environ, variables):
             rehearsal.verdict(Mock(), None)
+
+    def staging(self, write_sha, **cut_changes):
+        """A fake GitHub whose newest nightly write is at `write_sha` and whose newest cut record is the current cut's deploy, as
+        `deployed_cut` reads them; `None` for the write means staging has none."""
+        current = self.cut('x-new')
+        write = dict(id=10, sha=write_sha, payload=dict(channel='nightly-write', run_id='1', release_id='x-new'))
+        cut = dict(id=11, payload={**current, 'deploy_result': 'success', 'applied_release_id': 'x-new', **cut_changes})
+        github = Mock(spec=GitHub)
+        github.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [write] if task == 'nightly-write' and write_sha else [] if task == 'nightly-write' else [cut]
+        return github
+
+    def test_the_first_leg_is_skipped_only_when_staging_runs_a_finished_deploy_of_the_current_cut(self):
+        current = self.cut('x-new')
+        self.assertFalse(rehearsal.baseline_needed(self.staging('x' * 40), current))
+        for name, github in (('another cut', self.staging('z' * 40)), ('unfinished deploy', self.staging('x' * 40, deploy_result='failure')),
+                             ('another run', self.staging('x' * 40, run_id='2')), ('no write', self.staging(None))):
+            with self.subTest(name):
+                self.assertTrue(rehearsal.baseline_needed(github, current))
+
+    def test_a_skipped_first_leg_is_not_judged_but_a_failed_one_is(self):
+        self.judge('z-old', baseline=None, baseline_needed='false')
+        self.assertIn('first leg was skipped', self.summary.read_text())
+        with self.assertRaisesRegex(SystemExit, 'deploy current'):
+            self.judge('z-old', baseline=None)
 
     def test_three_legs_on_their_own_sources_pass(self):
         self.judge('z-old')

@@ -74,7 +74,6 @@ export type ParsedAccessGrant = {
 export type AccessGrant = {
   readonly [accessGrantBrand]: "AccessGrant";
 };
-export type AccessGrantProvider = () => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 export class AccessGrantError extends TypeError {
   readonly code = "access.invalid" as const;
   constructor(
@@ -121,7 +120,7 @@ export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
 export function parseAccessGrant(value: unknown): AccessGrant {
   return accessGrantFromParsed(parseParsedAccessGrant(value));
 }
-export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
+function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
   return Object.freeze({
     subject: {
       tenant_id: value.subject.tenantId,
@@ -141,36 +140,16 @@ export function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
     [accessGrantBrand]: "AccessGrant" as const,
   });
 }
-export async function requireParsedAccessGrant(value: unknown): Promise<ParsedAccessGrant> {
-  if (typeof Response !== "undefined" && value instanceof Response) {
-    await requireSuccessfulResponse(value);
-    try {
-      return parseParsedAccessGrant(await value.json());
-    } catch (error) {
-      if (error instanceof AccessGrantError) throw error;
-      throw new AccessGrantError();
-    }
-  }
-  return parseParsedAccessGrant(value);
-}
-export async function requireAccessGrant(value: unknown): Promise<AccessGrant> {
-  if (typeof Response !== "undefined" && value instanceof Response) {
-    await requireSuccessfulResponse(value);
-    try {
-      return parseAccessGrant(await value.json());
-    } catch (error) {
-      if (error instanceof AccessGrantError) throw error;
-      throw new AccessGrantError();
-    }
-  }
-  return parseAccessGrant(value);
-}
-export function isParsedAccessGrant(value: unknown): value is ParsedAccessGrant {
+export const requireParsedAccessGrant = (value: unknown): Promise<ParsedAccessGrant> => readGrant(value, parseParsedAccessGrant);
+export const requireAccessGrant = (value: unknown): Promise<AccessGrant> => readGrant(value, parseAccessGrant);
+async function readGrant<T>(value: unknown, parse: (value: unknown) => T): Promise<T> {
+  if (typeof Response === "undefined" || !(value instanceof Response)) return parse(value);
+  await requireSuccessfulResponse(value);
   try {
-    parseParsedAccessGrant(value);
-    return true;
-  } catch {
-    return false;
+    return parse(await value.json());
+  } catch (error) {
+    if (error instanceof AccessGrantError) throw error;
+    throw new AccessGrantError();
   }
 }
 function parseSubject(value: unknown): AccessSubject {

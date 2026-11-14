@@ -13,17 +13,26 @@
 (*    failForSnapshot (1065); MEDIA_RECOVERY_TIMEOUT_MS = 60000 (18)       *)
 (*  sdks/typescript/client/src/sync/v1-client.ts:577-580                   *)
 (*    the student's own participant_left becomes participant_inactive      *)
+(*  settleTerminalSnapshot sets timedOut when that happens while the       *)
+(*    student is still in the call; a pressed Leave never sets it          *)
 (*  apps/api/internal/adapters/postgres/participant_presence.go            *)
 (*    expireEpisodePresence (65): an expired seat gets the same            *)
 (*    participant_leave operation as a pressed Leave                       *)
 (*  apps/sync/lib/chalk_sync/episodes/reducer.ex:421                       *)
 (*    the reason of participant_left defaults to "left"                    *)
-(*  sdks/typescript/react/src/components/chalk/StatusSurface.tsx:30        *)
-(*    the "You left" screen                                                *)
+(*  sdks/typescript/react/src/components/chalk/StatusSurface.tsx           *)
+(*    the "You left" screen and the "timed-out" screen                     *)
 (*  sdks/typescript/client/src/space-client/media-controller.ts            *)
 (*    the owed off (offDebt), lines 49-62, 514, 600-613, 943               *)
+(*                                                                         *)
+(* ShowsTimeout is TRUE in the real code: a seat the server gave up shows  *)
+(* the "timedOut" screen. FALSE is the old code, which showed "left".      *)
+(* NetworkDrops.broken.cfg runs the old value.                             *)
 (***************************************************************************)
 EXTENDS Naturals
+
+CONSTANTS
+    ShowsTimeout \* does a seat the server gave up show the timeout screen?
 
 VARIABLES
     screen,       \* what the student sees
@@ -35,7 +44,7 @@ VARIABLES
 
 vars == <<screen, seat, pressedLeave, micLocal, micOthers, debt>>
 
-Screens == {"live", "reconnecting", "lost", "frozen", "left"}
+Screens == {"live", "reconnecting", "lost", "frozen", "left", "timedOut"}
 
 TypeOK ==
     /\ screen \in Screens
@@ -87,7 +96,7 @@ SeatExpires ==
 \* The page wakes and asks Sync for what it missed.
 PageWakes ==
     /\ screen = "frozen"
-    /\ screen' = IF seat = "held" THEN "reconnecting" ELSE "left"
+    /\ screen' = IF seat = "held" THEN "reconnecting" ELSE IF ShowsTimeout THEN "timedOut" ELSE "left"
     /\ UNCHANGED <<seat, pressedLeave, micLocal, micOthers, debt>>
 
 PressLeave ==
@@ -112,7 +121,7 @@ PayMuteDebt ==
     /\ debt' = "none"
     /\ UNCHANGED <<screen, seat, pressedLeave, micLocal>>
 
-Done == screen \in {"lost", "left"} /\ UNCHANGED vars
+Done == screen \in {"lost", "left", "timedOut"} /\ UNCHANGED vars
 
 Next ==
     \/ ConnectionDrops \/ RecoveryGivesUp \/ ConnectionReturns

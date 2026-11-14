@@ -2,13 +2,13 @@ import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { connectionErrorCode } from "./errors";
 import { structurallyEqual } from "./structural-equal";
 import type { ConnectionLifecycleSnapshot } from "../connection";
-import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
+import type { ConnectionSlice, MediaSlice, SpaceSnapshot } from "./types";
 
 const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["connection"]["sync"]>(["unresponsive", "connecting", "recovering", "stopped"]);
 
 const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({
-  connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false }),
+  connection: empty({ status: "idle", episode: null, lastError: null, episodeEnded: false, removedByHost: false, timedOut: false }),
   self: empty({ participantId: null, displayName: null, role: null, capabilities: empty([]), handRaised: false, can: () => false }),
   participants: empty({ roster: empty([]), admissionQueue: empty([]) }),
   media: empty({
@@ -59,38 +59,15 @@ export class SpaceStore {
       episodeEnded: snapshot.episodeEnded ?? false,
       episodeEndReason: snapshot.episodeEndReason,
       removedByHost: snapshot.removedByHost ?? false,
+      timedOut: snapshot.timedOut ?? false,
     };
-    this.#replace("connection", empty(next));
-  }
-  updateSelf(value: SelfSlice): void {
-    this.#replace("self", value);
-  }
-  updateParticipants(value: ParticipantsSlice): void {
-    this.#replace("participants", value);
-  }
-  updateMedia(value: MediaSlice): void {
-    this.#replace("media", value);
-  }
-  updateChat(value: ChatSlice): void {
-    this.#replace("chat", value);
-  }
-  updateReactions(value: ReactionsSlice): void {
-    this.#replace("reactions", value);
-  }
-  updateRecording(value: RecordingSlice): void {
-    this.#replace("recording", value);
-  }
-  updateOffline(value: OfflineSlice): void {
-    this.#replace("offline", value);
-  }
-  updateWhiteboard(value: WhiteboardSlice): void {
-    this.#replace("whiteboard", value);
+    this.update("connection", empty(next));
   }
   select(kind: keyof MediaSlice["selection"], deviceId: string): void {
     const current = this.getSnapshot();
-    this.updateMedia(empty({ ...current.media, selection: empty({ ...current.media.selection, [kind]: deviceId }) }));
+    this.update("media", empty({ ...current.media, selection: empty({ ...current.media.selection, [kind]: deviceId }) }));
   }
-  #replace<TSlice extends keyof SpaceSnapshot>(key: TSlice, value: SpaceSnapshot[TSlice]): void {
+  update<TSlice extends keyof SpaceSnapshot>(key: TSlice, value: SpaceSnapshot[TSlice]): void {
     const current = this.getSnapshot();
     if (structurallyEqual(current[key], value)) return;
     const next = empty({ ...current, [key]: value });

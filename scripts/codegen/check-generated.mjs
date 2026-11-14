@@ -1,8 +1,5 @@
 import { spawn } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { repositoryRoot } from "../lib/repository.mjs";
 
 // Each entry reuses an existing check. None needs Postgres or Docker.
 const checks = [

@@ -13,20 +13,36 @@ const encoder = new TextEncoder();
 const sha256Pattern = /^[0-9a-f]{64}$/u;
 
 export function createChalkChatFileHttpTransport(options: ChalkChatFileHttpTransportOptions): ChalkChatFileTransport {
-  const request = createChatFileRequest(options);
+  const fetchImplementation = withRequestContext(options.fetch);
+
+  async function request<T>(operation: ChalkChatFileOperation, url: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
+    const headers = new Headers(init.headers);
+    try {
+      headers.set("authorization", `Bearer ${await options.token()}`);
+    } catch (cause) {
+      throw new ChalkChatFileError({ operation, code: "unavailable", stage: "token", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
+    }
+    let response: Response;
+    try {
+      response = await fetchImplementation(url, { ...init, headers });
+    } catch (cause) {
+      throw new ChalkChatFileError({ operation, code: "unavailable", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
+    }
+    if (!response.ok) throw await responseError(response, operation);
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch (cause) {
+      throw new ChalkChatFileError({ operation, code: "file_transfer_failed", recoverable: false, message: "Chat attachment service returned invalid JSON." }, { cause });
+    }
+    if (!accepts(value)) throw chatFileError(operation, "file_transfer_failed", false, "Chat attachment service returned an invalid response.");
+    return value;
+  }
+
   return {
     initiateUpload: async (input) => {
       validateUploadInput(input);
-      return request(
-        "initiate_upload",
-        apiUrls.chatUploads(options.baseUrl),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(input),
-        },
-        isInitiateUploadResponse,
-      );
+      return request("initiate_upload", apiUrls.chatUploads(options.baseUrl), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) }, isInitiateUploadResponse);
     },
     finalizeUpload: (uploadId) => request("finalize_upload", apiUrls.chatUploadFinalize(options.baseUrl, uploadId), { method: "POST" }, isAttachment),
     getDownloadUrl: (attachmentId) => request("get_download", apiUrls.chatAttachmentDownload(options.baseUrl, attachmentId), { method: "GET" }, isDownloadResponse),
@@ -51,33 +67,6 @@ function validAttachmentByteLength(value: number): boolean {
 
 function invalidUpload(message: string): never {
   throw chatFileError("initiate_upload", "invalid_payload", false, message);
-}
-
-function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
-  const fetchImplementation = withRequestContext(options.fetch);
-  return async function request<T>(operation: ChalkChatFileOperation, url: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
-    const headers = new Headers(init.headers);
-    try {
-      headers.set("authorization", `Bearer ${await options.token()}`);
-    } catch (cause) {
-      throw new ChalkChatFileError({ operation, code: "unavailable", stage: "token", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
-    }
-    let response: Response;
-    try {
-      response = await fetchImplementation(url, { ...init, headers });
-    } catch (cause) {
-      throw new ChalkChatFileError({ operation, code: "unavailable", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
-    }
-    if (!response.ok) throw await responseError(response, operation);
-    let value: unknown;
-    try {
-      value = await response.json();
-    } catch (cause) {
-      throw new ChalkChatFileError({ operation, code: "file_transfer_failed", recoverable: false, message: "Chat attachment service returned invalid JSON." }, { cause });
-    }
-    if (!accepts(value)) throw chatFileError(operation, "file_transfer_failed", false, "Chat attachment service returned an invalid response.");
-    return value;
-  };
 }
 
 async function responseError(response: Response, operation: ChalkChatFileOperation): Promise<ChalkChatFileError> {
@@ -113,7 +102,7 @@ function isAttachment(value: unknown): value is Awaited<ReturnType<ChalkChatFile
   return hasOnlyKeys(value, "attachmentId,byteLength,fileName,mimeType") && typeof value.attachmentId === "string" && typeof value.fileName === "string" && isAllowedMimeType(value.mimeType) && typeof value.byteLength === "number" && validAttachmentByteLength(value.byteLength);
 }
 
-function isDownloadResponse(value: unknown): value is Awaited<ReturnType<ChalkChatFileTransport["getDownloadUrl"]>> {
+export function isDownloadResponse(value: unknown): value is Awaited<ReturnType<ChalkChatFileTransport["getDownloadUrl"]>> {
   return hasOnlyKeys(value, "downloadUrl,expiresAt") && isHttpUrl(value.downloadUrl) && isDate(value.expiresAt);
 }
 

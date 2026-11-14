@@ -5,6 +5,8 @@ set -euo pipefail
 mobile_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 repo_root=$(cd "$mobile_root/../.." && pwd)
 manifest="$repo_root/release/manifest.json"
+# shellcheck source=op-retry.sh
+source "$(dirname "${BASH_SOURCE[0]}")/op-retry.sh"
 output_dir=${SIGNED_OUTPUT_DIR:-"$mobile_root/build/releases"}
 mkdir -p "$output_dir"
 output_dir=$(cd "$output_dir" && pwd)
@@ -74,10 +76,10 @@ expected_screen_share_profile_uuid=$(jq -er '.apple.screen_share_profile_uuid' "
 expected_profile_certificate_sha256=$(jq -er '.apple.profile_certificate_sha256' "$manifest")
 
 echo "Recovering Chalk iOS release credentials from 1Password."
-op document get --force "$p12_item_id" --vault "$vault" --out-file "$temp_dir/distribution.p12" >/dev/null
-op document get --force "$p12_password_item_id" --vault "$vault" --out-file "$temp_dir/p12.pass" >/dev/null
-op document get --force "$main_profile_item_id" --vault "$vault" --out-file "$temp_dir/main.mobileprovision" >/dev/null
-op document get --force "$screen_share_profile_item_id" --vault "$vault" --out-file "$temp_dir/screen-share.mobileprovision" >/dev/null
+op_retry document get --force "$p12_item_id" --vault "$vault" --out-file "$temp_dir/distribution.p12" >/dev/null
+op_retry document get --force "$p12_password_item_id" --vault "$vault" --out-file "$temp_dir/p12.pass" >/dev/null
+op_retry document get --force "$main_profile_item_id" --vault "$vault" --out-file "$temp_dir/main.mobileprovision" >/dev/null
+op_retry document get --force "$screen_share_profile_item_id" --vault "$vault" --out-file "$temp_dir/screen-share.mobileprovision" >/dev/null
 chmod 600 "$temp_dir"/*
 
 security cms -D -i "$temp_dir/main.mobileprovision" > "$temp_dir/main.plist"
