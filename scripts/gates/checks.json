@@ -1071,6 +1071,36 @@
       "sample": "New; no history."
     },
     {
+      "id": "workflow:nightly-host-proof.yml#target",
+      "owner": "Release chain",
+      "catches": "Picks the newest held cut that no passed host proof covers, or the newest one on the weekly run.",
+      "runs": ["cut", "weekly", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-host-proof.yml#host",
+      "owner": "Release chain",
+      "catches": "A cut that does not deploy, stay healthy and come back from a reboot on a fresh production-kind host through the real SSM document and controller.",
+      "runs": ["cut", "weekly", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
+      "id": "workflow:nightly-host-proof.yml#record",
+      "owner": "Release chain",
+      "catches": "Writes the SHA-bound host proof verdict Promote requires when host paths changed.",
+      "runs": ["cut", "weekly", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
       "id": "workflow:nightly.yml#record",
       "owner": "Release chain",
       "catches": "Writes the nightly record Promote reads, and fails when any required job failed.",

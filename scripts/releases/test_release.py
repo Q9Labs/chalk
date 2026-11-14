@@ -133,14 +133,16 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'descends', side_effect=lambda sha, target: sha == target))
         self.changed = self.enterContext(patch.object(release, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
 
-    def github(self, item, latency='passed', scorecard='passed'):
+    def github(self, item, latency='passed', scorecard='passed', host='passed'):
         api = Mock(spec=GitHub)
         record = [] if latency is None else [dict(id=9, payload=dict(
             channel='nightly-latency', target_sha=item['payload']['target_sha'], result=latency, scorecard_result=scorecard,
             scorecard_gated_metrics=['chalk_sfu.action.join.first_audio_ms'] if scorecard == 'gated-breach' else [],
             scorecard_missing_items=['chalk_sfu.action.leave_ms'] if scorecard == 'missing' else []))]
         api.deployments.return_value = [item]
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: record if task == 'nightly-latency' else api.deployments.return_value
+        host_record = [] if host is None else [dict(id=8, payload=dict(channel='nightly-host-proof', target_sha=item['payload']['target_sha'], result=host))]
+        records = {'nightly-latency': record, 'nightly-host-proof': host_record}
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: records.get(task, api.deployments.return_value)
         api.request.side_effect = lambda route: ([dict(state=item['latest_status'])]
                                                  if '/statuses?' in route else item)
         return api
@@ -242,6 +244,53 @@ class ChalkSfuPromotionTests(unittest.TestCase):
                 release.latency_target(self.github(held(), latency=latency), None)
                 self.assertEqual(self.output.read_text(), f'sha={expected}\n')
 
+    def blocked_by_host_proof(self, action, result):
+        with self.assertRaisesRegex(ValueError, f'host_proof_result={result}'):
+            action()
+
+    def test_promote_needs_a_passing_host_proof_when_production_differs_in_host_paths(self):
+        self.blocked_by_host_proof(lambda: release.select(self.github(held(), host=None), None), 'host-proof-missing')
+        self.blocked_by_host_proof(lambda: release.select(self.github(held(), host='failed'), None), 'failed')
+        release.select(self.github(held()), None)
+
+    def test_promote_needs_no_host_proof_when_production_differs_in_no_host_path(self):
+        self.changed.side_effect = lambda previous, target, prefixes: previous != target and tuple(prefixes) != release.host_paths()
+        release.select(self.github(held(), host=None), None)
+
+    def test_the_host_proof_gate_sees_the_controller_host_bootstrap_and_recording_paths(self):
+        paths = release.host_paths()
+        for changed in ('infrastructure/managed-episode/controller/chalk-deployment-controller', 'infrastructure/nightly/host-cloud-init.yaml',
+                        'scripts/deploy/deploy-managed-release.mjs', 'scripts/recorder/release_core.py', 'apps/api/internal/recorderfleet/fleet.go',
+                        '.github/workflows/nightly-host-proof.yml', 'scripts/nightly-host-proof/run'):
+            self.assertTrue(any(changed == prefix or changed.startswith(prefix + '/') for prefix in paths), changed)
+
+    def test_an_override_names_a_host_proof_it_accepts_and_the_automatic_path_never_takes_it(self):
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='accepted by a person'):
+            audit = release.select(self.github(held(), host='failed'), None) or release.choose(self.github(held(), host='failed')).get('scorecard_override')
+        self.assertEqual(audit['proof_results'], dict(host_proof_result='failed'))
+        self.assertEqual(self.promoted_sha(self.github(held(), host=None)), '')
+
+    def test_host_proof_target_is_the_newest_held_cut_that_no_host_proof_covers_or_any_on_the_weekly_run(self):
+        for host, force, expected in ((None, '', SHA), ('failed', '', SHA), ('passed', '', ''), ('passed', 'true', SHA)):
+            with self.subTest(host=host, force=force), patch.dict(os.environ, HOST_PROOF_FORCE=force):
+                self.output.write_text('')
+                release.host_proof_target(self.github(held(), host=host), None)
+                lines = dict(line.split('=', 1) for line in self.output.read_text().splitlines())
+                self.assertEqual(lines['sha'], expected)
+                self.assertEqual(bool(lines['run_id']), bool(expected))
+
+    def test_record_host_proof_binds_the_verdict_and_the_database_mode_to_the_sha_and_run(self):
+        api = Mock(spec=GitHub)
+        api.record_proof.return_value = 6
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', HOST_PROOF_RESULT='passed', HOST_PROOF_DATABASE='container')):
+            release.record_host_proof(api, None)
+        sha, task, info = api.record_proof.call_args.args
+        self.assertEqual((sha, task), (SHA, 'nightly-host-proof'))
+        self.assertEqual((info['result'], info['run_id'], info['database']), ('passed', '77', 'container'))
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', HOST_PROOF_RESULT='cancelled')):
+            release.record_host_proof(api, None)
+        self.assertEqual(api.record_proof.call_args.args[2]['result'], 'failed')
+
     def test_latency_target_is_empty_without_a_held_cut(self):
         api = Mock(spec=GitHub)
         api.deployments.return_value = []
@@ -251,29 +300,29 @@ class ChalkSfuPromotionTests(unittest.TestCase):
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
         api = Mock(spec=GitHub)
-        api.record_latency.return_value = 5
+        api.record_proof.return_value = 5
         environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
         with patch.dict(os.environ, environment):
             release.record_latency(api, None)
-            saved = api.record_latency.call_args.args
+            saved = api.record_proof.call_args.args
             self.assertEqual(saved[0], SHA)
-            self.assertEqual((saved[1]['result'], saved[1]['run_id'], saved[1]['channel']), ('passed', '77', 'nightly-latency'))
+            self.assertEqual((saved[2]['result'], saved[2]['run_id'], saved[2]['channel']), ('passed', '77', 'nightly-latency'))
             os.environ['LATENCY_RESULT'] = 'failed'
             release.record_latency(api, None)
-            self.assertEqual(api.record_latency.call_args.args[1]['result'], 'failed')
+            self.assertEqual(api.record_proof.call_args.args[2]['result'], 'failed')
             os.environ['SCORECARD_RESULT'] = json.dumps(dict(scorecard, run_id='78'))
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
             os.environ['SCORECARD_RESULT'] = ''
             release.record_latency(api, None)
-            self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
+            self.assertEqual(api.record_proof.call_args.args[2]['scorecard_result'], 'missing')
 
     def test_record_latency_refuses_a_run_with_fewer_than_the_full_samples(self):
         api = Mock(spec=GitHub)
         with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='', LATENCY_SAMPLES='3')):
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
-        api.record_latency.assert_not_called()
+        api.record_proof.assert_not_called()
 
     def test_every_input_of_the_latency_measurement_decides_whether_a_record_still_covers(self):
         paths = release.latency_paths()
@@ -286,7 +335,7 @@ class ChalkSfuPromotionTests(unittest.TestCase):
             with patch.object(release, 'ancestor', side_effect=subprocess.CalledProcessError(1, 'git')):
                 with self.assertRaises(subprocess.CalledProcessError):
                     release.record_latency(api, None)
-        api.record_latency.assert_not_called()
+        api.record_proof.assert_not_called()
 
     def test_select_never_uses_a_passed_proof_from_another_sha(self):
         item = held('passed', OTHER_SHA)

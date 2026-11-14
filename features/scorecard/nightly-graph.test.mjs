@@ -404,3 +404,21 @@ test("the latency step cap fits a full retry: lease wait, two capped attempts, t
   const needed = cutWaits["latency retry"] / 60 + 2 * attemptMinutes + quietWait + 1;
   assert.ok(needed <= capMinutes(latencyStep).chalk, `a full retry needs ${needed} minutes; the step cap is ${capMinutes(latencyStep).chalk}`);
 });
+
+// The host proof is the only thing that touches AWS from a release workflow. It runs in the environment whose role trusts master
+// only, never on a pull request, and a failed proof is recorded as well as a passed one.
+test("Nightly host proof runs on master only, in the host-proof environment, and records every verdict", () => {
+  const hostProof = workflow("nightly-host-proof.yml");
+  assert.deepEqual(Object.keys(hostProof.on).sort(), ["schedule", "workflow_dispatch", "workflow_run"]);
+  assert.deepEqual(hostProof.on.workflow_run.workflows, ["Cut nightly"]);
+  assert.equal(hostProof.jobs.host.environment, "nightly-host-proof");
+  assert.equal(hostProof.jobs.host.permissions["id-token"], "write");
+  assert.equal(hostProof.jobs.target.steps[0].env.WORKFLOW_REF, "${{ github.ref }}");
+  assert.match(hostProof.jobs.target.steps[0].run, /refs\/heads\/master/);
+  assert.equal(hostProof.jobs.target.steps.find((step) => step.id === "target").env.HOST_PROOF_FORCE, "${{ github.event_name != 'workflow_run' }}");
+  const { record } = hostProof.jobs;
+  assert.deepEqual(needsOf(record), ["target", "host"]);
+  assert.match(record.if, /always\(\)/);
+  assert.match(record.steps.at(-1).env.HOST_PROOF_RESULT, /needs\.host\.result == 'success' && 'passed' \|\| 'failed'/);
+  assert.doesNotMatch(JSON.stringify(nightly.jobs), /nightly-host-proof/, "the cut does not wait for the host proof");
+});

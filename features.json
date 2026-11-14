@@ -450,6 +450,7 @@
         ".github/workflows/host-change-check.yml",
         ".github/workflows/hotfix.yml",
         ".github/workflows/nightly-cf-latency.yml",
+        ".github/workflows/nightly-host-proof.yml",
         ".github/workflows/nightly.yml",
         ".github/workflows/nightly-proofs.yml",
         ".github/workflows/npm-publish.yml",
@@ -464,6 +465,7 @@
         "infrastructure/README.md",
         "scripts/deploy",
         "scripts/gates",
+        "scripts/nightly-host-proof",
         "scripts/nightly-stack",
         "scripts/releases"
       ]

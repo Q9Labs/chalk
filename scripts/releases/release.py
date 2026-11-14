@@ -83,16 +83,34 @@ def descends(sha, target):
     return subprocess.run(['git', 'merge-base', '--is-ancestor', sha, target]).returncode == 0
 
 
-def covering_latency(github, target):
-    """The passed latency record that vouches for target: its SHA is target or an ancestor, and no latency path changed since."""
-    for item in github.deployments('nightly', 'nightly-latency'):
+# What the on-demand host proof exercises: the host controller and runtime, the host bootstrap, command delivery, the recorder
+# plane the host runs, and the proof's own script and workflow.
+HOST_EXTRA_PATHS = ('infrastructure/managed-episode', 'infrastructure/nightly', 'infrastructure/recorder', 'scripts/deploy',
+                    'scripts/nightly-host-proof', '.github/workflows/nightly-host-proof.yml')
+
+
+def host_paths():
+    return HOST_EXTRA_PATHS + recording_paths()
+
+
+def covering_record(github, target, task, paths):
+    """The passed record of this task that vouches for target: its SHA is target or an ancestor, and none of paths changed since."""
+    for item in github.deployments('nightly', task):
         info = payload(item)
         sha = info.get('target_sha', '')
         if info.get('result') != 'passed' or not re.fullmatch('[0-9a-f]{40}', sha):
             continue
-        if descends(sha, target) and not paths_changed(sha, target, latency_paths()):
+        if descends(sha, target) and not paths_changed(sha, target, paths):
             return info
     return None
+
+
+def covering_latency(github, target):
+    return covering_record(github, target, 'nightly-latency', latency_paths())
+
+
+def covering_host_proof(github, target):
+    return covering_record(github, target, 'nightly-host-proof', host_paths())
 
 
 def manifest_bytes(github, info, trusted=True):
@@ -374,16 +392,41 @@ def with_latency(github, info, production_sha):
     return merged
 
 
+def with_host_proof(github, info, production_sha):
+    """A cut whose changes since production touch a host path needs a passed host proof; without one it is a failed or missing
+    proof, never a pass. A cut that touches none needs no host proof."""
+    target = info['target_sha']
+    merged = dict(info)
+    if not paths_changed(production_sha, target, host_paths()):
+        merged['host_proof_result'] = 'not-required'
+    elif covering_host_proof(github, target):
+        merged['host_proof_result'] = 'passed'
+    else:
+        exact = github.deployments('nightly', 'nightly-host-proof', sha=target)
+        merged['host_proof_result'] = 'failed' if exact else 'host-proof-missing'
+    return merged
+
+
+def require_host_proof(info):
+    result = info.get('host_proof_result', 'missing')
+    require(result in ('passed', 'not-required'),
+            f"cannot promote SHA {info['target_sha']}: host_proof_result={result}; a passed on-demand host proof covering "
+            'the controller, runtime and host paths changed since production is required (run Nightly host proof)')
+
+
 def promotion_override(github, info, production_sha):
-    info = with_latency(github, info, production_sha)
+    info = with_host_proof(github, with_latency(github, info, production_sha), production_sha)
     reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
     scorecard_result = info.get('scorecard_result', 'missing')
     if not reason or scorecard_result not in ('gated-breach', 'missing'):
         require_scorecard(info)
     if not reason:
         require_chalk_sfu_proof(info)
+        require_host_proof(info)
         return None
     proof_results = {}
+    if info['host_proof_result'] not in ('passed', 'not-required'):
+        proof_results['host_proof_result'] = info['host_proof_result']
     if info.get('chalk_sfu_proof_result') != 'passed':
         proof_results['chalk_sfu_proof_result'] = info.get('chalk_sfu_proof_result', 'missing')
     if scorecard_result != 'passed':
@@ -468,7 +511,31 @@ def record_latency(github, args):
                 result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
                 scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
                 scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
-    outputs({'deployment_id': github.record_latency(sha, info)})
+    outputs({'deployment_id': github.record_proof(sha, 'nightly-latency', info)})
+
+
+def record_host_proof(github, args):
+    """The host proof deployed this cut to a host it created, so the record names the SHA it proved and how the database ran."""
+    sha = env('TARGET_SHA')
+    require(re.fullmatch('[0-9a-f]{40}', sha), 'target_sha must be a full lowercase commit SHA')
+    ancestor(sha)
+    result = os.environ.get('HOST_PROOF_RESULT', 'failed')
+    info = dict(channel='nightly-host-proof', target_sha=sha, run_id=env('GITHUB_RUN_ID'), result='passed' if result == 'passed' else 'failed',
+                database=os.environ.get('HOST_PROOF_DATABASE') or 'unknown', reason=os.environ.get('HOST_PROOF_REASON', ''))
+    outputs({'deployment_id': github.record_proof(sha, 'nightly-host-proof', info)})
+
+
+def host_proof_target(github, args):
+    """The newest held cut that no passed host proof covers, or nothing. HOST_PROOF_FORCE=true (the weekly run) takes the newest
+    held cut whatever covers it, so a host-only fault no diff shows still surfaces within a week."""
+    held = held_candidates(github.deployments('nightly'))
+    cut = payload(held[0]) if held else {}
+    sha = cut.get('target_sha', '')
+    force = os.environ.get('HOST_PROOF_FORCE') == 'true'
+    selected = bool(sha) and (force or covering_host_proof(github, sha) is None)
+    # The host job downloads the cut's own manifest: the release and the run that built it.
+    outputs({'sha': sha if selected else '', 'release_id': cut.get('release_id', '') if selected else '',
+             'run_id': cut.get('run_id', '') if selected else ''})
 
 
 def latency_target(github, args):
@@ -638,7 +705,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'host_proof_target', 'record_host_proof', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

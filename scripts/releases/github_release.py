@@ -315,8 +315,8 @@ class GitHub:
         require(expected is None or digest(data) == expected, f'{filename} checksum mismatch')
         return data
 
-    def record_latency(self, sha, info):
-        item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-latency', 'auto_merge': False,
+    def record_proof(self, sha, task, info):
+        item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': task, 'auto_merge': False,
                             'required_contexts': [], 'payload': info})
         return item['id']
 

@@ -58,6 +58,7 @@ export function usage() {
   [--dispatcher-config-parameter </chalk/environment/release/recorder.json>] \\
   [--proof-file <deployment-proof.json>] \\
   [--adopt-existing-release] \\
+  [--no-dispatcher-binding] \\
   [--exclude-secret <canonical-id>]... \\
   [--timeout-seconds <60-3600>] \\
   [--dry-run]
@@ -90,6 +91,7 @@ function createDefaultOptions() {
   return {
     adoptExistingRelease: false,
     dryRun: false,
+    noDispatcherBinding: false,
     excludedSecrets: [],
     timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
   };
@@ -109,6 +111,7 @@ function applyFlag(options, argument) {
   const handlers = {
     "--adopt-existing-release": () => enableAdoptExistingRelease(options),
     "--dry-run": () => enableDryRun(options),
+    "--no-dispatcher-binding": () => enableNoDispatcherBinding(options),
     "--help": () => {
       options.help = true;
     },
@@ -125,6 +128,11 @@ function applyFlag(options, argument) {
 function enableAdoptExistingRelease(options) {
   if (options.adoptExistingRelease) throw usageError("--adopt-existing-release was provided more than once");
   options.adoptExistingRelease = true;
+}
+
+function enableNoDispatcherBinding(options) {
+  if (options.noDispatcherBinding) throw usageError("--no-dispatcher-binding was provided more than once");
+  options.noDispatcherBinding = true;
 }
 
 function enableDryRun(options) {
@@ -158,7 +166,11 @@ function finishOptions(options) {
     throw usageError("provide exactly one of --document or --document-version");
   }
   validateOptions(options);
-  return { ...options, dispatcherConfigParameter: dispatcherConfiguration(options) };
+  if (options.noDispatcherBinding && options.dispatcherConfigParameter) {
+    throw usageError("--no-dispatcher-binding cannot be combined with --dispatcher-config-parameter");
+  }
+  // A proof host is not the environment's host, so it must not bind the environment's dispatcher to itself.
+  return { ...options, dispatcherConfigParameter: options.noDispatcherBinding ? undefined : dispatcherConfiguration(options) };
 }
 
 function dispatcherConfiguration(options) {
