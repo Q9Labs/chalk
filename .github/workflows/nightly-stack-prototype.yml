@@ -84,6 +84,7 @@ jobs:
         if: failure()
         run: |
           for name in api sync sfu; do echo "== $name"; docker logs --tail 60 "chalk-stack-$name" 2>&1 | grep -v '"/v1/sync"' | cut -c1-2500; done
+          echo "== sdk reports"; docker logs chalk-stack-api 2>&1 | grep sdk.connection_report | jq -r '.report' | jq -c '.events[] | select(.outcome != "succeeded" and .outcome != "started")' | cut -c1-600 | head -30
           echo "== evidence"; find .private/prod-proof -maxdepth 3 -type f 2>/dev/null | head -30
           for f in $(find .private/prod-proof -name '*.json' -o -name '*.log' -o -name '*.txt' 2>/dev/null | head -8); do echo "-- $f"; head -c 1500 "$f"; echo; done
       - name: Stop the stack
