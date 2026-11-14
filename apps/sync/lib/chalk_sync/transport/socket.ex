@@ -20,9 +20,6 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Transport.Socket.Lifecycle
   alias ChalkSync.Transport.Socket.LiveRequests
   alias ChalkSync.Transport.Socket.Outbound
-  alias ChalkSync.Transport.Socket.Outbound
-  alias ChalkSync.Transport.Socket.State
-  alias ChalkSync.Transport.Socket.State
   alias ChalkSync.Transport.Socket.State
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
