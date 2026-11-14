@@ -113,7 +113,7 @@ removal, Recording deletion and transcript search.
 ## Production check
 
 The `MCP production check` workflow (`.github/workflows/mcp-production-check.yml`)
-runs inside a production Promote, and only when the release changes MCP or something it depends on. It expects a 401 with
+runs after each production Promote and on demand. It expects a 401 with
 OAuth discovery on an unauthenticated request, then uses the proof Tenant's key
 for `initialize`, the tool list and one read. Run it by hand with
 `scripts/mcp-proof/check.mjs`, and set `CHALK_MCP_EXPECT_OAUTH=false` where OAuth is off.

@@ -945,7 +945,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "4 of 23 completed runs failed on 7 and 8 November, while it ran every six hours; the causes were not reviewed. It now runs inside Promote only when the release changes MCP or something it depends on."
+      "sample": "4 of 23 completed runs failed on 7 and 8 November, while it ran every six hours; the causes were not reviewed. It no longer has a timer and runs after each Promote."
     },
     {
       "id": "workflow:mobile-ci.yml#fingerprint",

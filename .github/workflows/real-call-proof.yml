@@ -163,11 +163,10 @@ jobs:
     # A passed Promote already ran the production proofs, so the daily run adds nothing on that day.
     # If this lookup fails, smoke still runs.
     name: Find a Promote from the last 24 hours
-    if: github.event_name == 'schedule'
+    # Callers pass an environment, and a reusable workflow sees its caller's event, so only this workflow's own schedule has none.
+    if: ${{ github.event_name == 'schedule' && inputs.environment == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions:
-      actions: read
     outputs:
       promoted: ${{ steps.find.outputs.promoted }}
     steps:
@@ -181,7 +180,7 @@ jobs:
   smoke:
     name: Real-call proofs
     needs: recent-promote
-    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.recent-promote.outputs.promoted != 'true') }}
+    if: ${{ !cancelled() && needs.recent-promote.outputs.promoted != 'true' }}
     runs-on: ubuntu-24.04
     # The proof only needs the environment's secrets and variables. A deployment record would mark the held nightly cut inactive (features/scorecard/deployment-records.test.mjs).
     environment:
