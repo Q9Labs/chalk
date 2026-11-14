@@ -106,7 +106,7 @@ def manifest_bytes(github, info, trusted=True):
         run = github.request(f"actions/runs/{info['run_id']}")
         require(not trusted or (run['head_branch'] == 'master' and run['head_repository']['full_name'] == github.repository
                 and run['path'].split('@')[0] in ('.github/workflows/ci.yml', '.github/workflows/nightly.yml', '.github/workflows/promote.yml')
-                and run['event'] in ('schedule', 'workflow_dispatch', 'workflow_run')), 'untrusted artifact-producing run')
+                and run['event'] in ('push', 'schedule', 'workflow_dispatch', 'workflow_run')), 'untrusted artifact-producing run')
         data = github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.json', info.get('manifest_sha256') or None)
     value = json.loads(data)
     require(value['release_id'] == info['release_id'] and value['source_revision'] == info['target_sha'], 'manifest identity mismatch')

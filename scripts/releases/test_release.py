@@ -828,6 +828,28 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
 
 
+class ManifestTrustTests(unittest.TestCase):
+    """A cut's manifest is read from its run only when a master workflow of this repository produced it."""
+    INFO = dict(run_id=1, release_id='r1', target_sha=SHA, manifest_artifact_id=2)
+
+    def read(self, **run):
+        fields = dict(head_branch='master', head_repository=dict(full_name='Q9Labs/chalk'), path='.github/workflows/nightly.yml@refs/heads/master', event='push')
+        github = Mock(spec=GitHub, repository='Q9Labs/chalk')
+        github.request.return_value = {**fields, **run}
+        github.artifact.return_value = json.dumps(dict(release_id='r1', source_revision=SHA)).encode()
+        with patch.object(release, 'ancestor'):
+            return release.manifest_bytes(github, self.INFO)
+
+    def test_a_push_started_nightly_cut_is_trusted(self):
+        self.assertIn(b'r1', self.read())
+
+    def test_a_run_from_another_branch_event_or_workflow_is_refused(self):
+        for run in (dict(head_branch='feature'), dict(event='pull_request'), dict(path='.github/workflows/other.yml@refs/heads/master'),
+                    dict(head_repository=dict(full_name='fork/chalk'))):
+            with self.subTest(run=run), self.assertRaisesRegex(ValueError, 'untrusted artifact-producing run'):
+                self.read(**run)
+
+
 class RecordingChangedTests(unittest.TestCase):
     """A nightly cut runs the recorder proof only when it changed a recording path."""
     def changed(self, *paths, returncode=0):
