@@ -97,8 +97,9 @@ export function renderTable(diff, { title, baselineLabel, dropped = [] }) {
  * @param {Record<string, any>} budgets  The budgets object of perf/budgets.json for the plane.
  * @param {number} floor  The fewest samples a metric may have.
  * @param {any[]} [baselineMetrics]  The metrics of the baseline card, for the baseline column.
+ * @param {{ metric: string, reason: string, count: number }[]} [dropped]  The card's drops: a timeout on a gated metric is a failure of the run.
  */
-export function expectedMetricRows(ids, metrics, budgets, floor, baselineMetrics = []) {
+export function expectedMetricRows(ids, metrics, budgets, floor, baselineMetrics = [], dropped = []) {
   const byId = new Map(metrics.map((metric) => [metric.id, metric]));
   const baselineById = new Map(baselineMetrics.map((metric) => [metric.id, metric]));
   return ids.map((id) => {
@@ -117,6 +118,8 @@ export function expectedMetricRows(ids, metrics, budgets, floor, baselineMetrics
     };
     if (samples === 0) return { ...row, verdict: "missing" };
     if (samples < floor) return { ...row, verdict: "too few samples" };
+    const timeouts = dropped.filter((drop) => drop.metric === id && drop.reason === "timeout").reduce((sum, drop) => sum + drop.count, 0);
+    if (timeouts > 0) return { ...row, verdict: "timed out", timeouts };
     return { ...row, verdict: overBudget(metric, budget) ? "over budget" : "ok" };
   });
 }
