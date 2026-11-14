@@ -58,7 +58,9 @@ jobs:
     if: needs.target.outputs.sha != ''
     runs-on: ubuntu-24.04
     # The environment accepts master only, and only it can assume the AWS role: a pull request never reaches AWS.
-    environment: nightly-host-proof
+    environment:
+      name: nightly-host-proof
+      deployment: false
     timeout-minutes: 45
     permissions:
       actions: read
