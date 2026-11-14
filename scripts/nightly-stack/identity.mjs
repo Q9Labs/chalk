@@ -71,6 +71,14 @@ function env(name, values) {
   );
 }
 
+// The API insists on a Cloudflare Realtime app while it boots. Without real credentials overflow is off, so nothing ever calls it.
+// The Cloudflare plane lane passes the Nightly credentials in the process environment (CHALK_STACK_CLOUDFLARE_*), and its Spaces
+// then talk to the real Cloudflare Realtime and TURN services.
+const cloudflareNames = ["ACCOUNT_ID", "REALTIME_APP_ID", "REALTIME_APP_SECRET", "TURN_KEY_ID", "TURN_API_TOKEN"];
+const cloudflareReal = cloudflareNames.map((name) => process.env[`CHALK_STACK_CLOUDFLARE_${name}`] ?? "");
+if (cloudflareReal.some(Boolean) && !cloudflareReal.every(Boolean)) throw new Error("identity: pass all of CHALK_STACK_CLOUDFLARE_* or none");
+const cloudflare = cloudflareReal.every(Boolean) ? Object.fromEntries(cloudflareNames.map((name, index) => [`CHALK_CLOUDFLARE_${name}`, cloudflareReal[index]])) : { CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused" };
+
 env("api.env", {
   CHALK_API_ADDR: `127.0.0.1:${apiPort}`,
   CHALK_API_ENV: "local",
@@ -111,9 +119,7 @@ env("api.env", {
   CHALK_SFU_ALLOWED_SPACES: "*",
   CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
   CHALK_SFU_CAPTURE_ENABLED: "true",
-  // The API insists on a Cloudflare Realtime app while it boots. Overflow is off, so nothing ever calls it.
-  CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused",
-  CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused",
+  ...cloudflare,
   CHALK_SFU_APPLICATION_ID: "nightly-stack",
   CHALK_SFU_NODES: `local=https://${announceIp}:${sfuControlPort}`,
   CHALK_SFU_SERVER_NAME: "chalk-sfu",
