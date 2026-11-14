@@ -420,6 +420,7 @@
         "infrastructure/listener-audio-alert",
         "infrastructure/observability",
         "infrastructure/uptime-worker",
+        "scripts/diagnose-call",
         "sdks/typescript/client/src/transport-diagnostics.ts"
       ]
     },
