@@ -190,7 +190,7 @@ func waitLapses(t *testing.T, n *Node, want uint64) {
 // refuses a new control instead of forgetting a live revoke.
 func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 	n := leaseNode(t, time.Minute)
-	n.sourceLimit = 2
+	n.sources.limit = 2
 	alice := testScope("alice", 1)
 	n.newTestSession(t, alice)
 	apply(t, n, control("alice", "microphone", protocol.SourceRevoke, 1))
@@ -203,12 +203,12 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 		t.Fatal("the live revoke was forgotten")
 	}
 
-	n.sourceLimit = 3
+	n.sources.limit = 3
 	apply(t, n, control("carol", "camera", protocol.SourceRevoke, 1)) // carol has no session
 	if result := apply(t, n, control("bob", "camera", protocol.SourceGrant, 2)); !result.Applied {
 		t.Fatal("an entry without a live session was not evicted for a new control")
 	}
-	if n.sources[sourceKey{keyOf(testScope("carol", 1)), "camera"}] != nil {
+	if n.source(sourceKey{keyOf(testScope("carol", 1)), "camera"}) != nil {
 		t.Fatal("the entry without a live session was kept")
 	}
 }
@@ -218,13 +218,13 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 // Episode's floor still opens it.
 func TestAnEvictedRevokeStillFencesItsSource(t *testing.T) {
 	n := leaseNode(t, time.Minute)
-	n.sourceLimit = 1
+	n.sources.limit = 1
 	alice := testScope("alice", 1)
 	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 5)) // alice has no session
 	if result := apply(t, n, control("bob", "camera", protocol.SourceGrant, 6)); !result.Applied {
 		t.Fatalf("bob's grant: %+v", result)
 	}
-	if n.sources[sourceKey{keyOf(alice), "camera"}] != nil {
+	if n.source(sourceKey{keyOf(alice), "camera"}) != nil {
 		t.Fatal("alice's revoke was not evicted")
 	}
 
@@ -246,7 +246,7 @@ func TestAnEvictedRevokeStillFencesItsSource(t *testing.T) {
 // floor costs nothing, and once the floors are full an entry that needs one stays.
 func TestSourceFloorsStayBounded(t *testing.T) {
 	n := leaseNode(t, time.Minute)
-	n.sourceLimit = 1
+	n.sources.limit = 1
 	in := func(episode, participant string, revision int64) protocol.SourceControlRequest {
 		request := control(participant, "camera", protocol.SourceGrant, revision)
 		request.EpisodeID = episode
@@ -260,8 +260,8 @@ func TestSourceFloorsStayBounded(t *testing.T) {
 	if _, err := n.ControlSources(in("episode-3", "dave", 1)); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("an eviction that needs a floor past the limit was admitted: %v", err)
 	}
-	if len(n.sources) != 1 || len(n.sourceFloors) != 1 {
-		t.Fatalf("table holds %d sources and %d floors, limit 1", len(n.sources), len(n.sourceFloors))
+	if n.sources.Len() != 1 || len(n.sourceFloors) != 1 {
+		t.Fatalf("table holds %d sources and %d floors, limit 1", n.sources.Len(), len(n.sourceFloors))
 	}
 }
 
@@ -271,7 +271,7 @@ func TestSourceFloorsStayBounded(t *testing.T) {
 // or refuse instead of growing the table.
 func TestPublicationAdmissionKeepsTheSourceTableBounded(t *testing.T) {
 	n := leaseNode(t, time.Minute)
-	n.sourceLimit = 1
+	n.sources.limit = 1
 	in := func(episode, participant string, revision int64) protocol.SourceControlRequest {
 		request := control(participant, "camera", protocol.SourceGrant, revision)
 		request.EpisodeID = episode
@@ -287,9 +287,9 @@ func TestPublicationAdmissionKeepsTheSourceTableBounded(t *testing.T) {
 		}
 		session.Close()
 	}
-	if len(n.sources) > n.sourceLimit || len(n.sourceOrder) != len(n.sources) || len(n.sourceFloors) > n.sourceLimit {
-		t.Fatalf("after 40 publish and close cycles the table holds %d sources, %d in order and %d floors, limit %d",
-			len(n.sources), len(n.sourceOrder), len(n.sourceFloors), n.sourceLimit)
+	if n.sources.Len() > n.sources.limit || len(n.sourceFloors) > n.sources.limit {
+		t.Fatalf("after 40 publish and close cycles the table holds %d sources and %d floors, limit %d",
+			n.sources.Len(), len(n.sourceFloors), n.sources.limit)
 	}
 }
 
@@ -436,7 +436,7 @@ func TestARevokesCleanupKeepsAPublicationAdmittedAfterTheRevoke(t *testing.T) {
 func reachRevision(n *Node, key sourceKey, revision int64) {
 	for {
 		n.mu.Lock()
-		reached := n.sources[key] != nil && n.sources[key].revision == revision
+		reached := n.source(key) != nil && n.source(key).revision == revision
 		n.mu.Unlock()
 		if reached {
 			return
@@ -545,7 +545,7 @@ func TestAWriteThatStallsPastTheLeaseStopsTheSendsAfterIt(t *testing.T) {
 // and let the batch's stale grant apply. With no other room, the batch is refused.
 func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 	n := leaseNode(t, time.Minute)
-	n.sourceLimit = 2
+	n.sources.limit = 2
 	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 10)) // no Participant here has a session
 	apply(t, n, control("dave", "camera", protocol.SourceRevoke, 1))
 	batch := func(controls ...protocol.SourceControl) protocol.SourceControlRequest {
@@ -561,15 +561,15 @@ func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 	if alice := response.Results[0]; alice.Applied || alice.Revision != 10 {
 		t.Fatalf("a stale grant applied after its source's revoke was evicted: %+v", alice)
 	}
-	if !response.Results[1].Applied || len(n.sources) != 2 {
-		t.Fatalf("bob's grant: %+v, table holds %d entries, limit 2", response.Results[1], len(n.sources))
+	if !response.Results[1].Applied || n.sources.Len() != 2 {
+		t.Fatalf("bob's grant: %+v, table holds %d entries, limit 2", response.Results[1], n.sources.Len())
 	}
 
 	carolGrant := protocol.SourceControl{ParticipantID: "carol", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
 	if _, err := n.ControlSources(batch(aliceGrant, bobGrant, carolGrant)); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a batch with no room besides its own sources was admitted: %v", err)
 	}
-	if len(n.sources) != 2 || n.sources[sourceKey{participantKey{tenant: "tenant-1", episode: "episode-1", participant: "alice"}, "camera"}] == nil {
+	if n.sources.Len() != 2 || n.source(sourceKey{participantKey{tenant: "tenant-1", episode: "episode-1", participant: "alice"}, "camera"}) == nil {
 		t.Fatal("a refused batch changed the table")
 	}
 }
@@ -583,7 +583,7 @@ func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) 
 	t.Run("evicted", func(t *testing.T) {
 		pacedPacketsOfAStoppedSource(t, func(n *Node, authority *sourceAuthority) {
 			n.mu.Lock()
-			n.evictSource(slices.Index(n.sourceOrder, authority.key))
+			n.evictSource(authority.key)
 			n.mu.Unlock()
 		}, func(*sourceAuthority) {})
 	})
@@ -635,4 +635,9 @@ func pacedPacketsOfAStoppedSource(t *testing.T, evict func(*Node, *sourceAuthori
 	if transport.queuedBytes != 0 {
 		t.Fatalf("%d bytes of a revoked source still wait in the pacer", transport.queuedBytes)
 	}
+}
+
+func (n *Node) source(key sourceKey) *sourceAuthority {
+	authority, _ := n.sources.Get(key)
+	return authority
 }

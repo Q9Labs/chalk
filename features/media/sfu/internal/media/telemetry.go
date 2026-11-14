@@ -21,11 +21,11 @@ const (
 	RefusedCaptureLimit     = "capture_limit"
 	RefusedHolds            = "holds"
 	RefusedRetirements      = "retirements"
-	RefusedCPUSteal         = reasonCPUSteal
-	RefusedCPUBusy          = reasonCPUBusy
-	RefusedSchedulerLatency = reasonSchedulerLatency
-	RefusedPacerDrops       = reasonPacerDrops
-	RefusedUDPErrors        = reasonUDPBufferErrors
+	RefusedCPUSteal         = "cpu_steal"
+	RefusedCPUBusy          = "cpu_busy"
+	RefusedSchedulerLatency = "scheduler_latency"
+	RefusedPacerDrops       = "pacer_drops"
+	RefusedUDPErrors        = "udp_buffer_errors"
 )
 
 // Ingress kinds split what publishers send by media.
@@ -125,7 +125,7 @@ func (n *Node) refuse(reason string, err error) error {
 // ids and returns its error. The reason is a closed set. The caller holds n.mu.
 func (n *Node) refuseFor(scope protocol.Scope, reason string, err error) error {
 	n.refusals[reason]++
-	n.trail(slog.LevelWarn, "sfu.admission.refused", scope, "reason", reason, "sessions", len(n.sessions))
+	n.trail(slog.LevelWarn, EventAdmissionRefused, scope, "reason", reason, "sessions", len(n.sessions))
 	return err
 }
 
@@ -181,12 +181,12 @@ func (n *Node) Telemetry() Telemetry {
 func (n *Node) countLeaseLapses(now int64) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	for _, authority := range n.sources {
+	for _, authority := range n.sources.All() {
 		window := authority.window.Load()
 		if window.until != 0 && now >= window.until && authority.lapsed < window.opens {
 			authority.lapsed = window.opens
 			n.totals.counts.LeaseLapses++
-			n.trail(slog.LevelWarn, "sfu.source.lease_lost", protocol.Scope{TenantID: authority.key.tenant, EpisodeID: authority.key.episode, ParticipantID: authority.key.participant},
+			n.trail(slog.LevelWarn, EventSourceLeaseLost, protocol.Scope{TenantID: authority.key.tenant, EpisodeID: authority.key.episode, ParticipantID: authority.key.participant},
 				"source", authority.key.source, "cause", "ttl_lapsed", "revision", authority.revision)
 		}
 	}

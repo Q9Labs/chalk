@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 
 export type StageLayoutChoice = "spotlight" | "grid";
 

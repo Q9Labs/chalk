@@ -5,6 +5,8 @@ import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse, SFUSubscriptionState } from "./types";
 import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, directOrigin, directPathBlocked, markDirectPathFailed, sharedDirectPathMemory } from "../direct-path";
 import { withRequestContext } from "../session";
+import * as apiUrls from "../api-urls";
+import { trimTrailingSlashes } from "../urls";
 import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
@@ -26,8 +28,8 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
   let lastToken = "";
-  const base = options.apiBaseURL.replace(/\/$/, "");
-  const mediaPathAt = (origin: string) => `${origin}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
+  const base = trimTrailingSlashes(options.apiBaseURL);
+  const subject = { tenantId: options.tenantId, spaceId: options.spaceId, episodeId: options.episodeId, participantId: options.participantId };
   const direct = directOrigin(options.directBaseURL);
   const directMemory = options.directMemory ?? sharedDirectPathMemory;
   let probe: Promise<boolean> | undefined;
@@ -57,7 +59,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       /* Observers cannot interrupt signaling. */
     }
   };
-  const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
+  const statsPath = apiUrls.callStats(base, options.tenantId);
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
   const freshToken = async (op?: SignalOp): Promise<string> => {
@@ -87,7 +89,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       let token = await freshToken(op);
       const [method, path] = ROUTES[op];
       const targetAt = (origin: string) => {
-        const mediaPath = mediaPathAt(origin);
+        const mediaPath = apiUrls.mediaSignalling(origin, subject);
         return options.unifiedSignaling
           ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
           : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };

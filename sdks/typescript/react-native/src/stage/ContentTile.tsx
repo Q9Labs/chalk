@@ -6,7 +6,7 @@ import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDeviceLayout } from "../frame/device-layout";
 import { LandscapeControlsContext } from "../frame/call-controls";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import { useMeasuredRef } from "../frame/measurement";
 import { createNativeMediaStream } from "../media/native-webrtc";
 import type { Frame } from "../motion/MovingFrame";

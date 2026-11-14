@@ -24,11 +24,11 @@ When `CHALK_ALERT_AXIOM_QUERY_TOKEN` is set in `/etc/chalk-alerts/collector.env`
 
 ## Read-only state collector
 
-`collector.go` is a standalone alert-only executable, not an API change. Build it from `apps/api` to reuse the pinned pgx, with Go 1.26.10, targeting the host (`aarch64` is Go's `arm64`):
+`collector.go` is a standalone alert-only executable, not an API change. Build it from `apps/api` to reuse the pinned pgx, with Go 1.26.11, targeting the host (`aarch64` is Go's `arm64`):
 
 ```sh
-GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/call_verdict_test.go
-GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go
+GOTOOLCHAIN=go1.26.11 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/call_verdict_test.go
+GOTOOLCHAIN=go1.26.11 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go
 ```
 
 It uses one connection, a read-only transaction and a five-second SQL timeout. It emits per-Tenant counts (zeros included, so latest-value evaluation clears an old count immediately) plus empty-Tenant heartbeat rows and global rows for Sync readiness, SFU retirement debt and, when enabled, SFU readiness and certificate expiry. A rejected or partial ingest fails the service. The freshness monitor detects missing snapshots within five minutes and counts six rules; it does not count the SFU rows. The SFU readiness row exists only on hosts that enable the probe, so counting it would page every host without an SFU. The debt row comes from the same database read as the others, so a stopped collector is already caught. Only snapshots newer than five minutes drive state alerts.

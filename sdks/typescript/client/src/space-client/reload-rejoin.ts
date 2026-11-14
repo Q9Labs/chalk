@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { parseParsedAccessGrant, requireAccessGrant, type AccessGrant } from "../access/grant";
 import { currentTabId } from "../session";
+import type { SpaceSnapshot } from "./types";
 
 /** A tab-scoped, two-minute recovery hint, never an admission credential by itself. */
 export type ReloadRejoinMarker = {
@@ -80,4 +81,13 @@ export async function resumeReloadRejoin(marker: ReloadRejoinMarker, refresh: ()
 export function reloadRejoinAccess(access: unknown): Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "tenantId"> {
   const parsed = parseParsedAccessGrant(access);
   return { tenantId: parsed.subject.tenantId, episodeId: parsed.subject.episodeId, participantId: parsed.subject.participantId, participantGeneration: parsed.subject.participantGeneration, mediaProof: parsed.media.token };
+}
+
+/** The part of a reload marker that comes from the live call: the name and which devices were on. */
+export function reloadRejoinPresence(snapshot: SpaceSnapshot, fallbackDisplayName: string): Pick<ReloadRejoinMarker, "displayName" | "microphone" | "camera"> {
+  return {
+    displayName: snapshot.self.displayName ?? fallbackDisplayName,
+    microphone: snapshot.media.local.microphone.state === "enabled",
+    camera: snapshot.media.local.camera.state === "enabled",
+  };
 }

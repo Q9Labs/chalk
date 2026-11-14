@@ -136,7 +136,7 @@ func TestTrailNamesARefusedJoinWithItsIds(t *testing.T) {
 	node := newLoggedTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 1 }, trail)
 	node.newTestSession(t, testScope("alice", 1))
 	scope := testScope("bob", 2)
-	if _, err := node.CreateSession(op(), scope); err == nil {
+	if _, err := node.Create(op(), scope, ParticipantSession, nil); err == nil {
 		t.Fatal("the second session fit under a limit of one")
 	}
 	refused := trail.events("sfu.admission.refused")

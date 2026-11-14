@@ -87,11 +87,24 @@ export type MediaPlaneResult = {
 export type ClientMediaPlane = {
   readonly observeAudioElement?: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   /**
-   * Runs the part of an enable that needs no grant, while Sync still decides it. It sends no media and
-   * publishes nothing: `setLocalPublicationTarget` stays the only step that publishes, and it redoes
-   * whatever this left undone. A rejection is safe to ignore for that reason.
+   * Runs the part of an enable that needs no grant, while Sync still decides it. It never creates a
+   * publication: `setLocalPublicationTarget` stays the only step that publishes, and it redoes whatever
+   * this left undone. A rejection is safe to ignore for that reason. A plane that parks a muted track
+   * on its server (mute in place) may resume that track here. The server's source lease authorizes what it
+   * forwards, and a role change, a removal and the end of the Episode revoke it. A listener must never get
+   * audio the authority would refuse, so the track may forward under a standing lease for about one round
+   * trip, until Sync's first result: the caller then runs `cancelPreparedLocalPublicationTarget` unless it
+   * goes on to `setLocalPublicationTarget`.
    */
   readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
+  /**
+   * Undoes what `prepareLocalPublicationTarget` resumed ahead of the grant. The caller runs it, without waiting
+   * for the head start, when the target will not be executed (a refusal, a retryable refusal, a timeout, a
+   * disconnect). The plane silences the track locally at once, then parks the publication again the way a user
+   * mute parks it, once any resume request has settled (also an unanswered one). It does nothing when nothing
+   * was resumed ahead or `setLocalPublicationTarget` has taken it over.
+   */
+  readonly cancelPreparedLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
   readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;

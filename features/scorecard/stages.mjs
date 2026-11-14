@@ -44,8 +44,8 @@ const turnOn = (id, title, metrics, source) => ({
   ],
 });
 
+// turnOff is a stage group for a remote track turning off. The receiver sends no tracks/close or renegotiate then: only the sender closes on the SFU (sfu_close).
 /** @param {string} id @param {string} title @param {string} metrics */
-// The receiver sends no tracks/close or renegotiate when a remote track turns off: only the sender closes on the SFU (sfu_close).
 const turnOff = (id, title, metrics) => ({
   id,
   title,
@@ -55,7 +55,7 @@ const turnOff = (id, title, metrics) => ({
     syncFanout,
     rosterApply,
     listPublications,
-    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track (the receiver drops the track locally and makes no SFU call)" },
+    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track (the receiver drops the track locally and makes no SFU call); for a microphone, which stays published when muted, until its track is disabled and no audio packet arrives" },
     syncAck,
     { id: "sfu_close", from: "call", description: "call until the sender's tracks/close reply" },
   ],
@@ -91,12 +91,6 @@ export const STAGE_GROUPS = [
 
 /** Every stage id the schema accepts, as "<group>.<stage>". */
 export const STAGE_IDS = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
-
-/**
- * Stage ids earlier versions of the kit wrote and no longer record. The validator still accepts them so a sidecar written
- * before the change is shown, but nothing emits or displays them.
- */
-export const RETIRED_STAGE_IDS = ["mic_off", "camera_off", "screen_stop"].flatMap((group) => ["close_tracks", "renegotiate"].map((stage) => `${group}.${stage}`));
 
 /**
  * The audio delay a listener adds, estimated from the receiver's WebRTC stats while a call is steady. Informational, like every

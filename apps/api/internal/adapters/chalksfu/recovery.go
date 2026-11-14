@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"log/slog"
 	"time"
 
@@ -133,7 +134,7 @@ type candidate struct {
 // uses: every primary that answered within the freshness window, is not draining and speaks a wire protocol this API can send, then the
 // same standbys. It does not guess at capacity from the probe: the probe's totals do not show
 // what the Episode already holds on a node, and a standby's degraded budget is enforced by the
-// node's own reserve (see wireReserveRequest.PacketCeiling), so the node's answer decides. It
+// node's own reserve (see protocol.ReserveEpisodeRequest.PacketCeiling), so the node's answer decides. It
 // does no I/O and, unlike Place, never offers another provider.
 func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
@@ -187,7 +188,7 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 		if node.standby && f.standbyBudget > 0 {
 			ceiling = f.standbyBudget
 		}
-		request := wireReserveRequest{
+		request := protocol.ReserveEpisodeRequest{
 			OperationID:   recoveryOperationID(episodeID, committed, node.adapter.node, participants, ceiling, window),
 			PacketCeiling: ceiling, AllocationGeneration: &committed,
 			TenantID: tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
@@ -195,7 +196,7 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 			// would be refused after its Participants rejoined, so the reserve always holds room for
 			// one. A node that cannot carry the Episode with a share refuses, and that is the
 			// capacity outcome.
-			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
+			Shape:      protocol.EpisodeShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
 			TTLSeconds: hold,
 		}
 		reply, err := node.adapter.reserve(ctx, request)
@@ -268,10 +269,10 @@ func (f *Fleet) logRecovery(ctx context.Context, message, node string, err error
 }
 
 // reserve asks the node to hold room for a whole Episode.
-func (a *Adapter) reserve(ctx context.Context, request wireReserveRequest) (wireReserveResponse, error) {
-	var reply wireReserveResponse
-	if err := a.call(ctx, "/v1/episodes/reserve", request, &reply); err != nil {
-		return wireReserveResponse{}, err
+func (a *Adapter) reserve(ctx context.Context, request protocol.ReserveEpisodeRequest) (protocol.ReserveEpisodeResponse, error) {
+	var reply protocol.ReserveEpisodeResponse
+	if err := a.call(ctx, protocol.RouteEpisodesReserve, request, &reply); err != nil {
+		return protocol.ReserveEpisodeResponse{}, err
 	}
 	return reply, nil
 }
@@ -346,7 +347,7 @@ func (f *Fleet) RetireAllocation(ctx context.Context, old mediaplane.Allocation,
 	}
 	nodeCtx, cancel := context.WithTimeout(ctx, retireNodeTimeout)
 	defer cancel()
-	err = adapter.call(nodeCtx, "/v1/episodes/retire", wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: generation}, nil)
+	err = adapter.call(nodeCtx, protocol.RouteEpisodesRetire, protocol.RetireEpisodeRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: generation}, nil)
 	if err != nil {
 		recordRetirement(ctx, retirePending)
 		return false, fmt.Errorf("retire the episode on node %q: %w", old.Node, err)

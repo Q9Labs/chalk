@@ -163,3 +163,80 @@ it.each([
   await act(async () => join?.click());
   await expectMessage("Calls are unavailable right now. Try again in a few minutes.");
 });
+
+function grantFixture() {
+  const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  const credential = (audience: string) => `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.fixture`;
+  const expiresAt = new Date(Date.now() + 300000).toISOString();
+  return {
+    subject: { tenant_id: "11111111-1111-4111-8111-111111111111", space_id: "22222222-2222-4222-8222-222222222222", episode_id: "33333333-3333-4333-8333-333333333333", participant_id: "44444444-4444-4444-8444-444444444444", participant_generation: 1 },
+    sync: { token: credential("chalk-sync"), expires_at: expiresAt },
+    media: { token: credential("chalk-media"), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } },
+  };
+}
+
+it("gives back an admission that finishes after Cancel and a new Join, instead of letting it replace the new attempt", async () => {
+  localStorage.setItem("chalk.display-name", "Ada");
+  const arrival = (handle: string, state: "pending" | "admitted", access?: unknown) => ({ ...freshArrival, state, arrival_handle: handle, retry_after: state === "pending" ? 0 : undefined, ...(access ? { access } : {}) });
+  const calls: string[] = [];
+  let arrivalsStarted = 0;
+  let releaseOldAdmission: () => void = () => undefined;
+  const oldAdmission = new Promise<void>((resolve) => {
+    releaseOldAdmission = resolve;
+  });
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const path = new URL(request.url).pathname;
+    const handle = request.headers.get("X-Chalk-Arrival-Handle");
+    if (path === "/v1/public/space-invite-arrivals") {
+      if (handle === "first") {
+        calls.push("re-arrive first");
+        await oldAdmission;
+        return Response.json(arrival("first", "admitted", grantFixture()), { status: 201 });
+      }
+      arrivalsStarted += 1;
+      calls.push(`arrive ${arrivalsStarted === 1 ? "first" : "second"}`);
+      return Response.json(arrival(arrivalsStarted === 1 ? "first" : "second", "pending"), { status: 201 });
+    }
+    if (path === "/v1/public/space-invite-arrival" && request.method === "GET") {
+      calls.push(`status ${handle}`);
+      return Response.json(arrival(handle ?? "", "admitted")); // admitted without access: the entrance asks again for it
+    }
+    if (path === "/v1/public/space-invite-arrival" && request.method === "DELETE") {
+      calls.push(`leave ${handle}`);
+      return new Response(null, { status: 204 });
+    }
+    return Response.json({ error: { code: "auth.unauthorized", message: "Sign in required" } }, { status: 401 });
+  });
+  const root = createRootRoute({
+    component: () => (
+      <ThemeProvider>
+        <SpacePage slug="design-lab" />
+      </ThemeProvider>
+    ),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [window.location.pathname + window.location.hash] }) });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  view = createRoot(container);
+  await act(async () => view?.render(<RouterProvider router={router} />));
+  const button = (label: string) => [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
+
+  await act(async () => button("Join call")?.click());
+  await vi.waitFor(() => expect(calls).toContain("re-arrive first")); // the old admission is now held
+  await act(async () => button("Cancel")?.click());
+  await vi.waitFor(() => expect(calls).toContain("leave first"));
+  await vi.waitFor(async () => {
+    await act(async () => undefined);
+    expect(button("Join call")).toBeDefined();
+  });
+  await act(async () => button("Join call")?.click());
+  await vi.waitFor(() => expect(calls).toContain("arrive second"));
+  await expectMessage("Asking to join");
+
+  releaseOldAdmission();
+  await vi.waitFor(() => expect(calls.filter((call) => call === "leave first")).toHaveLength(2)); // the stale admission was given back
+  await act(async () => undefined);
+  expect(document.body.textContent).toContain("Asking to join");
+  expect(calls).not.toContain("leave second");
+});

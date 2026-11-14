@@ -136,10 +136,10 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 
 	// A new Episode needs room for two: 2580 + 1320 = 3900 fits exactly.
 	node.newTestSession(t, episodeScope("b", "p1"))
-	if _, err := node.CreateSession("create-a-p4", episodeScope("a", "p4")); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := node.Create("create-a-p4", episodeScope("a", "p4"), ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("fourth Participant of Episode a: %v, want capacity exceeded", err)
 	}
-	if _, err := node.CreateSession("create-c-p1", episodeScope("c", "p1")); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := node.Create("create-c-p1", episodeScope("c", "p1"), ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("new Episode c: %v, want capacity exceeded", err)
 	}
 	if refusals := node.Telemetry().Refusals; len(refusals) != 1 || refusals[RefusedNodeFull] != 2 {
@@ -156,13 +156,13 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	// A reconnect replaces its own session and does not count twice.
 	reconnect := episodeScope("a", "p1")
 	reconnect.Generation = 2
-	if _, err := node.CreateSession("create-a-p1-g2", reconnect); err != nil {
+	if _, err := node.Create("create-a-p1-g2", reconnect, ParticipantSession, nil); err != nil {
 		t.Fatalf("reconnect at the budget: %v", err)
 	}
 
 	// Leaving frees the reservation.
 	node.EndEpisode("tenant-1", "b")
-	if _, err := node.CreateSession("create-c-p1-again", episodeScope("c", "p1")); err != nil {
+	if _, err := node.Create("create-c-p1-again", episodeScope("c", "p1"), ParticipantSession, nil); err != nil {
 		t.Fatalf("new Episode after room opened: %v", err)
 	}
 }
@@ -183,7 +183,7 @@ func TestTheEpisodeCeilingCapsTheReservationAndMandatoryMediaRefusesTheFourteent
 	}
 	// Fourteen microphones to everyone are 50·14² = 9800 packets/s and fourteen camera uplinks
 	// 150·14 = 2100 more. Pausing what subscribers receive lowers neither.
-	if _, err := node.CreateSession("create-fourteenth", episodeScope("a", "p13")); !errors.Is(err, errMandatoryMedia) {
+	if _, err := node.Create("create-fourteenth", episodeScope("a", "p13"), ParticipantSession, nil); !errors.Is(err, errMandatoryMedia) {
 		t.Fatalf("fourteenth Participant under an 11520 ceiling: %v, want mandatory media refused", err)
 	}
 	// The ceiling is the Episode's, not the node's: room left on the node admits a new Episode.
@@ -216,7 +216,7 @@ func TestAScreenShareThatMandatoryMediaCannotCarryIsRefused(t *testing.T) {
 		t.Fatalf("screen share for 11: %s %s", code, message)
 	}
 	// With the screen share running, a twelfth join no longer fits either.
-	if _, err := node.CreateSession("create-again", episodeScope("a", "p11")); !errors.Is(err, errMandatoryMedia) {
+	if _, err := node.Create("create-again", episodeScope("a", "p11"), ParticipantSession, nil); !errors.Is(err, errMandatoryMedia) {
 		t.Fatalf("twelfth join with a screen share: %v, want mandatory media refused", err)
 	}
 }
@@ -226,10 +226,10 @@ func TestTheParticipantCapStaysConfigurable(t *testing.T) {
 	for index := range 3 {
 		node.newTestSession(t, episodeScope("a", "p"+itoa(index)))
 	}
-	if _, err := node.CreateSession("create-fourth", episodeScope("a", "p3")); !errors.Is(err, errEpisodeFull) {
+	if _, err := node.Create("create-fourth", episodeScope("a", "p3"), ParticipantSession, nil); !errors.Is(err, errEpisodeFull) {
 		t.Fatalf("fourth Participant with a cap of 3: %v, want the Episode full", err)
 	}
-	if _, err := node.CreateSession("create-other-episode", episodeScope("b", "p0")); err != nil {
+	if _, err := node.Create("create-other-episode", episodeScope("b", "p0"), ParticipantSession, nil); err != nil {
 		t.Fatalf("another Episode: %v", err)
 	}
 }
@@ -506,11 +506,11 @@ func TestPeerSessionStaysInsideTheEpisode(t *testing.T) {
 func TestANewCreateReplacesTheLiveSessionAtTheSameGeneration(t *testing.T) {
 	node := newTestNode(t, nil)
 	scope := episodeScope("a", "alice")
-	first, err := node.CreateSession("create-first", scope)
+	first, err := node.Create("create-first", scope, ParticipantSession, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := node.CreateSession("create-second", scope)
+	second, err := node.Create("create-second", scope, ParticipantSession, nil)
 	if err != nil {
 		t.Fatalf("replacement at the same generation: %v", err)
 	}
@@ -520,7 +520,7 @@ func TestANewCreateReplacesTheLiveSessionAtTheSameGeneration(t *testing.T) {
 	if _, err := node.Session(first.ConnectionID, scope); !errors.Is(err, ErrSessionGone) {
 		t.Fatalf("the replaced session: %v, want gone", err)
 	}
-	if replay, err := node.CreateSession("create-second", scope); err != nil || replay.ConnectionID != second.ConnectionID {
+	if replay, err := node.Create("create-second", scope, ParticipantSession, nil); err != nil || replay.ConnectionID != second.ConnectionID {
 		t.Fatalf("a replayed create returned %v, %v", replay, err)
 	}
 	if _, reserved := node.Budget(); reserved != node.episodeReservation(1) {

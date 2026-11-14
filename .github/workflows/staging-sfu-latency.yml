@@ -1,7 +1,7 @@
 name: Staging SFU latency
 
-# Own-SFU staging action latency for the newest held nightly. It runs outside Cut nightly so the 30-minute measurement
-# never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 33 minutes later; the daily run and
+# Own-SFU staging action latency for the newest held nightly. It runs outside Cut nightly so the 45-minute measurement
+# never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 50 minutes later; the daily run and
 # a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
 # selects, and refuses a SHA with no verdict (own_sfu_proof_result=latency-missing).
 on:
@@ -11,6 +11,11 @@ on:
     workflows: [Cut nightly]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      samples:
+        description: Latency cycles, 1 to 60; empty measures 60. Fewer give a weaker p95, so use it only for a cut whose own staging-latency.mjs caps the run at 40 minutes, where about 45 cycles fit
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -51,6 +56,7 @@ jobs:
       media_plane: chalk_sfu
       latency: true
       latency_only: true
+      latency_samples: ${{ inputs.samples }}
       release_sha: ${{ needs.target.outputs.sha }}
       scorecard_label: chalk_sfu
     secrets: inherit

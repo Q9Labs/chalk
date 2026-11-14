@@ -12,7 +12,23 @@ const RUNS = new Set(["commit", "local", "pull_request", "merge_queue", "cut", "
 // action is work that is not a check (a build, a deploy, a cache warm).
 const BLOCKS = new Set(["merge", "release", "commit", "alert", "advisory", "action"]);
 const RECORDS = new Set(["caught", "noise", "never-failed", "unmeasured"]);
-const FIELDS = ["id", "owner", "catches", "runs", "blocks", "minutes", "record", "sample", "reason", "builtin"];
+const FIELDS = ["id", "owner", "catches", "runs", "blocks", "minutes", "record", "sample", "reason", "builtin", "demoted"];
+const RUN_ID = /^\d{8,}$/u;
+const ISSUE = /^https:\/\/github\.com\/Q9Labs\/chalk\/issues\/\d+$/u;
+
+// A check that fails twice with no product cause is demoted: it keeps running and reports, but blocks nothing until it is fixed.
+function demotedProblems(entry, where) {
+  const problems = [];
+  const demoted = entry.demoted;
+  if (!entry.id?.startsWith("gate:") || entry.builtin) problems.push(`${where}: only a planner Gate task can be demoted`);
+  if (entry.blocks !== "advisory") problems.push(`${where}: is demoted but still listed as required (blocks ${entry.blocks}); a demoted check has blocks advisory`);
+  if (typeof demoted !== "object" || demoted === null) return [...problems, `${where}: demoted holds a reason, two failing run ids and an issue link`];
+  for (const key of Object.keys(demoted)) if (!["reason", "runs", "issue"].includes(key)) problems.push(`${where}: unknown demoted field ${key}`);
+  if (typeof demoted.reason !== "string" || demoted.reason.trim() === "") problems.push(`${where}: demoted.reason must say what fails`);
+  if (!Array.isArray(demoted.runs) || new Set(demoted.runs).size < 2 || demoted.runs.some((run) => !RUN_ID.test(run))) problems.push(`${where}: demoted.runs lists at least two different failing run ids`);
+  if (typeof demoted.issue !== "string" || !ISSUE.test(demoted.issue)) problems.push(`${where}: demoted.issue is a Q9Labs/chalk issue link`);
+  return problems;
+}
 
 function shapeProblems(entry) {
   const problems = [];
@@ -31,6 +47,7 @@ function shapeProblems(entry) {
   if (entry.blocks === "advisory" && (typeof entry.reason !== "string" || entry.reason.trim() === "")) problems.push(`${where}: an advisory check needs a reason it stays and why it does not block`);
   if (entry.blocks === "merge" && !entry.runs?.some((run) => ["pull_request", "merge_queue", "local"].includes(run))) problems.push(`${where}: blocks merge but never runs on a pull request or in the merge queue`);
   if (entry.blocks === "release" && !entry.runs?.some((run) => ["cut", "promote", "daily"].includes(run))) problems.push(`${where}: blocks release but never runs in a cut or Promote`);
+  if (entry.demoted !== undefined) problems.push(...demotedProblems(entry, where));
   return problems;
 }
 
