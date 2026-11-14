@@ -72,9 +72,12 @@ until docker exec chalk-stack-postgres pg_isready -U postgres -d chalk -q 2> /de
 until docker exec chalk-stack-redis redis-cli ping 2> /dev/null | grep -q PONG; do sleep 0.2; done
 tick datastores
 
-printf '%s' "$db_url" > "$dir/database-url"
-chmod 644 "$dir/database-url"
-docker run --rm --network host -v "$dir:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
+# The migrator runs as uid 65532, so its input sits in a directory of its own that any user can read.
+mkdir -p "$dir/migrate"
+printf '%s' "$db_url" > "$dir/migrate/database-url"
+chmod 755 "$dir/migrate"
+chmod 644 "$dir/migrate/database-url"
+docker run --rm --network host -v "$dir/migrate:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
   "$api_image" --database-url-file /run/chalk/stack/database-url --target "$migration_target" > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
 tick migrate
 
