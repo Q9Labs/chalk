@@ -78,7 +78,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
           });
         }
       });
-      await attempt("transcripts", space.id, async () => {
+      if (!config.transcription_disabled) await attempt("transcripts", space.id, async () => {
         const transcripts = await list(call, `${base}/transcripts`, "transcripts");
         for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
           await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
@@ -99,7 +99,7 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       await endEpisode(call, path, await call("GET", `${path}/${tracked.id}`));
     });
     // Only this run's Episodes: a reused Space may hold Transcripts of other runs.
-    await attempt("tracked-transcripts", tracked.id, async () => {
+    if (!config.transcription_disabled) await attempt("tracked-transcripts", tracked.id, async () => {
       const transcripts = await list(call, `${base}/transcripts`, "transcripts");
       for (const transcript of transcripts.filter((entry) => entry.episode_id === tracked.id && entry.status !== "deleted")) {
         await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));

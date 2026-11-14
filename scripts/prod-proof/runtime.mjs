@@ -82,6 +82,8 @@ export async function loadConfig({ readiness = true, capabilities = true } = {})
   if (readiness) {
     const ready = await request(fields, "GET", "/readyz");
     if (capabilities) checkCapabilities(ready);
+    // A stack without Transcription answers 503 to the Transcript list, so cleanup has no Transcripts to look for.
+    else if (ready?.capabilities?.transcription !== "enabled") return { ...fields, transcription_disabled: true };
   }
   return fields;
 }

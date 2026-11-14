@@ -79,3 +79,19 @@ test("cleanup ends an Episode the run created, and deletes its Transcripts, in a
   assert.ok(calls.includes("DELETE /v1/tenants/tenant-1/transcripts/t-own"));
   assert.ok(!calls.includes("DELETE /v1/tenants/tenant-1/transcripts/t-other"));
 });
+
+test("cleanup does not list Transcripts on a stack that has no Transcription", async () => {
+  const directory = await scratch();
+  await writeFile(join(directory, "ownership.json"), JSON.stringify({ episodes: [{ space_id: "pinned", id: "e1" }] }));
+  const calls = [];
+  const fake = async (url, init = {}) => {
+    const { pathname } = new URL(url);
+    calls.push(`${init.method ?? "GET"} ${pathname}`);
+    if (pathname.endsWith("/transcripts")) return Response.json({ error: { code: "service.unavailable" } }, { status: 503 });
+    if (pathname.endsWith("/episodes/e1/end")) return Response.json({});
+    if (pathname.endsWith("/episodes/e1")) return Response.json({ id: "e1", status: "ended" });
+    return emptyListing();
+  };
+  await withFetch(fake, () => cleanupByRunId({ ...config, transcription_disabled: true }, "run-no-transcription", directory));
+  assert.ok(!calls.some((call) => call.endsWith("/transcripts")));
+});
