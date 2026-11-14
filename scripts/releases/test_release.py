@@ -13,9 +13,9 @@ from unittest.mock import Mock, patch
 
 import release
 import web
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from github_release import GitHub, digest, first_cut_of_day, payload
+from github_release import CUT_GAP, GitHub, digest, first_cut_of_day, payload
 
 SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
 OTHER_SHA = 'b' * 40
@@ -780,6 +780,18 @@ class PlanTests(unittest.TestCase):
         github.is_on_master = Mock(return_value=True)
         github.has_green_gate = Mock(return_value=True)
         self.assertEqual(github.newest_landed_gate('event=merge_group', self.REVISION), dict(head_sha=self.OLD))
+
+
+class ScheduleTests(unittest.TestCase):
+    def test_every_scheduled_slot_is_further_from_the_last_than_the_cut_gap(self):
+        # A slot inside the gap can only answer "cut attempted recently", so it would be a run that does nothing.
+        workflow = (release.ROOT / '.github/workflows/nightly.yml').read_text()
+        (cron,) = re.findall(r'^\s+- cron: "([^"]+)"', workflow, re.MULTILINE)
+        minute, hours, *rest = cron.split()
+        self.assertEqual(rest, ['*', '*', '*'])
+        step = re.fullmatch(r'\*/(\d+)', hours)
+        self.assertTrue(step, f'the cron hour field {hours} is not a fixed step')
+        self.assertGreater(timedelta(hours=int(step.group(1))), CUT_GAP)
 
 
 class GateCheckedTests(unittest.TestCase):

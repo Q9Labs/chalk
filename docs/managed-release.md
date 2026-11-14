@@ -13,7 +13,7 @@ Three workflows ship the managed backend and web: `Release` (`.github/workflows/
 
 ## Nightly cut
 
-`Cut nightly` runs hourly and at most once per six hours. The six-hour gap starts when an attempt is reserved, not when it ends. A cut ships the newest master commit whose push Gate passed. A manual dispatch always attempts a cut, but still requires the Gate of the pinned SHA to pass. Both workflows refuse a non-master ref.
+`Cut nightly` runs every six hours (17 minutes past 00, 06, 12 and 18 UTC) and at most once per five hours, so a slot is never inside the gap. The five-hour gap starts when an attempt is reserved, not when it ends. A cut ships the newest master commit whose push Gate passed. A manual dispatch always attempts a cut, but still requires the Gate of the pinned SHA to pass. Both workflows refuse a non-master ref.
 
 A cut becomes held only when the own-SFU (`chalk_sfu`) real-call proof and the web-call proof both pass on the freshly deployed nightly. The staging latency run is not part of the cut: `.github/workflows/staging-sfu-latency.yml` measures the newest held nightly when a cut finishes (about 50 minutes later, for 60 cycles of about 45 seconds; also daily and on dispatch) and records a verdict bound to that SHA, and Promote refuses a SHA with no passing verdict (`own_sfu_proof_result=latency-missing`), so Promote waits for that run. The measurement runs the cut's own `features/scorecard/staging-latency.mjs`, so a fix to it reaches a cut only through a new cut; the verdict is recorded only while staging still runs that cut. Each nightly write records a durable marker under the nightly lock and invalidates older held releases, so retrying an old record job cannot revive it.
 

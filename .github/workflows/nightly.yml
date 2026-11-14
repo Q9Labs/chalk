@@ -1,7 +1,9 @@
 name: Cut nightly
 on:
   schedule:
-    - cron: "17 * * * *"
+    # Every slot is six hours after the last and the plan refuses a cut within five hours of an attempt, so a slot is a cut
+    # unless master has no new green commit. An hourly poll was a no-op in most of its runs, all of them inside that gap.
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 permissions:
   contents: read
