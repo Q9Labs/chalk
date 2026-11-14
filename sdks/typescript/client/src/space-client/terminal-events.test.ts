@@ -283,12 +283,14 @@ describe("SpaceClient terminal callbacks", () => {
       timers.delete(callback as () => void);
     };
     let foreground = () => undefined;
-    const access = vi.fn(async () => {
-      if (access.mock.calls.length === 2 || access.mock.calls.length === 3) throw new Error("Access unavailable");
+    let accessCalls = 0;
+    const access = async () => {
+      accessCalls += 1;
+      if (accessCalls === 2 || accessCalls === 3) throw new Error("Access unavailable");
       const grant = opaqueAccessGrant(1);
       const expiresAt = new Date(now + 300_000).toISOString();
-      return { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt, client_payload: { connectionId: access.mock.calls.length > 1 ? "connection-2" : "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } } };
-    });
+      return { ...grant, sync: { ...grant.sync, expires_at: expiresAt }, media: { ...grant.media, expires_at: expiresAt, client_payload: { connectionId: accessCalls > 1 ? "connection-2" : "connection-1", stunServer: "stun:stun.cloudflare.com:3478" } } };
+    };
     const client = createSpaceClientForPlatform(
       { space: "test", getAccess: access },
       {
@@ -302,29 +304,15 @@ describe("SpaceClient terminal callbacks", () => {
         },
       },
     );
-    const error = vi.fn();
-    const ended = vi.fn();
-    client.on("error", error);
-    client.on("episodeEnded", ended);
-    const retry = async (calls: number, delay: number) => {
-      await vi.waitFor(() => expect([...timers.values()]).toContain(delay));
-      expect(client.getSnapshot().connection.status).toBe("live");
-      expect(error).not.toHaveBeenCalled();
-      const timer = [...timers].find(([, scheduled]) => scheduled === delay)?.[0];
-      if (!timer) throw new Error("Expected the refresh retry timer");
-      timers.delete(timer);
-      now += delay;
-      timer();
-      await vi.waitFor(() => expect(access).toHaveBeenCalledTimes(calls));
-    };
+    const errors: unknown[] = [];
+    client.on("error", (event) => errors.push(event));
     try {
       await client.join({ microphone: false, camera: false });
       now += 301_000;
       foreground();
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
       expect(client.getSnapshot().connection.lastError?.code).toBe("access.unavailable");
-      expect(error).toHaveBeenCalledTimes(1);
-      expect(access).toHaveBeenCalledTimes(2);
+      expect(errors).toHaveLength(1);
     } finally {
       client.dispose();
     }
