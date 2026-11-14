@@ -79,6 +79,9 @@ const cloudflareReal = cloudflareNames.map((name) => process.env[`CHALK_STACK_CL
 if (cloudflareReal.some(Boolean) && !cloudflareReal.every(Boolean)) throw new Error("identity: pass all of CHALK_STACK_CLOUDFLARE_* or none");
 const cloudflare = cloudflareReal.every(Boolean) ? Object.fromEntries(cloudflareNames.map((name, index) => [`CHALK_CLOUDFLARE_${name}`, cloudflareReal[index]])) : { CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused" };
 
+// New Spaces land on the plane the stack proves: Cloudflare when it has real credentials, the Chalk SFU otherwise.
+const mediaPlane = cloudflareReal.every(Boolean) ? "cf_sfu" : "chalk_sfu";
+
 env("api.env", {
   CHALK_API_ADDR: `127.0.0.1:${apiPort}`,
   CHALK_API_ENV: "local",
@@ -108,8 +111,8 @@ env("api.env", {
   CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE: "/run/chalk/provider-bridge/server.key",
   CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE: "/run/chalk/provider-bridge/client-ca.crt",
   CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN: trustDomain,
-  CHALK_DEFAULT_MEDIA_PLANE: "chalk_sfu",
-  CHALK_NEW_SPACE_MEDIA_PLANE: "chalk_sfu",
+  CHALK_DEFAULT_MEDIA_PLANE: mediaPlane,
+  CHALK_NEW_SPACE_MEDIA_PLANE: mediaPlane,
   // Recording and transcription need the recorder fleet, which this stack does not start.
   CHALK_NEW_SPACE_RECORDING_POLICY: "disabled",
   CHALK_NEW_SPACE_TRANSCRIPTION_POLICY: "disabled",

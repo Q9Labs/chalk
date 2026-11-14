@@ -39,8 +39,9 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
-// Recording runs only on Cloudflare, so the Chalk SFU proves the call without a Capture.
-const recordable = mediaPlane === "cf_sfu";
+// Recording runs only on Cloudflare, so the Chalk SFU proves the call without a Capture. CHALK_PROOF_RECORDING=off proves the
+// call alone on Cloudflare too, for a stack with no recorder fleet.
+const recordable = mediaPlane === "cf_sfu" && process.env.CHALK_PROOF_RECORDING !== "off";
 // A proof Space on `plane`. The public API refuses a request that names the Chalk SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
