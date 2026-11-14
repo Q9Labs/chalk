@@ -8,7 +8,7 @@ export class InMemoryV1PendingTargetStore implements V1PendingTargetStore {
   }
 
   async load(): Promise<readonly V1PendingTarget[]> {
-    return [...this.#commands.values()].map((command) => structuredClone(command)).sort(comparePending);
+    return [...this.#commands.values()].map((command) => structuredClone(command)).sort(compareV1PendingTargets);
   }
 
   async put(command: V1PendingTarget): Promise<void> {
@@ -21,9 +21,5 @@ export class InMemoryV1PendingTargetStore implements V1PendingTargetStore {
 }
 
 export function compareV1PendingTargets(left: V1PendingTarget, right: V1PendingTarget): number {
-  return comparePending(left, right);
-}
-
-function comparePending(left: V1PendingTarget, right: V1PendingTarget): number {
   return left.createdAt - right.createdAt || left.commandId.localeCompare(right.commandId);
 }

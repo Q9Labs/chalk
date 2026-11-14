@@ -1,5 +1,5 @@
 import { otherDeviceHasMicrophone } from "./same-identity";
-import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
+import { Clock, Deferred, Effect, Exit, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
@@ -12,19 +12,20 @@ import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
-import { normalizeMediaError, SpaceClientError } from "./errors";
+import { structurallyEqual } from "./structural-equal";
+import { makeScopedFork, type ScopedFork } from "./scoped-fork";
+import { foreign, isAccessInvalid, normalizeMediaError, SpaceClientError, type ClientEffect } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
+const ENABLE_ACTION = { microphone: "setMicrophoneEnabled", camera: "setCameraEnabled", screen: "startScreenShare" } as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
 const IDLE_RELEASE_MS = 30_000;
 const OFF_RETRY_INITIAL_MS = 1000;
 const OFF_RETRY_MAX_MS = 30000;
-type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
-type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
 type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly controlRevision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
 type SourceResult = { readonly revision: number; readonly status: "confirmed" } | { readonly revision: number; readonly status: "failed"; readonly cause: unknown; cleanup: boolean };
 type OffDebt = "none" | "owed" | "sent";
@@ -128,17 +129,12 @@ export type MediaControllerEffects = {
   readonly declineRequest: (requestId: string) => ClientEffect<void>;
   readonly dispose: () => void;
 };
-export class MediaControllerService extends Context.Service<MediaControllerService, MediaControllerEffects>()("@chalk/client/MediaController") {}
 /** Scoped media controller: all source work is serialized with Effect semaphores. */
 export const makeMediaController = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection): Effect.Effect<MediaControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
     const [microphone, camera, screen] = yield* Effect.all([Semaphore.make(1), Semaphore.make(1), Semaphore.make(1)]);
     const clock = yield* Clock.Clock;
-    const scope = yield* Effect.scope;
-    const context = yield* Effect.context<Clock.Clock>();
-    const fork: Fork = (effect) => {
-      void Effect.runForkWith(context)(Effect.forkIn(effect, scope).pipe(Effect.asVoid) as Effect.Effect<void, never, Clock.Clock>);
-    };
+    const fork = yield* makeScopedFork<Clock.Clock>();
     const controller = new MediaControllerRuntime(
       connection,
       store,
@@ -160,14 +156,13 @@ export const makeMediaController = (connection: ConnectionLifecycleCapability, s
     controller.refreshDevicesInBackground();
     return controller;
   });
-export const makeMediaControllerLayer = (connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection) => Layer.effect(MediaControllerService, makeMediaController(connection, store, selection));
 class MediaControllerRuntime implements MediaControllerEffects {
   readonly #connection: ConnectionLifecycleCapability;
   readonly #selection: MediaDeviceSelection;
   readonly #store: SpaceStore;
   readonly #gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>;
   readonly #now: () => number;
-  readonly #fork: Fork;
+  readonly #fork: ScopedFork<Clock.Clock>;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #idleReleases = new Map<"microphone" | "camera", unknown>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
@@ -198,7 +193,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #projection: MediaProjectionMonitor;
   #microphoneMutedByOtherDevice = false;
   #ownMicrophoneOff = false;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: ScopedFork<Clock.Clock>) {
     this.#connection = connection;
     this.#store = store;
     this.#selection = selection;
@@ -649,7 +644,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!intent.enabled) return this.#send(ports, source, intent, false);
     let captured: MediaStreamTrack | null = null;
     let prepared = false;
-    const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
+    const action = ENABLE_ACTION[source];
     return this.#mediaAction(
       true,
       Effect.suspend(() => {
@@ -902,20 +897,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
 
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
+    const waitLive = enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void;
     const command = this.#mediaAction(
       enabled,
       foreign(async () => {
         // Revision check and transport invocation are one synchronous turn, owned by the source worker.
         this.#assertCurrentIntent(source, intent.revision, enabled);
-        this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
+        this.#assertActivePorts(ports, ENABLE_ACTION[source]);
         const send = source === "microphone" ? ports.sync.setMicrophoneEnabled : source === "camera" ? ports.sync.setCameraEnabled : ports.sync.setScreenShareEnabled;
         await send.call(ports.sync, enabled);
       }).pipe(
-        Effect.andThen(enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void),
-        Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
+        Effect.andThen(waitLive),
+        Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, ENABLE_ACTION[source]), catch: (cause) => cause })),
       ),
     );
-    return enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports).pipe(Effect.andThen(command)) : command;
+    return waitLive.pipe(Effect.andThen(command));
   }
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
@@ -1356,7 +1352,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
             }),
           ),
         ),
-      (cause) => captureError(cause, source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled", `${source} permission was denied`),
+      (cause) => captureError(cause, ENABLE_ACTION[source], `${source} permission was denied`),
       signal,
     );
   }
@@ -1366,7 +1362,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.sync(() => {
           const current = this.#store.getSnapshot().media;
           const next = Object.freeze({ microphones: mediaDevicesOfKind(devices, "audioinput"), cameras: mediaDevicesOfKind(devices, "videoinput"), speakers: mediaDevicesOfKind(devices, "audiooutput") });
-          if (!sameDevices(current.devices, next)) this.#store.updateMedia(Object.freeze({ ...current, devices: next }));
+          this.#store.update("media", Object.freeze({ ...current, devices: next }));
         }),
       ),
       Effect.asVoid,
@@ -1711,7 +1707,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       callStats: snapshot?.callStats,
       link,
     });
-    if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
+    if (!sameMediaSlice(current.media, media)) this.#store.update("media", media);
   }
 }
 function pausedPublicationIds(snapshot: ConnectionMediaSnapshot | undefined): ReadonlySet<string> {
@@ -1732,9 +1728,6 @@ function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boole
 /** Sync answered the on with a refusal; a lost connection, a left call or a timeout is not one. */
 function refusedBySync(cause: unknown): boolean {
   return cause instanceof V1SyncError && cause.code === "terminal_failure";
-}
-function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
-  return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
 function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>, devices: Pick<ConnectionMediaDevices, "releaseTrack">): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
@@ -1768,9 +1761,9 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
   return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
-  if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
+  if (left.selection !== right.selection || !structurallyEqual(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
+  return sameScreenShare(left.screenShare, right.screenShare) && structurallyEqual(left.remote, right.remote) && structurallyEqual(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
 }
 function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean {
   return left?.tier === right?.tier && left?.reason === right?.reason;
@@ -1781,28 +1774,8 @@ function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["scr
 function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlice["local"][MediaSource]): boolean {
   return left.source === right.source && left.state === right.state && left.track === right.track;
 }
-function sameRemoteMedia(left: MediaSlice["remote"], right: MediaSlice["remote"]): boolean {
-  return left.length === right.length && left.every((track, index) => sameRemoteTrack(track, right[index]));
-}
-function sameRemoteTrack(left: RemoteMedia, right: RemoteMedia | undefined): boolean {
-  if (!right) return false;
-  return left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track && left.pausedForNetwork === right.pausedForNetwork;
-}
-function sameRequests(left: MediaSlice["incomingRequests"], right: MediaSlice["incomingRequests"]): boolean {
-  return left.length === right.length && left.every((request, index) => sameRequest(request, right[index]));
-}
-function sameRequest(left: IncomingMediaRequest, right: IncomingMediaRequest | undefined): boolean {
-  if (!right) return false;
-  return left.requestId === right.requestId && left.kind === right.kind && left.actorParticipantId === right.actorParticipantId && left.actorDisplayName === right.actorDisplayName && left.expiresAt === right.expiresAt;
-}
 function mediaDevicesOfKind(devices: readonly MediaDeviceInfo[], kind: MediaDeviceKind): MediaSlice["devices"]["microphones"] {
   return Object.freeze(devices.filter((device) => device.kind === kind).map((device) => Object.freeze({ deviceId: device.deviceId, label: device.label })));
-}
-function sameDevices(left: MediaSlice["devices"], right: MediaSlice["devices"]): boolean {
-  return sameDeviceList(left.microphones, right.microphones) && sameDeviceList(left.cameras, right.cameras) && sameDeviceList(left.speakers, right.speakers);
-}
-function sameDeviceList(left: MediaSlice["devices"]["microphones"], right: MediaSlice["devices"]["microphones"]): boolean {
-  return left.length === right.length && left.every((device, index) => device.deviceId === right[index]?.deviceId && device.label === right[index]?.label);
 }
 function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare", permissionMessage: string): ConnectionError {
   if (cause instanceof ConnectionError) return cause;
@@ -1812,21 +1785,4 @@ function captureError(cause: unknown, action: "join" | "setMicrophoneEnabled" | 
 }
 function isPermissionDenied(cause: unknown): boolean {
   return describeMediaCaptureError(cause).code === "permission_denied";
-}
-function isAccessInvalid(cause: unknown): boolean {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "code" in cause &&
-    ((
-      cause as {
-        readonly code?: unknown;
-      }
-    ).code === "access.invalid" ||
-      (
-        cause as {
-          readonly code?: unknown;
-        }
-      ).code === "invalid_access")
-  );
 }

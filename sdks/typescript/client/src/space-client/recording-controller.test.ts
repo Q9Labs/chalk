@@ -50,7 +50,7 @@ describe("RecordingController", () => {
           if (denied._tag === "Failure") expect(denied.failure.code).toBe("command.rejected");
           expect(startCount).toBe(0);
 
-          store.updateSelf({ participantId: "participant-1", displayName: "A Participant", role: "facilitator", capabilities: ["manageRecording"], handRaised: false, can: (capability) => capability === "manageRecording" });
+          store.update("self", { participantId: "participant-1", displayName: "A Participant", role: "facilitator", capabilities: ["manageRecording"], handRaised: false, can: (capability) => capability === "manageRecording" });
           expect(yield* controller.start()).toEqual({ recordingId: "recording-new" });
           expect(startCount).toBe(1);
 

@@ -136,7 +136,7 @@ export type ChalkWhiteboardV1Transport = {
 
 export type ChalkWhiteboardV1PendingOperation = {
   readonly operationId: string;
-  readonly frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" }>;
+  readonly frame: WhiteboardV1LogicalOperationFrame;
   readonly createdAt: number;
   readonly bytes: number;
 };
@@ -166,7 +166,7 @@ export type ChalkWhiteboardV1ClientOptions = {
   readonly retryDelayMs?: number;
   readonly onSummary?: (summary: ChalkWhiteboardSummary) => void;
   readonly watchdog?: boolean;
-  readonly onWatchdogReplacement?: (event: { readonly reason: "slow_heartbeat"; readonly roundTripsMs: readonly number[]; readonly outstandingAgesMs: readonly number[]; readonly backoffMs: number }) => void;
+  readonly onWatchdogReplacement?: (event: WhiteboardV1WatchdogReplacement) => void;
 };
 
 export type ChalkWhiteboardSummary = {
@@ -186,7 +186,9 @@ export type ChalkWhiteboardSummary = {
   readonly presenting: boolean;
   readonly error: ChalkWhiteboardV1Failure | null;
 };
-import type { WhiteboardV1ClientFrame, WhiteboardV1DrawPolicy } from "../generated/whiteboard-v1";
+import type { WhiteboardV1DrawPolicy } from "../generated/whiteboard-v1";
+import type { WhiteboardV1LogicalOperationFrame } from "./v1-multipart";
+import type { WhiteboardV1WatchdogReplacement } from "./v1-watchdog";
 import type { ChalkWhiteboardV1Capability } from "../collaboration/types";
 import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncWebSocketFactory } from "../sync/types";
 

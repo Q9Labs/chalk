@@ -4,6 +4,7 @@ import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-defer
 import { V1SyncError } from "./v1-error";
 import { compareV1PendingTargets } from "./v1-persistence";
 import { V1ReplicaError } from "./v1-reducer";
+import { V1TimerMap } from "./v1-timer-map";
 import type { V1CommandResult, V1OperationName, V1PendingTarget, V1PendingTargetStore, V1SyncClientOptions, V1TargetCommand } from "./v1-types";
 
 const MAX_IN_FLIGHT = 256;
@@ -46,12 +47,14 @@ export class V1CommandScheduler {
   readonly #commands = new Map<string, CommandDeferred>();
   readonly #acknowledgements = new Map<string, Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>>();
   readonly #pendingRemovals = new Map<string, V1PendingTarget>();
-  readonly #commandRetryTimers = new Map<string, unknown>();
-  readonly #pendingRemovalRetryTimers = new Map<string, unknown>();
+  readonly #commandRetryTimers: V1TimerMap;
+  readonly #pendingRemovalRetryTimers: V1TimerMap;
   #stopGeneration = 0;
 
   constructor(options: V1CommandSchedulerOptions) {
     this.#options = options;
+    this.#commandRetryTimers = new V1TimerMap(options.clock);
+    this.#pendingRemovalRetryTimers = new V1TimerMap(options.clock);
   }
 
   get pendingCount(): number {
@@ -79,7 +82,7 @@ export class V1CommandScheduler {
     for (const commandId of this.#pendingRemovals.keys()) {
       if (storedCommandIds.has(commandId)) continue;
       this.#pendingRemovals.delete(commandId);
-      this.#clearPendingRemovalRetryTimer(commandId);
+      this.#pendingRemovalRetryTimers.cancel(commandId);
     }
     for (const pending of [...stored].sort(compareV1PendingTargets)) {
       if (this.#pendingRemovals.has(pending.commandId)) {
@@ -95,15 +98,15 @@ export class V1CommandScheduler {
 
   stop(code: string): void {
     this.#stopGeneration += 1;
-    this.#clearCommandRetryTimers();
-    this.#clearPendingRemovalRetryTimers();
+    this.#commandRetryTimers.cancelAll();
+    this.#pendingRemovalRetryTimers.cancelAll();
     for (const deferred of this.#commands.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
     this.#commands.clear();
     this.#acknowledgements.clear();
   }
 
   disconnect(): void {
-    this.#clearCommandRetryTimers();
+    this.#commandRetryTimers.cancelAll();
   }
 
   assertCapacity(externalInFlight: number): void {
@@ -155,7 +158,7 @@ export class V1CommandScheduler {
     if (!deferred) return;
     if (isSatisfiedByInactiveParticipant(frame, deferred.frame)) {
       const head = this.#options.controlHead();
-      await this.#finishCommand(frame.command_id, { type: "ack", command_id: frame.command_id, delivery: "duplicate", outcome: "satisfied", revision: head.revision, state_digest: head.state_digest });
+      await this.#finishCommand(frame.command_id, satisfiedAck(frame.command_id, head.revision, head.state_digest));
       return;
     }
     if (frame.outcome === "rejected" || frame.outcome === "command_id_conflict") {
@@ -187,32 +190,18 @@ export class V1CommandScheduler {
     if (!operationName) return;
     for (const [commandId, deferred] of this.#commands) {
       if (deferred.frame.type !== "operation" || deferred.frame.name !== operationName) continue;
-      await this.#finishCommand(commandId, {
-        type: "ack",
-        command_id: commandId,
-        delivery: "duplicate",
-        outcome: "satisfied",
-        revision: frame.revision,
-        state_digest: frame.resulting_state_digest,
-      });
+      await this.#finishCommand(commandId, satisfiedAck(commandId, frame.revision, frame.resulting_state_digest));
     }
   }
 
   async settleTerminalRecovery(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome"; readonly mode: "terminal" }>): Promise<void> {
     const satisfies = (operation: V1OperationName): boolean => {
       if (frame.reason === "episode_ended") return operation === "end_episode" || operation === "participant_leave";
-      return frame.reason === "participant_inactive" && inactiveParticipantSatisfies(operation);
+      return frame.reason === "participant_inactive" && operation === "participant_leave";
     };
     for (const [commandId, deferred] of this.#commands) {
       if (deferred.frame.type !== "operation" || !satisfies(deferred.frame.name)) continue;
-      await this.#finishCommand(commandId, {
-        type: "ack",
-        command_id: commandId,
-        delivery: "duplicate",
-        outcome: "satisfied",
-        revision: frame.head.revision,
-        state_digest: frame.head.state_digest,
-      });
+      await this.#finishCommand(commandId, satisfiedAck(commandId, frame.head.revision, frame.head.state_digest));
     }
   }
 
@@ -229,11 +218,13 @@ export class V1CommandScheduler {
       return;
     }
     deferred.retries += 1;
-    const timer = this.#options.clock().setTimeout(() => {
-      this.#commandRetryTimers.delete(commandId);
-      if (this.#commands.get(commandId) === deferred) this.#options.sendIfLive(deferred.frame);
-    }, this.#options.retryDelayMs ?? 100);
-    this.#commandRetryTimers.set(commandId, timer);
+    this.#commandRetryTimers.schedule(
+      commandId,
+      () => {
+        if (this.#commands.get(commandId) === deferred) this.#options.sendIfLive(deferred.frame);
+      },
+      this.#options.retryDelayMs ?? 100,
+    );
   }
 
   enterLive(): void {
@@ -254,9 +245,9 @@ export class V1CommandScheduler {
       this.#expirePendingOperation(commandId, deferred);
       return;
     }
-    const timer = this.#options.clock().setTimeout(
+    this.#commandRetryTimers.schedule(
+      commandId,
       () => {
-        this.#commandRetryTimers.delete(commandId);
         if (this.#commands.get(commandId) !== deferred) return;
         if (this.#now() - deferred.createdAt >= (this.#options.maxOperationPendingAgeMs ?? MAX_PENDING_AGE_MS)) {
           this.#expirePendingOperation(commandId, deferred);
@@ -266,37 +257,32 @@ export class V1CommandScheduler {
       },
       Math.min(OPERATION_PENDING_POLL_INTERVAL_MS, remainingAge),
     );
-    this.#commandRetryTimers.set(commandId, timer);
   }
 
   #expirePendingOperation(commandId: string, deferred: CommandDeferred): void {
     if (this.#commands.get(commandId) !== deferred) return;
-    this.#commands.delete(commandId);
-    this.#acknowledgements.delete(commandId);
-    this.#clearCommandRetryTimer(commandId);
-    let pending: V1PendingTarget | undefined;
-    if (deferred.durableTarget) {
-      pending = this.#pendingTargets.get(commandId);
-      this.#pendingTargets.delete(commandId);
-      if (pending) this.#pendingRemovals.set(commandId, pending);
-    }
+    const pending = this.#detachCommand(commandId, deferred);
     rejectV1Deferred(deferred, new V1SyncError("external operation remained pending beyond its maximum age", "operation_pending_timeout"));
     this.#options.stateChanged();
     if (pending) void this.#removePersistedTarget(commandId, pending);
   }
 
+  /** Stops tracking a command. A durable target moves to the removals awaiting its store delete. */
+  #detachCommand(commandId: string, deferred: CommandDeferred): V1PendingTarget | undefined {
+    this.#commands.delete(commandId);
+    this.#commandRetryTimers.cancel(commandId);
+    this.#acknowledgements.delete(commandId);
+    if (!deferred.durableTarget) return undefined;
+    const pending = this.#pendingTargets.get(commandId);
+    this.#pendingTargets.delete(commandId);
+    if (pending) this.#pendingRemovals.set(commandId, pending);
+    return pending;
+  }
+
   async #finishCommand(commandId: string, result: V1CommandResult): Promise<void> {
     const deferred = this.#commands.get(commandId);
     if (!deferred) return;
-    this.#commands.delete(commandId);
-    this.#clearCommandRetryTimer(commandId);
-    this.#acknowledgements.delete(commandId);
-    let pending: V1PendingTarget | undefined;
-    if (deferred.durableTarget) {
-      pending = this.#pendingTargets.get(commandId);
-      this.#pendingTargets.delete(commandId);
-      if (pending) this.#pendingRemovals.set(commandId, pending);
-    }
+    const pending = this.#detachCommand(commandId, deferred);
     if (result.outcome === "rejected" || result.outcome === "command_id_conflict") rejectV1Deferred(deferred, new V1SyncError(result.reason, result.outcome));
     else resolveV1Deferred(deferred, result);
     this.#options.stateChanged();
@@ -320,7 +306,7 @@ export class V1CommandScheduler {
       await this.#options.store.remove(commandId);
       if (this.#pendingRemovals.get(commandId) !== pending) return;
       this.#pendingRemovals.delete(commandId);
-      this.#clearPendingRemovalRetryTimer(commandId);
+      this.#pendingRemovalRetryTimers.cancel(commandId);
     } catch {
       if (this.#pendingRemovals.get(commandId) !== pending) return;
       this.#schedulePendingRemovalRetry(commandId, pending);
@@ -329,11 +315,7 @@ export class V1CommandScheduler {
 
   #schedulePendingRemovalRetry(commandId: string, pending: V1PendingTarget): void {
     if (!this.#options.isStarted() || this.#pendingRemovalRetryTimers.has(commandId)) return;
-    const timer = this.#options.clock().setTimeout(() => {
-      this.#pendingRemovalRetryTimers.delete(commandId);
-      void this.#removePersistedTarget(commandId, pending);
-    }, this.#options.retryDelayMs ?? 100);
-    this.#pendingRemovalRetryTimers.set(commandId, timer);
+    this.#pendingRemovalRetryTimers.schedule(commandId, () => void this.#removePersistedTarget(commandId, pending), this.#options.retryDelayMs ?? 100);
   }
 
   #assertCommandIdAvailable(commandId: string): void {
@@ -355,30 +337,6 @@ export class V1CommandScheduler {
   #now(): number {
     return this.#options.clock().now();
   }
-
-  #clearCommandRetryTimers(): void {
-    for (const timer of this.#commandRetryTimers.values()) this.#options.clock().clearTimeout(timer);
-    this.#commandRetryTimers.clear();
-  }
-
-  #clearPendingRemovalRetryTimers(): void {
-    for (const timer of this.#pendingRemovalRetryTimers.values()) this.#options.clock().clearTimeout(timer);
-    this.#pendingRemovalRetryTimers.clear();
-  }
-
-  #clearPendingRemovalRetryTimer(commandId: string): void {
-    const timer = this.#pendingRemovalRetryTimers.get(commandId);
-    if (timer === undefined) return;
-    this.#options.clock().clearTimeout(timer);
-    this.#pendingRemovalRetryTimers.delete(commandId);
-  }
-
-  #clearCommandRetryTimer(commandId: string): void {
-    const timer = this.#commandRetryTimers.get(commandId);
-    if (timer === undefined) return;
-    this.#options.clock().clearTimeout(timer);
-    this.#commandRetryTimers.delete(commandId);
-  }
 }
 
 function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV1ClientFrame, { readonly type: "command" }> {
@@ -394,13 +352,13 @@ function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV
   }
 }
 
-// A Participant that is already inactive has reached the state a Leave asks for, whether sync reports it live or in a terminal recovery.
-function inactiveParticipantSatisfies(operation: V1OperationName): boolean {
-  return operation === "participant_leave";
+function satisfiedAck(commandId: string, revision: number, stateDigest: string): V1CommandResult {
+  return { type: "ack", command_id: commandId, delivery: "duplicate", outcome: "satisfied", revision, state_digest: stateDigest };
 }
 
+// A Participant that is already inactive has reached the state a Leave asks for, whether sync reports it live or in a terminal recovery.
 function isSatisfiedByInactiveParticipant(result: V1CommandResult, command: SyncV1ClientFrame): boolean {
-  return result.outcome === "rejected" && result.reason === "participant_inactive" && command.type === "operation" && inactiveParticipantSatisfies(command.name);
+  return result.outcome === "rejected" && result.reason === "participant_inactive" && command.type === "operation" && command.name === "participant_leave";
 }
 
 function isTerminalLifecycleOperation(frame: SyncV1ClientFrame): boolean {

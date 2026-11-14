@@ -11,7 +11,7 @@ export type PublicationCursor = {
 export function parseCloudflareSFUPublicationID(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   if (publicationId.startsWith("chalk_pub_v1.")) return parseVersionOnePublicationReference(publicationId.slice("chalk_pub_v1.".length));
   if (publicationId.startsWith("chalk_pub_")) throw new CloudflareSFUError("Cloudflare SFU publication ID uses an unsupported version", "invalid_publication");
-  return parseLegacyPublicationReference(publicationId);
+  return parseBarePublicationReference(publicationId);
 }
 
 function parseVersionOnePublicationReference(encoded: string): { readonly connectionId: string; readonly trackName: string } {
@@ -55,7 +55,7 @@ function isPositiveSafeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-function parseLegacyPublicationReference(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
+function parseBarePublicationReference(publicationId: string): { readonly connectionId: string; readonly trackName: string } {
   const separator = publicationId.indexOf("|");
   if (separator <= 0 || separator === publicationId.length - 1 || publicationId.indexOf("|", separator + 1) !== -1) {
     throw new CloudflareSFUError("Cloudflare SFU publication ID is malformed", "invalid_publication");

@@ -6,9 +6,9 @@ export type CallStatsSample = CallStatsRequest["samples"][number];
 /** One summary covers this long, so a call makes about six per minute. */
 export const CALL_STATS_WINDOW_MS = 10_000;
 /** A batch uploads once it holds this many samples (about a minute of call). */
-export const CALL_STATS_UPLOAD_SAMPLES = 6;
+const CALL_STATS_UPLOAD_SAMPLES = 6;
 /** The API rejects larger batches. */
-export const CALL_STATS_MAX_BATCH = 30;
+const CALL_STATS_MAX_BATCH = 30;
 /** The API rejects a window longer than this and drops the whole batch, so a longer gap (a stalled tab, a sleeping device) is skipped. */
 export const CALL_STATS_MAX_WINDOW_MS = 60_000;
 /** Per-call cap: about an hour of samples. Later windows are dropped. */
