@@ -65,7 +65,7 @@ wait
 tick pull
 
 # Keys, certificates and tokens. Nothing here is a stored secret; the machine and these files go away after the run.
-node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin" "$port_storage" "$storage_secret"
+node "$script_dir/identity.mjs" "$dir" "$announce_ip" "$db_url" "$port_api" "$port_sync" "$port_bridge" "$port_sfu_control" "$port_sfu_media" "$proof_origin" "$port_storage" "$storage_secret" "$port_front"
 tick identity
 
 docker rm -f chalk-stack-postgres chalk-stack-redis chalk-stack-api chalk-stack-sync chalk-stack-sfu chalk-stack-front chalk-stack-storage > /dev/null 2>&1 || true
@@ -96,6 +96,9 @@ chmod 755 "$dir/migrate"
 chmod 644 "$dir/migrate/database-url"
 docker run --rm --network host -v "$dir/migrate:/run/chalk/stack:ro" --entrypoint /usr/local/bin/chalk-migrate \
   "$api_image" --database-url-file /run/chalk/stack/database-url --target "$migration_target" > "$dir/migrate.log" 2>&1 || { tail -20 "$dir/migrate.log" >&2; exit 1; }
+# The public Space page creates its Space in this Tenant (CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID in identity.mjs).
+docker exec chalk-stack-postgres psql -h 127.0.0.1 -U postgres -d chalk -v ON_ERROR_STOP=1 -qAtc \
+  "insert into tenants (id, name) values ('00000000-0000-4000-8000-000000000001', 'Managed public Tenant'); insert into tenant_artifact_policies (tenant_id) values ('00000000-0000-4000-8000-000000000001')" > /dev/null
 tick migrate
 
 docker run -d --name chalk-stack-sfu --network host --env-file "$dir/sfu.env" \

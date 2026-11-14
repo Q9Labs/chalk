@@ -5,8 +5,9 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret] = process.argv.slice(2);
+const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret, frontPort] = process.argv.slice(2);
 const kid = "nightly-stack";
+const managedTenantId = "00000000-0000-4000-8000-000000000001";
 const issuer = `http://127.0.0.1:${apiPort}`;
 const trustDomain = "chalk.local";
 const apiIdentity = `spiffe://${trustDomain}/api`;
@@ -74,6 +75,13 @@ env("api.env", {
   CHALK_R2_BUCKET: "chalk-chat",
   CHALK_R2_ACCESS_KEY_ID: "chalk-stack",
   CHALK_R2_SECRET_ACCESS_KEY: storageSecret,
+  // The public Space page creates its Space in this Tenant, which boot inserts; its invites point at the stack's own web origin.
+  CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID: managedTenantId,
+  CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE: "chalk_sfu",
+  CHALK_PUBLIC_INVITE_WEB_ORIGIN: `http://127.0.0.1:${frontPort}`,
+  CHALK_PUBLIC_INVITE_KEY_ID: kid,
+  CHALK_PUBLIC_INVITE_PRIVATE_KEY: signingKey,
+  CHALK_PUBLIC_INVITE_VERIFICATION_KEYS: keyring,
   CHALK_SYNC_TOKEN_ISSUER: issuer,
   CHALK_SYNC_TOKEN_AUDIENCE: "chalk-sync",
   CHALK_SYNC_TOKEN_KEY_ID: kid,
