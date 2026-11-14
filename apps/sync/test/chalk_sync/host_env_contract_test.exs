@@ -16,7 +16,6 @@ defmodule ChalkSync.HostEnvContractTest do
     |> Enum.filter(&String.starts_with?(&1, "CHALK_"))
     |> Enum.each(&System.delete_env/1)
 
-
     # The contract also sets variables outside the CHALK_ prefix, so the whole environment is restored.
     on_exit(fn ->
       System.get_env() |> Map.keys() |> Enum.each(&System.delete_env/1)
