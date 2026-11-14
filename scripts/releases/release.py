@@ -437,10 +437,14 @@ def await_quiet(read, sleep, *, wait_minutes=LIVE_CALL_WAIT_MINUTES, allow_live_
                 deadline=None, now=lambda: datetime.now(timezone.utc)):
     """Return when no live call runs. Raise when calls last past the wait, the count cannot be read (unless a person
     allowed it) or the deadline, the end of an automatic release's quiet window, has passed."""
-    for minute in range(wait_minutes + 1):
+    def require_open():
         if deadline and now() >= deadline:
             raise ValueError(f'the quiet window closed at {deadline:%H:%M}Z; the next quiet-window tick tries again')
+
+    for minute in range(wait_minutes + 1):
+        require_open()
         result = read()
+        require_open()  # A slow read must not turn a closed window into an approval.
         if isinstance(result, Quiet):
             say('No live calls. Continuing.')
             return

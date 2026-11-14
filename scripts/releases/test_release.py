@@ -211,13 +211,19 @@ class OwnSfuPromotionTests(unittest.TestCase):
             self.assertIn(f'until={end}', self.output.read_text().splitlines())
 
     def test_promote_refuses_once_the_quiet_window_has_closed(self):
-        clock = iter([datetime(2026, 11, 16, 0, 59, tzinfo=timezone.utc), datetime(2026, 11, 16, 1, 5, tzinfo=timezone.utc)])
+        clock = iter([datetime(2026, 11, 16, 0, 59, tzinfo=timezone.utc)] * 2 + [datetime(2026, 11, 16, 1, 5, tzinfo=timezone.utc)])
         deadline = datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc)
         naps = []
         with self.assertRaises(ValueError) as error:
             release.await_quiet(lambda: release.Busy(1), naps.append, deadline=deadline, now=lambda: next(clock), say=lambda line: None)
         self.assertEqual(naps, [60])
         self.assertIn('quiet window closed', str(error.exception))
+
+    def test_a_quiet_read_that_ends_after_the_window_closed_does_not_approve(self):
+        clock = iter([datetime(2026, 11, 16, 0, 59, 59, tzinfo=timezone.utc), datetime(2026, 11, 16, 1, 0, 1, tzinfo=timezone.utc)])
+        with self.assertRaises(ValueError):
+            release.await_quiet(lambda: release.Quiet(), lambda seconds: None, now=lambda: next(clock), say=lambda line: None,
+                                deadline=datetime(2026, 11, 16, 1, 0, tzinfo=timezone.utc))
 
     def test_automatic_promotion_holds_while_calls_run_or_the_count_is_unknown(self):
         for calls in (release.Busy(2), release.Unknown('no answer')):
