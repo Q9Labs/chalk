@@ -169,7 +169,8 @@ env:
   TARGET_SHA: ${{ inputs.target_sha }}
 
 concurrency:
-  group: ${{ inputs.orchestrated && format('chalk-release-child-{0}', github.run_id) || format('chalk-environment-{0}', inputs.managed_environment) }}
+  # A run that deploys nothing takes the environment lock for nobody, so it gets a group of its own.
+  group: ${{ inputs.orchestrated && format('chalk-release-child-{0}', github.run_id) || ((inputs.deploy_managed || inputs.deploy_web) && format('chalk-environment-{0}', inputs.managed_environment) || format('chalk-publish-{0}', github.run_id)) }}
   cancel-in-progress: false
 
 jobs:
@@ -374,22 +375,23 @@ jobs:
         run: scripts/releases/check-contracts.sh --plan
 
   build-managed-images:
-    name: Build ${{ matrix.component }} image
+    name: Build ${{ matrix.component }} image (${{ matrix.arch }})
     needs: plan-managed
     if: always() && !cancelled() && needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.build_set != '[]'
     strategy:
       fail-fast: false
       matrix:
         component: ${{ fromJSON(needs.plan-managed.outputs.build_set) }}
-    runs-on: ubuntu-24.04-arm
+        arch: [arm64, amd64]
+    # Each architecture builds on a native runner, so nothing runs under emulation.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     permissions:
       contents: read
-      id-token: write
+      packages: write
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
-      AWS_REGION: ap-southeast-1
-      ECR_REGISTRY: ${{ secrets.CHALK_ECR_REGISTRY }}
       COMPONENT: ${{ matrix.component }}
+      ARCH: ${{ matrix.arch }}
       RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
     steps:
       - name: Checkout exact release
@@ -397,29 +399,21 @@ jobs:
         with:
           ref: ${{ inputs.target_sha }}
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+      - name: Login to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          role-to-assume: ${{ secrets.CHALK_IMAGE_PUBLISH_ROLE_ARN }}
-          aws-region: ap-southeast-1
-
-      - name: Verify signing profile is active
-        run: |
-          status="$(aws signer get-signing-profile --profile-name chalk_production_ecr --query status --output text)"
-          if [[ "$status" != "Active" ]]; then
-            echo "managed signing profile is not active (status: $status)" >&2
-            exit 1
-          fi
-
-      - name: Login to ECR
-        run: aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Build and push immutable image
-        id: build
+      # Push by digest: the per-architecture images carry no tag, and the index job below publishes the tagged index.
+      - name: Build and push the ${{ matrix.arch }} image by digest
         run: |
+          set -euo pipefail
+          registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
           case "$COMPONENT" in
             api)
               source_context="api_source=apps/api"
@@ -437,75 +431,150 @@ jobs:
               ;;
           esac
 
-          metadata_file="${RUNNER_TEMP}/${COMPONENT}-metadata.json"
-          docker buildx build \
-            --platform linux/arm64 \
-            --provenance=false \
-            --build-context "$source_context" \
-            --build-context protocol_source=features/media/sfu/protocol \
-            --cache-from "type=gha,scope=chalk-${COMPONENT}" \
-            --cache-to "type=gha,scope=chalk-${COMPONENT},mode=max" \
-            --file "$dockerfile" \
-            --build-arg RELEASE_ID="$RELEASE_ID" \
-            --build-arg SOURCE_REVISION="$TARGET_SHA" \
-            --tag "$ECR_REGISTRY/${repository}:$RELEASE_ID" \
-            --metadata-file "$metadata_file" \
-            --push \
-            infrastructure/managed-episode
-          digest="$(jq -er '."containerimage.digest"' "$metadata_file")"
-          printf '%s\n' "$ECR_REGISTRY/${repository}@$digest" > "${RUNNER_TEMP}/${COMPONENT}-image.txt"
-          printf 'repository=%s\n' "$repository" >> "$GITHUB_OUTPUT"
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          digests_dir="${RUNNER_TEMP}/digests"
+          mkdir -p "$digests_dir"
+          build_by_digest() {
+            local name="$1" cache_scope="$2" build_dockerfile="$3" metadata_file="$4"
+            shift 4
+            docker buildx build \
+              --platform "linux/${ARCH}" \
+              --provenance=false \
+              "$@" \
+              --build-context protocol_source=features/media/sfu/protocol \
+              --cache-from "type=gha,scope=${cache_scope}-${ARCH}" \
+              --cache-to "type=gha,scope=${cache_scope}-${ARCH},mode=max" \
+              --file "$build_dockerfile" \
+              --build-arg RELEASE_ID="$RELEASE_ID" \
+              --build-arg SOURCE_REVISION="$TARGET_SHA" \
+              --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${TARGET_SHA}" \
+              --output "type=image,name=${registry}/${repository},push-by-digest=true,name-canonical=true,push=true" \
+              --metadata-file "$metadata_file" \
+              infrastructure/managed-episode
+            jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "$metadata_file" > "${digests_dir}/${name}-${ARCH}.txt"
+          }
+
+          build_by_digest "$COMPONENT" "chalk-${COMPONENT}" "$dockerfile" "${RUNNER_TEMP}/${COMPONENT}-metadata.json" \
+            --build-context "$source_context"
 
           if [[ "$COMPONENT" == api && "${{ needs.plan-managed.outputs.recorder_control }}" == true ]]; then
-            control_metadata="${RUNNER_TEMP}/recorder-control-metadata.json"
-            docker buildx build \
-              --platform linux/arm64 --provenance=false \
-              --build-context api_source=apps/api \
-              --build-context protocol_source=features/media/sfu/protocol \
-              --cache-from type=gha,scope=chalk-recorder-control \
-              --cache-to type=gha,scope=chalk-recorder-control,mode=max \
-              --file infrastructure/managed-episode/images/recorder-control.Dockerfile \
-              --build-arg RELEASE_ID="$RELEASE_ID" --build-arg SOURCE_REVISION="$TARGET_SHA" \
-              --tag "$ECR_REGISTRY/chalk-api:recorder-$RELEASE_ID" \
-              --metadata-file "$control_metadata" --push infrastructure/managed-episode
-            control_digest="$(jq -er '."containerimage.digest"' "$control_metadata")"
-            printf '%s\n' "$ECR_REGISTRY/chalk-api@$control_digest" > "${RUNNER_TEMP}/recorder-control-image.txt"
-            printf 'control_digest=%s\n' "$control_digest" >> "$GITHUB_OUTPUT"
+            build_by_digest recorder-control chalk-recorder-control infrastructure/managed-episode/images/recorder-control.Dockerfile \
+              "${RUNNER_TEMP}/recorder-control-metadata.json" --build-context api_source=apps/api
           fi
 
-      - name: Wait for managed signing
+      - name: Upload image digests
+        uses: ./.github/actions/upload-sealed
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: managed-digest-${{ matrix.component }}-${{ matrix.arch }}-${{ env.RELEASE_ID }}
+          path: ${{ runner.temp }}/digests
+          retention-days: 7
+
+  merge-managed-images:
+    name: Publish ${{ matrix.component }} image index
+    needs: [plan-managed, build-managed-images]
+    if: always() && !cancelled() && needs.plan-managed.outputs.should_publish == 'true' && needs.plan-managed.outputs.build_set != '[]' && needs.build-managed-images.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.plan-managed.outputs.build_set) }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+      COMPONENT: ${{ matrix.component }}
+      RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
+    steps:
+      - name: Checkout exact release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.target_sha }}
+
+      - name: Download image digests
+        uses: ./.github/actions/download-sealed
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          pattern: managed-digest-${{ matrix.component }}-*-${{ needs.plan-managed.outputs.release_id }}
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Login to GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Publish the multi-architecture indexes
+        id: index
         run: |
-          digests=("${{ steps.build.outputs.digest }}")
-          if [[ -n "${{ steps.build.outputs.control_digest }}" ]]; then
-            digests+=("${{ steps.build.outputs.control_digest }}")
+          set -euo pipefail
+          registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          case "$COMPONENT" in
+            api) repository="chalk-api" ;;
+            sync) repository="chalk-sync" ;;
+            *) echo "unsupported component: $COMPONENT" >&2; exit 1 ;;
+          esac
+          images_dir="${RUNNER_TEMP}/images"
+          mkdir -p "$images_dir"
+
+          # Joins the two per-architecture digests under one tag, then proves the published index lists exactly
+          # linux/arm64 and linux/amd64 before its digest reaches a manifest.
+          publish_index() {
+            local name="$1" tag="$2" output_key="$3"
+            local arm64 amd64 index_digest platforms
+            arm64="$(<"${RUNNER_TEMP}/digests/${name}-arm64.txt")"
+            amd64="$(<"${RUNNER_TEMP}/digests/${name}-amd64.txt")"
+            docker buildx imagetools create \
+              --tag "${registry}/${repository}:${tag}" \
+              "${registry}/${repository}@${arm64}" \
+              "${registry}/${repository}@${amd64}"
+            index_digest="$(docker buildx imagetools inspect "${registry}/${repository}:${tag}" --format '{{json .Manifest}}' | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))')"
+            platforms="$(docker buildx imagetools inspect "${registry}/${repository}@${index_digest}" --format '{{json .Manifest}}' \
+              | jq -c '[.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"] | sort')"
+            if [[ "$platforms" != '["linux/amd64","linux/arm64"]' ]]; then
+              echo "published index for ${name} lists ${platforms}, not linux/amd64 and linux/arm64" >&2
+              exit 1
+            fi
+            printf '%s\n' "${registry}/${repository}@${index_digest}" > "${images_dir}/${name}-image.txt"
+            printf '%s=%s\n' "$output_key" "$index_digest" >> "$GITHUB_OUTPUT"
+          }
+
+          publish_index "$COMPONENT" "$RELEASE_ID" digest
+          if [[ -f "${RUNNER_TEMP}/digests/recorder-control-arm64.txt" ]]; then
+            publish_index recorder-control "recorder-${RELEASE_ID}" control_digest
           fi
-          for digest in "${digests[@]}"; do
-          for attempt in $(seq 1 60); do
-            status="$(aws ecr describe-image-signing-status --repository-name "${{ steps.build.outputs.repository }}" --image-id imageDigest="$digest" --query 'signingStatuses[0].status' --output text 2>/dev/null || echo PENDING)"
-            if [[ "$status" == "COMPLETE" ]]; then
-              break
-            fi
-            if [[ "$status" == "FAILED" ]]; then
-              echo "managed signing failed for $COMPONENT" >&2
-              exit 1
-            fi
-            if [[ "$attempt" == 60 ]]; then
-              echo "managed signing did not complete for $COMPONENT (last status: $status)" >&2
-              exit 1
-            fi
-            sleep 10
-          done
-          done
+          printf 'repository=%s\n' "${registry}/${repository}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest provenance of the image index
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.index.outputs.repository }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest provenance of the recorder control index
+        if: steps.index.outputs.control_digest != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.index.outputs.repository }}
+          subject-digest: ${{ steps.index.outputs.control_digest }}
+          push-to-registry: true
 
       - name: Upload immutable image reference
         uses: ./.github/actions/upload-sealed
         with:
           key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: managed-image-${{ matrix.component }}-${{ env.RELEASE_ID }}
-          path: |
-            ${{ runner.temp }}/${{ matrix.component }}-image.txt
-            ${{ runner.temp }}/recorder-control-image.txt
+          path: ${{ runner.temp }}/images
           retention-days: 7
 
   build-media:
@@ -614,13 +683,13 @@ jobs:
     outputs:
       artifact_id: ${{ steps.manifest-upload.outputs.artifact-id }}
       media_sha256: ${{ steps.media-hash.outputs.sha256 }}
-    needs: [plan-managed, check-managed-contracts, build-managed-images, build-media]
+    needs: [plan-managed, check-managed-contracts, merge-managed-images, build-media]
     if: >-
       always() &&
       needs.check-managed-contracts.result == 'success' &&
       needs.plan-managed.outputs.should_publish == 'true' &&
       (needs.build-media.result == 'success' || (needs.build-media.result == 'skipped' && (inputs.managed_environment != 'nightly' || needs.plan-managed.outputs.recorder_control != 'true'))) &&
-      (needs.build-managed-images.result == 'success' || (needs.build-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
+      (needs.merge-managed-images.result == 'success' || (needs.merge-managed-images.result == 'skipped' && needs.plan-managed.outputs.build_set == '[]'))
     runs-on: ubuntu-24.04
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
@@ -660,7 +729,7 @@ jobs:
           RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
           IMAGE_ROOT: ${{ runner.temp }}/managed-images
-          BUILD_JOB_RESULT: ${{ needs.build-managed-images.result }}
+          BUILD_JOB_RESULT: ${{ needs.merge-managed-images.result }}
           BUILD_SET: ${{ needs.plan-managed.outputs.build_set }}
           ENFORCE_ENTRY_OWNERSHIP: ${{ inputs.enforce_entry_ownership }}
         run: |
@@ -675,13 +744,16 @@ jobs:
           output="infrastructure/managed-episode/generated/${RELEASE_ID}.json"
           args=(
             --affected-components "$affected"
-            --architectures linux/arm64
             --source-revision "$TARGET_SHA"
             --release-id "$RELEASE_ID"
             --output "$output"
           )
           if [[ -f "$PLAN_ROOT/stable-manifest.json" ]]; then
             args+=(--stable-manifest "$PLAN_ROOT/stable-manifest.json")
+          fi
+          # Images carried from an earlier release are arm64-only, so both architectures are claimed only when this release rebuilt both application images.
+          if [[ "$BUILD_SET" == '["api","sync"]' ]]; then
+            args+=(--architectures "linux/amd64,linux/arm64")
           fi
           if jq -e '.affected_components | index("api") != null' "$plan" >/dev/null; then
             args+=(--api-image "$(<"$IMAGE_ROOT/api-image.txt")")

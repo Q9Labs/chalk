@@ -1,0 +1,44 @@
+name: Prune GHCR images
+
+on:
+  schedule:
+    - cron: "41 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Delete the versions the plan lists. Without it the run only prints the plan.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-prune-ghcr-images
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prune old image versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          flags=()
+          if [[ "$APPLY" == true ]]; then flags+=(--apply); fi
+          python3 scripts/releases/prune_ghcr_images.py "${flags[@]}"

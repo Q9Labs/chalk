@@ -850,6 +850,18 @@ if run_controller "$wrong_region_state" "${fixture_root}/wrong-region-request.js
   fail "cross-region ECR image was accepted"
 fi
 grep -Fq 'ECR image registry does not match the deployment region' "${fixture_root}/wrong-region.log" || fail "cross-region ECR rejection was not reported"
+
+ghcr_state="${fixture_root}/ghcr-state"
+mkdir -p "$ghcr_state"
+make_request ghcr "${fixture_root}/ghcr-request.json"
+make_manifest ghcr | jq '(.images[] |= sub("^[^@]+@"; "ghcr.io/chalk-labs/image@"))' >"${fixture_root}/ghcr-manifest.json"
+: >"${fixture_root}/commands.log"
+: >"${fixture_root}/aws.log"
+run_controller "$ghcr_state" "${fixture_root}/ghcr-request.json" "${fixture_root}/ghcr-manifest.json" >"${fixture_root}/ghcr.log" 2>&1 || fail "public GHCR images were rejected"
+grep -Fq 'podman pull ghcr.io/chalk-labs/image@sha256:' "${fixture_root}/commands.log" || fail "GHCR images were not pulled by digest"
+if grep -Fq 'podman login' "${fixture_root}/commands.log" || grep -Fq 'ecr get-login-password' "${fixture_root}/aws.log"; then
+  fail "a public GHCR release logged in to a registry"
+fi
 fi
 
 if group_enabled validation; then

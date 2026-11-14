@@ -767,6 +767,16 @@
       "sample": "0 failures in the audit sample."
     },
     {
+      "id": "workflow:ci.yml#merge-managed-images",
+      "owner": "Release chain",
+      "catches": "A published image index that lacks the arm64 or amd64 image, so the release stops before a host pulls it.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "New job; no runs in the audit sample."
+    },
+    {
       "id": "workflow:ci.yml#build-media",
       "owner": "Release chain",
       "catches": "Media release archives that do not build.",
@@ -1264,6 +1274,16 @@
       "record": "unmeasured",
       "sample": "6 to 10 seconds on each run of its own pull request; no history on other pull requests yet.",
       "reason": "Not a required context, and never to become one: it only reports the UI check job, which carries the verdict. It has write permissions, so it runs no code from the branch."
+    },
+    {
+      "id": "workflow:prune-ghcr-images.yml#prune",
+      "owner": "Release chain",
+      "catches": "Release images that pile up in GHCR, without ever deleting a child of a kept index.",
+      "runs": ["weekly"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "New workflow; no runs in the audit sample."
     },
     {
       "id": "workflow:sfu-bench-reaper.yml#reap",
