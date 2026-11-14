@@ -60,6 +60,9 @@ test("Only the Cloudflare plane lane receives the real Cloudflare credentials", 
   const names = Object.keys(boot.env).filter((name) => name.startsWith("CHALK_STACK_CLOUDFLARE_"));
   assert.equal(names.length, 5);
   for (const name of names) assert.match(boot.env[name], /^\$\{\{ matrix\.proof == 'cloudflare-plane' && secrets\.CHALK_CLOUDFLARE_[A-Z_]+ \|\| '' \}\}$/);
+  for (const step of lane.steps.filter((item) => /^(Refuse a pull|Require the revision to be merged)/.test(item.name))) {
+    assert.match(step.if, /matrix\.proof == 'cloudflare-plane'/, `${step.name} also guards the Cloudflare credentials`);
+  }
   const others = JSON.stringify(lane.steps.filter((item) => item !== boot));
   assert.doesNotMatch(others, /secrets\.CHALK_CLOUDFLARE_/);
 });
