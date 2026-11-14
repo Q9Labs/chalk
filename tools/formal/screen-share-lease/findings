@@ -1,5 +1,3 @@
 # A rule the real code breaks today. `run.sh` reports it and stays green; it
 # fails once the rule holds, so the finding then moves into ScreenShareLease.cfg.
 # Format: <rule><TAB><finding>
-AtMostOneShare	A second participant can start a screen share while the first one still runs, because the 10 s lease is not renewed by an unchanged observation
-ReshareGetsFullLease	A failed lease release is ignored, so the same participant's next share inherits the old lease and its remaining hard cap

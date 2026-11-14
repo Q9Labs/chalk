@@ -7,7 +7,7 @@ description: 'Model-check the Episode lifecycle and admission with TLA+. Use whe
 
 A Chalk Episode ends in several ways: a host presses End, the maximum duration passes, or a deadline change replaces the old limit. Each way runs as separate Postgres transactions, and a join, a knock decision or a Leave can land between them. Tests reach these orderings only by luck, because each needs an API call, a scheduler cycle, a consumer pass and a finalizer to land in a specific order.
 
-`tools/formal/episode-lifecycle/EpisodeLifecycle.tla` models those steps and checks four rules in every order they can happen in. It also states one rule the real code breaks today (see Findings).
+`tools/formal/episode-lifecycle/EpisodeLifecycle.tla` models those steps and checks five rules in every order they can happen in.
 
 | Rule                     | Plain sentence                                                                                                        | Harm when it breaks                                                                                                                          |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -15,33 +15,27 @@ A Chalk Episode ends in several ways: a host presses End, the maximum duration p
 | `EndClearsPending`       | When an Episode ends, no join intent and no knock request is still pending.                                           | A late join or a host's Admit applies to an ended Episode, or a knocker waits on a request nobody answers.                                   |
 | `AdmissionDecidedOnce`   | A knock request leaves `pending` at most once.                                                                        | A person is admitted and turned away for the same knock, or two hosts' decisions both apply, and the roster and the webhook disagree.        |
 | `StaleDeadlineCannotEnd` | The Episode ends for the maximum duration only through the operation for the deadline generation it has when it ends. | A host extends the time limit and an old end operation still ends the call at the old limit.                                                 |
+| `PastDeadlineGetsEnd`    | A passed deadline always has an end on the way or a retry coming.                                                     | An end that failed leaves the Episode running past its maximum duration, and only a host can end it.                                         |
 
 ## Findings
 
-`PastDeadlineGetsEnd` is the rule "a passed deadline always has an end on the way or a retry coming". The real code breaks it, so it is listed in `findings` and `tools/formal/episode-lifecycle/run.sh` reports it as known and stays green. It fails once the rule holds, and the finding then moves into `EpisodeLifecycle.cfg`.
+No rule is broken today. `findings` is empty, and `tools/formal/episode-lifecycle/run.sh` still checks every rule listed in it.
 
-**A failed maximum-duration end is never tried again.** Steps, in Chalk's words:
-
-1. The Episode runs past its maximum duration, and the scheduler enqueues the `maximum_episode_duration_expired` end (`EnqueueDueEpisodeDeadlines`, `ClaimDueEpisodeDeadlines`). The Episode becomes `ending`.
-2. The end cannot finish, for example because the media provider is down. After 100 attempts (`@max_attempts`) the consumer finalizes it as `{:terminal_failure, :retry_exhausted}`.
-3. The finalizer runs `restore_episode_active`, and the Episode is `active` again, past its deadline.
-4. The next scheduler cycle skips it, because `ClaimDueEpisodeDeadlines` skips every Episode that has a `maximum_episode_duration_expired` operation for the current deadline generation, whatever its status. Nothing ends the Episode except a host.
-
-Replay against the real code: a Postgres session with the repo's schema inserts an `active` Episode past its `deadline_at`, runs the real `ClaimDueEpisodeDeadlines` query (one row), inserts the failed `retry_exhausted` operation and sets the Episode `active` as `restore_episode_active` does, then runs the query again. It returns zero rows. The fix is to let `ClaimDueEpisodeDeadlines` pick the Episode again when the old operation failed, or to end it in the failure path.
+`PastDeadlineGetsEnd` was a finding: `ClaimDueEpisodeDeadlines` skipped every Episode with a `maximum_episode_duration_expired` operation for the current deadline generation, whatever its status, so an end that failed 100 times (`restore_episode_active`) was never tried again. The claim now skips only an operation that has not failed. A failed one allows a new operation, keyed `maximum-duration-<generation>-retry-<n>`, after a backoff of 1, 2, 4 ... 60 minutes (the model leaves the backoff out). The `failed_end_blocks_claim` variant restores the old behavior.
 
 ## Does my change touch the model?
 
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- apps/api/internal/adapters/postgres/episode_lifecycle_create.go apps/api/internal/adapters/postgres/episode_control.go apps/api/db/queries/sync_lifecycle.sql apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex apps/sync/lib/chalk_sync/external_operation_consumer.ex
+git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- apps/api/internal/adapters/postgres/episode_lifecycle_create.go apps/api/internal/adapters/postgres/episode_control.go apps/api/db/queries/sync_lifecycle.sql apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex apps/sync/lib/chalk_sync/external_operation_consumer.ex
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as recording or chat code in the same file, needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Sync commit: `941d5710deeddb444ef904519bf2a792f608fd36`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
+Sync commit: `98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches them.
 
 - `AdmitParticipant`, `RequestKnock`: `apps/api/internal/adapters/postgres/episode_lifecycle_create.go` (`AdmitParticipant` returns `ErrEpisodeNotActive` unless the Episode is `active`) and `apps/api/internal/adapters/postgres/public_episode_admission.go` (the knock request).
 - `ApplyJoin`: `apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex` (`transaction`, `validate_lifecycle_product_state`).
@@ -67,7 +61,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 1. It checks that every fragment in `anchors` is still in its file.
 2. It runs TLC on `EpisodeLifecycle.cfg` (2 people, 2 deadline generations, `Break = "none"`), which is the real code, and needs every rule to hold.
-3. It checks each rule in `findings` and needs TLC to report it as broken, so a fixed finding does not go unnoticed.
+3. It checks each rule in `findings` (none today) and needs TLC to report it as broken, so a fixed finding does not go unnoticed.
 4. It runs each broken variant in `breaks`, and needs TLC to report the named rule as broken. This proves the check can still fail.
 
 The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/episode-lifecycle/run.sh` in `.github/workflows/formal-episode-lifecycle.yml` when a covered file or this model changes.

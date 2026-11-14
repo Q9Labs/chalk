@@ -55,10 +55,10 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
                fixture.episode,
                contender.participant_id,
                contender.participant_generation,
-               now: DateTime.add(@now, 9_999, :millisecond)
+               now: DateTime.add(@now, 19_999, :millisecond)
              )
 
-    takeover_at = DateTime.add(@now, 10_000, :millisecond)
+    takeover_at = DateTime.add(@now, 20_000, :millisecond)
 
     assert {:ok, takeover} =
              ScreenShareLease.acquire(

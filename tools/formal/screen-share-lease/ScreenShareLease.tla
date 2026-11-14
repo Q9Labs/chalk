@@ -5,7 +5,7 @@
 (* renews and releases it while it follows the media plane's observations. *)
 (*                                                                         *)
 (* Paths are relative to apps/sync/lib/chalk_sync/live/. Time is counted   *)
-(* in units of 5 seconds: the renewal window is 10 s (Renew = 2), the hard *)
+(* in units of 5 seconds: the renewal window is 20 s (Renew = 4), the hard *)
 (* cap is 30 s but modeled as 25 s (Hard = 5, to keep the state space      *)
 (* small) and the coordinator reconciles every 15 s (Every = 3,            *)
 (* `@live_reconcile_interval_ms` in episodes/coordinator.ex).              *)
@@ -31,7 +31,11 @@ BreakNames == {
     "none",
     "stale_observation_applies",  \* compare_media_cursor no longer ignores an :older cursor
     "renew_skips_authority",      \* reconcile_observed_screen_lease renews without the authority check
-    "takeover_ignores_expiry"     \* acquire_query's `where least(...) <= excluded.acquired_at` is dropped
+    "takeover_ignores_expiry",    \* acquire_query's `where least(...) <= excluded.acquired_at` is dropped
+    "equal_look_skips_renew",     \* apply_equal_media_observation no longer reconciles the leases
+    "short_renewal",              \* the renewal window is shorter than the coordinator's look interval
+    "reshare_inherits",           \* a new share no longer replaces the owner's old row (:replace_own)
+    "hard_cap_lapses"             \* a look renews a lease its hard cap ends before the next look, and the lease lapses
 }
 
 ASSUME Cardinality(People) = 2
@@ -39,6 +43,7 @@ ASSUME Break \in BreakNames
 
 Ord == CHOOSE s \in [1..2 -> People] : s[1] # s[2]
 Min(a, b) == IF a < b THEN a ELSE b
+RenewBy == IF Break = "short_renewal" THEN Every - 1 ELSE Renew
 Max(a, b) == IF a > b THEN a ELSE b
 
 VARIABLES
@@ -113,20 +118,21 @@ S0 == [db |-> db, mem |-> mem, lidc |-> lidc, err |-> FALSE,
 (* keeps the lease id and the hard cap and extends the renewal window up   *)
 (* to the hard cap. Any other caller gets the row only when the lease      *)
 (* is no longer live.                                                      *)
-Acquire(st, p, g) ==
+Acquire(st, p, g, replace) ==
     LET r == st.db
-        same == r.held /\ r.owner = p /\ r.gen = g /\ Live(r)
-        free == ~Live(r) \/ Break = "takeover_ignores_expiry"
+        ownLive == r.held /\ r.owner = p /\ r.gen = g /\ Live(r)
+        same == ownLive /\ ~(replace /\ Break # "reshare_inherits")
+        free == ~Live(r) \/ ownLive \/ Break = "takeover_ignores_expiry"
         bad == st.authBad \/ auth[p] # g
     IN IF same
        THEN [ok |-> TRUE,
-             st |-> [st EXCEPT !.db.ru = Max(r.ru, Min(r.hu, now + Renew)),
+             st |-> [st EXCEPT !.db.ru = Max(r.ru, Min(r.hu, now + RenewBy)),
                                !.mem[p] = [lid |-> r.lid, gen |-> g],
                                !.authBad = bad]]
        ELSE IF free /\ st.lidc < MaxLid
        THEN [ok |-> TRUE,
              st |-> [st EXCEPT !.db = [held |-> TRUE, owner |-> p, gen |-> g, lid |-> st.lidc + 1,
-                                       ru |-> now + Renew, hu |-> now + Hard],
+                                       ru |-> now + RenewBy, hu |-> now + Hard],
                                !.lidc = st.lidc + 1,
                                !.mem[p] = [lid |-> st.lidc + 1, gen |-> g],
                                !.stolen = st.stolen \/ (Live(r) /\ r.owner # p),
@@ -196,7 +202,7 @@ ClientStops(p) ==
 EnableScreen(p, grantOk, relOk) ==
     /\ auth[p] > 0
     /\ p \notin pub
-    /\ LET a == Acquire(S0, p, auth[p])
+    /\ LET a == Acquire(S0, p, auth[p], mem[p].lid = 0)
            fresh == mem[p].lid = 0
            fb == freshBad \/ (fresh /\ a.st.db.hu # now + Hard)
        IN /\ a.ok
@@ -230,8 +236,10 @@ StopCommand(p, relOk) ==
 
 (* reconcile_observed_screen_lease: for a person whose share the           *)
 (* observation shows, the authority must still be the lease's generation;  *)
-(* then ScreenShareLease.renew needs a live lease, and a lapsed one is     *)
-(* rotated with a fresh acquire. A person the observation no longer shows  *)
+(* then a live lease whose hard cap outlasts the renewal window is        *)
+(* renewed (ScreenShareLease.renew), and any other one, a lapsed lease or  *)
+(* one the hard cap ends before the next look, is replaced with a fresh    *)
+(* acquire (:replace_own). A person the observation no longer shows  *)
 (* releases the lease. An error halts the whole pass.                      *)
 Handle(st, p, items, rf) ==
     LET m == st.mem[p]
@@ -240,9 +248,9 @@ Handle(st, p, items, rf) ==
     IN IF st.err \/ m.lid = 0 THEN st
        ELSE IF p \notin items THEN Rel(st, p, rf)
        ELSE IF auth[p] # m.gen /\ Break # "renew_skips_authority" THEN Rel(st, p, rf)
-       ELSE IF renewable
-            THEN [st EXCEPT !.db.ru = Min(r.hu, now + Renew), !.authBad = st.authBad \/ auth[p] # m.gen]
-            ELSE LET a == Acquire(st, p, m.gen)
+       ELSE IF renewable /\ (r.hu >= now + RenewBy \/ Break = "hard_cap_lapses")
+            THEN [st EXCEPT !.db.ru = Min(r.hu, now + RenewBy), !.authBad = st.authBad \/ auth[p] # m.gen]
+            ELSE LET a == Acquire(st, p, m.gen, TRUE)
                  IN IF a.ok THEN a.st ELSE [st EXCEPT !.err = TRUE]
 
 (* acquire_observed_screen_lease: a share without a lease in memory.       *)
@@ -251,7 +259,7 @@ Observed(st, items) ==
     ELSE LET q == CHOOSE x \in items : TRUE
          IN IF st.mem[q].lid # 0 THEN st
             ELSE IF auth[q] = 0 THEN [st EXCEPT !.err = TRUE]
-            ELSE LET a == Acquire(st, q, auth[q])
+            ELSE LET a == Acquire(st, q, auth[q], FALSE)
                  IN IF a.ok THEN a.st ELSE [st EXCEPT !.err = TRUE]
 
 (* apply_newer_media_observation runs the pass over the people and then   *)
@@ -262,15 +270,18 @@ Pass(c, rf) ==
     IN Observed(Handle(Handle(S0, Ord[1], items, rf), Ord[2], items, rf), items)
 
 (* apply_media_observation compares {incarnation, sequence}: an older      *)
-(* cursor is ignored, an equal one only re-projects the same snapshot (it  *)
-(* never touches a lease), and a newer one reconciles the leases. A late   *)
-(* delivery can repeat or reorder snapshots Live.Episode already saw, but  *)
-(* a new snapshot always is the plane's newest (c = seq): skipping ahead   *)
-(* to an older one is left out. The coordinator also forces a look every   *)
+(* cursor is ignored, and an equal or newer one reconciles the leases (an  *)
+(* equal one renews the sharer's lease at every look). A late              *)
+(* delivery can reorder snapshots (c < mc), but a snapshot Live.Episode    *)
+(* applies is the plane's newest (c = seq): a look reads the plane and     *)
+(* applies the answer in one step. The coordinator also forces a look every   *)
 (* `Every` units.                                                          *)
-Applies(c) == c > mc \/ (c < mc /\ Break = "stale_observation_applies")
+Applies(c) ==
+    \/ c > mc
+    \/ (c = mc /\ Break # "equal_look_skips_renew")
+    \/ (c < mc /\ Break = "stale_observation_applies")
 
-Fresh(c) == c = seq \/ c <= mc
+Fresh(c) == c = seq \/ c < mc
 
 Observe(c, rf) ==
     /\ Applies(c)
@@ -296,8 +307,10 @@ Conflict(c) ==
     /\ since' = 0
     /\ UNCHANGED <<now, auth, gens, pub, seq, hist, mc, top, mitems, mem, db, lidc, stolen, authBad, freshBad>>
 
+(* Only the broken variant ignores a look at an equal cursor.              *)
 Look(c) ==
     /\ ~Applies(c)
+    /\ c = mc
     /\ since' = 0
     /\ UNCHANGED <<now, auth, gens, pub, seq, hist, mc, top, mitems, mem, db, lidc, stolen, authBad, freshBad>>
 

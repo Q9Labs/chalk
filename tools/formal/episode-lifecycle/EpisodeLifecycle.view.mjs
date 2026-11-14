@@ -8,7 +8,7 @@ const episodeStates = (v) => {
   if (v.ep === "ended") return "Ended";
   if (v.ep === "ending") return v.endOp.kind === "max" ? "Ending, time limit passed" : "Ending, host pressed End";
   if (!v.due) return "Running";
-  return v.tried.length > 0 ? "Past time limit, end failed, never retried" : "Past time limit";
+  return "Past time limit";
 };
 
 // The chart uses one person, so each per-person function has one value.

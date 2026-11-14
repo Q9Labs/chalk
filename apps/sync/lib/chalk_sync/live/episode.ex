@@ -224,21 +224,24 @@ defmodule ChalkSync.Live.Episode do
         {:ok, state, []}
 
       :equal ->
-        apply_equal_media_observation(state, observation.publications)
+        apply_equal_media_observation(state, observation.publications, options)
 
       :newer ->
         apply_newer_media_observation(state, cursor, observation.publications, options)
     end
   end
 
-  defp apply_equal_media_observation(state, publications) do
+  defp apply_equal_media_observation(state, publications, options) do
     observed_items = normalize_media_items(publications)
 
     if observed_items == state.media_observed_items do
-      reconcile_observed_media(
-        state,
-        apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
-      )
+      {_pauses, media_items} =
+        projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
+
+      # Every look renews the lease of a share that still runs, even when nothing changed.
+      with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
+        reconcile_observed_media(next, projection)
+      end
     else
       {:error, :dependency_unavailable}
     end
@@ -710,7 +713,17 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
+  # A lease that its hard cap would end before the next look is replaced while the
+  # share still runs, so the lease never lapses under a sharer.
   defp renew_screen_lease(state, participant_id, lease, options) do
+    if ScreenShareLease.outlasts_renewal?(lease, options) do
+      extend_screen_lease(state, participant_id, lease, options)
+    else
+      rotate_screen_lease(state, participant_id, lease, options)
+    end
+  end
+
+  defp extend_screen_lease(state, participant_id, lease, options) do
     with {:ok, connection} <- database_connection(state),
          {:ok, renewed} <- ScreenShareLease.renew(connection, state.episode, lease, options) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, renewed)}}
@@ -733,7 +746,7 @@ defmodule ChalkSync.Live.Episode do
              state.episode,
              participant_id,
              lease.owner_generation,
-             options
+             Keyword.put(options, :replace_own, true)
            ) do
       {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, rotated)}}
     else
@@ -817,7 +830,10 @@ defmodule ChalkSync.Live.Episode do
         state.episode,
         authority.participant_id,
         authority.generation,
-        screen_lease_options(operation_id)
+        [
+          {:replace_own, not Map.has_key?(state.screen_leases, authority.participant_id)}
+          | screen_lease_options(operation_id)
+        ]
       )
     end
   catch

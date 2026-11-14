@@ -28,7 +28,8 @@ BreakNames == {
     "end_keeps_participants",        \* complete_episode_participants is not run
     "admit_ignores_episode_status",  \* AdmitParticipant drops the episode.Status != active check
     "decision_ignores_status",       \* admission SQL drops its pending and reservation checks
-    "deadline_race_unfenced"         \* an end no longer fences a deadline change, see StaleDeadlineCannotEnd
+    "deadline_race_unfenced",        \* an end no longer fences a deadline change, see StaleDeadlineCannotEnd
+    "failed_end_blocks_claim"        \* ClaimDueEpisodeDeadlines skips a generation with a failed operation, see PastDeadlineGetsEnd
 }
 
 ASSUME IsFiniteSet(People) /\ People # {}
@@ -47,7 +48,7 @@ VARIABLES
     dl,       \* episodes.deadline_generation
     due,      \* episodes.deadline_at <= now() for the current generation
     dlOp,     \* the tenant_set_deadline operation: its status and requested generation
-    tried,    \* generations for which a maximum_episode_duration_expired operation exists
+    tried,    \* generations with a maximum_episode_duration_expired operation that has not failed
     endedBy   \* the kind and generation of the end that completed, kind "none" before
 
 vars == <<ep, ps, ji, adm, res, decided, lv, endOp, dl, due, dlOp, tried, endedBy>>
@@ -59,6 +60,10 @@ AStat == {"none", "pending", "admitted", "denied", "expired"}
 Res == {"none", "admit", "deny", "expire", "ended"}
 OpStat == {"none", "pending", "applied", "failed"}
 Kinds == {"user", "max"}
+
+(* A failed maximum-duration operation no longer blocks its generation.    *)
+FailedEndRetried ==
+    IF endOp.kind = "max" /\ Break # "failed_end_blocks_claim" THEN tried \ {endOp.gen} ELSE tried
 
 NoEnd == [status |-> "none", kind |-> "user", gen |-> 0]
 NoDl == [status |-> "none", gen |-> 0]
@@ -270,10 +275,11 @@ AcceptUserEnd ==
 (* DeadlineScheduler.runCycle -> EnqueueDueEpisodeDeadlines                *)
 (* (adapters/postgres/episode_control.go). ClaimDueEpisodeDeadlines picks  *)
 (* an "active" Episode whose deadline passed and that has no              *)
-(* maximum_episode_duration_expired operation for the current generation,  *)
-(* whatever that operation's status is. createEndReadyOperation marks the  *)
-(* Episode "ending" and fails pending tenant_set_deadline operations       *)
-(* (FailPendingTenantControlOperationsForEnd).                             *)
+(* maximum_episode_duration_expired operation for the current generation   *)
+(* that has not failed (a failed one is retried with a new request key     *)
+(* after a backoff, which the model leaves out). createEndReadyOperation   *)
+(* marks the Episode "ending" and fails pending tenant_set_deadline        *)
+(* operations (FailPendingTenantControlOperationsForEnd).                  *)
 EnqueueMaximumDuration ==
     /\ ep = "active"
     /\ due
@@ -326,7 +332,8 @@ RejectStaleEnd ==
     /\ StaleMax
     /\ ep' = "active"
     /\ endOp' = [endOp EXCEPT !.status = "failed"]
-    /\ UNCHANGED <<ps, ji, adm, res, decided, lv, dl, due, dlOp, tried, endedBy>>
+    /\ tried' = FailedEndRetried
+    /\ UNCHANGED <<ps, ji, adm, res, decided, lv, dl, due, dlOp, endedBy>>
 
 (* The end operation cannot finish: ExternalOperationConsumer.             *)
 (* execute_operation finalizes a still-pending operation as                *)
@@ -338,7 +345,8 @@ EndRetriesExhausted ==
     /\ endOp.status = "pending"
     /\ ep' = "active"
     /\ endOp' = [endOp EXCEPT !.status = "failed"]
-    /\ UNCHANGED <<ps, ji, adm, res, decided, lv, dl, due, dlOp, tried, endedBy>>
+    /\ tried' = FailedEndRetried
+    /\ UNCHANGED <<ps, ji, adm, res, decided, lv, dl, due, dlOp, endedBy>>
 
 Done ==
     /\ ep = "ended"
@@ -387,9 +395,8 @@ StaleDeadlineCannotEnd ==
     endedBy.kind = "max" => endedBy.gen = dl
 
 (* A passed deadline always has an end on the way or a retry coming. An   *)
-(* "active" Episode past its deadline whose generation already has an      *)
-(* operation is never picked up by ClaimDueEpisodeDeadlines again, so      *)
-(* nothing but a host ends it.                                             *)
+(* "active" Episode past its deadline whose generation has only failed     *)
+(* operations is picked up by ClaimDueEpisodeDeadlines again.              *)
 PastDeadlineGetsEnd ==
     (ep = "active" /\ due) => dl \notin tried
 
