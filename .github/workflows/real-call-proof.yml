@@ -2,8 +2,8 @@ name: Real-call proof
 
 on:
   schedule:
-    # Production otherwise gets a real call only on promote. Scheduled runs have
-    # no inputs, so they take the production and "smoke transcript" fallbacks below.
+    # Production otherwise gets a real call only on promote, so the daily run skips a day that a passed Promote covered.
+    # Scheduled runs have no inputs, so they take the production and "smoke transcript" fallbacks below.
     - cron: "41 5 * * *"
   workflow_dispatch:
     inputs:
@@ -159,8 +159,29 @@ concurrency:
   queue: max
 
 jobs:
+  recent-promote:
+    # A passed Promote already ran the production proofs, so the daily run adds nothing on that day.
+    # If this lookup fails, smoke still runs.
+    name: Find a Promote from the last 24 hours
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      promoted: ${{ steps.find.outputs.promoted }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since="$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)"
+          passed="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow promote.yml --status success --created ">=$since" --limit 1 --json databaseId --jq length)"
+          echo "promoted=$([[ "$passed" -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
   smoke:
     name: Real-call proofs
+    needs: recent-promote
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.recent-promote.outputs.promoted != 'true') }}
     runs-on: ubuntu-24.04
     # The proof only needs the environment's secrets and variables. A deployment record would mark the held nightly cut inactive (features/scorecard/deployment-records.test.mjs).
     environment:

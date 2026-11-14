@@ -4,12 +4,14 @@ name: MCP production check
 # gets a 401 with OAuth discovery, then the proof tenant's API key runs initialize,
 # tools/list and one tool call (listing Spaces, which the proof key's scopes allow). A 404 or a broken sign-in setup fails this run.
 
+# Promote calls this as a proof, and only when a release changes MCP or something it depends on. There is no timer: a check that runs when nothing changed proves nothing new.
 on:
-  schedule:
-    - cron: "41 */6 * * *"
-  workflow_run:
-    workflows: ["Promote newest held nightly"]
-    types: [completed]
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: string
+        default: production
   workflow_dispatch:
     inputs:
       environment:
@@ -28,7 +30,6 @@ concurrency:
 jobs:
   mcp:
     name: MCP initialize, list tools and call a tool
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: ${{ inputs.environment || 'production' }}
