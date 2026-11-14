@@ -108,6 +108,7 @@
         "apps/sync/lib/chalk_sync/live",
         "apps/sync/lib/chalk_sync/media_plane.ex",
         "apps/sync/lib/chalk_sync/provider_bridge",
+        "apps/sync/test/chalk_sync/host_env_contract_test.exs",
         "apps/sync/test/chalk_sync/live",
         "apps/sync/test/chalk_sync/provider_bridge",
         "apps/sync/test/chalk_sync/stateholder/role_transition_planner_postgres_test.exs",
