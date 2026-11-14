@@ -184,7 +184,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     end
   end
 
-  defp record_cleanup(transaction, candidate, now, result, deleted) do
+  defp record_cleanup(transaction, candidate, now, %Result{} = result, deleted) do
     %{
       event_count: event_count,
       event_bytes: event_bytes,
