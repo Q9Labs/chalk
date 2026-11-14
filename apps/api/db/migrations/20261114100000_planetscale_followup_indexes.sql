@@ -6,7 +6,7 @@
 -- readiness retention-lag read, run about once a second, find uncleaned Episodes without scanning
 -- every Episode control row. Every statement is concurrent and commits on its own, so a run that
 -- stops early runs again safely.
--- chalk:removed-in #PR
+-- chalk:removed-in #1423
 drop index concurrently if exists users_created_at_id_idx;
 drop index concurrently if exists sync_chat_attachments_cleanup_idx;
 create index concurrently if not exists sync_episode_control_retention_pending_idx
