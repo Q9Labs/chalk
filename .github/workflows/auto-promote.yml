@@ -97,9 +97,16 @@ jobs:
           done
           [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No new Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
-          gh run watch "${run_id}" --exit-status --compact --interval 30
+          status=0
+          gh run watch "${run_id}" --exit-status --compact --interval 30 || status=$?
+          if [[ "${status}" != 0 ]]; then
+            # A guard refusal (calls started, or the window is too short) deployed nothing, so nobody is paged; the next tick tries again.
+            refused="$(gh run view "${run_id}" --json jobs --jq '[.jobs[] | select(.name == "live-calls" and .conclusion == "failure")] | length')"
+            [[ "${refused}" == 0 ]] || echo "refused=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "${status}"
       - name: Page Oncall when the automatic promotion failed
-        if: failure() && steps.promote.outcome == 'failure'
+        if: failure() && steps.promote.outcome == 'failure' && steps.promote.outputs.refused != 'true'
         env:
           ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
           SHA: ${{ steps.decide.outputs.sha }}
