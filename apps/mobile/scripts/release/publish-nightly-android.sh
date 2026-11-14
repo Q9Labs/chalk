@@ -51,14 +51,14 @@ if [[ "$mode" == decide ]]; then
   last_run=$(jq -r '[.releases[]? | select(.status == "completed") | .name | capture("^nightly-(?<run>[0-9]+)$").run | tonumber] | max // empty' <<< "$track")
   last_sha=''
   if [[ -n "$last_run" ]]; then
+    # Any failure below leaves build=true: a build that was not needed costs minutes, a skipped build that was needed ships a stale app.
     last_sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=100" \
-      --jq ".[] | select(.payload.proof_run_id == \"$last_run\") | .sha" | head -n 1)
+      --jq ".[] | select(.payload.proof_run_id == \"$last_run\") | .sha" | head -n 1) || last_sha=''
   fi
-  if [[ "$last_sha" =~ ^[0-9a-f]{40}$ ]] && git fetch --no-tags --depth=1 --filter=blob:none origin "$last_sha" 2>/dev/null; then
-    if [[ -z $(git diff --no-renames --name-only "$last_sha" "$SOURCE_SHA" -- "${app_paths[@]}") ]]; then
-      echo "Nothing under the app paths changed since the last release (${last_sha:0:12})."
-      build=false
-    fi
+  if [[ "$last_sha" =~ ^[0-9a-f]{40}$ ]] && git fetch --no-tags --depth=1 --filter=blob:none origin "$last_sha" 2>/dev/null &&
+    changed=$(git diff --no-renames --name-only "$last_sha" "$SOURCE_SHA" -- "${app_paths[@]}") && [[ -z "$changed" ]]; then
+    echo "Nothing under the app paths changed since the last release (${last_sha:0:12})."
+    build=false
   fi
   echo "build=$build" >> "$GITHUB_OUTPUT"
   exit 0
