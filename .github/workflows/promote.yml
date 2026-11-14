@@ -170,12 +170,14 @@ jobs:
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
   latency:
-    # The 60-cycle latency run on the Chalk SFU, beside the proofs. Every cycle makes its own Space, so it never holds the proof Spaces. It only
-    # feeds the scorecard: no other job needs it, so a failed run holds the verified release back and never starts rollback. A card that reports
-    # it ran beside the proofs and saw foreign load would move this job behind the proof (needs: proof); production cards carry no such evidence yet.
+    # The 60-cycle latency run on the Chalk SFU, after the proofs on the proof Space they used (the one Space the plane allowlist admits; a
+    # second one needs an operator to allowlist it before this job could run beside them). It only feeds the scorecard: no rollback or
+    # result job waits for it, and its own failure does not hold the release back, because the scorecard gate treats a missing card as a
+    # breach and asks for one rerun first.
     permissions:
       contents: read
-    needs: [select, release]
+    needs: [select, release, proof]
+    if: ${{ needs.proof.result == 'success' }}
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
@@ -183,6 +185,7 @@ jobs:
       media_plane: chalk_sfu
       latency: true
       latency_only: true
+      latency_samples: "60"
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       scorecard_label: latency
     secrets: inherit
@@ -253,8 +256,9 @@ jobs:
   latency-rerun:
     permissions:
       contents: read
-    needs: [select, scorecard]
-    if: needs.scorecard.outputs.over == 'true'
+    # It waits for the Leave rerun: both use the same proof Space.
+    needs: [select, scorecard, scorecard-rerun]
+    if: ${{ !cancelled() && needs.scorecard.outputs.over == 'true' && needs.scorecard-rerun.result == 'success' }}
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
@@ -262,6 +266,7 @@ jobs:
       media_plane: chalk_sfu
       latency: true
       latency_only: true
+      latency_samples: "60"
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       scorecard_label: latency-rerun
     secrets: inherit
@@ -417,7 +422,7 @@ jobs:
         run: exit 1
   github-release:
     # A release is published as verified, so it waits for the scorecard decision. A failed scorecard job holds it back; it never starts rollback.
-    needs: [select, result, latency, scorecard, scorecard-rerun, latency-rerun, scorecard-final]
+    needs: [select, result, scorecard, scorecard-rerun, scorecard-final]
     if: ${{ !cancelled() && needs.result.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     env:
