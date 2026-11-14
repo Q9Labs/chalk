@@ -4,7 +4,7 @@
 //   pnpm prod:recovery --environment staging --scenario sfu-restart --start-cmd 'ssh node systemctl --user restart chalk-sfu'
 //   pnpm prod:recovery --environment staging --scenario blackout-5s --start-cmd '...drop traffic' --hold-s 5 --end-cmd '...restore traffic'
 //
-// One run is one Episode on the own SFU with two guests who join and then publish steadily. The harness then runs --start-cmd (the
+// One run is one Episode on the Chalk SFU with two guests who join and then publish steadily. The harness then runs --start-cmd (the
 // fault is in force when it returns), waits --hold-s seconds, runs --end-cmd, and watches both pages for --watch-s more seconds.
 // Each page samples its own call every 100 ms: whether audio packets and decoded video frames still arrive, and the SDK's connection
 // status. The harness never touches the call after the fault, so any recovery is the product's own.

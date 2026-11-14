@@ -6,8 +6,8 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # delete it or set anything else to turn it off (gh variable delete CHALK_AUTO_PROMOTE). It ships off. An off run
 # skips every job, so it changes nothing.
 #
-# It asks the same question Promote asks. The newest held nightly must have a passed own-SFU proof, a passed Staging
-# SFU latency verdict, a passed scorecard and a green master Gate, and production must not already run it. A cut that
+# It asks the same question Promote asks. The newest held nightly must have a passed Chalk SFU proof, a passed Nightly
+# latency verdict, a passed scorecard and a green master Gate, and production must not already run it. A cut that
 # is not ready yet is not a failure: the latency verdict arrives last, and finishing it starts this workflow. It never
 # applies a scorecard override, because only a person accepts a failed gate.
 #
@@ -18,7 +18,7 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # rolled-back SHA would otherwise be tried again after every latency run.
 on:
   workflow_run:
-    workflows: [Staging SFU latency]
+    workflows: [Nightly latency]
     types: [completed]
   workflow_dispatch:
 permissions:

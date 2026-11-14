@@ -60,7 +60,7 @@ while IFS='|' read -r name check sources seq drops loss mutes cfails rule ui sfu
     own) sfu_consts="CloseCanFail = FALSE
   OrphansLinger = FALSE
   AtomicRevoke = TRUE" ;;
-    *) echo "unknown sfu '$sfu' in run $name" >&2; exit 2 ;;
+    *) echo "unknChalk SFU '$sfu' in run $name" >&2; exit 2 ;;
   esac
   symmetry=yes
   case "$check" in

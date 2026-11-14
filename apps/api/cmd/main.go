@@ -327,7 +327,7 @@ func run() error {
 		if ownCapture {
 			ownBinding, err := mediaPlaneRegistry.DeploymentBinding(mediaplane.ProviderChalkSFU)
 			if err != nil {
-				return fmt.Errorf("configure own SFU recording identity: %w", err)
+				return fmt.Errorf("configure Chalk SFU recording identity: %w", err)
 			}
 			captureRegistrations = append(captureRegistrations, captureproviders.Registration{Binding: ownBinding, Nodes: chalkSFU})
 		}
@@ -715,7 +715,7 @@ func run() error {
 		// timeout, before the server takes a request; a node with no answer is not placed on.
 		chalkSFU.Probe(signalCtx)
 		go chalkSFU.Watch(signalCtx)
-		// Own SFU nodes forward a source only while the API renews its grant.
+		// Chalk SFU nodes forward a source only while the API renews its grant.
 		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
 		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
 		go mediaPlaneRegistry.RunRetirements(signalCtx)

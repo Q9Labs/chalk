@@ -148,7 +148,7 @@ type SessionState struct {
 	Tracks []SessionTrack
 }
 
-// Subscription delivery states and the reasons for a pause, as the own SFU reports them.
+// Subscription delivery states and the reasons for a pause, as the Chalk SFU reports them.
 const (
 	SubscriptionActive  = "active"
 	SubscriptionPaused  = "paused"

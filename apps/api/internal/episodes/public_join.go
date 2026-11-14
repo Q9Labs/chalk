@@ -33,7 +33,7 @@ type PublicJoinInput struct {
 	Role             string
 	Request          Request
 	// MediaClients is what the joining guest's SDK can run. A new Episode binds
-	// the own SFU only when it declares it.
+	// the Chalk SFU only when it declares it.
 	MediaClients mediaplane.ClientProviders
 }
 

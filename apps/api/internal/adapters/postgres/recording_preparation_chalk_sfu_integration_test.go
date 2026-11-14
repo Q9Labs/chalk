@@ -17,7 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-type ownSFUPlaneCase struct {
+type chalkSFUPlaneCase struct {
 	name          string
 	tenantDefault string
 	spacePlane    string
@@ -27,27 +27,27 @@ type ownSFUPlaneCase struct {
 }
 
 // The plane a preparation is judged on is the active Episode's pinned binding, else the Space's
-// selection, else the Tenant's default. Without own capture the own SFU holds no preparation.
-var ownSFUPlaneCases = []ownSFUPlaneCase{
-	{"space selects the own SFU", "", "chalk_sfu", "", false, false},
-	{"tenant default is the own SFU", "chalk_sfu", "", "", false, false},
+// selection, else the Tenant's default. Without own capture the Chalk SFU holds no preparation.
+var chalkSFUPlaneCases = []chalkSFUPlaneCase{
+	{"space selects the Chalk SFU", "", "chalk_sfu", "", false, false},
+	{"tenant default is the Chalk SFU", "chalk_sfu", "", "", false, false},
 	{"space overrides a tenant default", "chalk_sfu", "cf_sfu", "", false, true},
 	{"cloudflare control", "", "cf_sfu", "", false, true},
-	{"space selects the own SFU with capture on", "", "chalk_sfu", "", true, true},
-	{"tenant default is the own SFU with capture on", "chalk_sfu", "", "", true, true},
+	{"space selects the Chalk SFU with capture on", "", "chalk_sfu", "", true, true},
+	{"tenant default is the Chalk SFU with capture on", "chalk_sfu", "", "", true, true},
 	{"live Cloudflare Episode keeps its recorder after the Space switches", "", "chalk_sfu", "cf_sfu", false, true},
-	{"live own SFU Episode gets no recorder after the Space switches back", "", "cf_sfu", "chalk_sfu", false, false},
-	{"live own SFU Episode with capture on", "", "cf_sfu", "chalk_sfu", true, true},
+	{"live Chalk SFU Episode gets no recorder after the Space switches back", "", "cf_sfu", "chalk_sfu", false, false},
+	{"live Chalk SFU Episode with capture on", "", "cf_sfu", "chalk_sfu", true, true},
 }
 
-func seedOwnSFUPlane(t *testing.T, pool *pgxpool.Pool, test ownSFUPlaneCase) (tenant, space utilities.ID) {
+func seedChalkSFUPlane(t *testing.T, pool *pgxpool.Pool, test chalkSFUPlaneCase) (tenant, space utilities.ID) {
 	t.Helper()
 	tenant, space = newTestID(t), newTestID(t)
 	var defaultPlane any
 	if test.tenantDefault != "" {
 		defaultPlane = test.tenantDefault
 	}
-	if _, err := pool.Exec(t.Context(), `insert into tenants (id,name,default_media_plane) values ($1,'Own SFU proof',$2)`, tenant.Bytes(), defaultPlane); err != nil {
+	if _, err := pool.Exec(t.Context(), `insert into tenants (id,name,default_media_plane) values ($1,'Chalk SFU proof',$2)`, tenant.Bytes(), defaultPlane); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -57,7 +57,7 @@ func seedOwnSFUPlane(t *testing.T, pool *pgxpool.Pool, test ownSFUPlaneCase) (te
 			}
 		}
 	})
-	if _, err := pool.Exec(t.Context(), `insert into spaces (id,tenant_id,name,slug,media_plane,recording_policy) values ($1,$2,'Own SFU proof','own-sfu-proof',$3,'automatic')`, space.Bytes(), tenant.Bytes(), test.spacePlane); err != nil {
+	if _, err := pool.Exec(t.Context(), `insert into spaces (id,tenant_id,name,slug,media_plane,recording_policy) values ($1,$2,'Chalk SFU proof','chalk-sfu-proof',$3,'automatic')`, space.Bytes(), tenant.Bytes(), test.spacePlane); err != nil {
 		t.Fatal(err)
 	}
 	if test.pinned != "" {
@@ -78,7 +78,7 @@ func newTestID(t *testing.T) utilities.ID {
 	return id
 }
 
-func ownSFUPlanePool(t *testing.T) *pgxpool.Pool {
+func chalkSFUPlanePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	pool, err := pgxpool.New(t.Context(), os.Getenv(config.DatabaseURL))
 	if err != nil {
@@ -91,12 +91,12 @@ func ownSFUPlanePool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestEntranceFollowsTheOwnSFUCaptureSwitch(t *testing.T) {
-	pool := ownSFUPlanePool(t)
+func TestEntranceFollowsTheChalkSFUCaptureSwitch(t *testing.T) {
+	pool := chalkSFUPlanePool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	for _, test := range ownSFUPlaneCases {
+	for _, test := range chalkSFUPlaneCases {
 		t.Run(test.name, func(t *testing.T) {
-			tenant, space := seedOwnSFUPlane(t, pool, test)
+			tenant, space := seedChalkSFUPlane(t, pool, test)
 			created, err := postgres.NewRecordingPreparationRepository(pool).WithOwnCapture(test.ownCapture).PrepareEntrance(t.Context(), tenant, space, now)
 			if err != nil || created != test.allowed {
 				t.Fatalf("Entrance preparation = %v, %v; want %v", created, err, test.allowed)
@@ -105,13 +105,13 @@ func TestEntranceFollowsTheOwnSFUCaptureSwitch(t *testing.T) {
 	}
 }
 
-func TestScheduledPreparationFollowsTheOwnSFUCaptureSwitch(t *testing.T) {
-	pool := ownSFUPlanePool(t)
+func TestScheduledPreparationFollowsTheChalkSFUCaptureSwitch(t *testing.T) {
+	pool := chalkSFUPlanePool(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	for _, test := range ownSFUPlaneCases {
+	for _, test := range chalkSFUPlaneCases {
 		t.Run(test.name, func(t *testing.T) {
-			tenant, space := seedOwnSFUPlane(t, pool, test)
-			// A policy denial, never a revision conflict, whether the Space or its Tenant selects the own SFU.
+			tenant, space := seedChalkSFUPlane(t, pool, test)
+			// A policy denial, never a revision conflict, whether the Space or its Tenant selects the Chalk SFU.
 			_, err := postgres.NewRecordingPreparationRepository(pool).WithOwnCapture(test.ownCapture).Prepare(t.Context(), recordingpreparation.Input{TenantID: tenant, SpaceID: space, StartsAt: now.Add(time.Hour)}, now)
 			if test.allowed != (err == nil) || (!test.allowed && !errors.Is(err, recordingpreparation.ErrPolicyDenied)) {
 				t.Fatalf("scheduled preparation = %v; want allowed %v", err, test.allowed)
@@ -128,9 +128,9 @@ func TestScheduledPreparationFollowsTheOwnSFUCaptureSwitch(t *testing.T) {
 }
 
 // A preparation made under another plane must not warm a recorder nobody can use.
-func TestExistingPreparationStopsCountingWhenTheSpaceSwitchesToTheOwnSFU(t *testing.T) {
-	pool := ownSFUPlanePool(t)
-	tenant, space := seedOwnSFUPlane(t, pool, ownSFUPlaneCase{spacePlane: "cf_sfu"})
+func TestExistingPreparationStopsCountingWhenTheSpaceSwitchesToTheChalkSFU(t *testing.T) {
+	pool := chalkSFUPlanePool(t)
+	tenant, space := seedChalkSFUPlane(t, pool, chalkSFUPlaneCase{spacePlane: "cf_sfu"})
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	if created, err := postgres.NewRecordingPreparationRepository(pool).PrepareEntrance(t.Context(), tenant, space, now); err != nil || !created {
 		t.Fatalf("Entrance preparation = %v, %v", created, err)

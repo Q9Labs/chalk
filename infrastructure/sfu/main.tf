@@ -1,4 +1,4 @@
-# One own-SFU node per environment. Run this root once per environment, each
+# One Chalk SFU node per environment. Run this root once per environment, each
 # with its own backend.hcl and tfvars.
 module "node" {
   source = "./node"

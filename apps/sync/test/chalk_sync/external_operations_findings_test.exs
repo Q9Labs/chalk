@@ -233,7 +233,7 @@ defmodule ChalkSync.ExternalOperationsFindingsTest do
     |> MediaPlane.new!()
   end
 
-  # The own SFU's ordering for one source: a control older than the recorded revision is
+  # The Chalk SFU's ordering for one source: a control older than the recorded revision is
   # stale, and at a tie a revoke wins. With apply_revoke?: false a revoke never reaches the
   # SFU and the caller sees an ambiguous outcome, as when the SFU is unreachable.
   defp sfu_transport(sfu, apply_revoke?: apply_revoke?) do

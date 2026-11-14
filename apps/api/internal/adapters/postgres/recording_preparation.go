@@ -142,8 +142,8 @@ func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, ten
 	return true, nil
 }
 
-// WithOwnCapture says the recorder can reach the own SFU's nodes, so a Space on it can hold a
-// preparation. Without it the own SFU has no capture path, and no preparation for it counts.
+// WithOwnCapture says the recorder can reach the Chalk SFU's nodes, so a Space on it can hold a
+// preparation. Without it the Chalk SFU has no capture path, and no preparation for it counts.
 func (r RecordingPreparationRepository) WithOwnCapture(enabled bool) RecordingPreparationRepository {
 	r.ownCapture = enabled
 	return r

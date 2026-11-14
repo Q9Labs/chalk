@@ -371,7 +371,7 @@
     "features/scorecard/staging-logs.mjs": [37],
     "features/scorecard/contention.mjs": [65],
     "sdks/typescript/client/src/sync/v1-client.ts": [27, 22],
-    "scripts/prod-proof/own-sfu-spaces-run.test.mjs": [21],
+    "scripts/prod-proof/chalk-sfu-spaces-run.test.mjs": [21],
     "apps/web/src/components/space/SpacePage.tsx": [30],
     "apps/web/src/components/space/entrance-machine.ts": [36],
     "apps/web/src/components/space/pre-join/PreJoin.tsx": [24],

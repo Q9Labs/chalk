@@ -9,7 +9,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// The own SFU forwards a granted source only while its lease lasts (60 s by
+// The Chalk SFU forwards a granted source only while its lease lasts (60 s by
 // default). Renewing every 5 s keeps a live grant many renewals clear of expiry,
 // so an API restart that answers again within the lease never stops a call.
 const (
@@ -19,7 +19,7 @@ const (
 )
 
 // SourceGrant is a confirmed grant whose durable authorization still stands: the
-// Episode is live on the own SFU, the Participant is present with the source's
+// Episode is live on the Chalk SFU, the Participant is present with the source's
 // capability, and no stop was decided at or after the grant's revision.
 type SourceGrant struct {
 	TenantID      utilities.ID

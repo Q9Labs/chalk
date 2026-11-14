@@ -16,7 +16,7 @@ import (
 )
 
 // Only a grant whose durable authorization still stands is renewed. A stop decided
-// at or after the grant ends renewal while it is still undelivered, so the own SFU
+// at or after the grant ends renewal while it is still undelivered, so the Chalk SFU
 // drops the source when its lease runs out even if the revoke never reached it.
 func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 	if testing.Short() {

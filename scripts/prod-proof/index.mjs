@@ -2,8 +2,8 @@
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
-import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
-import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
+import { leaveChalkSfuProof } from "./leave-chalk-sfu.mjs";
+import { ensureChalkSfuSpaces } from "./chalk-sfu-spaces.mjs";
 import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { deployHoldProof } from "./deploy-hold.mjs";
@@ -68,8 +68,8 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     "long-call": () => longCallProof(run, receiver),
     "deploy-hold": () => deployHoldProof(run, receiver),
     leave: () => leaveProof(run),
-    "leave-own-sfu": () => leaveOwnSfuProof(run),
-    "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
+    "leave-chalk-sfu": () => leaveChalkSfuProof(run),
+    "chalk-sfu-spaces": () => ensureChalkSfuSpaces(run),
     "chat-upload": () => chatUploadProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);

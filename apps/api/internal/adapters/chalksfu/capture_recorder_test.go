@@ -59,9 +59,9 @@ func (k *keyframeOnRequest) run(ctx context.Context, track *webrtc.TrackLocalSta
 	}()
 }
 
-// TestRecorderPeerReceivesVideoFromTheOwnSFU runs the recorder's real Pion peer against a real
+// TestRecorderPeerReceivesVideoFromTheChalkSFU runs the recorder's real Pion peer against a real
 // node through the CapturePlane adapter, for a camera that sends a keyframe only when asked.
-func TestRecorderPeerReceivesVideoFromTheOwnSFU(t *testing.T) {
+func TestRecorderPeerReceivesVideoFromTheChalkSFU(t *testing.T) {
 	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "200000"})
 	episode := newCapturedEpisode(t, box, 7)
 	ctx, stop := context.WithCancel(context.Background())

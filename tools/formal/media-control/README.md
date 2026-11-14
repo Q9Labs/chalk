@@ -10,7 +10,7 @@ The same model also holds a switchable variant, `current`, that reproduces how t
 
 ## Result
 
-Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The `current` variant (the SDK before `offDebt`) violates P2 and P4. `./run.sh` reproduces them.
+Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized Chalk SFU and for the Chalk SFU as a separate service. The `current` variant (the SDK before `offDebt`) violates P2 and P4. `./run.sh` reproduces them.
 
 | Property | Meaning                                                                                                            | `decided` | `current`    |
 | -------- | ------------------------------------------------------------------------------------------------------------------ | --------- | ------------ |
@@ -71,7 +71,7 @@ Fixes 1 and 2 close P2. Fix 3 is what makes P4 hold when the link never drops.
 
 Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed SFU closes (Cloudflare only). Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
 
-Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized own SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The own SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests, not by this model.
+Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized Chalk SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The Chalk SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests, not by this model.
 
 ## What it proves and what it does not
 

@@ -47,10 +47,10 @@ func TestChalkSFUPlatformDefaultNeedsTheSFUAndKeepsCloudflare(t *testing.T) {
 		sfu        ChalkSFUConfig
 		wantErr    string
 	}{
-		{"own SFU default runs with Cloudflare as fallback", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
-		{"own SFU default needs capture for recording", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
-		{"own SFU default needs the SFU enabled", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
-		{"own SFU default needs the Cloudflare fallback", mediaplane.ProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
+		{"Chalk SFU default runs with Cloudflare as fallback", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
+		{"Chalk SFU default needs capture for recording", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
+		{"Chalk SFU default needs the SFU enabled", mediaplane.ProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
+		{"Chalk SFU default needs the Cloudflare fallback", mediaplane.ProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
 		{"Cloudflare default keeps working", mediaplane.ProviderCloudflareSFU, cloudflare, ChalkSFUConfig{}, ""},
 		{"no default needs nothing", "", CloudflareRealtimeConfig{}, ChalkSFUConfig{}, ""},
 	}

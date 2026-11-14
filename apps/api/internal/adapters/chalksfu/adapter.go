@@ -1,4 +1,4 @@
-// Package chalksfu is the media-plane adapter for Chalk's own SFU. It speaks the
+// Package chalksfu is the media-plane adapter for the Chalk SFU. It speaks the
 // SFU's mutual-TLS control API and keeps no state of its own: every mutation
 // carries an operation ID that stays the same across this adapter's HTTP retries,
 // so the SFU runs it once.
@@ -118,7 +118,7 @@ func (a *Adapter) iceServersFor(ctx context.Context, episodeID string, allowRela
 		return a.iceServers
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "TURN credentials unavailable; own-SFU clients use STUN only",
+		slog.WarnContext(ctx, "TURN credentials unavailable; Chalk SFU clients use STUN only",
 			"event", "chalk_sfu.turn_credentials_failed", "node", a.node, "episode_id", episodeID, "error", err.Error())
 		turnMintFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU))))
 		return a.iceServers

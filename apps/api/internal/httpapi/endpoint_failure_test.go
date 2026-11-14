@@ -15,9 +15,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
-// A new Episode refused because no own-SFU node has room fails with the same
+// A new Episode refused because no Chalk SFU node has room fails with the same
 // retryable 503 a full node gives a join, on both creation paths.
-func TestOwnSFUPlacementRefusalIsRetryableMediaUnavailable(t *testing.T) {
+func TestChalkSFUPlacementRefusalIsRetryableMediaUnavailable(t *testing.T) {
 	refusal := fmt.Errorf("resolve episode media binding: %w: %w: no chalk sfu node has room", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited)
 	for name, rules := range map[string]errorRules{"lifecycle": episodeLifecycleRules, "public invite": publicInviteRules} {
 		apiErr := rules.apiError(refusal)
@@ -29,8 +29,8 @@ func TestOwnSFUPlacementRefusalIsRetryableMediaUnavailable(t *testing.T) {
 
 // The failure log keeps a bounded reason for a placement refusal. The
 // provider-error sanitizer would otherwise reduce it to "media provider rate
-// limited", which hides that the own-SFU pool was full with overflow off.
-func TestOwnSFUPlacementRefusalLogsItsReason(t *testing.T) {
+// limited", which hides that the Chalk SFU pool was full with overflow off.
+func TestChalkSFUPlacementRefusalLogsItsReason(t *testing.T) {
 	var logs bytes.Buffer
 	router := chi.NewRouter()
 	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))

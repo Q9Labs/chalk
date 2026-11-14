@@ -323,7 +323,7 @@ const (
 
 var retirements, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
 	"chalk.sfu.retirements",
-	metric.WithDescription("Retire calls to the own-SFU allocations whole-Episode recovery left, by outcome"),
+	metric.WithDescription("Retire calls to the Chalk SFU allocations whole-Episode recovery left, by outcome"),
 	metric.WithUnit("{retirement}"),
 )
 

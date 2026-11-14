@@ -19,7 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// chalkGrantPlane serves an Episode bound to the own SFU.
+// chalkGrantPlane serves an Episode bound to the Chalk SFU.
 type chalkGrantPlane struct {
 	recoveryGrantPlane
 }

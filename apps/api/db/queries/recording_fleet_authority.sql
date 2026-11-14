@@ -343,7 +343,7 @@ where recording_pool_health.observed_at <= excluded.observed_at
 returning role;
 
 -- name: EnsureRecordingColocatedCaptureWorker :exec
--- The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+-- The API registers the capture worker beside each Chalk SFU node from its node list. A revoked or
 -- existing row is never reactivated or rewritten here. These rows live apart from
 -- recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 insert into recording_colocated_capture_workers (environment, sfu_node, worker_id)

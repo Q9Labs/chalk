@@ -406,8 +406,8 @@ func isUniqueViolation(err error) bool {
 
 var _ recorderfleetauthority.Repository = RecordingFleetAuthorityRepository{}
 
-// WithOwnCapture says the recorder can reach the own SFU's nodes, so a preparation for a Space on
-// it counts as demand. Without it the own SFU has no capture path, and no such preparation counts.
+// WithOwnCapture says the recorder can reach the Chalk SFU's nodes, so a preparation for a Space on
+// it counts as demand. Without it the Chalk SFU has no capture path, and no such preparation counts.
 func (r RecordingFleetAuthorityRepository) WithOwnCapture(enabled bool) RecordingFleetAuthorityRepository {
 	r.ownCapture = enabled
 	return r
@@ -418,14 +418,14 @@ func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingp
 	return r
 }
 
-// WithColocatedCapture turns on capture workers beside own-SFU nodes. A capture waits for the
+// WithColocatedCapture turns on capture workers beside Chalk SFU nodes. A capture waits for the
 // healthy worker of its Episode's node for the grace, then the fleet may take it. Zero is off.
 func (r RecordingFleetAuthorityRepository) WithColocatedCapture(grace time.Duration) RecordingFleetAuthorityRepository {
 	r.colocatedGrace = grace
 	return r
 }
 
-// EnsureColocatedCaptureWorkers registers the worker beside each named own-SFU node. Its ID is
+// EnsureColocatedCaptureWorkers registers the worker beside each named Chalk SFU node. Its ID is
 // derived from the node, and an existing or revoked registration stays as it is.
 func (r RecordingFleetAuthorityRepository) EnsureColocatedCaptureWorkers(ctx context.Context, environment string, sfuNodes []string) error {
 	if r.queries == nil {

@@ -3,10 +3,10 @@
 cf-decided-safety-1src  | safety | mic          | 3 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
 cf-decided-live-1src    | P4     | mic          | 3 | 1 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
 cf-decided-live-1src-d2 | P4     | mic          | 2 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
-# Decided rule, own SFU (state in the room authority): all four properties hold.
+# Decided rule, Chalk SFU (state in the room authority): all four properties hold.
 own-decided-safety-1src | safety | mic          | 3 | 2 | 2 | 1 | 0 | decided | FALSE | own        | pass
 own-decided-live-1src   | P4     | mic          | 3 | 1 | 2 | 1 | 0 | decided | FALSE | own        | pass
-# Decided rule, own SFU as a separate service: revoke and close calls from the API can be lost
+# Decided rule, Chalk SFU as a separate service: revoke and close calls from the API can be lost
 # or fail, and publications of a dead session can linger, as with Cloudflare.
 own-dist-safety-1src    | safety | mic          | 3 | 2 | 2 | 1 | 1 | decided | FALSE | own-distributed | pass
 own-dist-live-1src      | P4     | mic          | 3 | 1 | 2 | 1 | 1 | decided | FALSE | own-distributed | pass

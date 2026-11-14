@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runs N failover trials against the STAGING own SFU and writes one JSON summary: recovered/N, audio-back p50 and p95, and the
+// Runs N failover trials against the STAGING Chalk SFU and writes one JSON summary: recovered/N, audio-back p50 and p95, and the
 // Cloudflare media request count over the batch window.
 //
 //   node scripts/staging-sfu/failover-batch.mjs --dry-run --trials 20 --out /tmp/failover-summary.json
