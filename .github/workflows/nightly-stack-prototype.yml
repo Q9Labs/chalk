@@ -1,0 +1,45 @@
+name: Nightly stack prototype
+
+on:
+  push:
+    branches: [ci/nightly-stack-boot]
+    paths:
+      - scripts/nightly-stack/**
+      - .github/workflows/nightly-stack-prototype.yml
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    name: Boot on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the images (not part of the boot time)
+        run: |
+          started=$(date +%s)
+          docker build -q --build-context api_source=apps/api --build-context protocol_source=features/media/sfu/protocol \
+            -f infrastructure/managed-episode/images/api.Dockerfile -t stack-api infrastructure/managed-episode > /dev/null &
+          docker build -q --build-context sync_source=apps/sync -f infrastructure/managed-episode/images/sync.Dockerfile \
+            -t stack-sync infrastructure/managed-episode > /dev/null &
+          docker build -q -f infrastructure/sfu/Dockerfile -t stack-sfu features/media/sfu > /dev/null &
+          wait
+          echo "build wall: $(($(date +%s) - started))s"
+          for image in stack-api stack-sync stack-sfu; do
+            echo "$image compressed: $(docker save "$image" | gzip -1 | wc -c | awk '{printf "%.0f MB", $1 / 1048576}')"
+          done
+      - name: Boot the stack, cold Postgres and Redis pulls
+        run: |
+          echo "runner: $(uname -m), $(nproc) cpus, $(free -m | awk '/Mem/ {print $2}') MB"
+          bash scripts/nightly-stack/boot --api-image stack-api --sync-image stack-sync --sfu-image stack-sfu \
+            --migration-target "$(grep -o '[0-9]\{14\}' apps/api/db/migrations/embed.go | head -1)" --dir "$RUNNER_TEMP/stack"
+          sed 's/=.*/=<set>/' "$RUNNER_TEMP/stack/proof.env"
+          bash scripts/nightly-stack/boot down

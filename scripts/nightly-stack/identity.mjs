@@ -1,7 +1,7 @@
 // Generates the throwaway identity of one Nightly stack: the token signing key, a private CA with the certificates the API,
 // Sync and the Chalk SFU use between them, and the env file of each service. Nothing is stored; the machine takes it all away.
 import { execFileSync } from "node:child_process";
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,7 +10,8 @@ const kid = "nightly-stack";
 const issuer = `http://127.0.0.1:${apiPort}`;
 const trustDomain = "chalk.local";
 const apiIdentity = `spiffe://${trustDomain}/api`;
-const syncIdentity = `spiffe://${trustDomain}/sync`;
+// The API names a Sync workload spiffe://<trust domain>/environment/<API environment>/sync/<id>.
+const syncIdentity = `spiffe://${trustDomain}/environment/local/sync/${randomUUID()}`;
 
 function openssl(...args) {
   execFileSync("openssl", args, { stdio: ["ignore", "ignore", "inherit"] });
@@ -87,6 +88,10 @@ env("api.env", {
   CHALK_SFU_ENABLED: "true",
   CHALK_SFU_ALLOWED_SPACES: "*",
   CHALK_SFU_CLOUDFLARE_OVERFLOW: "false",
+  CHALK_SFU_CAPTURE_ENABLED: "true",
+  // The API insists on a Cloudflare Realtime app while it boots. Overflow is off, so nothing ever calls it.
+  CHALK_CLOUDFLARE_REALTIME_APP_ID: "nightly-stack-unused",
+  CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "nightly-stack-unused",
   CHALK_SFU_APPLICATION_ID: "nightly-stack",
   CHALK_SFU_NODES: `local=https://127.0.0.1:${sfuControlPort}`,
   CHALK_SFU_SERVER_NAME: "chalk-sfu",
@@ -121,7 +126,8 @@ env("sfu.env", {
   SFU_CLIENT_CA_FILE: "/run/chalk-sfu/client-ca.crt",
   SFU_CLIENT_IDENTITY: apiIdentity,
   SFU_NODE_SIZE: "s-2vcpu-2gb",
-  SFU_ENVIRONMENT: "nightly",
+  // The node accepts only local, staging or production here.
+  SFU_ENVIRONMENT: "local",
 });
 
 writeFileSync(join(dir, "system-token"), systemToken, { mode: 0o600 });

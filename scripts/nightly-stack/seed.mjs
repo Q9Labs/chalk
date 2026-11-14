@@ -1,5 +1,6 @@
 // Seeds the stack through the API's system token: one Tenant and Space on the Chalk SFU and an API key, then writes the
 // values a proof run reads to <dir>/proof.env.
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,7 +10,7 @@ const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 async function call(method, path, body) {
   const response = await fetch(new URL(path, apiOrigin), {
     method,
-    headers: { authorization: `Bearer ${systemToken}`, ...(body ? { "content-type": "application/json" } : {}) },
+    headers: { authorization: `Bearer ${systemToken}`, ...(body ? { "content-type": "application/json" } : {}), ...(method === "POST" ? { "Idempotency-Key": `nightly-stack-${randomUUID()}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
@@ -19,7 +20,9 @@ async function call(method, path, body) {
 
 const tenant = await call("POST", "/v1/tenants", { name: "Nightly stack", default_media_plane: "chalk_sfu" });
 const space = await call("POST", `/v1/tenants/${tenant.id}/spaces`, { name: "Nightly proofs", slug: "nightly-proofs", media_plane: "chalk_sfu" });
-const key = await call("POST", `/v1/tenants/${tenant.id}/api-keys`, { name: "Nightly proofs" });
+const resources = ["spaces", "episodes", "recordings", "transcriptions", "signing_keys", "webhooks"];
+const scopes = [...resources.flatMap((resource) => ["read", "write", "delete"].map((action) => `${resource}:${action}`))];
+const key = await call("POST", `/v1/tenants/${tenant.id}/api-keys`, { name: "Nightly proofs", scopes, expires_at: new Date(Date.now() + 86400000).toISOString() });
 
 const values = {
   CHALK_PROOF_API_URL: apiOrigin,
