@@ -52,7 +52,7 @@ fail() { echo "host proof: $*" >&2; exit 1; }
 end_host() {
   local status=$?
   if [ -n "$instance" ]; then
-    aws ec2 terminate-instances --instance-ids "$instance" > /dev/null || echo "could not end $instance; its 90-minute shutdown ends it" >&2
+    aws ec2 terminate-instances --instance-ids "$instance" > /dev/null || echo "could not end $instance; its 90-minute expiry timer ends it" >&2
   fi
   note "- Host ended after $(($(date +%s) - started)) s in all (database: $database)"
   exit "$status"
@@ -81,8 +81,10 @@ wait_online() {
 }
 
 note "## Host proof"
-# A host the run forgets ends itself: the shutdown terminates it.
-user_data="$(cat "$root/infrastructure/nightly/host-cloud-init.yaml"; printf '  - [shutdown, -P, "+90"]\n')"
+# A host the run forgets ends itself: a timer unit under /etc (it survives the reboot below) powers it off 90 minutes after each
+# boot, and the instance's shutdown behavior terminates it.
+expiry='printf "[Timer]\nOnBootSec=90min\n[Install]\nWantedBy=timers.target\n" > /etc/systemd/system/host-proof-expiry.timer; printf "[Service]\nType=oneshot\nExecStart=/usr/bin/systemctl poweroff\n" > /etc/systemd/system/host-proof-expiry.service; systemctl enable --now host-proof-expiry.timer'
+user_data="$(cat "$root/infrastructure/nightly/host-cloud-init.yaml"; jq -n --arg command "$expiry" '"  - [sh, -c, \($command | @json)]"' -r)"
 instance=$(aws ec2 run-instances --image-id "$ami" --instance-type t4g.small --iam-instance-profile "Name=$instance_profile" \
   --instance-initiated-shutdown-behavior terminate --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2 \
   --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=20,VolumeType=gp3,Encrypted=true,DeleteOnTermination=true}' \
@@ -116,7 +118,7 @@ while :; do
   boot_after=$(shell 'cat /proc/sys/kernel/random/boot_id' 2> /dev/null || true)
   [ -n "$boot_after" ] && [ "$boot_after" != "$boot_before" ] || continue
   # shellcheck disable=SC2016 # The command expands on the host, not here.
-  if shell 'systemctl is-active --quiet chalk-runtime-restore.service && runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) podman ps --format "{{.Names}} {{.Status}}" | grep -E "^chalk-(api|sync) .*healthy" | wc -l | grep -qx 2' > /dev/null 2>&1; then
+  if shell 'systemctl is-active --quiet chalk-runtime-restore.service && runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) podman ps --format "{{.Names}} {{.Status}}" | grep -E "^chalk-(api|sync) .*\(healthy\)" | wc -l | grep -qx 2' > /dev/null 2>&1; then
     break
   fi
 done

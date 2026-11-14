@@ -40,10 +40,14 @@
       "Sid": "DeployToTaggedHostsOnly",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ssm:__REGION__::document/AWS-RunShellScript", "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*"],
-      "Condition": {
-        "StringEqualsIfExists": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" }
-      }
+      "Resource": "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*",
+      "Condition": { "StringEquals": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" } }
+    },
+    {
+      "Sid": "RunTheDeployAndShellDocuments",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ssm:__REGION__::document/AWS-RunShellScript"]
     },
     {
       "Sid": "ReadTheDeployDocument",
