@@ -31,7 +31,9 @@ defmodule ChalkSync.HostEnvContractTest do
   end
 
   defp chalk_env do
-    for {key, value} <- System.get_env(), String.starts_with?(key, "CHALK_"), into: %{}, do: {key, value}
+    System.get_env()
+    |> Enum.filter(fn {key, _value} -> String.starts_with?(key, "CHALK_") end)
+    |> Map.new()
   end
 
   defp read_contract(name) do
