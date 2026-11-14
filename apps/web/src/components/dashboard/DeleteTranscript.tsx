@@ -3,7 +3,8 @@ import { useState } from "react";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import type { Ids } from "./session-reads";
-import { Dialog, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { useToast } from "./kit";
 
 /** Deletes only the transcript on screen. An older attempt's transcript then takes its place, so nothing goes unseen. */
 export function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly ids: Ids; readonly transcriptId: string; readonly onClose: () => void; readonly onDeleted: () => void }) {
