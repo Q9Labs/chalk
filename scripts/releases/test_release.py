@@ -965,10 +965,10 @@ class PromoteReusesCutTests(unittest.TestCase):
             self.assertIn(f'\n      {key}: ${{{{ {expression} }}}}\n', block, key)
 
     def test_every_build_root_skips_when_a_cut_run_is_reused(self):
-        # build-managed-images and build-media need plan-managed's outputs, so they skip with it.
+        # build-managed-images, merge-managed-images and build-media need plan-managed's outputs, so they skip with it.
         for name in ('plan-managed', 'build-web'):
             self.assertIn("inputs.manifest_run_id == ''", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
-        for name in ('build-managed-images', 'build-media'):
+        for name in ('build-managed-images', 'merge-managed-images', 'build-media'):
             self.assertIn("needs.plan-managed.outputs.should_publish == 'true'", self.job('ci.yml', name).split('runs-on:', 1)[0], name)
 
     def test_reuse_skips_the_gate_wait(self):
