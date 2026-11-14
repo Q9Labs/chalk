@@ -169,10 +169,28 @@ jobs:
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
+  latency:
+    # The 60-cycle latency run on the Chalk SFU, beside the proofs. Every cycle makes its own Space, so it never holds the proof Spaces. It only
+    # feeds the scorecard: no other job needs it, so a failed run holds the verified release back and never starts rollback. A card that reports
+    # it ran beside the proofs and saw foreign load would move this job behind the proof (needs: proof); production cards carry no such evidence yet.
+    permissions:
+      contents: read
+    needs: [select, release]
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      lane: latency
+      media_plane: chalk_sfu
+      latency: true
+      latency_only: true
+      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+      scorecard_label: latency
+    secrets: inherit
   scorecard:
     # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
-    needs: [select, proof]
-    if: needs.proof.result == 'success'
+    needs: [select, proof, latency]
+    # A failed latency run leaves no card, and the gate then fails the run and asks for one rerun instead of skipping silently.
+    if: ${{ !cancelled() && needs.proof.result == 'success' }}
     outputs:
       over: ${{ steps.gate.outputs.over }}
     runs-on: ubuntu-24.04
@@ -194,6 +212,12 @@ jobs:
         with:
           name: scorecard-promote-proof
           path: artifacts
+      - name: Download the latency scorecard
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scorecard-promote-latency
+          path: artifacts/latency
       - name: Score the production proof against the nightly median
         id: gate
         env:
@@ -206,8 +230,13 @@ jobs:
           if git cat-file -e "${REVISION}^{commit}" 2> /dev/null && ! git cat-file -e "${REVISION}:features/scorecard/adapters/proof.mjs" 2> /dev/null; then
             SCORECARD_EXPECTED=false
           fi
-          export SCORECARD_EXPECTED
-          features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json
+          # The latency run measures with the held revision's own kit; a revision from before the Chalk SFU latency kit has none to score.
+          LATENCY_EXPECTED=false
+          if git cat-file -e "${REVISION}:features/scorecard/chalk-sfu.mjs" 2> /dev/null || git cat-file -e "${REVISION}:features/scorecard/own-sfu.mjs" 2> /dev/null; then
+            LATENCY_EXPECTED=true
+          fi
+          export SCORECARD_EXPECTED LATENCY_EXPECTED
+          features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json artifacts/latency/scorecard-chalk_sfu.json
   scorecard-rerun:
     permissions:
       contents: read
@@ -221,9 +250,24 @@ jobs:
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
       scorecard_label: rerun
     secrets: inherit
+  latency-rerun:
+    permissions:
+      contents: read
+    needs: [select, scorecard]
+    if: needs.scorecard.outputs.over == 'true'
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      lane: latency
+      media_plane: chalk_sfu
+      latency: true
+      latency_only: true
+      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+      scorecard_label: latency-rerun
+    secrets: inherit
   scorecard-final:
-    needs: [scorecard, scorecard-rerun]
-    if: needs.scorecard.outputs.over == 'true' && needs.scorecard-rerun.result == 'success'
+    needs: [select, scorecard, scorecard-rerun, latency-rerun]
+    if: ${{ !cancelled() && needs.scorecard.outputs.over == 'true' && needs.scorecard-rerun.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -242,10 +286,23 @@ jobs:
         with:
           name: scorecard-promote-rerun
           path: artifacts
+      - name: Download the latency scorecard of the rerun
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scorecard-promote-latency-rerun
+          path: artifacts/latency
       - name: Decide on the rerun
         env:
           GH_TOKEN: ${{ github.token }}
-        run: features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json
+          REVISION: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+        run: |
+          LATENCY_EXPECTED=false
+          if git cat-file -e "${REVISION}:features/scorecard/chalk-sfu.mjs" 2> /dev/null || git cat-file -e "${REVISION}:features/scorecard/own-sfu.mjs" 2> /dev/null; then
+            LATENCY_EXPECTED=true
+          fi
+          export LATENCY_EXPECTED
+          features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json artifacts/latency/scorecard-chalk_sfu.json
   rollback:
     permissions:
       contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
@@ -360,7 +417,7 @@ jobs:
         run: exit 1
   github-release:
     # A release is published as verified, so it waits for the scorecard decision. A failed scorecard job holds it back; it never starts rollback.
-    needs: [select, result, scorecard, scorecard-rerun, scorecard-final]
+    needs: [select, result, latency, scorecard, scorecard-rerun, latency-rerun, scorecard-final]
     if: ${{ !cancelled() && needs.result.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     env:

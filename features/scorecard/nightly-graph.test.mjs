@@ -176,7 +176,7 @@ test("the gate's scorecard download cannot match the Cloudflare card", () => {
 const latencyStep = proof.jobs.smoke.steps.find((item) => item.name === "Measure action latency");
 
 test("the Cloudflare latency step takes no log-query token", () => {
-  assert.match(latencyStep.env.CHALK_AXIOM_QUERY_TOKEN, /!\(inputs\.latency_only && inputs\.media_plane == 'cf_sfu'\) && secrets\.CHALK_AXIOM_QUERY_TOKEN \|\| ''/);
+  assert.match(latencyStep.env.CHALK_AXIOM_QUERY_TOKEN, /!\(inputs\.latency_only && \(inputs\.media_plane == 'cf_sfu' \|\| inputs\.environment == 'production'\)\) && secrets\.CHALK_AXIOM_QUERY_TOKEN \|\| ''/);
   assert.equal(latencyStep.env.CF_LATENCY_ONLY, "${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}");
 });
 
@@ -384,7 +384,7 @@ test("Cut nightly prints every proof's result when it holds the cut", () => {
 // A cut must outwait the warn-only Cloudflare run: that run cannot yield the lease, so the cut's wait has to cover all of it.
 // A step's cap is "<nightly chalk_sfu cap> || <any other cap>" in its expression.
 const capMinutes = (step) => {
-  const [, chalk, other] = /chalk_sfu' && (\d+) \|\| (\d+) \}\}$/.exec(step["timeout-minutes"]) ?? [];
+  const [, chalk, other] = /chalk_sfu' && (\d+) \|\|(?: .*? \|\|)? (\d+) \}\}$/.exec(step["timeout-minutes"]) ?? [];
   return { chalk: Number(chalk), other: Number(other) };
 };
 const proofStep = proof.jobs.smoke.steps.find((item) => item.name === "Prove a real call");

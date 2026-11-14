@@ -36,6 +36,26 @@ test("Promote's production proof and its rerun run on chalk_sfu, and none runs o
   for (const proofs of [proof.strategy.matrix, rerun.with.proofs]) assert.doesNotMatch(proofs, /\b(leave|smoke|transcript)\b(?!-)/);
 });
 
+// The 60-cycle latency run measures production beside the proofs and feeds the scorecard, so every gated action metric reaches it. It is
+// not a proof: no rollback waits on it, and a failed or missing run holds the verified release back through the scorecard gate.
+test("Promote measures action latency on the Chalk SFU beside the proofs and scores it with the Leave card", () => {
+  for (const name of ["latency", "latency-rerun"]) {
+    const job = promote.jobs[name];
+    assert.equal(job.uses, "./.github/workflows/real-call-proof.yml");
+    assert.deepEqual([job.with.environment, job.with.media_plane, job.with.latency, job.with.latency_only, job.with.lane], ["production", "chalk_sfu", true, true, "latency"]);
+    assert.equal(job.with.latency_samples, undefined, "the full 60 cycles measure the gate");
+  }
+  assert.deepEqual(needsOf(promote.jobs.latency).sort(), ["release", "select"], "it starts with the proofs, not after them");
+  assert.deepEqual([promote.jobs.latency.with.scorecard_label, promote.jobs["latency-rerun"].with.scorecard_label], ["latency", "latency-rerun"]);
+  for (const name of ["rollback", "rollback-npm", "result"]) assert.equal(needsOf(promote.jobs[name]).includes("latency"), false, `${name} does not wait for the latency run`);
+  assert.ok(needsOf(promote.jobs.scorecard).includes("latency"));
+  assert.ok(needsOf(promote.jobs["scorecard-final"]).includes("latency-rerun"));
+  assert.ok(needsOf(promote.jobs["github-release"]).includes("latency") && needsOf(promote.jobs["github-release"]).includes("latency-rerun"));
+  const gate = promote.jobs.scorecard.steps.find((step) => step.id === "gate").run;
+  assert.match(gate, /promote-gate\.sh first artifacts\/scorecard-proof\.json artifacts\/latency\/scorecard-chalk_sfu\.json/);
+  assert.match(promote.jobs["scorecard-final"].steps.at(-1).run, /promote-gate\.sh final artifacts\/scorecard-proof\.json artifacts\/latency\/scorecard-chalk_sfu\.json/);
+});
+
 test("a failed Chalk SFU proof still rolls the release back", () => {
   for (const name of ["rollback", "rollback-npm"]) assert.match(promote.jobs[name].if, /needs\.proof\.result != 'success'/);
 });
