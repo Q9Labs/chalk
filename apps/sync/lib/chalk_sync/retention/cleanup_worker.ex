@@ -150,32 +150,34 @@ defmodule ChalkSync.Retention.CleanupWorker do
     %Result{
       result
       | episodes: result.episodes + 1,
-      event_rows: result.event_rows + deleted.event_rows,
-      event_bytes: result.event_bytes + event_bytes,
-      receipt_rows: result.receipt_rows + deleted.receipt_rows,
-      receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
-      lifecycle_intent_rows: result.lifecycle_intent_rows + deleted.lifecycle_intent_rows,
-      lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
-      external_operation_rows:
-        result.external_operation_rows + elem(deleted.external_operations, 0),
-      external_operation_bytes:
-        result.external_operation_bytes + elem(deleted.external_operations, 1),
-      admission_request_rows: result.admission_request_rows + elem(deleted.admission_requests, 0),
-      admission_request_bytes:
-        result.admission_request_bytes + elem(deleted.admission_requests, 1),
-      recording_rows: result.recording_rows + elem(deleted.recordings, 0),
-      recording_bytes: result.recording_bytes + elem(deleted.recordings, 1),
-      screen_share_lease_rows:
-        result.screen_share_lease_rows + elem(deleted.screen_share_leases, 0),
-      screen_share_lease_bytes:
-        result.screen_share_lease_bytes + elem(deleted.screen_share_leases, 1),
-      publication_fence_rows: result.publication_fence_rows + elem(deleted.publication_fences, 0),
-      publication_fence_bytes:
-        result.publication_fence_bytes + elem(deleted.publication_fences, 1),
-      publication_grant_reservation_rows:
-        result.publication_grant_reservation_rows + elem(deleted.grant_reservations, 0),
-      publication_grant_reservation_bytes:
-        result.publication_grant_reservation_bytes + elem(deleted.grant_reservations, 1)
+        event_rows: result.event_rows + deleted.event_rows,
+        event_bytes: result.event_bytes + event_bytes,
+        receipt_rows: result.receipt_rows + deleted.receipt_rows,
+        receipt_bytes: result.receipt_bytes + candidate.receipt_bytes,
+        lifecycle_intent_rows: result.lifecycle_intent_rows + deleted.lifecycle_intent_rows,
+        lifecycle_intent_bytes: result.lifecycle_intent_bytes + candidate.lifecycle_intent_bytes,
+        external_operation_rows:
+          result.external_operation_rows + elem(deleted.external_operations, 0),
+        external_operation_bytes:
+          result.external_operation_bytes + elem(deleted.external_operations, 1),
+        admission_request_rows:
+          result.admission_request_rows + elem(deleted.admission_requests, 0),
+        admission_request_bytes:
+          result.admission_request_bytes + elem(deleted.admission_requests, 1),
+        recording_rows: result.recording_rows + elem(deleted.recordings, 0),
+        recording_bytes: result.recording_bytes + elem(deleted.recordings, 1),
+        screen_share_lease_rows:
+          result.screen_share_lease_rows + elem(deleted.screen_share_leases, 0),
+        screen_share_lease_bytes:
+          result.screen_share_lease_bytes + elem(deleted.screen_share_leases, 1),
+        publication_fence_rows:
+          result.publication_fence_rows + elem(deleted.publication_fences, 0),
+        publication_fence_bytes:
+          result.publication_fence_bytes + elem(deleted.publication_fences, 1),
+        publication_grant_reservation_rows:
+          result.publication_grant_reservation_rows + elem(deleted.grant_reservations, 0),
+        publication_grant_reservation_bytes:
+          result.publication_grant_reservation_bytes + elem(deleted.grant_reservations, 1)
     }
   end
 
