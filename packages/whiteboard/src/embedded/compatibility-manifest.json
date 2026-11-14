@@ -1,10 +1,7 @@
 {
   "schemaVersion": 1,
-  "rendererBuildId": "chalk-excalidraw-0.18.1-r1",
   "excalidraw": {
-    "package": "@excalidraw/excalidraw",
-    "version": "0.18.1",
-    "restoreImplementation": "@excalidraw/excalidraw@0.18.1"
+    "package": "@excalidraw/excalidraw"
   },
   "bridge": {
     "current": 1,
@@ -21,7 +18,6 @@
   },
   "assets": {
     "fonts": ["Assistant", "Cascadia", "ComicShanns", "Excalifont", "Liberation", "Lilita", "Nunito", "Virgil", "Xiaolai"],
-    "math": "mathjax@4.1.3",
     "runtimeContentDelivery": false
   },
   "clientSkew": {

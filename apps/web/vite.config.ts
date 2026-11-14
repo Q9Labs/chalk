@@ -1,4 +1,3 @@
-import "./scripts/sync-public-assets";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import mdx from "@mdx-js/rollup";
 import rehypeShiki, { type RehypeShikiOptions } from "@shikijs/rehype";
@@ -8,29 +7,18 @@ import remarkGfm from "remark-gfm";
 import tailwindcss from "@tailwindcss/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { execSync } from "child_process";
 import pkg from "./package.json";
 import ports from "../../scripts/dev/ports.json";
-import sdkReactPkg from "../../sdks/typescript/react/package.json";
 import { sourceAliases } from "./vite.aliases";
 import { selfHostedExcalidraw } from "./scripts/self-hosted-excalidraw";
+import { syncPublicAssetsPlugin } from "./scripts/sync-public-assets";
 
-const commitHash = resolveCommitHash(process.env.CHALK_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim());
-const buildTime = new Date().toISOString();
 const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : ports.web;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
 const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || `http://127.0.0.1:${ports.api}`;
 const localSyncOrigin = process.env.CHALK_DEV_SYNC_ORIGIN?.trim() || `http://127.0.0.1:${ports.sync}`;
 const publicHost = process.env.PUBLIC_ORIGIN?.trim() ? new URL(process.env.PUBLIC_ORIGIN).hostname : undefined;
-function resolveCommitHash(configuredHash: string | undefined): string {
-  const candidate = configuredHash || execSync("git rev-parse HEAD").toString().trim();
-  if (!/^[0-9a-f]{40}$/.test(candidate)) {
-    throw new Error(`CHALK_COMMIT_SHA must be a full 40-character lowercase commit SHA; received ${candidate || "unknown"}`);
-  }
-  return candidate;
-}
-
 // Docs code takes the site's code colors from CSS variables, so one highlight serves both themes.
 const docsCodeTheme = {
   name: "chalk-docs",
@@ -59,11 +47,7 @@ const docsShikiOptions = {
 
 const config = defineConfig({
   define: {
-    __COMMIT_HASH__: JSON.stringify(commitHash),
-    __BUILD_TIME__: JSON.stringify(buildTime),
     __APP_VERSION__: JSON.stringify(pkg.version || "0.0.0"),
-    __WEB_APP_VERSION__: JSON.stringify(pkg.version || "0.0.0"),
-    __SDK_REACT_VERSION__: JSON.stringify(sdkReactPkg.version || "0.0.0"),
   },
   build: {
     rolldownOptions: {
@@ -101,6 +85,7 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
+    syncPublicAssetsPlugin(),
     selfHostedExcalidraw(),
     tailwindcss(),
     tanstackStart({

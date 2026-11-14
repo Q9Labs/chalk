@@ -80,26 +80,6 @@
   flex: none;
 }
 
-.site .dash .d-ok {
-  background: var(--chalk-positive);
-}
-
-.site .dash .d-wn {
-  background: var(--chalk-warning);
-}
-
-.site .dash .d-dg {
-  background: var(--chalk-danger);
-}
-
-.site .dash .d-in {
-  background: var(--chalk-accent);
-}
-
-.site .dash .d-mu {
-  background: var(--chalk-muted-text);
-}
-
 .site .dash .tag {
   display: inline-flex;
   align-items: center;
@@ -1305,12 +1285,6 @@
   gap: var(--space-2);
 }
 
-.site .dash .secth .cnt {
-  font-weight: 500;
-  color: var(--chalk-muted-text);
-  font-size: var(--type-body);
-}
-
 .site .dash .list {
   display: grid;
   gap: var(--space-0-5);
@@ -1696,22 +1670,6 @@
   font-size: var(--type-body);
 }
 
-.site .dash .srow {
-  display: grid;
-  grid-template-columns: 110px 130px 70px minmax(90px, 1fr) 220px 20px;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 56px;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--type-body);
-}
-
-.site .dash .srow > svg.site-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--chalk-muted-text);
-}
-
 .site .dash .kept {
   display: flex;
   gap: var(--space-3);
@@ -1736,22 +1694,6 @@
   display: flex;
   justify-content: center;
   padding: var(--space-4);
-}
-
-.site .dash .sgrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: var(--space-8);
-  margin-top: var(--space-8);
-  align-items: start;
-}
-
-.site .dash .sgrid.slim {
-  grid-template-columns: minmax(0, 1fr) 320px;
-}
-
-.site .dash .sgrid.one {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .site .dash .player {
@@ -1939,12 +1881,6 @@
   box-shadow: var(--raise);
 }
 
-.site .dash .sgrid:not(.slim) .tpanel {
-  position: sticky;
-  top: 16px;
-  height: min(640px, calc(100vh - 140px));
-}
-
 .site .dash .thead {
   padding: var(--space-4) var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--chalk-line);
@@ -2093,11 +2029,6 @@
   text-underline-offset: 2px;
 }
 
-.site .dash .side2 > section + section {
-  margin-top: var(--space-8);
-}
-
-.site .dash .side2 h2,
 .site .dash .below h2 {
   font-size: var(--type-body-lg);
   line-height: 1.3;
@@ -2106,10 +2037,6 @@
 
 .site .dash .below {
   margin-top: var(--space-8);
-}
-
-.site .dash .sgrid > .below {
-  margin-top: 0;
 }
 
 .site .dash .who li {
@@ -2150,12 +2077,6 @@
   margin-left: var(--space-2);
   font-size: var(--type-caption);
   color: var(--chalk-muted-text);
-}
-
-.site .dash .tag.gst {
-  height: 20px;
-  font-size: var(--type-caption);
-  padding: 0 var(--space-1-5);
 }
 
 .site .dash .intro {
@@ -2348,14 +2269,6 @@
   .site .dash .main {
     padding: var(--space-6) var(--space-10) var(--space-16);
   }
-
-  .site .dash .srow {
-    grid-template-columns: 100px 120px 64px minmax(80px, 1fr) 200px 20px;
-  }
-
-  .site .dash .sgrid {
-    grid-template-columns: minmax(0, 1fr) 340px;
-  }
 }
 
 @media (max-width: 640px) {
@@ -2429,7 +2342,8 @@
     padding: var(--space-10) var(--space-5) var(--space-8);
   }
 
-  .site .dash .brk::before {
+  .site .dash .brk::before,
+  .site .dash .dlg::before {
     content: "";
     position: absolute;
     top: 8px;
@@ -2452,18 +2366,6 @@
   .site .dash .dlg.tall {
     height: calc(100dvh - 12px);
     max-height: none;
-  }
-
-  .site .dash .dlg::before {
-    content: "";
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    width: 36px;
-    height: 5px;
-    translate: -50% 0;
-    border-radius: var(--corner-xs);
-    background: var(--chalk-line-strong);
   }
 
   .site .dash .acts {
@@ -2575,11 +2477,6 @@
     gap: var(--space-6);
   }
 
-  .site .dash .sgrid,
-  .site .dash .sgrid.slim {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .site .dash .pctl .pb {
     width: 40px;
     height: 40px;
@@ -2587,13 +2484,6 @@
 
   .site .dash .pctl .hide-ph {
     display: none;
-  }
-
-  .site .dash .sgrid .tpanel,
-  .site .dash .sgrid:not(.slim) .tpanel {
-    position: static;
-    height: auto;
-    max-height: 520px;
   }
 
   .site .dash .tsearch .ib {
@@ -2632,10 +2522,6 @@
     grid-row: 1 / span 4;
     width: auto;
     align-self: center;
-  }
-
-  .site .dash .tbl td.phh {
-    display: none;
   }
 
   .site .dash .evgrid {

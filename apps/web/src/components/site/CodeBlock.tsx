@@ -8,6 +8,12 @@ export type CodeTab = { readonly label: string; readonly language: CodeLanguage;
 const TOKEN = /(\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'[^'\n]*'|`[^`]*`)|\b(import|from|export|function|return|const|let|await|async|if|throw|new|type|satisfies|try|finally)\b|(<\/?[A-Z][A-Za-z]*|\b[A-Z][A-Za-z]+\b)/g;
 const SHELL_COMMAND = /^(pnpm|npm|git)\b/gm;
 
+function tokenClass(match: RegExpMatchArray): string {
+  if (match[1]) return "tc";
+  if (match[2]) return "ts";
+  return match[3] ? "tk" : "tt";
+}
+
 /** A small highlighter for the few samples on the site, so the page ships no syntax engine. */
 function highlight(source: string, language: CodeLanguage): ReactNode[] {
   const pattern = language === "Shell" ? SHELL_COMMAND : TOKEN;
@@ -16,7 +22,7 @@ function highlight(source: string, language: CodeLanguage): ReactNode[] {
   for (const match of source.matchAll(pattern)) {
     const at = match.index;
     out.push(source.slice(last, at));
-    const className = language === "Shell" ? "tk" : match[1] ? "tc" : match[2] ? "ts" : match[3] ? "tk" : "tt";
+    const className = language === "Shell" ? "tk" : tokenClass(match);
     out.push(
       <span key={at} className={className}>
         {match[0]}

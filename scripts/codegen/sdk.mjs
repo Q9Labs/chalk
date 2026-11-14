@@ -21,7 +21,7 @@ const emitters = [
   { script: "effect-http-api", outputs: { CODEGEN_HTTP_API_OUTPUT_PATH: `${clientGenerated}/http-api.ts`, CODEGEN_PUBLIC_HTTP_API_OUTPUT_PATH: `${clientGenerated}/public-http-api.ts` } },
   { script: "sync-typescript", outputs: { CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/sync.ts` } },
   { script: "sync-elixir", outputs: { CODEGEN_SYNC_ELIXIR_OUTPUT_PATH: "apps/sync/lib/chalk_sync/contract/generated.ex" } },
-  { script: "whiteboard-typescript", outputs: { CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/whiteboard-v1.ts`, CODEGEN_WHITEBOARD_VIEW_LIMITS_OUTPUT_PATH: "packages/whiteboard/src/collab/view-limits.ts" } },
+  { script: "whiteboard-typescript", outputs: { CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH: `${clientGenerated}/whiteboard-v1.ts`, CODEGEN_WHITEBOARD_WIRE_LIMITS_OUTPUT_PATH: "packages/whiteboard/src/collab/wire-limits.ts" } },
   { script: "whiteboard-elixir", outputs: { CODEGEN_WHITEBOARD_ELIXIR_OUTPUT_PATH: "apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex" } },
 ];
 

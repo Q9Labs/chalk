@@ -1,9 +1,11 @@
 import "../lib/camera-effects";
-import "../lib/whiteboard-assets";
+import { installWhiteboardAssets } from "../lib/whiteboard-assets";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { installFakeDevices } from "./media";
 import { CALL_STATES } from "./states";
+
+installWhiteboardAssets();
 
 declare global {
   interface Window {

@@ -6,7 +6,7 @@ import { act, errorMessage } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { LanguagePicker } from "./LanguagePicker";
 import { Seg, useToast } from "./kit";
-import { rememberLanguage } from "./transcript-languages";
+import { rememberLanguage } from "./language-choice";
 
 type RenderMode = RecordingRenderSettingsDTO["recordingRenderMode"];
 const RENDER_MODES: readonly (readonly [RenderMode, string])[] = [
@@ -14,39 +14,46 @@ const RENDER_MODES: readonly (readonly [RenderMode, string])[] = [
   ["automatic", "Automatic"],
 ];
 
+/** One setting that saves on change: `save` runs the write and toasts its message or its error, and ignores a second change while one is saving. */
+function useSetting() {
+  const toast = useToast();
+  const [saving, setSaving] = useState(false);
+  async function save(write: () => Promise<string>) {
+    if (saving) return;
+    setSaving(true);
+    try {
+      toast(await write());
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setSaving(false);
+    }
+  }
+  return [saving, save] as const;
+}
+
 /** Account defaults for calls. Each control saves when it changes, and puts the old value back if the save fails. */
 export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: { readonly renderMode: RenderMode; readonly language: TranscriptLanguage; readonly onRenderMode: (mode: RenderMode) => void; readonly onLanguage: (language: TranscriptLanguage) => void }) {
-  const toast = useToast();
-  const [savingMode, setSavingMode] = useState(false);
-  const [savingLanguage, setSavingLanguage] = useState(false);
+  const [, saveMode] = useSetting();
+  const [savingLanguage, saveLanguage] = useSetting();
 
-  async function saveMode(mode: RenderMode) {
-    if (savingMode || mode === renderMode) return;
-    setSavingMode(true);
-    try {
-      const saved = await act("developer", { action: "set-recording-render-mode", mode });
-      onRenderMode(saved.recordingRenderMode);
-      toast("Recording settings saved");
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    } finally {
-      setSavingMode(false);
-    }
-  }
-  async function saveLanguage(next: TranscriptLanguage | null) {
-    if (savingLanguage || next === null || next === language) return;
-    setSavingLanguage(true);
-    try {
-      const saved = await act("developer", { action: "set-default-transcript-language", transcriptLanguage: next });
-      if (next !== "auto") rememberLanguage(next);
-      onLanguage(saved.transcriptLanguage);
-      toast("Transcript language saved");
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    } finally {
-      setSavingLanguage(false);
-    }
-  }
+  const changeMode = (mode: RenderMode) =>
+    mode === renderMode
+      ? undefined
+      : saveMode(async () => {
+          const saved = await act("developer", { action: "set-recording-render-mode", mode });
+          onRenderMode(saved.recordingRenderMode);
+          return "Recording settings saved";
+        });
+  const changeLanguage = (next: TranscriptLanguage | null) =>
+    next === null || next === language
+      ? undefined
+      : saveLanguage(async () => {
+          const saved = await act("developer", { action: "set-default-transcript-language", transcriptLanguage: next });
+          if (next !== "auto") rememberLanguage(next);
+          onLanguage(saved.transcriptLanguage);
+          return "Transcript language saved";
+        });
 
   return (
     <section className="panel card" id="calls" aria-labelledby="calls-title">
@@ -65,7 +72,7 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
           <b id="recording-render-mode-label">Recording videos</b>
           <p>On demand makes an MP4 when you request a video. Automatic makes one after each recorded call ends.</p>
         </div>
-        <Seg labelledBy="recording-render-mode-label" options={RENDER_MODES} value={renderMode} onChange={(mode) => void saveMode(mode)} />
+        <Seg labelledBy="recording-render-mode-label" options={RENDER_MODES} value={renderMode} onChange={(mode) => void changeMode(mode)} />
       </div>
       <div className="set" id="transcript-language">
         <span className="tile">
@@ -75,7 +82,7 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
           <b id="tenant-transcript-language-label">Transcript language</b>
           <p id="tenant-transcript-language-help">The default for new transcripts, unless a call has its own setting.</p>
         </div>
-        <LanguagePicker id="tenant-transcript-language" labelledBy="tenant-transcript-language-label" describedBy="tenant-transcript-language-help" value={language} loading={savingLanguage} loadingLabel="Saving…" onChange={(next) => void saveLanguage(next)} />
+        <LanguagePicker id="tenant-transcript-language" labelledBy="tenant-transcript-language-label" describedBy="tenant-transcript-language-help" value={language} loading={savingLanguage} loadingLabel="Saving…" onChange={(next) => void changeLanguage(next)} />
       </div>
       <div className="foot">
         <Icon name="check" size={14} />

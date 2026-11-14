@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // rehype-slug makes heading ids with github-slugger, so the index uses it too.
 import GithubSlugger from "github-slugger";
+import { slugOfFile } from "../src/docs/slug.ts";
 
 const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const contentDir = path.join(web, "src/docs/content");
@@ -32,7 +33,7 @@ for (const file of readdirSync(contentDir)
   .filter((name) => name.endsWith(".mdx"))
   .sort()) {
   const stem = file.replace(/\.mdx$/, "");
-  const slug = stem === "why-chalk" ? "" : stem;
+  const slug = slugOfFile(stem);
   const source = readFileSync(path.join(contentDir, file), "utf8").replace(/^```[\s\S]*?^```$/gm, (fence) => fence.replace(/\n/g, "\u0000"));
   const slugger = new GithubSlugger();
   for (const part of source.split(/^(?=#{2,3} )/m)) {

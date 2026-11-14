@@ -23,7 +23,6 @@ function reasonMessage(reason: unknown): string {
 }
 
 function reloadLatest(): void {
-  // Bust any cached HTML and ensure we fetch the latest entrypoints.
   const url = new URL(window.location.href);
   url.searchParams.set("__reload", Date.now().toString());
   window.location.replace(url.toString());

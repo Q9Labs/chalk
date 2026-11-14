@@ -1,6 +1,6 @@
 import type { WhiteboardView as ChalkWhiteboardView } from "../../collab/view";
 import { useEngineHistory } from "./board-history";
-import { ViewVersions } from "./board-view-versions";
+import { ChalkWhiteboardViewVersions as ViewVersions } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "../WhiteboardCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useMediaQuery, usePrefersReducedMotion } from "./useMediaQuery";
@@ -40,7 +40,7 @@ import { useClearBoard } from "./BoardClear";
 import { BoardIsland } from "./BoardIsland";
 import { BoardMenu } from "./BoardMenu";
 import type { WhoCanDraw } from "./board-draw-policy";
-import { WHITEBOARD_VIEW_PEOPLE_MAX } from "../../collab/view-limits";
+import { WHITEBOARD_CURSOR_TTL_MS, WHITEBOARD_VIEW_PEOPLE_MAX } from "../../collab/wire-limits";
 import { BoardStyles } from "./BoardStyles";
 import { useBoardToast, type BoardToast } from "./board-toasts";
 
@@ -444,7 +444,7 @@ export function Board({
       if (!selected && !appliedVersions.current.isNew(view, participantId)) return;
       appliedVersions.current.remember(view, participantId);
       const cursor = cursors.current.get(participantId);
-      const focus = cursor && Date.now() - Date.parse(cursor.occurredAt) <= 10_000 && cursor.x >= view.x && cursor.x <= view.x + view.width && cursor.y >= view.y && cursor.y <= view.y + view.height ? { x: cursor.x, y: cursor.y, width: 0, height: 0 } : view;
+      const focus = cursor && Date.now() - Date.parse(cursor.occurredAt) <= WHITEBOARD_CURSOR_TTL_MS && cursor.x >= view.x && cursor.x <= view.x + view.width && cursor.y >= view.y && cursor.y <= view.y + view.height ? { x: cursor.x, y: cursor.y, width: 0, height: 0 } : view;
       move(cameraForView(focus, viewportRef.current, camera.cameraRef.current.zoom), animate, "follow");
     },
     [move, viewportRef, camera.cameraRef],
@@ -497,7 +497,7 @@ export function Board({
     return subscribe((event) => {
       if (event.type === "cursor") {
         rememberCursor(cursors.current, event);
-        if (followingRef.current === event.participantId && Date.now() - Date.parse(event.occurredAt) <= 10_000) {
+        if (followingRef.current === event.participantId && Date.now() - Date.parse(event.occurredAt) <= WHITEBOARD_CURSOR_TTL_MS) {
           camera.move(cameraForView({ x: event.x, y: event.y, width: 0, height: 0 }, camera.viewportRef.current, camera.cameraRef.current.zoom), false, "follow");
         }
       } else if (event.type === "view") latestView.current(event);

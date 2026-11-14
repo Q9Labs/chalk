@@ -40,35 +40,41 @@ export function fixtureProvider(env: DashboardEnvironment): IdentityProvider {
     },
   };
 }
-export async function fixtureRoute(request: Request, env: DashboardEnvironment): Promise<Response> {
-  assertLocal(env);
+async function runtimeCheck(config: DashboardEnvironment): Promise<Response> {
+  const results: { mode: string; result: string }[] = [];
+  for (const mode of ["error", "manual"] as const) {
+    try {
+      const result = await fetch(`${config.CHALK_API_ORIGIN}/runtime-probe`, { redirect: mode, signal: AbortSignal.timeout(15000) });
+      results.push({ mode, result: `${result.status}` });
+    } catch (error) {
+      results.push({ mode, result: error instanceof Error ? error.message : "unknown" });
+    }
+  }
+  return json(results);
+}
+
+function authorize(url: URL, config: DashboardEnvironment): Response {
+  const input = authorizeSchema.parse(Object.fromEntries(url.searchParams));
+  if (!input.person) {
+    return new Response(`<a href="?${new URLSearchParams({ ...input, person: "ada" })}">Ada</a><a href="?${new URLSearchParams({ ...input, person: "malik" })}">Malik</a>`, { headers: { "Content-Type": "text/html", "Cache-Control": "no-store" } });
+  }
+  const code = crypto.randomUUID();
+  codes.set(code, { person: input.person, challenge: input.challenge, nonce: input.nonce, provider: input.provider, expiresAt: Date.now() + 60000 });
+  // The harness submits Apple's returned fields as a cross-site form POST.
+  return redirect(`${config.DASHBOARD_ORIGIN}/auth/callback/${input.provider}?${new URLSearchParams({ code, state: input.state })}`);
+}
+
+async function control(request: Request): Promise<Response> {
+  const input = z.strictObject({ person: z.enum(["ada", "malik"]), expire: z.literal(true) }).parse(await request.json());
+  for (const [sessionId, person] of issuedSessions) if (person === input.person) expired.add(sessionId);
+  return json({ ok: true });
+}
+
+export async function fixtureRoute(request: Request, config: DashboardEnvironment): Promise<Response> {
+  assertLocal(config);
   const url = new URL(request.url);
-  if (url.pathname === "/fixture/runtime-check") {
-    const results: { mode: string; result: string }[] = [];
-    for (const mode of ["error", "manual"] as const) {
-      try {
-        const result = await fetch(`${env.CHALK_API_ORIGIN}/runtime-probe`, { redirect: mode, signal: AbortSignal.timeout(15000) });
-        results.push({ mode, result: `${result.status}` });
-      } catch (error) {
-        results.push({ mode, result: error instanceof Error ? error.message : "unknown" });
-      }
-    }
-    return json(results);
-  }
-  if (url.pathname === "/fixture/authorize") {
-    const input = authorizeSchema.parse(Object.fromEntries(url.searchParams));
-    if (!input.person) {
-      return new Response(`<a href="?${new URLSearchParams({ ...input, person: "ada" })}">Ada</a><a href="?${new URLSearchParams({ ...input, person: "malik" })}">Malik</a>`, { headers: { "Content-Type": "text/html", "Cache-Control": "no-store" } });
-    }
-    const code = crypto.randomUUID();
-    codes.set(code, { person: input.person, challenge: input.challenge, nonce: input.nonce, provider: input.provider, expiresAt: Date.now() + 60000 });
-    // The harness submits Apple's returned fields as a cross-site form POST.
-    return redirect(`${env.DASHBOARD_ORIGIN}/auth/callback/${input.provider}?${new URLSearchParams({ code, state: input.state })}`);
-  }
-  if (request.method === "POST" && url.pathname === "/fixture/control") {
-    const input = z.strictObject({ person: z.enum(["ada", "malik"]), expire: z.literal(true) }).parse(await request.json());
-    for (const [sessionId, person] of issuedSessions) if (person === input.person) expired.add(sessionId);
-    return json({ ok: true });
-  }
+  if (url.pathname === "/fixture/runtime-check") return runtimeCheck(config);
+  if (url.pathname === "/fixture/authorize") return authorize(url, config);
+  if (request.method === "POST" && url.pathname === "/fixture/control") return control(request);
   return json({ error: { code: "route_not_found" } }, 404);
 }
