@@ -862,6 +862,8 @@ grep -Fq 'podman pull ghcr.io/chalk-labs/image@sha256:' "${fixture_root}/command
 if grep -Fq 'podman login' "${fixture_root}/commands.log" || grep -Fq 'ecr get-login-password' "${fixture_root}/aws.log"; then
   fail "a public GHCR release logged in to a registry"
 fi
+find "${fixture_root}/run" -mindepth 1 -depth -delete
+find "${fixture_root}/user-quadlet" -mindepth 1 -depth -delete
 fi
 
 if group_enabled validation; then
