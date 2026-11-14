@@ -256,9 +256,8 @@ jobs:
             pnpm prod:latency --samples "$LATENCY_SAMPLES" --planes chalk_sfu --environment nightly --tier nightly --region github-hosted --size ubuntu-24-04 || status=$?
           elif [ "$PROOF" = cloudflare-plane ]; then
             # The default plane of production Spaces: the camera-share proof on a Cloudflare Space, through the real Cloudflare services.
-            unset CHALK_PROOF_SPACE_ID_CHALK_SFU
             # The stack has no recorder fleet, so this proves the call; Recording is proved by the host proof and Promote.
-            CHALK_PROOF_RECORDING=off CHALK_PROOF_MEDIA_PLANE=cf_sfu pnpm prod:proof camera-share || status=$?
+            CHALK_PROOF_RECORDING=off pnpm prod:proof camera-share || status=$?
           elif [ "$PROOF" = latency-smoke ]; then
             # A runner shares its CPU, so this run checks that the kit emits every gated action metric, not how fast they are.
             # The speed check is nightly-latency.yml on a host of its own.

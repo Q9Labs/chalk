@@ -1,4 +1,5 @@
-// Seeds the stack through the API's system token: one Tenant and Space on the Chalk SFU and an API key, then writes the
+// Seeds the stack through the API's system token: one Tenant and Space on the stack's plane (the Chalk SFU, or Cloudflare when
+// the stack has real Cloudflare credentials) and an API key, then writes the
 // values a proof run reads to <dir>/proof.env.
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -7,6 +8,9 @@ import { join } from "node:path";
 const mediaPlane = "chalk_sfu";
 const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
+// identity.mjs wrote the plane new Spaces land on; the Tenant and the proof Space follow it.
+const plane = readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(.+)$/m)?.[1];
+if (plane !== "chalk_sfu" && plane !== "cf_sfu") throw new Error(`seed: api.env names no media plane (${plane})`);
 
 async function post(path, body) {
   const response = await fetch(new URL(path, apiOrigin), {
@@ -19,11 +23,11 @@ async function post(path, body) {
   return JSON.parse(text);
 }
 
-const tenant = await post("/v1/tenants", { name: "Nightly stack", default_media_plane: mediaPlane });
+const tenant = await post("/v1/tenants", { name: "Nightly stack", default_media_plane: plane });
 const space = await post(`/v1/tenants/${tenant.id}/spaces`, {
   name: "Nightly proofs",
   slug: "nightly-proofs",
-  media_plane: mediaPlane,
+  media_plane: plane,
   recording_policy: "manual",
   transcription_policy: "on_demand",
   default_episode_duration_seconds: 1800,
@@ -42,10 +46,10 @@ const values = {
   // The proofs that run on this stack send no webhooks; the harness still requires both values.
   CHALK_PROOF_WEBHOOK_SERVICE_URL: proofOrigin,
   CHALK_PROOF_WEBHOOK_ENDPOINT_ID: "unused",
-  CHALK_PROOF_MEDIA_PLANE: mediaPlane,
+  CHALK_PROOF_MEDIA_PLANE: plane,
   CHALK_PROOF_API_KEY: key.secret ?? key.api_key ?? key.key,
   CHALK_PROOF_TENANT_ID: tenant.id,
-  CHALK_PROOF_SPACE_ID_CHALK_SFU: space.id,
+  [`CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`]: space.id,
 };
 if (!values.CHALK_PROOF_API_KEY) throw new Error(`seed: the API key response had no secret (fields: ${Object.keys(key).join(", ")})`);
 writeFileSync(
