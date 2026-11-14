@@ -27,7 +27,6 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { pathToFileURL } from "node:url";
 
 const TARGET = { recovered: 1, audioBackP95S: 10, cloudflareRequests: 0, minStopTrials: 5 };
 
@@ -187,7 +186,7 @@ async function main() {
   process.exitCode = summary.pass || dryRun ? 0 : 1;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.main) {
   main().catch((error) => {
     console.error(`failover-batch: ${error.message}`);
     process.exit(2);
