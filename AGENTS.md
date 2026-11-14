@@ -21,6 +21,8 @@ Use the relevant checks for the change. Run heavy Linux checks on Instabox; [gat
 
 Open a pull request as a draft: the Gate, Mobile CI and Release contracts run nothing on a draft (a few path-triggered workflows still do). Run the relevant checks yourself (Instabox for the heavy ones), finish review, then mark it ready once. Every push to a ready pull request reruns the Gate at about 60 runner-minutes, so batch fixes into one push.
 
+Related changes go in one pull request, not in a chain of small ones: each ready pull request costs a Gate run, and the merge queue lands about two an hour on hosted runners. Only 6 pull requests against master are ready at once, across every fleet. Before you mark one ready, run `node scripts/gates/ready-cap.mjs --pr <number>`; when it says OVER, keep pushing to the draft or fold the change into a ready pull request that is already there. The Gate enforces the same count when a pull request becomes ready: over the cap, `Root gate` fails with a comment, and the author runs `gh pr ready --undo`. A maintainer raises the cap with the repository variable `CHALK_READY_CAP`, and the `ready-cap-exempt` label lets one urgent pull request through.
+
 ## Orbs
 
 Every change to UI or user-facing behavior is tested on an Orb: the running product on its own Instabox machine, started from Chalk's base snapshot with your branch on top. A change with no visible effect (docs, tests, CI, a refactor that keeps behavior) skips it.

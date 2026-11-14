@@ -16,6 +16,8 @@ name: Gate
 # runner input) for every job, and the hosted runners when both are empty. This file sends no pull request job to that
 # label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
 # runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
+# Only so many pull requests against master are ready at once (scripts/gates/ready-cap.mjs). Ready cap runs first when a
+# pull request is marked ready; over the cap it comments, Select gate jobs stands down, and Root gate fails until the pull request is a draft again.
 
 on:
   pull_request:
@@ -50,9 +52,44 @@ env:
   PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
 
 jobs:
+  # Pushes to a ready pull request are not counted again: only the moment it becomes ready is. If this job fails (an API error),
+  # Select gate jobs still runs, so a broken cap never stops the Gate.
+  ready-cap:
+    name: Ready cap
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft != true && contains(fromJSON('["opened", "reopened", "ready_for_review"]'), github.event.action) }}
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      capped: ${{ steps.cap.outputs.capped }}
+    steps:
+      - name: Check out the cap script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .tool-versions
+            scripts/gates/ready-cap.mjs
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Refuse the pull request when too many are ready
+        id: cap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHALK_READY_CAP: ${{ vars.CHALK_READY_CAP }}
+        run: node scripts/gates/ready-cap.mjs --pr "${{ github.event.pull_request.number }}" --enforce
+
   changes:
     name: Select gate jobs
-    if: github.event.pull_request.draft != true
+    needs: ready-cap
+    # always(), not !cancelled(): cancelling a run while Ready cap is still queued must not skip selection, because a skipped
+    # selection skips every required job, and a skipped required job counts as passed.
+    if: ${{ always() && github.event.pull_request.draft != true && needs.ready-cap.outputs.capped != 'true' }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 10
     permissions:
@@ -349,11 +386,18 @@ jobs:
 
   root:
     name: Root gate
-    needs: [changes, root-lanes]
-    if: ${{ always() && needs.changes.result != 'skipped' }}
+    needs: [ready-cap, changes, root-lanes]
+    if: ${{ always() && (needs.changes.result != 'skipped' || needs.ready-cap.outputs.capped == 'true') }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 10
     steps:
+      # A skipped required job counts as passed, so a pull request over the cap must fail here, not just skip the Gate.
+      - name: Refuse a pull request over the ready cap
+        if: needs.ready-cap.outputs.capped == 'true'
+        run: |
+          echo "::error title=Over the ready cap::Too many pull requests are ready against master. Run 'gh pr ready --undo ${{ github.event.pull_request.number }}' and see the Ready cap comment."
+          exit 1
+
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
