@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -262,15 +263,30 @@ def require_gate(github, args):
 def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
-    manifest_bytes(github, info)
-    require(media_bytes(github, info), 'held nightly has no immutable media members')
-    require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful")
     for target in ('nightly', 'production'):
-        member = info['web'][target]
-        require(re.fullmatch('[0-9a-f]{64}', member['sha256']), 'missing web hash')
-        data = github.artifact(info['run_id'], member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
+        require(re.fullmatch('[0-9a-f]{64}', info['web'][target]['sha256']), 'missing web hash')
+
+    def manifest():
+        manifest_bytes(github, info)
+
+    def media():
+        require(media_bytes(github, info), 'held nightly has no immutable media members')
+
+    def gate():
+        require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful")
+
+    def web(target):
         from web import read_marker
+        member = info['web'][target]
+        data = github.artifact(info['run_id'], member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
         require(read_marker(data) == {'environment': target, 'commit': info['target_sha']}, 'web identity mismatch')
+
+    # Each check is a download or an API read on its own: run them together, and report the first failure in this order.
+    checks = [manifest, media, gate, lambda: web('nightly'), lambda: web('production')]
+    with ThreadPoolExecutor(max_workers=len(checks)) as pool:
+        futures = [pool.submit(check) for check in checks]
+    for future in futures:
+        future.result()
     require(info.get('applied_release_id') == info['release_id'], 'held applied identity mismatch')
     return info
 
