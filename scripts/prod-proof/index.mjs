@@ -19,7 +19,7 @@ import { createProofKey, prepareIntegration, recordProof, exportProof, transcrip
 const plans = {
   leave: { media: false, webhooks: false, proofs: ["leave"] },
   // The current client's Leave on the Chalk SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
-  "leave-chalk-sfu": { media: false, webhooks: false, proofs: ["leave-chalk-sfu"] },
+  "leave-chalk-sfu": { media: false, webhooks: false, recorderFleet: false, proofs: ["leave-chalk-sfu"] },
   // Finds or creates Promote's two Chalk SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
   "chalk-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["chalk-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
