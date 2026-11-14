@@ -14,8 +14,10 @@ const calls = [
 export function toggleOffersPlan() {
   return [
     `Toggle offers: ${calls.length} calls of ${guestCount} guests on ${mediaPlane}, each in its own Space`,
-    ...calls.map((call) => `Call joining ${call.name} (guests ${call.joinOrder.map((guest) => guest + 1).join(", ")}): ${call.rounds} rounds; each round every guest turns its microphone and camera off and on`),
-    `Fails when a guest's final offer exceeds its first-join offer by more than ${bounds.growthBytes} bytes, when any offer passes ${bounds.nodeLimitBytes} bytes,`,
+    ...calls.map(
+      (call) => `Call joining ${call.name} (guests ${call.joinOrder.map((guest) => guest + 1).join(", ")}): ${call.rounds} rounds (${call.rounds - 1} growth-check rounds after round 1 establishes the live-track baseline); each round every guest turns its microphone and camera off and on`,
+    ),
+    `Round 1's largest offer is the baseline; join-time offer sizes are informational. Fails when a later round's final offer exceeds that baseline by more than ${bounds.growthBytes} bytes, or when any offer passes ${bounds.nodeLimitBytes} bytes,`,
     `or when a listener does not hear a re-published microphone within the unmute window (at least ${bounds.minRepublishes} re-publishes per guest and call). Prints toggle count against offer size.`,
   ].join("\n");
 }
@@ -59,8 +61,8 @@ async function toggleCall(run, receiver, call) {
     await joinInOrder(run, space, guests, call.joinOrder);
     await run.wait(3000); // The last offers of the join are sent.
     const cursors = guests.networks.map((network) => network.length);
-    const baseline = guests.networks.map((network) => largest(offerSizes(network), NaN));
-    const finals = [...baseline];
+    const joinBaseline = guests.networks.map((network) => largest(offerSizes(network), NaN));
+    const finals = [...joinBaseline];
     const rounds = [];
     const hearings = [];
     const failures = [];
@@ -123,12 +125,12 @@ async function toggleCall(run, receiver, call) {
             .join(", ")} bytes`,
         );
     }
-    const growth = judgeOfferGrowth({ baseline, rounds });
-    console.log(`Toggle count against offer size, call joining ${call.name} (bytes):`);
+    const growth = judgeOfferGrowth({ joinBaseline, rounds });
+    console.log(`Toggle count against offer size after the round 1 baseline, call joining ${call.name} (bytes):`);
     for (const line of growth.table) console.log(`  ${line}`);
     failures.push(...growth.failures.map((failure) => `${call.name}: ${failure}`));
     failures.push(...judgeRepublishes({ hearings, guests: guestCount }).map((failure) => `${call.name}: ${failure}`));
-    const evidence = { call: call.name, joinOrder: call.joinOrder, baseline, rounds, hearings: hearings.map(({ speaker, round, verdicts }) => ({ speaker, round, unheard: unheardAfterUnmute(speaker, verdicts) })), failures };
+    const evidence = { call: call.name, joinOrder: call.joinOrder, joinBaseline, baseline: growth.baseline, rounds, hearings: hearings.map(({ speaker, round, verdicts }) => ({ speaker, round, unheard: unheardAfterUnmute(speaker, verdicts) })), failures };
     await save(`${run.directory}/toggle-offers-${call.name.replace(" ", "-")}.json`, evidence);
     return failures;
   } finally {
