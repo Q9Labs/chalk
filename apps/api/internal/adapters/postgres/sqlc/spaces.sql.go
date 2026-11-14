@@ -482,52 +482,6 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 	return i, err
 }
 
-const createSpaceMember = `-- name: CreateSpaceMember :one
-insert into space_members (
-    id,
-    tenant_id,
-    space_id,
-    identity_id,
-    role_id
-) values (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5
-)
-returning id, tenant_id, space_id, identity_id, role_id, updated_at, created_at
-`
-
-type CreateSpaceMemberParams struct {
-	ID         pgtype.UUID `json:"id"`
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	SpaceID    pgtype.UUID `json:"space_id"`
-	IdentityID pgtype.UUID `json:"identity_id"`
-	RoleID     pgtype.UUID `json:"role_id"`
-}
-
-func (q *Queries) CreateSpaceMember(ctx context.Context, arg CreateSpaceMemberParams) (SpaceMember, error) {
-	row := q.db.QueryRow(ctx, createSpaceMember,
-		arg.ID,
-		arg.TenantID,
-		arg.SpaceID,
-		arg.IdentityID,
-		arg.RoleID,
-	)
-	var i SpaceMember
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.SpaceID,
-		&i.IdentityID,
-		&i.RoleID,
-		&i.UpdatedAt,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const createSpaceRole = `-- name: CreateSpaceRole :one
 insert into space_roles (
     id,
@@ -574,24 +528,6 @@ func (q *Queries) CreateSpaceRole(ctx context.Context, arg CreateSpaceRoleParams
 	return i, err
 }
 
-const deleteSpaceMember = `-- name: DeleteSpaceMember :exec
-delete from space_members
-where tenant_id = $1
-  and space_id = $2
-  and identity_id = $3
-`
-
-type DeleteSpaceMemberParams struct {
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	SpaceID    pgtype.UUID `json:"space_id"`
-	IdentityID pgtype.UUID `json:"identity_id"`
-}
-
-func (q *Queries) DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error {
-	_, err := q.db.Exec(ctx, deleteSpaceMember, arg.TenantID, arg.SpaceID, arg.IdentityID)
-	return err
-}
-
 const getSpaceCreateRequest = `-- name: GetSpaceCreateRequest :one
 select tenant_id, request_key, request_fingerprint, space_id, created_at
 from space_create_requests
@@ -612,35 +548,6 @@ func (q *Queries) GetSpaceCreateRequest(ctx context.Context, arg GetSpaceCreateR
 		&i.RequestKey,
 		&i.RequestFingerprint,
 		&i.SpaceID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const getSpaceMember = `-- name: GetSpaceMember :one
-select id, tenant_id, space_id, identity_id, role_id, updated_at, created_at
-from space_members
-where tenant_id = $1
-  and space_id = $2
-  and identity_id = $3
-`
-
-type GetSpaceMemberParams struct {
-	TenantID   pgtype.UUID `json:"tenant_id"`
-	SpaceID    pgtype.UUID `json:"space_id"`
-	IdentityID pgtype.UUID `json:"identity_id"`
-}
-
-func (q *Queries) GetSpaceMember(ctx context.Context, arg GetSpaceMemberParams) (SpaceMember, error) {
-	row := q.db.QueryRow(ctx, getSpaceMember, arg.TenantID, arg.SpaceID, arg.IdentityID)
-	var i SpaceMember
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.SpaceID,
-		&i.IdentityID,
-		&i.RoleID,
-		&i.UpdatedAt,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -786,47 +693,6 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.ArchivedAt,
 	)
 	return i, err
-}
-
-const listSpaceMembers = `-- name: ListSpaceMembers :many
-select id, tenant_id, space_id, identity_id, role_id, updated_at, created_at
-from space_members
-where tenant_id = $1
-  and space_id = $2
-order by created_at, id
-`
-
-type ListSpaceMembersParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	SpaceID  pgtype.UUID `json:"space_id"`
-}
-
-func (q *Queries) ListSpaceMembers(ctx context.Context, arg ListSpaceMembersParams) ([]SpaceMember, error) {
-	rows, err := q.db.Query(ctx, listSpaceMembers, arg.TenantID, arg.SpaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SpaceMember
-	for rows.Next() {
-		var i SpaceMember
-		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.SpaceID,
-			&i.IdentityID,
-			&i.RoleID,
-			&i.UpdatedAt,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listSpaceRoles = `-- name: ListSpaceRoles :many

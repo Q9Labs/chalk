@@ -10,18 +10,6 @@ import (
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var sourceIDPattern = regexp.MustCompile(`^rps_[0-9a-f]{64}$`)
 
-var themePalettes = map[string]struct{}{
-	"light": {}, "warm-porcelain": {}, "cool-mist": {}, "paper-and-ink": {},
-	"cream-and-clay": {}, "studio-canvas": {}, "prism-daylight": {}, "signal-white": {},
-	"warm-charcoal": {}, "cool-graphite": {}, "high-contrast-ink": {}, "espresso-night": {},
-	"chalkboard-atelier": {}, "prism-nocturne": {}, "cosmic-chalk": {}, "oled-signal": {},
-}
-
-var reactionValues = map[string]struct{}{"👍": {}, "❤️": {}, "😂": {}, "😮": {}, "🎉": {}, "👏": {}, "😀": {}, "😅": {}, "🙏": {}, "🔥": {}, "✅": {}, "👀": {}, "💯": {}, "🤔": {}, "😢": {}, "🙌": {}, "🚀": {}, "👌": {}, "😍": {}, "🤝": {}, "💡": {}, "⭐": {}, "😎": {}, "🥳": {}}
-var assetKinds = map[string]struct{}{
-	"logo": {}, "avatar": {}, "chat_attachment": {}, "whiteboard_state": {}, "whiteboard_file": {}, "font": {},
-}
-
 func ValidateProfile(profile Profile) error { return profile.validate() }
 
 func (timeline Timeline) Validate() error {

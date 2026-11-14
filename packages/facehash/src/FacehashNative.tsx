@@ -2,6 +2,7 @@ import * as React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { createFacehashScene, getColor, getForegroundColor, type Intensity3D, type Variant } from "./core/index";
 import { FacehashSceneSvgNative } from "./FacehashSceneSvg.native";
+import { sanitizeId } from "./scene-svg";
 
 export interface FacehashNativeProps {
   name: string;
@@ -14,10 +15,6 @@ export interface FacehashNativeProps {
   enableBlink?: boolean;
   renderMouth?: () => React.ReactNode;
   testID?: string;
-}
-
-function sanitizeId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
 }
 
 export function FacehashNative({ name, size = 40, variant = "gradient", intensity3d = "dramatic", interactive = true, showInitial = true, colors, enableBlink = false, renderMouth, testID }: FacehashNativeProps): React.JSX.Element {

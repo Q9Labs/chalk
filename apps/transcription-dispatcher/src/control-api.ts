@@ -1,6 +1,7 @@
-import { ControlApiError } from "./errors.js";
+import { ControlApiError, isRetryableStatus } from "./errors.js";
 import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./assignment.js";
-import type { ClaimResponse, CleanupAssignment, CompletionInput, ControlApi, FinalizeAssignment, FinalizeCompletionInput, FinalizeClaimResponse, JourneyContext, RetryInput, TranscriptionAssignment } from "./types.js";
+import type { ClaimResponse, CleanupAssignment, FinalizeClaimResponse } from "./assignment-types.js";
+import type { CompletionInput, ControlApi, ControlCall, FinalizeCompletionInput, JourneyContext, Lease, RetryInput } from "./types.js";
 import type { WorkloadSigner } from "./workload-auth.js";
 
 interface ControlApiOptions {
@@ -26,6 +27,43 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+function leaseBody(lease: Lease) {
+  return { job_id: lease.jobId, attempt: lease.attempt, lease_token: lease.leaseToken };
+}
+
+function retryBody(lease: Lease, input: { errorCode: string; retryAt?: string; terminal?: boolean }) {
+  return {
+    ...leaseBody(lease),
+    error_code: input.errorCode,
+    ...(input.retryAt === undefined ? {} : { retry_at: input.retryAt }),
+    ...(input.terminal === undefined ? {} : { terminal: input.terminal }),
+  };
+}
+
+/** The fields every completion carries: the result object and who produced it. */
+function resultBody(input: CompletionInput | FinalizeCompletionInput) {
+  return {
+    ...leaseBody(input),
+    result_sha256: input.checksumSha256,
+    result_size_bytes: input.sizeBytes,
+    content_type: input.contentType,
+    provider: input.provider,
+    model: input.model,
+    version_contract: input.versionContract,
+    ...(input.executionIdentity === undefined ? {} : { execution_identity: input.executionIdentity }),
+    ...(input.providerRequestId === undefined ? {} : { provider_request_id: input.providerRequestId }),
+    ...(input.quality === undefined ? {} : { quality: input.quality }),
+  };
+}
+
+/** `kind` is "", "finalize " or "cleanup ", and only words the error messages. */
+function claimedAssignments(value: unknown, kind: string): unknown[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ControlApiError(`invalid ${kind}claim response`, 502);
+  const assignments = "assignments" in value ? value.assignments : undefined;
+  if (!Array.isArray(assignments)) throw new ControlApiError(`invalid ${kind}assignments`, 502);
+  return assignments;
+}
+
 export class RecorderControlApiClient implements ControlApi {
   private readonly options: ControlApiOptions;
 
@@ -33,167 +71,64 @@ export class RecorderControlApiClient implements ControlApi {
     this.options = options;
   }
 
-  async claim(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<ClaimResponse> {
-    const value = await this.call("/internal/v1/transcription/jobs/claim", "POST", { batch_size: input.limit }, input.context, input.signal);
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid claim response", 502);
-    const assignments = (value as Record<string, unknown>).assignments;
-    if (!Array.isArray(assignments)) throw new ControlApiError("invalid claim assignments", 502);
-    const validated = assignments.map((assignment) => validateAssignment(assignment));
-    return { assignments: validated };
+  async claim(input: { limit: number } & ControlCall): Promise<ClaimResponse> {
+    return { assignments: (await this.claimAssignments("/internal/v1/transcription/jobs/claim", "", input)).map(validateAssignment) };
   }
 
-  async heartbeat(input: { assignment: Pick<TranscriptionAssignment, "jobId" | "attempt" | "leaseToken">; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/jobs/heartbeat",
-      "POST",
-      {
-        job_id: input.assignment.jobId,
-        attempt: input.assignment.attempt,
-        lease_token: input.assignment.leaseToken,
-      },
-      input.context,
-      input.signal,
-    );
+  async claimFinalize(input: { limit: number } & ControlCall): Promise<FinalizeClaimResponse> {
+    return { assignments: (await this.claimAssignments("/internal/v1/transcription/finalize/claim", "finalize ", input)).map(validateFinalizeAssignment) };
   }
 
-  async retry(input: RetryInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/jobs/retry",
-      "POST",
-      {
-        job_id: input.jobId,
-        attempt: input.attempt,
-        lease_token: input.leaseToken,
-        error_code: input.errorCode,
-        ...(input.retryAt === undefined ? {} : { retry_at: input.retryAt }),
-        ...(input.terminal === undefined ? {} : { terminal: input.terminal }),
-      },
-      input.context,
-      input.signal,
-    );
+  async claimCleanup(input: { limit: number } & ControlCall): Promise<{ assignments: CleanupAssignment[] }> {
+    return { assignments: (await this.claimAssignments("/internal/v1/transcription/cleanup/claim", "cleanup ", input)).map(validateCleanupAssignment) };
   }
 
-  async complete(input: CompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/jobs/complete",
-      "POST",
-      {
-        job_id: input.jobId,
-        attempt: input.attempt,
-        lease_token: input.leaseToken,
-        result_sha256: input.checksumSha256,
-        result_size_bytes: input.sizeBytes,
-        content_type: input.contentType,
-        provider: input.provider,
-        model: input.model,
-        version_contract: input.versionContract,
-        ...(input.executionIdentity === undefined ? {} : { execution_identity: input.executionIdentity }),
-        ...(input.providerRequestId === undefined ? {} : { provider_request_id: input.providerRequestId }),
-        ...(input.language === undefined ? {} : { language: input.language }),
-        measured_audio_ms: input.measuredAudioMs,
-        ...(input.providerObservedDurationMs === undefined ? {} : { provider_observed_duration_ms: input.providerObservedDurationMs }),
-        ...(input.billedAudioSeconds === undefined ? {} : { billed_audio_seconds: input.billedAudioSeconds }),
-        ...(input.quality === undefined ? {} : { quality: input.quality }),
-      },
-      input.context,
-      input.signal,
-    );
+  async heartbeat(input: { assignment: Lease } & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/jobs/heartbeat", leaseBody(input.assignment), input);
   }
 
-  async claimFinalize(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<FinalizeClaimResponse> {
-    const value = await this.call("/internal/v1/transcription/finalize/claim", "POST", { batch_size: input.limit }, input.context, input.signal);
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid finalize claim response", 502);
-    const assignments = (value as Record<string, unknown>).assignments;
-    if (!Array.isArray(assignments)) throw new ControlApiError("invalid finalize assignments", 502);
-    const validated = assignments.map((assignment) => validateFinalizeAssignment(assignment));
-    return { assignments: validated };
+  async retry(input: RetryInput & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/jobs/retry", retryBody(input, input), input);
   }
 
-  async completeFinalize(input: FinalizeCompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/finalize/complete",
-      "POST",
-      {
-        job_id: input.jobId,
-        attempt: input.attempt,
-        lease_token: input.leaseToken,
-        result_sha256: input.checksumSha256,
-        result_size_bytes: input.sizeBytes,
-        content_type: input.contentType,
-        provider: input.provider,
-        model: input.model,
-        version_contract: input.versionContract,
-        languages: input.languages,
-        ...(input.executionIdentity === undefined ? {} : { execution_identity: input.executionIdentity }),
-        ...(input.providerRequestId === undefined ? {} : { provider_request_id: input.providerRequestId }),
-        ...(input.quality === undefined ? {} : { quality: input.quality }),
-      },
-      input.context,
-      input.signal,
-    );
+  async retryFinalize(input: RetryInput & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/finalize/retry", retryBody(input, input), input);
   }
 
-  async retryFinalize(input: { jobId: string; attempt: number; leaseToken: string; errorCode: string; retryAt?: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/finalize/retry",
-      "POST",
-      {
-        job_id: input.jobId,
-        attempt: input.attempt,
-        lease_token: input.leaseToken,
-        error_code: input.errorCode,
-        ...(input.retryAt === undefined ? {} : { retry_at: input.retryAt }),
-        ...(input.terminal === undefined ? {} : { terminal: input.terminal }),
-      },
-      input.context,
-      input.signal,
-    );
+  async retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean } & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/cleanup/retry", retryBody(input.assignment, input), input);
   }
 
-  async claimCleanup(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }> {
-    const value = await this.call("/internal/v1/transcription/cleanup/claim", "POST", { batch_size: input.limit }, input.context, input.signal);
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid cleanup claim response", 502);
-    const assignments = (value as Record<string, unknown>).assignments;
-    if (!Array.isArray(assignments)) throw new ControlApiError("invalid cleanup assignments", 502);
-    return { assignments: assignments.map((assignment) => validateCleanupAssignment(assignment)) };
+  async complete(input: CompletionInput & ControlCall): Promise<void> {
+    const body = {
+      ...resultBody(input),
+      ...(input.language === undefined ? {} : { language: input.language }),
+      measured_audio_ms: input.measuredAudioMs,
+      ...(input.providerObservedDurationMs === undefined ? {} : { provider_observed_duration_ms: input.providerObservedDurationMs }),
+      ...(input.billedAudioSeconds === undefined ? {} : { billed_audio_seconds: input.billedAudioSeconds }),
+    };
+    await this.call("/internal/v1/transcription/jobs/complete", body, input);
   }
 
-  async completeCleanup(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/cleanup/complete",
-      "POST",
-      {
-        job_id: input.assignment.jobId,
-        attempt: input.assignment.attempt,
-        lease_token: input.assignment.leaseToken,
-      },
-      input.context,
-      input.signal,
-    );
+  async completeFinalize(input: FinalizeCompletionInput & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/finalize/complete", { ...resultBody(input), languages: input.languages }, input);
   }
 
-  async retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/cleanup/retry",
-      "POST",
-      {
-        job_id: input.assignment.jobId,
-        attempt: input.assignment.attempt,
-        lease_token: input.assignment.leaseToken,
-        error_code: input.errorCode,
-        ...(input.terminal === undefined ? {} : { terminal: input.terminal }),
-      },
-      input.context,
-      input.signal,
-    );
+  async completeCleanup(input: { assignment: CleanupAssignment } & ControlCall): Promise<void> {
+    await this.call("/internal/v1/transcription/cleanup/complete", leaseBody(input.assignment), input);
   }
 
-  private async call(path: string, method: "POST", body: unknown, context: JourneyContext, signal?: AbortSignal): Promise<unknown> {
+  private async claimAssignments(path: string, kind: string, input: { limit: number } & ControlCall): Promise<unknown[]> {
+    return claimedAssignments(await this.call(path, { batch_size: input.limit }, input), kind);
+  }
+
+  private async call(path: string, body: unknown, { context, signal }: ControlCall): Promise<unknown> {
+    const method = "POST";
     let response: Response;
     try {
       response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
         method,
-        headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer.sign({ method, path, body: JSON.stringify(body), context }) },
+        headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer({ method, path, body: JSON.stringify(body), context }) },
         body: JSON.stringify(body),
         ...(signal === undefined ? {} : { signal }),
       });
@@ -202,8 +137,7 @@ export class RecorderControlApiClient implements ControlApi {
       throw new TypeError(`fetch failed: ${method} ${path} (${networkCauseCode(error)})`, { cause: error });
     }
     if (!response.ok) {
-      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
-      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, retryable);
+      throw new ControlApiError(`control API request failed: ${method} ${path} returned ${response.status}`, response.status, isRetryableStatus(response.status));
     }
     return parseResponse(response);
   }

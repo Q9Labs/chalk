@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 )
 
 type StorageObject struct {
@@ -27,36 +29,48 @@ func (m ObjectManifest) Validate(scope Scope) error {
 	if m.Bucket == "" {
 		return errors.New("object bucket required")
 	}
-	approved := make(map[string]bool)
-	for _, identity := range scope.Delete {
-		approved[identity.ID] = true
-	}
 	for _, prefix := range m.SharedPrefixes {
-		if !strings.HasSuffix(prefix, "/") || strings.HasPrefix(prefix, "/") || path.Clean(prefix)+"/" != prefix || len(prefix) < 3 {
+		if !cleanSharedPrefix(prefix) {
 			return errors.New("shared prefixes must be explicit clean non-root prefixes")
 		}
 	}
-	seen := make(map[string]bool)
+	approved := make(map[string]bool, len(scope.Delete))
+	for _, identity := range scope.Delete {
+		approved[identity.ID] = true
+	}
+	seen := make(map[string]bool, len(m.Objects))
 	for _, object := range m.Objects {
-		if object.Key == "" || path.Clean(object.Key) != object.Key || strings.HasPrefix(object.Key, "/") || strings.HasPrefix(object.Key, "../") || object.Size < 0 || object.ETag == "" || seen[object.Key] {
+		if !cleanObjectKey(object) || seen[object.Key] {
 			return errors.New("objects require unique clean keys, sizes and ETags")
 		}
 		seen[object.Key] = true
-		if object.OwnerTenantID != "" {
-			if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, "tenants/"+object.OwnerTenantID+"/") {
-				return errors.New("object owner outside explicit erase scope")
-			}
-			continue
+		if err := m.validateOwner(object, approved); err != nil {
+			return err
 		}
-		shared := false
-		for _, prefix := range m.SharedPrefixes {
-			if strings.HasPrefix(object.Key, prefix) {
-				shared = true
-			}
+	}
+	return nil
+}
+
+func cleanSharedPrefix(prefix string) bool {
+	return strings.HasSuffix(prefix, "/") && !strings.HasPrefix(prefix, "/") && path.Clean(prefix)+"/" == prefix && len(prefix) >= 3
+}
+
+func cleanObjectKey(object StorageObject) bool {
+	return object.Key != "" && path.Clean(object.Key) == object.Key &&
+		!strings.HasPrefix(object.Key, "/") && !strings.HasPrefix(object.Key, "../") &&
+		object.Size >= 0 && object.ETag != ""
+}
+
+// validateOwner requires an object to belong to an erased Tenant or to sit under an explicit shared prefix.
+func (m ObjectManifest) validateOwner(object StorageObject, approved map[string]bool) error {
+	if object.OwnerTenantID != "" {
+		if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, recordingobjectkey.TenantPrefix(object.OwnerTenantID)) {
+			return errors.New("object owner outside explicit erase scope")
 		}
-		if !shared {
-			return errors.New("object has no approved Tenant or explicit shared prefix")
-		}
+		return nil
+	}
+	if !slices.ContainsFunc(m.SharedPrefixes, func(prefix string) bool { return strings.HasPrefix(object.Key, prefix) }) {
+		return errors.New("object has no approved Tenant or explicit shared prefix")
 	}
 	return nil
 }
@@ -74,31 +88,37 @@ type ObjectStore interface {
 // these scoped objects during cleanup. Absence counts as repeatable success.
 func CleanupObjects(ctx context.Context, store ObjectStore, manifest ObjectManifest, record func(StorageObject) error) error {
 	for _, object := range manifest.Objects {
-		facts, err := store.InspectObject(ctx, object.Key)
-		if errors.Is(err, objectstorage.ErrObjectNotFound) {
-			if err := record(object); err != nil {
-				return err
-			}
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("inspect approved object: %w", err)
-		}
-		if facts.Size != object.Size || strings.Trim(facts.ETag, "\"") != strings.Trim(object.ETag, "\"") {
-			return errors.New("approved object bytes changed; cleanup stopped")
-		}
-		if err := store.DeleteObject(ctx, object.Key); err != nil {
-			return fmt.Errorf("delete approved object: %w", err)
-		}
-		if _, err := store.InspectObject(ctx, object.Key); !errors.Is(err, objectstorage.ErrObjectNotFound) {
-			if err != nil {
-				return fmt.Errorf("verify absence: %w", err)
-			}
-			return errors.New("object still present after deletion")
+		if err := deleteApprovedObject(ctx, store, object); err != nil {
+			return err
 		}
 		if err := record(object); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// deleteApprovedObject removes one object whose bytes still match the plan and proves it is gone.
+func deleteApprovedObject(ctx context.Context, store ObjectStore, object StorageObject) error {
+	facts, err := store.InspectObject(ctx, object.Key)
+	if errors.Is(err, objectstorage.ErrObjectNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect approved object: %w", err)
+	}
+	if facts.Size != object.Size || strings.Trim(facts.ETag, "\"") != strings.Trim(object.ETag, "\"") {
+		return errors.New("approved object bytes changed; cleanup stopped")
+	}
+	if err := store.DeleteObject(ctx, object.Key); err != nil {
+		return fmt.Errorf("delete approved object: %w", err)
+	}
+	_, err = store.InspectObject(ctx, object.Key)
+	if errors.Is(err, objectstorage.ErrObjectNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("verify absence: %w", err)
+	}
+	return errors.New("object still present after deletion")
 }

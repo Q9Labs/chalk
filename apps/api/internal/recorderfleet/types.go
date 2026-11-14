@@ -32,7 +32,6 @@ const (
 	BootstrapAbandonSchemaVersion    = "recorder_fleet_bootstrap_abandon.v1"
 	CommandSchemaVersion             = "recorder_fleet_command.v1"
 	PoolSchemaVersion                = "recorder_fleet_pool.v1"
-	ControllerRole                   = "recorder-fleet-controller"
 	InventoryNotReadyCode            = "recorder_fleet.inventory_not_ready"
 	BootstrapPendingCode             = "recorder_fleet.bootstrap_pending"
 	BootstrapDiagnosticSchemaVersion = "recorder_fleet_bootstrap_diagnostic.v1"

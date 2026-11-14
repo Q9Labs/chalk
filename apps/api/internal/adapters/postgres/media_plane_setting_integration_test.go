@@ -67,7 +67,7 @@ func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenan
 	if err != nil {
 		return nil, err
 	}
-	binding, err := mediaplane.NewBinding(string(plane), mediaplane.BindingSourceDeploymentDefault, "proof-app")
+	binding, err := mediaplane.NewBinding(plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
 	return &binding, err
 }
 
@@ -103,7 +103,7 @@ func TestEpisodeCreationBindsThePlaneTheSettingsSelect(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			tenant, space := seedSettingsSpace(t, pool, c.tenantDefault, c.setting, c.stored)
-			policy := spaces.PlanePolicy{Platform: spaces.MediaPlaneProviderCloudflareSFU, NewEpisodesPaused: c.paused}
+			policy := spaces.PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, NewEpisodesPaused: c.paused}
 			if c.allowed {
 				policy.Allowed = everyone
 			}
@@ -142,7 +142,7 @@ func TestSettingChangesLeaveAStoredBindingAlone(t *testing.T) {
 	mustExec(t, pool, `insert into episodes (id,status,space_id,tenant_id,config_snapshot) values ($1,'active',$2,$3,'{"media_plane_binding":{"provider":"chalk_sfu","node":"node-a","generation":3}}'::jsonb)`, episode.Bytes(), space.Bytes(), tenant.Bytes())
 
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	cloudflare := spaces.MediaPlaneProviderCloudflareSFU
+	cloudflare := mediaplane.ProviderCloudflareSFU
 	legacy := "cf_sfu"
 	if _, err := repository.UpdateSpace(t.Context(), tenant, space, spaces.UpdateSpaceInput{
 		MediaPlane:        utilities.OptionalString{Set: true, Value: &legacy},
@@ -170,13 +170,13 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	pool := settingsPool(t)
 	tenant, space := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	own, cloudflare := spaces.MediaPlaneProviderChalkSFU, spaces.MediaPlaneProviderCloudflareSFU
+	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
 
 	got, err := repository.GetSpace(t.Context(), tenant, space)
 	if err != nil || got.MediaPlaneSetting != nil {
 		t.Fatalf("fresh Space setting = %v, %v, want null", got.MediaPlaneSetting, err)
 	}
-	set := func(value *spaces.MediaPlaneProvider, legacy string) {
+	set := func(value *mediaplane.Provider, legacy string) {
 		t.Helper()
 		if _, err := repository.UpdateSpace(t.Context(), tenant, space, spaces.UpdateSpaceInput{
 			MediaPlane:        utilities.OptionalString{Set: true, Value: &legacy},
@@ -268,7 +268,7 @@ func TestTenantDefaultApprovalFollowsTheWriter(t *testing.T) {
 func TestAdoptingAStoredPlaneRechecksEverythingInTheWrite(t *testing.T) {
 	pool := settingsPool(t)
 	repository := NewSpaceRepository(sqlc.New(pool), pool)
-	own := spaces.MediaPlaneProviderChalkSFU
+	own := mediaplane.ProviderChalkSFU
 	cf := "cf_sfu"
 	setting := func(space utilities.ID) *string {
 		t.Helper()
@@ -340,7 +340,7 @@ func TestAnOlderReleaseWritingMediaPlaneWinsOverTheStoredSetting(t *testing.T) {
 	if got := setting(space); got == nil || *got != cloudflare {
 		t.Fatalf("after the older release wrote cf_sfu: setting = %v, want cf_sfu", got)
 	}
-	if read, err := repository.GetSpace(t.Context(), tenant, space); err != nil || read.MediaPlaneSetting == nil || *read.MediaPlaneSetting != spaces.MediaPlaneProviderCloudflareSFU {
+	if read, err := repository.GetSpace(t.Context(), tenant, space); err != nil || read.MediaPlaneSetting == nil || *read.MediaPlaneSetting != mediaplane.ProviderCloudflareSFU {
 		t.Fatalf("the application read = %v, %v, want cf_sfu", read.MediaPlaneSetting, err)
 	}
 	olderRelease(space, "")
@@ -349,7 +349,7 @@ func TestAnOlderReleaseWritingMediaPlaneWinsOverTheStoredSetting(t *testing.T) {
 	}
 
 	// The operator's next write is a fresh choice again.
-	chalk := spaces.MediaPlaneProviderChalkSFU
+	chalk := mediaplane.ProviderChalkSFU
 	if _, err := repository.UpdateSpace(t.Context(), tenant, space, spaces.UpdateSpaceInput{
 		MediaPlane:        utilities.OptionalString{Set: true, Value: &own},
 		MediaPlaneSetting: spaces.OptionalMediaPlaneSetting{Set: true, Value: &chalk},

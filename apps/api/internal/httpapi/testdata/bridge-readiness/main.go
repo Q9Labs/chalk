@@ -31,7 +31,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
-	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -125,11 +125,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	verifier, err := syncidentity.NewVerifier("bridge.test", "test")
+	verifier, err := spiffe.NewVerifier("bridge.test", "test")
 	if err != nil {
 		return err
 	}
-	bridge := httptest.NewUnstartedServer(httpapi.NewProviderBridgeHandler(providerbridge.NewService(repository, providerbridge.NewSFUExecutor(publications, adapter)), verifier))
+	bridge := httptest.NewUnstartedServer(httpapi.NewProviderBridgeHandler(providerbridge.NewService(repository, providerbridge.NewSFUExecutor(publications, adapter)), verifier.ForRole(spiffe.RoleSync)))
 	cert, roots, err := certificates(os.Args[1])
 	if err != nil {
 		return err

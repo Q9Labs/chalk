@@ -39,7 +39,9 @@ type Querier interface {
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
 	ClaimDueEpisodeDeadlines(ctx context.Context, arg ClaimDueEpisodeDeadlinesParams) ([]ClaimDueEpisodeDeadlinesRow, error)
 	ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error)
-	// Lock control before Episode/participant, as entry and heartbeat renewal do.
+	// Lock control before Episode/participant, as entry and heartbeat renewal do. The scan starts from
+	// the active Episodes, which are few, and checks only their seats; starting from every control row
+	// would walk every ended Episode too.
 	ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error)
 	ClaimRecordingCaptureCommand(ctx context.Context, arg ClaimRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
@@ -92,14 +94,12 @@ type Querier interface {
 	CreateMCPOAuthGrant(ctx context.Context, arg CreateMCPOAuthGrantParams) error
 	CreateMCPOAuthToken(ctx context.Context, arg CreateMCPOAuthTokenParams) error
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (CreateMembershipRow, error)
-	CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error)
 	CreateRecordingReservation(ctx context.Context, arg CreateRecordingReservationParams) (CreateRecordingReservationRow, error)
 	CreateRecordingTranscriptionSource(ctx context.Context, arg CreateRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	CreateRecordingTranscriptionSourceChunk(ctx context.Context, arg CreateRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
 	CreateRenderCommittedTranscription(ctx context.Context, arg CreateRenderCommittedTranscriptionParams) (Transcription, error)
 	CreateRequestedTranscription(ctx context.Context, arg CreateRequestedTranscriptionParams) (Transcription, error)
 	CreateSpace(ctx context.Context, arg CreateSpaceParams) (CreateSpaceRow, error)
-	CreateSpaceMember(ctx context.Context, arg CreateSpaceMemberParams) (SpaceMember, error)
 	CreateSpacePublicAdmissionRequest(ctx context.Context, arg CreateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
 	CreateSpacePublicArrival(ctx context.Context, arg CreateSpacePublicArrivalParams) (SpacePublicArrival, error)
 	CreateSpacePublicInvite(ctx context.Context, arg CreateSpacePublicInviteParams) (SpacePublicInvite, error)
@@ -115,7 +115,6 @@ type Querier interface {
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
 	DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg DecideMCPOAuthAuthorizationRequestParams) (DecideMCPOAuthAuthorizationRequestRow, error)
 	DeleteExpiredMCPOAuthGrantRows(ctx context.Context, arg DeleteExpiredMCPOAuthGrantRowsParams) error
-	DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error
 	DeleteStaleMCPOAuthRegistrations(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
@@ -212,7 +211,6 @@ type Querier interface {
 	GetRecordingTranscriptionSource(ctx context.Context, arg GetRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	GetRecordingTranscriptionSourceChunk(ctx context.Context, arg GetRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
 	GetSpaceCreateRequest(ctx context.Context, arg GetSpaceCreateRequestParams) (SpaceCreateRequest, error)
-	GetSpaceMember(ctx context.Context, arg GetSpaceMemberParams) (SpaceMember, error)
 	GetSpacePublicAdmissionRequest(ctx context.Context, arg GetSpacePublicAdmissionRequestParams) (GetSpacePublicAdmissionRequestRow, error)
 	GetSpacePublicAdmissionRequestForArrival(ctx context.Context, arg GetSpacePublicAdmissionRequestForArrivalParams) (GetSpacePublicAdmissionRequestForArrivalRow, error)
 	GetSpacePublicArrival(ctx context.Context, arrivalHandle pgtype.UUID) (SpacePublicArrival, error)
@@ -294,7 +292,6 @@ type Querier interface {
 	ListRenewableSourceGrants(ctx context.Context, arg ListRenewableSourceGrantsParams) ([]ListRenewableSourceGrantsRow, error)
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
-	ListSpaceMembers(ctx context.Context, arg ListSpaceMembersParams) ([]SpaceMember, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
@@ -375,7 +372,6 @@ type Querier interface {
 	MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkTenantExternalEpisodeEndingParams) (Episode, error)
 	MarkTranscriptionTranscribing(ctx context.Context, arg MarkTranscriptionTranscribingParams) (Transcription, error)
 	MarkTranscriptionVerifying(ctx context.Context, arg MarkTranscriptionVerifyingParams) (Transcription, error)
-	MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error)
 	// Count by the fenced journal worker, not by a fleet-row join: a lost row
 	// must not hide live work. Refuse any conflicting provider or worker binding.
 	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
@@ -447,7 +443,6 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (UpdateTenantRow, error)
 	UpdateTenantEpisode(ctx context.Context, arg UpdateTenantEpisodeParams) (Episode, error)
 	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (UpdateTenantMembershipRow, error)
-	UpdateTenantRecording(ctx context.Context, arg UpdateTenantRecordingParams) (Recording, error)
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)

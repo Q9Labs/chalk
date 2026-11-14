@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -243,7 +244,7 @@ func reconciliationTestID(t *testing.T, raw string) utilities.ID {
 	return id
 }
 
-func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source string, enabled bool) {
+func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source mediaplane.PublicationSource, enabled bool) {
 	t.Helper()
 	for _, publication := range publications {
 		if publication.ParticipantID == participantID && publication.Source == source {
@@ -360,7 +361,7 @@ func TestRetiringAMutedMicrophoneAdvancesTheCursorOnceAndStopsHoldingIt(t *testi
 				t.Fatalf("publish microphone: %v", err)
 			}
 			microphone := repository.appended.Publications[0]
-			mute := func(source, publicationID string) {
+			mute := func(source mediaplane.PublicationSource, publicationID string) {
 				t.Helper()
 				if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: source, PublicationID: publicationID, Enabled: false}); err != nil {
 					t.Fatalf("mute %s: %v", source, err)

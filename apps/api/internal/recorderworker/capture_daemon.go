@@ -14,6 +14,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/trace"
@@ -632,7 +633,7 @@ func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recor
 	defer cancel()
 	errorCode := completionFailureCode
 	var httpErr HTTPError
-	if errors.As(cause, &httpErr) && httpErr.Code == "recording.capture_stop_publication_failed" {
+	if errors.As(cause, &httpErr) && httpErr.Code == recorderprotocol.CodeCaptureStopPublicationFailed {
 		errorCode = "capture_stop_publication_failed"
 	}
 	_, reportErr := d.control.Fail(reportCtx, recordingpipeline.FailureInput{

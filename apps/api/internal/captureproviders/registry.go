@@ -33,10 +33,11 @@ type NodePlanes interface {
 // provider with one global endpoint, or Nodes for a provider that runs several,
 // where the Episode binding names the node that holds the Episode's sessions.
 type Registration struct {
-	Provider           string
-	AdapterFingerprint string
-	Plane              captureplane.CapturePlane
-	Nodes              NodePlanes
+	// Binding is the deployment binding of the provider's application
+	// (mediaplaneproviders.Registry.DeploymentBinding).
+	Binding mediaplane.Binding
+	Plane   captureplane.CapturePlane
+	Nodes   NodePlanes
 }
 
 type registered struct {
@@ -62,8 +63,8 @@ func NewRegistry(source BindingSource, registrations ...Registration) (*Registry
 
 	adapters := make(map[adapterKey]registered, len(registrations))
 	for _, registration := range registrations {
-		key := adapterKey{provider: registration.Provider, fingerprint: registration.AdapterFingerprint}
-		if err := validateAdapterKey(key); err != nil || (registration.Plane == nil) == (registration.Nodes == nil) {
+		key := adapterKey{provider: registration.Binding.Provider, fingerprint: registration.Binding.AdapterFingerprint}
+		if err := registration.Binding.Validate(); err != nil || (registration.Plane == nil) == (registration.Nodes == nil) {
 			return nil, ErrInvalidConfig
 		}
 		if _, duplicate := adapters[key]; duplicate {
@@ -117,14 +118,3 @@ func (r *Registry) Resolve(ctx context.Context, identity captureplane.CaptureIde
 func resolutionError(kind error, class captureplane.ProviderFailureClass, code string, retryable bool) error {
 	return errors.Join(kind, captureplane.ProviderError{Class: class, Code: code, Retryable: retryable})
 }
-
-func validateAdapterKey(key adapterKey) error {
-	return (mediaplane.Binding{
-		SchemaVersion:       mediaplane.BindingSchemaVersion,
-		Provider:            key.provider,
-		ConfigurationSource: mediaplane.BindingSourceDeploymentDefault,
-		AdapterFingerprint:  key.fingerprint,
-	}).Validate()
-}
-
-var _ captureplane.Resolver = (*Registry)(nil)

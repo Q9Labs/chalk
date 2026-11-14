@@ -1046,16 +1046,6 @@ type SpaceCreateRequest struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
-type SpaceMember struct {
-	ID         pgtype.UUID        `json:"id"`
-	TenantID   pgtype.UUID        `json:"tenant_id"`
-	SpaceID    pgtype.UUID        `json:"space_id"`
-	IdentityID pgtype.UUID        `json:"identity_id"`
-	RoleID     pgtype.UUID        `json:"role_id"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-}
-
 type SpacePublicAdmissionRequest struct {
 	RequestHandle      pgtype.UUID        `json:"request_handle"`
 	ArrivalHandle      pgtype.UUID        `json:"arrival_handle"`
@@ -1608,21 +1598,6 @@ type TenantOnboardingRequest struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
 	TenantAccessID     pgtype.UUID        `json:"tenant_access_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-}
-
-type TenantSigningKey struct {
-	ID                pgtype.UUID        `json:"id"`
-	TenantID          pgtype.UUID        `json:"tenant_id"`
-	KeyID             string             `json:"key_id"`
-	Algorithm         string             `json:"algorithm"`
-	PublicKeyJwk      []byte             `json:"public_key_jwk"`
-	LastUsedAt        pgtype.Timestamptz `json:"last_used_at"`
-	CreatedByApiKeyID pgtype.UUID        `json:"created_by_api_key_id"`
-	CreatedByUserID   pgtype.UUID        `json:"created_by_user_id"`
-	RevokedAt         pgtype.Timestamptz `json:"revoked_at"`
-	ExpiresAt         pgtype.Timestamptz `json:"expires_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type TranscriptChunk struct {

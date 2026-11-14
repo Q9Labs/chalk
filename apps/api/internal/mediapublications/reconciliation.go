@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/attribute"
@@ -47,7 +48,7 @@ type publicationCandidateKey struct {
 	tenantID      string
 	episodeID     string
 	participantID string
-	source        string
+	source        mediaplane.PublicationSource
 	publicationID string
 }
 

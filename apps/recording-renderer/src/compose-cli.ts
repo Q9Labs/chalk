@@ -63,13 +63,13 @@ async function main(): Promise<void> {
         overlayListFor(segment, (sceneKey) => overlays.get(sceneKey)!, output.fps),
         { mode: 0o600 },
       );
-      await runFFmpeg(args.ffmpegPath, segmentArgs(segment, sources, listPath, segmentPath, output), `segment ${index}`);
+      await runTool(args.ffmpegPath, segmentArgs(segment, sources, listPath, segmentPath, output), `ffmpeg segment ${index}`);
       segmentPaths.push(segmentPath);
     }
 
     const segmentListPath = join(workDirectory, "segments.ffconcat");
     await writeFile(segmentListPath, segmentListFor(segmentPaths), { mode: 0o600 });
-    await runFFmpeg(args.ffmpegPath, muxArgs(segmentListPath, inputs.mixPath, args.outputPath, frameCount, output), "mux");
+    await runTool(args.ffmpegPath, muxArgs(segmentListPath, inputs.mixPath, args.outputPath, frameCount, output), "ffmpeg mux");
 
     const result: ComposeResultV1 = {
       schema_version: COMPOSE_RESULT_VERSION,
@@ -160,14 +160,14 @@ async function prepareSeekableSource(
   // A fixed-size dense encode would discard changing aspect ratios/detail;
   // yuv420p x264 also rejects odd dimensions. Compose these frames directly.
   if (!keepRecordedFrames && (frozenSeek || needsDenseKeyframes(keyframes, starts, duration))) {
-    await runFFmpeg(ffmpegPath, denseKeyframeArgs(path, densePath, output, frozenSeek ? duration : undefined), `dense keyframes ${source.sourceId}`);
+    await runTool(ffmpegPath, denseKeyframeArgs(path, densePath, output, frozenSeek ? duration : undefined), `ffmpeg dense keyframes ${source.sourceId}`);
     return { source: { path: densePath, startMs: source.startMs, changingSize }, densified: true };
   }
   return { source: { path, startMs: source.startMs, changingSize }, densified: false };
 }
 
 async function probeSourceFrames(ffmpegPath: string, path: string) {
-  const pictures = (await runProbe(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path)))
+  const pictures = (await runTool(ffprobePathFor(ffmpegPath), keyframeProbeArgs(path), "ffprobe"))
     .split("\n")
     .map((line) => line.split(","))
     .filter((fields) => Number.isFinite(Number.parseFloat(fields[0] ?? "")));
@@ -185,15 +185,6 @@ function ffprobePathFor(ffmpegPath: string): string {
   return basename(ffmpegPath) === ffmpegPath ? "ffprobe" : join(dirname(ffmpegPath), "ffprobe");
 }
 
-async function runFFmpeg(ffmpegPath: string, args: readonly string[], label: string): Promise<void> {
-  await runTool(ffmpegPath, args, `ffmpeg ${label}`);
-}
-
-async function runProbe(ffprobePath: string, args: readonly string[]): Promise<string> {
-  return runTool(ffprobePath, args, "ffprobe");
-}
-
-/** Runs a media tool, tracked so a stopped compositor kills it, and returns its stdout. */
 async function runTool(path: string, args: readonly string[], label: string): Promise<string> {
   const child = spawn(path, args, { stdio: ["ignore", "pipe", "pipe"] });
   running.add(child);

@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/adapters/recorderbootprobe"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean/bootprobe"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 }
 
 func run() error {
-	var input recorderbootprobe.Input
+	var input bootprobe.Input
 	decoder := json.NewDecoder(io.LimitReader(os.Stdin, 2<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
@@ -27,7 +27,7 @@ func run() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	result, err := recorderbootprobe.Run(ctx, input, os.Getenv("DIGITALOCEAN_TOKEN"))
+	result, err := bootprobe.Run(ctx, input, os.Getenv("DIGITALOCEAN_TOKEN"))
 	if err != nil {
 		return err
 	}

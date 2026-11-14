@@ -21,6 +21,13 @@ export interface SpeechBatch {
 
 /** Renderer contract: native FLAC, 16 kHz mono. Validate STREAMINFO before allocating PCM. */
 export async function prepareSpeechAudio(audio: Uint8Array, maxSeconds: number): Promise<{ batches: SpeechBatch[]; durationMs: number }> {
+  const samples = declaredSamples(audio, maxSeconds);
+  const pcm = await decodePcm(audio, samples);
+  return { batches: speechBatches(pcm), durationMs: Math.round((samples / RATE) * 1000) };
+}
+
+/** Reads the sample count from STREAMINFO and proves the stream is 16 kHz mono within the length bound. */
+function declaredSamples(audio: Uint8Array, maxSeconds: number): number {
   const header = Buffer.from(audio.buffer, audio.byteOffset, Math.min(audio.byteLength, 42));
   if (header.length < 42 || header.toString("ascii", 0, 4) !== "fLaC" || (header[4]! & 127) !== 0 || header.readUIntBE(5, 3) !== 34) throw providerSchemaError("invalid FLAC source", "audio", "renderer FLAC STREAMINFO", undefined);
   const stream = header.readBigUInt64BE(18);
@@ -28,6 +35,10 @@ export async function prepareSpeechAudio(audio: Uint8Array, maxSeconds: number):
   const channels = Number((stream >> 41n) & 7n) + 1;
   const samples = Number(stream & 0xfffffffffn);
   if (rate !== RATE || channels !== 1 || samples < 1 || samples > maxSeconds * RATE) throw providerSchemaError("FLAC source exceeded PCM bounds", "audio", "bounded 16 kHz mono FLAC", undefined);
+  return samples;
+}
+
+async function decodePcm(audio: Uint8Array, samples: number): Promise<Float32Array> {
   const decoder = new FLACDecoder();
   try {
     await decoder.ready;
@@ -36,7 +47,7 @@ export async function prepareSpeechAudio(audio: Uint8Array, maxSeconds: number):
     const decoded = await decoder.decodeFile(Buffer.concat([audio, Buffer.alloc(32)]));
     const pcm = decoded.channelData[0];
     if (decoded.errors.length || decoded.sampleRate !== RATE || decoded.channelData.length !== 1 || decoded.samplesDecoded !== samples || !pcm || pcm.length !== samples) throw providerSchemaError("FLAC decoding failed", "audio", "complete renderer PCM", undefined);
-    return { batches: speechBatches(pcm), durationMs: Math.round((samples / RATE) * 1000) };
+    return pcm;
   } finally {
     decoder.free();
   }

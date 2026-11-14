@@ -1,13 +1,11 @@
 import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
 import { installNativeSession } from "@q9labsai/chalk-react-native/client";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
-import { ChalkUI, useDeviceLayout, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
-import { space } from "@q9labsai/chalk-react-native";
+import { ChalkUI, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { PrivacyNotice } from "./src/privacy/PrivacyNotice";
 import { Splash } from "./src/brand/Splash";
 import { CallScreen } from "./src/call/CallScreen";
 import { useClipboardOffer } from "./src/home/ClipboardCard";
@@ -17,7 +15,7 @@ import { JoiningScreen, type JoinTarget } from "./src/join/JoiningScreen";
 import type { ArrivedCall } from "./src/lib/arrived-call";
 import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
-import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spaces";
+import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/space-link";
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
 import { loadDisplayName, saveDisplayName } from "./src/screens/display-name-store";
 
@@ -91,13 +89,9 @@ type ShellProps = {
 };
 
 function Shell(props: ShellProps): React.JSX.Element {
-  const { insets } = useDeviceLayout();
   const { colors } = useTheme();
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <View style={{ paddingLeft: space[4] + insets.left, paddingRight: space[4] + insets.right }}>
-        <PrivacyNotice topInset={insets.top} />
-      </View>
       <SafeAreaProvider>
         <ShellContent {...props} />
       </SafeAreaProvider>
@@ -119,26 +113,8 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
     [onNameChange, reportError],
   );
 
-  // App links and chalk:// links open straight into joining.
-  useEffect(() => {
-    const subscription = Linking.addEventListener("url", ({ url }) => {
-      void routeMobileLink(url)
-        .then((route) => {
-          if (route) join({ kind: "link", route });
-        })
-        .catch(reportError("open-link"));
-    });
-    return () => subscription.remove();
-  }, [join, reportError]);
-
-  useEffect(() => {
-    if (!diagnosticsEnabled) return;
-    const route = step.kind === "call" ? step.call.route : step.kind !== "home" && step.target.kind === "link" ? step.target.route : null;
-    recordDevDiagnosticsLifecycleEvent("navigation", `App step: ${step.kind}`, route ? `Space: ${route.space}` : undefined);
-    setDevDiagnosticsEnvironment({ apiBaseURL, buildProfile, routeKind: step.kind === "home" ? "home" : "space", routeSource: route?.source ?? null, routeSpaceId: route?.space ?? null });
-    setDevDiagnosticsDevice(getDeviceInfo());
-    if (step.kind === "home") setDevDiagnosticsConnection(null);
-  }, [apiBaseURL, buildProfile, diagnosticsEnabled, step]);
+  useJoinOnLink(join, reportError);
+  useStepDiagnostics(step, { apiBaseURL, buildProfile, diagnosticsEnabled });
 
   const joinFailed = useCallback(
     (cause: unknown) => {
@@ -174,6 +150,31 @@ function ShellContent({ apiBaseURL, buildProfile, diagnosticsEnabled, name, onNa
     case "call":
       return <CallScreen apiBaseURL={apiBaseURL} call={step.call} onClose={goHome} onError={reportError("leave")} onRejoin={() => join({ kind: "link", route: step.call.route })} onRemember={recentCalls.remember} preferences={preferences} />;
   }
+}
+
+/** App links and chalk:// links open straight into joining. */
+function useJoinOnLink(join: (target: JoinTarget) => void, reportError: ShellProps["reportError"]): void {
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      void routeMobileLink(url)
+        .then((route) => {
+          if (route) join({ kind: "link", route });
+        })
+        .catch(reportError("open-link"));
+    });
+    return () => subscription.remove();
+  }, [join, reportError]);
+}
+
+function useStepDiagnostics(step: Step, { apiBaseURL, buildProfile, diagnosticsEnabled }: Pick<ShellProps, "apiBaseURL" | "buildProfile" | "diagnosticsEnabled">): void {
+  useEffect(() => {
+    if (!diagnosticsEnabled) return;
+    const route = step.kind === "call" ? step.call.route : step.kind !== "home" && step.target.kind === "link" ? step.target.route : null;
+    recordDevDiagnosticsLifecycleEvent("navigation", `App step: ${step.kind}`, route ? `Space: ${route.space}` : undefined);
+    setDevDiagnosticsEnvironment({ apiBaseURL, buildProfile, routeKind: step.kind === "home" ? "home" : "space", routeSource: route?.source ?? null, routeSpaceId: route?.space ?? null });
+    setDevDiagnosticsDevice(getDeviceInfo());
+    if (step.kind === "home") setDevDiagnosticsConnection(null);
+  }, [apiBaseURL, buildProfile, diagnosticsEnabled, step]);
 }
 
 /** Home watches the clipboard only while it shows, so a call never reads it. */

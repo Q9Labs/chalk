@@ -21,7 +21,7 @@ _recorder_spec = importlib.util.spec_from_file_location("recorder_archive_releas
 recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
 from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
-from github_release import GitHub, payload
+from github_release import GitHub, payload, retain, retained
 
 INPUTS = {
     'capture': ('apps/api/', 'features/media/sfu/protocol/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
@@ -96,7 +96,7 @@ def baseline(args):
     records = GitHub().deployments('nightly', 'media-current')
     if records:
         saved = payload(records[0])
-        data = base64.b64decode(saved['media_base64'], validate=True)
+        data = retained(saved, 'media')
         require(digest(data) == saved['media_sha256'], 'current media checksum mismatch')
         previous = validate_members(json.loads(data))
         if 'recorder_source_bucket' in previous:
@@ -115,7 +115,7 @@ def record_current(args):
     receipts = [json.loads((args.directory / (role + '-receipt.json')).read_text()) for role in ('capture', 'render')]
     require(all(item['result'] == 'PASS' and item['fleet_equivalent_signed_boot'] and item['cleanup_confirmed'] for item in receipts), 'current media requires successful signed boot and cleanup')
     GitHub().request('deployments', dict(ref=os.environ['TARGET_SHA'], environment='nightly', task='media-current', auto_merge=False,
-                     required_contexts=[], payload=dict(channel='media-current', media_sha256=digest(data), media_base64=base64.b64encode(data).decode())))
+                     required_contexts=[], payload=retain(dict(channel='media-current', media_sha256=digest(data)), 'media', data)))
 
 
 def build_archives(args):
@@ -435,6 +435,10 @@ def reconcile_nightly_address(provider, config):
     raise RuntimeError('nightly recorder address association did not converge; cold boot refused')
 
 
+# The fleet's archive CDN settings; the boot check gets them too, so it downloads through CloudFront and not S3 (0.12 USD a GB).
+ARCHIVE_CDN_KEYS = ('CHALK_RECORDER_FLEET_ARCHIVE_CDN_URL', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_KEY_PAIR_ID', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64')
+
+
 def qualify(args):
     provider, config = settings(args)
     media = validate_members(json.loads(args.output.read_text()))
@@ -452,7 +456,7 @@ def qualify(args):
             path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
             private_json(path, request)
             checks.append(subprocess.Popen([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)],
-                           env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
+                           env={**os.environ, **{key: values[key] for key in ARCHIVE_CDN_KEYS if key in values}, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
                                 'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter}))
     finally:
         # A setup error on one role must not orphan the other role's droplet; the original error still propagates.

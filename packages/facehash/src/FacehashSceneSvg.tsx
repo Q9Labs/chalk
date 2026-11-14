@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { ensureBlinkKeyframes, getBlinkStyle } from "./blink.js";
 import type { FacehashScene, Variant } from "./core/index.js";
+import { faceBoxTransform } from "./scene-svg.js";
 
 type FacehashSceneSvgProps = {
   backgroundColor: string;
@@ -15,16 +16,12 @@ type FacehashSceneSvgProps = {
   withAnimatedProjection?: boolean;
 };
 
-function sanitizeId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
-}
-
 export function FacehashSceneSvg({ backgroundColor, enableBlink = false, height = "100%", idPrefix, scene, showInitial, style, variant, width = "100%", withAnimatedProjection = false }: FacehashSceneSvgProps): React.JSX.Element {
   if (enableBlink) {
     ensureBlinkKeyframes();
   }
 
-  const gradientId = `${sanitizeId(idPrefix)}-gradient`;
+  const gradientId = `${idPrefix}-gradient`;
   const projectionStyle = withAnimatedProjection
     ? {
         transformBox: "view-box" as const,
@@ -60,7 +57,7 @@ export function FacehashSceneSvg({ backgroundColor, enableBlink = false, height 
       {variant === "gradient" ? <rect fill={`url(#${gradientId})`} height="100" width="100" x="0" y="0" /> : null}
 
       <g style={projectionStyle} transform={scene.projection.svgTransform}>
-        <g transform={`translate(${scene.faceBox.x} ${scene.faceBox.y}) scale(${scene.faceBox.width / scene.faceGeometry.viewBox.width} ${scene.faceBox.height / scene.faceGeometry.viewBox.height})`}>
+        <g transform={faceBoxTransform(scene)}>
           <g style={getBlinkStyle(enableBlink, scene.data.blinkTimings.left)}>
             {scene.faceGeometry.leftEyePaths.map((path) => (
               <path d={path} fill="currentColor" key={path} />

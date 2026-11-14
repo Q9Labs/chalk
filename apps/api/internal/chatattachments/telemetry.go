@@ -89,43 +89,41 @@ func (t *requestTelemetry) start(
 	}
 }
 
+type requestOutcome struct {
+	cause   error
+	outcome string
+	reason  string
+}
+
+// requestOutcomes maps an error to its bounded outcome and reason. The first match wins.
+var requestOutcomes = []requestOutcome{
+	{ErrInvalidInput, "rejected", "invalid_input"},
+	{ErrPermissionDenied, "rejected", "permission_denied"},
+	{ErrClientAttachmentIDConflict, "rejected", "client_id_conflict"},
+	{ErrQuotaExceeded, "rejected", "quota_exceeded"},
+	{ErrUploadNotFound, "rejected", "upload_not_found"},
+	{ErrUploadExpired, "rejected", "upload_expired"},
+	{ErrUploadNotReady, "rejected", "upload_in_progress"},
+	{ErrAttachmentNotFound, "rejected", "attachment_not_found"},
+	{ErrFileTransferFailed, "failed", "transfer_failed"},
+	{objectstorage.ErrObjectNotFound, "failed", "object_missing"},
+	{objectstorage.ErrObjectAlreadyExists, "failed", "object_conflict"},
+	{objectstorage.ErrStoreUnavailable, "failed", "storage_unavailable"},
+	{objectstorage.ErrProviderFailed, "failed", "storage_failed"},
+	{context.Canceled, "failed", "request_canceled"},
+	{context.DeadlineExceeded, "failed", "request_deadline"},
+}
+
 func requestResult(err error) (string, string) {
-	switch {
-	case err == nil:
+	if err == nil {
 		return "succeeded", "none"
-	case errors.Is(err, ErrInvalidInput):
-		return "rejected", "invalid_input"
-	case errors.Is(err, ErrPermissionDenied):
-		return "rejected", "permission_denied"
-	case errors.Is(err, ErrClientAttachmentIDConflict):
-		return "rejected", "client_id_conflict"
-	case errors.Is(err, ErrQuotaExceeded):
-		return "rejected", "quota_exceeded"
-	case errors.Is(err, ErrUploadNotFound):
-		return "rejected", "upload_not_found"
-	case errors.Is(err, ErrUploadExpired):
-		return "rejected", "upload_expired"
-	case errors.Is(err, ErrUploadNotReady):
-		return "rejected", "upload_in_progress"
-	case errors.Is(err, ErrAttachmentNotFound):
-		return "rejected", "attachment_not_found"
-	case errors.Is(err, ErrFileTransferFailed):
-		return "failed", "transfer_failed"
-	case errors.Is(err, objectstorage.ErrObjectNotFound):
-		return "failed", "object_missing"
-	case errors.Is(err, objectstorage.ErrObjectAlreadyExists):
-		return "failed", "object_conflict"
-	case errors.Is(err, objectstorage.ErrStoreUnavailable):
-		return "failed", "storage_unavailable"
-	case errors.Is(err, objectstorage.ErrProviderFailed):
-		return "failed", "storage_failed"
-	case errors.Is(err, context.Canceled):
-		return "failed", "request_canceled"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "failed", "request_deadline"
-	default:
-		return "failed", "internal_error"
 	}
+	for _, entry := range requestOutcomes {
+		if errors.Is(err, entry.cause) {
+			return entry.outcome, entry.reason
+		}
+	}
+	return "failed", "internal_error"
 }
 
 func requestLogLevel(outcome string) slog.Level {

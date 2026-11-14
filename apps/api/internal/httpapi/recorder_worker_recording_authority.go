@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -33,110 +34,14 @@ type RecorderRecordingObjectService interface {
 	Commit(context.Context, recordingobjects.CommitInput) (recordingobjects.Bundle, error)
 }
 
-type recorderRecordingAuthorityBody struct {
-	TenantID          string `json:"tenant_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseOwner        string `json:"lease_owner"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-}
-
-type recorderRecordingKeyAccessBody struct {
-	recorderRecordingAuthorityBody
-	KeyHandle string `json:"key_handle"`
-}
-
-type recorderRecordingObjectAuthorityBody struct {
-	recorderRecordingAuthorityBody
-	ObjectHandle string `json:"object_handle"`
-}
-
-type recorderRecordingObjectReserveBody struct {
-	recorderRecordingObjectAuthorityBody
-	ReservationRequestID    string `json:"reservation_request_id"`
-	EncryptionContextDigest string `json:"encryption_context_digest"`
-}
-
-type recorderRecordingObjectFinalizeBody struct {
-	recorderRecordingObjectAuthorityBody
-	AllocationID         string  `json:"allocation_id"`
-	ByteSize             int64   `json:"byte_size"`
-	ChecksumSHA256       string  `json:"checksum_sha256"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-}
-
-type recorderRecordingObjectCommitBody struct {
-	recorderRecordingObjectAuthorityBody
-	AllocationID         string `json:"allocation_id"`
-	UploadToken          string `json:"upload_token"`
-	ManifestDigest       string `json:"manifest_digest"`
-	MonotonicStartMillis int64  `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64  `json:"monotonic_end_millis"`
-	MediaStartMillis     int64  `json:"media_start_millis"`
-	MediaEndMillis       int64  `json:"media_end_millis"`
-}
-
-type recorderRecordingKeyAccessResponse struct {
-	KeyHandle        string `json:"key_handle"`
-	Plaintext        string `json:"plaintext"`
-	CiphertextDigest string `json:"ciphertext_digest"`
-	ContextDigest    string `json:"context_digest"`
-	CaptureEpoch     int64  `json:"capture_epoch"`
-}
-
-type recorderRecordingObjectReserveResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	SequenceNumber    int64  `json:"sequence_number"`
-	AllocationVersion int64  `json:"allocation_version"`
-}
-
-type recorderSignedUploadResponse struct {
-	Method        string              `json:"method"`
-	URL           string              `json:"url"`
-	ExpiresAt     string              `json:"expires_at"`
-	SignedHeaders map[string][]string `json:"signed_headers"`
-}
-
-type recorderRecordingObjectFinalizeResponse struct {
-	AllocationID string                       `json:"allocation_id"`
-	UploadToken  string                       `json:"upload_token"`
-	Upload       recorderSignedUploadResponse `json:"upload"`
-	ExpiresAt    string                       `json:"expires_at"`
-}
-
-type recorderRecordingObjectCommitResponse struct {
-	AllocationID      string `json:"allocation_id"`
-	ObjectKey         string `json:"object_key"`
-	SequenceNumber    int64  `json:"sequence_number"`
-	AllocationVersion int64  `json:"allocation_version"`
-	ObjectVersion     string `json:"object_version"`
-	ObjectETag        string `json:"object_etag"`
-	ObjectChecksum    string `json:"object_checksum_sha256"`
-	ManifestDigest    string `json:"manifest_digest"`
-	CommittedAt       string `json:"committed_at"`
-}
-
 func mountRecorderRecordingAuthorityRoutes(r chi.Router, keys RecorderRecordingKeyService, objects RecorderRecordingObjectService) {
 	if keys != nil {
-		r.Post("/keys/access", recorderRecordingKeyAccessHandler(keys))
+		r.Post(string(recorderprotocol.RouteKeysAccess), recorderRecordingKeyAccessHandler(keys))
 	}
 	if objects != nil {
-		r.Post("/bundles/reserve", recorderRecordingObjectReserveHandler(objects))
-		r.Post("/bundles/finalize", recorderRecordingObjectFinalizeHandler(objects))
-		r.Post("/bundles/commit", recorderRecordingObjectCommitHandler(objects))
+		r.Post(string(recorderprotocol.RouteBundlesReserve), recorderRecordingObjectReserveHandler(objects))
+		r.Post(string(recorderprotocol.RouteBundlesFinalize), recorderRecordingObjectFinalizeHandler(objects))
+		r.Post(string(recorderprotocol.RouteBundlesCommit), recorderRecordingObjectCommitHandler(objects))
 	}
 }
 
@@ -148,7 +53,7 @@ func recorderRecordingKeyAccessHandler(service RecorderRecordingKeyService) http
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRecordingKeyAccessBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RecordingKeyAccessRequest](w, request)
 		if !ok {
 			return
 		}
@@ -163,7 +68,7 @@ func recorderRecordingKeyAccessHandler(service RecorderRecordingKeyService) http
 			return
 		}
 		defer recordingkeys.ClearPlaintext(key.Plaintext)
-		writeJSON(w, http.StatusOK, recorderRecordingKeyAccessResponse{
+		writeJSON(w, http.StatusOK, recorderprotocol.RecordingKeyAccessResponse{
 			KeyHandle: key.KeyHandle, Plaintext: base64.StdEncoding.EncodeToString(key.Plaintext),
 			CiphertextDigest: hex.EncodeToString(key.CiphertextDigest), ContextDigest: hex.EncodeToString(key.ContextDigest), CaptureEpoch: key.CaptureEpoch,
 		})
@@ -176,11 +81,11 @@ func recorderRecordingObjectReserveHandler(service RecorderRecordingObjectServic
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRecordingObjectReserveBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RecordingObjectReserveRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingObjectAuthority(identity, body.recorderRecordingObjectAuthorityBody)
+		authority, valid := recordingObjectAuthority(identity, body.RecordingObjectAuthority)
 		digest, digestErr := decodeSHA256Hex(body.EncryptionContextDigest)
 		if !valid || digestErr != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording object reservation")
@@ -191,7 +96,7 @@ func recorderRecordingObjectReserveHandler(service RecorderRecordingObjectServic
 			writeRecorderRecordingAuthorityError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderRecordingObjectReserveResponse{AllocationID: allocation.ID, ObjectKey: allocation.ObjectKey, SequenceNumber: allocation.SequenceNumber, AllocationVersion: allocation.AllocationVersion})
+		writeJSON(w, http.StatusOK, recorderprotocol.RecordingObjectReserveResponse{AllocationID: allocation.ID, ObjectKey: allocation.ObjectKey, SequenceNumber: allocation.SequenceNumber, AllocationVersion: allocation.AllocationVersion})
 	}
 }
 
@@ -201,11 +106,11 @@ func recorderRecordingObjectFinalizeHandler(service RecorderRecordingObjectServi
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRecordingObjectFinalizeBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RecordingObjectFinalizeRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingObjectAuthority(identity, body.recorderRecordingObjectAuthorityBody)
+		authority, valid := recordingObjectAuthority(identity, body.RecordingObjectAuthority)
 		checksum, checksumErr := decodeSHA256Hex(body.ChecksumSHA256)
 		if !valid || checksumErr != nil || (strings.TrimSpace(body.ContentType) != recordingBundleContentType && strings.TrimSpace(body.ContentType) != legacyRecordingBundleContentType) {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording object finalization")
@@ -220,9 +125,9 @@ func recorderRecordingObjectFinalizeHandler(service RecorderRecordingObjectServi
 			writeRecorderRecordingAuthorityError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderRecordingObjectFinalizeResponse{
+		writeJSON(w, http.StatusOK, recorderprotocol.RecordingObjectFinalizeResponse{
 			AllocationID: result.AllocationID, UploadToken: result.UploadToken, ExpiresAt: utilities.FormatTimestamp(result.ExpiresAt),
-			Upload: recorderSignedUploadResponse{Method: result.UploadURL.Method, URL: result.UploadURL.URL, ExpiresAt: utilities.FormatTimestamp(result.UploadURL.ExpiresAt), SignedHeaders: cloneSignedHeaders(result.UploadURL)},
+			Upload: recorderprotocol.SignedUploadResponse{Method: result.UploadURL.Method, URL: result.UploadURL.URL, ExpiresAt: utilities.FormatTimestamp(result.UploadURL.ExpiresAt), SignedHeaders: cloneSignedHeaders(result.UploadURL)},
 		})
 	}
 }
@@ -233,11 +138,11 @@ func recorderRecordingObjectCommitHandler(service RecorderRecordingObjectService
 		if !ok {
 			return
 		}
-		body, ok := decodeRecorderWorkerBody[recorderRecordingObjectCommitBody](w, request)
+		body, ok := decodeRecorderWorkerBody[recorderprotocol.RecordingObjectCommitRequest](w, request)
 		if !ok {
 			return
 		}
-		authority, valid := recordingObjectAuthority(identity, body.recorderRecordingObjectAuthorityBody)
+		authority, valid := recordingObjectAuthority(identity, body.RecordingObjectAuthority)
 		manifestDigest, digestErr := decodeSHA256Hex(body.ManifestDigest)
 		if !valid || digestErr != nil {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording object commit")
@@ -252,7 +157,7 @@ func recorderRecordingObjectCommitHandler(service RecorderRecordingObjectService
 			writeRecorderRecordingAuthorityError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderRecordingObjectCommitResponse{
+		writeJSON(w, http.StatusOK, recorderprotocol.RecordingObjectCommitResponse{
 			AllocationID: bundle.ID, ObjectKey: bundle.ObjectKey, SequenceNumber: bundle.SequenceNumber,
 			AllocationVersion: bundle.AllocationVersion, ObjectVersion: bundle.ObjectVersion, ObjectETag: bundle.ObjectETag,
 			ObjectChecksum: hex.EncodeToString(bundle.ObjectChecksumSHA256), ManifestDigest: hex.EncodeToString(bundle.ManifestDigest), CommittedAt: utilities.FormatTimestamp(bundle.CommittedAt),
@@ -266,14 +171,14 @@ func recorderCaptureIdentity(w http.ResponseWriter, request *http.Request) (work
 		return workeridentity.Identity{}, false
 	}
 	if identity.Role != workeridentity.RoleCapture {
-		writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may access recording authority")
+		writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Only capture workers may access recording authority")
 		return workeridentity.Identity{}, false
 	}
 	return identity, true
 }
 
-func recordingKeyAuthority(identity workeridentity.Identity, body recorderRecordingKeyAccessBody) (recordingkeys.Authority, bool) {
-	base, ok := parseRecorderRecordingAuthority(identity, body.recorderRecordingAuthorityBody)
+func recordingKeyAuthority(identity workeridentity.Identity, body recorderprotocol.RecordingKeyAccessRequest) (recordingkeys.Authority, bool) {
+	base, ok := parseRecorderRecordingAuthority(identity, body.RecordingAuthority)
 	keyHandle, keyErr := utilities.ParseID(body.KeyHandle)
 	if !ok || keyErr != nil {
 		return recordingkeys.Authority{}, false
@@ -281,8 +186,8 @@ func recordingKeyAuthority(identity workeridentity.Identity, body recorderRecord
 	return recordingkeys.Authority{TenantID: base.tenantID, EpisodeID: base.episodeID, RecordingID: base.recordingID, JobID: base.jobID, KeyHandle: keyHandle.String(), AttemptCount: base.attemptCount, FencingGeneration: base.fencingGeneration, CaptureEpoch: base.captureEpoch, EnvelopeDigest: base.envelopeDigest, LeaseToken: base.leaseToken, LeaseOwner: base.leaseOwner, LeaseExpiresAt: base.leaseExpiresAt}, true
 }
 
-func recordingObjectAuthority(identity workeridentity.Identity, body recorderRecordingObjectAuthorityBody) (recordingobjects.Authority, bool) {
-	base, ok := parseRecorderRecordingAuthority(identity, body.recorderRecordingAuthorityBody)
+func recordingObjectAuthority(identity workeridentity.Identity, body recorderprotocol.RecordingObjectAuthority) (recordingobjects.Authority, bool) {
+	base, ok := parseRecorderRecordingAuthority(identity, body.RecordingAuthority)
 	objectHandle, objectErr := utilities.ParseID(body.ObjectHandle)
 	if !ok || objectErr != nil {
 		return recordingobjects.Authority{}, false
@@ -299,7 +204,7 @@ type parsedRecorderRecordingAuthority struct {
 	leaseExpiresAt                          time.Time
 }
 
-func parseRecorderRecordingAuthority(identity workeridentity.Identity, body recorderRecordingAuthorityBody) (parsedRecorderRecordingAuthority, bool) {
+func parseRecorderRecordingAuthority(identity workeridentity.Identity, body recorderprotocol.RecordingAuthority) (parsedRecorderRecordingAuthority, bool) {
 	tenantID, tenantErr := utilities.ParseID(body.TenantID)
 	episodeID, episodeErr := utilities.ParseID(body.EpisodeID)
 	recordingID, recordingErr := utilities.ParseID(body.RecordingID)

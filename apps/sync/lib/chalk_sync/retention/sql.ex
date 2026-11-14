@@ -120,6 +120,7 @@ defmodule ChalkSync.Retention.SQL do
               candidate_messages.last_sequence - candidate_messages.first_sequence + 1
         )
       )
+      and control.episode_id <> all($4::uuid[])
     order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
     for update of control skip locked

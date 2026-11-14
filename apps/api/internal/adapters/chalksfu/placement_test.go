@@ -208,15 +208,15 @@ type placements struct{ got []string }
 
 func (p *placements) RecordResolution(context.Context, providercontracts.Resolution) {}
 
-func (p *placements) RecordPlacement(_ context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
-	p.got = append(p.got, string(provider)+"/"+string(reason))
+func (p *placements) RecordPlacement(_ context.Context, provider mediaplane.Provider, reason mediaplane.PlacementReason) {
+	p.got = append(p.got, provider.SettingName()+"/"+string(reason))
 }
 
 var withCloudflare = runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
 
 func registryOn(fleet *chalksfu.Fleet, process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding, telemetry providercontracts.Telemetry) mediaplaneproviders.Registry {
 	return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-		ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Telemetry: telemetry, ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
+		ProcessConfig: process, DefaultProvider: mediaplane.ProviderCloudflareSFU, Telemetry: telemetry, ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace}, Episodes: episodeBindings{live},
 	})
 }
 
@@ -232,7 +232,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	telemetry := &placements{}
 	registry := registryOn(fleet, withCloudflare, nil, telemetry)
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 	resolve := func() mediaplane.Binding {
 		t.Helper()
@@ -247,13 +247,13 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	}
 
 	// Before the first probe round no node is verified, so the Episode is not bound to one.
-	if before := resolve(); before.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || before.Node != "" || before.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
+	if before := resolve(); before.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || before.Node != "" || before.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
 		t.Fatalf("before a probe: %+v, want Cloudflare overflow_node_unavailable", before)
 	}
 
 	fleet.Probe(ctx)
 	onPrimary := resolve()
-	if onPrimary.Provider != string(spaces.MediaPlaneProviderChalkSFU) || onPrimary.Node != "sfu-primary" || onPrimary.PlacementReason != mediaplane.PlacementPrimary || onPrimary.NodeIncarnation == "" {
+	if onPrimary.Provider != mediaplane.ProviderChalkSFU.SettingName() || onPrimary.Node != "sfu-primary" || onPrimary.PlacementReason != mediaplane.PlacementPrimary || onPrimary.NodeIncarnation == "" {
 		t.Fatalf("pool with room: %+v, want the primary with its incarnation", onPrimary)
 	}
 
@@ -275,7 +275,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, second), scopeOf("ep-2", "bob"))
 	fleet.Probe(ctx)
 	full := resolve()
-	if full.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || full.Node != "" || full.NodeIncarnation != "" || full.PlacementReason != mediaplane.PlacementOverflowNoRoom {
+	if full.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || full.Node != "" || full.NodeIncarnation != "" || full.PlacementReason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("both nodes full: %+v, want Cloudflare overflow_no_room", full)
 	}
 
@@ -284,7 +284,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	stranger.Probe(ctx)
 	unavailable := registryOn(stranger, withCloudflare, nil, telemetry)
 	down, err := unavailable.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || down.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || down.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
+	if err != nil || down.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || down.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
 		t.Fatalf("no node answers: %+v, %v, want Cloudflare overflow_node_unavailable", down, err)
 	}
 
@@ -303,7 +303,7 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	draining := startSFUUnder(t, ca, nil)
 	full := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-draining", ControlURL: draining.controlURL}, {ID: "sfu-full", ControlURL: full.controlURL}}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	reply, err := draining.httpClient(t, ca, clientIdentity).Post(draining.controlURL+"/v1/drain", "application/json", nil)
@@ -316,7 +316,7 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	overflowOn.Probe(ctx)
 	telemetry := &placements{}
 	moved, err := registryOn(overflowOn, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || moved.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || moved.Node != "" || moved.PlacementReason != mediaplane.PlacementOverflowDraining {
+	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.Node != "" || moved.PlacementReason != mediaplane.PlacementOverflowDraining {
 		t.Fatalf("draining pool, overflow on: %+v, %v, want Cloudflare overflow_draining", moved, err)
 	}
 
@@ -367,14 +367,14 @@ func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
 	guarded.StartTLS()
 	t.Cleanup(guarded.Close)
 	guardedNode := runtimeconfig.ChalkSFUNode{ID: "sfu-guarded", ControlURL: guarded.URL}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	alone := real.fleetWithOverflow(t, ca, clientIdentity, true, guardedNode)
 	alone.Probe(ctx)
 	telemetry := &placements{}
 	moved, err := registryOn(alone, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || moved.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || moved.PlacementReason != mediaplane.PlacementOverflowHostGuard {
+	if err != nil || moved.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || moved.PlacementReason != mediaplane.PlacementOverflowHostGuard {
 		t.Fatalf("guarded pool, overflow on: %+v, %v, want Cloudflare overflow_host_guard", moved, err)
 	}
 	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, guardedNode)
@@ -411,7 +411,7 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-a", ControlURL: box.controlURL}}
 	fleet := box.fleetWithOverflow(t, ca, clientIdentity, false, nodes...)
 	telemetry := &placements{}
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	ctx := context.Background()
 
 	fleet.Probe(ctx)

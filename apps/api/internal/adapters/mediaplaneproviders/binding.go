@@ -23,17 +23,17 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 	if err != nil {
 		return nil, err
 	}
-	var pin spaces.MediaPlaneProvider
-	if selected == spaces.MediaPlaneProviderChalkSFU {
+	var pin mediaplane.Provider
+	if selected == mediaplane.ProviderChalkSFU {
 		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
 			return nil, err
 		}
-		admits, err := r.admitsNewChalkSFUEpisode(ctx, space)
+		admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
 		if err != nil {
 			return nil, fmt.Errorf("read the new-Episode switch: %w", err)
 		}
 		if !admits || !clients.Runs(mediaplane.ProviderChalkSFU) {
-			pin = spaces.MediaPlaneProviderCloudflareSFU
+			pin = mediaplane.ProviderCloudflareSFU
 		}
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
@@ -66,7 +66,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 			// the capacity error a full node gives a join. Without a Cloudflare
 			// application it is refused too: Place names a node only when it can take
 			// the Episode, and a binding to any other would fail every join.
-			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU)
+			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, mediaplane.ProviderCloudflareSFU)
 			if err != nil || fallback == nil || !r.chalk.CloudflareOverflow() {
 				// The refusal keeps the reason nothing had room, so a host guard
 				// reads differently from a full pool or a drain.
@@ -77,7 +77,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 			placement.Node, placement.Incarnation = "", ""
 		}
 	}
-	binding, err := mediaplane.NewBinding(string(resolution.Provider), resolution.ConfigurationSource, r.applicationID(resolved))
+	binding, err := mediaplane.NewBinding(resolution.Provider, resolution.ConfigurationSource, r.applicationID(resolved))
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 	return &binding, nil
 }
 
-func (r Registry) recordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+func (r Registry) recordPlacement(ctx context.Context, provider mediaplane.Provider, reason mediaplane.PlacementReason) {
 	if r.telemetry != nil {
 		r.telemetry.RecordPlacement(ctx, provider, reason)
 	}
@@ -99,10 +99,10 @@ func (r Registry) recordPlacement(ctx context.Context, provider spaces.MediaPlan
 // resolveApplication resolves the provider configuration a new Episode binds to.
 // A non-empty pin replaces the Space and Tenant selection. It is nil when the
 // selection has no media or the deployment has no application for it.
-func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, pin spaces.MediaPlaneProvider) (*resolvedProviderConfig, providercontracts.Resolution, error) {
+func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, pin mediaplane.Provider) (*resolvedProviderConfig, providercontracts.Resolution, error) {
 	resolution := providercontracts.Resolution{
 		ConfigurationSource: providercontracts.ConfigurationSourceNone,
-		Mode:                providercontracts.ModeUnknown,
+		Mode:                mediaplane.ModeUnknown,
 	}
 	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, pin)
 	if err != nil || resolved == nil {
@@ -110,7 +110,7 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 	}
 	if r.applicationID(resolved) == "" {
 		if resolution.ConfigurationSource == providercontracts.ConfigurationSourceTenantManaged {
-			return nil, resolution, providercontracts.ErrMissingProviderConfig
+			return nil, resolution, mediaplane.ErrMissingTenantConfig
 		}
 		// A deployment without media configuration may still create non-media
 		// Episodes. Recording cannot resolve an adapter for this nil binding.
@@ -133,18 +133,18 @@ func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space
 // refuseAfterSunset refuses a client that cannot run the own SFU once the client
 // sunset has passed, in a Space that is on the allowlist. Disabled media is left
 // alone: that Episode has no binding, so no client has to run the own SFU.
-func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected spaces.MediaPlaneProvider, clients mediaplane.ClientProviders) error {
-	if selected != spaces.MediaPlaneProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected mediaplane.Provider, clients mediaplane.ClientProviders) error {
+	if selected != mediaplane.ProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || !r.rollout.SunsetPassed() {
 		return nil
 	}
-	admits, err := r.admitsNewChalkSFUEpisode(ctx, space)
+	admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
 	if err != nil {
 		return fmt.Errorf("read the new-Episode switch: %w", err)
 	}
 	if !admits {
 		return nil
 	}
-	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: providercontracts.ModeUnknown}
+	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: mediaplane.ModeUnknown}
 	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, "")
 	if err != nil {
 		return err

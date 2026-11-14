@@ -189,7 +189,7 @@ test("a measured check prints its message, a nested one prints every message, an
 test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {
   const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
   for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
-    assert.equal(workflow.split(`${name}: \${{ vars.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
+    assert.equal(workflow.split(`${name}: \${{ secrets.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
   }
   const deployment = (method) => (method === "GET" ? { id: "chalk-space", effective_media_plane: "chalk_sfu", ...policyApplied } : { id: "new", effective_media_plane: "cf_sfu", ...policyApplied });
   const cloudflareLane = await fakeRun(deployment);

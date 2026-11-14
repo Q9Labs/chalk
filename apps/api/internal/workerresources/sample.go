@@ -20,11 +20,10 @@ type Sample struct {
 
 func (s Sample) Valid(now time.Time) bool {
 	const maxBytes = int64(1 << 50)
-	validFloat := func(value float64) bool {
-		return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0 && value <= 1e12
-	}
-	return validFloat(s.CPUUserSeconds) && validFloat(s.CPUSystemSeconds) && validFloat(s.Load1) && s.Load1 <= 1e6 &&
-		s.RSSBytes >= 0 && s.RSSBytes <= maxBytes && s.PeakRSSBytes >= s.RSSBytes && s.PeakRSSBytes <= maxBytes &&
-		s.HostMemoryTotalBytes > 0 && s.HostMemoryTotalBytes <= maxBytes && s.HostMemoryAvailableBytes >= 0 && s.HostMemoryAvailableBytes <= s.HostMemoryTotalBytes &&
-		!s.SampledAt.IsZero() && !s.SampledAt.Before(now.Add(-24*time.Hour)) && !s.SampledAt.After(now.Add(5*time.Minute))
+	finite := func(value, max float64) bool { return !math.IsNaN(value) && value >= 0 && value <= max }
+	inBytes := func(value, min int64) bool { return value >= min && value <= maxBytes }
+	return finite(s.CPUUserSeconds, 1e12) && finite(s.CPUSystemSeconds, 1e12) && finite(s.Load1, 1e6) &&
+		inBytes(s.RSSBytes, 0) && inBytes(s.PeakRSSBytes, s.RSSBytes) &&
+		inBytes(s.HostMemoryTotalBytes, 1) && s.HostMemoryAvailableBytes >= 0 && s.HostMemoryAvailableBytes <= s.HostMemoryTotalBytes &&
+		!s.SampledAt.Before(now.Add(-24*time.Hour)) && !s.SampledAt.After(now.Add(5*time.Minute)) && !s.SampledAt.IsZero()
 }

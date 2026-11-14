@@ -2037,8 +2037,7 @@ export interface components {
         participant_id: components["schemas"]["ParticipantId"];
       }[];
     };
-    EpisodeDeadline: components["schemas"]["EpisodeEnd"];
-    EpisodeEnd: {
+    EpisodeDeadline: {
       episode_id: components["schemas"]["EpisodeId"];
       external_operation: {
         created_at: components["schemas"]["DateTimeString"];
@@ -2050,6 +2049,20 @@ export interface components {
         target_participant_generation?: number | null;
         target_participant_id?: components["schemas"]["ParticipantId"] | null;
       };
+      status: string;
+    };
+    EpisodeEnd: {
+      episode_id: components["schemas"]["EpisodeId"];
+      external_operation?: {
+        created_at: components["schemas"]["DateTimeString"];
+        deadline_generation?: number | null;
+        id: components["schemas"]["UUID"];
+        operation_name: string;
+        request_key: string;
+        status: string;
+        target_participant_generation?: number | null;
+        target_participant_id?: components["schemas"]["ParticipantId"] | null;
+      } | null;
       status: string;
     };
     /** Format: uuid */

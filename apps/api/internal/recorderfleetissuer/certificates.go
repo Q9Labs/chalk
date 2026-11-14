@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 )
 
 type CertificateAuthority struct {
@@ -64,7 +65,7 @@ func (authority *CertificateAuthority) issue(csr *x509.CertificateRequest, ident
 	if err != nil {
 		return certificateRecord{}, fmt.Errorf("generate worker certificate serial: %w", err)
 	}
-	identityURI, err := url.Parse(fmt.Sprintf("spiffe://%s/environment/%s/%s/%s", authority.trustDomain, url.PathEscape(environment), identity.Role, identity.WorkerID))
+	identityURI, err := url.Parse(spiffe.URI(authority.trustDomain, environment, identity.Role, identity.WorkerID))
 	if err != nil {
 		return certificateRecord{}, fmt.Errorf("build worker identity URI: %w", err)
 	}

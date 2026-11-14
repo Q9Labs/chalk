@@ -1,10 +1,12 @@
 import type { TranscriptLanguageMode } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
-import type { ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult, SpeakerTurn, SpeakerTurnManifest, TrackClass } from "./types.js";
+import type { ManifestIdentity, SpeakerTurn, SpeakerTurnManifest, TrackClass } from "./assignment-types.js";
+import type { ProviderResult } from "./provider-types.js";
+import type { NormalizedCue, NormalizedTranscriptDocument } from "./transcript-types.js";
 
 type CueTurn = Pick<SpeakerTurn, "identity" | "trackClass"> & Partial<Pick<SpeakerTurn, "displayNameSnapshot" | "overlap">>;
 
-export function normalizeTranscriptChunk(input: {
+export interface NormalizeInput {
   transcriptLanguage?: TranscriptLanguageMode;
   jobId: string;
   episodeId: string;
@@ -18,43 +20,56 @@ export function normalizeTranscriptChunk(input: {
   measuredAudioMs: number;
   sourceIdentity: ManifestIdentity;
   sourceTrackClass: TrackClass;
-}): NormalizedTranscriptDocument {
-  if (!Number.isInteger(input.episodeStartMs) || !Number.isInteger(input.episodeEndMs) || input.episodeEndMs <= input.episodeStartMs) throw new AssignmentError("chunk episode range is invalid");
-  if (!Number.isInteger(input.sourceStartMs) || !Number.isInteger(input.sourceEndMs) || input.sourceStartMs < 0 || input.sourceEndMs <= input.sourceStartMs || input.sourceEndMs - input.sourceStartMs !== input.episodeEndMs - input.episodeStartMs)
-    throw new AssignmentError("chunk source range is invalid");
-  if (!Number.isInteger(input.measuredAudioMs) || input.measuredAudioMs < 0) throw new AssignmentError("measured duration is invalid");
-  const cues = input.provider.segments.flatMap((segment) => {
-    const startMs = Math.max(input.episodeStartMs, audioTimeToRecording(input, segment.startSeconds));
-    const endMs = Math.min(input.episodeEndMs, audioTimeToRecording(input, segment.endSeconds));
-    if (endMs <= startMs) return [];
-    const allMatches = input.manifest.turns.filter((turn) => turn.endMs > startMs && turn.startMs < endMs);
-    const authoritative = allMatches.filter((turn) => isAuthoritativeTurn(turn, input.sourceIdentity, input.sourceTrackClass));
-    if (!segment.useSegmentText && input.provider.words && input.provider.words.length > 0) {
-      return cuesFromWords(segment, startMs, endMs, authoritative, allMatches, input);
-    }
-    return cuesFromSegment(segment, startMs, endMs, authoritative, allMatches, input);
-  });
+}
+
+export function normalizeTranscriptChunk(input: NormalizeInput): NormalizedTranscriptDocument {
+  checkChunkRanges(input);
   return {
     schemaVersion: "transcript.v1",
     transcriptLanguage: input.transcriptLanguage ?? { mode: "auto" },
     jobId: input.jobId,
     episodeId: input.episodeId,
-    cues,
-    ...(input.provider.language === undefined ? {} : { language: input.provider.language }),
-    provider: input.provider.provider,
-    model: input.provider.model,
-    versionContract: input.provider.versionContract,
+    cues: input.provider.segments.flatMap((segment) => cuesFromProviderSegment(segment, input)),
     attempt: input.attempt,
     measuredAudioMs: input.measuredAudioMs,
-    ...(input.provider.providerIdentity === undefined ? {} : { providerIdentity: input.provider.providerIdentity }),
-    ...(input.provider.executionIdentity === undefined ? {} : { executionIdentity: input.provider.executionIdentity }),
-    ...(input.provider.durationMs === undefined ? {} : { providerObservedDurationMs: input.provider.durationMs }),
-    ...(input.provider.providerReportedCostUsd === undefined ? {} : { providerReportedCostUsd: input.provider.providerReportedCostUsd }),
-    ...(input.provider.quality === undefined ? {} : { quality: input.provider.quality }),
+    ...providerSummary(input.provider),
   };
 }
 
-function cuesFromWords(segment: ProviderResult["segments"][number], segmentStartMs: number, segmentEndMs: number, authoritative: SpeakerTurn[], allMatches: SpeakerTurn[], input: Parameters<typeof normalizeTranscriptChunk>[0]): NormalizedCue[] {
+function checkChunkRanges(input: NormalizeInput): void {
+  const { episodeStartMs, episodeEndMs, sourceStartMs, sourceEndMs, measuredAudioMs } = input;
+  if (!Number.isInteger(episodeStartMs) || !Number.isInteger(episodeEndMs) || episodeEndMs <= episodeStartMs) throw new AssignmentError("chunk episode range is invalid");
+  const sourceIsValid = Number.isInteger(sourceStartMs) && Number.isInteger(sourceEndMs) && sourceStartMs >= 0 && sourceEndMs > sourceStartMs && sourceEndMs - sourceStartMs === episodeEndMs - episodeStartMs;
+  if (!sourceIsValid) throw new AssignmentError("chunk source range is invalid");
+  if (!Number.isInteger(measuredAudioMs) || measuredAudioMs < 0) throw new AssignmentError("measured duration is invalid");
+}
+
+/** What the provider reported about itself, copied onto the transcript document when present. */
+function providerSummary(provider: ProviderResult): Omit<NormalizedTranscriptDocument, "schemaVersion" | "transcriptLanguage" | "jobId" | "episodeId" | "cues" | "attempt" | "measuredAudioMs"> {
+  return {
+    ...(provider.language === undefined ? {} : { language: provider.language }),
+    provider: provider.provider,
+    model: provider.model,
+    versionContract: provider.versionContract,
+    ...(provider.providerIdentity === undefined ? {} : { providerIdentity: provider.providerIdentity }),
+    ...(provider.executionIdentity === undefined ? {} : { executionIdentity: provider.executionIdentity }),
+    ...(provider.durationMs === undefined ? {} : { providerObservedDurationMs: provider.durationMs }),
+    ...(provider.providerReportedCostUsd === undefined ? {} : { providerReportedCostUsd: provider.providerReportedCostUsd }),
+    ...(provider.quality === undefined ? {} : { quality: provider.quality }),
+  };
+}
+
+function cuesFromProviderSegment(segment: ProviderResult["segments"][number], input: NormalizeInput): NormalizedCue[] {
+  const startMs = Math.max(input.episodeStartMs, audioTimeToRecording(input, segment.startSeconds));
+  const endMs = Math.min(input.episodeEndMs, audioTimeToRecording(input, segment.endSeconds));
+  if (endMs <= startMs) return [];
+  const allMatches = input.manifest.turns.filter((turn) => turn.endMs > startMs && turn.startMs < endMs);
+  const authoritative = allMatches.filter((turn) => isAuthoritativeTurn(turn, input.sourceIdentity, input.sourceTrackClass));
+  const timedWords = !segment.useSegmentText && (input.provider.words?.length ?? 0) > 0;
+  return timedWords ? cuesFromWords(segment, startMs, endMs, authoritative, allMatches, input) : cuesFromSegment(segment, startMs, endMs, authoritative, allMatches, input);
+}
+
+function cuesFromWords(segment: ProviderResult["segments"][number], segmentStartMs: number, segmentEndMs: number, authoritative: SpeakerTurn[], allMatches: SpeakerTurn[], input: NormalizeInput): NormalizedCue[] {
   const words = input.provider.words?.filter((word) => word.endSeconds > segment.startSeconds && word.startSeconds < segment.endSeconds) ?? [];
   const groups: Array<{ turn: SpeakerTurn | undefined; words: typeof words }> = [];
   for (const word of words) {
@@ -83,7 +98,7 @@ function cuesFromWords(segment: ProviderResult["segments"][number], segmentStart
   });
 }
 
-function cuesFromSegment(segment: ProviderResult["segments"][number], segmentStartMs: number, segmentEndMs: number, authoritative: SpeakerTurn[], allMatches: SpeakerTurn[], input: Parameters<typeof normalizeTranscriptChunk>[0]): NormalizedCue[] {
+function cuesFromSegment(segment: ProviderResult["segments"][number], segmentStartMs: number, segmentEndMs: number, authoritative: SpeakerTurn[], allMatches: SpeakerTurn[], input: NormalizeInput): NormalizedCue[] {
   if (authoritative.length > 1) throw new AssignmentError("segment crosses multiple source track epochs");
   const turn = authoritative[0];
   if (!turn) {
@@ -101,7 +116,7 @@ function identityEquals(left: ManifestIdentity | undefined, right: ManifestIdent
   return left?.kind === right?.kind && left?.participantRef === right?.participantRef && left?.participantGeneration === right?.participantGeneration && left?.trackId === right?.trackId && left?.trackEpoch === right?.trackEpoch;
 }
 
-function audioTimeToRecording(input: Parameters<typeof normalizeTranscriptChunk>[0], seconds: number): number {
+function audioTimeToRecording(input: NormalizeInput, seconds: number): number {
   return input.episodeStartMs + Math.round(seconds * 1_000);
 }
 
@@ -109,7 +124,7 @@ function overlaps(left: SpeakerTurn, right: SpeakerTurn): boolean {
   return left.endMs > right.startMs && left.startMs < right.endMs;
 }
 
-function cueForSegment(text: string, startMs: number, endMs: number, turn: CueTurn | undefined, overlap: boolean, confidence: number | undefined, input: Parameters<typeof normalizeTranscriptChunk>[0]): NormalizedCue {
+function cueForSegment(text: string, startMs: number, endMs: number, turn: CueTurn | undefined, overlap: boolean, confidence: number | undefined, input: NormalizeInput): NormalizedCue {
   if (!turn) throw new AssignmentError("cue has no authenticated source turn");
   return {
     startMs,

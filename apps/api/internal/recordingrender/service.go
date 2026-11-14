@@ -14,6 +14,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -363,7 +364,7 @@ func renderObjectKey(authority Authority, purpose ObjectPurpose, allocationID ut
 	case PurposeTranscriptionAudio:
 		extension = "flac"
 	}
-	return fmt.Sprintf("tenants/%s/recordings/%s/render/%d/%s/%s.%s", authority.TenantID.String(), authority.RecordingID.String(), authority.CaptureEpoch, purpose, allocationID.String(), extension)
+	return recordingobjectkey.Render(authority.TenantID.String(), authority.RecordingID.String(), int64(authority.CaptureEpoch), string(purpose), allocationID.String(), extension)
 }
 
 func opaqueToken() (string, error) {
