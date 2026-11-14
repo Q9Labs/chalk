@@ -443,6 +443,7 @@
         ".github/workflows/auto-promote.yml",
         ".github/workflows/boot-smoke.yml",
         ".github/workflows/cache-warm.yml",
+        ".github/workflows/ci-janitor.yml",
         ".github/workflows/ci.yml",
         ".github/workflows/codeql.yml",
         ".github/workflows/formal-episode-lifecycle.yml",

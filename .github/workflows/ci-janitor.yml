@@ -1,0 +1,43 @@
+name: CI janitor
+
+# GitHub keeps 10 GiB of caches per repository and evicts the least recently used past that, master's included.
+# Pull request and merge queue caches can be read only by their own ref, so this job deletes them when the pull request
+# closes or the queue group lands, and keeps the repository under 8 GiB. It leaves artifacts and runs alone: artifacts
+# expire by their own retention days, sealed release artifacts must outlive any cleanup, and run records are the deploy history.
+on:
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List what would be deleted without deleting it.
+        type: boolean
+        default: true
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-janitor
+
+jobs:
+  clean:
+    name: Delete dead caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+      - name: Delete caches that no pull request or queue group can read
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CI_JANITOR_DRY_RUN: ${{ inputs.dry_run }}
+        run: node scripts/gates/ci-janitor.mjs

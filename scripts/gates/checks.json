@@ -607,6 +607,17 @@
       "reason": "It only saves what the pull request already proved. If it fails, the queue runs every group again, which is the safe direction."
     },
     {
+      "id": "workflow:ci-janitor.yml#clean",
+      "owner": "Gate",
+      "catches": "Caches of closed pull requests and landed merge queue groups that push master's caches out of the repository's 10 GiB.",
+      "runs": ["daily"],
+      "blocks": "advisory",
+      "minutes": 0.5,
+      "record": "unmeasured",
+      "sample": "New; no history yet. On 14 November the repository held 10.6 GiB of caches, four of them 930 MiB macOS caches on pull request refs.",
+      "reason": "It only deletes caches that nothing can read, or the least recently used ones past a budget. A failed run leaves the caches in place, and GitHub then evicts by its own rule."
+    },
+    {
       "id": "workflow:host-change-check.yml#check",
       "owner": "Monitoring",
       "catches": "A change to the node that no release made, read from CloudTrail and Axiom over the last eight hours and sent to Oncall.",
