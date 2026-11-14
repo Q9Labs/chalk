@@ -174,7 +174,6 @@
       "apps/transcription-dispatcher/**"
     ]
   },
-  "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs"],
   "health": {
     "ignore": [
       "features/scorecard/**",

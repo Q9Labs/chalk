@@ -13,7 +13,6 @@
         "apps/api/internal/httpapi/episode_lifecycle.go",
         "apps/api/internal/httpapi/episode_lifecycle_transport.go",
         "apps/api/internal/httpapi/episode_live.go",
-        "apps/api/internal/httpapi/episode_read_rate_limit_test.go",
         "apps/api/internal/httpapi/participant_episode_status.go",
         "apps/api/internal/httpapi/participant_join_seats.go",
         "apps/api/internal/httpapi/recording_entrance.go",
@@ -305,7 +304,6 @@
       "paths": [
         "apps/api/internal/httpapi/memberships.go",
         "apps/api/internal/httpapi/public_invite_leave_retry_test.go",
-        "apps/api/internal/httpapi/public_invite_media_error_test.go",
         "apps/api/internal/httpapi/spaces.go",
         "apps/mobile/src/home",
         "apps/mobile/src/lib/spaces.ts",

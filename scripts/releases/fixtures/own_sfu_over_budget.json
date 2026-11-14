@@ -2,7 +2,7 @@
   "schema": "chalk.scorecard/v1",
   "run": {
     "id": "nightly-latency",
-    "commit": "693cb26f710040c0cbca65f6e299ce0a639bfe40",
+    "commit": "8e7a9381803d7e24e924a0f847250ec6c2bb390a",
     "tier": "nightly",
     "environment": "staging",
     "startedAt": "2026-11-08T16:55:52.628Z",
