@@ -94,12 +94,12 @@ production web build, and the grant door does not need it. Keep that guard.
 
 Use the first row that fits. The fallback is what makes the no-deploy rows safe.
 
-| Goal                                 | Action                                                                                                                                                  | Deploy |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off. | no     |
-| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                   | no     |
-| Turn the flag off for new page loads | Delete the secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (`gh secret delete`) and cut a web release. Loaded pages keep trying and fall back, so also do the row above.                          | yes    |
-| Remove everything                    | `direct-sync-proxy remove --purge`, then `tofu destroy`                                                                                                 | no     |
+| Goal                                 | Action                                                                                                                                                          | Deploy |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off.         | no     |
+| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                           | no     |
+| Turn the flag off for new page loads | Delete the secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (`gh secret delete`) and cut a web release. Loaded pages keep trying and fall back, so also do the row above. | yes    |
+| Remove everything                    | `direct-sync-proxy remove --purge`, then `tofu destroy`                                                                                                         | no     |
 
 ## What to watch
 
