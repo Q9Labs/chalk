@@ -273,7 +273,10 @@ jobs:
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
           read -r -a proofs <<< "$PROOFS"
-          node scripts/prod-proof/registry.mjs check "$CHALK_PROOF_MEDIA_PLANE" "${proofs[@]}"
+          # A revision from before the rename knows only the old names; the labels below keep the new ones.
+          checked=("${proofs[@]}")
+          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then checked=("${proofs[@]//chalk-sfu/own-sfu}"); fi
+          node scripts/prod-proof/registry.mjs check "$CHALK_PROOF_MEDIA_PLANE" "${checked[@]}"
           mkdir -p .private
           results=()
           failed=()
