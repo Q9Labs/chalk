@@ -682,9 +682,9 @@
       "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#deploy-current",
@@ -692,9 +692,9 @@
       "catches": "The newest passed cut failing to deploy on nightly.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 13.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. It is skipped when nightly already runs the current cut."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-back",
@@ -702,9 +702,9 @@
       "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 7.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-forward",
@@ -712,9 +712,9 @@
       "catches": "Rolling forward again after a rollback failing.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 7.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#result",
@@ -722,9 +722,9 @@
       "catches": "A rehearsal whose outcome is not reported.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": null,
-      "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners."
     },
     {
       "id": "workflow:gate.yml#sync",
