@@ -122,6 +122,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.web, config.urls.public])].join(","),
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
+        // Without a platform plane the API rejects a Space created with none, which is how the dashboard's Start a call creates one.
+        CHALK_DEFAULT_MEDIA_PLANE: "cf_sfu",
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
         CHALK_CLOUDFLARE_REALTIME_APP_SECRET: provider.appSecret,
         CHALK_SYNC_TOKEN_ISSUER: config.auth.issuer,
