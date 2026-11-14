@@ -25,10 +25,11 @@ function repository(commits) {
 }
 
 test("a release that changes MCP code, or code its check exercises, runs the check", () => {
-  const { cwd, shas } = repository([{ "README.md": "a" }, { "apps/api/internal/mcptools/tool.go": "x" }, { "apps/api/internal/apikeys/key.go": "y" }]);
+  const { cwd, shas } = repository([{ "README.md": "a" }, { "apps/api/internal/mcptools/tool.go": "x" }, { "apps/api/internal/apikeys/key.go": "y" }, { "apps/api/internal/httpapi/middleware.go": "z" }]);
   try {
     assert.equal(decide({ previous: shas[0], target: shas[1], cwd, featureMap }).changed, true);
     assert.equal(decide({ previous: shas[1], target: shas[2], cwd, featureMap }).changed, true, "an API-key change");
+    assert.equal(decide({ previous: shas[2], target: shas[3], cwd, featureMap }).changed, true, "the tenant authentication middleware MCP calls");
     assert.match(decide({ previous: shas[0], target: shas[2], cwd, featureMap }).reason, /2 changed file\(s\)/);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
