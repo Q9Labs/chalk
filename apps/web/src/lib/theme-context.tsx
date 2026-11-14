@@ -2,11 +2,11 @@ import { useRouterState } from "@tanstack/react-router";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import type React from "react";
 
-import { applyThemeMode, persistThemePreference, readThemePreference, resolveThemeMode, type ThemeMode, type ThemePreference } from "./theme";
+import { applyTheme, persistThemePreference, readThemePreference, resolveTheme, type ResolvedTheme, type ThemePreference } from "./theme";
 
 type ThemeContextValue = {
   readonly preference: ThemePreference;
-  readonly mode: ThemeMode;
+  readonly mode: ResolvedTheme;
   readonly setPreference: (preference: ThemePreference) => void;
 };
 
@@ -16,9 +16,9 @@ export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [preference, storePreference] = useState<ThemePreference>(() => (typeof document === "undefined" ? "dark" : readThemePreference(document.cookie)));
 
-  const mode = resolveThemeMode({ preference, pathname });
+  const mode = resolveTheme({ preference, pathname });
 
-  useEffect(() => applyThemeMode(document.documentElement, mode), [mode]);
+  useEffect(() => applyTheme(document.documentElement, mode), [mode]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     storePreference(next);

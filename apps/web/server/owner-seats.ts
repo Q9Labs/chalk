@@ -16,16 +16,20 @@ async function cachedSeats(request: Request, env: DashboardEnvironment): Promise
 function belongsTo(seat: OwnerSeat, person: Identity): boolean {
   return seat.userId === person.userId && seat.sessionId === person.sessionId && seat.expiresAt > Date.now();
 }
-export async function readOwnerSeat(request: Request, env: DashboardEnvironment, person: Identity, input: { spaceId: string; joinKey?: string; ownerSeat?: string }): Promise<OwnerSeat> {
-  let seat: OwnerSeat | undefined;
-  if (input.ownerSeat) seat = seatSchema.parse(await unseal(input.ownerSeat, env.SESSION_SECRET, "owner-seat"));
-  else {
-    seat = (await cachedSeats(request, env)).find((entry) => entry.spaceId === input.spaceId && (input.joinKey === undefined || entry.joinKey === input.joinKey));
-    if (!seat) {
-      const legacy = readCookie(request, env, input.joinKey ? `seat_${input.spaceId}_${input.joinKey}` : `seat_${input.spaceId}`);
-      if (legacy) seat = { ...seatSchema.parse(await unseal(legacy, env.SESSION_SECRET, "owner-seat")), ...(input.joinKey ? { joinKey: input.joinKey } : {}) };
-    }
-  }
+type SeatInput = { spaceId: string; joinKey?: string; ownerSeat?: string };
+
+/** The seat a request names: the sealed one it carries, else the cached one for the Space, else the older per-Space cookie. */
+async function findSeat(request: Request, env: DashboardEnvironment, input: SeatInput): Promise<OwnerSeat | undefined> {
+  if (input.ownerSeat) return seatSchema.parse(await unseal(input.ownerSeat, env.SESSION_SECRET, "owner-seat"));
+  const cached = (await cachedSeats(request, env)).find((entry) => entry.spaceId === input.spaceId && (input.joinKey === undefined || entry.joinKey === input.joinKey));
+  if (cached) return cached;
+  const legacy = readCookie(request, env, input.joinKey ? `seat_${input.spaceId}_${input.joinKey}` : `seat_${input.spaceId}`);
+  if (!legacy) return undefined;
+  return { ...seatSchema.parse(await unseal(legacy, env.SESSION_SECRET, "owner-seat")), ...(input.joinKey ? { joinKey: input.joinKey } : {}) };
+}
+
+export async function readOwnerSeat(request: Request, env: DashboardEnvironment, person: Identity, input: SeatInput): Promise<OwnerSeat> {
+  const seat = await findSeat(request, env, input);
   if (!seat || !belongsTo(seat, person) || seat.spaceId !== input.spaceId || (input.joinKey !== undefined && seat.joinKey !== input.joinKey)) throw new DashboardError(401, "join_required");
   return seat;
 }

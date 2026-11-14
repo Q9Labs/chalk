@@ -107,27 +107,36 @@ function checked(url: URL): boolean {
   return url.protocol === "https:" && publicHostname(url.host) !== null;
 }
 
+type Hop = { readonly kind: "stop" } | { readonly kind: "redirect"; readonly url: URL } | { readonly kind: "body"; readonly bytes: Bytes };
+const STOP: Hop = { kind: "stop" };
+
+/** One request: a redirect to follow, the capped body, or a stop. */
+async function hop(fetcher: IconFetcher, url: URL, limit: number): Promise<Hop> {
+  if (!checked(url)) return STOP;
+  const response = await fetcher(url, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { Accept: "image/*,text/html;q=0.8", "User-Agent": "ChalkIconFetcher/1.0" } });
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel();
+    const next = response.headers.get("Location");
+    return next ? { kind: "redirect", url: new URL(next, url) } : STOP;
+  }
+  if (!response.ok || !response.body) return STOP;
+  if (Number(response.headers.get("Content-Length")) > limit) {
+    await response.body.cancel();
+    return STOP;
+  }
+  const bytes = await readCapped(response.body, limit);
+  return bytes ? { kind: "body", bytes } : STOP;
+}
+
 /** GET with the guards applied to every hop: public https hosts only, redirects followed by hand, a deadline, and a byte cap. Null means "no usable answer". */
 async function get(fetcher: IconFetcher, start: URL, limit: number): Promise<{ readonly url: URL; readonly bytes: Bytes } | null> {
   let url = start;
   try {
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      if (!checked(url)) return null;
-      const response = await fetcher(url, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers: { Accept: "image/*,text/html;q=0.8", "User-Agent": "ChalkIconFetcher/1.0" } });
-      if (response.status >= 300 && response.status < 400) {
-        await response.body?.cancel();
-        const next = response.headers.get("Location");
-        if (!next) return null;
-        url = new URL(next, url);
-        continue;
-      }
-      if (!response.ok || !response.body) return null;
-      if (Number(response.headers.get("Content-Length")) > limit) {
-        await response.body.cancel();
-        return null;
-      }
-      const bytes = await readCapped(response.body, limit);
-      return bytes ? { url, bytes } : null;
+    for (let hops = 0; hops <= MAX_REDIRECTS; hops++) {
+      const step = await hop(fetcher, url, limit);
+      if (step.kind === "stop") return null;
+      if (step.kind === "body") return { url, bytes: step.bytes };
+      url = step.url;
     }
     return null;
   } catch (error) {

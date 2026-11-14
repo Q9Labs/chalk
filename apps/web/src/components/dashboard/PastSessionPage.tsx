@@ -9,7 +9,8 @@ import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { BadgeView } from "./ListParts";
 import { Page, Stat } from "./Page";
-import { DownloadMenu, SessionViewer, usePastSession, type Ids, type Page as Loaded, type Parts } from "./SessionViewer";
+import { DownloadMenu, SessionViewer, type Parts } from "./SessionViewer";
+import { usePastSession, type Ids, type Page as Loaded } from "./session-reads";
 import { CopyAction, ErrorPanel, Sk } from "./kit";
 import { VIDEO_BADGE } from "../../lib/dashboard/lists";
 

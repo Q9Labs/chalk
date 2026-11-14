@@ -52,6 +52,37 @@ export async function withSessionEngine(request: Request, env: DashboardEnvironm
 const apiFailure = z.object({ error: z.object({ code: z.string().max(100) }) });
 const inactiveParticipantFailure = z.object({ error: z.object({ code: z.literal("participant.not_active") }) });
 const invalidAPIKeyExpiryFailure = z.object({ error: z.object({ code: z.literal("api_key.invalid_expiry") }) });
+async function failureBody(httpError: HttpClientError.HttpClientError, status: number): Promise<unknown> {
+  if (httpError.response?.status !== status) return null;
+  return Effect.runPromise(httpError.response.json.pipe(Effect.catch(() => Effect.succeed(null))));
+}
+
+/** The wire code of an engine failure, and whether the engine really named it, as opposed to us falling back to "engine.unavailable". */
+async function engineCode(error: unknown, httpError: HttpClientError.HttpClientError | undefined): Promise<{ readonly code: string; readonly named: boolean }> {
+  const decoded = apiFailure.safeParse(error);
+  if (decoded.success) return { code: decoded.data.error.code, named: true };
+  // New wire codes can arrive through the SDK's existing transport error channel
+  // without widening the tagged error union in a 5.x release.
+  if (httpError) {
+    if (inactiveParticipantFailure.safeParse(await failureBody(httpError, 409)).success) return { code: "participant.not_active", named: true };
+    if (invalidAPIKeyExpiryFailure.safeParse(await failureBody(httpError, 400)).success) return { code: "api_key.invalid_expiry", named: true };
+  }
+  return { code: "engine.unavailable", named: false };
+}
+
+const CONFLICT_CODES = ["conflict", "already_active", "already_exists", "capacity_exceeded"];
+
+function dashboardErrorFor(code: string, status: number | undefined): DashboardError {
+  if (status === 429) return new DashboardError(429, "engine_rate_limited");
+  if (code === "api_key.invalid_expiry") return new DashboardError(400, "api_key_invalid_expiry");
+  if (code === "request.invalid") return new DashboardError(400, "invalid_request");
+  if (code.endsWith("not_found") || code === "access.forbidden") return new DashboardError(404, "resource_not_found");
+  if (code === "participant.connection_superseded" || code === "media_token.subject_mismatch" || CONFLICT_CODES.some((part) => code.includes(part))) return new DashboardError(409, "engine_conflict");
+  if (code.includes("rate_limited")) return new DashboardError(429, "engine_rate_limited");
+  if (code === "participant.not_active") return new DashboardError(409, "participant_not_active");
+  return new DashboardError(502, "engine_unavailable");
+}
+
 export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
   const result = await Effect.runPromise(
     operation.pipe(
@@ -63,31 +94,19 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
   );
   if (result.kind === "success") return result.value;
   const httpError = HttpClientError.isHttpClientError(result.error) ? result.error : undefined;
-  // New wire codes can arrive through the SDK's existing transport error channel
-  // without widening the tagged error union in a 5.x release.
-  const inactiveParticipant = httpError?.response?.status === 409 && inactiveParticipantFailure.safeParse(await Effect.runPromise(httpError.response.json.pipe(Effect.catch(() => Effect.succeed(null))))).success;
-  const invalidAPIKeyExpiry = httpError?.response?.status === 400 && invalidAPIKeyExpiryFailure.safeParse(await Effect.runPromise(httpError.response.json.pipe(Effect.catch(() => Effect.succeed(null))))).success;
-  const failure = apiFailure.safeParse(result.error);
-  const code = failure.success ? failure.data.error.code : inactiveParticipant ? "participant.not_active" : invalidAPIKeyExpiry ? "api_key.invalid_expiry" : "engine.unavailable";
+  const { code, named } = await engineCode(result.error, httpError);
   // Generated API errors decode a fixed contract code. Never log their message,
   // the response, or the request (which contains the service bearer).
   console.warn(
     JSON.stringify({
       event: "dashboard.engine_failed",
       engine_status: httpError?.response?.status,
-      engine_code: failure.success || inactiveParticipant || invalidAPIKeyExpiry ? code : undefined,
+      engine_code: named ? code : undefined,
       sdk_error_tag: httpError ? httpError._tag : Schema.isSchemaError(result.error) ? result.error._tag : undefined,
       sdk_error_reason: httpError?.reason._tag,
     }),
   );
-  if (httpError?.response?.status === 429) throw new DashboardError(429, "engine_rate_limited");
-  if (code === "api_key.invalid_expiry") throw new DashboardError(400, "api_key_invalid_expiry");
-  if (code === "request.invalid") throw new DashboardError(400, "invalid_request");
-  if (code.endsWith("not_found") || code === "access.forbidden") throw new DashboardError(404, "resource_not_found");
-  if (code === "participant.connection_superseded" || code === "media_token.subject_mismatch" || code.includes("conflict") || code.includes("already_active") || code.includes("already_exists") || code.includes("capacity_exceeded")) throw new DashboardError(409, "engine_conflict");
-  if (code.includes("rate_limited")) throw new DashboardError(429, "engine_rate_limited");
-  if (code === "participant.not_active") throw new DashboardError(409, "participant_not_active");
-  throw new DashboardError(502, "engine_unavailable");
+  throw dashboardErrorFor(code, httpError?.response?.status);
 }
 type LiveEpisodeRow = { episode_id: string; participant_count: number; participants: readonly { participant_id: string; display_name: string }[] } | null;
 export function liveDTO(spaceId: string, liveEpisode: LiveEpisodeRow): LiveDTO {

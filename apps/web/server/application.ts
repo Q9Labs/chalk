@@ -31,56 +31,80 @@ async function current(request: Request, env: DashboardEnvironment, provider: Id
 async function sessionDTO(person: Identity, env: DashboardEnvironment): Promise<SessionDTO> {
   return { profile: { id: person.userId, name: person.name, email: person.email, avatarUrl: person.avatarUrl }, csrfToken: await csrfToken(person, env) };
 }
+type Provider = "google" | "apple";
+type AuthContext = { readonly request: Request; readonly env: DashboardEnvironment; readonly provider: IdentityProvider };
+
+async function authStart({ request, env, provider }: AuthContext): Promise<Response> {
+  const input = startQuery.parse(query(request));
+  const login = await provider.start(input.provider);
+  const response = redirect(login.url);
+  const existing = readCookie(request, env, "session");
+  const authenticated: Authentication = existing ? await provider.authenticate(existing) : { kind: "unauthenticated" };
+  const previous = authenticated.kind === "authenticated" && authenticated.identity.provider === input.provider ? { userId: authenticated.identity.userId, name: authenticated.identity.name } : undefined;
+  writeCookie(response, env, `login_${input.provider}`, await seal({ state: login.state, codeVerifier: login.codeVerifier, nonce: login.nonce, previous, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.SESSION_SECRET, `login_${input.provider}`), 600);
+  return response;
+}
+
+async function completeSignIn({ request, env, provider }: AuthContext, name: Provider): Promise<Response> {
+  if (name === "apple" && request.headers.get("Origin") !== "https://appleid.apple.com") throw new DashboardError(403, "origin_rejected");
+  const loginCookie = readCookie(request, env, `login_${name}`);
+  if (!loginCookie) throw new DashboardError(400, "login_state_missing");
+  const login = transaction.parse(await unseal(loginCookie, env.SESSION_SECRET, `login_${name}`));
+  const input = callbackQuery.parse(name === "apple" ? await form(request) : query(request));
+  if (login.expiresAt <= Date.now() || login.state !== input.state || login.provider !== name) throw new DashboardError(400, "login_state_rejected");
+  const identity = await provider.exchange({ ...input, provider: name, codeVerifier: login.codeVerifier, nonce: login.nonce });
+  if (!identity.name && login.previous?.userId === identity.userId) identity.name = login.previous.name;
+  if (!identity.name) identity.name = identity.email;
+  await resolveTenant(env, identity, true);
+  const response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
+  await setSession(response, env, await sealSession(identity, env.SESSION_SECRET), identity);
+  return response;
+}
+
+/** A failed sign-in goes back to the sign-in page, not to a JSON error. The login cookie is spent either way. */
+async function authCallback(context: AuthContext, name: Provider): Promise<Response> {
+  let response: Response;
+  try {
+    response = await completeSignIn(context, name);
+  } catch (error) {
+    const failed = failure(error);
+    response = redirect(`/dashboard/sign-in?failed=${name}`);
+    response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
+  }
+  writeCookie(response, context.env, `login_${name}`, "", 0);
+  return response;
+}
+
+async function authLeave({ request, env }: AuthContext, signOut: boolean): Promise<Response> {
+  exactOrigin(request, env.DASHBOARD_ORIGIN);
+  emptyBody.parse(await body(request));
+  const bound = await binding(request, env);
+  await checkCsrf(request, bound, env);
+  const response = json(signOut ? { ok: true, clearLocalBookmarks: true } : { ok: true });
+  if (signOut) clearSession(response, env, request);
+  else clearSeatCookies(response, request, env);
+  return response;
+}
+
 async function auth(request: Request, env: DashboardEnvironment, provider: IdentityProvider, path: string): Promise<Response> {
-  if (request.method === "GET" && path === "/auth/start") {
-    const input = startQuery.parse(query(request));
-    const login = await provider.start(input.provider);
-    const response = redirect(login.url);
-    const existing = readCookie(request, env, "session");
-    const authenticated: Authentication = existing ? await provider.authenticate(existing) : { kind: "unauthenticated" };
-    const previous = authenticated.kind === "authenticated" && authenticated.identity.provider === input.provider ? { userId: authenticated.identity.userId, name: authenticated.identity.name } : undefined;
-    writeCookie(response, env, `login_${input.provider}`, await seal({ state: login.state, codeVerifier: login.codeVerifier, nonce: login.nonce, previous, returnTo: input.returnTo, provider: input.provider, expiresAt: Date.now() + 600000 }, env.SESSION_SECRET, `login_${input.provider}`), 600);
-    return response;
+  const context = { request, env, provider };
+  const route = `${request.method} ${path}`;
+  switch (route) {
+    case "GET /auth/start":
+      return authStart(context);
+    case "GET /auth/callback/google":
+      return authCallback(context, "google");
+    case "POST /auth/callback/apple":
+      return authCallback(context, "apple");
+    case "GET /auth/session":
+      return json(await sessionDTO(await current(request, env, provider), env));
+    case "POST /auth/sign-out":
+      return authLeave(context, true);
+    case "POST /auth/clear-owner-seats":
+      return authLeave(context, false);
+    default:
+      throw new DashboardError(405, "method_not_allowed");
   }
-  const providerName = path === "/auth/callback/apple" ? "apple" : "google";
-  if ((request.method === "GET" && path === "/auth/callback/google") || (request.method === "POST" && path === "/auth/callback/apple")) {
-    let response: Response;
-    try {
-      if (providerName === "apple" && request.headers.get("Origin") !== "https://appleid.apple.com") throw new DashboardError(403, "origin_rejected");
-      const loginCookie = readCookie(request, env, `login_${providerName}`);
-      if (!loginCookie) throw new DashboardError(400, "login_state_missing");
-      const login = transaction.parse(await unseal(loginCookie, env.SESSION_SECRET, `login_${providerName}`));
-      const values = providerName === "apple" ? await form(request) : query(request);
-      const input = callbackQuery.parse(values);
-      if (login.expiresAt <= Date.now() || login.state !== input.state || login.provider !== providerName) throw new DashboardError(400, "login_state_rejected");
-      const identity = await provider.exchange({ ...input, provider: providerName, codeVerifier: login.codeVerifier, nonce: login.nonce });
-      if (!identity.name && login.previous?.userId === identity.userId) identity.name = login.previous.name;
-      if (!identity.name) identity.name = identity.email;
-      await resolveTenant(env, identity, true);
-      response = redirect(startQuery.shape.returnTo.parse(login.returnTo));
-      await setSession(response, env, await sealSession(identity, env.SESSION_SECRET), identity);
-    } catch (error) {
-      const failed = failure(error);
-      response = redirect(`/dashboard/sign-in?failed=${providerName}`);
-      response.headers.set("X-Request-ID", failed.headers.get("X-Request-ID") ?? "");
-    }
-    writeCookie(response, env, `login_${providerName}`, "", 0);
-    return response;
-  }
-  if (request.method === "GET" && path === "/auth/session") {
-    return json(await sessionDTO(await current(request, env, provider), env));
-  }
-  if (request.method === "POST" && (path === "/auth/sign-out" || path === "/auth/clear-owner-seats")) {
-    exactOrigin(request, env.DASHBOARD_ORIGIN);
-    emptyBody.parse(await body(request));
-    const bound = await binding(request, env);
-    await checkCsrf(request, bound, env);
-    const response = json(path === "/auth/sign-out" ? { ok: true, clearLocalBookmarks: true } : { ok: true });
-    if (path === "/auth/sign-out") clearSession(response, env, request);
-    else clearSeatCookies(response, request, env);
-    return response;
-  }
-  throw new DashboardError(405, "method_not_allowed");
 }
 async function dashboard(request: Request, env: DashboardEnvironment, provider: IdentityProvider, path: string): Promise<Response> {
   if (request.method !== "GET" && request.method !== "POST") throw new DashboardError(405, "method_not_allowed");
