@@ -75,6 +75,7 @@ const plans = {
     media: false,
     longCall: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["long-call"],
   },
   // Three calls of three guests held open while an operator deploys the API host (DEPLOY_HOLD_STARTED_FILE, DEPLOY_HOLD_DONE_FILE). Opt-in: nightly only.
@@ -89,6 +90,7 @@ const plans = {
     media: false,
     longCall: true,
     webhooks: false,
+    recorderFleet: false,
     proofs: ["toggle-offers"],
   },
 };
