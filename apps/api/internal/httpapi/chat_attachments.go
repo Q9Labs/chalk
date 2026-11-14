@@ -30,7 +30,7 @@ type ChatAttachmentService interface {
 }
 
 type ChatParticipantVerifier interface {
-	VerifyChatParticipant(context.Context, string) (chatattachments.Subject, bool, error)
+	VerifyParticipant(context.Context, string) (chatattachments.Subject, bool, error)
 }
 
 type initiateChatAttachmentBody struct {
@@ -185,7 +185,7 @@ func requireChatParticipant(verifier ChatParticipantVerifier) func(http.Handler)
 				writeUnauthenticated(response)
 				return
 			}
-			subject, valid, err := verifier.VerifyChatParticipant(request.Context(), token)
+			subject, valid, err := verifier.VerifyParticipant(request.Context(), token)
 			if err != nil {
 				writeServiceUnavailable(response)
 				return
