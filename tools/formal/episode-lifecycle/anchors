@@ -1,0 +1,20 @@
+# Code that each EpisodeLifecycle step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+AdmitParticipant	apps/api/internal/adapters/postgres/episode_lifecycle_create.go	if episode.Status != episodes.EpisodeStatusActive { return episodes.ErrEpisodeNotActive }
+ApplyJoin	apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex	when name in ["participant_joined", "participant_left"] and status in ["ending", "ended"], do: {:error, :episode_ending}
+ReserveDecision	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex	and admission_request_id = $4 and status = 'pending' and decision_external_operation_id is null
+FinalizeDecision	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex	and admission_request_id = $4 and status = 'pending' and decision_external_operation_id = $6
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	LifecycleCommit.complete_episode_participants( connection, episode, external, webhook_object.ended_at )
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	LifecycleSQL.supersede_pending_lifecycle_intents(),
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	SQL.complete_external_episode_admissions(),
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex	update sync_lifecycle_intents set status = 'superseded', terminal_reason = 'superseded_by_episode_end'
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex	where tenant_id = $1 and space_id = $2 and episode_id = $3 and status != 'left' for update
+CompleteEnd	apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex	update sync_admission_requests set status = 'expired', decision_external_operation_id = $4, completed_at = now() where tenant_id = $1 and space_id = $2 and episode_id = $3 and status = 'pending'
+RejectStaleEnd	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	external.deadline_generation != policy.deadline_generation ||
+EnqueueMaximumDuration	apps/api/db/queries/sync_lifecycle.sql	episodes.status = 'active' and episodes.deadline_at <= now()
+EnqueueMaximumDuration	apps/api/db/queries/sync_lifecycle.sql	and operations.operation_name = 'maximum_episode_duration_expired' and operations.deadline_generation = episodes.deadline_generation
+EndRetriesExhausted	apps/sync/lib/chalk_sync/external_operation_consumer.ex	do: {:terminal_failure, :retry_exhausted},
+EndRetriesExhausted	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	SQL.restore_episode_active()
+FinalizeDeadline	apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex	validate_finalization_deadline(external, policy)

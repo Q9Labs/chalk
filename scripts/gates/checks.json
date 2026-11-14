@@ -421,6 +421,28 @@
       "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
     },
     {
+      "id": "workflow:formal-episode-lifecycle.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the Episode lifecycle or admission code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
+      "id": "workflow:formal-screen-share-lease.yml#check",
+      "owner": "Sync",
+      "catches": "A change to the screen-share lease code that breaks a rule of its TLA+ model, or a model whose code anchors no longer match the code.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "It runs only when a file the model covers changes, so it cannot be a required context on every pull request."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
