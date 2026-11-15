@@ -1,6 +1,7 @@
 """The web archive is uploaded as a preview while the API deploys; only a successful API deploy lets deploy-web move the alias."""
 
 import io
+import json
 import os
 import re
 import tarfile
@@ -25,12 +26,15 @@ class WebStageTests(unittest.TestCase):
         archive = io.BytesIO()
         with tarfile.open(fileobj=archive, mode='w:gz') as tar:
             tar.addfile(tarfile.TarInfo('dist/client/index.html'))
+            marker = json.dumps(dict(environment='production', commit=SHA)).encode()
+            release = tarfile.TarInfo('dist/client/release.json')
+            release.size = len(marker)
+            tar.addfile(release, io.BytesIO(marker))
         member = dict(sha256='a' * 64, artifact_id='1')
         calls = []
         github = Mock()
         github.return_value.artifact.return_value = archive.getvalue()
         with (patch.object(web, 'GitHub', github), patch.dict(os.environ, CLOUDFLARE_ACCOUNT_ID='account'),
-              patch.object(web, 'read_marker', return_value=dict(environment='production', commit=SHA)),
               patch.object(web.subprocess, 'run', side_effect=lambda command, **kwargs: calls.append(command))):
             command('production', SHA, RUN, member, 'project')
         return calls
