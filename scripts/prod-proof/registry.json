@@ -14,7 +14,7 @@
   "camera-share": {
     "description": "Camera and screen share between guests.",
     "planes": ["cf_sfu", "chalk_sfu"],
-    "flags": { "media": true, "cameraShare": true },
+    "flags": { "media": true, "cameraShare": true, "recorderFleet": false },
     "proofs": ["camera-share"]
   },
   "recording-rejoin": {
@@ -46,7 +46,7 @@
     "description": "Three guests held across media-access refreshes for at least ten minutes, with mic and camera toggles on a schedule. Opt-in: nightly only.",
     "planes": ["cf_sfu", "chalk_sfu"],
     "dryRun": true,
-    "flags": { "longCall": true },
+    "flags": { "longCall": true, "recorderFleet": false },
     "proofs": ["long-call"]
   },
   "deploy-hold": {
@@ -63,6 +63,7 @@
   "leave-chalk-sfu": {
     "description": "The current client's Leave on the Chalk SFU: acknowledgement, released capture, removed participant and media.",
     "planes": ["cf_sfu", "chalk_sfu"],
+    "flags": { "recorderFleet": false },
     "proofs": ["leave-chalk-sfu"]
   },
   "chalk-sfu-spaces": {
@@ -75,6 +76,7 @@
     "description": "A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket.",
     "planes": ["cf_sfu", "chalk_sfu"],
     "browser": false,
+    "flags": { "recorderFleet": false },
     "proofs": ["chat-upload"]
   }
 }

@@ -14,6 +14,7 @@ from pathlib import Path
 import live_calls, seal
 from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
+from latency_paths import latency_paths
 from step_timing import timed
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -39,16 +40,39 @@ def recording_paths():
     return tuple(next(item for item in features if item['name'] == 'recording')['paths']) + RECORDING_EXTRA_PATHS
 
 
-def recording_changed(previous, target):
-    # The call-artifacts proof boots recorder droplets, which fetch the recorder archives from S3 and cost real money,
-    # so a cut runs it when it changed a recording path. With no baseline or an unreadable diff the answer is yes.
+def paths_changed(previous, target, prefixes):
+    # With no baseline or an unreadable diff the answer is yes: a proof that might be needed runs.
     if not previous:
         return True
     diff = subprocess.run(['git', 'diff', '--name-only', f'{previous}..{target}'], capture_output=True, text=True)
     if diff.returncode != 0:
         return True
-    prefixes = recording_paths()
     return any(path == prefix or path.startswith(prefix + '/') for path in diff.stdout.splitlines() for prefix in prefixes)
+
+
+def recording_changed(previous, target):
+    # The call-artifacts proof boots recorder droplets, which fetch the recorder archives from S3 and cost real money,
+    # so a cut runs it when it changed a recording path.
+    return paths_changed(previous, target, recording_paths())
+
+
+LATENCY_SAMPLES = 60
+
+
+def descends(sha, target):
+    return subprocess.run(['git', 'merge-base', '--is-ancestor', sha, target]).returncode == 0
+
+
+def covering_latency(github, target):
+    """The passed latency record that vouches for target: its SHA is target or an ancestor, and no latency path changed since."""
+    for item in github.deployments('nightly', 'nightly-latency'):
+        info = payload(item)
+        sha = info.get('target_sha', '')
+        if info.get('result') != 'passed' or not re.fullmatch('[0-9a-f]{40}', sha):
+            continue
+        if descends(sha, target) and not paths_changed(sha, target, latency_paths()):
+            return info
+    return None
 
 
 def manifest_bytes(github, info, trusted=True):
@@ -62,7 +86,7 @@ def manifest_bytes(github, info, trusted=True):
         run = github.request(f"actions/runs/{info['run_id']}")
         require(not trusted or (run['head_branch'] == 'master' and run['head_repository']['full_name'] == github.repository
                 and run['path'].split('@')[0] in ('.github/workflows/ci.yml', '.github/workflows/nightly.yml', '.github/workflows/promote.yml')
-                and run['event'] in ('schedule', 'workflow_dispatch')), 'untrusted artifact-producing run')
+                and run['event'] in ('push', 'schedule', 'workflow_dispatch', 'workflow_run')), 'untrusted artifact-producing run')
         data = github.artifact(info['run_id'], info['manifest_artifact_id'], info['release_id'] + '.json', info.get('manifest_sha256') or None)
     value = json.loads(data)
     require(value['release_id'] == info['release_id'] and value['source_revision'] == info['target_sha'], 'manifest identity mismatch')
@@ -247,9 +271,9 @@ def plan(github, args):
 
 def builds_fresh_artifacts():
     # Mirrors the plan-managed and build-web conditions in ci.yml. Reuse deploys artifacts that an earlier, gated run
-    # built; a Pages rollback input alone does not stop either build.
+    # built; a Pages rollback input alone does not stop either build, and an archive-only web build is a fresh artifact too.
     flag = lambda name: os.environ.get(name) == 'true'
-    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB'))
+    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB') or flag('BUILD_WEB'))
 
 
 def require_gate(github, args):
@@ -265,7 +289,7 @@ def require_gate(github, args):
     require(re.fullmatch('[0-9a-f]{40}', target), 'target_sha must be a full lowercase commit SHA')
     # A called workflow sees its caller's event. Scheduled nightly plans its cut on the latest push Gate, so its child
     # applies the same rule; an unfinished 01:17 scheduled Gate must not fail a cut that the plan already accepted.
-    push_only = os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    push_only = os.environ.get('GITHUB_EVENT_NAME') in ('schedule', 'workflow_run')
     require(github.is_on_master(target), f'{target} is not on master; merge it first')
     github.wait_for_gate(target, push_only=push_only)
     require(github.has_green_gate(target, push_only=push_only),
@@ -310,27 +334,28 @@ def require_scorecard(info):
 SCORECARD_RANK = {'passed': 0, 'gated-breach': 1, 'missing': 2}
 
 
-def with_latency(github, info):
-    """Promote reads the cut and the newest Nightly latency run of the same SHA together; no run yet is not a pass."""
-    records = github.deployments('nightly', 'nightly-latency', sha=info['target_sha'])
-    latency = payload(records[0]) if records else None
+def with_latency(github, info, production_sha):
+    """Promote reads the cut together with the latency record that covers it. A cut whose changes since production touch
+    no latency path needs none; a changed path with no passing record is a failed or missing proof, never a pass."""
+    target = info['target_sha']
+    covering = covering_latency(github, target)
     merged = dict(info)
-    proof = info.get('chalk_sfu_proof_result', 'missing')
-    if proof == 'passed':
-        merged['chalk_sfu_proof_result'] = 'latency-missing' if not latency else 'passed' if latency.get('result') == 'passed' else 'failed'
-    if latency:
+    if info.get('chalk_sfu_proof_result', 'missing') == 'passed' and not covering and paths_changed(production_sha, target, latency_paths()):
+        exact = github.deployments('nightly', 'nightly-latency', sha=target, passed_only=False)
+        merged['chalk_sfu_proof_result'] = 'failed' if exact else 'latency-missing'
+    if covering:
         scorecard_result = info.get('scorecard_result', 'missing')
-        results = [scorecard_result, latency.get('scorecard_result', 'missing')]
+        results = [scorecard_result, covering.get('scorecard_result', 'missing')]
         gated = info.get('scorecard_gated_metrics', [])
         missing = info.get('scorecard_missing_items', ['nightly scorecard result'] if scorecard_result == 'missing' else [])
         merged.update(scorecard_result=max(results, key=lambda result: SCORECARD_RANK.get(result, SCORECARD_RANK['missing'])),
-                      scorecard_gated_metrics=gated + [item for item in latency.get('scorecard_gated_metrics', []) if item not in gated],
-                      scorecard_missing_items=missing + [item for item in latency.get('scorecard_missing_items', []) if item not in missing])
+                      scorecard_gated_metrics=gated + [item for item in covering.get('scorecard_gated_metrics', []) if item not in gated],
+                      scorecard_missing_items=missing + [item for item in covering.get('scorecard_missing_items', []) if item not in missing])
     return merged
 
 
-def promotion_override(github, info):
-    info = with_latency(github, info)
+def promotion_override(github, info, production_sha):
+    info = with_latency(github, info, production_sha)
     reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
     scorecard_result = info.get('scorecard_result', 'missing')
     if not reason or scorecard_result not in ('gated-breach', 'missing'):
@@ -365,8 +390,8 @@ def choose(github):
     if expected:
         require(info['target_sha'] == expected,
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
-    audit = timed('check the scorecard and latency', promotion_override, github, info)
     previous = timed('read the production baseline', previous_production, github)
+    audit = timed('check the scorecard and latency', promotion_override, github, info, previous['target_sha'])
     try:
         ancestor(previous['target_sha'], info['target_sha'])
     except subprocess.CalledProcessError as error:
@@ -402,6 +427,26 @@ def auto_promote(github, args):
         summary.write(f'## Automatic promotion\n\n{"Promoting " + sha if sha else "Not promoting: " + reason}\n')
 
 
+def record_latency(github, args):
+    """The latency run measured this cut on its own throwaway SFU host, so the record needs no deployed-cut check."""
+    sha = env('TARGET_SHA')
+    require(re.fullmatch('[0-9a-f]{40}', sha), 'target_sha must be a full lowercase commit SHA')
+    ancestor(sha)
+    scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
+    if scorecard:
+        require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
+                f"scorecard identity does not match SHA {sha} and latency run {env('GITHUB_RUN_ID')}")
+    scorecard_result = scorecard.get('result', 'missing')
+    latency_result = os.environ.get('LATENCY_RESULT', 'failed')
+    # A shorter run has a weaker p95 and is for trying the workflow; it never becomes promotion evidence.
+    require(os.environ.get('LATENCY_SAMPLES', str(LATENCY_SAMPLES)) == str(LATENCY_SAMPLES), f'a latency record needs the full {LATENCY_SAMPLES} samples')
+    info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
+                result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
+                scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
+                scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
+    outputs({'deployment_id': github.record_latency(sha, info)})
+
+
 def deployed_cut(github):
     """The SHA Nightly runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
     lease. So the newest cut record must be newer than that write (a rerun of only the deploy job writes again with the
@@ -420,34 +465,11 @@ def deployed_cut(github):
 
 
 def latency_target(github, args):
-    try:
-        sha = deployed_cut(github)
-        # Promote reads the newest verdict of a SHA, so a repeat measurement that runs into a busy staging would turn a
-        # pass into a failure. Every Cut nightly run triggers this workflow, including one that deployed nothing new.
-        records = github.deployments('nightly', 'nightly-latency', sha=sha)
-        require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' or not records or payload(records[0]).get('result') != 'passed',
-                f'{sha} already has a passed staging latency verdict, and only a manual dispatch measures it again')
-        outputs({'sha': sha})
-    except ValueError as error:
-        outputs({'sha': ''})
-        with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
-            summary.write(f'No Nightly latency was measured: {error}.\n')
-
-
-def record_latency(github, args):
-    sha = env('TARGET_SHA')
-    require(deployed_cut(github) == sha, f'Nightly no longer runs the measured cut {sha}; refusing a stale latency verdict')
-    scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
-    if scorecard:
-        require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
-                f"scorecard identity does not match SHA {sha} and latency run {env('GITHUB_RUN_ID')}")
-    scorecard_result = scorecard.get('result', 'missing')
-    latency_result = os.environ.get('LATENCY_RESULT', 'failed')
-    info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
-                result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
-                scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
-                scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
-    outputs({'deployment_id': github.record_latency(sha, info)})
+    """The newest held cut that no passed latency record covers, or nothing: the cut Nightly latency measures. A person's dispatch measures the newest held cut even when a record covers it."""
+    held = held_candidates(github.deployments('nightly'))
+    sha = payload(held[0])['target_sha'] if held else ''
+    dispatched = os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+    outputs({'sha': sha if sha and (dispatched or covering_latency(github, sha) is None) else ''})
 
 
 def recheck(github, args):
@@ -459,7 +481,7 @@ def recheck(github, args):
     newest = held_candidates(timed('list held cuts', github.deployments, 'nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
     info = timed('validate the cut', validate_choice, github, item)
-    audit = timed('check the scorecard and latency', promotion_override, github, info)
+    audit = timed('check the scorecard and latency', promotion_override, github, info, selection['previous']['target_sha'])
     require(audit == selection.get('scorecard_override'), 'scorecard override changed after selection')
     timed('check the production baseline', manifest_bytes, github, selection['previous'])
     require(timed('read the production baseline', previous_production, github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
@@ -547,49 +569,26 @@ def record(github, args):
     info['target_sha'] = env('TARGET_SHA')
     info['transcribed'] = os.environ.get('TRANSCRIBE') == 'true'
     info['web'] = json.loads(info.get('web') or '{}')
-    # The gate: the Chalk SFU real-call proof (chalk_sfu); promotion adds the Nightly latency run of this SHA (with_latency).
-    real_call = os.environ.get('PROOF_RESULT', 'failed')
-    web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
-    chalk_sfu = os.environ.get('CHALK_SFU_RESULT', 'skipped')
+    # The gate: the proof lanes on the throwaway stack (every lane, web call included); promotion adds the latency record that
+    # covers this SHA (with_latency).
+    proof = os.environ.get('PROOF_RESULT', 'failed')
+    release = os.environ.get('RELEASE_RESULT', '')
     scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
     if scorecard:
         require(scorecard.get('target_sha') == info['target_sha'] and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
                 f"scorecard identity does not match SHA {info['target_sha']} and nightly run {env('GITHUB_RUN_ID')}")
-    passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
-    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', deploy_result=os.environ.get('DEPLOY_RESULT', ''),
-                real_call_proof_result=real_call, web_e2e_result=web_e2e, chalk_sfu_proof_result=chalk_sfu,
-                proof_run_id=env('GITHUB_RUN_ID'))
+    passed = release == 'success' and proof == 'passed'
+    # The release built this cut and the proof lanes ran its images, so the built release is the one that was proven.
+    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', release_result=release,
+                chalk_sfu_proof_result=proof, applied_release_id=info.get('release_id', ''), proof_run_id=env('GITHUB_RUN_ID'))
     info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
                 scorecard_missing_items=scorecard.get('missing_items', ['nightly scorecard result'] if not scorecard else []),
                 scorecard_budgets_revision=scorecard.get('budgets_revision', ''))
     if passed:
-        require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
-        require_current_write(github.deployments('nightly', 'nightly-write'), info)
         validate_choice(github, {'payload': info})
         data = manifest_bytes(github, info)
         info['recorder_control'] = 'recorder_control' in json.loads(data).get('images', {})
     outputs({'deployment_id': github.record(info['target_sha'], info, passed)})
-
-
-def require_current_write(records, info, message='a newer nightly write replaced this run; refusing stale held evidence'):
-    markers = [item for item in records if payload(item).get('channel') == 'nightly-write']
-    latest = max(markers, key=lambda item: (item['created_at'], int(item['id'])), default=None)
-    require(latest and payload(latest).get('run_id') == info['run_id']
-            and payload(latest).get('release_id') == info['applied_release_id'],
-            message)
-
-
-def invalidate(github, args):
-    # All callers hold chalk-environment-nightly, including record-only retries.
-    backend = os.environ.get('EXPECTED_BACKEND_RELEASE_ID', '')
-    if backend:
-        require_current_write(github.deployments('nightly', 'nightly-write'),
-                              dict(run_id=env('GITHUB_RUN_ID'), applied_release_id=backend),
-                              "a newer nightly write replaced this run's backend; refusing stale web write")
-    # Track live writes for proof ownership, not promotion of saved held bytes.
-    github.request('deployments', {'ref': env('TARGET_SHA'), 'environment': 'nightly', 'task': 'nightly-write', 'auto_merge': False,
-                   'required_contexts': [], 'payload': dict(channel='nightly-write', run_id=env('GITHUB_RUN_ID'),
-                                                          release_id=backend or os.environ.get('RELEASE_ID', ''))})
 
 
 def verify_images(github, args):
@@ -629,7 +628,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

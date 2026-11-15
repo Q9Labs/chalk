@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Creates or updates the GitHub OIDC role the host proof assumes, with the inline policy in policy.json.
+#
+#   AWS_PROFILE=<admin profile> create-role --ami <ami id> --subnet <subnet id> --security-group <sg id> [--region ap-southeast-1]
+#
+# The role can start and stop only hosts tagged chalk-purpose=nightly-host-proof and can deploy to them through the Nightly
+# SSM document. Only the `nightly-host-proof` GitHub environment may assume it, and that environment accepts master only,
+# so a pull request can never reach AWS. Prints the role ARN; store it as a secret of that environment.
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+region=ap-southeast-1 ami="" subnet="" security_group=""
+role=chalk-nightly-host-proof-github
+repo=Q9Labs/chalk
+environment=nightly-host-proof
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --ami) ami=$2 ;;
+    --subnet) subnet=$2 ;;
+    --security-group) security_group=$2 ;;
+    --region) region=$2 ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift 2
+done
+: "${ami:?--ami is required}" "${subnet:?--subnet is required}" "${security_group:?--security-group is required}"
+
+account=$(aws sts get-caller-identity --query Account --output text)
+trust=$(jq -n --arg provider "arn:aws:iam::$account:oidc-provider/token.actions.githubusercontent.com" \
+  --arg sub "repo:$repo:environment:$environment" '{
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow", Principal: { Federated: $provider }, Action: "sts:AssumeRoleWithWebIdentity",
+      Condition: { StringEquals: { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com", "token.actions.githubusercontent.com:sub": $sub } }
+    }]
+  }')
+policy=$(sed -e "s/__ACCOUNT__/$account/g" -e "s/__REGION__/$region/g" -e "s/__AMI__/$ami/g" \
+  -e "s/__SUBNET__/$subnet/g" -e "s/__SECURITY_GROUP__/$security_group/g" "$here/policy.json")
+
+if aws iam get-role --role-name "$role" > /dev/null 2>&1; then
+  aws iam update-assume-role-policy --role-name "$role" --policy-document "$trust"
+else
+  aws iam create-role --role-name "$role" --assume-role-policy-document "$trust" --max-session-duration 3600 \
+    --description "Nightly host proof: starts and stops tagged throwaway hosts" > /dev/null
+fi
+aws iam put-role-policy --role-name "$role" --policy-name chalk-nightly-host-proof --policy-document "$policy"
+aws iam get-role --role-name "$role" --query Role.Arn --output text

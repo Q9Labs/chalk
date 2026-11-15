@@ -1,6 +1,6 @@
 // Stands in for the browser, API and cloud modules that latency.mjs imports, so the test can run the real entry point through a
 // whole cycle and let it write its files. The fake page runs each evaluate callback in this process against a fake `window`.
-import { appendFile } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import timers from "node:timers/promises";
 
@@ -49,6 +49,12 @@ const page = { context: () => context, bringToFront: async () => undefined, eval
 export const loadConfig = async () => ({});
 export const command = async () => "a".repeat(40);
 export const createRun = async (_config, directory, _signal, runId) => ({ runId, directory, tenantPath: "/v1/tenants/t", config: { api_url: "https://api.invalid" }, resources: [], apiRequest: async () => ({ id: "episode" }) });
+export const startRun = async () => {
+  const runId = process.env.CHALK_PROOF_RUN_ID;
+  const directory = `.private/prod-proof/${runId}`;
+  await mkdir(directory, { recursive: true });
+  return { runId, directory };
+};
 export const sweepStaleRuns = async () => undefined;
 export const cleanupRun = async () => undefined;
 export const disposeResource = async () => [];
