@@ -29,6 +29,7 @@ export const workflowGraphNodeTests = [
   "features/scorecard/nightly-graph.test.mjs",
   "features/scorecard/deployment-records.test.mjs",
   "features/scorecard/lease-arguments.test.mjs",
+  "apps/mobile/scripts/release/nightly-current-cut.test.mjs",
   "scripts/gates/gate-runner-label.test.mjs",
   "scripts/gates/stale-merge-group.test.mjs",
 ];
