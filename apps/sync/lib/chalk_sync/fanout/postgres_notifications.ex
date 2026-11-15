@@ -49,13 +49,12 @@ defmodule ChalkSync.Fanout.PostgresNotifications do
     {:ok, notifications} =
       Postgrex.Notifications.start_link(Keyword.put(connection_options, :auto_reconnect, true))
 
-    {:ok, listen_ref} = Postgrex.Notifications.listen(notifications, @channel)
-    {:ok, publication_ref} = Postgrex.Notifications.listen(notifications, @publication_channel)
+    listen_ref = Database.listen(notifications, @channel)
+    publication_ref = Database.listen(notifications, @publication_channel)
 
     collaboration_refs =
       Map.new(@collaboration_channels, fn channel ->
-        {:ok, reference} = Postgrex.Notifications.listen(notifications, channel)
-        {reference, channel}
+        {Database.listen(notifications, channel), channel}
       end)
 
     {:ok,

@@ -56,9 +56,9 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
     {:ok, notifications} =
       Postgrex.Notifications.start_link(Keyword.put(connection_options, :auto_reconnect, true))
 
-    {:ok, head_ref} = Postgrex.Notifications.listen(notifications, @head_channel)
-    {:ok, cursor_ref} = Postgrex.Notifications.listen(notifications, @cursor_channel)
-    {:ok, access_ref} = Postgrex.Notifications.listen(notifications, @access_channel)
+    head_ref = Database.listen(notifications, @head_channel)
+    cursor_ref = Database.listen(notifications, @cursor_channel)
+    access_ref = Database.listen(notifications, @access_channel)
     {:ok, publisher} = Postgrex.start_link(connection_options)
 
     {:ok,

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Reconcile only the three named Chalk monitors and their Discord and Oncall notifiers."""
+"""Reconcile only the three named Chalk monitors.
+
+The monitors have no notifier: they still evaluate, and the API readiness and the goal check read their state. This
+file creates and references no delivery target. It and the files beside it are the only source of the monitors:
+--check lists every way the live monitors differ from them, and a notifier attached in the console is drift."""
 
 import argparse
 import json
@@ -25,24 +29,6 @@ THRESHOLDS = {
 }
 
 
-ONCALL_NOTIFIER = "Chalk production Oncall"
-
-
-def kept_oncall_ids(notifiers, detach):
-    """An apply without the Oncall URL leaves an existing Oncall notifier attached; only --detach-oncall removes it."""
-    if detach:
-        return []
-    return [item["id"] for item in notifiers if item["name"] == ONCALL_NOTIFIER]
-
-
-def reconcile_notifier(name, properties):
-    notifiers = api("GET", "/v2/notifiers")
-    existing = next((item for item in notifiers if item["name"] == name), None)
-    payload = {"name": name, "properties": properties}
-    notifier = api("POST" if existing is None else "PUT", "/v2/notifiers" + ("" if existing is None else "/" + existing["id"]), payload)
-    return notifier["id"]
-
-
 def api(method, path, payload=None):
     request = Request(
         "https://api.axiom.co" + path,
@@ -58,7 +44,7 @@ def api(method, path, payload=None):
         with urlopen(request, timeout=30) as response:
             return json.load(response)
     except HTTPError as error:
-        # Responses can echo the webhook/token; keep them out of console logs.
+        # Responses can echo the token; keep them out of console logs.
         raise RuntimeError(f"Axiom {method} {path} returned HTTP {error.code}") from None
     except URLError:
         raise RuntimeError(f"Axiom {method} {path} request failed") from None
@@ -67,13 +53,19 @@ def api(method, path, payload=None):
 # The rules that have a query of their own, joined to the generic production-state query. A rule named here is
 # evaluated over minute windows by its query, so the generic query leaves it out.
 RULE_BRANCHES = (
-    ("sync-readiness.apl", "sync-readiness"),
-    ("sfu-readiness.apl", "sfu-readiness"),
-    ("sfu-retirement-debt.apl", "sfu-retirement-debt"),
-    ("turn-credentials.apl", None),
-    ("recovery-refused.apl", None),
-    ("sfu-overflow.apl", None),
-    ("deadline-scheduler.apl", None),
+    ("readiness.apl", ("sync-readiness", "database-unreachable", "runtime-health")),
+    ("sfu-readiness.apl", ("sfu-readiness",)),
+    ("sfu-retirement-debt.apl", ("sfu-retirement-debt",)),
+    ("turn-credentials.apl", ()),
+    ("recovery-refused.apl", ()),
+    ("sfu-overflow.apl", ()),
+    ("deadline-scheduler.apl", ()),
+)
+
+# What a monitor is compared on by --check.
+COMPARED_FIELDS = (
+    "description", "type", "aplQuery", "columnName", "operator", "threshold", "intervalMinutes", "rangeMinutes",
+    "triggerFromNRuns", "triggerAfterNPositiveResults", "notifyByGroup", "notifyEveryRun", "alertOnNoData", "disabled",
 )
 
 
@@ -81,7 +73,7 @@ def monitor_definitions(variables, disabled=False, without_connection_reports=Fa
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
     branches = {
         "RULE_BRANCHES": "".join(" | union (\n" + Path(__file__).with_name(file).read_text() + "\n)" for file, _ in RULE_BRANCHES),
-        "WINDOWED_RULES_EXCLUDED": "".join(f" and chalk_alert_rule != '{rule}'" for _, rule in RULE_BRANCHES if rule),
+        "WINDOWED_RULES_EXCLUDED": "".join(f" and chalk_alert_rule != '{rule}'" for _, rules in RULE_BRANCHES for rule in rules),
     }
     branch = ""
     if not without_connection_reports:
@@ -99,15 +91,38 @@ def monitor_definitions(variables, disabled=False, without_connection_reports=Fa
     return monitors
 
 
+def monitor_drift(expected, live):
+    """Every way the live monitors differ from the repo, as readable lines; none means they match.
+
+    The query text is compared with its whitespace collapsed and is never printed. A monitor has no notifier, so any
+    attached notifier is drift."""
+    problems = []
+    live_by_name = {item["name"]: item for item in live}
+    for monitor in expected:
+        item = live_by_name.get(monitor["name"])
+        if item is None:
+            problems.append(f"{monitor['name']}: missing")
+            continue
+        for field in COMPARED_FIELDS:
+            want, have = monitor[field], item.get(field)
+            if isinstance(want, bool):
+                have = bool(have)
+            if field == "aplQuery":
+                want, have = " ".join(want.split()), " ".join((have or "").split())
+            if want != have:
+                problems.append(f"{monitor['name']}: {field} differs")
+        if item.get("notifierIds"):
+            problems.append(f"{monitor['name']}: a notifier is attached")
+    return problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Create/update production configuration")
-    parser.add_argument("--disabled", action="store_true", help="Stage monitors without evaluating or notifying")
+    parser.add_argument("--check", action="store_true", help="Read the live monitors and exit 1 if any differs from this folder; changes nothing")
+    parser.add_argument("--disabled", action="store_true", help="Stage monitors without evaluating")
     parser.add_argument("--without-connection-reports", action="store_true", help="Undo the connection-report rules without disabling existing alerts")
-    parser.add_argument("--detach-oncall", action="store_true", help="Detach the Oncall notifier from every monitor, for a delivery test; apply again with ONCALL_WEBHOOK_URL to attach it")
     args = parser.parse_args()
-    if args.detach_oncall and os.environ.get("ONCALL_WEBHOOK_URL"):
-        raise RuntimeError("--detach-oncall conflicts with ONCALL_WEBHOOK_URL")
     variables = {}
     for name in ("LOG_DATASET", "TRACE_DATASET"):
         value = os.environ.get(name, "")
@@ -115,33 +130,27 @@ def main():
             raise RuntimeError(f"{name} must be a private dataset name")
         variables[name] = value
     monitors = monitor_definitions(variables, args.disabled, args.without_connection_reports)
+    if args.check:
+        for name in ("AXIOM_TOKEN", "AXIOM_ORG_ID"):
+            if not os.environ.get(name):
+                raise RuntimeError(f"{name} is required")
+        problems = monitor_drift(monitors, api("GET", "/v2/monitors"))
+        for problem in problems:
+            print("DRIFT " + problem, file=sys.stderr)
+        if problems:
+            sys.exit(1)
+        print(f"The {len(monitors)} live monitors match this folder")
+        return
     if not args.apply:
         print(f"Validated {len(monitors)} monitor definitions; no production changes")
         return
     for name in ("AXIOM_TOKEN", "AXIOM_ORG_ID"):
         if not os.environ.get(name):
             raise RuntimeError(f"{name} is required")
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
-    if not webhook and not args.disabled:
-        raise RuntimeError("DISCORD_WEBHOOK_URL is required to enable monitors")
-    notifier_ids = []
-    if webhook:
-        if not re.fullmatch(r"https://(?:discord|discordapp)\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+", webhook):
-            raise RuntimeError("DISCORD_WEBHOOK_URL must be a Discord webhook URL")
-        discord = {"customWebhook": {"url": webhook, "headers": {"Content-Type": "application/json"}, "body": Path(__file__).with_name("discord-body.tmpl").read_text()}}
-        notifier_ids.append(reconcile_notifier("Chalk production Discord", discord))
-    oncall = os.environ.get("ONCALL_WEBHOOK_URL", "")
-    if oncall:
-        if not re.fullmatch(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9/_.~%-]+", oncall):
-            raise RuntimeError("ONCALL_WEBHOOK_URL must be an https URL")
-        # The plan has no custom-webhook feature to create a notifier with; the Slack notifier is free.
-        notifier_ids.append(reconcile_notifier(ONCALL_NOTIFIER, {"slack": {"slackUrl": oncall}}))
-    else:
-        notifier_ids.extend(kept_oncall_ids(api("GET", "/v2/notifiers"), args.detach_oncall))
     existing_monitors = {item["name"]: item for item in api("GET", "/v2/monitors")}
     for monitor in monitors:
         existing = existing_monitors.get(monitor["name"])
-        monitor["notifierIds"] = notifier_ids
+        monitor["notifierIds"] = []
         api("POST" if existing is None else "PUT", "/v2/monitors" + ("" if existing is None else "/" + existing["id"]), monitor)
         print("Reconciled " + monitor["name"] + (" (disabled)" if args.disabled else ""))
 

@@ -21,9 +21,24 @@ defmodule ChalkSync.Operations do
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
+  @serving_key {__MODULE__, :serving}
+
+  @doc """
+  Opens the node to sockets. Production Sync stays closed until the presence witness is written,
+  so a socket never lives before the recovery floor protects the leases of a node that was away.
+  The flag outlives this process: a restart of it does not close an open node.
+  """
+  @spec begin_serving() :: :ok
+  def begin_serving, do: :persistent_term.put(@serving_key, true)
+
+  @spec serving?() :: boolean()
+  def serving? do
+    :persistent_term.get(@serving_key, not Application.fetch_env!(:chalk_sync, :database_workers))
+  end
+
   @spec accepting_connections?(GenServer.server()) :: boolean()
   def accepting_connections?(server \\ __MODULE__) do
-    GenServer.call(server, :accepting_connections, 250)
+    serving?() and GenServer.call(server, :accepting_connections, 250)
   catch
     :exit, _reason -> false
   end

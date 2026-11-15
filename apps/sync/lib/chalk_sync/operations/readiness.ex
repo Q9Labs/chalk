@@ -234,10 +234,12 @@ defmodule ChalkSync.Operations.Readiness do
 
   defp public_health(state) do
     accepting? = Operations.accepting_connections?()
+    serving? = Operations.serving?()
 
     %{
       status: if(accepting?, do: Atom.to_string(state.status), else: "unready"),
-      draining: not accepting?,
+      serving: serving?,
+      draining: serving? and not accepting?,
       consecutive_failures: state.consecutive_failures,
       consecutive_successes: state.consecutive_successes,
       last_check_age_ms: check_age_ms(state),

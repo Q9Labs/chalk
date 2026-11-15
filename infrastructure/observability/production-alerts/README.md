@@ -2,13 +2,14 @@
 
 The local Grafana rules do not run in production. Production has Axiom API logs, API/Sync traces and metrics, Postgres state and an uptime Worker. CloudWatch holds transcription Lambda and deployment logs and does not cover these failures.
 
-Axiom's custom webhook notifier with `discord-body.tmpl` posts straight to the Discord webhook. Three grouped monitors fit the current monitor allowance. When `ONCALL_WEBHOOK_URL` is set, `provision.py` also reconciles a second, free Slack-type notifier aimed at the Q9 Oncall webhook and attaches both notifiers to every monitor (the plan has no custom-webhook feature for a new notifier). The on-call guide for the Chalk SFU alerts, including the DigitalOcean node alerts `do-monitoring.sh` sets, is [sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names, monitor IDs and Discord webhook in private configuration, never in this repo.
+The three Axiom monitors have no notifier: nothing here sends a message to a person. They still evaluate every minute, and the API readiness and the goal check read their state. A new delivery target needs an owner's decision and a change to this folder, not a console edit, because `provision.py --check` reports any attached notifier as drift. Three grouped monitors fit the current monitor allowance (the free Axiom plan allows three), so a new rule joins an existing monitor instead of adding a fourth. The runbook for the Chalk SFU alerts, including the DigitalOcean node alerts `do-monitoring.sh` sets, is [sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names and monitor IDs in private configuration, never in this repo.
 
 The rules are the `.apl` queries, `monitors.json`, `state.sql` and the thresholds in `provision.py`. Judgment behind them:
 
 - The Capture and Export rules are disjoint: a Render failure only counts as Export.
 - API errors are unsampled in the production `errors` request-log mode, and the API threshold is 0.05 errors/second over five minutes, not a percentage of requests. Sync counts only rejected upgrades and closures marked `close_kind=abnormal`; normal leaves, acknowledged class ends and server drains are excluded. Axiom keeps span attributes outside its conventions in `attributes.custom`, so the query reads `['attributes.custom']['close_kind']` (`['attributes.close_kind']` is rejected). Install the Sync instrumentation before switching the monitor.
-- State rules take the latest sample per minute and alert on at least four unhealthy minute samples in five minutes while the newest is unhealthy and newer than 90 seconds. That tolerates a short blip and timer jitter (a 24-second failure cannot page, a roughly five-minute outage can) and gives detection after about three to four minutes plus one evaluation interval. A healthy sample clears on the next evaluation. Missing evidence is not proof of continued failure.
+- The outage rules (`sync-readiness`, `database-unreachable`, `runtime-health` in `readiness.apl`) are judged per rule on the latest sample per minute. They alert on at least three unhealthy minute samples in four minutes while the newest is unhealthy and newer than 90 seconds, so a total outage pages within five minutes. `database-unreachable` is value 1 when the collector cannot connect to or read the database, so it is the one row that still carries the failure when the database is down. `runtime-health` probes the API and the tunnel the way the host watchdog does. A rule that stays red repeats its message every 30 minutes, because the message carries a 30-minute time bucket that changes the notification group.
+- The Chalk SFU state rules take the latest sample per minute and alert on at least four unhealthy minute samples in five minutes while the newest is unhealthy and newer than 90 seconds. That tolerates a short blip and timer jitter (a 24-second failure cannot page, a roughly five-minute outage can) and gives detection after about three to four minutes plus one evaluation interval. A healthy sample clears on the next evaluation. Missing evidence is not proof of continued failure.
 - Rules that read the API log (`turn-credentials.apl`, `recovery-refused.apl`, `deadline-scheduler.apl`) have alert text that names no Tenant, node or address. Axiom refuses to save a monitor naming a field its dataset has never received, so `deadline-scheduler.apl` reads `consecutive_failures` and `phase` through `column_ifexists` with defaults that never alert. A `control_busy` skip waits on a publication fence that Sync normally releases in seconds, so it alerts only after sixty passes. Chalk SFU placement outcomes are a metric only, with no rule, because no log line records them.
 - All SFU thresholds beyond the readiness shape live in `THRESHOLDS` in `provision.py`; the APL files read placeholders, and `provision.py` refuses a query with an unresolved one.
 
@@ -17,15 +18,15 @@ The rules are the `.apl` queries, `monitors.json`, `state.sql` and the threshold
 `collector.go` is a standalone alert-only executable, not an API change. Build it from `apps/api` to reuse the pinned pgx, with Go 1.26.11, targeting the host (`aarch64` is Go's `arm64`):
 
 ```sh
-GOTOOLCHAIN=go1.26.11 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go
-GOTOOLCHAIN=go1.26.11 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
+GOTOOLCHAIN=go1.26.11 go test ../../infrastructure/observability/production-alerts/collector*.go
+GOTOOLCHAIN=go1.26.11 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector $(ls ../../infrastructure/observability/production-alerts/collector*.go | grep -v _test)
 ```
 
 It uses one connection, a read-only transaction and a five-second SQL timeout. It emits per-Tenant counts (zeros included, so latest-value evaluation clears an old count immediately) plus empty-Tenant heartbeat rows and global rows for Sync readiness, SFU retirement debt and, when enabled, SFU readiness and certificate expiry. A rejected or partial ingest fails the service. The freshness monitor detects missing snapshots within five minutes and counts six rules; it does not count the SFU rows. The SFU readiness row exists only on hosts that enable the probe, so counting it would page every host without an SFU. The debt row comes from the same database read as the others, so a stopped collector is already caught. Only snapshots newer than five minutes drive state alerts.
 
 Install the collector only after the API release that runs the `sfu_retirement_debts` migration and after `provision.py --apply` has updated the first monitor, otherwise the previous query pages any positive debt age as a generic failure. Install the updated collector and monitor definitions together.
 
-Tenant display names and stable IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord, capped at 80 characters with control and Discord formatting characters stripped, and mentions disabled. Names may reveal internal tests but no rule suppresses a Tenant by name. No job IDs, connection strings, error details or customer payloads are exported. API and Sync events have no safe Tenant attribution, so their messages say so rather than guess.
+Tenant display names and stable IDs are read at run time and exported to the private Axiom dataset; only names appear in alert messages, capped at 80 characters with control and chat formatting characters stripped, and mentions disabled. Names may reveal internal tests but no rule suppresses a Tenant by name. No job IDs, connection strings, error details or customer payloads are exported. API and Sync events have no safe Tenant attribution, so their messages say so rather than guess.
 
 The collector also probes Sync at `http://127.0.0.1:14100/readyz` (override with `CHALK_ALERT_SYNC_READY_URL`): 200 emits zero, anything else one. Redirects are not followed, the HTTP probe is bounded to five seconds and SQL to ten, so readiness is still ingested when SQL fails. Only allowlisted reason codes are exported; no body, endpoint or exception text.
 
@@ -53,7 +54,7 @@ A managed release replaces only the managed runtime files and leaves `/opt/chalk
 
 ## Connection-report rules
 
-[connection-reports.apl](connection-reports.apl) joins the first monitor and uses the existing Discord notifier and three-monitor allowance. It covers `join_failed`, `media_start_failed`, `media_recovery_exhausted`, `media_projection_mismatch` and `audio_receive_stuck` reports, grouped by Tenant ID, Episode ID and failure.
+[connection-reports.apl](connection-reports.apl) joins the first monitor and uses the three-monitor allowance. It covers `join_failed`, `media_start_failed`, `media_recovery_exhausted`, `media_projection_mismatch` and `audio_receive_stuck` reports, grouped by Tenant ID, Episode ID and failure.
 
 - Only accepted `sdk.connection_report` API events count. Rejected uploads, ordinary state changes, connection-loss reports and retries that recover do not, but permission or device failures that stop a join do; do not hide a real class failure as noise.
 - Repeated uploads and multiple diagnostics count once per participant. A failed media start is the more specific join-failure category, not a second alert for the same join.
@@ -65,34 +66,27 @@ A managed release replaces only the managed runtime files and leaves `/opt/chalk
 
 ## Reconcile the native monitors
 
-Load these privately: `AXIOM_TOKEN` (monitor and notifier management), `AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, `DISCORD_WEBHOOK_URL`, plus `ONCALL_WEBHOOK_URL` to create or update the Oncall notifier. With the URL unset an existing Oncall notifier stays attached; only `--detach-oncall` removes it. The Discord URL is in 1Password vault `dev`, item **Chalk production alerts Discord webhook**; the Oncall URL is the item **Oncall webhook URL**.
+Load these privately: `AXIOM_TOKEN` (monitor management), `AXIOM_ORG_ID`, `LOG_DATASET` and `TRACE_DATASET`.
 
 ```sh
 python3 infrastructure/observability/production-alerts/provision.py
 python3 infrastructure/observability/production-alerts/provision.py --apply --disabled
-# Enable only after the collector snapshots and Discord destination are verified:
+# Enable only after the collector snapshots are verified:
 python3 infrastructure/observability/production-alerts/provision.py --apply
+# Read the live monitors and list every difference from this folder (exit 1 on any); run it after every apply and on a schedule:
+python3 infrastructure/observability/production-alerts/provision.py --check
 ```
 
-For a release that keeps existing alerts enabled, validate with the first command, install the updated collector, then run the final `--apply`. Never stage all monitors with `--disabled` during a live class. Confirm the native monitor evaluation and actual Discord receipt after release.
+This folder is the only source of the monitors. A change made in the Axiom console shows up as `DRIFT` in `--check`; put it here or undo it there. `--check` compares the query text (whitespace collapsed), thresholds, intervals and flags, and expects no notifier on any monitor: an empty notifier list is the correct state, an attached one is drift.
+
+Install the collector that writes `database-unreachable` and `runtime-health` before the first `--apply` of these queries. The staleness monitor watches both rules, so applying it first pages once per missing rule.
+
+For a release that keeps existing alerts enabled, validate with the first command, install the updated collector, then run the final `--apply`. Never stage all monitors with `--disabled` during a live class. Confirm the native monitor evaluation after release.
 
 To undo only the connection-report rules, keeping the previous job, traffic and freshness queries enabled, run `provision.py --apply --without-connection-reports` with the same private environment. It leaves the collector's harmless name field in place and does not disable the collector or any app unit.
 
-Only the three exact monitor names and the exact notifier name are reconciled; unrelated configuration is untouched. Provisioning without a webhook is permitted only with `--disabled`, as preparation, not working delivery. The state and traffic monitors notify per rule group and treat no data as not a failure; the third monitor explicitly catches missing state coverage. Exporter health stays with the uptime Worker and existing telemetry checks.
+Only the three exact monitor names are reconciled, with an empty notifier list; unrelated configuration is untouched. The state and traffic monitors group per rule and treat no data as not a failure; the third monitor lists the rules that wrote no row in five minutes and alerts for each one on its own, so one stopped probe cannot hide behind the others. Exporter health stays with the uptime Worker and existing telemetry checks.
 
-## Prove delivery and reset
+## Check the monitors and the collector
 
-All Axiom rules share one route: Axiom monitor, custom webhook notifier, Discord, and (when attached) Slack-type notifier, Oncall. A direct webhook POST proves the endpoint only, not this route.
-
-1. With production monitors enabled, run `collector --test`, which emits a dedicated `delivery-test` group with no database write or induced failure. It reaches every notifier on the monitor and would start an Oncall run, so first run `provision.py --apply --detach-oncall`, and run `provision.py --apply` with `ONCALL_WEBHOOK_URL` again after step 3 so production paging comes back.
-2. Wait for the native monitor evaluation, using its history as evidence. Confirm the **TEST: Chalk alert delivery** message in the actual Discord channel, and record the evidence privately.
-3. Run `collector --clear-test`, confirm the threshold-closed message, and remove the test notification from the channel when supported. The test events carry no customer data.
-4. Query all rule groups and freshness, and confirm the timer remains active.
-
-If the Discord item is absent, finish the code and checks, leave monitors disabled and report delivery as unproved. Never infer receipt from a successful HTTP response from Axiom or a created notifier. Rollback disables the three named monitors and stops only `chalk-alert-state.timer`; it leaves app units alone.
-
-## Discord layout
-
-Axiom's [custom webhook notifier](https://axiom.co/docs/monitor-data/custom-webhook-notifier) exposes Go templates with `Action`, `Value`, `GroupKeys` and `GroupValues`; provisioning sets `Content-Type: application/json`. Axiom joins each result's group columns into one `GroupValues` string, so `GroupKeys` and `GroupValues` are not parallel arrays. The job and connection queries therefore group on one `alert_message` column of newline-delimited Tenant identity, rule, headline, summary, next action and engineer line (the collector strips controls from names; fixed text has no newlines). The template slices at newline byte boundaries and JSON-quotes the message, includes complete messages within a 1,700-byte budget, and adds a counted omission notice pointing to the monitor. That stays under Discord's 2,000-character limit without cutting Unicode or losing a whole batch. Mentions are disabled.
-
-Threshold closure is explicitly **not proof of repair**: the message says the threshold is no longer exceeded and asks an engineer to confirm. The last line is always "For engineers" with a first diagnostic command. A Capture terminal failure does not mean all source is unrecoverable (the completion recovery path can retain source), so no complete video is promised and an engineer checks recoverability immediately. Export messages calculate the earliest source expiry from the Capture completion and the Episode's frozen retention policy; transcripts use their immutable `source_expires_at`; unknown or passed deadlines are stated, never invented.
+Run `provision.py --check` after every apply and on a schedule: it reads the live monitors and exits 1 on any difference. Confirm the monitor evaluation from its history in Axiom, and query every rule group and its freshness. Run `collector --test` and `collector --clear-test` to write a `delivery-test` group with no database write or induced failure; with no notifier it only proves the rows reach the dataset and the monitors read them. Rollback disables the three named monitors and stops only `chalk-alert-state.timer`; it leaves app units alone.

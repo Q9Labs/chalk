@@ -149,12 +149,12 @@ func TestSFUReadinessRowOnlyWhenConfigured(t *testing.T) {
 	sync := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer sync.Close()
 	items, _ := collectState(context.Background(), sync.Client(), "", sync.URL, nil)
-	if len(items) != 1 || items[0].Rule != "sync-readiness" {
+	if len(items) != 2 || items[0].Rule != "sync-readiness" {
 		t.Fatalf("an unconfigured SFU must emit no row: %+v", items)
 	}
 	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")), ready(200, sfuBody(0, "")))
 	items, _ = collectState(context.Background(), sync.Client(), "", sync.URL, probes)
-	if len(items) != 2 || items[0].Rule != "sync-readiness" || items[1].Rule != "sfu-readiness" || items[1].Value != 0 {
+	if len(items) != 3 || items[0].Rule != "sync-readiness" || items[1].Rule != "sfu-readiness" || items[1].Value != 0 {
 		t.Fatalf("a configured fleet emits one global row: %+v", items)
 	}
 }

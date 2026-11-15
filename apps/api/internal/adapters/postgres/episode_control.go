@@ -246,11 +246,7 @@ func lockPresenceRecoveryFloor(ctx context.Context, tx pgx.Tx) (pgtype.Timestamp
 
 func lockPresenceRuntimeFloor(ctx context.Context, tx pgx.Tx, witness int) (pgtype.Timestamptz, error) {
 	var floor pgtype.Timestamptz
-	err := tx.QueryRow(ctx, `select (case when exists (
-    select 1 from pg_locks where locktype='advisory' and classid=1128811595
-        and objid=$1::oid and objsubid=2 and mode='ShareLock' and granted
-        and database=(select oid from pg_database where datname=current_database())
-) then recover_after end)::timestamptz as recover_after
+	err := tx.QueryRow(ctx, `select (case when `+presenceWitnessHeld+` then recover_after end)::timestamptz as recover_after
 from sync_presence_runtime where singleton for share;`, witness).Scan(&floor)
 	return floor, err
 }

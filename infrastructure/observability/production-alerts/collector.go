@@ -107,9 +107,7 @@ func run() error {
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID."
-		if snapshots[i].Rule == ruleSyncReadiness {
-			snapshots[i].Engineers = "For engineers: sync-readiness; inspect /readyz and sync.readiness.failed events, then systemctl status chalk-alert-state.timer chalk-alert-state.service."
-		}
+		healthEngineers(&snapshots[i])
 		if snapshots[i].Rule == ruleCertificateExpiry {
 			snapshots[i].Engineers = "For engineers: certificate-expiry; run `openssl s_client -connect <host>:443 </dev/null | openssl x509 -noout -enddate` for the door, or deploy/certs for the SFU, then the renewal steps in the production-alerts README."
 		}
@@ -150,7 +148,7 @@ func message(rule string) (headline, impact, next string) {
 	case ruleRecordingStop:
 		return "A Recording has not finished stopping", "Capture finished more than two minutes ago, but Sync still reports stopping. This can block Episode end and another Episode in the same Space.", "An engineer must check capture-stopped callback delivery and pipeline maintenance now."
 	case ruleSyncReadiness:
-		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
+		return "Sync has stayed unready", "Sync was unready in at least three of the last four minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
 	case ruleSFUReadiness:
 		return "A Chalk SFU node is refusing new calls or unreachable", "At least one Chalk SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
 	case ruleCertificateExpiry:
@@ -164,13 +162,13 @@ func message(rule string) (headline, impact, next string) {
 	case ruleWebhook:
 		return "A customer's system was not told about a class event", "Chalk tried several times to reach the customer's server and gave up, so their attendance or Recording records may be out of date.", "An engineer must check the customer's server now, then redeliver the event; automatic retries have ended."
 	default:
-		return "TEST: Chalk alert delivery", "No customer failure was induced.", "This only tests notification delivery; no customer action is needed."
+		return healthMessage(rule)
 	}
 }
 
 func formatMessage(item *snapshot) {
 	item.Headline, item.Summary, item.Next = message(item.Rule)
-	if item.Rule == ruleSyncReadiness || item.Rule == ruleSFUReadiness || (item.Rule == ruleCertificateExpiry && item.Value > 0) {
+	if item.Rule == ruleSyncReadiness || item.Rule == ruleSFUReadiness || item.Rule == ruleRuntimeHealth || (item.Rule == ruleCertificateExpiry && item.Value > 0) {
 		item.Summary += " Latest readiness reason: " + item.Reason + "."
 	}
 	if item.Tenant != "" {
@@ -198,6 +196,7 @@ func collectState(ctx context.Context, client *http.Client, databaseURL, readine
 	databaseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	snapshots, err := collect(databaseCtx, databaseURL)
+	readiness = append(readiness, healthRows(ctx, client, snapshots, err)...)
 	return append(snapshots, readiness...), err
 }
 
@@ -652,17 +651,17 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 	config.RuntimeParams["statement_timeout"] = "5000"
 	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
-		return nil, errors.New("alert state database connection failed")
+		return nil, unreachableError("alert state database connection failed")
 	}
 	defer conn.Close(ctx)
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, errors.New("alert state read-only transaction failed")
+		return nil, unreachableError("alert state read-only transaction failed")
 	}
 	defer tx.Rollback(ctx)
 	rows, err := tx.Query(ctx, stateSQL)
 	if err != nil {
-		return nil, errors.New("alert state query failed")
+		return nil, unreachableError("alert state query failed")
 	}
 	defer rows.Close()
 	var snapshots []snapshot

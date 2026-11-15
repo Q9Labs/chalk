@@ -3,8 +3,8 @@ Description=Chalk production SyncEngine
 After=network-online.target chalk-api.service
 Requires=chalk-api.service
 Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
+# A database outage can last hours. The unit keeps retrying, because a start limit would leave it failed until someone starts it by hand.
+StartLimitIntervalSec=0
 
 [Container]
 Image=__SYNC_IMAGE_REFERENCE__
@@ -39,7 +39,7 @@ PodmanArgs=--stop-timeout=15
 
 [Service]
 Restart=on-failure
-RestartSec=2s
+RestartSec=5s
 TimeoutStartSec=120
 TimeoutStopSec=25
 
