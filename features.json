@@ -456,6 +456,7 @@
         ".github/workflows/formal-recording-pipeline.yml",
         ".github/workflows/gate.yml",
         ".github/workflows/host-change-check.yml",
+        ".github/workflows/hotfix-rehearsal.yml",
         ".github/workflows/hotfix.yml",
         ".github/workflows/nightly-cf-latency.yml",
         ".github/workflows/nightly-host-proof.yml",

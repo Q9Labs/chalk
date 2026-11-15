@@ -30,12 +30,10 @@ def baseline_for(github, environment):
 
 def plan(github, args):
     sha = env('HOTFIX_SHA')
-    environment = env('HOTFIX_ENVIRONMENT')
+    environment = env('HOTFIX_ENVIRONMENT')  # nightly names the rehearsal, whose baseline is the held nightly cut
     require(re.fullmatch('[0-9a-f]{40}', sha), 'sha must be a full lowercase commit SHA')
     require(environment in ('nightly', 'production'), 'environment must be nightly or production')
     require(os.environ.get('GITHUB_REF') == 'refs/heads/master', 'run the hotfix workflow from master')
-    require(os.environ.get('FORCE_SMOKE_FAILURE') != 'true' or environment == 'nightly',
-            'a forced smoke failure is a rehearsal and runs only on nightly')
     require(github.is_on_master(sha), f'{sha} is not on master; merge the fix first')
     github.wait_for_gate(sha, push_only=True)
     require(github.has_green_gate(sha, push_only=True),
