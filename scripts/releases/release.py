@@ -14,6 +14,7 @@ from pathlib import Path
 import live_calls, seal
 from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
+from step_timing import timed
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -356,17 +357,16 @@ def summarize_override(audit):
 
 
 def choose(github):
-    records = github.deployments('nightly')
-    held = held_candidates(records)
+    held = held_candidates(timed('list held cuts', github.deployments, 'nightly'))
     require(held, 'no held nightly')
     selected = held[0]  # Never fall back when the newest held record is invalid.
-    info = validate_choice(github, selected)
+    info = timed('validate the cut', validate_choice, github, selected)
     expected = os.environ.get('EXPECTED_RELEASE_SHA')
     if expected:
         require(info['target_sha'] == expected,
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
-    audit = promotion_override(github, info)
-    previous = previous_production(github)
+    audit = timed('check the scorecard and latency', promotion_override, github, info)
+    previous = timed('read the production baseline', previous_production, github)
     try:
         ancestor(previous['target_sha'], info['target_sha'])
     except subprocess.CalledProcessError as error:
@@ -456,13 +456,13 @@ def recheck(github, args):
     status = github.request(f"deployments/{item['id']}/statuses?per_page=1")
     item['latest_status'] = status[0]['state'] if status else 'pending'
     require(held_candidates([item]) and payload(item) == selection['selection'], 'selected nightly changed or is no longer held')
-    newest = held_candidates(github.deployments('nightly'))
+    newest = held_candidates(timed('list held cuts', github.deployments, 'nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
-    info = validate_choice(github, item)
-    audit = promotion_override(github, info)
+    info = timed('validate the cut', validate_choice, github, item)
+    audit = timed('check the scorecard and latency', promotion_override, github, info)
     require(audit == selection.get('scorecard_override'), 'scorecard override changed after selection')
-    manifest_bytes(github, selection['previous'])
-    require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
+    timed('check the production baseline', manifest_bytes, github, selection['previous'])
+    require(timed('read the production baseline', previous_production, github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
     summarize_override(audit)
 
 
