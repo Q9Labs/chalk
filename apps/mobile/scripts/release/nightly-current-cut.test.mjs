@@ -4,6 +4,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { createGatePlan } from "../../../../scripts/gates/chalk-gate-plan.mjs";
 
 const script = new URL("./nightly-current-cut.sh", import.meta.url).pathname;
 const thisCut = { sha: "aaa", run: "100" };
@@ -49,4 +50,11 @@ test("the failed Android publish of 2026-11-15 would have published", () => {
   // The two newest nightly-cut deployments when run 43690022203 refused: a cut whose proof failed, then the cut being published.
   const observed = [deployment("dfaa8e6023a86a17c7b8602b62933738efc68ef1", "43688458706", "failed"), deployment("8613646804c87f9a810c11ef9b57e9d5df0b7d18", "43687016274", "passed")];
   assert.equal(cutIsCurrent(observed, { sha: "8613646804c87f9a810c11ef9b57e9d5df0b7d18", run: "43687016274" }), true);
+});
+
+test("a change to only the guard or only its test selects the workflow-graph lane", () => {
+  for (const file of ["apps/mobile/scripts/release/nightly-current-cut.sh", "apps/mobile/scripts/release/nightly-current-cut.test.mjs"]) {
+    const plan = createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+    assert.ok(plan.tasks.find((task) => task.id === "workflow-graph").selected, file);
+  }
 });
