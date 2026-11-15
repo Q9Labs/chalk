@@ -2,7 +2,7 @@
 // Save a cut-scoped budget verdict before history publishing or issue updates can fail.
 import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { gatedActionIds, gatedSampleFloor, planeBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { gatedActionIds, gatedSampleFloor, latencyRegressionLimits, planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { diffMetrics, expectedMetricRows, renderExpectedMetrics } from "./diff.mjs";
 import { parseHistory } from "./history.mjs";
 import { regressions } from "./regression.mjs";
@@ -18,6 +18,8 @@ const { budgets } = file;
 // A manual trial runs fewer cycles than the full run (LATENCY_SAMPLES) and is held to the same share of them.
 // A cut from before gatedSamples existed has no such key, so its floor comes from the budgets file of the revision running this script.
 const sampleSource = file.gatedSamples ? file : JSON.parse(readFileSync("perf/budgets.json", "utf8"));
+// The same holds for latencyRegression, read from the budgets file next to this script.
+const regressionRule = latencyRegressionLimits(file.latencyRegression ? file : await readBudgets());
 const sampleFloor = gatedSampleFloor(sampleSource, process.env.LATENCY_SAMPLES ? Number(process.env.LATENCY_SAMPLES) : undefined);
 validateBudgetEntries(budgets);
 const metrics = new Set();
@@ -31,7 +33,7 @@ function readHistoryBranch() {
 
 // A gated metric whose p95 is far above the median of the recent passing records of its plane and runner is a gated breach, named like any other.
 function scoreRegressions(card) {
-  const { failures, learning } = regressions(readHistoryBranch(), card, budgets, gatedSampleFloor(sampleSource));
+  const { failures, learning } = regressions(readHistoryBranch(), card, budgets, gatedSampleFloor(sampleSource), regressionRule);
   const lines = failures.map((row) => `| ${row.id} | ${Math.round(row.p95)} ms | ${Math.round(row.median)} ms (${row.runs} records) | +${Math.round((100 * (row.p95 - row.median)) / row.median)}% |`);
   if (lines.length === 0 && learning.length === 0) return;
   const note = learning.length ? `\n${learning.length} gated metric(s) have too few prior records to judge and only warn.\n` : "";

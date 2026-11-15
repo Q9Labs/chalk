@@ -71,3 +71,16 @@ export function gatedSampleFloor({ gatedSamples }, cycles = gatedSamples?.fullRu
   }
   return Math.min(gatedSamples.floor, Math.ceil((gatedSamples.floor / gatedSamples.fullRun) * cycles));
 }
+
+/**
+ * latencyRegressionLimits is the regression rule of the latency verdict, from the file's latencyRegression: a gated metric fails when its p95 is more than
+ * `pct` percent and more than `ms` milliseconds above the median p95 of the last `runs` passing records, and only warns with fewer than `minRuns` of them.
+ * @param {{ latencyRegression?: { runs: number, minRuns: number, pct: number, ms: number } }} file  The parsed perf/budgets.json.
+ */
+export function latencyRegressionLimits({ latencyRegression: limits }) {
+  const whole = (value) => Number.isInteger(value) && value >= 1;
+  if (!whole(limits?.runs) || !whole(limits?.minRuns) || limits.minRuns > limits.runs || !(Number.isFinite(limits.pct) && limits.pct > 0) || !(Number.isFinite(limits.ms) && limits.ms > 0)) {
+    throw new Error("perf/budgets.json: latencyRegression needs integer runs and minRuns (minRuns at most runs) and positive pct and ms");
+  }
+  return limits;
+}
