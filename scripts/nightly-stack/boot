@@ -164,7 +164,7 @@ cat > "$dir/Caddyfile" <<CADDY
 }
 :$port_front {
 	bind 127.0.0.1
-	@sync path /v1/sync /v1/sync/* /v1/whiteboard /v1/whiteboard/*
+	@sync path /v1/sync /v1/sync/* /v1/whiteboard
 	handle @sync {
 		reverse_proxy 127.0.0.1:$port_sync
 	}

@@ -2,8 +2,9 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# What decides the Chalk SFU's media speed: the `media` paths in features.json, the latency kit and the stack it measures on.
+# What decides the Chalk SFU's media speed: the `media` paths in features.json, the latency kit, the stack it measures on and the SDK join and media code the kit drives.
 LATENCY_EXTRA_PATHS = ('features/scorecard', 'perf/budgets.json', 'scripts/nightly-stack', 'scripts/prod-proof',
+                       'sdks/typescript/client/src/connection', 'sdks/typescript/client/src/media',
                        '.github/workflows/nightly-latency.yml', '.github/workflows/nightly-proofs.yml')
 
 
