@@ -40,9 +40,8 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
   defp initial_policy(transaction, candidate) do
     config_policy = %{config_snapshot: candidate.config_snapshot}
 
-    with {:ok, deadline_policy} <- initial_deadline_policy(transaction, candidate) do
-      {:ok, Map.merge(config_policy, deadline_policy)}
-    else
+    case initial_deadline_policy(transaction, candidate) do
+      {:ok, deadline_policy} -> {:ok, Map.merge(config_policy, deadline_policy)}
       :not_usable -> {:ok, config_policy}
     end
   end
