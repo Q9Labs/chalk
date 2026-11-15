@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { decide } from "./changed.mjs";
+import { decide } from "./changed-paths.mjs";
 
 const featureMap = { features: [{ name: "mcp", paths: ["apps/api/internal/mcptools", "apps/api/internal/httpapi/mcp.go"] }] };
 
