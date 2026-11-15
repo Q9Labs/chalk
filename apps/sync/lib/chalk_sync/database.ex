@@ -153,8 +153,8 @@ defmodule ChalkSync.Database do
       "disable" ->
         {:ok, [ssl: false]}
 
-      # As in libpq and the Go API, require encrypts without verifying the certificate: the Nightly host proof's own
-      # Postgres container presents a self-signed one. The environment rule in the host controller keeps production on verify-full.
+      # As in libpq and the Go API, require encrypts without verifying the certificate: the Nightly host proof's
+      # own Postgres container presents a self-signed one. The host controller keeps production on verify-full.
       "require" ->
         {:ok, [ssl: true, ssl_opts: [verify: :verify_none]]}
 
