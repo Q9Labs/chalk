@@ -48,7 +48,7 @@ test("a Release job with an environment that runs after a failed dependency stil
 
 test("only the call-artifacts proof leaves the production group that every other production proof, web proof included, shares", () => {
   const group = proofWorkflow.concurrency.group;
-  assert.match(group, /format\('real-call-proof-\{0\}\{1\}', inputs\.environment \|\| 'production', inputs\.proofs == 'call-artifacts' && '-recording' \|\| ''\)/);
+  assert.match(group, /format\('real-call-proof-\{0\}\{1\}', inputs\.environment \|\| 'production', inputs\.proofs == 'call-artifacts' && inputs\.media_plane == 'chalk_sfu' && '-recording' \|\| ''\)/);
   assert.match(webProofWorkflow.concurrency.group, /format\('real-call-proof-\{0\}', inputs\.environment\)/);
   const legs = JSON.parse(promote.jobs.proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
   assert.deepEqual(legs.filter((leg) => leg.proofs === "call-artifacts").length, 1);

@@ -152,9 +152,9 @@ on:
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
   # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
-  # In production the call-artifacts proof alone uses the automatic Recording Space, so it has its own group and runs beside the proofs that use the manual Space.
+  # In production the Chalk SFU call-artifacts proof alone uses the automatic Recording Space, so it has its own group and runs beside the proofs that use the manual Space.
   # Every other production run, web-call-proof.yml included, shares one group. A production run that mixes call-artifacts with other proofs, or adds latency to it, is refused below.
-  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && '-recording' || '') }}
+  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && inputs.media_plane == 'chalk_sfu' && '-recording' || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
