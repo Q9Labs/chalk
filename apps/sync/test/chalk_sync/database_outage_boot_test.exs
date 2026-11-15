@@ -79,6 +79,54 @@ defmodule ChalkSync.DatabaseOutageBootTest do
     await(fn -> Readiness.ready?() end, 60_000)
   end
 
+  test "Sync stays up while the provider bridge is away as well, because the API waits for the same database" do
+    previous = Application.fetch_env(:chalk_sync, :provider_bridge)
+
+    on_exit(fn ->
+      case previous do
+        {:ok, value} -> Application.put_env(:chalk_sync, :provider_bridge, value)
+        :error -> Application.delete_env(:chalk_sync, :provider_bridge)
+      end
+    end)
+
+    # Valid certificate files, so that start accepts the configuration, and a port with no listener.
+    directory =
+      Path.join(System.tmp_dir!(), "bridge-outage-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(directory)
+    on_exit(fn -> File.rm_rf(directory) end)
+    certificate = Path.join(directory, "certificate.pem")
+    key = Path.join(directory, "key.pem")
+
+    {_output, 0} =
+      System.cmd(
+        "openssl",
+        ~w(req -x509 -newkey rsa:2048 -nodes -subj /CN=bridge -days 1 -keyout #{key} -out #{certificate}),
+        stderr_to_stdout: true
+      )
+
+    Application.put_env(:chalk_sync, :provider_bridge,
+      base_url: "https://127.0.0.1:#{free_port()}",
+      certfile: certificate,
+      keyfile: key,
+      cacertfile: certificate
+    )
+
+    assert {:ok, _started} = Application.ensure_all_started(:chalk_sync)
+
+    {_id, boot_check, _type, _modules} =
+      ChalkSync.Supervisor
+      |> Supervisor.which_children()
+      |> Enum.find(fn {id, _pid, _type, _modules} -> id == ChalkSync.Operations.BootCheck end)
+
+    assert is_pid(boot_check)
+    Process.sleep(500)
+    assert Process.alive?(boot_check)
+    assert Process.whereis(ChalkSync.Supervisor)
+    refute Operations.serving?()
+    refute Readiness.ready?()
+  end
+
   test "a node whose boot checks have not passed takes no sockets, even with the witness written" do
     Operations.begin_serving()
     Operations.hold_for_boot_check()

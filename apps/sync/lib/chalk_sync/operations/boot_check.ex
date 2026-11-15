@@ -8,8 +8,14 @@ defmodule ChalkSync.Operations.BootCheck do
 
   # An absent or switching database is an outage that readiness reports and recovers from, not a
   # bad deploy. Crashing on it let systemd's start limit strand Sync for hours. The checks that
-  # need the database then run again until they pass, and sockets stay out until they do.
-  @outage_reasons [:database_unavailable, :database_not_writable_primary]
+  # need the database then run again until they pass, and sockets stay out until they do. The
+  # provider bridge is the API, and the API waits for the same database at start, so a bridge that
+  # is not ready yet is part of the same outage.
+  @outage_reasons [
+    :database_unavailable,
+    :database_not_writable_primary,
+    :provider_bridge_unavailable
+  ]
   @recheck_ms 5_000
 
   def start_link(options \\ []), do: GenServer.start_link(__MODULE__, options)

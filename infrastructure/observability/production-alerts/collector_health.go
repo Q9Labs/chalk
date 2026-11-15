@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -31,21 +32,44 @@ func healthRows(ctx context.Context, client *http.Client, snapshots []snapshot, 
 	case databaseErr == nil || len(snapshots) > 0:
 		rows = append(rows, snapshot{Rule: ruleDatabase, Value: 0, Reason: "readable"})
 	}
-	return append(rows, collectRuntimeHealth(ctx, client, os.Getenv("CHALK_ALERT_API_READY_URL"), os.Getenv("CHALK_ALERT_TUNNEL_READY_URL")))
+	return append(rows, collectRuntimeHealth(ctx, client, os.Getenv("CHALK_ALERT_API_READY_URL"), tunnelProbeURL()))
 }
 
-// collectRuntimeHealth probes what the host watchdog (chalk-runtime-health) probes: the API and the tunnel. The
+// tunnelProbeURL is the tunnel readiness URL, or empty when the host has no connector. Like chalk-runtime-health, the
+// connector exists when its Quadlet is installed; an environment without the tunnel token has none, so nothing is
+// checked there. CHALK_ALERT_TUNNEL_QUADLET names the file for a host that keeps its Quadlets elsewhere.
+func tunnelProbeURL() string {
+	quadlet := os.Getenv("CHALK_ALERT_TUNNEL_QUADLET")
+	if quadlet == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		quadlet = filepath.Join(home, ".config/containers/systemd/chalk-cloudflared.container")
+	}
+	if _, err := os.Stat(quadlet); err != nil {
+		return ""
+	}
+	if url := os.Getenv("CHALK_ALERT_TUNNEL_READY_URL"); url != "" {
+		return url
+	}
+	return "http://127.0.0.1:12000/ready"
+}
+
+// collectRuntimeHealth probes what the host watchdog (chalk-runtime-health) probes: the API and, when the host has a
+// connector (a tunnelURL), the tunnel. The
 // watchdog only fails a systemd unit on the host; this row pages through the same path as every other rule.
 func collectRuntimeHealth(ctx context.Context, client *http.Client, apiURL, tunnelURL string) snapshot {
 	if apiURL == "" {
 		apiURL = "http://127.0.0.1:18080/readyz"
 	}
-	if tunnelURL == "" {
-		tunnelURL = "http://127.0.0.1:12000/ready"
-	}
 	item := snapshot{Rule: ruleRuntimeHealth, Reason: "healthy", Time: time.Now().UTC().Format(time.RFC3339Nano)}
 	var failed []string
-	for _, probe := range []struct{ name, url string }{{"api", apiURL}, {"tunnel", tunnelURL}} {
+	probes := []struct{ name, url string }{{"api", apiURL}}
+	if tunnelURL != "" {
+		probes = append(probes, struct{ name, url string }{"tunnel", tunnelURL})
+	}
+	for _, probe := range probes {
 		if !probeOK(ctx, client, probe.url) {
 			failed = append(failed, probe.name)
 		}

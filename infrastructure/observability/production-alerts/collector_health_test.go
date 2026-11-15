@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -73,6 +75,8 @@ func TestRuntimeHealthFollowsTheAPIAndTheTunnel(t *testing.T) {
 		{"api refusing", failing.URL, healthy.URL, 1, "api_unhealthy"},
 		{"tunnel down", healthy.URL, "http://127.0.0.1:1/ready", 1, "tunnel_unhealthy"},
 		{"both down", failing.URL, failing.URL, 1, "api+tunnel_unhealthy"},
+		{"no connector on the host", healthy.URL, "", 0, "healthy"},
+		{"no connector and the api refusing", failing.URL, "", 1, "api_unhealthy"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			item := collectRuntimeHealth(context.Background(), healthy.Client(), test.api, test.tunnel)
@@ -91,5 +95,24 @@ func TestEveryHealthRuleHasItsOwnText(t *testing.T) {
 		if strings.Contains(item.Headline, "TEST") || !strings.HasPrefix(item.Engineers, "For engineers: "+rule+";") {
 			t.Fatalf("%s has no text of its own: %+v", rule, item)
 		}
+	}
+}
+
+func TestTheTunnelIsProbedOnlyWhereTheConnectorIsInstalled(t *testing.T) {
+	quadlet := filepath.Join(t.TempDir(), "chalk-cloudflared.container")
+	t.Setenv("CHALK_ALERT_TUNNEL_QUADLET", quadlet)
+	t.Setenv("CHALK_ALERT_TUNNEL_READY_URL", "")
+	if got := tunnelProbeURL(); got != "" {
+		t.Fatalf("a host without the connector must not probe the tunnel, got %q", got)
+	}
+	if err := os.WriteFile(quadlet, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := tunnelProbeURL(); got != "http://127.0.0.1:12000/ready" {
+		t.Fatalf("a host with the connector probes the default tunnel URL, got %q", got)
+	}
+	t.Setenv("CHALK_ALERT_TUNNEL_READY_URL", "http://127.0.0.1:9/ready")
+	if got := tunnelProbeURL(); got != "http://127.0.0.1:9/ready" {
+		t.Fatalf("the configured URL wins, got %q", got)
 	}
 }
