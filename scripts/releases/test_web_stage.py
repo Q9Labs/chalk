@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import release
 import web
 
-SHA = '8e7a9381803d7e24e924a0f847250ec6c2bb390a'
+SHA = '737897ad7361c859b1bc865d26399dd045c4fb9a'
 RUN = '123'
 
 
