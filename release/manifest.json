@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "product": "Chalk",
-  "version_name": "3.0.6",
+  "version_name": "3.0.7",
   "vault": "Mobile App Releases",
   "android": {
     "package_name": "ai.q9labs.chalk.mobile",
