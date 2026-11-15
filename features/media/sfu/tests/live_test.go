@@ -30,7 +30,6 @@ import (
 //	CHALK_SFU_LIVE_DIR      the directory holding ca.crt, operator.crt and operator.key
 //	CHALK_SFU_LIVE_SECONDS  how long media flows between the two samples (default 6)
 //
-// Staging runs must hold the staging lease (scripts/staging-sfu/staging-lock).
 func TestLiveSmoke(t *testing.T) {
 	svc := liveNode(t)
 	seconds := 6

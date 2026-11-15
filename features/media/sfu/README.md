@@ -39,23 +39,13 @@ Deployment (the OpenTofu node module, the image, the Quadlet unit, `deploy` and 
 Run heavy runs on Instabox (`box run -- '...'` from the repository root), not a laptop.
 
 1. **Loopback integration** starts the real HTTP service and two real Pion peers and asserts payloads, close, inspect, duplicate create, a wrong client certificate, a cross-Tenant pull and that nothing leaks at the end. `cd features/media/sfu && go test -race -count=1 ./...`; `scripts/gate.sh` runs it with format, tidy and vet, and the repo gate runs it as the `sfu` lane.
-2. **Live smoke** (`scripts/live-smoke <staging|production> --confirm <env>`) runs `TestLiveSmoke` against a deployed node through the operator certificate and an SSH tunnel, and prints `<env>-live-smoke: PASS` or `FAIL: <reason>`. Production's run is the M7 hard condition. Staging runs hold the staging lease.
-3. **Live staging soak** (`TestLiveSmokeClasses` in `tests/live_smoke_test.go`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/sfu/capacity-calibration.md#soak-acceptance). It skips without `SFU_LIVE_URL`; the knobs and defaults are listed above the test. It is a staging run, so it goes through the lease wrapper, and `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the CPU file the test reads:
+2. **Live smoke** (`scripts/live-smoke <staging|production> --confirm <env>`) runs `TestLiveSmoke` against a deployed node through the operator certificate and an SSH tunnel, and prints `<env>-live-smoke: PASS` or `FAIL: <reason>`. Production's run is the M7 hard condition.
+3. **Live staging soak** (`TestLiveSmokeClasses` in `tests/live_smoke_test.go`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/sfu/capacity-calibration.md#soak-acceptance). It skips without `SFU_LIVE_URL`; the knobs and defaults are listed above the test. `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the CPU file the test reads:
 
    ```sh
    ssh root@<node> 'bash -s -- 10' < features/media/sfu/scripts/node-cpu-capture > cpu.jsonl &
-   scripts/staging-sfu/staging-lock --holder soak --purpose staging-soak --run-id <label> --ttl 600 -- \
-     env SFU_LIVE_URL=<control URL> SFU_LIVE_CA=<ca> SFU_LIVE_CERT=<api cert> SFU_LIVE_KEY=<api key> \
-       SFU_LIVE_NODE_CPU=cpu.jsonl SFU_LIVE_RESULT=result.json \
+   env SFU_LIVE_URL=<control URL> SFU_LIVE_CA=<ca> SFU_LIVE_CERT=<api cert> SFU_LIVE_KEY=<api key> \
+     SFU_LIVE_NODE_CPU=cpu.jsonl SFU_LIVE_RESULT=result.json \
      go -C features/media/sfu test ./tests -run '^TestLiveSmokeClasses$' -count=1 -v -timeout 5h45m
    ```
 
-### Shared staging node
-
-Every lane that drives the staging SFU runs its whole test, rerun, fault test or soak through `scripts/staging-sfu/staging-lock` before touching the node; workflows also use the Actions concurrency group `chalk-staging-sfu` with cancellation disabled. Cleanup of a proof's own resources by run ID is exempt: always end its Episodes and archive its Spaces without waiting for a lease, and fail the job if cleanup fails.
-
-```sh
-scripts/staging-sfu/staging-lock --holder lane-name --purpose retest --run-id run-label -- your-test-command
-```
-
-The helper creates `refs/heads/locks/staging-sfu` atomically, holding one JSON lease record (holder, purpose, run ID, times, ownership token). Use plain labels, not customer names, URLs or secrets. The lock branch must stay outside release branch protections, and nobody edits or deletes it by hand. Expired leases are taken over with compare-and-swap, and release expires the record instead of deleting it. The default wait is 10 minutes and the TTL 180 seconds with periodic renewal; a failed renewal stops the workload before expiry. Never detach a workload from the helper, because the lease covers only its process tree. The lease is cooperative, so an older checkout or unwrapped command can still interfere. The nightly latency card therefore also records observed foreign Episodes and connections (see the [scorecard](../../scorecard/README.md#staging-contention)). The disposable fleet in `scripts/bench/bench` and `scripts/bench/faults` does not target shared staging and needs no lease.

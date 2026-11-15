@@ -49,7 +49,7 @@ jobs:
     # Builds the hotfix release and its nightly web archive on the baseline, as Hotfix does, and deploys nothing.
     needs: plan
     permissions:
-      contents: write # ci.yml's deploy job declares it, and a caller must grant what a called workflow declares.
+      contents: read
       actions: read
       deployments: write
       id-token: write

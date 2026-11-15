@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The proofs `pnpm prod:proof` runs, read from registry.json by index.mjs, scripts/staging-sfu/run-proofs and real-call-proof.yml.
+// The proofs `pnpm prod:proof` runs, read from registry.json by index.mjs and real-call-proof.yml.
 //
 //   registry.mjs check <media-plane> <proof>...   exits 1 when the plane or a proof is not supported
 //   registry.mjs lane <proof>                     prints "own" for a proof with its own Space, otherwise "shared"

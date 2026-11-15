@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Promote runs on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -26,7 +26,7 @@ on:
         type: boolean
         default: true
       latency:
-        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
+        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (Promote, chalk_sfu)
         type: boolean
         default: false
       latency_samples:
@@ -56,7 +56,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Promote runs on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
       transcribe:
@@ -64,7 +64,7 @@ on:
         type: boolean
         default: true
       latency:
-        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
+        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (Promote, chalk_sfu)
         type: boolean
         default: false
       latency_samples:
@@ -72,7 +72,7 @@ on:
         type: string
         default: ""
       latency_only:
-        description: Skip real-call proofs and run only the nightly latency scorecard of one plane (chalk_sfu or cf_sfu)
+        description: Skip real-call proofs and run only the production latency scorecard (chalk_sfu)
         type: boolean
         default: false
       release_sha:
@@ -117,21 +117,6 @@ on:
       CHALK_PROOF_WEBHOOK_SERVICE_URL:
         description: Proof identifier, held as an environment secret so it never prints in logs
         required: false
-      CHALK_AXIOM_STAGING_LOG_DATASET:
-        description: Axiom location, held as an environment secret so it never prints in logs
-        required: false
-      CHALK_AXIOM_STAGING_METRICS_DATASET:
-        description: Axiom location, held as an environment secret so it never prints in logs
-        required: false
-      CHALK_AXIOM_METRICS_BASE_URL:
-        description: Axiom location, held as an environment secret so it never prints in logs
-        required: false
-      CHALK_AXIOM_QUERY_TOKEN:
-        description: Read-only Nightly API-log query token, needed only for Chalk SFU Nightly latency
-        required: false
-      CHALK_AXIOM_METRICS_QUERY_TOKEN:
-        description: Read-only SFU metrics query token, needed only for Chalk SFU Nightly latency
-        required: false
       CHALK_ALERTS_DISCORD_WEBHOOK_URL:
         description: Production alerts Discord webhook; only timer runs use it
         required: false
@@ -139,22 +124,14 @@ on:
       result:
         description: passed or failed; may be absent on cancellation or runner loss
         value: ${{ jobs.smoke.outputs.result }}
-      failure:
-        description: Named reason when the staging SFU lease stopped the proof (staging-sfu-lease-timeout or staging-sfu-lease-lost); empty otherwise
-        value: ${{ jobs.smoke.outputs.failure }}
       results:
         description: Each proof's result in order, as name=passed, name=failed or name=not-run, separated by spaces; empty when the proof step did not finish
         value: ${{ jobs.smoke.outputs.results }}
 
-# Inherit the caller's permissions. Only nightly's proof and latency callers grant contents:write
-# for the staging lease; Promote and the Cloudflare latency caller retain contents:read.
-
 concurrency:
-  # All workflows driving the shared staging SFU use this group and the Git-ref lease.
-  # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
   # In production the Chalk SFU call-artifacts proof alone uses the automatic Recording Space, so it has its own group and runs beside the proofs that use the manual Space.
   # Every other production run, web-call-proof.yml included, shares one group. A production run that mixes call-artifacts with other proofs, or adds latency to it, is refused below.
-  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && inputs.media_plane == 'chalk_sfu' && '-recording' || '') }}
+  group: ${{ format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && inputs.media_plane == 'chalk_sfu' && '-recording' || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
@@ -170,16 +147,18 @@ jobs:
       deployment: false
     outputs:
       result: ${{ steps.result.outputs.result }}
-      failure: ${{ steps.prove.outputs.failure }}
       results: ${{ steps.prove.outputs.results }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || inputs.latency_only && inputs.environment == 'production' && 90 || 50 }}
+    timeout-minutes: ${{ inputs.latency_only && 90 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
           WORKFLOW_REF: ${{ github.ref }}
           RELEASE_SHA: ${{ inputs.release_sha }}
+          ENVIRONMENT: ${{ inputs.environment || 'production' }}
         run: |
           test "$WORKFLOW_REF" = refs/heads/master
+          # Nightly has no shared host and no permanent proof Tenant; its proofs run on throwaway stacks (nightly-proofs.yml).
+          [[ "$ENVIRONMENT" == production ]] || { echo "Real-call proofs run on production only." >&2; exit 1; }
           if [[ -n "$RELEASE_SHA" ]]; then
             [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           fi
@@ -190,9 +169,9 @@ jobs:
           MEDIA_PLANE: ${{ inputs.media_plane }}
           LATENCY: ${{ inputs.latency }}
         run: |
-          # Promote measures production on chalk_sfu beside its proofs; the Cloudflare plane is measured on nightly only.
-          [[ ( "$ENVIRONMENT" == nightly && ( "$MEDIA_PLANE" == chalk_sfu || "$MEDIA_PLANE" == cf_sfu ) || "$ENVIRONMENT" == production && "$MEDIA_PLANE" == chalk_sfu ) && "$LATENCY" == true ]] || {
-            echo "Latency-only mode requires nightly (chalk_sfu or cf_sfu) or production (chalk_sfu), and latency=true." >&2
+          # Promote measures production on chalk_sfu beside its proofs.
+          [[ "$ENVIRONMENT" == production && "$MEDIA_PLANE" == chalk_sfu && "$LATENCY" == true ]] || {
+            echo "Latency-only mode requires production (chalk_sfu) and latency=true." >&2
             exit 1
           }
       - name: Refuse a production run that spans both proof Spaces
@@ -258,10 +237,9 @@ jobs:
       - name: Prove a real call
         id: prove
         if: ${{ success() && !inputs.latency_only }}
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 65 || 40 }}
+        timeout-minutes: 40
         env:
           GH_TOKEN: ${{ github.token }}
-          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
@@ -293,50 +271,29 @@ jobs:
           mkdir -p .private
           results=()
           failed=()
-          if [[ "$STAGING_SFU_PROOF" == true ]]; then
-            # The nightly proofs are independent, so one failure must not hide the others' results. One lease covers the whole group:
-            # call-artifacts runs on its own Space beside the other proofs when it has its own proof origin (see run-proofs). A lease problem (exit 75) leaves a proof
-            # without a status, so it is not-run, and gate-lease names the reason in the step output `failure`.
-            status_dir=.private/proof-status
-            for proof in "${proofs[@]}"; do echo "${RUN_PREFIX}-${proof}" >> .private/proof-run-ids; done
-            group=0
-            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof nightly-proofs "$RUN_PREFIX" -- scripts/staging-sfu/run-proofs "$RUN_PREFIX" "$status_dir" "${proofs[@]}" || group=$?
-            for proof in "${proofs[@]}"; do
-              if [ ! -f "$status_dir/$proof" ]; then
-                results+=("$proof=not-run")
-              elif [ "$(cat "$status_dir/$proof")" -eq 0 ]; then
-                results+=("$proof=passed")
-              else
-                results+=("$proof=failed")
-                failed+=("$proof")
-              fi
-            done
-            if [ "$group" -ne 0 ] && [ "${#failed[@]}" -eq 0 ]; then failed+=("lease-or-run-error-$group"); fi
-          else
-            # Promote's proofs build on each other, so a failure stops the rest.
-            stop=false
-            for proof in "${proofs[@]}"; do
-              if [ "$stop" = true ]; then
-                results+=("$proof=not-run")
-                continue
-              fi
-              start=$(date +%s)
-              run_id="${RUN_PREFIX}-${proof}"
-              echo "$run_id" >> .private/proof-run-ids
-              status=0
-              command="$proof"
-              if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then command="${proof//chalk-sfu/own-sfu}"; fi
-              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$command" || status=$?
-              echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
-              if [ "$status" -eq 0 ]; then
-                results+=("$proof=passed")
-                continue
-              fi
-              results+=("$proof=failed")
-              failed+=("$proof")
-              stop=true
-            done
-          fi
+          # Promote's proofs build on each other, so a failure stops the rest.
+          stop=false
+          for proof in "${proofs[@]}"; do
+            if [ "$stop" = true ]; then
+              results+=("$proof=not-run")
+              continue
+            fi
+            start=$(date +%s)
+            run_id="${RUN_PREFIX}-${proof}"
+            echo "$run_id" >> .private/proof-run-ids
+            status=0
+            command="$proof"
+            if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then command="${proof//chalk-sfu/own-sfu}"; fi
+            CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$command" || status=$?
+            echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$status" -eq 0 ]; then
+              results+=("$proof=passed")
+              continue
+            fi
+            results+=("$proof=failed")
+            failed+=("$proof")
+            stop=true
+          done
           echo "results=${results[*]}" >> "$GITHUB_OUTPUT"
           echo "Proof results: ${results[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
           if [ "${#failed[@]}" -gt 0 ]; then
@@ -344,9 +301,9 @@ jobs:
             exit 1
           fi
       - name: Measure action latency
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly' || inputs.environment == 'production') }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'production') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || inputs.environment == 'production' && inputs.latency_only && 75 || 25 }}
+        timeout-minutes: ${{ inputs.environment == 'production' && inputs.latency_only && 75 || 25 }}
         # Promote's scorecard gate decides what a breach, a thin metric or a missing card means, one rerun included; a first attempt that
         # breaches must not fail the job, or its failure would outlive a passing rerun. The run summary and the gate still show it.
         continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
@@ -370,70 +327,39 @@ jobs:
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
           CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
-          SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || inputs.latency_only && inputs.environment == 'production' && 'promote' || 'manual' }}
-          SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'nightly' || inputs.environment == 'production' && 'production' || 'ci' }}
+          SCORECARD_TIER: ${{ inputs.latency_only && inputs.environment == 'production' && 'promote' || 'manual' }}
+          SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
-          CF_LATENCY_ONLY: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}
           CHALK_LATENCY_SAMPLES: ${{ inputs.latency_samples }}
-          # Only the Chalk SFU Nightly run queries the staging API logs. The Cloudflare latency-only run and Promote's production run do not receive their token.
-          CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && (inputs.media_plane == 'cf_sfu' || inputs.environment == 'production')) && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
-          CHALK_AXIOM_STAGING_LOG_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_LOG_DATASET }}
-          CHALK_AXIOM_METRICS_QUERY_TOKEN: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && secrets.CHALK_AXIOM_METRICS_QUERY_TOKEN || '' }}
-          CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_METRICS_DATASET }}
-          CHALK_AXIOM_METRICS_BASE_URL: ${{ secrets.CHALK_AXIOM_METRICS_BASE_URL }}
         run: |
           collector=features/scorecard/chalk-sfu.mjs
-          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then
-            collector=$LEGACY_COLLECTOR
-            [ "$SCORECARD_ENVIRONMENT" != nightly ] || export SCORECARD_ENVIRONMENT=staging
-          fi
+          [ "${PROOF_NAMES_BEFORE_RENAME:-}" != true ] || collector=$LEGACY_COLLECTOR
           # A revision from before the Chalk SFU nightly has no latency kit scorecard code to run.
           if [ ! -f "$collector" ]; then
             echo "The selected revision predates the Chalk SFU nightly, so no latency was measured." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           mkdir -p .private
-          if [[ "$SCORECARD_ENVIRONMENT" =~ ^(nightly|staging)$ && "$CHALK_PROOF_MEDIA_PLANE" == chalk_sfu ]]; then
-            node features/scorecard/staging-latency.mjs
-            exit $?
-          fi
           run_id="${RUN_PREFIX}-latency"
           echo "$run_id" >> .private/proof-run-ids
           latency=(pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04)
           # Without --samples the kit measures 20 cycles; the gate's 60 cycles (floor 48) must be asked for.
           [ -z "$CHALK_LATENCY_SAMPLES" ] || latency+=(--samples "$CHALK_LATENCY_SAMPLES")
-          if [[ "$CF_LATENCY_ONLY" != true ]]; then
-            CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}"
-            exit $?
-          fi
-          # Cloudflare traffic still reaches the nightly API, whose logs the Chalk SFU proof reads to count foreign Episodes.
-          # Hold the staging lease, but never wait for it: when a cut holds it, skip this warn-only measurement.
-          status=0
-          # The timeout lets the lease wrapper stop the kit and release the lease inside the 25-minute step cap, and the 60-second
-          # TTL ends the lease soon after the last renewal if the release fails. A cut waits 1800 seconds for the lease, longer than this.
-          timeout --kill-after=30 1440 scripts/staging-sfu/staging-lock --holder nightly-cf-latency --purpose action-latency --run-id "$GITHUB_RUN_ID" --ttl 60 --wait 0 --evidence .private/cf-lease.json -- env CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}" || status=$?
-          if ! jq -e '.acquired' .private/cf-lease.json > /dev/null 2>&1; then
-            echo "The staging SFU lease is busy or unavailable, so the Cloudflare latency was skipped." >> "$GITHUB_STEP_SUMMARY"
-            touch .private/cf-latency-skipped
-            exit 0
-          fi
-          exit "$status"
+          CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}"
       - name: Collect the latency scorecard
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly' || inputs.environment == 'production') }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'production') }}
         # A missing card is the gate's finding for Promote's production run (see the measurement step).
         continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
-          STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
           collector=features/scorecard/chalk-sfu.mjs
           [ "${PROOF_NAMES_BEFORE_RENAME:-}" != true ] || collector=$LEGACY_COLLECTOR
-          if [ ! -f "$collector" ] || [ -f .private/cf-latency-skipped ]; then
+          if [ ! -f "$collector" ]; then
             exit 0
           fi
           evidence=.private/prod-proof
-          [[ "$STAGING_LATENCY" != true ]] || evidence=.private/latency-scorecard
           if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ]; then
             node "$collector" "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
           else
@@ -441,7 +367,6 @@ jobs:
           fi
       - name: Clean proof runs
         if: always()
-        # Deleting this run's resources must never wait on another lane's measurement lease.
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
@@ -460,34 +385,32 @@ jobs:
           fi
           exit "$status"
       - name: Build the scorecard from the Leave proof
-        if: always() && (inputs.environment == 'nightly' || (inputs.environment == 'production' && github.event_name == 'workflow_dispatch'))
-        # A scoring failure must not change the proof result: Promote rolls back on a failed proof, and the nightly records a failed proof as a failed cut.
+        if: always() && inputs.environment == 'production' && github.event_name == 'workflow_dispatch'
+        # A scoring failure must not change the proof result: Promote rolls back on a failed proof.
         continue-on-error: true
         run: |
-          # The scorecard holds timings only, so unlike the evidence it is not encrypted. The nightly run appends it to the history.
+          # The scorecard holds timings only, so unlike the evidence it is not encrypted.
           leave=$(find .private/prod-proof \( -path "*-leave/leave-comparison.json" -o -path "*-leave-chalk-sfu/leave-comparison.json" \) -print -quit 2> /dev/null || true)
           if [ -z "$leave" ]; then
             echo "No Leave proof result in this run; no scorecard."
             exit 0
           fi
           mkdir -p artifacts
-          if [ "${PROOF_NAMES_BEFORE_RENAME:-}" = true ] && [ "$SCORECARD_ENVIRONMENT" = nightly ]; then SCORECARD_ENVIRONMENT=staging; fi
           node features/scorecard/scorecard.mjs build --proof-leave "$leave" --tier "$SCORECARD_TIER" --environment "$SCORECARD_ENVIRONMENT" --id "$GITHUB_RUN_ID" \
             --plane "$CHALK_PROOF_MEDIA_PLANE" --region github-hosted --size ubuntu-24-04 --commit "$(git rev-parse HEAD)" \
             --out artifacts/scorecard-proof.json
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
-          SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}
-          SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'nightly' || 'production' }}
+          SCORECARD_TIER: promote
+          SCORECARD_ENVIRONMENT: production
       - name: Upload the scorecard
-        if: always() && (inputs.environment == 'nightly' || (inputs.environment == 'production' && github.event_name == 'workflow_dispatch'))
-        # A scoring failure must not change the proof result: Promote rolls back on a failed proof, and the nightly records a failed proof as a failed cut.
+        if: always() && inputs.environment == 'production' && github.event_name == 'workflow_dispatch'
+        # A scoring failure must not change the proof result: Promote rolls back on a failed proof.
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          # The warn-only Cloudflare latency card has its own prefix, so the gate's scorecard-nightly-* download never sees it.
-          name: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'warn-scorecard' || 'scorecard' }}-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}
+          name: scorecard-promote-${{ inputs.scorecard_label || 'proof' }}
           path: |
             artifacts/scorecard-*.json
             artifacts/latency-diagnostics-*.json

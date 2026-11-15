@@ -1082,36 +1082,6 @@
       "sample": "Counted with the Android job above."
     },
     {
-      "id": "workflow:nightly-cf-latency.yml#target",
-      "owner": "Scorecard",
-      "catches": "Finds the revision a successful cut deployed, so the Cloudflare run measures the right build.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 0.1,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
-      "id": "workflow:nightly-cf-latency.yml#latency",
-      "owner": "Scorecard",
-      "catches": "Cloudflare-plane action latency over a gated budget; the job turns red and blocks nothing else.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 1.6,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
-      "id": "workflow:nightly-cf-latency.yml#history",
-      "owner": "Scorecard",
-      "catches": "A Cloudflare latency card that cannot be recorded in the scorecard history.",
-      "runs": ["cut"],
-      "blocks": "alert",
-      "minutes": 0.3,
-      "record": "never-failed",
-      "sample": "3 successful runs since 9 November."
-    },
-    {
       "id": "workflow:nightly.yml#plan",
       "owner": "Release chain",
       "catches": "A cut of the wrong revision, a cut when nothing new is on master, or a cut of a commit with no green master Gate.",

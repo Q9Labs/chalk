@@ -58,7 +58,7 @@ jobs:
     # Builds the cut once: the API and Sync images, the media archives and both web archives. Nothing is deployed; the proof
     # lanes run these images on a throwaway stack, and Promote ships the same bytes.
     permissions:
-      contents: write # ci.yml's deploy job asks for it, and a caller must grant what a called workflow declares.
+      contents: read
       actions: read
       deployments: write
       id-token: write

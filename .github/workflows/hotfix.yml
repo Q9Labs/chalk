@@ -85,7 +85,7 @@ jobs:
   release:
     needs: [plan, retain]
     permissions:
-      contents: write # ci.yml's deploy job declares it, and a caller must grant what a called workflow declares.
+      contents: read
       actions: read
       deployments: write
       id-token: write
@@ -120,7 +120,7 @@ jobs:
   rollback:
     # The same Release job Promote uses, on the baseline. It runs once the hotfix reached the host and the real call did not pass.
     permissions:
-      contents: write
+      contents: read
       actions: read
       deployments: write
       id-token: write

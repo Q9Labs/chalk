@@ -195,8 +195,6 @@ After a host resize or deploy, run one throwaway two-guest proof before trusting
 features/media/sfu/scripts/live-smoke production --confirm production
 ```
 
-On staging, hold the staging lease: `scripts/staging-sfu/staging-lock --holder <you> --purpose live-smoke --run-id <label> -- features/media/sfu/scripts/live-smoke staging --confirm staging`.
-
 ## Kill switch
 
 Sending one Space back to Cloudflare, and returning it, is in [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`media-settings new-episodes --state off --operator <name> --reason <text>`) is the second step and needs no API reload.

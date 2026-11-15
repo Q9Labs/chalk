@@ -63,10 +63,6 @@ The first row is an emergency stop for new Episodes, not the normal failover: a 
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../sfu/production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 
-## Rehearse a Chalk SFU node failure on staging
-
-`node scripts/staging-sfu/failover-batch.mjs --trials 20` runs the stop and blackhole faults against the staging node and writes a summary that passes only when every trial recovered, audio came back in under 10 seconds at p95, no request reached Cloudflare and at least five stop trials ran. A real run reads `FAILOVER_NODE_HOST`, `FAILOVER_SSH_KEY` and `FAILOVER_KNOWN_HOSTS` from the environment; `--dry-run` proves the loop and the summary without touching the node. Hold the staging lease first.
-
 ## Never stop the production node
 
 Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, a shutdown started on the node (`shutdown`, `poweroff`) or a stop that AWS starts for a scheduled event. It does block termination through the console, CLI or API.

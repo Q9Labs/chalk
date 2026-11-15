@@ -375,7 +375,6 @@
     "apps/web/src/components/space/SpacePage.tsx": [30],
     "apps/web/src/components/space/entrance-machine.ts": [36],
     "apps/web/src/components/space/pre-join/PreJoin.tsx": [24],
-    "features/scorecard/staging-latency.mjs": [34],
     "features/scorecard/diagnostics.mjs": [28],
     "features/scorecard/schema.mjs": [42, 24],
     "sdks/typescript/react-native/src/primitives/IconButton.tsx": [25],
