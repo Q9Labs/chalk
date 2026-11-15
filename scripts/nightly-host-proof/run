@@ -4,28 +4,37 @@
 # ends the host. Nothing here is shared with a running Nightly host except the runtime inputs it reads from the store.
 #
 #   run --manifest <release.json> --run-id <id> --ami <id> --subnet <id> --security-group <id> [--then <newer.json>]
-#       [--rollback-manifest <older.json>] [--region ap-southeast-1] [--summary <file>]
+#       [--rollback-manifest <older.json>] [--call-proof] [--region ap-southeast-1] [--summary <file>]
 #
 # --then delivers a second release over the first, as a hotfix does. With --rollback-manifest the host finally takes the older
 # release again, as a rollback does: the release is a fresh envelope of the older source with a new release id (a host refuses an
 # id it already holds), and the older release's controller must read the pointer the newer one wrote (the failure of the 23 Oct
 # rollback). The host is thrown away, so there is no roll-forward leg.
 #
+# --call-proof gives the host the Nightly tunnel, so nightly-api.chalkmeet.com and nightly-sync.chalkmeet.com serve from it while it
+# lives, and after the --then leg and after the rollback leg it seeds a Tenant and runs the camera-share proof on the Cloudflare plane
+# without recording (what the Nightly cloudflare-plane lane runs). It needs the repository's dependencies installed. The Nightly
+# host must stay stopped, and the workflow's concurrency group keeps one host at a time. Recording is proved by the per-cut lanes.
+#
 # AWS credentials come from the environment (the workflow assumes the host-proof role; infrastructure/nightly/host-proof).
-# The deploy skips the environment's recorder dispatcher binding and the Cloudflare tunnel: both belong to the environment's own
-# host, and a second connector would take its traffic. The database is a Postgres container started on the host for the run (the
+# The deploy skips the environment's recorder dispatcher binding and, without --call-proof, the Cloudflare tunnel: both belong to the
+# environment's own host, and a second connector would take its traffic. The database is a Postgres container started on the host for the run (the
 # Nightly runtime inputs point at host.containers.internal), so nothing outside the host holds state.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-region=ap-southeast-1 summary=/dev/stdout manifest="" then_manifest="" rollback_manifest="" run_id="" ami="" subnet="" security_group=""
+region=ap-southeast-1 summary=/dev/stdout manifest="" then_manifest="" rollback_manifest="" with_call=false run_id="" ami="" subnet="" security_group=""
 environment=nightly
 prefix=/chalk/nightly/managed-episode
 document=chalk-nightly-host-proof-release
 log_group=/chalk/nightly/managed-episode
 instance_profile=chalk-nightly-host
+api_origin=https://nightly-api.chalkmeet.com
+web_origin=https://nightly.chalkmeet.com
+proof_origin=http://127.0.0.1:4567
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --call-proof) with_call=true; shift; continue ;;
     --manifest) manifest=$2 ;;
     --then) then_manifest=$2 ;;
     --rollback-manifest) rollback_manifest=$2 ;;
@@ -59,6 +68,7 @@ fail() { echo "host proof: $*" >&2; exit 1; }
 
 end_host() {
   local status=$?
+  rm -rf "${RUNNER_TEMP:-/tmp}"/host-proof-call-*
   if [ -n "$instance" ]; then
     aws ec2 terminate-instances --instance-ids "$instance" > /dev/null || echo "could not end $instance; its 90-minute expiry timer ends it" >&2
   fi
@@ -110,7 +120,43 @@ step "Bootstrap finished (the production host's cloud-init)"
 shell "echo $(base64 < "$root/scripts/nightly-host-proof/start-postgres" | tr -d '\n') | base64 -d | bash" > /dev/null
 step "Proof Postgres running on the host"
 
+# Seeds a Tenant on the host through its public address and runs a real call: the camera-share proof on the Cloudflare plane, without
+# recording. The host holds the Cloudflare credentials and the service secret; the run's role cannot read the parameter store, so the
+# secret comes off the host through SSM. SSM keeps every command's output for 30 days, so only ciphertext may appear there: the host
+# encrypts the secret to a key made for this call, and the key never leaves the runner.
+call_proof() {
+  local leg=$1 dir public deadline
+  dir="${RUNNER_TEMP:-/tmp}/host-proof-call-$leg"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$dir/transfer.pem" 2> /dev/null
+  public=$(openssl pkey -in "$dir/transfer.pem" -pubout | base64 | tr -d '\n')
+  # shellcheck disable=SC2016 # The command expands on the host, not here.
+  shell "set -e; s=\$(sed -n 's/^CHALK_API_SERVICE_SECRETS=//p' /run/chalk/env/api.env | cut -d, -f1 | tr -d '\n'); [ -n \"\$s\" ]; k=\$(mktemp); echo $public | base64 -d > \"\$k\"; printf %s \"\$s\" | openssl pkeyutl -encrypt -pubin -inkey \"\$k\" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0; rm -f \"\$k\"" \
+    | base64 -d | (umask 077 && openssl pkeyutl -decrypt -inkey "$dir/transfer.pem" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 > "$dir/system-token")
+  [ -s "$dir/system-token" ] || fail "the host's api.env holds no service secret"
+  rm -f "$dir/transfer.pem"
+  deadline=$((SECONDS + 300))
+  until curl --fail --silent --max-time 10 "$api_origin/healthz" > /dev/null; do
+    [ "$SECONDS" -lt "$deadline" ] || fail "$api_origin did not answer through the tunnel ($leg)"
+    sleep 5
+  done
+  CHALK_SEED_PLANE=cf_sfu CHALK_SEED_WEB_URL="$web_origin" CHALK_SEED_TENANT_CORS_ORIGINS="$proof_origin" \
+    node "$root/scripts/nightly-stack/seed.mjs" "$dir" "$api_origin" "$proof_origin" "$api_origin"
+  (
+    cd "$root"
+    set -a
+    # shellcheck disable=SC1091 # Written by seed.mjs just above.
+    . "$dir/proof.env"
+    set +a
+    CHALK_PROOF_RUN_ID="host-proof-$run_id-$leg" CHALK_PROOF_RECORDING=off pnpm prod:proof camera-share
+  )
+  step "Camera-share call through the host's public address passed ($leg)"
+}
+
 # Delivers a release through the real SSM document and host controller and checks the controller reported it deployed and healthy.
+exclude=(--exclude-secret cloudflare-tunnel-token)
+[ "$with_call" = false ] || exclude=()
 deliver() {
   local file=$1 leg=$2 id proof
   id=$(jq -er .release_id "$file")
@@ -119,19 +165,21 @@ deliver() {
     --environment "$environment" --region "$region" --instance-id "$instance" --document-name "$document" \
     --document "$root/infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json" --parameter-prefix "$prefix" \
     --request-id "$run_id.hostproof.$leg.$id" --log-group-name "$log_group" --timeout-seconds 1800 \
-    --no-dispatcher-binding --exclude-secret cloudflare-tunnel-token
+    --no-dispatcher-binding ${exclude[@]+"${exclude[@]}"}
   step "Release delivered by the host controller and healthy ($leg: $id)"
 }
 
 deliver "$manifest" deploy
 if [ -n "$then_manifest" ]; then
   deliver "$then_manifest" hotfix
+  [ "$with_call" = false ] || call_proof hotfix
 fi
 if [ -n "$rollback_manifest" ]; then
   fresh="${RUNNER_TEMP:-/tmp}/host-proof-rollback-manifest.json"
   python3 -c 'import pathlib, sys; sys.path.insert(0, sys.argv[1]); import release; release.fresh_envelope(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))' \
     "$root/scripts/releases" "$rollback_manifest" "$fresh"
   deliver "$fresh" rollback
+  [ "$with_call" = false ] || call_proof rollback
 fi
 
 # The runtime must come back from a reboot by itself: the restore unit pulls the active release and starts it.

@@ -165,6 +165,7 @@ class RehearsalGraph(unittest.TestCase):
             self.assertIn(line, release_block, line)
         self.assertNotIn('deploy_web', release_block)
         self.assertIn('needs: [plan, release]', workflow_job('hotfix-rehearsal.yml', 'rehearse'))
+        self.assertIn('--call-proof', workflow_job('hotfix-rehearsal.yml', 'rehearse'))
         pages = workflow_job('hotfix-rehearsal.yml', 'pages')
         self.assertIn('needs: [plan, release]', pages)
         self.assertIn('name: nightly\n', pages)

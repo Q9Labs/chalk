@@ -1,6 +1,11 @@
 // Seeds the stack through the API's system token: one Tenant and Space on the stack's plane (the Chalk SFU, or Cloudflare when
 // the stack has real Cloudflare credentials) and an API key, then writes the
 // values a proof run reads to <dir>/proof.env.
+//
+// The Nightly host proof seeds a deployed host the same way: <dir>/system-token then holds the host's service secret (a service
+// principal owns the Tenants it creates), CHALK_SEED_PLANE names the plane because the host's api.env is not on this machine, and
+// CHALK_SEED_TENANT_CORS_ORIGINS lists origins the Tenant allows, since the host's deployment origins do not include the proof's, and
+// CHALK_SEED_WEB_URL is the web origin when it is not the API's.
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,21 +13,24 @@ import { join } from "node:path";
 const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 // identity.mjs wrote the plane new Spaces land on; the Tenant and the proof Space follow it.
-const plane = readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(chalk_sfu|cf_sfu)$/m)?.[1];
-if (!plane) throw new Error("seed: api.env names no media plane");
+const plane = process.env.CHALK_SEED_PLANE ?? readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(chalk_sfu|cf_sfu)$/m)?.[1];
+if (plane !== "chalk_sfu" && plane !== "cf_sfu") throw new Error("seed: no media plane named in CHALK_SEED_PLANE or api.env");
 
-async function post(path, body) {
+async function send(method, path, body) {
   const response = await fetch(new URL(path, apiOrigin), {
-    method: "POST",
+    method,
     headers: { authorization: `Bearer ${systemToken}`, "content-type": "application/json", "Idempotency-Key": `nightly-stack-${randomUUID()}` },
     body: JSON.stringify(body),
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`seed POST ${path} failed with HTTP ${response.status}: ${text.slice(0, 200)}`);
+  if (!response.ok) throw new Error(`seed ${method} ${path} failed with HTTP ${response.status}: ${text.slice(0, 200)}`);
   return JSON.parse(text);
 }
+const post = (path, body) => send("POST", path, body);
 
 const tenant = await post("/v1/tenants", { name: "Nightly stack", default_media_plane: plane });
+const corsOrigins = (process.env.CHALK_SEED_TENANT_CORS_ORIGINS ?? "").split(",").filter(Boolean);
+if (corsOrigins.length > 0) await send("PATCH", `/v1/tenants/${tenant.id}`, { cors_allowed_origins: corsOrigins });
 const space = await post(`/v1/tenants/${tenant.id}/spaces`, {
   name: "Nightly proofs",
   slug: "nightly-proofs",
@@ -40,7 +48,7 @@ const key = await post(`/v1/tenants/${tenant.id}/api-keys`, { name: "Nightly pro
 const values = {
   CHALK_PROOF_CONFIG_SOURCE: "env",
   CHALK_PROOF_API_URL: publicOrigin,
-  CHALK_PROOF_WEB_URL: publicOrigin,
+  CHALK_PROOF_WEB_URL: process.env.CHALK_SEED_WEB_URL ?? publicOrigin,
   CHALK_PROOF_PROOF_ORIGIN: proofOrigin,
   // The proofs that run on this stack send no webhooks; the harness still requires both values.
   CHALK_PROOF_WEBHOOK_SERVICE_URL: proofOrigin,
