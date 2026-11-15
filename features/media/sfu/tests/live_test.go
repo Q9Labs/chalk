@@ -29,7 +29,6 @@ import (
 //	CHALK_SFU_LIVE_URL      the control API, reached through the SSH tunnel
 //	CHALK_SFU_LIVE_DIR      the directory holding ca.crt, operator.crt and operator.key
 //	CHALK_SFU_LIVE_SECONDS  how long media flows between the two samples (default 6)
-//
 func TestLiveSmoke(t *testing.T) {
 	svc := liveNode(t)
 	seconds := 6

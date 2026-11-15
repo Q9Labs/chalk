@@ -48,4 +48,3 @@ Run heavy runs on Instabox (`box run -- '...'` from the repository root), not a 
      SFU_LIVE_NODE_CPU=cpu.jsonl SFU_LIVE_RESULT=result.json \
      go -C features/media/sfu test ./tests -run '^TestLiveSmokeClasses$' -count=1 -v -timeout 5h45m
    ```
-
