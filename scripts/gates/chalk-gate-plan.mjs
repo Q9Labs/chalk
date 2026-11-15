@@ -19,8 +19,7 @@ const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
-// A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
-// proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
+// A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release, proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
 export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu", "apps/mobile/scripts/release/nightly-current-cut.sh", "apps/mobile/scripts/release/nightly-current-cut.test.mjs"];

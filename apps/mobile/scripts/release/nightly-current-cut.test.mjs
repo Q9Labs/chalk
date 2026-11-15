@@ -47,9 +47,6 @@ test("a cut whose own proof failed is not current", () => {
 
 test("the failed Android publish of 2026-11-15 would have published", () => {
   // The two newest nightly-cut deployments when run 43690022203 refused: a cut whose proof failed, then the cut being published.
-  const observed = [
-    deployment("dfaa8e6023a86a17c7b8602b62933738efc68ef1", "43688458706", "failed"),
-    deployment("8613646804c87f9a810c11ef9b57e9d5df0b7d18", "43687016274", "passed"),
-  ];
+  const observed = [deployment("dfaa8e6023a86a17c7b8602b62933738efc68ef1", "43688458706", "failed"), deployment("8613646804c87f9a810c11ef9b57e9d5df0b7d18", "43687016274", "passed")];
   assert.equal(cutIsCurrent(observed, { sha: "8613646804c87f9a810c11ef9b57e9d5df0b7d18", run: "43687016274" }), true);
 });
