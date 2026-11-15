@@ -1,4 +1,4 @@
-# The nightly Android publisher sources this file. A cut is current when no newer cut has passed its proof.
+# The nightly Android and iOS publishers source this file. A cut is current when no newer cut has passed its proof.
 # A newer cut that is red is held, so it is not production truth and does not make this build stale.
 # Needs GITHUB_REPOSITORY, SOURCE_RUN (the cut's proof run id) and SOURCE_SHA.
 cut_is_current() {
