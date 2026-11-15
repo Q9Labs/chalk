@@ -1547,7 +1547,10 @@ deploy() {
     --manifest "$manifest_path" \
     --sync-proof "${stage_root}/evidence/planetscale-sync-proof.json" \
     --rendered-root "$rendered_root" \
-    --excluded-secrets "$missing_inputs_csv" >"${stage_root}/validate.log" 2>&1 || fail "candidate runtime validation failed"
+    --excluded-secrets "$missing_inputs_csv" >"${stage_root}/validate.log" 2>&1 || {
+    tail -n 20 "${stage_root}/validate.log" >&2 || true
+    fail "candidate runtime validation failed"
+  }
   validate_host_quadlets "$rendered_root"
   local stable_exists=false
   local stable_was_adopted=false
