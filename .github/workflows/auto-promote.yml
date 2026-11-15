@@ -93,6 +93,7 @@ jobs:
           runs_for_sha() { gh run list --workflow promote.yml --event workflow_dispatch --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId"; }
           before="$(runs_for_sha)"
           gh workflow run promote.yml --ref master -f expected_sha="${SHA}" -f deploy_before="${UNTIL}"
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
           run_id=""
           for _ in $(seq 24); do
             run_id="$(comm -13 <(sort <<< "${before}") <(runs_for_sha | sort) | head -n 1)"
@@ -100,7 +101,6 @@ jobs:
             sleep 5
           done
           [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No new Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
-          echo "dispatched=true" >> "$GITHUB_OUTPUT"
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
           status=0
           gh run watch "${run_id}" --exit-status --compact --interval 30 || status=$?
