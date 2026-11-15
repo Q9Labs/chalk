@@ -23,7 +23,7 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
-export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu", "apps/mobile/scripts/release/nightly-current-cut"];
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu", "apps/mobile/scripts/release/nightly-current-cut.sh", "apps/mobile/scripts/release/nightly-current-cut.test.mjs"];
 export const workflowGraphNodeTests = [
   "features/scorecard/promote-graph.test.mjs",
   "features/scorecard/nightly-graph.test.mjs",

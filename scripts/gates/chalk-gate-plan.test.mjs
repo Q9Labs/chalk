@@ -162,7 +162,7 @@ test("a test of the workflow-graph lane reads only paths that lane selects", () 
     const outside = [...new Set(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8").match(repositoryPath))].filter((path) => !workflowGraphRoots.some((root) => path.startsWith(root)));
     assert.deepEqual(outside, [], `${file} reads paths that do not select the workflow-graph lane`);
   }
-  for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock", "scripts/staging-sfu/gate-lease", "scripts/prod-proof/cleanup.mjs", "scripts/deploy/deploy-managed-release.mjs"]) {
+  for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock", "scripts/staging-sfu/gate-lease", "scripts/prod-proof/cleanup.mjs", "scripts/deploy/deploy-managed-release.mjs", "apps/mobile/scripts/release/nightly-current-cut.sh", "apps/mobile/scripts/release/nightly-current-cut.test.mjs"]) {
     assert.ok(selected([file], "pull_request").includes("workflow-graph"), file);
   }
 });
