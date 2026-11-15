@@ -11,7 +11,12 @@ check_url() {
   fi
 }
 
-for unit in chalk-redis.service chalk-api.service chalk-sync.service chalk-cloudflared.service; do
+# An environment that excludes the tunnel token has no connector Quadlet, so there is no tunnel to check.
+units=(chalk-redis.service chalk-api.service chalk-sync.service)
+tunnel_quadlet="${HOME}/.config/containers/systemd/chalk-cloudflared.container"
+[[ ! -e "${tunnel_quadlet}" ]] || units+=(chalk-cloudflared.service)
+
+for unit in "${units[@]}"; do
   if ! systemctl --user is-active --quiet "${unit}"; then
     failures+=("unit:${unit}")
   fi
@@ -19,7 +24,7 @@ done
 
 check_url api http://127.0.0.1:18080/readyz
 check_url sync http://127.0.0.1:14100/readyz
-check_url tunnel http://127.0.0.1:12000/ready
+[[ ! -e "${tunnel_quadlet}" ]] || check_url tunnel http://127.0.0.1:12000/ready
 
 release_manifest=/run/chalk/release/release-manifest.json
 release_checksum=/run/chalk/release/release-manifest.sha256

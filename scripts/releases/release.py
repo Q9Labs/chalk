@@ -14,7 +14,9 @@ from pathlib import Path
 import live_calls, seal
 from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require, retain, retained
 from scorecard_override import override_reason
+import proof_cover
 from latency_paths import latency_paths
+from proof_cover import covering_host_proof, covering_latency, recording_changed, require_host_proof, with_host_proof
 from step_timing import timed
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -31,48 +33,7 @@ def ancestor(sha, target='origin/master'):
     subprocess.run(['git', 'merge-base', '--is-ancestor', sha, target], check=True)
 
 
-# Release tooling that builds or ships the recorder, beside the `recording` paths in features.json.
-RECORDING_EXTRA_PATHS = ('scripts/releases/media.py', '.github/workflows/real-call-proof.yml')
-
-
-def recording_paths():
-    features = json.loads((ROOT / 'features.json').read_text())['features']
-    return tuple(next(item for item in features if item['name'] == 'recording')['paths']) + RECORDING_EXTRA_PATHS
-
-
-def paths_changed(previous, target, prefixes):
-    # With no baseline or an unreadable diff the answer is yes: a proof that might be needed runs.
-    if not previous:
-        return True
-    diff = subprocess.run(['git', 'diff', '--name-only', f'{previous}..{target}'], capture_output=True, text=True)
-    if diff.returncode != 0:
-        return True
-    return any(path == prefix or path.startswith(prefix + '/') for path in diff.stdout.splitlines() for prefix in prefixes)
-
-
-def recording_changed(previous, target):
-    # The call-artifacts proof boots recorder droplets, which fetch the recorder archives from S3 and cost real money,
-    # so a cut runs it when it changed a recording path.
-    return paths_changed(previous, target, recording_paths())
-
-
 LATENCY_SAMPLES = 60
-
-
-def descends(sha, target):
-    return subprocess.run(['git', 'merge-base', '--is-ancestor', sha, target]).returncode == 0
-
-
-def covering_latency(github, target):
-    """The passed latency record that vouches for target: its SHA is target or an ancestor, and no latency path changed since."""
-    for item in github.deployments('nightly', 'nightly-latency'):
-        info = payload(item)
-        sha = info.get('target_sha', '')
-        if info.get('result') != 'passed' or not re.fullmatch('[0-9a-f]{40}', sha):
-            continue
-        if descends(sha, target) and not paths_changed(sha, target, latency_paths()):
-            return info
-    return None
 
 
 def manifest_bytes(github, info, trusted=True):
@@ -340,7 +301,7 @@ def with_latency(github, info, production_sha):
     target = info['target_sha']
     covering = covering_latency(github, target)
     merged = dict(info)
-    if info.get('chalk_sfu_proof_result', 'missing') == 'passed' and not covering and paths_changed(production_sha, target, latency_paths()):
+    if info.get('chalk_sfu_proof_result', 'missing') == 'passed' and not covering and proof_cover.paths_changed(production_sha, target, latency_paths()):
         exact = github.deployments('nightly', 'nightly-latency', sha=target, passed_only=False)
         merged['chalk_sfu_proof_result'] = 'failed' if exact else 'latency-missing'
     if covering:
@@ -355,15 +316,18 @@ def with_latency(github, info, production_sha):
 
 
 def promotion_override(github, info, production_sha):
-    info = with_latency(github, info, production_sha)
+    info = with_host_proof(github, with_latency(github, info, production_sha), production_sha)
     reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
     scorecard_result = info.get('scorecard_result', 'missing')
     if not reason or scorecard_result not in ('gated-breach', 'missing'):
         require_scorecard(info)
     if not reason:
         require_chalk_sfu_proof(info)
+        require_host_proof(info)
         return None
     proof_results = {}
+    if info['host_proof_result'] not in ('passed', 'not-required'):
+        proof_results['host_proof_result'] = info['host_proof_result']
     if info.get('chalk_sfu_proof_result') != 'passed':
         proof_results['chalk_sfu_proof_result'] = info.get('chalk_sfu_proof_result', 'missing')
     if scorecard_result != 'passed':
@@ -444,7 +408,31 @@ def record_latency(github, args):
                 result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
                 scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
                 scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
-    outputs({'deployment_id': github.record_latency(sha, info)})
+    outputs({'deployment_id': github.record_proof(sha, 'nightly-latency', info)})
+
+
+def record_host_proof(github, args):
+    """The host proof deployed this cut to a host it created, so the record names the SHA it proved and how the database ran."""
+    sha = env('TARGET_SHA')
+    require(re.fullmatch('[0-9a-f]{40}', sha), 'target_sha must be a full lowercase commit SHA')
+    ancestor(sha)
+    result = os.environ.get('HOST_PROOF_RESULT', 'failed')
+    info = dict(channel='nightly-host-proof', target_sha=sha, run_id=env('GITHUB_RUN_ID'), result='passed' if result == 'passed' else 'failed',
+                database=os.environ.get('HOST_PROOF_DATABASE') or 'unknown', reason=os.environ.get('HOST_PROOF_REASON', ''))
+    outputs({'deployment_id': github.record_proof(sha, 'nightly-host-proof', info)})
+
+
+def host_proof_target(github, args):
+    """The newest held cut that no passed host proof covers, or nothing. HOST_PROOF_FORCE=true (the weekly run) takes the newest
+    held cut whatever covers it, so a host-only fault no diff shows still surfaces within a week."""
+    held = held_candidates(github.deployments('nightly'))
+    cut = payload(held[0]) if held else {}
+    sha = cut.get('target_sha', '')
+    force = os.environ.get('HOST_PROOF_FORCE') == 'true'
+    selected = bool(sha) and (force or covering_host_proof(github, sha) is None)
+    # The host job downloads the cut's own manifest: the release and the run that built it.
+    outputs({'sha': sha if selected else '', 'release_id': cut.get('release_id', '') if selected else '',
+             'run_id': cut.get('run_id', '') if selected else ''})
 
 
 def deployed_cut(github):
@@ -628,7 +616,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'auto_promote', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'host_proof_target', 'record_host_proof', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

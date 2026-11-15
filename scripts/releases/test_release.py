@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-import release
+import proof_cover, release
 import web
 from datetime import datetime, timezone
 
@@ -125,19 +125,19 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'previous_production', return_value=self.previous))
         self.enterContext(patch.object(release, 'ancestor'))
         # The fixtures' SHAs are not in this checkout: a latency record covers its own SHA, and the changed-paths answer is set per test.
-        self.enterContext(patch.object(release, 'descends', side_effect=lambda sha, target: sha == target))
-        self.changed = self.enterContext(patch.object(release, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
+        self.enterContext(patch.object(proof_cover, 'descends', side_effect=lambda sha, target: sha == target))
+        self.changed = self.enterContext(patch.object(proof_cover, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
 
-    def github(self, item, latency='passed', scorecard='passed'):
+    def github(self, item, latency='passed', scorecard='passed', host='passed'):
         api = Mock(spec=GitHub)
         record = [] if latency is None else [dict(id=9, payload=dict(
             channel='nightly-latency', target_sha=item['payload']['target_sha'], result=latency, scorecard_result=scorecard,
             scorecard_gated_metrics=['chalk_sfu.action.join.first_audio_ms'] if scorecard == 'gated-breach' else [],
             scorecard_missing_items=['chalk_sfu.action.leave_ms'] if scorecard == 'missing' else []))]
         api.deployments.return_value = [item]
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: record if task == 'nightly-latency' else api.deployments.return_value
-        api.request.side_effect = lambda route: ([dict(state=item['latest_status'])]
-                                                 if '/statuses?' in route else item)
+        records = {'nightly-latency': record, 'nightly-host-proof': [] if host is None else [dict(id=8, payload=dict(channel='nightly-host-proof', target_sha=item['payload']['target_sha'], result=host))]}
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: records.get(task, api.deployments.return_value)
+        api.request.side_effect = lambda route: [dict(state=item['latest_status'])] if '/statuses?' in route else item
         return api
 
     def assert_blocked(self, action, result):
@@ -216,32 +216,32 @@ class ChalkSfuPromotionTests(unittest.TestCase):
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
         api = Mock(spec=GitHub)
-        api.record_latency.return_value = 5
+        api.record_proof.return_value = 5
         environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
         with patch.dict(os.environ, environment):
             release.record_latency(api, None)
-            saved = api.record_latency.call_args.args
+            saved = api.record_proof.call_args.args
             self.assertEqual(saved[0], SHA)
-            self.assertEqual((saved[1]['result'], saved[1]['run_id'], saved[1]['channel']), ('passed', '77', 'nightly-latency'))
+            self.assertEqual((saved[2]['result'], saved[2]['run_id'], saved[2]['channel']), ('passed', '77', 'nightly-latency'))
             os.environ['LATENCY_RESULT'] = 'failed'
             release.record_latency(api, None)
-            self.assertEqual(api.record_latency.call_args.args[1]['result'], 'failed')
+            self.assertEqual(api.record_proof.call_args.args[2]['result'], 'failed')
             os.environ['SCORECARD_RESULT'] = json.dumps(dict(scorecard, run_id='78'))
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
             os.environ['SCORECARD_RESULT'] = ''
             release.record_latency(api, None)
-            self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
+            self.assertEqual(api.record_proof.call_args.args[2]['scorecard_result'], 'missing')
 
     def test_record_latency_refuses_a_run_with_fewer_than_the_full_samples(self):
         api = Mock(spec=GitHub)
         with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='', LATENCY_SAMPLES='3')):
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
-        api.record_latency.assert_not_called()
+        api.record_proof.assert_not_called()
 
     def test_every_input_of_the_latency_measurement_decides_whether_a_record_still_covers(self):
-        paths = release.latency_paths()
+        paths = proof_cover.latency_paths()
         for changed in ('scripts/prod-proof/latency.mjs', 'perf/budgets.json', '.github/workflows/nightly-proofs.yml', 'features/scorecard/evaluate.mjs', 'sdks/typescript/client/src/connection/lifecycle.ts'):
             self.assertTrue(any(changed == prefix or changed.startswith(prefix + '/') for prefix in paths), changed)
 
@@ -251,7 +251,7 @@ class ChalkSfuPromotionTests(unittest.TestCase):
             with patch.object(release, 'ancestor', side_effect=subprocess.CalledProcessError(1, 'git')):
                 with self.assertRaises(subprocess.CalledProcessError):
                     release.record_latency(api, None)
-        api.record_latency.assert_not_called()
+        api.record_proof.assert_not_called()
 
     def test_select_never_uses_a_passed_proof_from_another_sha(self):
         item = held('passed', OTHER_SHA)
@@ -836,7 +836,7 @@ class RecordingChangedTests(unittest.TestCase):
         self.assertFalse(self.changed())
 
     def test_every_recording_path_exists(self):
-        for path in release.recording_paths():
+        for path in proof_cover.recording_paths():
             self.assertTrue((release.ROOT / path).exists(), path)
 
 

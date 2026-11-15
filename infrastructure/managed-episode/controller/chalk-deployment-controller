@@ -583,12 +583,13 @@ fetch_deployment_inputs() {
     version="$(jq -er --arg name "$name" '.Parameters[] | select(.Name == $name) | .Version | numbers' "$response_file")" || fail "SSM runtime input version is malformed: ${id}"
     [[ "$version" =~ ^[1-9][0-9]*$ ]] || fail "SSM runtime input version is malformed: ${id}"
     versions_json="$(jq -c --arg id "$id" --arg name "$name" --argjson version "$version" '. + [{id:$id,name:$name,version:$version}]' <<<"${versions_json}")"
-    if [[ "$value_length" == 0 ]]; then
-      json_is_excluded "$id" || fail "required SSM runtime input is empty: ${id}"
+    if json_is_excluded "$id"; then
+      # An excluded input is never written, even when a value is stored, so a value kept for another host cannot reach this one.
       missing_json="$(jq -c --arg id "$id" '. + [$id]' <<<"${missing_json}")"
       record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" true
       continue
     fi
+    [[ "$value_length" != 0 ]] || fail "required SSM runtime input is empty: ${id}"
     write_input_file "$destination" "$response_file" "$name"
     record_input "$id" "$suffix" "$destination" "$kind" "$name" "$version" false
   done
@@ -632,9 +633,26 @@ validate_host_quadlets() {
   fi
 }
 
+# An environment that excludes the tunnel token runs without the connector, so a host that is not the environment's own cannot join its tunnel.
+tunnel_connector_enabled() {
+  ! json_is_excluded cloudflare-tunnel-token
+}
+
+without_tunnel_connector() {
+  local runtime_source="$1"
+  local filtered="${stage_root}/runtime-without-connector"
+  remove_staged_tree "$filtered"
+  cp -a "$runtime_source" "$filtered" || fail "rendered runtime could not be copied"
+  rm -f -- "${filtered}/quadlet/chalk-cloudflared.container" || fail "tunnel connector Quadlet could not be removed"
+  sed 's/ chalk-cloudflared\.service//g' "${filtered}/systemd/chalk-runtime.target" >"${filtered}/runtime.target.tmp" || fail "runtime target could not be rewritten"
+  mv "${filtered}/runtime.target.tmp" "${filtered}/systemd/chalk-runtime.target" || fail "runtime target could not be installed"
+  printf '%s\n' "$filtered"
+}
+
 install_runtime_files() {
   local runtime_source="$1"
   require_directory "$runtime_source"
+  tunnel_connector_enabled || runtime_source="$(without_tunnel_connector "$runtime_source")"
   mkdir -p "$runtime_quadlet_dir" "$runtime_systemd_dir"
   chmod 700 "$runtime_quadlet_dir" "$runtime_systemd_dir"
   remove_absent_runtime_files "${runtime_source}/quadlet" "$runtime_quadlet_dir" \
@@ -1029,6 +1047,8 @@ stop_runtime() {
     fi
   done
   for unit in chalk-api-migrate.service chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
+    # A connector from an earlier release keeps running after its Quadlet is removed, so stop it when it is up.
+    [[ "$unit" == chalk-cloudflared.service ]] && ! tunnel_connector_enabled && ! run_user_systemctl is-active --quiet "$unit" && continue
     if ! stop_runtime_unit "$unit"; then
       failed=true
     fi

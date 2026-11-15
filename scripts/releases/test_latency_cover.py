@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import release
+import proof_cover
 from github_release import GitHub
 from test_release import SHA, OTHER_SHA, ChalkSfuPromotionTests as Promotion, held
 
@@ -27,7 +28,7 @@ class LatencyCoverTests(unittest.TestCase):
         api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
             [dict(id=9, payload=dict(channel='nightly-latency', target_sha='c' * 40, result='passed', scorecard_result='passed'))]
             if task == 'nightly-latency' else [held()])
-        with patch.object(release, 'descends', return_value=True):
+        with patch.object(proof_cover, 'descends', return_value=True):
             self.assertEqual(release.covering_latency(api, SHA)['target_sha'], 'c' * 40)
             self.changed.side_effect = lambda previous, target, prefixes: True
             self.assertIsNone(release.covering_latency(api, SHA))
