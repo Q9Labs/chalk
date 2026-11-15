@@ -47,4 +47,3 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
 });
-
