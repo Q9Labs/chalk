@@ -188,7 +188,7 @@ test("the cut-scoped promotion evaluator fails closed on valid contended cards",
     current.metrics.push(...others.map((id) => ({ id, unit: "ms", n: 60, p50: 100, p95: 100, source: "latency-kit" })));
     writeFileSync(path, JSON.stringify(current));
     writeFileSync(output, "");
-    const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "evaluate.mjs"), revision, "123", path], { cwd: root, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: output } });
+    const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "evaluate.mjs"), revision, "123", path], { cwd: root, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: output, SCORECARD_HISTORY_REF: "origin/no-history" } });
     assert.equal(result.status, expected === "passed" ? 0 : 1, result.stderr);
     if (expected === "contended") {
       assert.match(result.stderr, /contended measurement is not promotion evidence/);

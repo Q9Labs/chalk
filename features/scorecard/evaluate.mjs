@@ -25,8 +25,9 @@ validateBudgetEntries(budgets);
 const metrics = new Set();
 
 // history.jsonl is on the scorecard-history branch, which the record job's full checkout holds. Before the first run there is none, and every metric is still learning.
+// SCORECARD_HISTORY_REF names another branch, so a test with synthetic cards does not depend on the real history.
 function readHistoryBranch() {
-  const ref = "origin/scorecard-history:history.jsonl";
+  const ref = `${process.env.SCORECARD_HISTORY_REF ?? "origin/scorecard-history"}:history.jsonl`;
   if (spawnSync("git", ["cat-file", "-e", ref]).status !== 0) return [];
   return parseHistory(execFileSync("git", ["show", ref], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }));
 }
