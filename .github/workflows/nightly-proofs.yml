@@ -96,7 +96,6 @@ jobs:
       matrix:
         proof: ${{ fromJSON(needs.prepare.outputs.lanes) }}
     env:
-      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       IMAGE_SOURCE: ${{ matrix.proof == 'latency' && 'build' || inputs.image_source }}
       LATENCY_SAMPLES: ${{ inputs.latency_samples }}
       PROOF: ${{ matrix.proof }}
