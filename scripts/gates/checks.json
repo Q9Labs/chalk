@@ -1192,6 +1192,16 @@
       "sample": "New; no history."
     },
     {
+      "id": "workflow:nightly.yml#start-latency",
+      "owner": "Release chain",
+      "catches": "Starts Nightly latency on the cut's published release the moment it publishes, so the speed run does not wait for the proofs.",
+      "runs": ["cut"],
+      "blocks": "alert",
+      "minutes": 0.1,
+      "record": "unmeasured",
+      "sample": "New; no history."
+    },
+    {
       "id": "workflow:nightly.yml#record",
       "owner": "Release chain",
       "catches": "Writes the nightly record Promote reads, and fails when any required job failed.",

@@ -65,6 +65,11 @@ def covering_latency(github, target):
     return covering_record(github, target, 'nightly-latency', latency_paths())
 
 
+def measured_other_images(covering, info):
+    """A latency record of this very SHA that measured another release's images says nothing about the images Promote ships."""
+    return covering['target_sha'] == info['target_sha'] and covering.get('release_id') not in (None, '', info.get('release_id'))
+
+
 def covering_host_proof(github, target):
     return covering_record(github, target, 'nightly-host-proof', host_paths())
 

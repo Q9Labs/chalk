@@ -17,7 +17,7 @@ from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_
 from scorecard_override import override_reason
 import proof_cover
 from latency_paths import latency_paths
-from proof_cover import covering_host_proof, covering_latency, recording_changed, require_host_proof, with_host_proof
+from proof_cover import covering_host_proof, covering_latency, measured_other_images, recording_changed, require_host_proof, with_host_proof
 from step_timing import timed
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -313,6 +313,8 @@ def with_latency(github, info, production_sha):
     if info.get('chalk_sfu_proof_result', 'missing') == 'passed' and not covering and proof_cover.paths_changed(production_sha, target, latency_paths()):
         exact = github.deployments('nightly', 'nightly-latency', sha=target, passed_only=False)
         merged['chalk_sfu_proof_result'] = 'failed' if exact else 'latency-missing'
+    if covering and measured_other_images(covering, info) and merged.get('chalk_sfu_proof_result') == 'passed':
+        merged['chalk_sfu_proof_result'] = 'latency-images-differ'
     if covering:
         scorecard_result = info.get('scorecard_result', 'missing')
         results = [scorecard_result, covering.get('scorecard_result', 'missing')]
@@ -413,7 +415,7 @@ def record_latency(github, args):
     latency_result = os.environ.get('LATENCY_RESULT', 'failed')
     # A shorter run has a weaker p95 and is for trying the workflow; it never becomes promotion evidence.
     require(os.environ.get('LATENCY_SAMPLES', str(LATENCY_SAMPLES)) == str(LATENCY_SAMPLES), f'a latency record needs the full {LATENCY_SAMPLES} samples')
-    info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
+    info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), release_id=os.environ.get('RELEASE_ID', ''), latency_run_result=latency_result,
                 result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
                 scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
                 scorecard_missing_items=scorecard.get('missing_items', ['Nightly latency scorecard'] if not scorecard else []))
@@ -462,11 +464,12 @@ def deployed_cut(github):
 
 
 def latency_target(github, args):
-    """The newest held cut that no passed latency record covers, or nothing: the cut Nightly latency measures. A person's dispatch measures the newest held cut even when a record covers it."""
-    held = held_candidates(github.deployments('nightly'))
-    sha = payload(held[0])['target_sha'] if held else ''
-    dispatched = os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
-    outputs({'sha': sha if sha and (dispatched or covering_latency(github, sha) is None) else ''})
+    """The cut Nightly latency measures, or nothing. A cut names its own SHA and is skipped when a passed latency record covers it; a person's dispatch names none and measures the newest held cut even when a record covers it."""
+    named = os.environ.get('LATENCY_SHA', '')
+    sha = named or next((payload(item)['target_sha'] for item in held_candidates(github.deployments('nightly'))[:1]), '')
+    if named:
+        ancestor(named)
+    outputs({'sha': sha if sha and (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and not named or covering_latency(github, sha) is None) else ''})
 
 
 def recheck(github, args):

@@ -47,6 +47,27 @@ class LatencyCoverTests(unittest.TestCase):
                 release.latency_target(self.github(held(), latency='passed'), None)
                 self.assertEqual(self.output.read_text(), f'sha={expected}\n')
 
+    def test_a_cut_names_its_own_sha_and_is_skipped_when_a_passed_record_covers_it(self):
+        for latency, expected in ((None, SHA), ('failed', SHA), ('passed', '')):
+            with self.subTest(latency=latency), patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'workflow_dispatch', 'LATENCY_SHA': SHA}):
+                self.output.write_text('')
+                release.latency_target(self.github(held(), latency=latency), None)
+                self.assertEqual(self.output.read_text(), f'sha={expected}\n')
+
+    def test_promote_refuses_a_record_of_this_sha_that_measured_other_images(self):
+        for measured, expected in (('another-release', 'latency-images-differ'), ('release', 'passed'), (None, 'passed')):
+            with self.subTest(measured=measured):
+                api = self.github(held())
+                record = dict(id=9, payload=dict(channel='nightly-latency', target_sha=SHA, result='passed', scorecard_result='passed', **({} if measured is None else dict(release_id=measured))))
+                api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [record] if task == 'nightly-latency' else [held()]
+                self.assertEqual(release.with_latency(api, held()['payload'], OTHER_SHA)['chalk_sfu_proof_result'], expected)
+
+    def test_record_latency_names_the_release_whose_images_it_measured(self):
+        api = Mock(spec=GitHub)
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='', RELEASE_ID='release')):
+            release.record_latency(api, None)
+        self.assertEqual(api.record_proof.call_args.args[2]['release_id'], 'release')
+
     def test_latency_target_is_empty_without_a_held_cut(self):
         api = Mock(spec=GitHub)
         api.deployments.return_value = []

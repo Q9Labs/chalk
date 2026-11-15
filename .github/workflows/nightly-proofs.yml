@@ -9,8 +9,8 @@ name: Nightly proofs
 #
 # Two lanes differ from the rest. latency-smoke runs the latency kit for a few cycles on the stack and checks that it emits
 # every gated action metric. latency measures speed: its Chalk SFU runs on a DigitalOcean host created for the run, of the size
-# the production node table gives a primary, and deleted when the lane ends. Its runner is x86 because the host is, so it builds
-# the API and Sync images from the revision instead of pulling the cut's arm images.
+# the production node table gives a primary, and deleted when the lane ends. Its runner is x86 because the host is; the cut's
+# API and Sync images are multi-architecture indexes, so it pulls the same digests as every other lane.
 on:
   workflow_call:
     inputs:
@@ -20,6 +20,10 @@ on:
         type: string
       release_id:
         description: Release whose manifest names the API and Sync images (image_source manifest)
+        default: ""
+        type: string
+      release_run_id:
+        description: Run that published that manifest, when it is not this one (a latency run started by a cut)
         default: ""
         type: string
       proofs:
@@ -98,7 +102,7 @@ jobs:
       matrix:
         proof: ${{ fromJSON(needs.prepare.outputs.lanes) }}
     env:
-      IMAGE_SOURCE: ${{ matrix.proof == 'latency' && 'build' || inputs.image_source }}
+      IMAGE_SOURCE: ${{ inputs.image_source }}
       LATENCY_SAMPLES: ${{ inputs.latency_samples }}
       PROOF: ${{ matrix.proof }}
     steps:
@@ -150,16 +154,25 @@ jobs:
         with:
           key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
           name: release-manifest-${{ inputs.release_id }}
+          run-id: ${{ inputs.release_run_id || github.run_id }}
           path: ${{ runner.temp }}/manifest
           merge-multiple: true
       - name: Name the images
         id: images
         env:
           RELEASE_ID: ${{ inputs.release_id }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
           if [ "$IMAGE_SOURCE" = manifest ]; then
             manifest="$RUNNER_TEMP/manifest/$RELEASE_ID.json"
+            # A lane measures the artifacts Promote ships: the manifest must be this release of this revision, and each image a digest.
+            jq -e --arg id "$RELEASE_ID" --arg sha "$RELEASE_SHA" '.release_id == $id and .source_revision == $sha' "$manifest" > /dev/null \
+              || { echo "The manifest is not release $RELEASE_ID of $RELEASE_SHA" >&2; exit 1; }
+            for image in api sync; do
+              jq -er --arg image "$image" '.images[$image] | select(test("@sha256:[0-9a-f]{64}$"))' "$manifest" > /dev/null \
+                || { echo "The manifest names no digest-pinned $image image" >&2; exit 1; }
+            done
             echo "api=$(jq -er '.images.api' "$manifest")" >> "$GITHUB_OUTPUT"
             echo "sync=$(jq -er '.images.sync' "$manifest")" >> "$GITHUB_OUTPUT"
           else
