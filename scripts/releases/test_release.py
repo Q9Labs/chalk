@@ -116,7 +116,7 @@ class ChalkSfuPromotionTests(unittest.TestCase):
         self.output = Path(directory) / 'output'
         self.enterContext(patch.dict(os.environ, GITHUB_OUTPUT=str(self.output),
                                     GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'),
-                                    SCORECARD_OVERRIDE='',
+                                    SCORECARD_OVERRIDE='', GITHUB_EVENT_NAME='',
                                     EXPECTED_RELEASE_SHA=SHA))
         # Unrelated archive, media, Gate and rollback validation has its own boundaries.
         self.enterContext(patch.object(release, 'validate_choice', side_effect=lambda github, item: payload(item)))

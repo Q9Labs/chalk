@@ -24,6 +24,14 @@ test("The proof lanes can read the cut's manifest artifact, and a trial latency 
   assert.match(record.if, /inputs\.samples \|\| '60'\) == '60'/);
 });
 
+test("A proof lane runs in the nightly environment, whose OIDC subject no AWS role trusts, so it asks for no AWS credentials", () => {
+  const proofs = workflow("nightly-proofs.yml");
+  assert.equal(proofs.jobs.lane.environment.name, "nightly");
+  assert.equal(proofs.permissions["id-token"], undefined);
+  assert.equal(nightly.jobs.proof.permissions["id-token"], undefined);
+  for (const step of proofs.jobs.lane.steps) assert.doesNotMatch(step.uses ?? "", /configure-aws-credentials/, `${step.name} assumes an AWS role`);
+});
+
 test("The SFU bench reaper deletes the SSH key of a finished latency run", () => {
   const reaper = workflow("sfu-bench-reaper.yml");
   const step = reaper.jobs.reap.steps.find((item) => item.name === "Delete SSH keys of finished latency runs");
