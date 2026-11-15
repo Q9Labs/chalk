@@ -33,6 +33,27 @@ test("Promote's production proof and its rerun run on chalk_sfu, and none runs o
   for (const proofs of [proof.strategy.matrix, rerun.with.proofs]) assert.doesNotMatch(proofs, /\b(leave|smoke|transcript)\b(?!-)/);
 });
 
+// The 60-cycle latency run measures production after the proofs, on the proof Space they used, and feeds the scorecard, so every gated
+// action metric reaches it. It is not a proof: no rollback waits on it, and a failed or missing run is the scorecard gate's finding.
+test("Promote measures action latency on the Chalk SFU after the proofs and scores it with the Leave card", () => {
+  for (const name of ["latency", "latency-rerun"]) {
+    const job = promote.jobs[name];
+    assert.equal(job.uses, "./.github/workflows/real-call-proof.yml");
+    assert.deepEqual([job.with.environment, job.with.media_plane, job.with.latency, job.with.latency_only], ["production", promote.jobs.proof.with.media_plane, true, true]);
+    assert.equal(job.with.latency_samples, "60", "the kit measures 20 cycles unless it is asked for the 60 the gate needs");
+  }
+  assert.deepEqual(needsOf(promote.jobs.latency).sort(), ["proof", "release", "select"], "the proof Space is free only after the proofs");
+  assert.ok(needsOf(promote.jobs["latency-rerun"]).includes("scorecard-rerun"), "the Leave rerun and the latency rerun share the proof Space");
+  assert.deepEqual([promote.jobs.latency.with.scorecard_label, promote.jobs["latency-rerun"].with.scorecard_label], ["latency", "latency-rerun"]);
+  for (const name of ["rollback", "rollback-npm", "result"]) assert.equal(needsOf(promote.jobs[name]).includes("latency"), false, `${name} does not wait for the latency run`);
+  assert.ok(needsOf(promote.jobs.scorecard).includes("latency"));
+  assert.ok(needsOf(promote.jobs["scorecard-final"]).includes("latency-rerun"));
+  assert.equal(needsOf(promote.jobs["github-release"]).includes("latency"), false, "a failed first attempt does not outlive a passing rerun");
+  const gate = promote.jobs.scorecard.steps.find((step) => step.id === "gate").run;
+  assert.match(gate, /promote-gate\.sh first artifacts\/scorecard-proof\.json artifacts\/latency\/scorecard-chalk_sfu\.json/);
+  assert.match(promote.jobs["scorecard-final"].steps.at(-1).run, /promote-gate\.sh final artifacts\/scorecard-proof\.json artifacts\/latency\/scorecard-chalk_sfu\.json/);
+});
+
 test("a failed Chalk SFU proof still rolls the release back", () => {
   for (const name of ["rollback", "rollback-npm"]) assert.match(promote.jobs[name].if, /needs\.proof\.result != 'success'/);
 });
@@ -62,5 +83,5 @@ test("a production Chalk SFU run that spans both proof Spaces is refused, so no 
   assert.match(guard.if, new RegExp(`inputs\\.environment == 'production' && inputs\\.media_plane == '${plane}' && contains\\(inputs\\.proofs, 'call-artifacts'\\) && \\(inputs\\.proofs != 'call-artifacts' \\|\\| inputs\\.latency\\)`));
   assert.match(guard.run, /exit 1/);
   const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
-  for (const job of calls) assert.ok(job.with.proofs.includes("matrix.proofs") || !job.with.proofs.includes("call-artifacts"), "Promote reaches call-artifacts only through its own leg");
+  for (const job of calls) assert.ok(!job.with.proofs?.includes("call-artifacts") || job.with.proofs.includes("matrix.proofs"), "Promote reaches call-artifacts only through its own leg");
 });

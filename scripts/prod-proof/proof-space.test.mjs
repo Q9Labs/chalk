@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { createEpisode, createSpace } from "./proofs.mjs";
+import { createEpisode, createSpace, openEpisodeInSpace } from "./proofs.mjs";
 import { ProofError, measured, publicFailure } from "./runtime.mjs";
 
 // The public API refuses a Create Space request that names the Chalk SFU, so a proof names no
@@ -133,6 +133,15 @@ test("Create Episode waits for a busy Space and goes through once it clears", as
   const { episode } = await createEpisode(await withDirectory(run), pinnedSpace);
   assert.equal(episode.id, "e1");
   assert.deepEqual(waits, [3000, 3000]);
+});
+
+// The latency kit makes an Episode in the same Space every cycle, and the one before may still be ending.
+test("the latency kit's Episode in a reused Space waits for the one still ending and times only the request that went through", async () => {
+  const { run, waits } = spaceRun([], [busy(), busy(), episodeBody]);
+  const { episode, createMs } = await openEpisodeInSpace(await withDirectory(run), pinnedSpace);
+  assert.equal(episode.id, "e1");
+  assert.deepEqual(waits, [3000, 3000]);
+  assert.ok(createMs < 3000, "the waits are not part of the measured delay");
 });
 
 test("a Space that stays busy for 90 seconds fails with proof-space-busy", async () => {

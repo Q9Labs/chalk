@@ -20,7 +20,7 @@ import { parseArgs } from "node:util";
 import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, disposeResource, startRun, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createSpace, episodeEnd, openEpisodeInSpace, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
@@ -133,10 +133,7 @@ async function shareSteps(pages, participantId, sample, stages) {
 async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending, checkPath) {
   const space = await createSpace(run, plane);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const createdAt = clock();
-  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
-  const createMs = clock() - createdAt;
-  await trackEpisode(run, space, episode);
+  const { episode, createMs } = await openEpisodeInSpace(run, space);
   ending.path = `${path}/${episode.id}`;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);

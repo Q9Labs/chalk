@@ -13,6 +13,7 @@ import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 import { findChalkSfuSpace, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 import { manualPolicy, spacePayload } from "./space-fixture.mjs";
+import { createEpisodeWhenSpaceClears } from "./space-clears.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -135,24 +136,16 @@ async function endLeftoverEpisodes(run, space) {
     await requestEpisodeEnd(run.apiRequest, `${path}/${episode.id}`);
   }
 }
-// An Episode still ending, or someone else's, makes Create Episode answer 409 episode.capacity_exceeded; wait up to 30 x 3 s for it.
-const spaceBusyPolls = 30;
-const spaceBusyPollMs = 3_000;
-async function createEpisodeWhenSpaceClears(run, space) {
-  for (let poll = 0; ; poll++) {
-    try {
-      return await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-    } catch (error) {
-      if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
-      if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);
-      await run.wait(spaceBusyPollMs);
-    }
-  }
+// A new Episode in a Space the run may share (an operator's moved Space, or the Promote proof Space): it ends what a finished run left live,
+// waits for an Episode that is still ending, and reports how long the successful request took, so a wait never counts as a measured delay.
+export async function openEpisodeInSpace(run, space) {
+  if (space.metadata?.proof_run_id !== run.runId) await endLeftoverEpisodes(run, space);
+  const { episode, createMs } = await createEpisodeWhenSpaceClears(run, space);
+  await trackEpisode(run, space, episode);
+  return { episode, createMs };
 }
 export async function createEpisode(run, space, policy = manualPolicy) {
-  if (space.metadata?.proof_run_id !== run.runId) await endLeftoverEpisodes(run, space);
-  const episode = await createEpisodeWhenSpaceClears(run, space);
-  await trackEpisode(run, space, episode);
+  const { episode } = await openEpisodeInSpace(run, space);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const effective = episode.config_snapshot.artifact_policy;

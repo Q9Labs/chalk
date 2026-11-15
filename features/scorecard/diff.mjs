@@ -96,26 +96,40 @@ export function renderTable(diff, { title, baselineLabel, dropped = [] }) {
  * @param {any[]} metrics  The run's metrics.
  * @param {Record<string, any>} budgets  The budgets object of perf/budgets.json for the plane.
  * @param {number} floor  The fewest samples a metric may have.
+ * @param {any[]} [baselineMetrics]  The metrics of the baseline card, for the baseline column.
+ * @param {{ metric: string, reason: string, count: number }[]} [dropped]  The card's drops: a timeout on a gated metric is a failure of the run.
  */
-export function expectedMetricRows(ids, metrics, budgets, floor) {
+export function expectedMetricRows(ids, metrics, budgets, floor, baselineMetrics = [], dropped = []) {
   const byId = new Map(metrics.map((metric) => [metric.id, metric]));
+  const baselineById = new Map(baselineMetrics.map((metric) => [metric.id, metric]));
   return ids.map((id) => {
     const metric = byId.get(id);
     const budget = budgets[id];
     const samples = metric?.n ?? 0;
-    const row = { id, samples, floor, budget, now: metric && samples > 0 ? primary(metric, budget) : undefined, unit: metric?.unit ?? "ms" };
+    const before = baselineById.get(id);
+    const row = {
+      id,
+      samples,
+      floor,
+      budget,
+      baseline: before && before.n > 0 ? primary(before, budget) : undefined,
+      now: metric && samples > 0 ? primary(metric, budget) : undefined,
+      unit: metric?.unit ?? "ms",
+    };
     if (samples === 0) return { ...row, verdict: "missing" };
     if (samples < floor) return { ...row, verdict: "too few samples" };
+    const timeouts = dropped.filter((drop) => drop.metric === id && drop.reason === "timeout").reduce((sum, drop) => sum + drop.count, 0);
+    if (timeouts > 0) return { ...row, verdict: "timed out", timeouts };
     return { ...row, verdict: overBudget(metric, budget) ? "over budget" : "ok" };
   });
 }
 
 /** renderExpectedMetrics writes every expected metric as a Markdown table, so a missing one shows as a row, not as an absence. */
 export function renderExpectedMetrics(rows, title) {
-  const lines = [`### ${title}`, "", "| Metric | Samples | Budget | Current | Verdict |", "|---|---|---|---|---|"];
+  const lines = [`### ${title}`, "", "| Metric | Samples | Budget | Baseline | Current | Verdict |", "|---|---|---|---|---|---|"];
   for (const row of rows) {
     const mark = row.verdict === "ok" ? "✅" : "❌";
-    lines.push(`| \`${row.id}\` | ${row.samples} (floor ${row.floor}) | ${limitText(row.budget)} | ${row.now === undefined ? "–" : `${formatNumber(row.now)} ${row.unit}`} | ${mark} ${row.verdict} |`);
+    lines.push(`| \`${row.id}\` | ${row.samples} (floor ${row.floor}) | ${limitText(row.budget)} | ${row.baseline === undefined ? "–" : `${formatNumber(row.baseline)} ${row.unit}`} | ${row.now === undefined ? "–" : `${formatNumber(row.now)} ${row.unit}`} | ${mark} ${row.verdict} |`);
   }
   return `${lines.join("\n")}\n`;
 }

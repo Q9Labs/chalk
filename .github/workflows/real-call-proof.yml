@@ -172,7 +172,7 @@ jobs:
       result: ${{ steps.result.outputs.result }}
       failure: ${{ steps.prove.outputs.failure }}
       results: ${{ steps.prove.outputs.results }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || inputs.latency_only && inputs.environment == 'production' && 60 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -190,8 +190,9 @@ jobs:
           MEDIA_PLANE: ${{ inputs.media_plane }}
           LATENCY: ${{ inputs.latency }}
         run: |
-          [[ "$ENVIRONMENT" == nightly && ( "$MEDIA_PLANE" == chalk_sfu || "$MEDIA_PLANE" == cf_sfu ) && "$LATENCY" == true ]] || {
-            echo "Latency-only mode requires nightly, chalk_sfu or cf_sfu, and latency=true." >&2
+          # Promote measures production on chalk_sfu beside its proofs; the Cloudflare plane is measured on nightly only.
+          [[ ( "$ENVIRONMENT" == nightly && ( "$MEDIA_PLANE" == chalk_sfu || "$MEDIA_PLANE" == cf_sfu ) || "$ENVIRONMENT" == production && "$MEDIA_PLANE" == chalk_sfu ) && "$LATENCY" == true ]] || {
+            echo "Latency-only mode requires nightly (chalk_sfu or cf_sfu) or production (chalk_sfu), and latency=true." >&2
             exit 1
           }
       - name: Refuse a production run that spans both proof Spaces
@@ -343,11 +344,17 @@ jobs:
             exit 1
           fi
       - name: Measure action latency
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly' || inputs.environment == 'production') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || 25 }}
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || inputs.environment == 'production' && inputs.latency_only && 45 || 25 }}
+        # Promote's scorecard gate decides what a breach, a thin metric or a missing card means, one rerun included; a first attempt that
+        # breaches must not fail the job, or its failure would outlive a passing rerun. The run summary and the gate still show it.
+        continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
+          # Promote's latency run reuses the proof Space the proofs used, the only Space of this Tenant the plane allowlist admits. Like the proofs, it takes a pinned
+          # Space ID when an operator pinned one and otherwise finds the Space by slug.
+          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.latency_only && inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
@@ -363,13 +370,13 @@ jobs:
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
           CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ secrets.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ secrets.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
-          SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'manual' }}
+          SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || inputs.latency_only && inputs.environment == 'production' && 'promote' || 'manual' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'nightly' || inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
           CF_LATENCY_ONLY: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}
           CHALK_LATENCY_SAMPLES: ${{ inputs.latency_samples }}
-          # The Cloudflare latency-only run never queries the staging API logs, so it does not receive their token.
-          CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && inputs.media_plane == 'cf_sfu') && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
+          # Only the Chalk SFU Nightly run queries the staging API logs. The Cloudflare latency-only run and Promote's production run do not receive their token.
+          CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && (inputs.media_plane == 'cf_sfu' || inputs.environment == 'production')) && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_LOG_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_LOG_DATASET }}
           CHALK_AXIOM_METRICS_QUERY_TOKEN: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && secrets.CHALK_AXIOM_METRICS_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ secrets.CHALK_AXIOM_STAGING_METRICS_DATASET }}
@@ -393,6 +400,8 @@ jobs:
           run_id="${RUN_PREFIX}-latency"
           echo "$run_id" >> .private/proof-run-ids
           latency=(pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04)
+          # Without --samples the kit measures 20 cycles; the gate's 60 cycles (floor 48) must be asked for.
+          [ -z "$CHALK_LATENCY_SAMPLES" ] || latency+=(--samples "$CHALK_LATENCY_SAMPLES")
           if [[ "$CF_LATENCY_ONLY" != true ]]; then
             CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}"
             exit $?
@@ -410,7 +419,9 @@ jobs:
           fi
           exit "$status"
       - name: Collect the latency scorecard
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly' || inputs.environment == 'production') }}
+        # A missing card is the gate's finding for Promote's production run (see the measurement step).
+        continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
