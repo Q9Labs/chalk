@@ -23,7 +23,7 @@ export function webMediaFixture(guest, { permission = "prompt" } = {}) {
       { deviceId: "proof-camera", groupId: "proof", kind: "videoinput", label: "Proof camera", toJSON() { return {}; } },
       { deviceId: "proof-microphone", groupId: "proof", kind: "audioinput", label: "Proof microphone", toJSON() { return {}; } }
     ];
-    (${installFixture.toString()})({ speech: "", guest: ${guest}, tones: true });
+    (${installFixture.toString()})({ speech: "", guest: ${guest}, tones: true, camera: { width: 640, height: 360 } });
     let permission = ${JSON.stringify(permission)};
     const watchers = [];
     const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
