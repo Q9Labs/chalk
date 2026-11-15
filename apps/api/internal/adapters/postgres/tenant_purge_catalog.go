@@ -157,7 +157,7 @@ func (c purgeCatalog) predicates() (map[string]string, error) {
 	exclusive := `select u.id from public.users u where exists(select 1 from public.memberships m where m.user_id=u.id and m.tenant_id=any($1::uuid[])) and not exists(select 1 from public.memberships m where m.user_id=u.id and not(m.tenant_id=any($1::uuid[])))`
 	// Global user-owned resources are retained unless their ownership proves exclusivity.
 	for _, fk := range c.FKs {
-		if fk.Parent != "users" || len(fk.ChildColumns) != 1 || slices.Contains([]string{"memberships", "auth_identities", "login_sessions", "password_resets"}, fk.Child) {
+		if fk.Parent != "users" || len(fk.ChildColumns) != 1 || slices.Contains([]string{"memberships", "auth_identities", "login_sessions"}, fk.Child) {
 			continue
 		}
 		t, ok := c.table(fk.Child)

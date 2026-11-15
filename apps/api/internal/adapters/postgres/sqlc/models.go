@@ -327,15 +327,6 @@ type ParticipantPresenceLease struct {
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 }
 
-type PasswordReset struct {
-	AccountID pgtype.UUID        `json:"account_id"`
-	TokenHash string             `json:"token_hash"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	UsedAt    pgtype.Timestamptz `json:"used_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-}
-
 type ProviderOperationObservation struct {
 	TenantID               pgtype.UUID        `json:"tenant_id"`
 	EpisodeID              pgtype.UUID        `json:"episode_id"`
@@ -1589,15 +1580,6 @@ type TenantArtifactPolicy struct {
 	SourceWindowSeconds        int64              `json:"source_window_seconds"`
 	UpdatedAt                  pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt                  pgtype.Timestamptz `json:"created_at"`
-}
-
-type TenantOnboardingRequest struct {
-	AccountID          pgtype.UUID        `json:"account_id"`
-	RequestKey         string             `json:"request_key"`
-	RequestFingerprint []byte             `json:"request_fingerprint"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	TenantAccessID     pgtype.UUID        `json:"tenant_access_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
 
 type TranscriptChunk struct {
