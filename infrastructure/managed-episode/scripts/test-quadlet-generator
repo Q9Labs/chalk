@@ -28,4 +28,11 @@ paths="$(grep -o -- '--env-file [^ ]*' "${work}/generated" | cut -d' ' -f2)"
 while read -r path; do
   [[ "$path" == /run/chalk/* ]] || fail "the generator resolved an environment file to ${path}"
 done <<<"$paths"
+# The generator accepts a start limit too, so read the policy from the units: a database outage can last hours, and
+# a unit that reached its start limit stays failed until someone starts it by hand.
+for unit in chalk-api chalk-sync; do
+  grep -Fxq 'StartLimitIntervalSec=0' "${work}/rendered/quadlet/${unit}.container" || fail "${unit} has a start limit"
+  grep -Fxq 'Restart=on-failure' "${work}/rendered/quadlet/${unit}.container" || fail "${unit} does not restart on failure"
+done
+! grep -Eq '^Requires=.*chalk-api\.service' "${work}/rendered/quadlet/chalk-sync.container" || fail "chalk-sync requires the API, so a timed-out API start would strand it"
 echo "PASS Quadlet generator accepts the rendered units (${quadlet}, $(podman --version))"

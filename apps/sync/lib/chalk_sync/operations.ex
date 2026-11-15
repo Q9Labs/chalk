@@ -21,9 +21,40 @@ defmodule ChalkSync.Operations do
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
+  @serving_key {__MODULE__, :serving}
+  @boot_key {__MODULE__, :boot_check_passed}
+
+  @doc """
+  Opens the node to sockets. Production Sync stays closed until the presence witness is written,
+  so a socket never lives before the recovery floor protects the leases of a node that was away.
+  The flag outlives this process: a restart of it does not close an open node.
+  """
+  @spec begin_serving() :: :ok
+  def begin_serving, do: :persistent_term.put(@serving_key, true)
+
+  @doc """
+  Keeps sockets out while the production boot checks have not passed. The boot check calls this
+  when the database was away at start, so the checks that need it run later, and calls
+  `boot_check_passed/0` once they pass.
+  """
+  @spec hold_for_boot_check() :: :ok
+  def hold_for_boot_check, do: :persistent_term.put(@boot_key, false)
+
+  @spec boot_check_passed() :: :ok
+  def boot_check_passed, do: :persistent_term.put(@boot_key, true)
+
+  @spec serving?() :: boolean()
+  def serving? do
+    :persistent_term.get(@boot_key, true) and
+      :persistent_term.get(
+        @serving_key,
+        not Application.fetch_env!(:chalk_sync, :database_workers)
+      )
+  end
+
   @spec accepting_connections?(GenServer.server()) :: boolean()
   def accepting_connections?(server \\ __MODULE__) do
-    GenServer.call(server, :accepting_connections, 250)
+    serving?() and GenServer.call(server, :accepting_connections, 250)
   catch
     :exit, _reason -> false
   end

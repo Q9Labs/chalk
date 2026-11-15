@@ -51,6 +51,23 @@ func (r Readiness) LiveParticipants(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
+// presenceWitnessHeld is true while a lease-aware Sync session holds the witness lock $1 (1 or 2).
+const presenceWitnessHeld = `exists (
+    select 1 from pg_locks where locktype='advisory' and classid=1128811595
+        and objid=$1::oid and objsubid=2 and mode='ShareLock' and granted
+        and database=(select oid from pg_database where datname=current_database())
+)`
+
+// SyncConnected reports whether a lease-aware Sync holds its presence witness, which it does from the end
+// of its startup barrier until its database session ends. A Sync that is down or still starting holds none.
+func (r Readiness) SyncConnected(ctx context.Context) (bool, error) {
+	var held bool
+	if err := r.Pool.QueryRow(ctx, `select `+presenceWitnessHeld, 1).Scan(&held); err != nil {
+		return false, fmt.Errorf("read sync presence witness: %w", err)
+	}
+	return held, nil
+}
+
 func validateMigrationVersion(current, required int64) error {
 	if current < required {
 		return fmt.Errorf("postgres migration version %d is below required %d", current, required)

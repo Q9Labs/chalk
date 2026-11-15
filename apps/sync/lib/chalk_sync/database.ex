@@ -48,6 +48,19 @@ defmodule ChalkSync.Database do
       unavailable
   end
 
+  @doc """
+  Subscribes a `Postgrex.Notifications` process to a channel. While the database is away the
+  subscription is held and applied on connect (and again after every reconnect), so a database
+  outage at boot never fails the caller.
+  """
+  @spec listen(GenServer.server(), String.t()) :: reference()
+  def listen(notifications, channel) do
+    case Postgrex.Notifications.listen(notifications, channel) do
+      {:ok, reference} -> reference
+      {:eventually, reference} -> reference
+    end
+  end
+
   @doc "A connection for work that belongs to no Episode. Each purpose keeps its own pool slot."
   @spec connection_for(:background | :retention | :readiness) :: GenServer.server()
   def connection_for(purpose) when purpose in [:background, :retention, :readiness] do

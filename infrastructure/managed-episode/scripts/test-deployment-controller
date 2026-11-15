@@ -93,6 +93,7 @@ mkdir -p "${fixture_root}/source/infrastructure/managed-episode" "${fixture_root
 cp -R "${managed_root}/contracts" "${fixture_root}/source/infrastructure/managed-episode/"
 cp -R "${managed_root}/controller" "${fixture_root}/source/infrastructure/managed-episode/"
 cp -R "${managed_root}/systemd" "${fixture_root}/source/infrastructure/managed-episode/"
+cp -R "${managed_root}/quadlet" "${fixture_root}/source/infrastructure/managed-episode/"
 mkdir -p "${fixture_root}/source/infrastructure/managed-episode/scripts"
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/render-runtime" <<'RENDER'
 #!/usr/bin/env bash
@@ -106,7 +107,10 @@ if [[ -z "$target" ]]; then
   target="$(jq -er '.database_compatibility.minimum_migration' "$1")"
 fi
 extra="${FAKE_MIGRATION_EXTRA:---allow-missing-version 20260819120000}"
-printf 'Image=%s\n' "$image" >"$output/quadlet/chalk-api.container"
+# The release's own unit templates, so a change to their restart policy travels the same install path as a real deploy.
+templates="$(dirname "$0")/../quadlet"
+sed "s|__API_IMAGE_REFERENCE__|${image}|" "${templates}/chalk-api.container.in" >"$output/quadlet/chalk-api.container"
+sed "s|__SYNC_IMAGE_REFERENCE__|$(jq -er '.images.sync' "$1")|" "${templates}/chalk-sync.container.in" >"$output/quadlet/chalk-sync.container"
 printf 'Image=%s\nSecret=chalk-managed-migrator-database-url,type=mount,target=/run/chalk/migrate/database-url\nPodmanArgs=--entrypoint=/usr/local/bin/chalk-migrate\nExec=--database-url-file /run/chalk/migrate/database-url --target %s%s\n' "$image" "$target" "${extra:+ ${extra}}" >"$output/quadlet/chalk-api-migrate.container"
 printf '[Unit]\nDescription=fake runtime\n' >"$output/systemd/chalk-runtime.target"
 if jq -e '.images | has("recorder_control")' "$1" >/dev/null; then
@@ -1107,6 +1111,18 @@ jq -e -R -s '
 ' "${fixture_root}/aws.log" >/dev/null || fail "runtime inputs were not fetched in SSM batches of at most 10 names"
 jq -e -s 'length == 1 and .[0].outcome == "healthy" and .[0].release_id == "stable" and (.[0].inputs | length == 11)' "${stable_state}/ledger.jsonl" >/dev/null || fail "healthy deployment ledger record was not written"
 grep -Fq 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" || fail "database migration unit was not started"
+# The restart policy reaches the host: the installed units never hit a start limit, and systemd reloads them before anything starts.
+for unit in chalk-api chalk-sync; do
+  grep -Fxq 'StartLimitIntervalSec=0' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with a start limit"
+  ! grep -Eq '^StartLimitBurst=' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with a start burst"
+  grep -Fxq 'RestartSec=5s' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with the old restart delay"
+done
+# Sync must not Require the API: an API start that times out during an outage would cancel Sync's start and strand it.
+! grep -Eq '^Requires=.*chalk-api\.service' "${fixture_root}/user-quadlet/chalk-sync.container" || fail "chalk-sync was installed requiring the API"
+grep -Fxq 'PartOf=chalk-api.service' "${fixture_root}/user-quadlet/chalk-sync.container" || fail "chalk-sync does not follow the API's stop and restart"
+reload_line="$(grep -nF 'systemctl --user daemon-reload' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+first_start_line="$(grep -nE 'systemctl --user (start|restart) ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
+[[ -n "$reload_line" && "$reload_line" -lt "$first_start_line" ]] || fail "the user manager did not reload the units before the runtime started"
 migration_start_line="$(grep -nF 'systemctl --user start chalk-api-migrate.service' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
 runtime_start_line="$(grep -nF 'systemctl --user start chalk-runtime.target' "${fixture_root}/commands.log" | tail -n 1 | cut -d: -f1)"
 [[ "${migration_start_line}" -lt "${runtime_start_line}" ]] || fail "runtime target started before database migrations"

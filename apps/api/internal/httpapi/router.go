@@ -213,6 +213,7 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlo
 				body["sfu_retirement_debts"] = map[string]int64{"count": int64(count), "oldest_age_seconds": int64(oldest.Seconds())}
 			}
 		}
+		addSyncConnection(ctx, checker, body)
 		// A release waits for the live participant count to reach zero before it restarts production. The count is usage
 		// data, so only a request with the operator read token sees it. Like the backlog, it never fails readiness: an
 		// unreadable count is left out, so the reader sees "unknown" and never a made-up zero.

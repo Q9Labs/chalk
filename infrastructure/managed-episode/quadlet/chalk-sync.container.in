@@ -1,10 +1,13 @@
 [Unit]
 Description=Chalk production SyncEngine
 After=network-online.target chalk-api.service
-Requires=chalk-api.service
-Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
+# Sync does not need the API to run, so it does not Require it: while the database is away the API's start can
+# time out, and a Requires would cancel Sync's start with it and leave Sync down. Wants and PartOf keep the
+# ordering and the stop and restart that follow the API.
+Wants=network-online.target chalk-api.service
+PartOf=chalk-api.service
+# A database outage can last hours. The unit keeps retrying, because a start limit would leave it failed until someone starts it by hand.
+StartLimitIntervalSec=0
 
 [Container]
 Image=__SYNC_IMAGE_REFERENCE__
@@ -39,7 +42,7 @@ PodmanArgs=--stop-timeout=15
 
 [Service]
 Restart=on-failure
-RestartSec=2s
+RestartSec=5s
 TimeoutStartSec=120
 TimeoutStopSec=25
 

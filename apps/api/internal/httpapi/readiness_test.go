@@ -100,3 +100,37 @@ func containsKey(raw []byte, key string) bool {
 	_, found := body[key]
 	return found
 }
+
+type syncChecker struct {
+	readyChecker
+	connected bool
+	err       error
+}
+
+func (c syncChecker) SyncConnected(context.Context) (bool, error) { return c.connected, c.err }
+
+// Whether Sync is connected is reported by /readyz and never fails it: a Sync outage must not take the API
+// out of service, restart it, or roll a release back.
+func TestReadyzReportsSyncWithoutFailingReadiness(t *testing.T) {
+	read := func(checker ReadinessChecker) (int, map[string]json.RawMessage) {
+		recorder := httptest.NewRecorder()
+		NewRouter(Options{Readiness: checker}).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		var body map[string]json.RawMessage
+		_ = json.Unmarshal(recorder.Body.Bytes(), &body)
+		return recorder.Code, body
+	}
+	for name, test := range map[string]struct {
+		checker ReadinessChecker
+		want    string
+	}{
+		"connected":    {syncChecker{connected: true}, `"connected"`},
+		"disconnected": {syncChecker{}, `"disconnected"`},
+		"unreadable":   {syncChecker{err: errors.New("database is slow")}, ""},
+		"no reporter":  {readyChecker{}, ""},
+	} {
+		code, body := read(test.checker)
+		if code != http.StatusOK || string(body["sync"]) != test.want {
+			t.Fatalf("%s: /readyz answered %d with sync %q, want 200 and %q", name, code, body["sync"], test.want)
+		}
+	}
+}
