@@ -120,6 +120,9 @@ class AutoPromoteWindowTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'validate_choice', side_effect=lambda github, item: payload(item)))
         self.enterContext(patch.object(release, 'previous_production', return_value=dict(target_sha=OTHER_SHA)))
         self.enterContext(patch.object(release, 'ancestor'))
+        # The fixtures' SHAs are not in this checkout: a latency record covers its own SHA, and a path changed whenever two SHAs differ.
+        self.enterContext(patch.object(release, 'descends', side_effect=lambda sha, target: sha == target))
+        self.enterContext(patch.object(release, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
 
     def github(self):
         item = held()

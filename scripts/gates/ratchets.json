@@ -173,7 +173,7 @@
     "features/media/sfu/tests/live_soak_test.go": 338,
     "features/media/sfu/tests/live_support_test.go": 378,
     "features/media/sfu/tests/loopback_test.go": 659,
-    "features/scorecard/nightly-graph.test.mjs": 382,
+    "features/scorecard/nightly-graph.test.mjs": 376,
     "infrastructure/observability/production-alerts/collector.go": 740,
     "infrastructure/observability/production-alerts/collector_test.go": 424,
     "packages/assets/src/index.ts": 323,
@@ -203,8 +203,8 @@
     "scripts/recorder/boot-check.py": 679,
     "scripts/releases/github_release.py": 319,
     "scripts/releases/media.py": 489,
-    "scripts/releases/release.py": 645,
-    "scripts/releases/test_release.py": 993,
+    "scripts/releases/release.py": 644,
+    "scripts/releases/test_release.py": 979,
     "scripts/staging-sfu/test_staging_lock.py": 355,
     "sdks/typescript/client/scripts/real-browser-sync.mjs": 457,
     "sdks/typescript/client/src/connection/lifecycle.test.ts": 823,
@@ -270,7 +270,7 @@
     "tools/sdk-web-consumer-e2e/scripts/run.mjs": 484
   },
   "copies": {
-    "copy.provider_names": 421,
+    "copy.provider_names": 420,
     "copy.port_8443": 32,
     "copy.pnpm_version": 5,
     "copy.excalidraw_pin": 5,

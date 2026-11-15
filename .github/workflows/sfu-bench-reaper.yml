@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -36,3 +37,18 @@ jobs:
           set -euo pipefail
           test -n "$DIGITALOCEAN_ACCESS_TOKEN" || { echo "Missing existing nightly DO token" >&2; exit 1; }
           features/media/sfu/scripts/bench/bench reap 4
+      - name: Delete SSH keys of finished latency runs
+        env:
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The latency lane names its key chalk-sfu-bench-latency-<run id>-<attempt> and deletes it itself; this covers a runner that died.
+          doctl compute ssh-key list --format ID,Name --no-header | while read -r id name; do
+            case "$name" in chalk-sfu-bench-latency-*) ;; *) continue ;; esac
+            run=${name#chalk-sfu-bench-latency-}
+            run=${run%%-*}
+            status=$(gh run view "$run" --json status --jq .status 2> /dev/null || echo unknown)
+            if [ "$status" = completed ]; then doctl compute ssh-key delete "$id" --force; fi
+          done

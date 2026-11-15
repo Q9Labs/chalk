@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { check, request, save, waitFor, errorEvidence, ProofError } from "./runtime.mjs";
@@ -7,6 +8,14 @@ import { requestCleanupEnd } from "./episode-end.mjs";
 export function runLabel(runId) {
   check(/^[A-Za-z0-9_-]{1,51}$/.test(runId), "Invalid proof run ID");
   return `chalk-proof:${runId}`;
+}
+// Names the run, makes its private directory, and returns both.
+export async function startRun() {
+  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
+  runLabel(runId);
+  const directory = resolve(".private", "prod-proof", runId);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  return { runId, directory };
 }
 function cleanupClient(config) {
   // Never inherit the proof's aborted signal. Every HTTP operation has a deadline.
@@ -78,12 +87,13 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
           });
         }
       });
-      await attempt("transcripts", space.id, async () => {
-        const transcripts = await list(call, `${base}/transcripts`, "transcripts");
-        for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
-          await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
-        }
-      });
+      if (!config.transcription_disabled)
+        await attempt("transcripts", space.id, async () => {
+          const transcripts = await list(call, `${base}/transcripts`, "transcripts");
+          for (const transcript of transcripts.filter((entry) => entry.space_id === space.id && entry.status !== "deleted")) {
+            await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
+          }
+        });
       if (failures.length === before) {
         await attempt("space", space.id, async () => {
           if (!space.archived) await call("POST", `${base}/spaces/${space.id}/archive`, {});
@@ -99,12 +109,13 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       await endEpisode(call, path, await call("GET", `${path}/${tracked.id}`));
     });
     // Only this run's Episodes: a reused Space may hold Transcripts of other runs.
-    await attempt("tracked-transcripts", tracked.id, async () => {
-      const transcripts = await list(call, `${base}/transcripts`, "transcripts");
-      for (const transcript of transcripts.filter((entry) => entry.episode_id === tracked.id && entry.status !== "deleted")) {
-        await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
-      }
-    });
+    if (!config.transcription_disabled)
+      await attempt("tracked-transcripts", tracked.id, async () => {
+        const transcripts = await list(call, `${base}/transcripts`, "transcripts");
+        for (const transcript of transcripts.filter((entry) => entry.episode_id === tracked.id && entry.status !== "deleted")) {
+          await attempt("transcript", transcript.id, () => call("DELETE", `${base}/transcripts/${transcript.id}`));
+        }
+      });
   }
   await cleanupWebhook(call, config, known, base, attempt);
   await save(`${directory}/remote-cleanup.json`, results);
