@@ -13,6 +13,7 @@ import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 import { findChalkSfuSpace, chalkSfuSpaceKind, chalkSfuSpaces, spacePlane } from "./chalk-sfu-spaces.mjs";
 import { manualPolicy, spacePayload } from "./space-fixture.mjs";
+import { createEpisodeWhenSpaceClears } from "./space-clears.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -133,22 +134,6 @@ async function endLeftoverEpisodes(run, space) {
     if (episode.status !== "active" || typeof owner !== "string" || owner === run.runId) continue;
     console.log("Ending an Episode a finished proof run left live in the proof Space");
     await requestEpisodeEnd(run.apiRequest, `${path}/${episode.id}`);
-  }
-}
-// An Episode still ending, or someone else's, makes Create Episode answer 409 episode.capacity_exceeded; wait up to 30 x 3 s for it.
-const spaceBusyPolls = 30;
-const spaceBusyPollMs = 3_000;
-async function createEpisodeWhenSpaceClears(run, space) {
-  for (let poll = 0; ; poll++) {
-    const startedAt = performance.now();
-    try {
-      const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-      return { episode, createMs: performance.now() - startedAt };
-    } catch (error) {
-      if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
-      if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);
-      await run.wait(spaceBusyPollMs);
-    }
   }
 }
 // A new Episode in a Space the run may share (an operator's moved Space, or the Promote proof Space): it ends what a finished run left live,

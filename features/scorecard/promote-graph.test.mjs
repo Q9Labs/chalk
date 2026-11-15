@@ -39,7 +39,7 @@ test("Promote measures action latency on the Chalk SFU after the proofs and scor
   for (const name of ["latency", "latency-rerun"]) {
     const job = promote.jobs[name];
     assert.equal(job.uses, "./.github/workflows/real-call-proof.yml");
-    assert.deepEqual([job.with.environment, job.with.media_plane, job.with.latency, job.with.latency_only, job.with.lane], ["production", "chalk_sfu", true, true, "latency"]);
+    assert.deepEqual([job.with.environment, job.with.media_plane, job.with.latency, job.with.latency_only], ["production", promote.jobs.proof.with.media_plane, true, true]);
     assert.equal(job.with.latency_samples, "60", "the kit measures 20 cycles unless it is asked for the 60 the gate needs");
   }
   assert.deepEqual(needsOf(promote.jobs.latency).sort(), ["proof", "release", "select"], "the proof Space is free only after the proofs");
@@ -83,5 +83,5 @@ test("a production Chalk SFU run that spans both proof Spaces is refused, so no 
   assert.match(guard.if, new RegExp(`inputs\\.environment == 'production' && inputs\\.media_plane == '${plane}' && contains\\(inputs\\.proofs, 'call-artifacts'\\) && \\(inputs\\.proofs != 'call-artifacts' \\|\\| inputs\\.latency\\)`));
   assert.match(guard.run, /exit 1/);
   const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
-  for (const job of calls) assert.ok(job.with.proofs.includes("matrix.proofs") || !job.with.proofs.includes("call-artifacts"), "Promote reaches call-artifacts only through its own leg");
+  for (const job of calls) assert.ok(!job.with.proofs?.includes("call-artifacts") || job.with.proofs.includes("matrix.proofs"), "Promote reaches call-artifacts only through its own leg");
 });

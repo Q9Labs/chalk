@@ -204,7 +204,6 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      lane: latency
       media_plane: chalk_sfu
       latency: true
       latency_only: true
@@ -285,7 +284,6 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      lane: latency
       media_plane: chalk_sfu
       latency: true
       latency_only: true

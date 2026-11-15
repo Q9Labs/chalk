@@ -7,10 +7,12 @@ import test from "node:test";
 import { gatedActionIds, MIN_GATED_SAMPLES, readBudgets } from "./budgets.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
 
+const chalkSfu = "chalk_sfu";
+
 const root = resolve(import.meta.dirname, "../..");
 const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 const run = { id: "promote-run", commit: revision, tier: "promote", environment: "production", startedAt: "2026-11-15T22:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
-const card = (metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane: "chalk_sfu", metrics, dropped: [] });
+const card = (metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane: chalkSfu, metrics, dropped: [] });
 const leave = card([{ id: "proof.leave_median_ms", unit: "ms", n: 5, p50: 100, p95: 120, source: "leave-proof" }]);
 const action = (id, n = 60) => ({ id, unit: "ms", n, p50: 100, p95: 100, source: "latency-kit" });
 const node = (args) => spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), ...args], { cwd: root, encoding: "utf8" });
@@ -26,7 +28,7 @@ async function fixture(t, latencyMetrics) {
   return files;
 }
 const { budgets } = await readBudgets();
-const gated = gatedActionIds(budgets, "chalk_sfu");
+const gated = gatedActionIds(budgets, chalkSfu);
 const gate = (mode, files, env, latency = files.latency) =>
   spawnSync("bash", ["features/scorecard/promote-gate.sh", mode, files.leave, latency], {
     cwd: root,
