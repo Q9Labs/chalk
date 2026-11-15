@@ -21,6 +21,18 @@ type unreachableError string
 
 func (e unreachableError) Error() string { return string(e) }
 
+// snapshotError is the failure of reading the state rows: a database failure while consuming them is an unreachable
+// database, and rows that read cleanly but cover too few rules are an incomplete snapshot.
+func snapshotError(rowsErr error, rules int) error {
+	if rowsErr != nil {
+		return unreachableError("alert state rows could not be read")
+	}
+	if rules != 5 {
+		return errors.New("alert state snapshot incomplete")
+	}
+	return nil
+}
+
 // healthRows gives the database row and the runtime-health row. The database row is the only row that
 // still carries a failure when the database is down, because every other state row comes from it.
 func healthRows(ctx context.Context, client *http.Client, snapshots []snapshot, databaseErr error) []snapshot {

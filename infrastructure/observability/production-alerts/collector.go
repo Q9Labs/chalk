@@ -675,11 +675,8 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 		snapshots = append(snapshots, item)
 	}
 	rows.Close()
-	if rows.Err() != nil {
-		return nil, unreachableError("alert state rows could not be read")
-	}
-	if len(seenRules) != 5 {
-		return nil, errors.New("alert state snapshot incomplete")
+	if err := snapshotError(rows.Err(), len(seenRules)); err != nil {
+		return nil, err
 	}
 	// A failed debt read keeps the job and webhook rows, but still fails the service.
 	var oldestDebtSeconds int64
