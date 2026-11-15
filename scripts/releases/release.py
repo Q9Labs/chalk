@@ -264,15 +264,6 @@ def validate_choice(github, item):
     info = payload(item)
     require(re.fullmatch('[0-9a-f]{64}', info['manifest_sha256']), 'missing manifest hash')
 
-    def manifest():
-        manifest_bytes(github, info)
-
-    def media():
-        require(media_bytes(github, info), 'held nightly has no immutable media members')
-
-    def gate():
-        require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful")
-
     def web(target):
         from web import read_marker
         member = info['web'][target]
@@ -281,7 +272,10 @@ def validate_choice(github, item):
         require(read_marker(data) == {'environment': target, 'commit': info['target_sha']}, 'web identity mismatch')
 
     # Each check is a download or an API read on its own: run them together, and report the first failure in this order.
-    checks = [manifest, media, gate, lambda: web('nightly'), lambda: web('production')]
+    checks = [lambda: manifest_bytes(github, info),
+              lambda: require(media_bytes(github, info), 'held nightly has no immutable media members'),
+              lambda: require(github.has_green_gate(info['target_sha']), f"latest master Gate for {info['target_sha']} is not successful"),
+              lambda: web('nightly'), lambda: web('production')]
     with ThreadPoolExecutor(max_workers=len(checks)) as pool:
         futures = [pool.submit(check) for check in checks]
     for future in futures:
