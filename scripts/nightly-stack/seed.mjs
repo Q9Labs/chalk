@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const mediaPlane = "chalk_sfu";
 const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 // identity.mjs wrote the plane new Spaces land on; the Tenant and the proof Space follow it.
