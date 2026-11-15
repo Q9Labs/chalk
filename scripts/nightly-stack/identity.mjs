@@ -5,7 +5,6 @@ import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const mediaPlane = "chalk_sfu";
 const [dir, announceIp, databaseUrl, apiPort, syncPort, bridgePort, sfuControlPort, sfuMediaPort, proofOrigin, storagePort, storageSecret, frontPort] = process.argv.slice(2);
 const kid = "nightly-stack";
 // An announce address other than loopback means the Chalk SFU runs on another host, which the API reaches over the network.
