@@ -13,5 +13,6 @@ TimeoutStartSec=40
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
+# The runtime-health row reads the tunnel Quadlet under the runtime User's home to know whether a connector exists.
+ProtectHome=read-only
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
