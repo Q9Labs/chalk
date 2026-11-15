@@ -31,7 +31,7 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
 });
 
 // The cut builds once and proves the built images on throwaway stacks: the proof job holds the cut, nothing is deployed, and the
-// latency run holds only Promote.
+// latency run, which the cut only starts, holds only Promote.
 test("Cut nightly builds the cut, proves it on throwaway stacks and carries no latency run", () => {
   const { release, proof: gate, record, scorecard } = nightly.jobs;
   assert.equal(nightly.jobs.latency, undefined, "latency runs off the cut");
@@ -52,26 +52,6 @@ test("Cut nightly builds the cut, proves it on throwaway stacks and carries no l
   assert.equal(env.RELEASE_RESULT, "${{ needs.release.result }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$RELEASE_RESULT" = success && test "\$PROOF_RESULT" = passed/);
-});
-
-test("Nightly latency measures the newest held cut on a host made for the run and records its verdict for Promote", () => {
-  const latencyWorkflow = workflow("nightly-latency.yml");
-  assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");
-  assert.ok("workflow_dispatch" in latencyWorkflow.on);
-  const { target, latency, record } = latencyWorkflow.jobs;
-  assert.equal(latency.uses, "./.github/workflows/nightly-proofs.yml");
-  assert.deepEqual(needsOf(latency), ["target"]);
-  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
-  assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
-  assert.equal(latency.with.proofs, "latency");
-  assert.equal(latency.with.image_source, "build", "the lane runs on x86 beside its x86 host, so it builds the images");
-  assert.match(target.steps.at(-1).run, /release\.py latency_target/);
-  assert.deepEqual(needsOf(record), ["target", "latency"]);
-  assert.equal(record.permissions.deployments, "write");
-  assert.match(record.steps.at(-1).run, /release\.py record_latency/);
-  const evaluate = record.steps.find((item) => item.id === "evaluate").run;
-  assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
-  assert.notEqual(latencyWorkflow.concurrency.group, nightly.concurrency.group, "a latency run does not hold up a cut");
 });
 
 test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {

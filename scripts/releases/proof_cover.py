@@ -49,9 +49,13 @@ def host_paths():
     return HOST_EXTRA_PATHS + recording_paths()
 
 
+# How many passed records back a cut may look for one that covers it: a newer cut that never became held can have its own record in front.
+LOOKBACK = 20
+
+
 def covering_record(github, target, task, paths):
     """The passed record of this task that vouches for target: its SHA is target or an ancestor, and none of paths changed since."""
-    for item in github.deployments('nightly', task):
+    for item in github.deployments('nightly', task, limit=LOOKBACK):
         info = payload(item)
         sha = info.get('target_sha', '')
         if info.get('result') != 'passed' or not re.fullmatch('[0-9a-f]{40}', sha):
@@ -63,6 +67,11 @@ def covering_record(github, target, task, paths):
 
 def covering_latency(github, target):
     return covering_record(github, target, 'nightly-latency', latency_paths())
+
+
+def measured_other_images(covering, info):
+    """A latency record of this very SHA that measured another release's images says nothing about the images Promote ships."""
+    return covering['target_sha'] == info['target_sha'] and covering.get('release_id') not in (None, '', info.get('release_id'))
 
 
 def covering_host_proof(github, target):

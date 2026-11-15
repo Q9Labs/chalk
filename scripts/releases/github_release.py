@@ -160,13 +160,10 @@ class GitHub:
                            f'repos/{self.repository}/{route}{separator}per_page=100'], route)
         return [item for page in json.loads(data) for item in (page[key] if key else page)]
 
-    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None, passed_only=True):
-        # GitHub returns newest IDs first. Page only this environment/task, and
-        # inspect statuses only after the payload identifies a usable candidate.
-        route = f'deployments?environment={environment}&task={task}&per_page=100'
-        if sha:
-            route += f'&sha={sha}'
-        page = 1
+    def deployments(self, environment, task='nightly-cut', sha=None, manifest_sha256=None, passed_only=True, limit=1):
+        # GitHub returns newest IDs first. Page only this environment/task; inspect statuses only after the payload identifies a usable candidate.
+        route = f'deployments?environment={environment}&task={task}&per_page=100' + (f'&sha={sha}' if sha else '')
+        page, found = 1, []
         while True:
             items = self.request(f'{route}&page={page}')
             for item in items:
@@ -184,11 +181,13 @@ class GitHub:
                         continue
                     if task == 'production-release' and item['latest_status'] != 'success':
                         continue
-                return [item]
+                found.append(item)
+                if len(found) == limit:
+                    return found
             if len(items) < 100:
                 break
             page += 1
-        return []
+        return found
 
     def cuts_on(self, day):
         """Every finished, passed nightly cut recorded on the UTC date `day`, newest first: `deployments` stops at the newest one."""

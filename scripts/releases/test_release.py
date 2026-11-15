@@ -211,7 +211,7 @@ class ChalkSfuPromotionTests(unittest.TestCase):
     def test_the_newest_latency_verdict_is_looked_up_for_the_selected_sha(self):
         api = self.github(held())
         release.select(api, None)
-        api.deployments.assert_any_call('nightly', 'nightly-latency')
+        api.deployments.assert_any_call('nightly', 'nightly-latency', limit=proof_cover.LOOKBACK)
 
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])

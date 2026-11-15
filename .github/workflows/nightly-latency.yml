@@ -1,21 +1,32 @@
 name: Nightly latency
 
-# Chalk SFU action latency for the newest held cut, measured at the full 60 cycles on a Chalk SFU host that this run creates and
-# deletes (nightly-proofs.yml, lane `latency`), so no other run shares it and nothing needs a lease. It runs only when no passed
-# latency record covers the cut: a record covers a cut whose SHA descends from the measured one with no latency path changed
-# since (features.json `media`, the latency kit and the stack; see release.py latency_paths). Promote reads the record and
-# refuses a cut with changed latency paths and no covering record (chalk_sfu_proof_result=latency-missing).
-# Cost: one s-2vcpu-2gb DigitalOcean host for about 55 minutes, about 0.05 USD, plus about 60 free runner minutes.
+# Chalk SFU action latency for a cut, measured at the full 60 cycles on a Chalk SFU host that this run creates and deletes
+# (nightly-proofs.yml, lane `latency`), so no other run shares it and nothing needs a lease. A cut starts it the moment its
+# release publishes (nightly.yml, job latency), side by side with the proof lanes, and the run measures the cut's own digest-pinned
+# API and Sync images. A person's dispatch without a SHA measures the newest held cut, building the images from its revision.
+# A run starts only when no passed latency record covers the cut: a record covers a cut whose SHA descends from the measured
+# one with no latency path changed since (features.json `media`, the latency kit and the stack; see release.py latency_paths).
+# Promote reads the record and refuses a cut with changed latency paths and no covering record (chalk_sfu_proof_result=latency-missing).
+# Cost: one s-2vcpu-2gb DigitalOcean host for about 30 minutes, about 0.03 USD, plus about 30 free runner minutes.
 on:
-  workflow_run:
-    workflows: [Cut nightly]
-    types: [completed]
   workflow_dispatch:
     inputs:
       samples:
         description: Latency cycles, 1 to 60. Fewer give a weaker p95; use it to try the workflow, not to promote
         type: string
         default: "60"
+      sha:
+        description: Cut to measure, set by the cut itself; leave empty to measure the newest held cut
+        type: string
+        default: ""
+      release_id:
+        description: Release of that cut, set by the cut itself
+        type: string
+        default: ""
+      release_run_id:
+        description: Cut run that published the release manifest, set by the cut itself
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -46,6 +57,8 @@ jobs:
       - id: target
         env:
           GH_TOKEN: ${{ github.token }}
+          LATENCY_SHA: ${{ inputs.sha }}
+          RELEASE_ID: ${{ inputs.release_id }}
         run: python3 scripts/releases/release.py latency_target
   latency:
     needs: target
@@ -57,8 +70,10 @@ jobs:
     uses: ./.github/workflows/nightly-proofs.yml
     with:
       release_sha: ${{ needs.target.outputs.sha }}
+      release_id: ${{ inputs.release_id }}
+      release_run_id: ${{ inputs.release_run_id }}
       proofs: latency
-      image_source: build
+      image_source: ${{ inputs.release_id != '' && 'manifest' || 'build' }}
       latency_samples: ${{ inputs.samples || '60' }}
     secrets: inherit
   record:
@@ -107,6 +122,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LATENCY_SAMPLES: ${{ inputs.samples || '60' }}
           TARGET_SHA: ${{ needs.target.outputs.sha }}
+          RELEASE_ID: ${{ inputs.release_id }}
           LATENCY_RESULT: ${{ needs.latency.result == 'success' && needs.latency.outputs.result || 'failed' }}
           SCORECARD_RESULT: ${{ steps.evaluate.outputs.result }}
         run: python3 scripts/releases/release.py record_latency

@@ -94,6 +94,23 @@ jobs:
       proofs: camera-share long-call chat-upload leave-chalk-sfu cloudflare-plane latency-smoke web-call
       image_source: manifest
     secrets: inherit
+  start-latency:
+    # The 60-cycle speed run needs the cut's published images and nothing from the proofs, so it starts when the release
+    # publishes and runs beside them in a workflow of its own: it does not hold this cut's lock, and its finished run still wakes
+    # auto-promote. Promote needs both this cut's record and the latency record.
+    needs: [plan, release]
+    if: needs.plan.outputs.should_cut == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - name: Start Nightly latency on this cut's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+          RELEASE_ID: ${{ needs.release.outputs.release_id }}
+        run: gh workflow run nightly-latency.yml --repo "$GITHUB_REPOSITORY" --ref master -f sha="$TARGET_SHA" -f release_id="$RELEASE_ID" -f release_run_id="$GITHUB_RUN_ID"
   record:
     needs: [plan, release, proof, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
