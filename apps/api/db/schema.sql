@@ -496,6 +496,24 @@ create trigger episodes_immutable_config_snapshot
 before update on episodes
 for each row execute function protect_immutable_episode_policy();
 
+create function record_initial_episode_deadline() returns trigger
+language plpgsql as $$
+begin
+    if old.deadline_generation = 1 then
+        update sync_episode_control
+        set initial_deadline_at_ms = floor(extract(epoch from old.deadline_at) * 1000)::bigint,
+            initial_deadline_generation = 1
+        where tenant_id = old.tenant_id and episode_id = old.id and initial_deadline_at_ms is null;
+    end if;
+    return new;
+end;
+$$;
+
+create trigger episodes_record_initial_deadline
+after update of deadline_at on episodes
+for each row when (old.deadline_at is distinct from new.deadline_at)
+execute function record_initial_episode_deadline();
+
 create table episode_create_requests (
     tenant_id uuid not null,
     space_id uuid not null,
@@ -1322,6 +1340,8 @@ create table sync_episode_control (
     retention_deleted_publication_fence_bytes bigint not null default 0,
     retention_deleted_publication_grant_reservation_rows bigint not null default 0,
     retention_deleted_publication_grant_reservation_bytes bigint not null default 0,
+    initial_deadline_at_ms bigint,
+    initial_deadline_generation bigint,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (tenant_id, episode_id),
@@ -1329,6 +1349,10 @@ create table sync_episode_control (
     foreign key (tenant_id, space_id, episode_id)
         references episodes(tenant_id, space_id, id)
         on delete restrict,
+    constraint sync_episode_control_initial_deadline_check check (
+        (initial_deadline_at_ms is null and initial_deadline_generation is null)
+        or (initial_deadline_at_ms >= 1 and initial_deadline_generation >= 1)
+    ),
     check (
         control_revision >= 0
         and snapshot_bytes >= 0

@@ -1294,6 +1294,8 @@ type SyncEpisodeControl struct {
 	RetentionDeletedPublicationFenceBytes            int64              `json:"retention_deleted_publication_fence_bytes"`
 	RetentionDeletedPublicationGrantReservationRows  int64              `json:"retention_deleted_publication_grant_reservation_rows"`
 	RetentionDeletedPublicationGrantReservationBytes int64              `json:"retention_deleted_publication_grant_reservation_bytes"`
+	InitialDeadlineAtMs                              pgtype.Int8        `json:"initial_deadline_at_ms"`
+	InitialDeadlineGeneration                        pgtype.Int8        `json:"initial_deadline_generation"`
 	CreatedAt                                        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                                        pgtype.Timestamptz `json:"updated_at"`
 }
