@@ -22,19 +22,17 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release, proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 // The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
-export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu", "apps/mobile/scripts/release", "scripts/gates/chalk-gate-plan.mjs"];
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "apps/mobile/scripts/release", "scripts/gates/chalk-gate-plan.mjs"];
 export const workflowGraphNodeTests = [
   "features/scorecard/promote-graph.test.mjs",
   "features/scorecard/nightly-graph.test.mjs",
   "features/scorecard/nightly-latency-graph.test.mjs",
   "features/scorecard/deployment-records.test.mjs",
-  "features/scorecard/lease-arguments.test.mjs",
   "apps/mobile/scripts/release/nightly-current-cut.test.mjs",
   "scripts/gates/gate-runner-label.test.mjs",
   "scripts/gates/stale-merge-group.test.mjs",
 ];
 // The proof-bundle lane runs every test under scripts/prod-proof and scripts/web-proof, including chalk-sfu-spaces-run.test.mjs and proof-space.test.mjs, which also read real-call-proof.yml. The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
-export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
 // What the proof tests run or read: the proof scripts, the media analyzer and its helpers, the scorecard modules, budgets and workflow they import, the API access-grant types, the web routes, docs manifest and public association files they read, and the client sources and dependencies they bundle.
 const proofTestRoots = [
   "scripts/prod-proof",
@@ -527,11 +525,7 @@ export function createGatePlan(files, options = {}) {
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
     task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
-    task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
-      "bash",
-      "-c",
-      `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
-    ]),
+    task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", ["node", "scripts/test/run.mjs", "node", "--test", ...workflowGraphNodeTests]),
     task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", [
       "bash",

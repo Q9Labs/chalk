@@ -15,9 +15,6 @@
 # defaults to ~/.ssh/chalk-sfu-operator_ed25519; certificates come from
 # $CHALK_SFU_PRIVATE_DIR/<env> (default ~/.config/chalk-sfu), as for deploy.
 #
-# Staging runs hold the shared lease:
-#   scripts/staging-sfu/staging-lock --holder lane --purpose live-smoke --run-id label -- \
-#     features/media/sfu/scripts/live-smoke staging --confirm staging
 # Production needs this smoke (docs/sfu/production-rollout.md). Run it once the production
 # node is deployed and before any production API gets CHALK_SFU_ENABLED. It creates one
 # random-named Episode and ends it.

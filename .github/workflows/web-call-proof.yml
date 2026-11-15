@@ -46,13 +46,10 @@ on:
       result:
         description: passed only when the web call and cleanup pass
         value: ${{ jobs.web.outputs.result }}
-      failure:
-        description: Named reason when the staging SFU lease stopped the proof; empty otherwise
-        value: ${{ jobs.web.outputs.failure }}
 permissions:
   contents: read
 concurrency:
-  group: ${{ inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment) }}
+  group: ${{ format('real-call-proof-{0}', inputs.environment) }}
   cancel-in-progress: false
   queue: max
 jobs:
@@ -61,14 +58,9 @@ jobs:
     environment:
       name: ${{ inputs.environment }}
       deployment: false
-    # A nightly chalk_sfu run may wait up to 30 minutes for the staging SFU lease.
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 15 }}
-    # The staging SFU lease is a Git ref, so a nightly chalk_sfu run needs contents:write. Other runs never push.
-    permissions:
-      contents: write
+    timeout-minutes: 15
     outputs:
       result: ${{ steps.result.outputs.result }}
-      failure: ${{ steps.prove.outputs.failure }}
     env:
       CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
       # A Space an operator moved to the Chalk SFU (media-settings), since the public API refuses to create one.
@@ -134,18 +126,10 @@ jobs:
           echo "TMPDIR=/dev/shm/chalk-web-tmp" >> "$GITHUB_ENV"
       - name: Prove the deployed web app
         id: prove
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 38 || 7 }}
+        timeout-minutes: 7
         env:
-          GH_TOKEN: ${{ github.token }}
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
-          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
-        run: |
-          if [[ "$STAGING_SFU_PROOF" == true ]]; then
-            # A lease that stays busy for the whole wait fails the gate as staging-sfu-lease-timeout.
-            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-web web-call "$GITHUB_RUN_ID" -- pnpm web:proof
-          else
-            pnpm web:proof
-          fi
+        run: pnpm web:proof
       - name: Clean proof resources even after cancellation
         if: always()
         env:

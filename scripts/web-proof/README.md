@@ -32,7 +32,7 @@ for the call and off again afterwards, and ends the Episode it made. `CHALK_PROO
 iPad Safari profile) beside Chromium. `CHALK_PROOF_JOIN_ORDER=web-first` or `guest-first` fixes which side is in the
 Episode before the other joins; unset, the SDK guest starts while the web app opens.
 
-Run browser suites in a configured checkout, not a developer laptop. For hosted runs, `.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only when the test, cleanup and encrypted evidence upload pass. Nightly runs it after deploy and after the `chalk_sfu` real-call proof, on `chalk_sfu` under the staging SFU lease; a manual dispatch takes `media_plane` (`cf_sfu` by default). Both workflows share one environment lock because proof cleanup resets the webhook. Both must pass to hold a cut.
+Run browser suites in a configured checkout, not a developer laptop. For hosted runs, `.github/workflows/web-call-proof.yml` accepts an environment (production) and returns `result=passed` only when the test, cleanup and encrypted evidence upload pass. A manual dispatch takes `media_plane` (`cf_sfu` by default). The cut's own web lane runs on a throwaway stack (`.github/workflows/nightly-proofs.yml`). This workflow and the real-call proof share one environment lock because proof cleanup resets the webhook.
 
 Tests live in `tests/*.e2e.ts` and use TesterArmy `e2e` with `@e2e-dev/web`. Retries are disabled, so a failing cut stays failed.
 

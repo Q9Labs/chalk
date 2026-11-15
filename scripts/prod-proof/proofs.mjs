@@ -124,7 +124,7 @@ export async function trackEpisode(run, space, episode) {
   run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
   await saveOwnership(run);
 }
-// A Space holds one live Episode, and a proof Space is shared with the run before it. The run holds the staging lease, so a live
+// A Space holds one live Episode, and a proof Space is shared with the run before it. Proof runs do not overlap, so a live
 // Episode that carries another run's proof_run_id was left by a proof whose cleanup did not finish: end it. An Episode with no
 // proof_run_id belongs to someone else and is never ended; it only gets the wait below.
 async function endLeftoverEpisodes(run, space) {

@@ -11,7 +11,7 @@
 //
 // Result in .private/prod-proof/<run>/recovery.json, per direction: "down" is what guest 2 receives from guest 1 and "up" what guest 1
 // receives from guest 2. Run client-side faults against guest 2 only by giving --guest2-chromium a launcher that starts Chromium in
-// its own network namespace (recovery-rig). Take the staging lease (scripts/staging-sfu/staging-lock) around every run.
+// its own network namespace (recovery-rig).
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { exec } from "node:child_process";

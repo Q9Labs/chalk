@@ -152,7 +152,7 @@ jobs:
         run: python3 scripts/releases/live_calls.py
   release:
     permissions:
-      contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
+      contents: read
       actions: read
       deployments: write
       id-token: write
@@ -361,7 +361,7 @@ jobs:
           features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json artifacts/latency/scorecard-chalk_sfu.json
   rollback:
     permissions:
-      contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
+      contents: read
       actions: read
       deployments: write
       id-token: write
