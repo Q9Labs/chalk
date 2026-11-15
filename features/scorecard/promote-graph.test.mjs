@@ -48,7 +48,8 @@ test("a Release job with an environment that runs after a failed dependency stil
 
 test("only the call-artifacts proof leaves the production group that every other production proof, web proof included, shares", () => {
   const group = proofWorkflow.concurrency.group;
-  assert.match(group, /format\('real-call-proof-\{0\}\{1\}', inputs\.environment \|\| 'production', inputs\.proofs == 'call-artifacts' && inputs\.media_plane == 'chalk_sfu' && '-recording' \|\| ''\)/);
+  const plane = promote.jobs.proof.with.media_plane;
+  assert.match(group, new RegExp(`format\\('real-call-proof-\\{0\\}\\{1\\}', inputs\\.environment \\|\\| 'production', inputs\\.proofs == 'call-artifacts' && inputs\\.media_plane == '${plane}' && '-recording' \\|\\| ''\\)`));
   assert.match(webProofWorkflow.concurrency.group, /format\('real-call-proof-\{0\}', inputs\.environment\)/);
   const legs = JSON.parse(promote.jobs.proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
   assert.deepEqual(legs.filter((leg) => leg.proofs === "call-artifacts").length, 1);
@@ -57,7 +58,8 @@ test("only the call-artifacts proof leaves the production group that every other
 test("a production Chalk SFU run that spans both proof Spaces is refused, so no run overlaps Promote's other leg", () => {
   const steps = Object.values(proofWorkflow.jobs).flatMap((job) => job.steps ?? []);
   const guard = steps.find((step) => step.name === "Refuse a production run that spans both proof Spaces");
-  assert.match(guard.if, /inputs\.environment == 'production' && inputs\.media_plane == 'chalk_sfu' && contains\(inputs\.proofs, 'call-artifacts'\) && \(inputs\.proofs != 'call-artifacts' \|\| inputs\.latency\)/);
+  const plane = promote.jobs.proof.with.media_plane;
+  assert.match(guard.if, new RegExp(`inputs\\.environment == 'production' && inputs\\.media_plane == '${plane}' && contains\\(inputs\\.proofs, 'call-artifacts'\\) && \\(inputs\\.proofs != 'call-artifacts' \\|\\| inputs\\.latency\\)`));
   assert.match(guard.run, /exit 1/);
   const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
   for (const job of calls) assert.ok(job.with.proofs.includes("matrix.proofs") || !job.with.proofs.includes("call-artifacts"), "Promote reaches call-artifacts only through its own leg");
