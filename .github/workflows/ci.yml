@@ -1172,7 +1172,9 @@ jobs:
     continue-on-error: true
     timeout-minutes: 15
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.managed_environment }}
+    environment:
+      name: ${{ inputs.managed_environment }}
+      deployment: false
     env:
       CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
