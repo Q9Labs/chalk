@@ -21,7 +21,7 @@ FIXTURES = Path(__file__).parent / 'fixtures'
 # The commit the nightly fixture card scores: one commit holding perf/budgets.json as it was at 693cb26f (8 Nov 2026),
 # with fixed authorship and dates so its SHA never changes. The evaluator reads budgets with `git show <sha>:perf/budgets.json`,
 # so the tests build that commit themselves instead of needing an old commit in the checkout's history, which a shallow clone lacks.
-SHA = '8e7a9381803d7e24e924a0f847250ec6c2bb390a'
+SHA = '737897ad7361c859b1bc865d26399dd045c4fb9a'
 EVALUATE = str(Path(__file__).resolve().parents[2] / 'features/scorecard/evaluate.mjs')
 SCORED = None
 

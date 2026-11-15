@@ -1159,11 +1159,48 @@ jobs:
           path: release-input/${{ steps.prepare.outputs.release_id }}*.json
           retention-days: 90
 
+  stage-web:
+    name: Stage the web archive on Pages while the API deploys
+    # Uploads the files as a Pages preview deployment (a branch other than the production one), so the live alias stays on the old
+    # web release until deploy-web runs after deploy-managed succeeds. It gates nothing: when it fails or is skipped, deploy-web
+    # uploads everything itself. It starts with the same inputs deploy-managed needs, so it never runs before the release is verified.
+    needs: [prepare-web, prepare-release]
+    if: >-
+      always() && !cancelled() && github.ref == 'refs/heads/master' && inputs.deploy_web && inputs.deploy_managed &&
+      inputs.managed_environment == 'production' && inputs.pages_rollback_id == '' && needs.prepare-release.result == 'success' &&
+      (inputs.manifest_run_id != '' || needs.prepare-web.result == 'success')
+    continue-on-error: true
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    environment:
+      name: ${{ inputs.managed_environment }}
+      deployment: false
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_R2_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_API_TOKEN }}
+      CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY: "true"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Select the explicit production Pages destination
+        run: |
+          node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-js
+      - name: Stage the verified prebuilt archive as a preview deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_TARGET: ${{ inputs.managed_environment }}
+          ARTIFACT_RUN_ID: ${{ inputs.manifest_run_id || github.run_id }}
+          WEB_ARTIFACT: ${{ inputs.web_artifact || toJSON(fromJSON(needs.prepare-web.outputs.web || '{}')[inputs.managed_environment]) }}
+        run: python3 scripts/releases/web.py stage --target "$WEB_TARGET" --sha "$TARGET_SHA"
+
   deploy-web:
     name: Deploy selected web or restore Pages
     outputs:
       pages_deployment_id: ${{ steps.restore.outputs.pages_deployment_id }}
-    needs: [prepare-web, deploy-managed]
+    needs: [prepare-web, deploy-managed, stage-web]
     # always() lets the Pages restore run after a failed backend deploy, so no dependency can refuse a branch revision here:
     # the job holds the Cloudflare credentials and checks out the workflow revision's own tooling.
     if: >-

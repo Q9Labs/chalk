@@ -121,7 +121,11 @@ def rollback(project, deployment_id, target='production'):
     outputs({'pages_deployment_id': deployment_id})
 
 
-def deploy(target, sha, run, member, project):
+PRODUCTION_BRANCH = 'master'
+STAGE_BRANCH = 'promote-stage'
+
+
+def upload(target, sha, run, member, project, branch):
     require(len(member['sha256']) == 64, 'web artifact requires a SHA256 hash')
     require(project and os.environ.get('CLOUDFLARE_ACCOUNT_ID'), 'missing Pages destination')
     data = GitHub().artifact(run, member['artifact_id'], f'web-{target}.tar.gz', member['sha256'])
@@ -133,8 +137,18 @@ def deploy(target, sha, run, member, project):
                         '--directory', str(Path(directory) / 'dist/client'), '--target', target,
                         *(['--verify-only'] if os.environ.get('CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY') == 'true' else [])], check=True)
         subprocess.run([str(ROOT / 'node_modules/.bin/wrangler'), 'pages', 'deploy', 'dist/client',
-                        '--project-name', project, '--branch', 'master', '--commit-hash', sha,
+                        '--project-name', project, '--branch', branch, '--commit-hash', sha,
                         '--commit-dirty=false'], cwd=directory, check=True)
+
+
+def stage(target, sha, run, member, project):
+    """Upload the archive to Pages as a preview deployment, while the API still deploys. A branch other than the production one
+    never becomes the live alias, so the later deploy only creates the production deployment from files Pages already holds."""
+    upload(target, sha, run, member, project, STAGE_BRANCH)
+
+
+def deploy(target, sha, run, member, project):
+    upload(target, sha, run, member, project, PRODUCTION_BRANCH)
     config = public_config(target, sha)
     subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-web-deploy.mjs'), config['VITE_PUBLIC_APP_URL'], sha,
                     '--api-base-url', config['VITE_API_URL'], '--environment', target], check=True)
@@ -142,7 +156,7 @@ def deploy(target, sha, run, member, project):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('build', 'deploy', 'current', 'previous', 'rollback'))
+    parser.add_argument('command', choices=('build', 'stage', 'deploy', 'current', 'previous', 'rollback'))
     parser.add_argument('--target', choices=('nightly', 'production'))
     parser.add_argument('--sha')
     parser.add_argument('--output', type=Path, default=Path('web-output'))
@@ -158,4 +172,5 @@ if __name__ == '__main__':
     elif args.command == 'rollback':
         rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'], args.target)
     else:
-        deploy(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'])
+        (stage if args.command == 'stage' else deploy)(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']),
+                                                       os.environ['PAGES_PROJECT'])

@@ -90,6 +90,7 @@ jobs:
         id: evaluate
         env:
           TARGET_SHA: ${{ needs.target.outputs.sha }}
+          LATENCY_SAMPLES: ${{ inputs.samples || '60' }}
         run: |
           mapfile -t cards < <(find artifacts/nightly -name "scorecard-*.json")
           node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"

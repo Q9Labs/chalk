@@ -85,3 +85,26 @@ test("a production Chalk SFU run that spans both proof Spaces is refused, so no 
   const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
   for (const job of calls) assert.ok(!job.with.proofs?.includes("call-artifacts") || job.with.proofs.includes("matrix.proofs"), "Promote reaches call-artifacts only through its own leg");
 });
+
+// The MCP production check is a monitor of the deployed release: it runs beside the proofs when the release changes MCP, and nothing waits on it.
+test("Promote runs the MCP production check only for a release that changes MCP, and the check has no schedule", () => {
+  const change = promote.jobs["mcp-change"];
+  const mcp = promote.jobs.mcp;
+  assert.ok(needsOf(change).includes("release"));
+  assert.match(change.if, /needs\.release\.result == 'success'/);
+  assert.match(JSON.stringify(change.steps), /scripts\/mcp-proof\/changed\.mjs --previous .* --target/);
+  assert.match(JSON.stringify(change.steps), /previous\.target_sha/);
+  assert.equal(mcp.uses, "./.github/workflows/mcp-production-check.yml");
+  assert.match(mcp.if, /needs\.mcp-change\.outputs\.changed == 'true'/);
+  assert.match(mcp.if, /needs\.proof\.result == 'success'/, "a release being rolled back is not checked");
+  for (const [name, job] of Object.entries(promote.jobs)) {
+    if (["mcp", "mcp-change"].includes(name)) continue;
+    assert.equal(
+      needsOf(job).some((need) => need.startsWith("mcp")),
+      false,
+      `${name} does not wait for the MCP check`,
+    );
+  }
+  const check = load(readFileSync(resolve(root, ".github/workflows/mcp-production-check.yml"), "utf8"));
+  assert.deepEqual(Object.keys(check.on ?? check[true]).sort(), ["workflow_call", "workflow_dispatch"]);
+});

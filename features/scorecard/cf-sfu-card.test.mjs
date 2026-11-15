@@ -4,9 +4,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { gatedActionIds, MIN_GATED_SAMPLES, readBudgets } from "./budgets.mjs";
+import { gatedActionIds, gatedSampleFloor, readBudgets } from "./budgets.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
+
+const MIN_GATED_SAMPLES = gatedSampleFloor(await readBudgets());
 
 const chalkSfu = "chalk_sfu";
 
@@ -104,4 +106,57 @@ test("the evaluator lists every gated action metric and fails one with no sample
   assert.match(table, /❌ missing/);
   assert.match(table, /❌ too few samples/);
   assert.match(table, /✅ ok/);
+});
+
+test("a later card with no samples cannot erase an earlier complete one, and a short trial is held to 80% of its own cycles", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "expected-metrics-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { budgets } = await readBudgets();
+  const [first, ...others] = gatedActionIds(budgets, chalkSfu);
+  const save = (name, value) => {
+    const path = join(dir, name);
+    writeFileSync(path, JSON.stringify(value));
+    return path;
+  };
+  const complete = save(
+    "complete.json",
+    card(
+      chalkSfu,
+      [first, ...others].map((id) => metric(id, 100)),
+    ),
+  );
+  const empty = save("empty.json", card(chalkSfu, [{ ...metric(first, 100, 0), p50: null, p95: null }]));
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", complete, empty]).stdout).result, "passed");
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", empty, complete]).stdout).result, "passed");
+  const trial = save(
+    "trial.json",
+    card(
+      chalkSfu,
+      [first, ...others].map((id) => metric(id, 100, 20)),
+    ),
+  );
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", trial], { LATENCY_SAMPLES: "20" }).stdout).result, "passed");
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", trial]).stdout).result, "missing", "the full run still needs the full floor");
+});
+
+test("a cut from before gatedSamples existed is held to the floor of the revision running the evaluator", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "expected-metrics-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const git = (args, input) => spawnSync("git", args, { cwd: root, encoding: "utf8", input, env: { ...process.env, GIT_AUTHOR_NAME: "Test", GIT_AUTHOR_EMAIL: "test@example.com", GIT_COMMITTER_NAME: "Test", GIT_COMMITTER_EMAIL: "test@example.com" } }).stdout.trim();
+  const { gatedSamples, ...older } = await readBudgets();
+  const blob = git(["hash-object", "-w", "--stdin"], JSON.stringify(older));
+  const perf = git(["mktree"], `100644 blob ${blob}\tbudgets.json\n`);
+  const tree = git(["mktree"], `040000 tree ${perf}\tperf\n`);
+  const oldRevision = git(["commit-tree", tree, "-m", "budgets before gatedSamples"]);
+  const { budgets } = older;
+  const path = join(dir, "card.json");
+  const oldCard = {
+    ...card(
+      chalkSfu,
+      gatedActionIds(budgets, chalkSfu).map((id) => metric(id, 100, gatedSamples.floor)),
+    ),
+    run: { ...run, commit: oldRevision },
+  };
+  writeFileSync(path, JSON.stringify(oldCard));
+  assert.equal(JSON.parse(node("evaluate.mjs", [oldRevision, "123", path]).stdout).result, "passed");
 });

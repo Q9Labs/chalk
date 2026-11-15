@@ -63,6 +63,13 @@ class HostProofTests(unittest.TestCase):
             release.record_host_proof(api, None)
         self.assertEqual(api.record_proof.call_args.args[2]['result'], 'failed')
 
+    def test_the_lookup_skips_a_newer_failed_host_proof_to_reach_an_older_pass(self):
+        records = [dict(id=2, payload=dict(channel='nightly-host-proof', target_sha=SHA, result='failed')),
+                   dict(id=1, payload=dict(channel='nightly-host-proof', target_sha=SHA, result='passed'))]
+        github = GitHub.__new__(GitHub)
+        github.request = Mock(return_value=records)
+        self.assertEqual(github.deployments('nightly', 'nightly-host-proof', sha=SHA)[0]['id'], 1)
+        self.assertEqual(github.deployments('nightly', 'nightly-host-proof', sha=SHA, passed_only=False)[0]['id'], 2)
 
 if __name__ == '__main__':
     unittest.main()

@@ -192,6 +192,36 @@ jobs:
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
+  mcp-change:
+    # The MCP production check runs only when this release changes MCP or what the check exercises, measured against the production release
+    # it replaces. It starts with the proofs, so it adds no minutes; like the latency run, it never starts a rollback.
+    runs-on: ubuntu-24.04
+    needs: [select, release]
+    if: ${{ needs.release.result == 'success' }}
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.change.outputs.changed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - id: change
+        env:
+          PREVIOUS_SHA: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
+          TARGET_SHA: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+        run: node scripts/mcp-proof/changed.mjs --previous "$PREVIOUS_SHA" --target "$TARGET_SHA"
+  mcp:
+    # After the proofs pass, so it never checks a release that is being rolled back; it runs beside the latency run.
+    needs: [mcp-change, proof]
+    if: ${{ needs.proof.result == 'success' && needs.mcp-change.outputs.changed == 'true' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mcp-production-check.yml
+    secrets: inherit
   latency:
     # The 60-cycle latency run on the Chalk SFU, after the proofs on the proof Space they used (the one Space the plane allowlist admits; a
     # second one needs an operator to allowlist it before this job could run beside them). It only feeds the scorecard: no rollback or

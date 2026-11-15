@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
-import { MIN_GATED_SAMPLES, gatedActionIds, planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { gatedActionIds, gatedSampleFloor, planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { deviceMetrics } from "./adapters/device.mjs";
 import { leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
@@ -93,7 +93,8 @@ async function diff(argv) {
   const current = parseScorecard(readJson(values.current));
   const candidate = values.baseline ? parseScorecard(withoutRetiredMetrics(readJson(values.baseline))) : undefined;
   const baseline = candidate && countsAsEvidence(candidate) ? candidate : undefined;
-  const { budgets } = await readBudgets();
+  const budgetFile = await readBudgets();
+  const { budgets } = budgetFile;
   validateBudgetEntries(budgets);
   const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
   if (!countsAsEvidence(current)) {
@@ -102,7 +103,7 @@ async function diff(argv) {
   }
   const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
   // Every gated action metric of the plane must be there with enough samples; the table shows each one, so a missing metric is a row.
-  const expected = values["expect-gated"] ? expectedMetricRows(gatedActionIds(budgets, current.mediaPlane), current.metrics, planeBudgets(budgets, current.mediaPlane), MIN_GATED_SAMPLES, baseline?.metrics, current.dropped) : [];
+  const expected = values["expect-gated"] ? expectedMetricRows(gatedActionIds(budgets, current.mediaPlane), current.metrics, planeBudgets(budgets, current.mediaPlane), gatedSampleFloor(budgetFile), baseline?.metrics, current.dropped) : [];
   const lacking = expected.filter((row) => row.verdict !== "ok" && row.verdict !== "over budget");
   const output = planeNoteMarkdown(current.mediaPlane) + table + (values["expect-gated"] ? `\n${renderExpectedMetrics(expected, `Gated action metrics on ${current.mediaPlane}`)}` : "");
   if (values.markdown) writeFileSync(values.markdown, output);

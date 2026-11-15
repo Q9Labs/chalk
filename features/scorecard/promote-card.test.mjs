@@ -4,8 +4,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { gatedActionIds, MIN_GATED_SAMPLES, readBudgets } from "./budgets.mjs";
+import { gatedActionIds, gatedSampleFloor, readBudgets } from "./budgets.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
+
+const MIN_GATED_SAMPLES = gatedSampleFloor(await readBudgets());
 
 const chalkSfu = "chalk_sfu";
 

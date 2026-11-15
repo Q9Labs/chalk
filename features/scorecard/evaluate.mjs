@@ -2,7 +2,7 @@
 // Save a cut-scoped budget verdict before history publishing or issue updates can fail.
 import { appendFileSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { gatedActionIds, MIN_GATED_SAMPLES, planeBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { gatedActionIds, gatedSampleFloor, planeBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { diffMetrics, expectedMetricRows, renderExpectedMetrics } from "./diff.mjs";
 import { parseScorecard } from "./schema.mjs";
 
@@ -11,7 +11,12 @@ const args = process.argv.slice(2);
 const latencyDeferred = args.includes("--latency-deferred");
 const [revision, runId, ...paths] = args.filter((arg) => arg !== "--latency-deferred");
 if (!/^[0-9a-f]{40}$/.test(revision ?? "") || !/^\d+$/.test(runId ?? "")) throw new Error("usage: evaluate.mjs <cut-sha> <run-id> [scorecard.json]...");
-const { budgets } = JSON.parse(execFileSync("git", ["show", `${revision}:perf/budgets.json`], { encoding: "utf8" }));
+const file = JSON.parse(execFileSync("git", ["show", `${revision}:perf/budgets.json`], { encoding: "utf8" }));
+const { budgets } = file;
+// A manual trial runs fewer cycles than the full run (LATENCY_SAMPLES) and is held to the same share of them.
+// A cut from before gatedSamples existed has no such key, so its floor comes from the budgets file of the revision running this script.
+const sampleSource = file.gatedSamples ? file : JSON.parse(readFileSync("perf/budgets.json", "utf8"));
+const sampleFloor = gatedSampleFloor(sampleSource, process.env.LATENCY_SAMPLES ? Number(process.env.LATENCY_SAMPLES) : undefined);
 validateBudgetEntries(budgets);
 const metrics = new Set();
 const planes = new Set();
@@ -38,7 +43,7 @@ for (const path of paths) {
 if (planes.has("chalk_sfu")) {
   if (!latencyDeferred) {
     // Every gated action metric must be there with enough samples; the table lists them all, so a missing one is a row.
-    const rows = expectedMetricRows(gatedActionIds(budgets, "chalk_sfu"), chalkSfuMetrics, planeBudgets(budgets, "chalk_sfu"), MIN_GATED_SAMPLES);
+    const rows = expectedMetricRows(gatedActionIds(budgets, "chalk_sfu"), chalkSfuMetrics, planeBudgets(budgets, "chalk_sfu"), sampleFloor);
     const table = renderExpectedMetrics(rows, `Gated action metrics of ${revision.slice(0, 8)} on chalk_sfu`);
     process.stderr.write(`${table}\n`);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table}\n`);
