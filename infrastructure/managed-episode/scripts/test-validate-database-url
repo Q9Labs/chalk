@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# The database URL rule is keyed on the deployment environment: production verifies the certificate, other environments need TLS.
+set -euo pipefail
+
+rule="$(cd "$(dirname "$0")" && pwd)/validate-database-url"
+fail() { echo "FAIL $*" >&2; exit 1; }
+accepts() { "$rule" "$1" "$2" 2>/dev/null || fail "$1 should accept $2"; }
+rejects() { ! "$rule" "$1" "$2" 2>/dev/null || fail "$1 should reject $2"; }
+
+full='postgres://u:p@db.example:5432/chalk?sslmode=verify-full'
+require='postgres://u:p@host.containers.internal:5432/chalk?sslmode=require'
+disable='postgres://u:p@host.containers.internal:5432/chalk?sslmode=disable'
+none='postgres://u:p@host.containers.internal:5432/chalk'
+
+for environment in production nightly nightly-host-proof; do
+  accepts "$environment" "$full"
+  rejects "$environment" "$disable"
+  rejects "$environment" "$none"
+  rejects "$environment" 'mysql://u:p@db.example/chalk?sslmode=verify-full'
+done
+accepts nightly "$require"
+accepts nightly-host-proof "$require"
+rejects production "$require"
+# The mode must be the whole value of the sslmode parameter.
+rejects production 'postgres://u:p@db.example:5432/chalk?sslmode=verify-fullx'
+rejects production "${require}&note=sslmode=verify-full"
+accepts production 'postgres://u:p@db.example:5432/chalk?application_name=x&sslmode=verify-full&connect_timeout=5'
+echo "database URL rule: ok"

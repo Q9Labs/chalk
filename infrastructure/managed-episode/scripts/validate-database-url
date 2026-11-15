@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# The database URL rule for a deployment environment. The environment comes from the host controller's own request, never from the
+# runtime inputs, so no input can switch the rule off. Production must verify the server certificate (a public CA). Any other
+# environment may use a database whose certificate is not verifiable, such as the container Postgres of the Nightly host proof, but
+# the connection must still be encrypted.
+set -euo pipefail
+
+environment="${1:?deployment environment is required}"
+database_url="${2:?database URL is required}"
+
+[[ "${database_url}" =~ ^postgres(ql)?:// ]] || { echo "CHALK_DATABASE_URL must be a PostgreSQL URL" >&2; exit 1; }
+if [[ "${environment}" == production ]]; then
+  [[ "${database_url}" =~ [?\&]sslmode=verify-full(\&|$) ]] || { echo "CHALK_DATABASE_URL must use sslmode=verify-full" >&2; exit 1; }
+  exit 0
+fi
+[[ "${database_url}" =~ [?\&]sslmode=(verify-full|require)(\&|$) ]] || { echo "CHALK_DATABASE_URL must use sslmode=verify-full or sslmode=require in ${environment}" >&2; exit 1; }

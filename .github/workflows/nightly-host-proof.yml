@@ -115,6 +115,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.target.outputs.sha }}
           HOST_PROOF_RESULT: ${{ needs.host.result == 'success' && 'passed' || 'failed' }}
-          # The database the proof ran against: the Nightly database until a throwaway managed one exists.
-          HOST_PROOF_DATABASE: shared-nightly
+          # The database the proof ran against: a Postgres container on the proof host.
+          HOST_PROOF_DATABASE: container-postgres
         run: python3 scripts/releases/release.py record_host_proof

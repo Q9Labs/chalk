@@ -694,48 +694,28 @@
       "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": 0.5,
-      "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
+      "record": "unmeasured",
+      "sample": "The rehearsal moved onto an on-demand host on 15 November; no run has been recorded there yet. Before that it ran through the Nightly host (a master run on 14 November passed)."
     },
     {
-      "id": "workflow:rollback-rehearsal.yml#deploy-current",
+      "id": "workflow:rollback-rehearsal.yml#rehearse",
       "owner": "Release",
-      "catches": "The newest passed cut failing to deploy on nightly.",
+      "catches": "A rollback to the previous cut that fails on a host of the production kind, such as an older controller that cannot read a newer pointer.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
-      "minutes": 13.5,
-      "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28. It is skipped when nightly already runs the current cut."
+      "minutes": 20,
+      "record": "unmeasured",
+      "sample": "The rehearsal moved onto an on-demand host on 15 November; no run has been recorded there yet. Before that it ran through the Nightly host (a master run on 14 November passed)."
     },
     {
-      "id": "workflow:rollback-rehearsal.yml#roll-back",
+      "id": "workflow:rollback-rehearsal.yml#page",
       "owner": "Release",
-      "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
-      "runs": ["weekly", "manual"],
-      "blocks": "alert",
-      "minutes": 7.5,
-      "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
-    },
-    {
-      "id": "workflow:rollback-rehearsal.yml#roll-forward",
-      "owner": "Release",
-      "catches": "Rolling forward again after a rollback failing.",
-      "runs": ["weekly", "manual"],
-      "blocks": "alert",
-      "minutes": 28,
-      "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
-    },
-    {
-      "id": "workflow:rollback-rehearsal.yml#result",
-      "owner": "Release",
-      "catches": "A rehearsal whose outcome is not reported.",
+      "catches": "A failed weekly rehearsal that nobody hears about.",
       "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": 0.5,
-      "record": "never-failed",
-      "sample": "A scheduled run has not happened yet (the first is Sunday 15 November, 03:23 UTC). Of the 6 manual runs before 14 November, 5 were started from a branch and the master-only guard rejected them; the one master run passed. The master run of 14 November passed in 44 minutes, 10 of them waiting for hosted runners. After the first leg was skipped (nightly already ran the current cut), the run of 14 November passed in 37 minutes of work after waiting 35 minutes behind another nightly deploy: roll-back 7 minutes, roll-forward 28."
+      "record": "unmeasured",
+      "sample": "The rehearsal moved onto an on-demand host on 15 November; no run has been recorded there yet. Before that it ran through the Nightly host (a master run on 14 November passed)."
     },
     {
       "id": "workflow:gate.yml#sync",

@@ -3,16 +3,20 @@
 # cut's release to it through the real SSM document and host controller, checks the runtime comes back after a reboot, and
 # ends the host. Nothing here is shared with a running Nightly host except the runtime inputs it reads from the store.
 #
-#   run --manifest <release.json> --run-id <id> --ami <id> --subnet <id> --security-group <id> [--region ap-southeast-1] [--summary <file>]
+#   run --manifest <release.json> --run-id <id> --ami <id> --subnet <id> --security-group <id> [--rollback-manifest <older.json>]
+#       [--region ap-southeast-1] [--summary <file>]
+#
+# With --rollback-manifest the host then takes the older release, as a rollback does: the older release's controller must read the
+# pointer the newer one wrote (the failure of the 23 Oct rollback). The host is thrown away, so there is no roll-forward leg.
 #
 # AWS credentials come from the environment (the workflow assumes the host-proof role; infrastructure/nightly/host-proof).
 # The deploy skips the environment's recorder dispatcher binding and the Cloudflare tunnel: both belong to the environment's own
-# host, and a second connector would take its traffic. The database is the Nightly database; a throwaway managed database
-# replaces it when the PlanetScale service token exists (the summary names the database that ran).
+# host, and a second connector would take its traffic. The database is a Postgres container started on the host for the run (the
+# Nightly runtime inputs point at host.containers.internal), so nothing outside the host holds state.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-region=ap-southeast-1 summary=/dev/stdout manifest="" run_id="" ami="" subnet="" security_group=""
+region=ap-southeast-1 summary=/dev/stdout manifest="" rollback_manifest="" run_id="" ami="" subnet="" security_group=""
 environment=nightly
 prefix=/chalk/nightly/managed-episode
 document=chalk-nightly-host-proof-release
@@ -21,6 +25,7 @@ instance_profile=chalk-nightly-host
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --manifest) manifest=$2 ;;
+    --rollback-manifest) rollback_manifest=$2 ;;
     --run-id) run_id=$2 ;;
     --ami) ami=$2 ;;
     --subnet) subnet=$2 ;;
@@ -37,7 +42,7 @@ export AWS_DEFAULT_REGION=$region AWS_PAGER=
 instance=""
 started=$(date +%s)
 step_started=$started
-database=shared-nightly
+database=container-postgres
 
 note() { printf '%s\n' "$*" >> "$summary"; }
 # Names a finished step and how long it took, so a slow host shows where the time went.
@@ -99,14 +104,26 @@ wait_online
 step "Host online in SSM"
 shell 'cloud-init status --wait > /dev/null; cloud-init status | grep -q "status: done"' > /dev/null
 step "Bootstrap finished (the production host's cloud-init)"
+shell "echo $(base64 < "$root/scripts/nightly-host-proof/start-postgres" | tr -d '\n') | base64 -d | bash" > /dev/null
+step "Proof Postgres running on the host"
 
-release_id=$(jq -er .release_id "$manifest")
-node "$root/scripts/deploy/deploy-managed-release.mjs" --manifest "$manifest" --proof-file "${RUNNER_TEMP:-/tmp}/host-proof-deployment.json" \
-  --environment "$environment" --region "$region" --instance-id "$instance" --document-name "$document" \
-  --document "$root/infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json" --parameter-prefix "$prefix" \
-  --request-id "$run_id.hostproof.$release_id" --log-group-name "$log_group" --timeout-seconds 1800 \
-  --no-dispatcher-binding --exclude-secret cloudflare-tunnel-token
-step "Release delivered by the host controller and healthy ($release_id)"
+# Delivers a release through the real SSM document and host controller and checks the controller reported it deployed and healthy.
+deliver() {
+  local file=$1 leg=$2 id proof
+  id=$(jq -er .release_id "$file")
+  proof="${RUNNER_TEMP:-/tmp}/host-proof-$leg.json"
+  node "$root/scripts/deploy/deploy-managed-release.mjs" --manifest "$file" --proof-file "$proof" \
+    --environment "$environment" --region "$region" --instance-id "$instance" --document-name "$document" \
+    --document "$root/infrastructure/managed-episode/ssm/chalk-managed-episode-deploy.json" --parameter-prefix "$prefix" \
+    --request-id "$run_id.hostproof.$leg.$id" --log-group-name "$log_group" --timeout-seconds 1800 \
+    --no-dispatcher-binding --exclude-secret cloudflare-tunnel-token
+  step "Release delivered by the host controller and healthy ($leg: $id)"
+}
+
+deliver "$manifest" deploy
+if [ -n "$rollback_manifest" ]; then
+  deliver "$rollback_manifest" rollback
+fi
 
 # The runtime must come back from a reboot by itself: the restore unit pulls the active release and starts it.
 boot_before=$(shell 'cat /proc/sys/kernel/random/boot_id')

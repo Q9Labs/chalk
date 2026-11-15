@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Runs on the host-proof host as root. Starts the proof's own Postgres in a rootful container with TLS (a self-signed certificate), so
+# the API, Sync and the migrator, which run rootless on the chalk-runtime network, reach it at host.containers.internal:5432 with
+# sslmode=require. The host has no inbound rules and ends with the run, so the database holds nothing worth protecting; the
+# environment-keyed rule in validate-database-url is what keeps this URL out of production.
+set -euo pipefail
+
+tls=/var/lib/chalk-proof-postgres/tls
+install -d -m 0755 "${tls}"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=host.containers.internal -keyout "${tls}/server.key" -out "${tls}/server.crt" 2> /dev/null
+chown 999:999 "${tls}/server.key" "${tls}/server.crt"
+chmod 600 "${tls}/server.key"
+podman run -d --name chalk-proof-postgres --restart=always -p 5432:5432 \
+  -e POSTGRES_DB=chalk -e POSTGRES_USER=chalk -e POSTGRES_PASSWORD=chalk-host-proof -e POSTGRES_INITDB_ARGS=--data-checksums \
+  -v "${tls}:/tls:ro" docker.io/library/postgres:18.3 -c ssl=on -c ssl_cert_file=/tls/server.crt -c ssl_key_file=/tls/server.key > /dev/null
+until podman exec chalk-proof-postgres pg_isready -h 127.0.0.1 -U chalk -d chalk -q 2> /dev/null; do sleep 1; done
+echo "Postgres ready"
