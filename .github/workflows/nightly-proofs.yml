@@ -26,6 +26,10 @@ on:
         description: Run that published that manifest, when it is not this one (a latency run started by a cut)
         default: ""
         type: string
+      sfu_image:
+        description: Digest reference of the cut's published Chalk SFU image; the latency lane pulls it, and empty builds it from the revision
+        default: ""
+        type: string
       proofs:
         description: Space-separated proofs, one lane each
         required: true
@@ -179,11 +183,24 @@ jobs:
             echo "api=stack-api" >> "$GITHUB_OUTPUT"
             echo "sync=stack-sync" >> "$GITHUB_OUTPUT"
           fi
-      - name: Build the images that the cut does not publish
+      - name: Get the Chalk SFU and the images that the cut does not publish
+        env:
+          # Only the latency lane runs on x86, and the published Chalk SFU image is amd64.
+          SFU_IMAGE: ${{ matrix.proof == 'latency' && inputs.sfu_image || '' }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          # The Chalk SFU is built from the cut, so the proof runs its code. With image_source build, API and Sync are built too.
-          docker build -q -f infrastructure/sfu/Dockerfile -t stack-sfu features/media/sfu > /dev/null &
+          # The Chalk SFU runs the cut's code: the latency lane pulls the image the cut published and checks its revision, and every
+          # other lane (or a latency run with no image) builds it. With image_source build, API and Sync are built too.
+          if [ -n "$SFU_IMAGE" ]; then
+            [[ "$SFU_IMAGE" =~ ^ghcr\.io/[a-z0-9._-]+/chalk-sfu@sha256:[0-9a-f]{64}$ ]] || { echo "not a digest-pinned Chalk SFU image: $SFU_IMAGE" >&2; exit 1; }
+            docker pull --quiet "$SFU_IMAGE" > /dev/null
+            docker tag "$SFU_IMAGE" stack-sfu
+            revision="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' stack-sfu)"
+            [ "$revision" = "$RELEASE_SHA" ] || { echo "The Chalk SFU image is revision $revision, want $RELEASE_SHA" >&2; exit 1; }
+          else
+            docker build -q -f infrastructure/sfu/Dockerfile -t stack-sfu features/media/sfu > /dev/null &
+          fi
           if [ "$IMAGE_SOURCE" = build ]; then
             docker build -q --build-context api_source=apps/api --build-context protocol_source=features/media/sfu/protocol \
               -f infrastructure/managed-episode/images/api.Dockerfile -t stack-api infrastructure/managed-episode > /dev/null &
