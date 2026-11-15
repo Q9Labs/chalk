@@ -467,9 +467,9 @@ def latency_target(github, args):
     """The cut Nightly latency measures, or nothing. A cut names its own SHA and is skipped when a passed latency record covers it; a person's dispatch names none and measures the newest held cut even when a record covers it."""
     named = os.environ.get('LATENCY_SHA', '')
     sha = named or next((payload(item)['target_sha'] for item in held_candidates(github.deployments('nightly'))[:1]), '')
-    if named:
-        ancestor(named)
-    outputs({'sha': sha if sha and (os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and not named or covering_latency(github, sha) is None) else ''})
+    named and ancestor(named)
+    covering = None if not sha or (not named and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch') else covering_latency(github, sha)
+    outputs({'sha': '' if covering and not measured_other_images(covering, dict(target_sha=sha, release_id=os.environ.get('RELEASE_ID', ''))) else sha})
 
 
 def recheck(github, args):

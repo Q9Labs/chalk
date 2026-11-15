@@ -54,6 +54,18 @@ class LatencyCoverTests(unittest.TestCase):
                 release.latency_target(self.github(held(), latency=latency), None)
                 self.assertEqual(self.output.read_text(), f'sha={expected}\n')
 
+    def test_a_cut_is_measured_again_when_the_record_of_its_sha_measured_another_release(self):
+        for measured, expected in (('another-release', SHA), ('release', ''), (None, '')):
+            with self.subTest(measured=measured), patch.dict(os.environ, {'LATENCY_SHA': SHA, 'RELEASE_ID': 'release'}):
+                api = self.github(held())
+                if measured:
+                    api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
+                        [dict(id=9, payload=dict(channel='nightly-latency', target_sha=SHA, result='passed', scorecard_result='passed', release_id=measured))]
+                        if task == 'nightly-latency' else [held()])
+                self.output.write_text('')
+                release.latency_target(api, None)
+                self.assertEqual(self.output.read_text(), f'sha={expected}\n')
+
     def test_promote_refuses_a_record_of_this_sha_that_measured_other_images(self):
         for measured, expected in (('another-release', 'latency-images-differ'), ('release', 'passed'), (None, 'passed')):
             with self.subTest(measured=measured):
