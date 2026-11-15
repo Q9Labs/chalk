@@ -65,7 +65,7 @@
     {
       "Sid": "ReadCommandResults",
       "Effect": "Allow",
-      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:CancelCommand"],
+      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"],
       "Resource": "*"
     },
     {
