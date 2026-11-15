@@ -3,8 +3,9 @@ run-name: Hotfix rehearsal ${{ inputs.sha }}
 # Rehearses what a production hotfix asks of a host, on a host this run creates and ends: build the hotfix release on the newest held
 # nightly cut, deliver the cut, then the hotfix over it, then roll back to the cut as the Release job does (a fresh envelope of the
 # older source) (scripts/nightly-host-proof/run). The Pages rollback is rehearsed on the nightly Pages project, which nobody serves
-# (scripts/releases/web.py rehearse). It does not run the real-call smoke: that needs a public origin, a seeded Tenant and a media
-# plane wired to the host, and Hotfix itself runs it on production after every hotfix.
+# (scripts/releases/web.py rehearse). After the hotfix leg and after the rollback leg the host serves nightly-api.chalkmeet.com and
+# runs a real call through it (the camera-share proof on the Cloudflare plane, without recording). The recorder path is not run here:
+# the per-cut lanes cover it, and Hotfix runs the full smoke on production after every hotfix.
 # Cost: one on-demand t4g.small for about 20 minutes, under 0.02 USD, plus the build minutes of a release.
 on:
   workflow_dispatch:
@@ -68,14 +69,14 @@ jobs:
       enable_recorder_control: false
     secrets: inherit
   rehearse:
-    name: Deliver the cut, the hotfix, then roll back
+    name: Deliver the cut, the hotfix, then roll back, with a call after each
     needs: [plan, release]
     runs-on: ubuntu-24.04
     # The environment accepts master only, and only it can assume the AWS role: a pull request never reaches AWS.
     environment:
       name: nightly-host-proof
       deployment: false
-    timeout-minutes: 60
+    timeout-minutes: 75
     permissions:
       actions: read
       contents: read
@@ -85,9 +86,25 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
           persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .tool-versions
+          cache: pnpm
+      # What the call proof needs, as the Nightly cloudflare-plane lane installs it (nightly-proofs.yml).
+      - name: Install proof dependencies
+        run: pnpm install --frozen-lockfile --filter @q9labsai/chalk-client...
+      - uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg imagemagick espeak fonts-dejavu-core
+      - name: Install ImageMagick 7 entry point
+        run: |
+          # shellcheck disable=SC2016
+          printf '#!/bin/sh\nif [ "$1" = montage ]; then shift; exec montage "$@"; fi\nexec convert "$@"\n' | sudo tee /usr/local/bin/magick > /dev/null
+          sudo chmod +x /usr/local/bin/magick
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
       - name: Download the baseline's release manifest
         uses: ./.github/actions/download-sealed
         with:
@@ -119,7 +136,7 @@ jobs:
           HOTFIX_RELEASE: ${{ needs.release.outputs.release_id }}
         run: |
           scripts/nightly-host-proof/run --manifest "$RUNNER_TEMP/baseline/$BASELINE_RELEASE.json" \
-            --then "$RUNNER_TEMP/hotfix/$HOTFIX_RELEASE.json" --rollback-manifest "$RUNNER_TEMP/baseline/$BASELINE_RELEASE.json" \
+            --then "$RUNNER_TEMP/hotfix/$HOTFIX_RELEASE.json" --rollback-manifest "$RUNNER_TEMP/baseline/$BASELINE_RELEASE.json" --call-proof \
             --run-id "$GITHUB_RUN_ID" --ami "$AMI" --subnet "$SUBNET" --security-group "$SECURITY_GROUP" --summary "$GITHUB_STEP_SUMMARY"
   pages:
     name: Upload the web, then restore the saved Pages deployment

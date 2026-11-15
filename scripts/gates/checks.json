@@ -710,10 +710,10 @@
     {
       "id": "workflow:hotfix-rehearsal.yml#rehearse",
       "owner": "Release",
-      "catches": "A hotfix that its host takes badly, or a rollback to the cut that fails, such as an older controller that cannot read a newer pointer.",
+      "catches": "A hotfix that its host takes badly, a rollback to the cut that fails, such as an older controller that cannot read a newer pointer, or a call that fails through the host's public address after either leg.",
       "runs": ["manual"],
       "blocks": "alert",
-      "minutes": 20,
+      "minutes": 40,
       "record": "unmeasured",
       "sample": "New on 15 November; no run recorded yet."
     },
