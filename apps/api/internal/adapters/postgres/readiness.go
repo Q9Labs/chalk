@@ -39,6 +39,18 @@ func (r Readiness) Check(ctx context.Context) error {
 	return nil
 }
 
+const liveParticipantsQuery = `select count(*) from participant_presence_leases where expires_at > now()`
+
+// LiveParticipants counts the participants whose presence lease has not expired. Sync renews a lease
+// every few seconds for a connected participant and lets it lapse 120 seconds after the last renewal.
+func (r Readiness) LiveParticipants(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.Pool.QueryRow(ctx, liveParticipantsQuery).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count live participants: %w", err)
+	}
+	return count, nil
+}
+
 func validateMigrationVersion(current, required int64) error {
 	if current < required {
 		return fmt.Errorf("postgres migration version %d is below required %d", current, required)

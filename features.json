@@ -593,6 +593,7 @@
         "apps/api/internal/httpapi/errors.go",
         "apps/api/internal/httpapi/json_fields.go",
         "apps/api/internal/httpapi/middleware.go",
+        "apps/api/internal/httpapi/operator_read.go",
         "apps/api/internal/httpapi/pagination.go",
         "apps/api/internal/httpapi/provider_operations.go",
         "apps/api/internal/httpapi/provider_operations_observation_test.go",
