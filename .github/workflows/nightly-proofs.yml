@@ -267,7 +267,7 @@ jobs:
           start=$(date +%s)
           export CHALK_PROOF_RUN_ID="nightly-$GITHUB_RUN_ID-$PROOF"
           if [ "$PROOF" = web-call ]; then
-            CHALK_PROOF_WEBKIT=1 pnpm web:proof || status=$?
+            CHALK_DIAG_VARIANT="$LATENCY_SAMPLES" CHALK_PROOF_WEBKIT=1 pnpm web:proof || status=$?
           elif [ "$PROOF" = latency ]; then
             # The full run: the budgets in perf/budgets.json gate it, and Promote reads its record.
             pnpm prod:latency --samples "$LATENCY_SAMPLES" --planes chalk_sfu --environment nightly --tier nightly --region github-hosted --size ubuntu-24-04 || status=$?

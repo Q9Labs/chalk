@@ -5,6 +5,14 @@ import { installAgreementProbe } from "./agreement.mjs";
 // The camera and microphone permission behaves like a browser's: it starts as "prompt" and becomes "granted" once capture succeeds,
 // so the pre-join access sheet appears on a tablet or phone. A proof that is not about that step starts with permission: "granted"
 // and joins with mic and camera off.
+// Repro only: CHALK_DIAG_VARIANT picks how the web app's camera is published.
+function fixtureOptions(guest) {
+  const variant = process.env.CHALK_DIAG_VARIANT ?? "product";
+  const options = { speech: "", guest, tones: true, simulcast: variant === "override", single: variant === "single" || variant === "small-single" };
+  if (variant === "small" || variant === "small-single") options.camera = { width: 640, height: 360 };
+  return options;
+}
+
 export function webMediaFixture(guest, { permission = "prompt" } = {}) {
   return `(() => {
     (${installAgreementProbe.toString()})();
@@ -23,7 +31,7 @@ export function webMediaFixture(guest, { permission = "prompt" } = {}) {
       { deviceId: "proof-camera", groupId: "proof", kind: "videoinput", label: "Proof camera", toJSON() { return {}; } },
       { deviceId: "proof-microphone", groupId: "proof", kind: "audioinput", label: "Proof microphone", toJSON() { return {}; } }
     ];
-    (${installFixture.toString()})({ speech: "", guest: ${guest}, tones: true, simulcast: false });
+    (${installFixture.toString()})(${JSON.stringify(fixtureOptions(guest))});
     let permission = ${JSON.stringify(permission)};
     const watchers = [];
     const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);

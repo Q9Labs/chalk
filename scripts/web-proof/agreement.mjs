@@ -159,12 +159,14 @@ export async function sampleTransport() {
   const keys = [
     "type", "kind", "rid", "ssrc", "active", "framesSent", "framesEncoded", "framesReceived", "framesDecoded", "framesDropped", "keyFramesEncoded", "keyFramesDecoded",
     "packetsSent", "packetsReceived", "packetsLost", "bytesSent", "bytesReceived", "freezeCount", "totalFreezesDuration", "pliCount", "firCount", "nackCount", "qualityLimitationReason",
-    "frameWidth", "frameHeight", "state", "currentRoundTripTime",
+    "frameWidth", "frameHeight", "state", "currentRoundTripTime", "availableOutgoingBitrate", "targetBitrate", "framesPerSecond", "frames", "width", "height", "fractionLost",
+    "roundTripTime", "jitter", "encoderImplementation", "totalEncodeTime", "totalPacketSendDelay", "qualityLimitationResolutionChanges", "qualityLimitationDurations",
+    "retransmittedPacketsSent", "packetsDiscardedOnSend", "hugeFramesSent", "totalPacketsSendDelay", "nominated", "selected",
   ];
   const connections = await Promise.all(
     (window.proofConnections ?? []).map(async (connection) => {
       const report = await connection.getStats();
-      const rows = [...report.values()].filter((row) => ["outbound-rtp", "inbound-rtp", "candidate-pair", "transport"].includes(row.type) && (row.kind === "video" || row.type === "candidate-pair" || row.type === "transport"));
+      const rows = [...report.values()].filter((row) => ["outbound-rtp", "inbound-rtp", "remote-inbound-rtp", "media-source", "candidate-pair", "transport"].includes(row.type) && (row.kind === "video" || row.type === "candidate-pair" || row.type === "transport"));
       return {
         connectionState: connection.connectionState,
         iceConnectionState: connection.iceConnectionState,
