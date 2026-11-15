@@ -17,7 +17,7 @@ name: Gate
 # label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
 # runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
 # Two sizes: the API gate and the browser-tests lane use that label (Instabox 4x8, $0.034 an hour). Every other job uses
-# CHALK_GATE_RUNNER_SMALL (Instabox 2x4, $0.017 an hour; its dispatchers peak at 2.5 GB there, the full gate fits), and
+# CHALK_GATE_RUNNER_SMALL (Instabox 2x4, $0.017 an hour; every lane but those two peaked between 0.5 and 3.1 GB of its 3.9 GB on 15 Nov 2026), and
 # CHALK_GATE_RUNNER when that is empty. A manual run's runner_small input does the same for that run; runner alone sends every job to one label.
 # Only so many pull requests against master are ready at once (scripts/gates/ready-cap.mjs). Ready cap runs first when a
 # pull request is marked ready; over the cap it comments, Select gate jobs stands down, and Root gate fails until the pull request is a draft again.
@@ -297,12 +297,12 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
-      # The Sync model check (formal-sync) needs Java. The hosted image has it; the Instabox snapshot does not.
-      - name: Install Java for the Sync model check
+      # The Sync model check (formal-sync) needs Java and the SFU promotion tests need gpg. The hosted image has both; the Instabox snapshot has neither.
+      - name: Install Java and gpg for the checks lane
         if: matrix.group == 'checks' && runner.environment == 'self-hosted'
         uses: ./.github/actions/apt-install
         with:
-          packages: default-jre-headless
+          packages: default-jre-headless gnupg
 
       # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
       - name: Set up OpenTofu

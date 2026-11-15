@@ -17,7 +17,7 @@ Put shared behavior in packages first, then wire it into apps. Don't fix SDK beh
 
 ## Verification
 
-Use the relevant checks for the change. Run heavy Linux checks on Instabox; [gate operations](scripts/gates/README.md) covers the full gate, API and Sync gates, setup, and the commit hook. For code review, apply [CODING_STANDARDS.md](CODING_STANDARDS.md).
+Use the relevant checks for the change. Run heavy Linux checks on Instabox at `box run`'s default size of 2x4, which costs half of 4x8 and fits the gates through `scripts/gates/instabox-run.sh` (it adds a swap file); use `--size 4x8` only for a run that ran out of memory there. [gate operations](scripts/gates/README.md) covers the full gate, API and Sync gates, setup, and the commit hook. For code review, apply [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
 Open a pull request as a draft: the Gate, Mobile CI and Release contracts run nothing on a draft (a few path-triggered workflows still do). Run the relevant checks yourself (Instabox for the heavy ones), finish review, then mark it ready once. Every push to a ready pull request reruns the Gate at about 60 runner-minutes, so batch fixes into one push.
 
