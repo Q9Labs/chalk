@@ -173,7 +173,7 @@ class GitHub:
                 info = payload(item)
                 if info.get('channel') != task:
                     continue
-                if task == 'nightly-cut' and passed_only and info.get('proof_result') != 'passed':
+                if passed_only and {'nightly-cut': info.get('proof_result'), 'nightly-latency': info.get('result')}.get(task, 'passed') != 'passed':
                     continue
                 if manifest_sha256 and info.get('manifest_sha256') != manifest_sha256:
                     continue

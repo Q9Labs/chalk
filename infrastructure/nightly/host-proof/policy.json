@@ -40,15 +40,32 @@
       "Sid": "DeployToTaggedHostsOnly",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*"],
-      "Condition": {
-        "StringEqualsIfExists": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" }
-      }
+      "Resource": "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*",
+      "Condition": { "StringEquals": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" } }
+    },
+    {
+      "Sid": "RunTheDeployAndShellDocuments",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ssm:__REGION__::document/AWS-RunShellScript"]
+    },
+    {
+      "Sid": "ReadTheDeployDocument",
+      "Effect": "Allow",
+      "Action": ["ssm:ListDocumentVersions", "ssm:GetDocument", "ssm:DescribeDocument"],
+      "Resource": "arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release"
+    },
+    {
+      "Sid": "RebootOnlyTaggedHosts",
+      "Effect": "Allow",
+      "Action": "ec2:RebootInstances",
+      "Resource": "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/*",
+      "Condition": { "StringEquals": { "ec2:ResourceTag/chalk-purpose": "nightly-host-proof" } }
     },
     {
       "Sid": "ReadCommandResults",
       "Effect": "Allow",
-      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"],
+      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:CancelCommand"],
       "Resource": "*"
     },
     {

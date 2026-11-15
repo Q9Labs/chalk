@@ -271,9 +271,9 @@ def plan(github, args):
 
 def builds_fresh_artifacts():
     # Mirrors the plan-managed and build-web conditions in ci.yml. Reuse deploys artifacts that an earlier, gated run
-    # built; a Pages rollback input alone does not stop either build.
+    # built; a Pages rollback input alone does not stop either build, and an archive-only web build is a fresh artifact too.
     flag = lambda name: os.environ.get(name) == 'true'
-    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB'))
+    return not os.environ.get('MANIFEST_RUN_ID') and (flag('RELEASE_MANAGED') or flag('DEPLOY_MANAGED') or flag('DEPLOY_WEB') or flag('BUILD_WEB'))
 
 
 def require_gate(github, args):
@@ -341,7 +341,7 @@ def with_latency(github, info, production_sha):
     covering = covering_latency(github, target)
     merged = dict(info)
     if info.get('chalk_sfu_proof_result', 'missing') == 'passed' and not covering and paths_changed(production_sha, target, latency_paths()):
-        exact = github.deployments('nightly', 'nightly-latency', sha=target)
+        exact = github.deployments('nightly', 'nightly-latency', sha=target, passed_only=False)
         merged['chalk_sfu_proof_result'] = 'failed' if exact else 'latency-missing'
     if covering:
         scorecard_result = info.get('scorecard_result', 'missing')

@@ -205,6 +205,7 @@ jobs:
           RELEASE_MANAGED: ${{ inputs.release_managed }}
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
           DEPLOY_WEB: ${{ inputs.deploy_web }}
+          BUILD_WEB: ${{ inputs.build_web }}
         run: python3 scripts/releases/release.py require_gate
 
   plan-managed:

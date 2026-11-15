@@ -1,4 +1,4 @@
-"""The latency record a promotion needs, and the cut Nightly's latency lane measures."""
+"""The latency record a promotion needs, the cut Nightly's latency lane measures, and the archive-only build's Gate."""
 
 import os
 import unittest
@@ -51,6 +51,20 @@ class LatencyCoverTests(unittest.TestCase):
         api.deployments.return_value = []
         release.latency_target(api, None)
         self.assertEqual(self.output.read_text(), 'sha=\n')
+
+    def test_the_lookup_skips_a_newer_failed_record_to_reach_an_older_pass(self):
+        records = [dict(id=2, payload=dict(channel='nightly-latency', target_sha='d' * 40, result='failed')),
+                   dict(id=1, payload=dict(channel='nightly-latency', target_sha='c' * 40, result='passed'))]
+        github = GitHub.__new__(GitHub)
+        github.request = Mock(return_value=records)
+        self.assertEqual(github.deployments('nightly', 'nightly-latency')[0]['id'], 1)
+        self.assertEqual(github.deployments('nightly', 'nightly-latency', passed_only=False)[0]['id'], 2)
+
+
+class ArchiveOnlyBuildTests(unittest.TestCase):
+    def test_an_archive_only_web_build_is_gated(self):
+        with patch.dict(os.environ, {'BUILD_WEB': 'true'}):
+            self.assertTrue(release.builds_fresh_artifacts())
 
 
 if __name__ == '__main__':
