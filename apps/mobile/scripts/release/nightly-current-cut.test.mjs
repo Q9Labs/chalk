@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -56,5 +56,14 @@ test("a change to only the guard or only its test selects the workflow-graph lan
   for (const file of ["apps/mobile/scripts/release/nightly-current-cut.sh", "apps/mobile/scripts/release/nightly-current-cut.test.mjs"]) {
     const plan = createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
     assert.ok(plan.tasks.find((task) => task.id === "workflow-graph").selected, file);
+  }
+});
+
+test("both nightly publishers use the shared guard and carry no query of their own", () => {
+  for (const name of ["publish-nightly-android.sh", "publish-nightly-ios.sh"]) {
+    const source = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
+    assert.match(source, /source "\$repo_root\/apps\/mobile\/scripts\/release\/nightly-current-cut\.sh"/, name);
+    assert.match(source, /cut_is_current \|\|/, name);
+    assert.doesNotMatch(source, /deployments\?environment=nightly&task=nightly-cut&per_page=1"/, name);
   }
 });
