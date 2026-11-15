@@ -80,12 +80,16 @@ defmodule ChalkSync.DatabaseOutageBootTest do
   end
 
   test "Sync stays up while the provider bridge is away as well, because the API waits for the same database" do
-    previous = Application.fetch_env(:chalk_sync, :provider_bridge)
+    # Start installs the media and recording planes from the bridge, and they outlive the application.
+    keys = [:provider_bridge, :media_plane, :recording_plane]
+    previous = Map.new(keys, &{&1, Application.fetch_env(:chalk_sync, &1)})
 
     on_exit(fn ->
-      case previous do
-        {:ok, value} -> Application.put_env(:chalk_sync, :provider_bridge, value)
-        :error -> Application.delete_env(:chalk_sync, :provider_bridge)
+      for {key, value} <- previous do
+        case value do
+          {:ok, value} -> Application.put_env(:chalk_sync, key, value)
+          :error -> Application.delete_env(:chalk_sync, key)
+        end
       end
     end)
 
