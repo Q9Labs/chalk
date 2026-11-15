@@ -156,7 +156,7 @@ on:
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
   # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
-  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}-{1}', inputs.environment || 'production', inputs.lane || '') }}
+  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.lane && format('-{0}', inputs.lane) || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
