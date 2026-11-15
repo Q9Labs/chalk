@@ -31,11 +31,11 @@ test("only Cut nightly holds the Nightly environment lock", () => {
   for (const file of readdirSync(resolve(root, ".github/workflows")).filter((name) => /\.ya?ml$/.test(name))) {
     const parsed = workflow(file);
     const groups = [parsed.concurrency, ...Object.values(parsed.jobs ?? {}).map((job) => job.concurrency)].filter(Boolean);
-    if (groups.some((item) => JSON.stringify(item).includes("chalk-environment-nightly"))) holders.push(file);
+    if (groups.some((item) => item.group === "chalk-environment-nightly")) holders.push(file);
     for (const job of Object.values(parsed.jobs ?? {})) {
       const call = job.with;
       const deploys = call?.deploy_managed === true || call?.deploy_web === true;
-      if (job.uses === "./.github/workflows/ci.yml" && deploys && call.managed_environment === "nightly" && !call.orchestrated) holders.push(file);
+      if (job.uses === "./.github/workflows/ci.yml" && deploys && (call.managed_environment ?? "nightly") === "nightly" && !call.orchestrated) holders.push(file);
     }
   }
   assert.deepEqual([...new Set(holders)], ["nightly.yml"]);

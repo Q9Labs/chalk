@@ -142,9 +142,9 @@ jobs:
     name: Upload the web, then restore the saved Pages deployment
     needs: [plan, release]
     runs-on: ubuntu-24.04
-    # Nothing else deploys to the nightly Pages project (Cut nightly builds the web archive and deploys none), and the workflow's own
-    # group keeps one rehearsal at a time. The job takes no nightly lock: a second pending run in that group cancels the first, and a
-    # rehearsal job once cancelled the pending cut for master.
+    # No automated run deploys to the nightly Pages project (Cut nightly builds the web archive and deploys none; only a hand-dispatched
+    # Release with deploy_web could), and the workflow's own group keeps one rehearsal at a time. The job takes no nightly lock: a second
+    # pending run in that group cancels the first, and a rehearsal job once cancelled the pending cut for master.
     environment:
       name: nightly
       deployment: false
