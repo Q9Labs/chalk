@@ -85,8 +85,9 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
     end
   end
 
-  # An Episode extended before the first deadline was recorded: its first deadline is taken to be a
-  # whole number of minutes after its creation (at most about 30,000 replays). Only a deadline that reproduces the first event's digest is
+  # An Episode extended before the first deadline was recorded: its first deadline is taken to be its
+  # configured default duration after its creation, or else a whole number of minutes (at most about
+  # 30,000 replays). Only a deadline that reproduces the first event's digest is
   # taken, so a changed event still fails the replay that follows.
   defp find_initial_deadline(transaction, candidate, generation) when generation >= 1 do
     [first | _] = event_rows(transaction, candidate, 0, 1)
@@ -97,12 +98,19 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
         deadline_generation: generation
       })
 
-    candidate.deadline_anchors
-    |> Enum.map(&DateTime.to_unix(&1, :millisecond))
-    |> Enum.uniq()
+    anchors =
+      candidate.deadline_anchors
+      |> Enum.map(&DateTime.to_unix(&1, :millisecond))
+      |> Enum.uniq()
+
+    default_seconds = default_duration_seconds(candidate)
+
+    anchors
     |> Stream.flat_map(fn anchor_ms ->
-      @minimum_seconds..@maximum_seconds//60
-      |> Stream.map(&(anchor_ms + &1 * 1_000))
+      Stream.concat(
+        Enum.map(default_seconds, &(anchor_ms + &1 * 1_000)),
+        Stream.map(@minimum_seconds..@maximum_seconds//60, &(anchor_ms + &1 * 1_000))
+      )
     end)
     |> Enum.find(&replays_first_event?(%{state | deadline_at_ms: &1}, first))
     |> case do
@@ -112,6 +120,15 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
   end
 
   defp find_initial_deadline(_transaction, _candidate, _generation), do: :not_usable
+
+  # Created without a deadline, an Episode gets the default duration its configuration snapshot froze.
+  defp default_duration_seconds(%{
+         config_snapshot: %{"default_episode_duration_seconds" => seconds}
+       })
+       when is_integer(seconds) and seconds >= @minimum_seconds and seconds <= @maximum_seconds,
+       do: [seconds]
+
+  defp default_duration_seconds(_candidate), do: []
 
   defp replays_first_event?(state, row) do
     {event, digest} = event(row)

@@ -168,6 +168,7 @@ defmodule ChalkSync.SyncPostgres do
       delete(transaction, "sync_chat_messages", tenant_id)
       delete(transaction, "sync_chat_streams", tenant_id)
       delete(transaction, "participants", tenant_id)
+      delete(transaction, "episode_create_requests", tenant_id)
       delete(transaction, "episodes", tenant_id)
       delete(transaction, "spaces", tenant_id)
 
