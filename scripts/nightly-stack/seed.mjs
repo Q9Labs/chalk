@@ -8,8 +8,8 @@ import { join } from "node:path";
 const [dir, apiOrigin, proofOrigin, publicOrigin] = process.argv.slice(2);
 const systemToken = readFileSync(join(dir, "system-token"), "utf8");
 // identity.mjs wrote the plane new Spaces land on; the Tenant and the proof Space follow it.
-const plane = readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(.+)$/m)?.[1];
-if (plane !== "chalk_sfu" && plane !== "cf_sfu") throw new Error(`seed: api.env names no media plane (${plane})`);
+const plane = readFileSync(join(dir, "api.env"), "utf8").match(/^CHALK_NEW_SPACE_MEDIA_PLANE=(chalk_sfu|cf_sfu)$/m)?.[1];
+if (!plane) throw new Error("seed: api.env names no media plane");
 
 async function post(path, body) {
   const response = await fetch(new URL(path, apiOrigin), {
