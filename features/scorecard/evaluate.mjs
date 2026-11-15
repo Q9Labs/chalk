@@ -8,6 +8,8 @@ import { parseScorecard } from "./schema.mjs";
 
 // --latency-deferred: the cut's cards carry no latency kit run; the staging latency workflow scores that one against the same budgets.
 const args = process.argv.slice(2);
+// A manual trial runs fewer than the full 60 cycles (LATENCY_SAMPLES): its floor is the same 80% of the cycles it asked for.
+const sampleFloor = Math.min(MIN_GATED_SAMPLES, Math.ceil(0.8 * Number(process.env.LATENCY_SAMPLES || 60)));
 const latencyDeferred = args.includes("--latency-deferred");
 const [revision, runId, ...paths] = args.filter((arg) => arg !== "--latency-deferred");
 if (!/^[0-9a-f]{40}$/.test(revision ?? "") || !/^\d+$/.test(runId ?? "")) throw new Error("usage: evaluate.mjs <cut-sha> <run-id> [scorecard.json]...");
@@ -38,7 +40,7 @@ for (const path of paths) {
 if (planes.has("chalk_sfu")) {
   if (!latencyDeferred) {
     // Every gated action metric must be there with enough samples; the table lists them all, so a missing one is a row.
-    const rows = expectedMetricRows(gatedActionIds(budgets, "chalk_sfu"), chalkSfuMetrics, planeBudgets(budgets, "chalk_sfu"), MIN_GATED_SAMPLES);
+    const rows = expectedMetricRows(gatedActionIds(budgets, "chalk_sfu"), chalkSfuMetrics, planeBudgets(budgets, "chalk_sfu"), sampleFloor);
     const table = renderExpectedMetrics(rows, `Gated action metrics of ${revision.slice(0, 8)} on chalk_sfu`);
     process.stderr.write(`${table}\n`);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${table}\n`);

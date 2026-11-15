@@ -105,3 +105,34 @@ test("the evaluator lists every gated action metric and fails one with no sample
   assert.match(table, /❌ too few samples/);
   assert.match(table, /✅ ok/);
 });
+
+test("a later card with no samples cannot erase an earlier complete one, and a short trial is held to 80% of its own cycles", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "expected-metrics-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { budgets } = await readBudgets();
+  const [first, ...others] = gatedActionIds(budgets, chalkSfu);
+  const save = (name, value) => {
+    const path = join(dir, name);
+    writeFileSync(path, JSON.stringify(value));
+    return path;
+  };
+  const complete = save(
+    "complete.json",
+    card(
+      chalkSfu,
+      [first, ...others].map((id) => metric(id, 100)),
+    ),
+  );
+  const empty = save("empty.json", card(chalkSfu, [{ ...metric(first, 100, 0), p50: null, p95: null }]));
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", complete, empty]).stdout).result, "passed");
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", empty, complete]).stdout).result, "passed");
+  const trial = save(
+    "trial.json",
+    card(
+      chalkSfu,
+      [first, ...others].map((id) => metric(id, 100, 20)),
+    ),
+  );
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", trial], { LATENCY_SAMPLES: "20" }).stdout).result, "passed");
+  assert.equal(JSON.parse(node("evaluate.mjs", [revision, "123", trial]).stdout).result, "missing", "the full run still needs the full floor");
+});

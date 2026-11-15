@@ -100,7 +100,9 @@ export function renderTable(diff, { title, baselineLabel, dropped = [] }) {
  * @param {{ metric: string, reason: string, count: number }[]} [dropped]  The card's drops: a timeout on a gated metric is a failure of the run.
  */
 export function expectedMetricRows(ids, metrics, budgets, floor, baselineMetrics = [], dropped = []) {
-  const byId = new Map(metrics.map((metric) => [metric.id, metric]));
+  // Cards may repeat an id: the one with the most samples stands for it, so an empty later entry cannot erase a complete one.
+  const byId = new Map();
+  for (const metric of metrics) if ((metric.n ?? 0) >= (byId.get(metric.id)?.n ?? 0)) byId.set(metric.id, metric);
   const baselineById = new Map(baselineMetrics.map((metric) => [metric.id, metric]));
   return ids.map((id) => {
     const metric = byId.get(id);

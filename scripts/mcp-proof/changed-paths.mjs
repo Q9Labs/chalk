@@ -15,7 +15,11 @@ const dependencyPaths = [
   "apps/api/internal/httpapi/authorization.go",
   "apps/api/internal/httpapi/middleware.go",
   "apps/api/internal/httpapi/request_credentials.go",
+  "apps/api/internal/httpapi/router.go",
   "apps/api/internal/httpapi/spaces.go",
+  "apps/api/internal/config/config.go",
+  "apps/api/internal/adapters/postgres/api_keys.go",
+  "apps/api/internal/adapters/postgres/spaces.go",
 ];
 
 function checkedPaths(featureMap) {

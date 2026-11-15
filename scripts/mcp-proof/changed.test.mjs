@@ -25,12 +25,29 @@ function repository(commits) {
 }
 
 test("a release that changes MCP code, or code its check exercises, runs the check", () => {
-  const { cwd, shas } = repository([{ "README.md": "a" }, { "apps/api/internal/mcptools/tool.go": "x" }, { "apps/api/internal/apikeys/key.go": "y" }, { "apps/api/internal/httpapi/middleware.go": "z" }]);
+  const { cwd, shas } = repository([
+    { "README.md": "a" },
+    { "apps/api/internal/mcptools/tool.go": "x" },
+    { "apps/api/internal/apikeys/key.go": "y" },
+    { "apps/api/internal/httpapi/middleware.go": "z" },
+    { "apps/api/internal/httpapi/router.go": "r" },
+    { "apps/api/internal/config/config.go": "c" },
+    { "apps/api/internal/adapters/postgres/api_keys.go": "k" },
+    { "apps/api/internal/adapters/postgres/spaces.go": "s" },
+  ]);
   try {
     assert.equal(decide({ previous: shas[0], target: shas[1], cwd, featureMap }).changed, true);
     assert.equal(decide({ previous: shas[1], target: shas[2], cwd, featureMap }).changed, true, "an API-key change");
     assert.equal(decide({ previous: shas[2], target: shas[3], cwd, featureMap }).changed, true, "the tenant authentication middleware MCP calls");
     assert.match(decide({ previous: shas[0], target: shas[2], cwd, featureMap }).reason, /2 changed file\(s\)/);
+    for (const [index, what] of [
+      [4, "the router that mounts /mcp"],
+      [5, "the OAuth configuration"],
+      [6, "the API-key store"],
+      [7, "the Space store"],
+    ]) {
+      assert.equal(decide({ previous: shas[index - 1], target: shas[index], cwd, featureMap }).changed, true, what);
+    }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
