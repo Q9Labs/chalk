@@ -13,7 +13,7 @@ function deployment(sha, run, proof) {
 }
 
 // The deployments list is newest first, like the GitHub API returns it.
-function cutIsCurrent(deployments) {
+function cutIsCurrent(deployments, cut = thisCut) {
   const bin = mkdtempSync(join(tmpdir(), "current-cut-"));
   writeFileSync(join(bin, "gh"), `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify(deployments)}\nJSON\n`);
   chmodSync(join(bin, "gh"), 0o755);
@@ -22,8 +22,8 @@ function cutIsCurrent(deployments) {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
       GITHUB_REPOSITORY: "Q9Labs/chalk",
-      SOURCE_RUN: thisCut.run,
-      SOURCE_SHA: thisCut.sha,
+      SOURCE_RUN: cut.run,
+      SOURCE_SHA: cut.sha,
     },
   });
   return result.status === 0;
@@ -43,4 +43,13 @@ test("a newer cut that passed its proof makes the build stale", () => {
 
 test("a cut whose own proof failed is not current", () => {
   assert.equal(cutIsCurrent([deployment("aaa", "100", "failed")]), false);
+});
+
+test("the failed Android publish of 2026-11-15 would have published", () => {
+  // The two newest nightly-cut deployments when run 43690022203 refused: a cut whose proof failed, then the cut being published.
+  const observed = [
+    deployment("dfaa8e6023a86a17c7b8602b62933738efc68ef1", "43688458706", "failed"),
+    deployment("8613646804c87f9a810c11ef9b57e9d5df0b7d18", "43687016274", "passed"),
+  ];
+  assert.equal(cutIsCurrent(observed, { sha: "8613646804c87f9a810c11ef9b57e9d5df0b7d18", run: "43687016274" }), true);
 });
