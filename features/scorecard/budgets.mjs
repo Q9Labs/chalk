@@ -59,6 +59,15 @@ export function planeLimits(budgets, plane) {
   return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95, warnOnly: !entry.gate }]));
 }
 
-// The full latency run takes 60 cycles. A gated action metric that fewer than 48 of them measured (80%) is not evidence: the
-// percentiles of a handful of samples hide a regression.
-export const MIN_GATED_SAMPLES = 48;
+/**
+ * gatedSampleFloor is the fewest samples a gated action metric may have, from the file's gatedSamples. A trial of fewer cycles than
+ * the full run is held to the same share of its own cycles.
+ * @param {{ gatedSamples?: { floor: number, fullRun: number } }} file  The parsed perf/budgets.json.
+ * @param {number} [cycles]  The cycles the run asked for; the full run when omitted.
+ */
+export function gatedSampleFloor({ gatedSamples }, cycles = gatedSamples?.fullRun) {
+  if (!Number.isInteger(gatedSamples?.floor) || !Number.isInteger(gatedSamples?.fullRun) || gatedSamples.floor < 1 || gatedSamples.floor > gatedSamples.fullRun) {
+    throw new Error("perf/budgets.json: gatedSamples needs integer floor and fullRun, with floor between 1 and fullRun");
+  }
+  return Math.min(gatedSamples.floor, Math.ceil((gatedSamples.floor / gatedSamples.fullRun) * cycles));
+}
