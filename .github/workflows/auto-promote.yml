@@ -14,7 +14,7 @@ run-name: Auto-promote after ${{ github.event.workflow_run.display_title || 'a m
 # It dispatches Promote, which already retains the live Pages deployment and media pins, deploys the held release,
 # proves a real call on production, and rolls back to the retained release when that call does not pass. This run
 # then follows Promote to its end, so it turns red when production was rolled back or Promote failed.
-# It promotes only from 21:00 to 00:45 UTC (01:00 to 04:45 in Dubai) and only while no participant is in a call. A
+# It promotes only from 21:00 to 00:10 UTC (01:00 to 04:10 in Dubai; a Promote needs 50 minutes to finish or roll back before 01:00) and only while no participant is in a call. A
 # verdict that lands outside the window, or while calls run, promotes nothing; a tick at 21:05, 22:05, 23:05 and 00:05
 # UTC picks up the held cut instead.
 # A SHA is tried automatically once: a second attempt is a person's call, because Promote is named by its SHA and a
@@ -39,6 +39,10 @@ jobs:
       vars.CHALK_AUTO_PROMOTE == 'true' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
+    outputs:
+      dispatched: ${{ steps.promote.outputs.dispatched }}
+      refused: ${{ steps.promote.outputs.refused }}
+      sha: ${{ steps.decide.outputs.sha }}
     environment: # Holds the API URL secret the live-call read needs; a record would mark the held cut inactive.
       name: production
       deployment: false
@@ -79,6 +83,7 @@ jobs:
             echo "Promote already ran ${tried} time(s) for ${SHA}. Not promoting it again automatically." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
       - name: Dispatch Promote and follow it to its end
+        id: promote
         if: steps.decide.outputs.sha != '' && steps.tried.outputs.tried == '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,6 +93,7 @@ jobs:
           runs_for_sha() { gh run list --workflow promote.yml --event workflow_dispatch --limit 100 --json databaseId,displayTitle --jq ".[] | select(.displayTitle | endswith(\"${SHA}\")) | .databaseId"; }
           before="$(runs_for_sha)"
           gh workflow run promote.yml --ref master -f expected_sha="${SHA}" -f deploy_before="${UNTIL}"
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
           run_id=""
           for _ in $(seq 24); do
             run_id="$(comm -13 <(sort <<< "${before}") <(runs_for_sha | sort) | head -n 1)"
@@ -96,4 +102,30 @@ jobs:
           done
           [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No new Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
-          gh run watch "${run_id}" --exit-status --compact --interval 30
+          status=0
+          gh run watch "${run_id}" --exit-status --compact --interval 30 || status=$?
+          if [[ "${status}" != 0 ]]; then
+            # A guard refusal (calls started, or the window is too short) deployed nothing, so nobody is paged; the next tick tries again.
+            refused="$(gh run view "${run_id}" --json jobs --jq '[.jobs[] | select(.name == "live-calls" and .conclusion == "failure")] | length')"
+            [[ "${refused}" == 0 ]] || echo "refused=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "${status}"
+  page:
+    # A separate job, so a promotion that outlasts the 120-minute limit above still pages: the limit cancels the steps of that job, not this one.
+    needs: promote
+    if: always() && needs.promote.result == 'failure' && needs.promote.outputs.dispatched == 'true' && needs.promote.outputs.refused != 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      deployment: false
+    timeout-minutes: 5
+    steps:
+      - name: Page Oncall when the automatic promotion failed
+        env:
+          ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
+          SHA: ${{ needs.promote.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg detail "Automatic promotion of ${SHA} failed or timed out. Open the Promote run for whether production was rolled back. ${RUN_URL}" \
+            '{source: "oncall-poller", incidents: [{app: "chalk", kind: "new", key: "auto-promote", detail: $detail}]}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$ONCALL_WEBHOOK_URL"

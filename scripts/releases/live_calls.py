@@ -30,9 +30,10 @@ class Unknown:
 LIVE_CALL_WAIT_MINUTES = 20
 
 
-# A deploy starts this long after the guard passes: runner queues and the gate check took about 4 minutes in
-# Promote on 14 November 2026, and 15 leaves room for three times that.
-DEPLOY_MARGIN_MINUTES = 15
+# The longest a Promote runs, to its end or to the end of a rollback: the 90th percentile of its run time over the last 27
+# finished runs (about 50 minutes on 15 November 2026). The guard lets a deploy start only when that much of the window is left,
+# so a rollback after a failed proof also lands inside the window. Lower it when Promote gets faster.
+PROMOTE_P90_MINUTES = 50
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -117,8 +118,8 @@ def read_configured():
 
 
 def last_start(deploy_before):
-    """The guard refuses from here: a deploy that starts later could finish starting after deploy_before."""
-    return deploy_before - timedelta(minutes=DEPLOY_MARGIN_MINUTES)
+    """The guard refuses from here: a Promote that starts later could still run, or roll back, after deploy_before."""
+    return deploy_before - timedelta(minutes=PROMOTE_P90_MINUTES)
 
 
 def require_quiet_window():

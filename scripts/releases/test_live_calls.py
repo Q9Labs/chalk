@@ -77,10 +77,10 @@ class LiveCallsTests(unittest.TestCase):
         self.assertEqual(naps, [60])
         self.assertIn('too late to deploy inside the quiet window', str(error.exception))
 
-    def test_the_guard_refuses_from_fifteen_minutes_before_the_end_of_the_window(self):
+    def test_the_guard_refuses_from_one_promote_p90_before_the_end_of_the_window(self):
         limit = live_calls.last_start(at(1, day=16))
-        self.assertEqual(limit, at(0, 45, day=16))
-        for now, passes in ((at(0, 44, 59, day=16), True), (at(0, 45, day=16), False), (at(0, 59, day=16), False)):
+        self.assertEqual(limit, at(0, 10, day=16))
+        for now, passes in ((at(0, 9, 59, day=16), True), (at(0, 10, day=16), False), (at(0, 59, day=16), False)):
             with self.subTest(now=f'{now:%H:%M:%S}'):
                 try:
                     live_calls.await_quiet(lambda: live_calls.Quiet(), lambda seconds: None, now=lambda: now, say=lambda line: None, deadline=limit)
@@ -142,8 +142,8 @@ class AutoPromoteWindowTests(unittest.TestCase):
         return dict(line.split('=', 1) for line in self.output.read_text().splitlines())
 
     def test_it_waits_for_the_quiet_window(self):
-        for now, promotes in ((at(20, 59), False), (at(21), True), (at(23, 59), True), (at(0, 44, day=16), True),
-                              (at(0, 45, day=16), False), (at(0, 59, day=16), False),
+        for now, promotes in ((at(20, 59), False), (at(21), True), (at(23, 59), True), (at(0, 9, day=16), True),
+                              (at(0, 10, day=16), False), (at(0, 44, day=16), False), (at(0, 59, day=16), False),
                               (at(1, day=16), False), (at(12), False)):
             with self.subTest(now=f'{now:%H:%M}'):
                 self.assertEqual(self.promoted(now)['sha'], SHA if promotes else '')
@@ -163,7 +163,7 @@ class AutoPromoteWindowTests(unittest.TestCase):
     def test_it_hands_promote_the_end_of_the_window(self):
         self.assertEqual(self.promoted(at(22, 5))['until'], '2026-11-16T01:00:00+00:00')
         self.assertEqual(self.promoted(at(0, 5, day=16))['until'], '2026-11-16T01:00:00+00:00')
-        self.assertEqual(self.promoted(at(0, 50, day=16))['until'], '')  # Inside the last 15 minutes the guard would refuse, so nothing is dispatched.
+        self.assertEqual(self.promoted(at(0, 10, day=16))['until'], '')  # Inside the last 50 minutes the guard would refuse, so nothing is dispatched.
 
 
 if __name__ == '__main__':
