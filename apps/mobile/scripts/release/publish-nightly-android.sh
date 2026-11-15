@@ -10,11 +10,10 @@ source "$repo_root/apps/mobile/scripts/release/nightly-app-paths.sh"
 app_paths=("${nightly_app_paths[@]}" .github/workflows/mobile-nightly-android.yml)
 package=ai.q9labs.chalk.mobile
 release_name="nightly-$SOURCE_RUN"
+source "$repo_root/apps/mobile/scripts/release/nightly-current-cut.sh"
 require_current_cut() {
-  gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-cut&per_page=1" |
-    jq -e --arg run "$SOURCE_RUN" --arg sha "$SOURCE_SHA" \
-      '.[0] | .sha == $sha and .payload.proof_run_id == $run and .payload.proof_result == "passed"' >/dev/null || {
-    echo 'The nightly cut is no longer current; refusing a stale Android release.' >&2
+  cut_is_current || {
+    echo 'A newer nightly cut has passed its proof; refusing a stale Android release.' >&2
     exit 1
   }
 }
