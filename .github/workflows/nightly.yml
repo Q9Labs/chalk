@@ -80,6 +80,46 @@ jobs:
       stable_manifest_artifact_id: ${{ needs.plan.outputs.baseline_artifact_id }}
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
+  sfu-image:
+    # The Chalk SFU of this cut, built once from its SHA and published by digest to the registry that holds the API and Sync images.
+    # The latency run pulls this digest instead of building (nightly-proofs.yml), and an operator deploy installs the same digest
+    # (infrastructure/sfu/deploy --image), so the image that was measured is the image that ships. amd64 only: the latency host and the
+    # nodes are x86, and the other lanes still build their own arm copy.
+    needs: plan
+    if: needs.plan.outputs.should_cut == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.target_sha }}
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Build and push the Chalk SFU image
+        id: push
+        env:
+          TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          repository="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/chalk-sfu"
+          docker buildx build --platform linux/amd64 --provenance=false \
+            --file infrastructure/sfu/Dockerfile \
+            --build-arg SOURCE_REVISION="$TARGET_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --cache-from type=gha,scope=chalk-sfu --cache-to type=gha,scope=chalk-sfu,mode=max \
+            --tag "$repository:$TARGET_SHA" --push --metadata-file "$RUNNER_TEMP/sfu-metadata.json" features/media/sfu
+          digest="$(jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/sfu-metadata.json")"
+          echo "image=$repository@$digest" >> "$GITHUB_OUTPUT"
+          echo "- Chalk SFU: \`$repository@$digest\`" >> "$GITHUB_STEP_SUMMARY"
   proof:
     # The gate. Each proof is a lane on its own runner with its own throwaway stack (scripts/nightly-stack), so the lanes
     # run side by side and the first failed lane cancels the rest. The web call proof is one of them.
@@ -98,7 +138,7 @@ jobs:
     # The 60-cycle speed run needs the cut's published images and nothing from the proofs, so it starts when the release
     # publishes and runs beside them in a workflow of its own: it does not hold this cut's lock, and its finished run still wakes
     # auto-promote. Promote needs both this cut's record and the latency record.
-    needs: [plan, release]
+    needs: [plan, release, sfu-image]
     if: needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -110,7 +150,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
           RELEASE_ID: ${{ needs.release.outputs.release_id }}
-        run: gh workflow run nightly-latency.yml --repo "$GITHUB_REPOSITORY" --ref master -f sha="$TARGET_SHA" -f release_id="$RELEASE_ID" -f release_run_id="$GITHUB_RUN_ID"
+          SFU_IMAGE: ${{ needs.sfu-image.outputs.image }}
+        run: gh workflow run nightly-latency.yml --repo "$GITHUB_REPOSITORY" --ref master -f sha="$TARGET_SHA" -f release_id="$RELEASE_ID" -f release_run_id="$GITHUB_RUN_ID" -f sfu_image="$SFU_IMAGE"
   record:
     needs: [plan, release, proof, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'

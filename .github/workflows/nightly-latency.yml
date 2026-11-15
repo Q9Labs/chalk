@@ -27,6 +27,10 @@ on:
         description: Cut run that published the release manifest, set by the cut itself
         type: string
         default: ""
+      sfu_image:
+        description: Digest of the cut's Chalk SFU image, set by the cut itself; empty builds the Chalk SFU from the revision
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -72,6 +76,7 @@ jobs:
       release_sha: ${{ needs.target.outputs.sha }}
       release_id: ${{ inputs.release_id }}
       release_run_id: ${{ inputs.release_run_id }}
+      sfu_image: ${{ inputs.sfu_image }}
       proofs: latency
       image_source: ${{ inputs.release_id != '' && 'manifest' || 'build' }}
       latency_samples: ${{ inputs.samples || '60' }}
