@@ -60,8 +60,14 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
     with {:ok, deadline_policy} <- persisted_deadline_policy(candidate),
          true <- terminal_deadline_matches?(candidate, deadline_policy) do
       case first_deadline_generation(transaction, candidate) do
-        nil -> {:ok, deadline_policy}
-        generation -> find_initial_deadline(transaction, candidate, generation - 1)
+        :none ->
+          {:ok, deadline_policy}
+
+        {:ok, generation} when is_integer(generation) ->
+          find_initial_deadline(transaction, candidate, generation - 1)
+
+        {:ok, _malformed} ->
+          :not_usable
       end
     else
       _ -> :not_usable
@@ -73,8 +79,8 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
            candidate.tenant_id,
            candidate.episode_id
          ]).rows do
-      [[generation]] -> generation
-      [] -> nil
+      [[generation]] -> {:ok, generation}
+      [] -> :none
     end
   end
 

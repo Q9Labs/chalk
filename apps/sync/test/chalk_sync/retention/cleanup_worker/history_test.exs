@@ -158,6 +158,29 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
     assert checkpointed?(connection, fixture)
   end
 
+  test "holds, and does not abort the batch for, an Episode whose first deadline event has a malformed generation",
+       %{connections: connections} do
+    connection = hd(connections)
+    fixture = seed_extended_episode(connection)
+
+    Postgrex.query!(
+      connection,
+      "update sync_episode_control set initial_deadline_at_ms = null, initial_deadline_generation = null where tenant_id = $1 and episode_id = $2",
+      episode_ids(fixture)
+    )
+
+    Postgrex.query!(
+      connection,
+      "update sync_control_events set payload = jsonb_set(payload, '{deadline_generation}', '\"corrupted\"') where tenant_id = $1 and episode_id = $2 and event_name = 'deadline_changed'",
+      episode_ids(fixture)
+    )
+
+    assert {:ok, %Result{episodes: 0, held: [{_id, {:invalid_history, _reason}}]}} =
+             run_cleanup(connection)
+
+    refute checkpointed?(connection, fixture)
+  end
+
   for {label, recorded?} <- [{"with", true}, {"without", false}] do
     test "still rejects a changed event in an extended Episode #{label} a recorded first deadline",
          %{
