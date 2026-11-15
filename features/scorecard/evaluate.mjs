@@ -14,7 +14,9 @@ if (!/^[0-9a-f]{40}$/.test(revision ?? "") || !/^\d+$/.test(runId ?? "")) throw 
 const file = JSON.parse(execFileSync("git", ["show", `${revision}:perf/budgets.json`], { encoding: "utf8" }));
 const { budgets } = file;
 // A manual trial runs fewer cycles than the full run (LATENCY_SAMPLES) and is held to the same share of them.
-const sampleFloor = gatedSampleFloor(file, process.env.LATENCY_SAMPLES ? Number(process.env.LATENCY_SAMPLES) : undefined);
+// A cut from before gatedSamples existed has no such key, so its floor comes from the budgets file of the revision running this script.
+const sampleSource = file.gatedSamples ? file : JSON.parse(readFileSync("perf/budgets.json", "utf8"));
+const sampleFloor = gatedSampleFloor(sampleSource, process.env.LATENCY_SAMPLES ? Number(process.env.LATENCY_SAMPLES) : undefined);
 validateBudgetEntries(budgets);
 const metrics = new Set();
 const planes = new Set();
