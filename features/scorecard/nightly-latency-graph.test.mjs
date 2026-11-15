@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import test from "node:test";
+import { load } from "js-yaml";
+
+const root = resolve(import.meta.dirname, "../..");
+const workflow = (name) => load(readFileSync(resolve(root, ".github/workflows", name), "utf8"));
+const nightly = workflow("nightly.yml");
+const needsOf = (job) => [job.needs ?? []].flat();
+
+test("A cut starts Nightly latency when its release publishes, and the run measures the cut's own images and records its verdict for Promote", () => {
+  const latencyWorkflow = workflow("nightly-latency.yml");
+  assert.equal(latencyWorkflow.on.workflow_run, undefined, "a finished cut no longer starts it");
+  assert.deepEqual(Object.keys(latencyWorkflow.on.workflow_dispatch.inputs), ["samples", "sha", "release_id", "release_run_id"]);
+  const start = nightly.jobs["start-latency"];
+  assert.deepEqual(needsOf(start), ["plan", "release"], "it needs the published release, not the proofs");
+  assert.equal(start.permissions.actions, "write");
+  assert.match(start.steps[0].run, /gh workflow run nightly-latency\.yml .*-f sha="\$TARGET_SHA" -f release_id="\$RELEASE_ID" -f release_run_id="\$GITHUB_RUN_ID"/);
+  assert.ok(!needsOf(nightly.jobs.record).includes("start-latency"), "a cut is held on its proofs, not on its latency run");
+  const { target, latency, record } = latencyWorkflow.jobs;
+  assert.equal(latency.uses, "./.github/workflows/nightly-proofs.yml");
+  assert.deepEqual(needsOf(latency), ["target"]);
+  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
+  assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
+  assert.equal(latency.with.release_id, "${{ inputs.release_id }}");
+  assert.equal(latency.with.release_run_id, "${{ inputs.release_run_id }}");
+  assert.equal(latency.with.proofs, "latency");
+  assert.match(latency.with.image_source, /inputs\.release_id != '' && 'manifest' \|\| 'build'/, "a cut's run pulls its digests; a person's dispatch builds");
+  assert.equal(target.steps.at(-1).env.LATENCY_SHA, "${{ inputs.sha }}");
+  assert.match(target.steps.at(-1).run, /release\.py latency_target/);
+  assert.deepEqual(needsOf(record), ["target", "latency"]);
+  assert.equal(record.permissions.deployments, "write");
+  assert.equal(record.steps.at(-1).env.RELEASE_ID, "${{ inputs.release_id }}");
+  assert.match(record.steps.at(-1).run, /release\.py record_latency/);
+  const evaluate = record.steps.find((item) => item.id === "evaluate").run;
+  assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
+  assert.notEqual(latencyWorkflow.concurrency.group, nightly.concurrency.group, "a latency run does not hold up a cut");
+  const lane = workflow("nightly-proofs.yml").jobs.lane;
+  assert.equal(lane.env.IMAGE_SOURCE, "${{ inputs.image_source }}", "no lane builds the images the cut published");
+  const manifest = lane.steps.find((item) => item.name === "Download the release manifest");
+  assert.equal(manifest.with["run-id"], "${{ inputs.release_run_id || github.run_id }}");
+  const images = lane.steps.find((item) => item.id === "images").run;
+  assert.match(images, /\.release_id == \$id and \.source_revision == \$sha/);
+  assert.match(images, /@sha256:\[0-9a-f\]\{64\}/);
+});
