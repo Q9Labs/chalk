@@ -94,9 +94,6 @@ jobs:
     # The latency lane runs 60 cycles of about 45 seconds, plus the host and the build.
     timeout-minutes: ${{ matrix.proof == 'latency' && 80 || 45 }}
     # The environment supplies the evidence recipient; a proof here makes no deployment.
-    environment:
-      name: nightly
-      deployment: false
     strategy:
       fail-fast: true
       matrix:
@@ -143,7 +140,7 @@ jobs:
         run: pnpm exec e2e-web install chromium webkit --with-deps
       - name: Validate evidence recipient
         env:
-          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+          EVIDENCE_RECIPIENT: age1q7xknvz6pqe8gkw0awl33jjz6wwl8zhcxfld99lh5aepxf7u4g9qctgj2u
         run: |
           test -n "$EVIDENCE_RECIPIENT" || { echo "Missing required variable CHALK_PROOF_EVIDENCE_RECIPIENT" >&2; exit 1; }
           printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
@@ -332,7 +329,7 @@ jobs:
       - name: Encrypt private proof evidence
         if: always()
         env:
-          EVIDENCE_RECIPIENT: ${{ vars.CHALK_PROOF_EVIDENCE_RECIPIENT }}
+          EVIDENCE_RECIPIENT: age1q7xknvz6pqe8gkw0awl33jjz6wwl8zhcxfld99lh5aepxf7u4g9qctgj2u
         run: |
           directories=()
           for directory in prod-proof web-proof/e2e; do [ -d ".private/$directory" ] && directories+=("$directory"); done
