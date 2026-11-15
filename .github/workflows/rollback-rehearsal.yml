@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      actions: read # Planning downloads the manifests of cuts that are not promoted.
       contents: read
       deployments: read
     env:
