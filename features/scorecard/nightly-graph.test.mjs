@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import { load } from "js-yaml";
@@ -22,6 +22,23 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
     assert.doesNotMatch(JSON.stringify(job), /cf_sfu|warn-scorecard/, `${name} must not mention the Cloudflare plane`);
   }
   for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
+});
+
+// GitHub keeps one pending run per concurrency group, so a second user of the Nightly group cancels the pending cut for master.
+// Only Cut nightly may hold it, as a workflow or a job group, or through a release call that deploys to the nightly environment.
+test("only Cut nightly holds the Nightly environment lock", () => {
+  const holders = [];
+  for (const file of readdirSync(resolve(root, ".github/workflows")).filter((name) => /\.ya?ml$/.test(name))) {
+    const parsed = workflow(file);
+    const groups = [parsed.concurrency, ...Object.values(parsed.jobs ?? {}).map((job) => job.concurrency)].filter(Boolean);
+    if (groups.some((item) => JSON.stringify(item).includes("chalk-environment-nightly"))) holders.push(file);
+    for (const job of Object.values(parsed.jobs ?? {})) {
+      const call = job.with;
+      const deploys = call?.deploy_managed === true || call?.deploy_web === true;
+      if (job.uses === "./.github/workflows/ci.yml" && deploys && call.managed_environment === "nightly" && !call.orchestrated) holders.push(file);
+    }
+  }
+  assert.deepEqual([...new Set(holders)], ["nightly.yml"]);
 });
 
 // The cut builds once and proves the built images on throwaway stacks: the proof job holds the cut, nothing is deployed, and the
