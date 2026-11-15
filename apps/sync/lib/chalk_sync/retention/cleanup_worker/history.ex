@@ -4,6 +4,7 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Retention.DeadlineSQL
   alias ChalkSync.Retention.SQL
   alias ChalkSync.UUID
 
@@ -75,7 +76,7 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
   end
 
   defp first_deadline_generation(transaction, candidate) do
-    case Postgrex.query!(transaction, SQL.first_deadline_generation(), [
+    case Postgrex.query!(transaction, DeadlineSQL.first_deadline_generation(), [
            candidate.tenant_id,
            candidate.episode_id
          ]).rows do
