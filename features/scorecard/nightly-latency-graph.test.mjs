@@ -44,3 +44,11 @@ test("A cut starts Nightly latency when its release publishes, and the run measu
   assert.match(images, /\.release_id == \$id and \.source_revision == \$sha/);
   assert.match(images, /@sha256:\[0-9a-f\]\{64\}/);
 });
+
+test("Auto-promote starts when the cut or its latency run finishes, whichever is last", () => {
+  const trigger = workflow("auto-promote.yml").on.workflow_run;
+  assert.deepEqual([...trigger.workflows].sort(), ["Cut nightly", "Nightly latency"]);
+  assert.deepEqual(trigger.types, ["completed"]);
+  assert.equal(nightly.name, "Cut nightly");
+  assert.equal(workflow("nightly-latency.yml").name, "Nightly latency");
+});

@@ -33,6 +33,15 @@ class LatencyCoverTests(unittest.TestCase):
             self.changed.side_effect = lambda previous, target, prefixes: True
             self.assertIsNone(release.covering_latency(api, SHA))
 
+    def test_a_newer_passed_record_of_a_cut_that_was_never_held_does_not_hide_the_record_that_covers_the_held_cut(self):
+        records = [dict(id=2, payload=dict(channel='nightly-latency', target_sha='d' * 40, result='passed')),
+                   dict(id=1, payload=dict(channel='nightly-latency', target_sha='c' * 40, result='passed'))]
+        api = self.github(held())
+        api.deployments.side_effect = lambda environment, task='nightly-cut', limit=1, **kwargs: records[:limit]
+        self.changed.side_effect = lambda previous, target, prefixes: False
+        with patch.object(proof_cover, 'descends', side_effect=lambda sha, target: sha == 'c' * 40):
+            self.assertEqual(release.covering_latency(api, SHA)['target_sha'], 'c' * 40)
+
     def test_latency_target_is_the_newest_held_cut_that_no_latency_record_covers(self):
         for latency, expected in ((None, SHA), ('failed', SHA), ('passed', '')):
             with self.subTest(latency=latency):
@@ -93,6 +102,7 @@ class LatencyCoverTests(unittest.TestCase):
         github.request = Mock(return_value=records)
         self.assertEqual(github.deployments('nightly', 'nightly-latency')[0]['id'], 1)
         self.assertEqual(github.deployments('nightly', 'nightly-latency', passed_only=False)[0]['id'], 2)
+        self.assertEqual([item['id'] for item in github.deployments('nightly', 'nightly-latency', passed_only=False, limit=5)], [2, 1])
 
 
 class ArchiveOnlyBuildTests(unittest.TestCase):
