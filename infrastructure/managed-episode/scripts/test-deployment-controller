@@ -122,6 +122,7 @@ RENDER
 cat >"${fixture_root}/source/infrastructure/managed-episode/scripts/validate-runtime" <<'VALIDATE'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ -z "${FAKE_VALIDATION_FAIL:-}" ]] || { printf '%s\n' "$FAKE_VALIDATION_FAIL" >&2; exit 1; }
 [[ "$1" == --environment && "$2" == "${FAKE_VALIDATION_ENVIRONMENT:?}" ]] || exit 1
 VALIDATE
 chmod 0755 "${fixture_root}/source/infrastructure/managed-episode/scripts/"{render-runtime,validate-runtime}
@@ -849,6 +850,15 @@ for exclusions in '["api-env","api-env"]' '["api-env","nope"]' '["*"]' '["sync-e
   make_request invalid "${fixture_root}/request.json" "$exclusions"
   expect_failure "$controller" deploy --request "${fixture_root}/request.json" --manifest "$manifest" --source-root "${fixture_root}/source"
 done
+
+validation_state="${fixture_root}/validation-state"
+mkdir -p "$validation_state"
+make_request stable "${fixture_root}/validation-request.json"
+if FAKE_VALIDATION_FAIL="FAIL fake validation reason" run_controller "$validation_state" "${fixture_root}/validation-request.json" "$manifest" ok >/dev/null 2>"${fixture_root}/validation.log"; then
+  fail "a failed runtime validation must fail the deployment"
+fi
+grep -q "FAIL fake validation reason" "${fixture_root}/validation.log" || { cat "${fixture_root}/validation.log" >&2; fail "the validation reason must reach the command output"; }
+grep -q "candidate runtime validation failed" "${fixture_root}/validation.log" || fail "the deployment must name the failed step"
 
 wrong_region_state="${fixture_root}/wrong-region-state"
 mkdir -p "$wrong_region_state"
