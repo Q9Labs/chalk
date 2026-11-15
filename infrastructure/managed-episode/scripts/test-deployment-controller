@@ -1117,6 +1117,9 @@ for unit in chalk-api chalk-sync; do
   ! grep -Eq '^StartLimitBurst=' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with a start burst"
   grep -Fxq 'RestartSec=5s' "${fixture_root}/user-quadlet/${unit}.container" || fail "${unit} was installed with the old restart delay"
 done
+# Sync must not Require the API: an API start that times out during an outage would cancel Sync's start and strand it.
+! grep -Eq '^Requires=.*chalk-api\.service' "${fixture_root}/user-quadlet/chalk-sync.container" || fail "chalk-sync was installed requiring the API"
+grep -Fxq 'PartOf=chalk-api.service' "${fixture_root}/user-quadlet/chalk-sync.container" || fail "chalk-sync does not follow the API's stop and restart"
 reload_line="$(grep -nF 'systemctl --user daemon-reload' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
 first_start_line="$(grep -nE 'systemctl --user (start|restart) ' "${fixture_root}/commands.log" | head -n 1 | cut -d: -f1)"
 [[ -n "$reload_line" && "$reload_line" -lt "$first_start_line" ]] || fail "the user manager did not reload the units before the runtime started"

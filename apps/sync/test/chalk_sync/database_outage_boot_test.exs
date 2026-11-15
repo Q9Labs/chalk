@@ -21,11 +21,13 @@ defmodule ChalkSync.DatabaseOutageBootTest do
       Map.new(@settings, fn {key, _value} -> {key, Application.fetch_env(:chalk_sync, key)} end)
 
     serving_key = {Operations, :serving}
+    boot_key = {Operations, :boot_check_passed}
     upstream = upstream(ChalkSync.SyncPostgres.database_url!())
     proxy_port = free_port()
 
     :ok = Application.stop(:chalk_sync)
     :persistent_term.erase(serving_key)
+    :persistent_term.erase(boot_key)
 
     for {key, value} <- @settings do
       Application.put_env(:chalk_sync, key, value || proxied_url(upstream, proxy_port))
@@ -34,6 +36,7 @@ defmodule ChalkSync.DatabaseOutageBootTest do
     on_exit(fn ->
       Application.stop(:chalk_sync)
       :persistent_term.erase(serving_key)
+      :persistent_term.erase(boot_key)
 
       for {key, value} <- saved do
         case value do
@@ -66,6 +69,7 @@ defmodule ChalkSync.DatabaseOutageBootTest do
     assert Operations.serving?()
     assert Operations.accepting_connections?()
     assert Readiness.health().status == "ready"
+    assert witness_keepalives() == ["30", "10", "3"]
 
     # A second loss and recovery needs no restart either.
     Process.exit(proxy, :kill)
@@ -73,6 +77,29 @@ defmodule ChalkSync.DatabaseOutageBootTest do
     assert Process.whereis(ChalkSync.Supervisor)
     start_proxy(context.proxy_port, context.upstream)
     await(fn -> Readiness.ready?() end, 60_000)
+  end
+
+  test "a node whose boot checks have not passed takes no sockets, even with the witness written" do
+    Operations.begin_serving()
+    Operations.hold_for_boot_check()
+    refute Operations.serving?()
+    Operations.boot_check_passed()
+    assert Operations.serving?()
+  end
+
+  # The presence session is the child that holds the witness lock; a dead peer must be seen quickly.
+  defp witness_keepalives do
+    {_id, session, _type, _modules} =
+      ChalkSync.Supervisor
+      |> Supervisor.which_children()
+      |> Enum.find(fn {id, _pid, _type, _modules} ->
+        id == ChalkSync.Stateholder.Postgres.PresenceRuntime
+      end)
+
+    for name <- ["tcp_keepalives_idle", "tcp_keepalives_interval", "tcp_keepalives_count"] do
+      %{rows: [[value]]} = Postgrex.query!(session, "show #{name}", [])
+      String.trim_trailing(value, "s")
+    end
   end
 
   defp unready_with_reason(%{dependencies: %{reason: _reason}} = health), do: health

@@ -17,6 +17,8 @@ class MonitorDefinitions(unittest.TestCase):
         stale = monitors[2]["aplQuery"]
         for rule in ("sync-readiness", "database-unreachable", "runtime-health"):
             self.assertIn(f"'{rule}'", stale)
+        # A lost host writes no rows, so three minutes without one must turn the monitor red.
+        self.assertIn("_time > ago(3m)", stale)
         self.assertEqual(monitors[2]["operator"], "Above")
         self.assertTrue(monitors[2]["notifyByGroup"])
 

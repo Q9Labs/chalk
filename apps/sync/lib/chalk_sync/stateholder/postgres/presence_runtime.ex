@@ -14,7 +14,23 @@ defmodule ChalkSync.Stateholder.Postgres.PresenceRuntime do
     Postgrex.start_link(connection_options ++ [after_connect: &connected/1])
   end
 
+  # The witness lock lives as long as this session. Postgres frees it when it sees the peer die, and
+  # without probes a host that vanished (power loss, a network split) stays "connected" for the
+  # kernel default of about two hours. These probes make that 30 + 3 * 10 = 60 seconds.
+  @keepalive_settings [
+    {"tcp_keepalives_idle", 30},
+    {"tcp_keepalives_interval", 10},
+    {"tcp_keepalives_count", 3}
+  ]
+
   defp connected(connection) do
+    for {name, seconds} <- @keepalive_settings do
+      Postgrex.query!(connection, "select set_config($1, $2, false)", [
+        name,
+        Integer.to_string(seconds)
+      ])
+    end
+
     {:ok, :ok} =
       Postgrex.transaction(connection, fn transaction ->
         Postgrex.query!(

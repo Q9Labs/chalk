@@ -33,9 +33,9 @@
   },
   {
     "name": "Chalk production alert state is stale",
-    "description": "A named alert rule has written no row for five minutes, so that rule cannot alert until this is fixed. Each missing rule alerts on its own.",
+    "description": "A named alert rule has written no row for three minutes, so that rule cannot alert until this is fixed. A host that is lost or cut off writes no row at all, so this is also how a lost Sync host shows. Each missing rule alerts on its own.",
     "type": "Threshold",
-    "aplQuery": "print rule=dynamic(['recording', 'recording-stop', 'export', 'transcript', 'webhook', 'sync-readiness', 'database-unreachable', 'runtime-health']) | mv-expand rule to typeof(string) | join kind=leftouter (['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' and _time > ago(5m) | summarize seen=count() by rule=chalk_alert_rule) on rule | extend value=iff(isnull(seen) or seen == 0, 1, 0), alert_message=strcat('\\n\\n', rule, '\\nChalk production alert state is stale for ', rule, '\\nNo ', rule, ' row arrived in five minutes, so this rule cannot alert. Other rules may be fine.\\nAn engineer must check systemctl status chalk-alert-state.timer chalk-alert-state.service on the host now.\\n') | project alert_message, value",
+    "aplQuery": "print rule=dynamic(['recording', 'recording-stop', 'export', 'transcript', 'webhook', 'sync-readiness', 'database-unreachable', 'runtime-health']) | mv-expand rule to typeof(string) | join kind=leftouter (['${LOG_DATASET}'] | where chalk_alert_stream == 'production-state-v2' and _time > ago(3m) | summarize seen=count() by rule=chalk_alert_rule) on rule | extend value=iff(isnull(seen) or seen == 0, 1, 0), alert_message=strcat('\\n\\n', rule, '\\nChalk production alert state is stale for ', rule, '\\nNo ', rule, ' row arrived in three minutes, so this rule cannot alert. Other rules may be fine.\\nAn engineer must check systemctl status chalk-alert-state.timer chalk-alert-state.service on the host now.\\n') | project alert_message, value",
     "columnName": "value",
     "operator": "Above",
     "threshold": 0,
