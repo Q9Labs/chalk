@@ -1005,6 +1005,36 @@ FAKE_EMPTY_SUFFIX=api.env run_controller "$empty_state" "${fixture_root}/empty-r
 jq -e '.inputs[] | select(.id == "api-env" and .missing == true and .version == 1)' "${empty_state}/active-release.json" >/dev/null || fail "excluded empty input was not recorded as missing"
 [[ ! -e "${fixture_root}/run/env/api.env" ]] || fail "excluded empty input was published to /run"
 
+# A stored tunnel token must not start a connector on a host that excludes it: the input is not written, the connector is not installed or stopped, and a reboot restore keeps that.
+tunnel_state="${fixture_root}/tunnel-state"
+mkdir -p "$tunnel_state"
+make_request tunnel "${fixture_root}/tunnel-request.json" '["cloudflare-tunnel-token"]'
+make_manifest tunnel >"${fixture_root}/tunnel-manifest.json"
+: >"${fixture_root}/commands.log"
+run_controller "$tunnel_state" "${fixture_root}/tunnel-request.json" "${fixture_root}/tunnel-manifest.json" ok >/dev/null
+jq -e '.inputs[] | select(.id == "cloudflare-tunnel-token" and .missing == true and .version == 1)' "${tunnel_state}/active-release.json" >/dev/null || fail "excluded stored tunnel token was not recorded as unused"
+! grep -Eq 'podman secret create .*chalk-cloudflare-tunnel-token' "${fixture_root}/commands.log" || fail "excluded stored tunnel token reached a Podman secret"
+[[ ! -e "${fixture_root}/user-quadlet/chalk-cloudflared.container" ]] || fail "the tunnel connector was installed on a host that excludes its token"
+! grep -Fq 'chalk-cloudflared' "${fixture_root}/user-systemd/chalk-runtime.target" || fail "the runtime target still requires the tunnel connector"
+! grep -Fq 'chalk-cloudflared' "${fixture_root}/commands.log" || fail "the tunnel connector was stopped or started on a host without one"
+: >"${fixture_root}/commands.log"
+printf '0' >"${fixture_root}/health-index"
+run_restore "$tunnel_state" ok >/dev/null
+[[ ! -e "${fixture_root}/user-quadlet/chalk-cloudflared.container" ]] || fail "reboot restore brought the tunnel connector back"
+! grep -Eq 'podman secret create .*chalk-cloudflare-tunnel-token' "${fixture_root}/commands.log" || fail "reboot restore registered the excluded tunnel token"
+
+# The real health check expects the tunnel only where the connector is installed.
+health_home="${fixture_root}/health-home"
+mkdir -p "${health_home}/.config/containers/systemd" "${fixture_root}/health-bin"
+printf '#!/usr/bin/env bash\nexit 1\n' >"${fixture_root}/health-bin/systemctl"
+cp "${fixture_root}/health-bin/systemctl" "${fixture_root}/health-bin/curl"
+chmod 0755 "${fixture_root}/health-bin/systemctl" "${fixture_root}/health-bin/curl"
+HOME="$health_home" PATH="${fixture_root}/health-bin:${PATH}" bash "${managed_root}/scripts/chalk-runtime-health" >/dev/null 2>"${fixture_root}/health-without.log" || true
+! grep -Eq 'tunnel|chalk-cloudflared' "${fixture_root}/health-without.log" || fail "the health check expected a tunnel on a host without a connector"
+: >"${health_home}/.config/containers/systemd/chalk-cloudflared.container"
+HOME="$health_home" PATH="${fixture_root}/health-bin:${PATH}" bash "${managed_root}/scripts/chalk-runtime-health" >/dev/null 2>"${fixture_root}/health-with.log" || true
+grep -Fq 'tunnel' "${fixture_root}/health-with.log" && grep -Fq 'unit:chalk-cloudflared.service' "${fixture_root}/health-with.log" || fail "the health check skipped the tunnel on a host with a connector"
+
 unsafe_release_state="${fixture_root}/unsafe-release-state"
 mkdir -p "$unsafe_release_state"
 make_request 'unsafe/release' "${fixture_root}/unsafe-release-request.json"

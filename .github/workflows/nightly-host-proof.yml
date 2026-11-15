@@ -1,0 +1,120 @@
+name: Nightly host proof
+
+# The host side of a release, proved on a host this run creates and ends: an Ubuntu arm64 t4g.small with the production host's
+# bootstrap, the release delivered through the real SSM document and host controller, the runtime restored after a reboot
+# (scripts/nightly-host-proof/run). It proves what the in-runner stack cannot: command delivery, rootless Podman and Quadlet on the
+# real image, the store read, the controller, and the reboot restore.
+#
+# It runs for the newest held cut when no passed record covers it: a record covers a cut whose SHA descends from the proved one with
+# no host path changed since (release.py host_paths: the controller, the host bootstrap, command delivery, the recorder plane).
+# Promote refuses a cut with changed host paths and no covering record (host_proof_result=host-proof-missing). A weekly run proves
+# the newest held cut whatever changed, so a fault in the host image or the AWS side that no diff shows surfaces within a week.
+# Cost: one on-demand t4g.small for about 10 minutes, under 0.01 USD, and about 15 free runner minutes.
+on:
+  workflow_run:
+    workflows: [Cut nightly]
+    types: [completed]
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: chalk-nightly-host-proof-run
+  cancel-in-progress: false
+
+jobs:
+  target:
+    name: Find the cut to prove
+    runs-on: ubuntu-24.04
+    env:
+      CHALK_RELEASE_SEAL_KEY: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+      release_id: ${{ steps.target.outputs.release_id }}
+      run_id: ${{ steps.target.outputs.run_id }}
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # The weekly run and a manual dispatch prove the newest held cut whatever covers it.
+          HOST_PROOF_FORCE: ${{ github.event_name != 'workflow_run' }}
+        run: python3 scripts/releases/release.py host_proof_target
+  host:
+    name: Prove the host
+    needs: target
+    if: needs.target.outputs.sha != ''
+    runs-on: ubuntu-24.04
+    # The environment accepts master only, and only it can assume the AWS role: a pull request never reaches AWS.
+    environment:
+      name: nightly-host-proof
+      deployment: false
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.target.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Download the cut's release manifest
+        uses: ./.github/actions/download-sealed
+        with:
+          key: ${{ secrets.CHALK_RELEASE_SEAL_KEY }}
+          name: release-manifest-${{ needs.target.outputs.release_id }}
+          path: ${{ runner.temp }}/manifest
+          run-id: ${{ needs.target.outputs.run_id }}
+          merge-multiple: true
+      - name: Configure the host-proof role
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.CHALK_HOST_PROOF_ROLE_ARN }}
+          aws-region: ap-southeast-1
+          role-duration-seconds: 3600
+      - name: Prove the host
+        env:
+          AMI: ${{ secrets.CHALK_HOST_PROOF_AMI }}
+          SUBNET: ${{ secrets.CHALK_HOST_PROOF_SUBNET }}
+          SECURITY_GROUP: ${{ secrets.CHALK_HOST_PROOF_SECURITY_GROUP }}
+          RELEASE_ID: ${{ needs.target.outputs.release_id }}
+        run: |
+          scripts/nightly-host-proof/run --manifest "$RUNNER_TEMP/manifest/$RELEASE_ID.json" --run-id "$GITHUB_RUN_ID" \
+            --ami "$AMI" --subnet "$SUBNET" --security-group "$SECURITY_GROUP" --summary "$GITHUB_STEP_SUMMARY"
+  record:
+    # A failed proof matters as much as a passed one, so this job records whichever happened.
+    needs: [target, host]
+    if: always() && needs.target.outputs.sha != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Record the verdict for Promote
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.target.outputs.sha }}
+          HOST_PROOF_RESULT: ${{ needs.host.result == 'success' && 'passed' || 'failed' }}
+          # The database the proof ran against: the Nightly database until a throwaway managed one exists.
+          HOST_PROOF_DATABASE: shared-nightly
+        run: python3 scripts/releases/release.py record_host_proof

@@ -3,7 +3,7 @@
 #
 #   AWS_PROFILE=<admin profile> create-role --ami <ami id> --subnet <subnet id> --security-group <sg id> [--region ap-southeast-1]
 #
-# The role can start and stop only hosts tagged chalk-purpose=nightly-host-proof and can deploy to them through the Nightly
+# The role can start and stop only hosts tagged chalk-purpose=nightly-host-proof and can deploy to them through their own
 # SSM document. Only the `nightly-host-proof` GitHub environment may assume it, and that environment accepts master only,
 # so a pull request can never reach AWS. Prints the role ARN; store it as a secret of that environment.
 set -euo pipefail
@@ -42,6 +42,12 @@ if aws iam get-role --role-name "$role" > /dev/null 2>&1; then
 else
   aws iam create-role --role-name "$role" --assume-role-policy-document "$trust" --max-session-duration 3600 \
     --description "Nightly host proof: starts and stops tagged throwaway hosts" > /dev/null
+fi
+# The role may update this document but not create one, so it exists first. The proof publishes the cut's version.
+document=chalk-nightly-host-proof-release
+if ! aws ssm get-document --region "$region" --name "$document" > /dev/null 2>&1; then
+  aws ssm create-document --region "$region" --name "$document" --document-type Command --document-format JSON \
+    --content "file://$here/../../managed-episode/ssm/chalk-managed-episode-deploy.json" > /dev/null
 fi
 aws iam put-role-policy --role-name "$role" --policy-name chalk-nightly-host-proof --policy-document "$policy"
 aws iam get-role --role-name "$role" --query Role.Arn --output text

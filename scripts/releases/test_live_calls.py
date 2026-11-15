@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import live_calls
 import release
+import proof_cover
 from github_release import GitHub, payload
 from test_release import OTHER_SHA, SHA, held
 
@@ -121,15 +122,17 @@ class AutoPromoteWindowTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'previous_production', return_value=dict(target_sha=OTHER_SHA)))
         self.enterContext(patch.object(release, 'ancestor'))
         # The fixtures' SHAs are not in this checkout: a latency record covers its own SHA, and a path changed whenever two SHAs differ.
-        self.enterContext(patch.object(release, 'descends', side_effect=lambda sha, target: sha == target))
-        self.enterContext(patch.object(release, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
+        self.enterContext(patch.object(proof_cover, 'descends', side_effect=lambda sha, target: sha == target))
+        self.enterContext(patch.object(proof_cover, 'paths_changed', side_effect=lambda previous, target, prefixes: previous != target))
 
     def github(self):
         item = held()
         api = Mock(spec=GitHub)
         latency = [dict(id=9, payload=dict(channel='nightly-latency', target_sha=SHA, result='passed', scorecard_result='passed',
                                            scorecard_gated_metrics=[], scorecard_missing_items=[]))]
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: latency if task == 'nightly-latency' else [item]
+        host = [dict(id=8, payload=dict(channel='nightly-host-proof', target_sha=SHA, result='passed'))]
+        records = {'nightly-latency': latency, 'nightly-host-proof': host}
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: records.get(task, [item])
         api.request.side_effect = lambda route: [dict(state=item['latest_status'])] if '/statuses?' in route else item
         return api
 

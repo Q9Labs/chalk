@@ -44,16 +44,16 @@
       "Condition": { "StringEquals": { "ssm:resourceTag/chalk-purpose": "nightly-host-proof" } }
     },
     {
-      "Sid": "RunTheDeployAndShellDocuments",
+      "Sid": "RunTheProofAndShellDocuments",
       "Effect": "Allow",
       "Action": "ssm:SendCommand",
-      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release", "arn:aws:ssm:__REGION__::document/AWS-RunShellScript"]
+      "Resource": ["arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-host-proof-release", "arn:aws:ssm:__REGION__::document/AWS-RunShellScript"]
     },
     {
-      "Sid": "ReadTheDeployDocument",
+      "Sid": "PublishTheProofDocument",
       "Effect": "Allow",
-      "Action": ["ssm:ListDocumentVersions", "ssm:GetDocument", "ssm:DescribeDocument"],
-      "Resource": "arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-managed-episode-release"
+      "Action": ["ssm:ListDocumentVersions", "ssm:GetDocument", "ssm:DescribeDocument", "ssm:UpdateDocument"],
+      "Resource": "arn:aws:ssm:__REGION__:__ACCOUNT__:document/chalk-nightly-host-proof-release"
     },
     {
       "Sid": "RebootOnlyTaggedHosts",
