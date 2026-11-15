@@ -17,7 +17,7 @@ const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: 
 const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-09T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
 const metric = (id, value, n = 60) => ({ id, unit: "ms", n, p50: value, p95: value, source: "latency-kit" });
 const card = (mediaPlane, metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane, metrics, dropped: [] });
-const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, ...env } });
+const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, SCORECARD_HISTORY_REF: "origin/no-history", ...env } });
 
 test("only the Cloudflare plane carries the Iowa and Singapore note", () => {
   assert.equal(planeNoteMarkdown(chalkSfu), "");

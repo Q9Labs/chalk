@@ -22,7 +22,7 @@ FIXTURES = Path(__file__).parent / 'fixtures'
 # with fixed authorship and dates so its SHA never changes. The evaluator reads budgets with `git show <sha>:perf/budgets.json`,
 # so the tests build that commit themselves instead of needing an old commit in the checkout's history, which a shallow clone lacks.
 SHA = '737897ad7361c859b1bc865d26399dd045c4fb9a'
-EVALUATE = str(Path(__file__).resolve().parents[2] / 'features/scorecard/evaluate.mjs')
+EVALUATE = str(Path(__file__).resolve().parents[2] / 'features/scorecard/evaluate.mjs'); os.environ['SCORECARD_HISTORY_REF'] = 'origin/no-history'  # the regression rule must not read the real history
 SCORED = None
 
 

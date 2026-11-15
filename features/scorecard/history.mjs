@@ -10,13 +10,15 @@ const BASELINE_RUNS = 7;
 const TREND_RUNS = 14;
 const key = (card) => `${card.run.id}/${card.mediaPlane}`;
 
-export function readHistory(directory) {
-  const file = join(directory, "history.jsonl");
-  if (!existsSync(file)) return [];
-  return readFileSync(file, "utf8")
+export const parseHistory = (text) =>
+  text
     .split("\n")
     .filter(Boolean)
     .map((line) => JSON.parse(line));
+
+export function readHistory(directory) {
+  const file = join(directory, "history.jsonl");
+  return existsSync(file) ? parseHistory(readFileSync(file, "utf8")) : [];
 }
 
 /** appendCards adds the cards that history lacks, one line each, and returns how many it added. */
