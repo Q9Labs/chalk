@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -154,9 +155,23 @@ def deploy(target, sha, run, member, project):
                     '--api-base-url', config['VITE_API_URL'], '--environment', target], check=True)
 
 
+def rehearse_rollback(target, sha, run, member, project):
+    """Proves the Pages rollback on the nightly project, which nobody serves: upload the archive to the production branch, then restore
+    the deployment that was live before it, as a failed hotfix does. It does not run verify-web-deploy, which needs the API of a live host."""
+    require(target == 'nightly', 'the Pages rollback rehearsal never touches production')
+    saved = current(project)
+    upload(target, sha, run, member, project, PRODUCTION_BRANCH)
+    for attempt in range(12):
+        if current(project) != saved:
+            break
+        time.sleep(5)
+    require(current(project) != saved, 'the upload did not become the live Pages deployment')
+    rollback(project, saved, target)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('build', 'stage', 'deploy', 'current', 'previous', 'rollback'))
+    parser.add_argument('command', choices=('build', 'stage', 'deploy', 'rehearse', 'current', 'previous', 'rollback'))
     parser.add_argument('--target', choices=('nightly', 'production'))
     parser.add_argument('--sha')
     parser.add_argument('--output', type=Path, default=Path('web-output'))
@@ -172,5 +187,5 @@ if __name__ == '__main__':
     elif args.command == 'rollback':
         rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'], args.target)
     else:
-        (stage if args.command == 'stage' else deploy)(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']),
-                                                       os.environ['PAGES_PROJECT'])
+        upload_command = dict(stage=stage, deploy=deploy, rehearse=rehearse_rollback)[args.command]
+        upload_command(args.target, args.sha, os.environ['ARTIFACT_RUN_ID'], json.loads(os.environ['WEB_ARTIFACT']), os.environ['PAGES_PROJECT'])

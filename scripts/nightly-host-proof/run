@@ -3,11 +3,13 @@
 # cut's release to it through the real SSM document and host controller, checks the runtime comes back after a reboot, and
 # ends the host. Nothing here is shared with a running Nightly host except the runtime inputs it reads from the store.
 #
-#   run --manifest <release.json> --run-id <id> --ami <id> --subnet <id> --security-group <id> [--rollback-manifest <older.json>]
-#       [--region ap-southeast-1] [--summary <file>]
+#   run --manifest <release.json> --run-id <id> --ami <id> --subnet <id> --security-group <id> [--then <newer.json>]
+#       [--rollback-manifest <older.json>] [--region ap-southeast-1] [--summary <file>]
 #
-# With --rollback-manifest the host then takes the older release, as a rollback does: the older release's controller must read the
-# pointer the newer one wrote (the failure of the 23 Oct rollback). The host is thrown away, so there is no roll-forward leg.
+# --then delivers a second release over the first, as a hotfix does. With --rollback-manifest the host finally takes the older
+# release again, as a rollback does: the release is a fresh envelope of the older source with a new release id (a host refuses an
+# id it already holds), and the older release's controller must read the pointer the newer one wrote (the failure of the 23 Oct
+# rollback). The host is thrown away, so there is no roll-forward leg.
 #
 # AWS credentials come from the environment (the workflow assumes the host-proof role; infrastructure/nightly/host-proof).
 # The deploy skips the environment's recorder dispatcher binding and the Cloudflare tunnel: both belong to the environment's own
@@ -16,7 +18,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-region=ap-southeast-1 summary=/dev/stdout manifest="" rollback_manifest="" run_id="" ami="" subnet="" security_group=""
+region=ap-southeast-1 summary=/dev/stdout manifest="" then_manifest="" rollback_manifest="" run_id="" ami="" subnet="" security_group=""
 environment=nightly
 prefix=/chalk/nightly/managed-episode
 document=chalk-nightly-host-proof-release
@@ -25,6 +27,7 @@ instance_profile=chalk-nightly-host
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --manifest) manifest=$2 ;;
+    --then) then_manifest=$2 ;;
     --rollback-manifest) rollback_manifest=$2 ;;
     --run-id) run_id=$2 ;;
     --ami) ami=$2 ;;
@@ -121,8 +124,14 @@ deliver() {
 }
 
 deliver "$manifest" deploy
+if [ -n "$then_manifest" ]; then
+  deliver "$then_manifest" hotfix
+fi
 if [ -n "$rollback_manifest" ]; then
-  deliver "$rollback_manifest" rollback
+  fresh="${RUNNER_TEMP:-/tmp}/host-proof-rollback-manifest.json"
+  python3 -c 'import pathlib, sys; sys.path.insert(0, sys.argv[1]); import release; release.fresh_envelope(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]))' \
+    "$root/scripts/releases" "$rollback_manifest" "$fresh"
+  deliver "$fresh" rollback
 fi
 
 # The runtime must come back from a reboot by itself: the restore unit pulls the active release and starts it.

@@ -688,6 +688,46 @@
       "sample": "Dispatched for an incident; no run recorded yet."
     },
     {
+      "id": "workflow:hotfix-rehearsal.yml#plan",
+      "owner": "Release",
+      "catches": "A rehearsal for a commit that is not on master, has no green push Gate, or does not contain the newest held cut.",
+      "runs": ["manual"],
+      "blocks": "alert",
+      "minutes": 1,
+      "record": "unmeasured",
+      "sample": "New on 15 November; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix-rehearsal.yml#release",
+      "owner": "Release",
+      "catches": "A hotfix release that fails to build on the newest held cut.",
+      "runs": ["manual"],
+      "blocks": "alert",
+      "minutes": 25,
+      "record": "unmeasured",
+      "sample": "New on 15 November; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix-rehearsal.yml#rehearse",
+      "owner": "Release",
+      "catches": "A hotfix that its host takes badly, or a rollback to the cut that fails, such as an older controller that cannot read a newer pointer.",
+      "runs": ["manual"],
+      "blocks": "alert",
+      "minutes": 20,
+      "record": "unmeasured",
+      "sample": "New on 15 November; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix-rehearsal.yml#pages",
+      "owner": "Release",
+      "catches": "A Pages rollback that does not restore the saved deployment, or a hotfix web archive that cannot reach the nightly Pages project.",
+      "runs": ["manual"],
+      "blocks": "alert",
+      "minutes": 3,
+      "record": "unmeasured",
+      "sample": "New on 15 November; no run recorded yet."
+    },
+    {
       "id": "workflow:rollback-rehearsal.yml#plan",
       "owner": "Release",
       "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",

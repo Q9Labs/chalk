@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -47,9 +48,9 @@ class RequireGate(Files):
 
 
 class Plan(Files):
-    def run_plan(self, sha=SHA, environment='production', force='false', ref='refs/heads/master', on_master=True, green=True, baseline=BASELINE, ancestry=True):
+    def run_plan(self, sha=SHA, environment='production', ref='refs/heads/master', on_master=True, green=True, baseline=BASELINE, ancestry=True):
         github = Mock(**{'is_on_master.return_value': on_master, 'has_green_gate.return_value': green})
-        variables = dict(HOTFIX_SHA=sha, HOTFIX_ENVIRONMENT=environment, FORCE_SMOKE_FAILURE=force, GITHUB_REF=ref)
+        variables = dict(HOTFIX_SHA=sha, HOTFIX_ENVIRONMENT=environment, GITHUB_REF=ref)
         failure = None if ancestry else subprocess.CalledProcessError(1, 'git')
         with patch.dict(os.environ, variables), patch.object(hotfix, 'baseline_for', return_value=baseline), \
                 patch.object(hotfix, 'ancestor', side_effect=failure):
@@ -64,7 +65,6 @@ class Plan(Files):
         cases = (
             (dict(sha='abc'), 'full lowercase'),
             (dict(ref='refs/heads/fix'), 'from master'),
-            (dict(force='true'), 'only on nightly'),
             (dict(on_master=False), 'not on master'),
             (dict(green=False), 'no successful push Gate'),
             (dict(baseline={**BASELINE, 'target_sha': SHA}), 'already runs'),
@@ -74,8 +74,8 @@ class Plan(Files):
             with self.subTest(message), self.assertRaisesRegex(ValueError, message):
                 self.run_plan(**changes)
 
-    def test_a_forced_smoke_failure_is_allowed_on_nightly(self):
-        self.run_plan(environment='nightly', force='true')
+    def test_the_rehearsal_plans_on_nightly(self):
+        self.run_plan(environment='nightly')
 
 
 class Verdict(Files):
@@ -109,6 +109,66 @@ class Verdict(Files):
         self.assertIsNotNone(self.judge(RELEASE_RESULT='failure', SMOKE_RESULT='skipped', SMOKE_OUTCOME='', APPLIED_RELEASE=''))
         self.assertIn('HOTFIX NOT DEPLOYED', self.summary.read_text())
 
+
+
+def workflow_job(workflow, name):
+    text = (release.ROOT / '.github/workflows' / workflow).read_text()
+    start = text.index(f'\n  {name}:\n')
+    following = re.search(r'\n  [A-Za-z0-9_-]+:\n', text[start + 1:])
+    return text[start:start + 1 + following.start() if following else len(text)]
+
+
+class HotfixGraph(unittest.TestCase):
+    """The job graph of Hotfix: what runs, in what order, and what sends the previous release back. The verdict tests above judge the
+    results; these fail when an edit to the workflow breaks the wiring the verdict relies on."""
+
+    def test_the_hotfix_deploys_the_release_and_the_web_to_production(self):
+        block = workflow_job('hotfix.yml', 'release')
+        for line in ('needs: [plan, retain]', 'uses: ./.github/workflows/ci.yml', 'release_managed: true', 'deploy_managed: true', 'deploy_web: true',
+                     'managed_environment: production'):
+            self.assertIn(line, block, line)
+
+    def test_the_real_call_smoke_runs_after_the_release(self):
+        block = workflow_job('hotfix.yml', 'smoke')
+        for line in ('needs: [plan, release]', 'uses: ./.github/workflows/real-call-proof.yml', 'environment: production'):
+            self.assertIn(line, block, line)
+
+    def test_the_rollback_runs_when_the_release_or_the_smoke_did_not_pass(self):
+        block = workflow_job('hotfix.yml', 'rollback')
+        for line in ('needs: [plan, retain, release, smoke]', "needs.retain.result == 'success'", "needs.release.outputs.applied_release_id != ''",
+                     "needs.release.result != 'success'", "needs.smoke.result != 'success'", "needs.smoke.outputs.result != 'passed'"):
+            self.assertIn(line, block, line)
+
+    def test_the_rollback_returns_the_baseline_and_the_saved_pages_deployment(self):
+        block = workflow_job('hotfix.yml', 'rollback')
+        for line in ('release_managed: false', 'deploy_managed: true', 'deploy_web: true', 'managed_environment: production',
+                     'target_sha: ${{ fromJSON(needs.plan.outputs.baseline).target_sha }}',
+                     'reuse_release_id: ${{ fromJSON(needs.plan.outputs.baseline).release_id }}',
+                     'pages_rollback_id: ${{ needs.retain.outputs.pages_deployment_id }}'):
+            self.assertIn(line, block, line)
+
+    def test_the_verdict_job_always_runs_after_every_other_job(self):
+        block = workflow_job('hotfix.yml', 'result')
+        self.assertIn('needs: [plan, retain, release, smoke, rollback]', block)
+        self.assertIn('if: always()', block)
+        self.assertIn('python3 scripts/releases/hotfix.py verdict', block)
+
+    def test_the_retain_job_saves_the_live_pages_deployment_before_the_release(self):
+        self.assertIn('python3 scripts/releases/web.py current', workflow_job('hotfix.yml', 'retain'))
+        self.assertIn('needs: [plan, retain]', workflow_job('hotfix.yml', 'release'))
+
+
+class RehearsalGraph(unittest.TestCase):
+    def test_the_host_and_pages_legs_wait_for_the_release_and_never_deploy_it(self):
+        release_block = workflow_job('hotfix-rehearsal.yml', 'release')
+        for line in ('uses: ./.github/workflows/ci.yml', 'managed_environment: nightly', 'deploy_managed: false', 'publish_runtime_only: true', 'build_web: true'):
+            self.assertIn(line, release_block, line)
+        self.assertNotIn('deploy_web', release_block)
+        self.assertIn('needs: [plan, release]', workflow_job('hotfix-rehearsal.yml', 'rehearse'))
+        pages = workflow_job('hotfix-rehearsal.yml', 'pages')
+        self.assertIn('needs: [plan, release]', pages)
+        self.assertIn('name: nightly\n', pages)
+        self.assertIn('web.py rehearse --target nightly', pages)
 
 class Rehearsal(Files):
     def cut(self, release_id, proof='passed'):

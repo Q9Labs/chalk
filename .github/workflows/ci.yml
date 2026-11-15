@@ -95,6 +95,11 @@ on:
         required: false
         default: false
         type: boolean
+      publish_runtime_only:
+        description: Publish a runtime-only manifest for a change that builds no application image, without deploying it (the hotfix rehearsal delivers it to its own host)
+        required: false
+        default: false
+        type: boolean
       enable_recorder_control:
         required: false
         default: false
@@ -268,6 +273,7 @@ jobs:
         id: plan
         env:
           DEPLOY_MANAGED: ${{ inputs.deploy_managed }}
+          PUBLISH_RUNTIME_ONLY: ${{ inputs.publish_runtime_only }}
           PLAN_ROOT: ${{ runner.temp }}/managed-release-plan
           ENABLE_RECORDER_CONTROL: ${{ inputs.enable_recorder_control }}
           ENFORCE_ENTRY_OWNERSHIP: ${{ inputs.enforce_entry_ownership }}
@@ -319,7 +325,7 @@ jobs:
             echo "runtime-only classification must not request application images" >&2
             exit 1
           fi
-          if [[ "$classification" == none && ( "$DEPLOY_MANAGED" == "true" || "${ENFORCE_ENTRY_OWNERSHIP:-false}" == true ) ]]; then
+          if [[ "$classification" == none && ( "$DEPLOY_MANAGED" == "true" || "$PUBLISH_RUNTIME_ONLY" == "true" || "${ENFORCE_ENTRY_OWNERSHIP:-false}" == true ) ]]; then
             should_publish=true
           else
             should_publish="$(jq -r 'if (.build_set | length) > 0 then "true" else "false" end' "$PLAN_ROOT/plan.json")"
