@@ -53,3 +53,12 @@ test("only the call-artifacts proof leaves the production group that every other
   const legs = JSON.parse(promote.jobs.proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
   assert.deepEqual(legs.filter((leg) => leg.proofs === "call-artifacts").length, 1);
 });
+
+test("a production Chalk SFU run that spans both proof Spaces is refused, so no run overlaps Promote's other leg", () => {
+  const steps = Object.values(proofWorkflow.jobs).flatMap((job) => job.steps ?? []);
+  const guard = steps.find((step) => step.name === "Refuse a production run that spans both proof Spaces");
+  assert.match(guard.if, /inputs\.environment == 'production' && inputs\.media_plane == 'chalk_sfu' && contains\(inputs\.proofs, 'call-artifacts'\) && \(inputs\.proofs != 'call-artifacts' \|\| inputs\.latency\)/);
+  assert.match(guard.run, /exit 1/);
+  const calls = Object.values(promote.jobs).filter((job) => job.uses === "./.github/workflows/real-call-proof.yml" && job.with.environment === "production");
+  for (const job of calls) assert.ok(job.with.proofs.includes("matrix.proofs") || !job.with.proofs.includes("call-artifacts"), "Promote reaches call-artifacts only through its own leg");
+});

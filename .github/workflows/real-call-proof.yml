@@ -153,7 +153,7 @@ concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
   # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
   # In production the call-artifacts proof alone uses the automatic Recording Space, so it has its own group and runs beside the proofs that use the manual Space.
-  # Every other production run, web-call-proof.yml included, shares one group. A manual run that mixes call-artifacts with other proofs holds only that group.
+  # Every other production run, web-call-proof.yml included, shares one group. A production run that mixes call-artifacts with other proofs, or adds latency to it, is refused below.
   group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}{1}', inputs.environment || 'production', inputs.proofs == 'call-artifacts' && '-recording' || '') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
@@ -194,6 +194,12 @@ jobs:
             echo "Latency-only mode requires nightly, chalk_sfu or cf_sfu, and latency=true." >&2
             exit 1
           }
+      - name: Refuse a production run that spans both proof Spaces
+        # call-artifacts alone has its own concurrency group; a run that also uses the manual Space would overlap Promote's other leg.
+        if: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' && contains(inputs.proofs, 'call-artifacts') && (inputs.proofs != 'call-artifacts' || inputs.latency) }}
+        run: |
+          echo "A production Chalk SFU run of call-artifacts must run alone and without latency, so it cannot overlap Promote on the other proof Space." >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.release_sha || github.sha }}
