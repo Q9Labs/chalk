@@ -176,19 +176,19 @@ jobs:
       promotion_audit: ${{ toJSON(fromJSON(needs.select.outputs.selection).scorecard_override) }}
     secrets: inherit
   proof:
-    # Two lanes run at once, each on its own proof Space (manual and automatic Recording), so they never share an Episode.
+    # Two legs run at once, each on its own proof Space (manual and automatic Recording), so they never share an Episode. Real-call proof gives the
+    # call-artifacts leg its own concurrency group, so a manual proof of the same Space waits for it.
     # The first leg to fail cancels the other, and a cancelled leg still removes its proof keys and Episodes. A matrix call exposes
     # no reliable output of its own: the job result is success only when every leg passed, and Promote reads that.
     permissions:
       contents: read
     needs: [select, release]
     strategy:
-      matrix: ${{ fromJSON(inputs.capture_proofs && '{"include":[{"lane":"calls","proofs":"leave-chalk-sfu camera-share chat-upload"},{"lane":"recording","proofs":"call-artifacts"}]}' || '{"include":[{"lane":"calls","proofs":"leave-chalk-sfu camera-share chat-upload"}]}') }}
+      matrix: ${{ fromJSON(inputs.capture_proofs && '{"include":[{"proofs":"leave-chalk-sfu camera-share chat-upload"},{"proofs":"call-artifacts"}]}' || '{"include":[{"proofs":"leave-chalk-sfu camera-share chat-upload"}]}') }}
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
       proofs: ${{ matrix.proofs }}
-      lane: ${{ matrix.lane }}
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit

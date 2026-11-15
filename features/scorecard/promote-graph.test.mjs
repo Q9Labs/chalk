@@ -7,6 +7,8 @@ import { load } from "js-yaml";
 const root = resolve(import.meta.dirname, "../..");
 const promote = load(readFileSync(resolve(root, ".github/workflows/promote.yml"), "utf8"));
 const release = load(readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8"));
+const proofWorkflow = load(readFileSync(resolve(root, ".github/workflows/real-call-proof.yml"), "utf8"));
+const webProofWorkflow = load(readFileSync(resolve(root, ".github/workflows/web-call-proof.yml"), "utf8"));
 const needsOf = (job) => [job.needs ?? []].flat();
 
 test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
@@ -22,13 +24,8 @@ test("Promote's production proof and its rerun run on chalk_sfu, and none runs o
   const proof = promote.jobs.proof;
   assert.equal(proof.with.media_plane, "chalk_sfu");
   assert.equal(proof.with.proofs, "${{ matrix.proofs }}");
-  assert.equal(proof.with.lane, "${{ matrix.lane }}");
   const lanes = JSON.parse(proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
-  assert.deepEqual(
-    lanes.map((lane) => lane.lane),
-    ["calls", "recording"],
-    "two lanes run at once, each on its own proof Space",
-  );
+  assert.equal(lanes.length, 2, "two legs run at once, each on its own proof Space");
   assert.deepEqual(lanes.flatMap((lane) => lane.proofs.split(" ")).sort(), ["call-artifacts", "camera-share", "chat-upload", "leave-chalk-sfu"]);
   assert.ok(needsOf(proof).includes("release"));
   const rerun = promote.jobs["scorecard-rerun"];
@@ -47,4 +44,12 @@ test("a Release job with an environment that runs after a failed dependency stil
     assert.ok(guarded, `${name} runs under always() with an environment but no master-ref or prepare-release condition`);
   }
   assert.match(release.jobs["deploy-web"].if, /github\.ref == 'refs\/heads\/master'/);
+});
+
+test("only the call-artifacts proof leaves the production group that every other production proof, web proof included, shares", () => {
+  const group = proofWorkflow.concurrency.group;
+  assert.match(group, /format\('real-call-proof-\{0\}\{1\}', inputs\.environment \|\| 'production', inputs\.proofs == 'call-artifacts' && '-recording' \|\| ''\)/);
+  assert.match(webProofWorkflow.concurrency.group, /format\('real-call-proof-\{0\}', inputs\.environment\)/);
+  const legs = JSON.parse(promote.jobs.proof.strategy.matrix.replace(/^\$\{\{ fromJSON\(inputs\.capture_proofs && '/, "").replace(/' \|\| '.*$/, "")).include;
+  assert.deepEqual(legs.filter((leg) => leg.proofs === "call-artifacts").length, 1);
 });
