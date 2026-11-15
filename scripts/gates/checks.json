@@ -758,6 +758,16 @@
       "sample": "New and off by default (CHALK_AUTO_PROMOTE); no history yet."
     },
     {
+      "id": "workflow:auto-promote.yml#page",
+      "owner": "Release",
+      "catches": "An automatic promotion that failed or timed out without Oncall hearing of it.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New and off by default (CHALK_AUTO_PROMOTE); no history yet."
+    },
+    {
       "id": "workflow:cache-warm.yml#go",
       "owner": "Gate",
       "catches": "Queue groups downloading the go toolchain from a flaky host because master saved no cache.",

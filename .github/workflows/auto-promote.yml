@@ -39,6 +39,10 @@ jobs:
       vars.CHALK_AUTO_PROMOTE == 'true' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
+    outputs:
+      dispatched: ${{ steps.promote.outputs.dispatched }}
+      refused: ${{ steps.promote.outputs.refused }}
+      sha: ${{ steps.decide.outputs.sha }}
     environment: # Holds the API URL secret the live-call read needs; a record would mark the held cut inactive.
       name: production
       deployment: false
@@ -96,6 +100,7 @@ jobs:
             sleep 5
           done
           [[ -n "${run_id}" ]] || { echo "::error title=Promote did not start::No new Promote run for ${SHA} appeared within two minutes of the dispatch."; exit 1; }
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
           echo "Promote run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
           status=0
           gh run watch "${run_id}" --exit-status --compact --interval 30 || status=$?
@@ -105,13 +110,22 @@ jobs:
             [[ "${refused}" == 0 ]] || echo "refused=true" >> "$GITHUB_OUTPUT"
           fi
           exit "${status}"
+  page:
+    # A separate job, so a promotion that outlasts the 120-minute limit above still pages: the limit cancels the steps of that job, not this one.
+    needs: promote
+    if: always() && needs.promote.result == 'failure' && needs.promote.outputs.dispatched == 'true' && needs.promote.outputs.refused != 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      deployment: false
+    timeout-minutes: 5
+    steps:
       - name: Page Oncall when the automatic promotion failed
-        if: failure() && steps.promote.outcome == 'failure' && steps.promote.outputs.refused != 'true'
         env:
           ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
-          SHA: ${{ steps.decide.outputs.sha }}
+          SHA: ${{ needs.promote.outputs.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          jq -n --arg detail "Automatic promotion of ${SHA} failed; Promote rolled production back to the retained release unless its own summary says recovery did not run. ${RUN_URL}" \
+          jq -n --arg detail "Automatic promotion of ${SHA} failed or timed out. Open the Promote run for whether production was rolled back. ${RUN_URL}" \
             '{source: "oncall-poller", incidents: [{app: "chalk", kind: "new", key: "auto-promote", detail: $detail}]}' \
             | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$ONCALL_WEBHOOK_URL"
