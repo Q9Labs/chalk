@@ -341,6 +341,10 @@ if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE:-}" && "$*" == *"${FAKE_SYSTEMCTL_FAIL_ONCE
   printf 'Job for %s canceled.\n' "${*: -1}" >&2
   exit 1
 fi
+if [[ "$*" == '--user is-active --quiet chalk-cloudflared.service' ]]; then
+  [[ -e "${FAKE_CONNECTOR_ACTIVE:-/nonexistent}" ]]
+  exit
+fi
 case "${1:-}" in
   is-enabled) [[ -e "${FAKE_RESTORE_ENABLED_STATE:?}" ]] ;;
   enable) : >"${FAKE_RESTORE_ENABLED_STATE:?}" ;;
@@ -1016,12 +1020,20 @@ jq -e '.inputs[] | select(.id == "cloudflare-tunnel-token" and .missing == true 
 ! grep -Eq 'podman secret create .*chalk-cloudflare-tunnel-token' "${fixture_root}/commands.log" || fail "excluded stored tunnel token reached a Podman secret"
 [[ ! -e "${fixture_root}/user-quadlet/chalk-cloudflared.container" ]] || fail "the tunnel connector was installed on a host that excludes its token"
 ! grep -Fq 'chalk-cloudflared' "${fixture_root}/user-systemd/chalk-runtime.target" || fail "the runtime target still requires the tunnel connector"
-! grep -Fq 'chalk-cloudflared' "${fixture_root}/commands.log" || fail "the tunnel connector was stopped or started on a host without one"
+! grep -Eq '(start|stop) .*chalk-cloudflared' "${fixture_root}/commands.log" || fail "the tunnel connector was stopped or started on a host without one"
 : >"${fixture_root}/commands.log"
 printf '0' >"${fixture_root}/health-index"
 run_restore "$tunnel_state" ok >/dev/null
 [[ ! -e "${fixture_root}/user-quadlet/chalk-cloudflared.container" ]] || fail "reboot restore brought the tunnel connector back"
 ! grep -Eq 'podman secret create .*chalk-cloudflare-tunnel-token' "${fixture_root}/commands.log" || fail "reboot restore registered the excluded tunnel token"
+
+# A connector that an earlier release left running is stopped when the next release excludes its token.
+: >"${fixture_root}/connector-active"
+: >"${fixture_root}/commands.log"
+make_request tunnel-next "${fixture_root}/tunnel-next-request.json" '["cloudflare-tunnel-token"]'
+make_manifest tunnel-next >"${fixture_root}/tunnel-next-manifest.json"
+FAKE_CONNECTOR_ACTIVE="${fixture_root}/connector-active" run_controller "$tunnel_state" "${fixture_root}/tunnel-next-request.json" "${fixture_root}/tunnel-next-manifest.json" ok >/dev/null
+grep -Fq 'systemctl --user --job-mode=replace-irreversibly stop chalk-cloudflared.service' "${fixture_root}/commands.log" || fail "a running tunnel connector was left running when its token was excluded"
 
 # The real health check expects the tunnel only where the connector is installed.
 health_home="${fixture_root}/health-home"

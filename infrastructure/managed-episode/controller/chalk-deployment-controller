@@ -1047,7 +1047,8 @@ stop_runtime() {
     fi
   done
   for unit in chalk-api-migrate.service chalk-cloudflared.service chalk-sync.service chalk-api.service chalk-redis.service; do
-    [[ "$unit" == chalk-cloudflared.service ]] && ! tunnel_connector_enabled && continue
+    # A connector from an earlier release keeps running after its Quadlet is removed, so stop it when it is up.
+    [[ "$unit" == chalk-cloudflared.service ]] && ! tunnel_connector_enabled && ! run_user_systemctl is-active --quiet "$unit" && continue
     if ! stop_runtime_unit "$unit"; then
       failed=true
     fi
