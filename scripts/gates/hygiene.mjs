@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -62,6 +62,12 @@ for (const [taskName, task] of Object.entries(turboConfig.tasks ?? {})) {
   if (serialized.includes("<NONEXISTENT>")) {
     errors.push(`turbo.json task "${taskName}" resolves to <NONEXISTENT>`);
   }
+}
+
+// The Nightly stack scripts run on a fresh runner, outside every other check; a script that does not parse breaks every cut.
+for (const script of execFileSync("git", ["ls-files", "scripts/nightly-stack/*.mjs"], { cwd: repoRoot, encoding: "utf8" }).trim().split(/\r?\n/).filter(Boolean)) {
+  const parsed = spawnSync(process.execPath, ["--check", script], { cwd: repoRoot, encoding: "utf8" });
+  if (parsed.status !== 0) errors.push(`${script} does not parse: ${parsed.stderr.split("\n").find((line) => line.includes("Error")) ?? "node --check failed"}`);
 }
 
 if (errors.length > 0) {
