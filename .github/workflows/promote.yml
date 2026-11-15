@@ -257,7 +257,7 @@ jobs:
           fi
           # The latency run measures with the held revision's own kit; a revision from before the Chalk SFU latency kit has none to score.
           LATENCY_EXPECTED=false
-          if git cat-file -e "${REVISION}:features/scorecard/chalk-sfu.mjs" 2> /dev/null || git cat-file -e "${REVISION}:features/scorecard/own-sfu.mjs" 2> /dev/null; then
+          if git ls-tree --name-only "${REVISION}" features/scorecard/ | grep -Eq '/(chalk|own)-sfu\.mjs$'; then
             LATENCY_EXPECTED=true
           fi
           export SCORECARD_EXPECTED LATENCY_EXPECTED
@@ -324,7 +324,7 @@ jobs:
           REVISION: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
         run: |
           LATENCY_EXPECTED=false
-          if git cat-file -e "${REVISION}:features/scorecard/chalk-sfu.mjs" 2> /dev/null || git cat-file -e "${REVISION}:features/scorecard/own-sfu.mjs" 2> /dev/null; then
+          if git ls-tree --name-only "${REVISION}" features/scorecard/ | grep -Eq '/(chalk|own)-sfu\.mjs$'; then
             LATENCY_EXPECTED=true
           fi
           export LATENCY_EXPECTED
