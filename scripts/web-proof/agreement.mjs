@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { appendFile } from "node:fs/promises";
 import { setTimeout as wait } from "node:timers/promises";
 
 // AudioOutput uses detached new Audio() elements. Observe its real sinks,
@@ -153,17 +154,59 @@ export function agreementIssues(before, after, { checkCameraFrames = true } = {}
   return issues;
 }
 
+// What each endpoint sends and receives right now, for the evidence of a failed agreement. Self-contained for serialization.
+export async function sampleTransport() {
+  const keys = [
+    "type", "kind", "rid", "ssrc", "active", "framesSent", "framesEncoded", "framesReceived", "framesDecoded", "framesDropped", "keyFramesEncoded", "keyFramesDecoded",
+    "packetsSent", "packetsReceived", "packetsLost", "bytesSent", "bytesReceived", "freezeCount", "totalFreezesDuration", "pliCount", "firCount", "nackCount", "qualityLimitationReason",
+    "frameWidth", "frameHeight", "state", "currentRoundTripTime",
+  ];
+  const connections = await Promise.all(
+    (window.proofConnections ?? []).map(async (connection) => {
+      const report = await connection.getStats();
+      const rows = [...report.values()].filter((row) => ["outbound-rtp", "inbound-rtp", "candidate-pair", "transport"].includes(row.type) && (row.kind === "video" || row.type === "candidate-pair" || row.type === "transport"));
+      return {
+        connectionState: connection.connectionState,
+        iceConnectionState: connection.iceConnectionState,
+        senders: connection.getSenders().map((sender) => sender.track && { kind: sender.track.kind, id: sender.track.id, readyState: sender.track.readyState, muted: sender.track.muted, enabled: sender.track.enabled }),
+        rows: rows.map((row) => Object.fromEntries(keys.filter((key) => row[key] !== undefined).map((key) => [key, row[key]]))),
+      };
+    }),
+  );
+  const videos = [...document.querySelectorAll("video")].map((video) => ({
+    participant: video.dataset.participantId,
+    paused: video.paused,
+    readyState: video.readyState,
+    width: video.videoWidth,
+    height: video.videoHeight,
+    frames: video.getVideoPlaybackQuality?.().totalVideoFrames,
+    tracks: video.srcObject?.getTracks().map((track) => ({ id: track.id, kind: track.kind, readyState: track.readyState, muted: track.muted, enabled: track.enabled })),
+  }));
+  return { at: Date.now(), visibility: document.visibilityState, focused: document.hasFocus(), connections, videos };
+}
+
+async function recordFailure(endpoints, issues, attempt) {
+  const directory = process.env.CHALK_E2E_DIRECTORY;
+  if (!directory) return;
+  const transport = await Promise.all(endpoints.map((endpoint) => endpoint.evaluate(sampleTransport).catch((error) => ({ error: String(error) }))));
+  await appendFile(`${directory}/agreement-failures.jsonl`, `${JSON.stringify({ at: Date.now(), attempt, issues, transport })}\n`);
+}
+
 export async function assertAgreement(endpoints, { timeoutMs = 15_000, checkCameraFrames = true } = {}) {
   const sample = () => Promise.all(endpoints.map((endpoint) => endpoint.evaluate(sampleAgreement)));
   const deadline = Date.now() + timeoutMs;
   let issues;
+  let attempt = 0;
   do {
     const before = await sample();
     await wait(350);
     const after = await sample();
     issues = agreementIssues(before, after, { checkCameraFrames });
     if (!issues.length) return after;
+    // Stats at the first miss and again at a few seconds in and at the deadline show whether the frames stopped on send, in the SFU or on receive.
+    if ([0, 8].includes(attempt++)) await recordFailure(endpoints, issues, attempt);
   } while (Date.now() < deadline);
+  await recordFailure(endpoints, issues, attempt);
   assert.deepEqual(issues, [], "Media agreement: owner controls, every observer badge and required playback must agree");
 }
 

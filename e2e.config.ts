@@ -19,6 +19,6 @@ export default {
   timeout: 240_000,
   cleanupTimeout: 30_000,
   output: ".private/web-proof/e2e",
-  trace: "off",
-  video: "off",
+  trace: "retain-on-failure",
+  video: "retain-on-failure",
 } satisfies E2EConfig;
