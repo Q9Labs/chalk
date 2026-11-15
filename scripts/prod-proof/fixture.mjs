@@ -27,7 +27,7 @@ export async function generateTurnVoices(directory, signal) {
 }
 
 // Browser-side generator: animated, distinguishable camera; repeatable spoken audio.
-export function installFixture({ speech, guest, tones = false, voiceGain, turns = false, camera: size = { width: 1280, height: 720 } }) {
+export function installFixture({ speech, guest, tones = false, voiceGain, turns = false, simulcast = true, camera: size = { width: 1280, height: 720 } }) {
   const NativePC = window.RTCPeerConnection;
   window.proofConnections = [];
   window.RTCPeerConnection = class extends NativePC {
@@ -36,7 +36,7 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       window.proofConnections.push(this);
     }
     addTransceiver(track, options) {
-      if (track instanceof MediaStreamTrack && track.kind === "video" && track.id === window.proofCameraId) {
+      if (simulcast && track instanceof MediaStreamTrack && track.kind === "video" && track.id === window.proofCameraId) {
         return super.addTransceiver(track, {
           ...options,
           sendEncodings: [
