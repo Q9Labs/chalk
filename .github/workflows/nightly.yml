@@ -86,7 +86,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
     needs: [plan, release]
     uses: ./.github/workflows/nightly-proofs.yml
     with:
