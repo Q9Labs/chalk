@@ -77,6 +77,12 @@ box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-pos
 
 `instabox-run.sh` installs locked dependencies, mounts data-disk scratch at `/tmp` (the snapshot's 4 GB tmpfs cannot satisfy the queue proofs' 8 GB admission floor, and one mount preserves hard links), installs Chromium with `--browser`, and runs `pnpm gate:full` when given no command. Use `with-postgres.sh --` for Sync runs; the API gate manages its own database. Tool versions are pinned in `.tool-versions`, `apps/api/go.mod` and the CI setup actions. The [performance runbook](../../docs/performance-budget.md) separates diagnostic timings from calibrated budgets; do not enforce old timing limits on a new runner without re-measuring.
 
+### The Gate on Instabox
+
+When the hosted runners are unavailable, set the repository variables `CHALK_GATE_RUNNER=instabox` and `CHALK_GATE_RUNNER_SMALL=instabox-small`; clearing `CHALK_GATE_RUNNER` sends the Gate back to the hosted runners. Merge queue groups and manual runs then use two sizes: the API gate and the browser-tests lane run on `instabox` (4x8, $0.034 an hour), and every other job runs on `instabox-small` (2x4, $0.017 an hour). browser-tests peaked at 3.7 GB on 2x4 (of its 3.9 GB) and 4.1 GB on 4x8, and the API gate between 3.0 and 6.6 GB on 4x8, so those two stay on 4x8; on 15 Nov 2026 every other job peaked between 0.5 and 3.1 GB on 2x4 and ran about as long as on 4x8, because the worker counts follow the core count. A manual run takes `runner` for one label for all jobs and `runner_small` for the small jobs.
+
+The mini serves both labels with launchd dispatchers: four big slots and eight small ones. They poll GitHub for queued jobs even when nothing is queued, so they run only while the variables are set: `~/.local/share/chalk-instabox-dispatcher/ctl up` starts them and `ctl down` stops them. Slot N starts a machine only while N jobs are queued, so the slot count caps how many jobs of a size run at once.
+
 ## UI check
 
 A pull request that changes a UI path also runs the **UI check** workflow beside Gate. It walks the call journeys on the branch and on the base and fails on a layout problem that only the branch has; `scripts/ui-check/README.md` explains what it checks and how to run it. It is a separate required status check because it needs the call-state harness and a browser, not a Gate lane.
