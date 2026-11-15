@@ -58,3 +58,7 @@ export function planeLimits(budgets, plane) {
   const entries = Object.entries(planeBudgets(budgets, plane)).filter(([id, entry]) => id.startsWith("action.") && entry.max_p95 !== undefined);
   return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95, warnOnly: !entry.gate }]));
 }
+
+// The full latency run takes 60 cycles. A gated action metric that fewer than 48 of them measured (80%) is not evidence: the
+// percentiles of a handful of samples hide a regression.
+export const MIN_GATED_SAMPLES = 48;

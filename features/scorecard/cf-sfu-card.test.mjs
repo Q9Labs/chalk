@@ -4,19 +4,21 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { gatedActionIds, readBudgets } from "./budgets.mjs";
+import { gatedActionIds, MIN_GATED_SAMPLES, readBudgets } from "./budgets.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
+
+const chalkSfu = "chalk_sfu";
 
 const root = resolve(import.meta.dirname, "../..");
 const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
 const run = { id: "run-latency", commit: revision, tier: "nightly", environment: "nightly", startedAt: "2026-11-09T03:00:00.000Z", client: { kind: "browser", browser: "chromium-headless/151", region: "github-hosted", size: "ubuntu-24-04" } };
-const metric = (id, value, n = 20) => ({ id, unit: "ms", n, p50: value, p95: value, source: "latency-kit" });
+const metric = (id, value, n = 60) => ({ id, unit: "ms", n, p50: value, p95: value, source: "latency-kit" });
 const card = (mediaPlane, metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane, metrics, dropped: [] });
 const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, ...env } });
 
 test("only the Cloudflare plane carries the Iowa and Singapore note", () => {
-  assert.equal(planeNoteMarkdown("chalk_sfu"), "");
+  assert.equal(planeNoteMarkdown(chalkSfu), "");
   assert.match(planeNoteMarkdown("cf_sfu"), /Iowa.*nearby point of presence.*Singapore.*not a fair comparison yet.*fewer samples/s);
 });
 
@@ -44,7 +46,7 @@ test("a Cloudflare latency card is collected, shown with the note, and an over-b
   assert.equal(table.status, 1, table.stderr);
   assert.match(table.stdout, /^> \*\*Read with care:\*\*.*Iowa/);
 
-  writeFileSync(path, JSON.stringify(card("chalk_sfu", [metric("action.leave_ms", 300)])));
+  writeFileSync(path, JSON.stringify(card(chalkSfu, [metric("action.leave_ms", 300)])));
   assert.doesNotMatch(node("scorecard.mjs", ["diff", "--current", path]).stdout, /Read with care/);
 });
 
@@ -52,10 +54,10 @@ test("adding a Cloudflare latency card cannot change the nightly verdict", async
   const dir = mkdtempSync(join(tmpdir(), "cf-verdict-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const { budgets } = await readBudgets();
-  const gated = gatedActionIds(budgets, "chalk_sfu");
+  const gated = gatedActionIds(budgets, chalkSfu);
   const own = (leave) =>
     card(
-      "chalk_sfu",
+      chalkSfu,
       gated.map((id) => metric(id, id === "action.leave_ms" ? leave : 100)),
     );
   // Every Cloudflare action metric far over its budget, in every cycle.
@@ -82,4 +84,24 @@ test("adding a Cloudflare latency card cannot change the nightly verdict", async
     }
     assert.deepEqual(verdicts[1], verdicts[0], `${expected}: the Cloudflare card changed the verdict`);
   }
+});
+
+test("the evaluator lists every gated action metric and fails one with no samples or too few", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "expected-metrics-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const { budgets } = await readBudgets();
+  const [thin, absent, ...enough] = gatedActionIds(budgets, chalkSfu);
+  const path = join(dir, "card.json");
+  writeFileSync(path, JSON.stringify(card(chalkSfu, [metric(thin, 100, MIN_GATED_SAMPLES - 1), ...enough.map((id) => metric(id, 100))])));
+  const summary = join(dir, "summary.md");
+  const result = node("evaluate.mjs", [revision, "123", path], { GITHUB_STEP_SUMMARY: summary });
+  const verdict = JSON.parse(result.stdout);
+  assert.equal(result.status, 1);
+  assert.equal(verdict.result, "missing");
+  assert.deepEqual(verdict.missing_items, [`chalk_sfu.${absent} (missing: 0 of ${MIN_GATED_SAMPLES})`, `chalk_sfu.${thin} (too few samples: ${MIN_GATED_SAMPLES - 1} of ${MIN_GATED_SAMPLES})`].sort());
+  const table = readFileSync(summary, "utf8");
+  for (const id of gatedActionIds(budgets, chalkSfu)) assert.match(table, new RegExp(`\`${id}\``), `${id} has a row`);
+  assert.match(table, /❌ missing/);
+  assert.match(table, /❌ too few samples/);
+  assert.match(table, /✅ ok/);
 });
