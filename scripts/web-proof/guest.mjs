@@ -3,7 +3,7 @@ import { createRun } from "../prod-proof/runtime.mjs";
 import { launchGuests, stats } from "../prod-proof/media.mjs";
 import { save } from "../prod-proof/runtime.mjs";
 import { playIncomingAudio } from "./media.mjs";
-import { assertAgreement, playProofMedia } from "./agreement.mjs";
+import { assertAgreement, playProofMedia, startTransportTimeline } from "./agreement.mjs";
 import { boardDraw, boardElements, boardOpen, boardView } from "./board.mjs";
 import { guestConfig } from "./environment.mjs";
 
@@ -73,6 +73,7 @@ async function prepareGuest(directory) {
   // The test awaits this promise after opening the app; keep early failure handled.
   ready.catch(() => {});
   let leaving;
+  let stopTimeline;
   const leave = () =>
     (leaving ??= ready.then(async (guest) => {
       const errors = [];
@@ -88,6 +89,7 @@ async function prepareGuest(directory) {
     ready,
     async agreement(browser) {
       const guest = await ready;
+      stopTimeline ??= startTransportTimeline([browser, guest.pages[0]], `${directory}/transport-timeline.jsonl`);
       await guest.pages[0].evaluate(playProofMedia);
       return assertAgreement([browser, guest.pages[0]]);
     },
@@ -142,6 +144,7 @@ async function prepareGuest(directory) {
     async dispose() {
       const guest = await ready.catch(() => undefined);
       const errors = [];
+      await stopTimeline?.().catch((error) => errors.push(error));
       if (guest) await leave().catch((error) => errors.push(error));
       const results = await Promise.allSettled([...run.resources].reverse().map((resource) => resource.dispose()));
       errors.push(...results.filter((result) => result.status === "rejected").map((result) => result.reason));

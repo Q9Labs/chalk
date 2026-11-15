@@ -182,7 +182,23 @@ export async function sampleTransport() {
     frames: video.getVideoPlaybackQuality?.().totalVideoFrames,
     tracks: video.srcObject?.getTracks().map((track) => ({ id: track.id, kind: track.kind, readyState: track.readyState, muted: track.muted, enabled: track.enabled })),
   }));
-  return { at: Date.now(), visibility: document.visibilityState, focused: document.hasFocus(), connections, videos };
+  return JSON.parse(JSON.stringify({ at: Date.now(), visibility: document.visibilityState, focused: document.hasFocus(), connections, videos }));
+}
+
+/** Records both endpoints' transport stats twice a second until the returned stop function is called. */
+export function startTransportTimeline(endpoints, file) {
+  let stopped = false;
+  const done = (async () => {
+    while (!stopped) {
+      const transport = await Promise.all(endpoints.map((endpoint) => endpoint.evaluate(sampleTransport).catch((error) => ({ error: String(error) }))));
+      await appendFile(file, `${JSON.stringify({ at: Date.now(), transport })}\n`);
+      await wait(500);
+    }
+  })();
+  return async () => {
+    stopped = true;
+    await done;
+  };
 }
 
 async function recordFailure(endpoints, issues, attempt) {
