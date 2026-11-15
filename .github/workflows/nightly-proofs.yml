@@ -299,6 +299,12 @@ jobs:
             echo "== sfu host"
             ssh -i "$RUNNER_TEMP/host-key" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=10 "root@$HOST_IP" 'docker ps -a --format "{{.Names}} {{.Status}}"; docker logs --tail 60 chalk-stack-sfu 2>&1 | cut -c1-1500' || true
           fi
+      - name: Save the stack logs with the web-call evidence
+        if: always() && matrix.proof == 'web-call'
+        run: |
+          directory=".private/prod-proof/nightly-$GITHUB_RUN_ID-web-call/stack-logs"
+          mkdir -p "$directory"
+          for name in api sync sfu; do docker logs --timestamps "chalk-stack-$name" > "$directory/$name.log" 2>&1 || true; done
       - name: Collect the latency card
         if: always() && matrix.proof == 'latency'
         run: |
