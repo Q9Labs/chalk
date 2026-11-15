@@ -168,6 +168,13 @@ defmodule ChalkSync.Retention.CleanupWorkerHistoryTest do
       episode_ids(fixture) ++ [deadline]
     )
 
+    # This fixture sets the deadline by hand, so what the trigger recorded does not describe it.
+    Postgrex.query!(
+      connection,
+      "update sync_episode_control set initial_deadline_at_ms = null, initial_deadline_generation = null where tenant_id = $1 and episode_id = $2",
+      episode_ids(fixture)
+    )
+
     assert {:ok, %{external_operation_id: operation_id}} =
              Postgres.begin_operation(
                hd(fixture.identities),

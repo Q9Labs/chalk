@@ -713,7 +713,7 @@ insert into sync_episode_control (
     0,
     0
 )
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 `
 
 type CreateSyncEpisodeControlParams struct {
@@ -781,6 +781,8 @@ func (q *Queries) CreateSyncEpisodeControl(ctx context.Context, arg CreateSyncEp
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1936,7 +1938,7 @@ func (q *Queries) LockPendingDeadlineOperation(ctx context.Context, arg LockPend
 }
 
 const lockSyncEpisodeControlForUpdate = `-- name: LockSyncEpisodeControlForUpdate :one
-select tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+select tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 from sync_episode_control
 where
     tenant_id = $1
@@ -1998,6 +2000,8 @@ func (q *Queries) LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockS
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2399,7 +2403,7 @@ where
     and lifecycle_reserved_intent_bytes >= $2
     and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
     and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + $1 - $2 <= 33554432
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 `
 
 type ReserveEpisodeEndParams struct {
@@ -2463,6 +2467,8 @@ func (q *Queries) ReserveEpisodeEnd(ctx context.Context, arg ReserveEpisodeEndPa
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2498,7 +2504,7 @@ where
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
     ) < $8::bigint
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 `
 
 type ReserveKnockAdmissionParams struct {
@@ -2568,6 +2574,8 @@ func (q *Queries) ReserveKnockAdmission(ctx context.Context, arg ReserveKnockAdm
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2603,7 +2611,7 @@ where
             and participants.episode_id = sync_episode_control.episode_id
             and participants.status in ('joining', 'active', 'leaving')
     ) < $7::bigint
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 `
 
 type ReserveParticipantAdmissionParams struct {
@@ -2671,6 +2679,8 @@ func (q *Queries) ReserveParticipantAdmission(ctx context.Context, arg ReservePa
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2693,7 +2703,7 @@ where
     and lifecycle_reserved_intent_bytes >= $2
     and lifecycle_intent_count + lifecycle_reserved_intents <= 2048
     and lifecycle_intent_bytes + lifecycle_reserved_intent_bytes + $1 - $2 <= 33554432
-returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, created_at, updated_at
+returning tenant_id, space_id, episode_id, control_revision, folded_state, state_schema_version, state_digest, snapshot_bytes, snapshot_reserved_bytes, participant_event_count, participant_event_bytes, lifecycle_event_count, lifecycle_event_bytes, lifecycle_reserved_events, lifecycle_reserved_bytes, lifecycle_intent_count, lifecycle_intent_bytes, lifecycle_reserved_intents, lifecycle_reserved_intent_bytes, receipt_count, receipt_bytes, retention_checkpoint_revision, retention_checkpoint_state_digest, retention_checkpoint_event_count, retention_cleaned_at, retention_deleted_event_rows, retention_deleted_event_bytes, retention_deleted_receipt_rows, retention_deleted_receipt_bytes, retention_deleted_lifecycle_intent_rows, retention_deleted_lifecycle_intent_bytes, retention_deleted_external_operation_rows, retention_deleted_external_operation_bytes, retention_deleted_admission_request_rows, retention_deleted_admission_request_bytes, retention_deleted_recording_rows, retention_deleted_recording_bytes, retention_deleted_screen_share_lease_rows, retention_deleted_screen_share_lease_bytes, retention_deleted_publication_fence_rows, retention_deleted_publication_fence_bytes, retention_deleted_publication_grant_reservation_rows, retention_deleted_publication_grant_reservation_bytes, initial_deadline_at_ms, initial_deadline_generation, created_at, updated_at
 `
 
 type ReserveParticipantRemovalParams struct {
@@ -2757,6 +2767,8 @@ func (q *Queries) ReserveParticipantRemoval(ctx context.Context, arg ReservePart
 		&i.RetentionDeletedPublicationFenceBytes,
 		&i.RetentionDeletedPublicationGrantReservationRows,
 		&i.RetentionDeletedPublicationGrantReservationBytes,
+		&i.InitialDeadlineAtMs,
+		&i.InitialDeadlineGeneration,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

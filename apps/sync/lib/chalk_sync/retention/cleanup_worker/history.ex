@@ -4,10 +4,14 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Retention.DeadlineSQL
   alias ChalkSync.Retention.SQL
   alias ChalkSync.UUID
 
   @event_page_size 256
+  # The Episode duration check in the schema bounds a first deadline to 60 seconds up to 7 days after creation.
+  @minimum_seconds 60
+  @maximum_seconds 604_800
 
   def verify_history(transaction, candidate) do
     with {:ok, initial_policy} <- initial_policy(transaction, candidate),
@@ -31,18 +35,103 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
     end
   end
 
+  # Every digest in the history covers the whole state, including the deadline the Episode started
+  # with, so the replay has to start from that deadline.
   defp initial_policy(transaction, candidate) do
     config_policy = %{config_snapshot: candidate.config_snapshot}
 
-    with {:ok, deadline_policy} <- persisted_deadline_policy(candidate),
-         true <- terminal_deadline_matches?(candidate, deadline_policy),
-         false <- has_deadline_transition?(transaction, candidate) do
-      {:ok, Map.merge(config_policy, deadline_policy)}
-    else
+    case initial_deadline_policy(transaction, candidate) do
+      {:ok, deadline_policy} -> {:ok, Map.merge(config_policy, deadline_policy)}
       :not_usable -> {:ok, config_policy}
-      false -> {:ok, config_policy}
-      true -> {:ok, config_policy}
     end
+  end
+
+  # The control row records the first deadline when the first extension replaces it. Without a record
+  # the Episode was either never extended (its current deadline is its first) or was extended before
+  # the record existed (the first deadline is found from the digests).
+  defp initial_deadline_policy(
+         _transaction,
+         %{initial_deadline_at_ms: deadline_at_ms, initial_deadline_generation: generation}
+       )
+       when is_integer(deadline_at_ms) and is_integer(generation),
+       do: {:ok, %{deadline_at_ms: deadline_at_ms, deadline_generation: generation}}
+
+  defp initial_deadline_policy(transaction, candidate) do
+    with {:ok, deadline_policy} <- persisted_deadline_policy(candidate),
+         true <- terminal_deadline_matches?(candidate, deadline_policy) do
+      case first_deadline_generation(transaction, candidate) do
+        :none ->
+          {:ok, deadline_policy}
+
+        {:ok, generation} when is_integer(generation) ->
+          find_initial_deadline(transaction, candidate, generation - 1)
+
+        {:ok, _malformed} ->
+          :not_usable
+      end
+    else
+      _ -> :not_usable
+    end
+  end
+
+  defp first_deadline_generation(transaction, candidate) do
+    case Postgrex.query!(transaction, DeadlineSQL.first_deadline_generation(), [
+           candidate.tenant_id,
+           candidate.episode_id
+         ]).rows do
+      [[generation]] -> {:ok, generation}
+      [] -> :none
+    end
+  end
+
+  # An Episode extended before the first deadline was recorded: its first deadline is taken to be its
+  # configured default duration after its creation, or else a whole number of minutes (at most about
+  # 30,000 replays). Only a deadline that reproduces the first event's digest is
+  # taken, so a changed event still fails the replay that follows.
+  defp find_initial_deadline(transaction, candidate, generation) when generation >= 1 do
+    [first | _] = event_rows(transaction, candidate, 0, 1)
+
+    state =
+      Reducer.new(UUID.load!(candidate.episode_id), %{
+        config_snapshot: candidate.config_snapshot,
+        deadline_generation: generation
+      })
+
+    anchors =
+      candidate.deadline_anchors
+      |> Enum.map(&DateTime.to_unix(&1, :millisecond))
+      |> Enum.uniq()
+
+    default_seconds = default_duration_seconds(candidate)
+
+    anchors
+    |> Stream.flat_map(fn anchor_ms ->
+      Stream.concat(
+        Enum.map(default_seconds, &(anchor_ms + &1 * 1_000)),
+        Stream.map(@minimum_seconds..@maximum_seconds//60, &(anchor_ms + &1 * 1_000))
+      )
+    end)
+    |> Enum.find(&replays_first_event?(%{state | deadline_at_ms: &1}, first))
+    |> case do
+      nil -> :not_usable
+      deadline_at_ms -> {:ok, %{deadline_at_ms: deadline_at_ms, deadline_generation: generation}}
+    end
+  end
+
+  defp find_initial_deadline(_transaction, _candidate, _generation), do: :not_usable
+
+  # Created without a deadline, an Episode gets the default duration its configuration snapshot froze.
+  defp default_duration_seconds(%{
+         config_snapshot: %{"default_episode_duration_seconds" => seconds}
+       })
+       when is_integer(seconds) and seconds >= @minimum_seconds and seconds <= @maximum_seconds,
+       do: [seconds]
+
+  defp default_duration_seconds(_candidate), do: []
+
+  defp replays_first_event?(state, row) do
+    {event, digest} = event(row)
+    match?({:ok, _next}, Reducer.replay_event(state, event, digest))
   end
 
   defp persisted_deadline_policy(candidate) do
@@ -65,23 +154,8 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
       candidate.folded_state["deadline_generation"] == generation
   end
 
-  defp has_deadline_transition?(transaction, candidate) do
-    case Postgrex.query!(transaction, SQL.has_deadline_transition?(), [
-           candidate.tenant_id,
-           candidate.episode_id
-         ]).rows do
-      [[value]] -> value
-    end
-  end
-
   defp fold_event_pages(transaction, candidate, state, event_count, event_bytes) do
-    rows =
-      Postgrex.query!(transaction, SQL.read_event_page(), [
-        candidate.tenant_id,
-        candidate.episode_id,
-        state.revision,
-        @event_page_size
-      ]).rows
+    rows = event_rows(transaction, candidate, state.revision, @event_page_size)
 
     with {:ok, next_state, next_count, next_bytes} <-
            fold_event_page(rows, state, event_count, event_bytes) do
@@ -99,24 +173,33 @@ defmodule ChalkSync.Retention.CleanupWorker.History do
     end
   end
 
-  defp fold_event_page(rows, state, event_count, event_bytes) do
-    Enum.reduce_while(rows, {:ok, state, event_count, event_bytes}, fn
-      [base_revision, revision, name, payload, schema_version, digest, encoded_bytes],
-      {:ok, current, count, bytes} ->
-        event = %{
-          base_revision: base_revision,
-          revision: revision,
-          name: name,
-          payload: payload
-        }
+  defp event_rows(transaction, candidate, after_revision, limit) do
+    Postgrex.query!(transaction, SQL.read_event_page(), [
+      candidate.tenant_id,
+      candidate.episode_id,
+      after_revision,
+      limit
+    ]).rows
+  end
 
-        with true <- schema_version == Reducer.state_schema_version(),
-             {:ok, next} <- Reducer.replay_event(current, event, digest) do
-          {:cont, {:ok, next, count + 1, bytes + encoded_bytes}}
-        else
-          {:error, reason} -> {:halt, {:error, reason}}
-          false -> {:halt, {:error, :event_digest_mismatch}}
-        end
+  defp event([base_revision, revision, name, payload, _schema_version, digest, _encoded_bytes]),
+    do:
+      {%{base_revision: base_revision, revision: revision, name: name, payload: payload}, digest}
+
+  defp fold_event_page(rows, state, event_count, event_bytes) do
+    Enum.reduce_while(rows, {:ok, state, event_count, event_bytes}, fn row,
+                                                                       {:ok, current, count,
+                                                                        bytes} ->
+      [_base, _revision, _name, _payload, schema_version, _digest, encoded_bytes] = row
+      {event, digest} = event(row)
+
+      with true <- schema_version == Reducer.state_schema_version(),
+           {:ok, next} <- Reducer.replay_event(current, event, digest) do
+        {:cont, {:ok, next, count + 1, bytes + encoded_bytes}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+        false -> {:halt, {:error, :event_digest_mismatch}}
+      end
     end)
   end
 end

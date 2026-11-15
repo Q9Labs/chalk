@@ -10,6 +10,17 @@ defmodule ChalkSync.Retention.SQL do
       episode.config_snapshot,
       episode.deadline_at,
       episode.deadline_generation,
+      control.initial_deadline_at_ms,
+      control.initial_deadline_generation,
+      array_remove(array[
+        episode.created_at,
+        episode.started_at,
+        (select min(request.created_at)
+         from episode_create_requests request
+         where request.tenant_id = control.tenant_id
+           and request.space_id = control.space_id
+           and request.episode_id = control.episode_id)
+      ], null) as deadline_anchors,
       control.control_revision,
       control.folded_state,
       control.state_schema_version,
@@ -124,18 +135,6 @@ defmodule ChalkSync.Retention.SQL do
     order by episode.ended_at, control.tenant_id, control.episode_id
     limit $3
     for update of control skip locked
-    """
-  end
-
-  def has_deadline_transition? do
-    """
-    select exists (
-      select 1
-      from sync_control_events
-      where tenant_id = $1
-        and episode_id = $2
-        and event_name = 'deadline_changed'
-    )
     """
   end
 
