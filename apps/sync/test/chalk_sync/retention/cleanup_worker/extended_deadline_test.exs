@@ -116,6 +116,15 @@ defmodule ChalkSync.Retention.CleanupWorkerExtendedDeadlineTest do
       assert checkpointed?(connection, fixture)
     end
 
+    test "recovers observed Episode #{name} when the default is a whole second but not a whole minute",
+         %{connections: connections} do
+      connection = hd(connections)
+      fixture = seed_observed_episode(connection, unquote(Macro.escape(observed)), 0, 3_601)
+
+      assert {:ok, %Result{episodes: 1, event_rows: 7}} = run_cleanup(connection)
+      assert checkpointed?(connection, fixture)
+    end
+
     for {label, extra_ms} <- [
           {"is a fraction of a second off the default", 417},
           {"is half a minute off the default", 30_000}
@@ -136,7 +145,12 @@ defmodule ChalkSync.Retention.CleanupWorkerExtendedDeadlineTest do
     end
   end
 
-  defp seed_observed_episode(connection, observed, extra_ms) do
+  defp seed_observed_episode(
+         connection,
+         observed,
+         extra_ms,
+         default_seconds \\ @observed_default_seconds
+       ) do
     created_ms = DateTime.to_unix(observed.created_at, :millisecond)
 
     # A deadline is a whole millisecond and the offsets floor the fraction of created_at away.
@@ -145,8 +159,8 @@ defmodule ChalkSync.Retention.CleanupWorkerExtendedDeadlineTest do
       seed_extended_episode(connection, %{
         created_at: observed.created_at,
         participants: 2,
-        default_seconds: @observed_default_seconds,
-        first_deadline_ms: created_ms + @observed_default_seconds * 1_000 + extra_ms,
+        default_seconds: default_seconds,
+        first_deadline_ms: created_ms + default_seconds * 1_000 + extra_ms,
         deadlines: Enum.map(observed.deadlines, &(created_ms + &1 + 1))
       })
 
