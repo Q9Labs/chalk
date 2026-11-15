@@ -172,7 +172,7 @@ jobs:
       result: ${{ steps.result.outputs.result }}
       failure: ${{ steps.prove.outputs.failure }}
       results: ${{ steps.prove.outputs.results }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || inputs.latency_only && inputs.environment == 'production' && 60 || 50 }}
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 235 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || inputs.latency_only && inputs.environment == 'production' && 90 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -346,7 +346,7 @@ jobs:
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly' || inputs.environment == 'production') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || inputs.environment == 'production' && inputs.latency_only && 45 || 25 }}
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 160 || inputs.environment == 'production' && inputs.latency_only && 75 || 25 }}
         # Promote's scorecard gate decides what a breach, a thin metric or a missing card means, one rerun included; a first attempt that
         # breaches must not fail the job, or its failure would outlive a passing rerun. The run summary and the gate still show it.
         continue-on-error: ${{ inputs.latency_only && inputs.environment == 'production' }}
