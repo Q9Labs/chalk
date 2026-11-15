@@ -254,8 +254,7 @@ expected_sync_resource_attributes="service.name=chalk-sync,service.version=${syn
 [[ "$(env_value "${sync_env}" CHALK_SYNC_PROVIDER_BRIDGE_URL)" == https://chalk-api:8443 ]] || fail "Sync provider bridge URL must use the private API alias"
 for file in "${api_env}" "${sync_env}"; do
   database_url="$(env_value "${file}" CHALK_DATABASE_URL)"
-  [[ "${database_url}" =~ ^postgres(ql)?:// ]] || fail "CHALK_DATABASE_URL must be a PostgreSQL URL"
-  [[ "${database_url}" == *'sslmode=verify-full'* ]] || fail "CHALK_DATABASE_URL must use sslmode=verify-full"
+  "${managed_root}/scripts/validate-database-url" "${environment}" "${database_url}" || fail "CHALK_DATABASE_URL does not meet the ${environment} rule"
 done
 fi
 
