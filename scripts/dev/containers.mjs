@@ -49,7 +49,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
         ];
   for (const [name, target] of mounts) args.push("--mount", `type=volume,source=${names.cache}-${name},target=${target}`);
   for (const key of Object.keys(env)) args.push("--env", key);
-  args.push(image, ...(command || (service === "api" ? ["sh", "-c", "go build -o /tmp/chalk-api ./cmd && exec /tmp/chalk-api"] : ["mix", "run", "--no-halt"])));
+  args.push(image, ...(command || (service === "api" ? ["sh", "-c", "go build -buildvcs=false -o /tmp/chalk-api ./cmd && exec /tmp/chalk-api"] : ["mix", "run", "--no-halt"])));
   return args;
 }
 

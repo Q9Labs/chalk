@@ -100,7 +100,6 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       await stopContainers();
       if (state.redis.started) await runResource(process.execPath, [scripts.redis, "stop"], { cwd: config.root, env: { CHALK_REDIS_CONTAINER: config.redis.container, CHALK_REDIS_PORT: String(config.redis.port) } }, "redis").catch(() => {});
       if (state.postgres.started) await runResource(process.execPath, [scripts.postgres, "stop"], { cwd: config.root, env: { CHALK_POSTGRES_CONTAINER: postgres.container, CHALK_POSTGRES_PORT: String(config.ports.postgres) } }, "postgres").catch(() => {});
-      await removeNetwork();
     },
     stopContainers,
     async reset() {
@@ -160,6 +159,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`], { cwd: config.root }, "postgres");
       await runResource("docker", ["exec", postgres.container, "psql", "-U", "postgres", "-d", "postgres", "-c", `CREATE DATABASE "${databaseName}"`], { cwd: config.root }, "postgres");
     } finally {
+      await removeNetwork();
       if (startedForReset) await runResource(process.execPath, [scripts.postgres, "stop"], { cwd: config.root, env }, "postgres").catch(() => {});
     }
   }

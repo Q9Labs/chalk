@@ -131,6 +131,8 @@ pnpm dev:stop
 pnpm dev:down
 ```
 
+For media smoke, install the test browser once with `pnpm exec playwright install chromium`. On Linux, use `pnpm exec playwright install --with-deps chromium` to include system libraries.
+
 `doctor` checks the running stack and a seeded guest's join. `smoke` checks the media path. `stop` stops the runtime and its containers but keeps data and caches. `down` also removes the local runtime files, resets the dev database, and removes the dev Redis volume. It keeps Postgres storage, build caches, logs, and verification evidence. `pnpm dev --fresh` recreates this checkout's seeded Tenant and Space.
 
 Logs are in `.logs/dev-server.log`. Windows ownership files live in `%LOCALAPPDATA%\chalk`. macOS uses `~/Library/Application Support/chalk`. Linux uses `$XDG_STATE_HOME/chalk`, or `~/.local/state/chalk`.
@@ -144,7 +146,7 @@ pnpm dev:exec api go test ./...
 pnpm dev:exec sync mix test
 ```
 
-Start the stack first. The command mounts the checkout and the named language caches. Sync tests use `MIX_ENV=test`. Database tests must use a separate test database, never the dev database. See the [database workflow](../apps/api/docs/database-workflow.md) and [Sync README](../apps/sync/README.md) for test database setup and test groups.
+Start the stack first. The command mounts the checkout and the named language caches. Sync tests use `MIX_ENV=test`. Each command creates and migrates a separate temporary test database, then removes it. It never uses the dev database. Set `CHALK_DATABASE_URL` only to use a test database you manage yourself. See the [database workflow](../apps/api/docs/database-workflow.md) and [Sync README](../apps/sync/README.md) for test database setup and test groups.
 
 To run migrations in the API container:
 
