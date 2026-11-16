@@ -77,6 +77,26 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run check:generated
 
+      - name: Build, vet and test the API
+        if: ${{ !cancelled() }}
+        working-directory: apps/api
+        # pwsh stops only on the last native command, so these three run in bash, which stops at the first failure.
+        shell: bash
+        run: |
+          go build ./...
+          go vet ./...
+          go test -short ./...
+
+      - name: Build, vet and test the SFU
+        if: ${{ !cancelled() }}
+        working-directory: features/media/sfu
+        # pwsh stops only on the last native command, so these three run in bash, which stops at the first failure.
+        shell: bash
+        run: |
+          go build ./...
+          go vet ./...
+          go test -short ./...
+
       # The packed web consumer test drives Chromium and fails in CI when the browser is missing.
       - name: Install Chromium
         if: ${{ !cancelled() }}
