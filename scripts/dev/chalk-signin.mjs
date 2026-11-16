@@ -21,12 +21,13 @@ export async function enableSeedInvite({ apiOrigin, systemToken, tenantId, space
 }
 
 /** Loads the invite page, arrives as the seeded guest through `origin`, checks the guest is admitted, then leaves. */
-export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, attempts = 3, retryDelayMs = 3000 } = {}) {
+export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, attempts = 3, episodeAttempts = 31, retryDelayMs = 3000 } = {}) {
   const page = await fetchImpl(new URL(invite.path, origin), { headers: { accept: "text/html" } });
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
   }
-  // A provider timeout or an Episode finishing its previous guest leave can make an arrival transiently unavailable.
+  // A restart can interrupt the previous guest's cleanup. Sync's external-operation
+  // lease lasts 60 seconds; allow its retry plus a 30-second provider request.
   let arrival;
   for (let attempt = 1; ; attempt += 1) {
     arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
@@ -42,7 +43,7 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
           .json()
           .catch(() => undefined)
       )?.error?.code === "episode.not_active";
-    if ((!endingEpisode && arrival.status < 500) || attempt === attempts) break;
+    if (endingEpisode ? attempt >= episodeAttempts : arrival.status < 500 || attempt >= attempts) break;
     await arrival.arrayBuffer();
     await delay(retryDelayMs);
   }

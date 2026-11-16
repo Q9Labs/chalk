@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { proveSeededSignIn } from "./chalk-signin.mjs";
 
-async function withArrivalServer(firstStatus, code, check) {
+async function withArrivalServer(firstStatus, code, check, failures = 1) {
   let arrivals = 0;
   const server = createServer((request, response) => {
     if (request.method === "GET") {
@@ -15,7 +15,7 @@ async function withArrivalServer(firstStatus, code, check) {
       return;
     }
     arrivals++;
-    if (arrivals === 1) {
+    if (arrivals <= failures) {
       response.writeHead(firstStatus, { "content-type": "application/json" }).end(JSON.stringify({ error: { code } }));
       return;
     }
@@ -31,9 +31,14 @@ async function withArrivalServer(firstStatus, code, check) {
 }
 
 test("a reload proof survives the preceding guest's Episode ending", async () => {
-  await withArrivalServer(409, "episode.not_active", async (origin) => {
-    assert.deepEqual(await proveSeededSignIn({ origin, invite: { path: "/seeded-invite", code: "seeded-invite" }, retryDelayMs: 1 }), { state: "admitted" });
-  });
+  await withArrivalServer(
+    409,
+    "episode.not_active",
+    async (origin) => {
+      assert.deepEqual(await proveSeededSignIn({ origin, invite: { path: "/seeded-invite", code: "seeded-invite" }, retryDelayMs: 1 }), { state: "admitted" });
+    },
+    5,
+  );
 });
 
 test("a rejected invite is not retried as a transient Episode transition", async () => {
