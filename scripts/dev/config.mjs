@@ -1,3 +1,4 @@
+import { findExecutable } from "../lib/platform.mjs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { access } from "node:fs/promises";
@@ -21,8 +22,10 @@ const commands = new Set(Object.values(DevCommand));
 const { metro: metroPort, ...localPorts } = ports;
 const defaultPorts = Object.freeze(localPorts);
 const toolByProfile = Object.freeze({
-  core: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl", "op"],
-  mobile: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl", "op", "xcrun"],
+  core: ["node", "pnpm", "docker", "op"],
+  mobile: ["node", "pnpm", "docker", "op", "adb", "java"],
+  android: ["node", "pnpm", "docker", "op", "adb", "java"],
+  ios: ["node", "pnpm", "docker", "op", "xcrun"],
 });
 
 function parseFlagValue(token, flag, argv, index) {
@@ -58,7 +61,7 @@ export function parseArguments(argv = []) {
     let value;
     [value, index] = parseFlagValue(token, "--profile", argv, index);
     if (value !== undefined) {
-      if (value !== "core" && value !== "mobile") throw failure(FailureKind.CONFIG, `unknown profile: ${value}`, { stage: "arguments" });
+      if (!Object.hasOwn(toolByProfile, value)) throw failure(FailureKind.CONFIG, `unknown profile: ${value}`, { stage: "arguments" });
       profile = value;
       continue;
     }
@@ -126,12 +129,13 @@ function durationFromEnv(env, name, fallback) {
 }
 
 function userStateRoot({ env, platform, home }) {
+  if (platform === "win32") return join(env.LOCALAPPDATA || join(home, "AppData", "Local"), "chalk");
   if (platform === "darwin") return join(home, "Library", "Application Support", "chalk");
   return join(env.XDG_STATE_HOME || join(home, ".local", "state"), "chalk");
 }
 
 export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = process.env, platform = process.platform, home = homedir(), profile = "core", fresh = false, requiredTools, allowBusyPorts = [], secretResolver } = {}) {
-  if (profile !== "core" && profile !== "mobile") throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
+  if (!Object.hasOwn(toolByProfile, profile)) throw failure(FailureKind.CONFIG, `unknown profile: ${profile}`, { stage: "config" });
   const checkoutRoot = resolve(root);
   const stateRoot = env.CHALK_DEV_STATE_ROOT || userStateRoot({ env, platform, home });
   const runtimeRoot = join(checkoutRoot, ".private", "chalk-dev");
@@ -148,7 +152,7 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
   const publicOrigin = publicOriginFromEnv(env);
   const hasEnvSfuCredential = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
-  if (profile === "mobile") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
+  if (profile !== "core") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
   return {
     cwd: resolve(cwd),
     root: checkoutRoot,
@@ -236,10 +240,5 @@ export async function preflight(config, { which = async (tool) => commandExists(
 }
 
 async function commandExists(tool) {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolveExists) => {
-    const child = spawn("sh", ["-c", `command -v ${JSON.stringify(tool)}`], { stdio: "ignore" });
-    child.once("error", () => resolveExists(false));
-    child.once("exit", (code) => resolveExists(code === 0));
-  });
+  return Boolean(findExecutable(tool));
 }

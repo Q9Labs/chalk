@@ -199,7 +199,8 @@ async function hasOwnedChild(children, isAlive) {
   return false;
 }
 
-async function processCommand(pid) {
+export async function processCommand(pid) {
+  if (process.platform === "win32") return windowsProcessCommand(pid);
   const { execFile } = await import("node:child_process");
   return new Promise((resolveCommand) => {
     execFile("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" }, (_error, stdout) => resolveCommand(stdout || ""));
@@ -207,8 +208,17 @@ async function processCommand(pid) {
 }
 
 async function processGroupId(pid) {
+  if (process.platform === "win32") return pid;
   const { execFile } = await import("node:child_process");
   return new Promise((resolveGroup) => {
     execFile("ps", ["-p", String(pid), "-o", "pgid="], { encoding: "utf8" }, (_error, stdout) => resolveGroup(String(stdout || "").trim()));
+  });
+}
+
+async function windowsProcessCommand(pid) {
+  if (!Number.isInteger(pid) || pid < 1) return "";
+  const { execFile } = await import("node:child_process");
+  return new Promise((resolveCommand) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}').CommandLine`], { encoding: "utf8", windowsHide: true }, (_error, stdout) => resolveCommand(stdout || ""));
   });
 }

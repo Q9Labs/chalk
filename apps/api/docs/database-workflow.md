@@ -1,10 +1,10 @@
 # API database work
 
-The API uses pgx, sqlc, and goose. `apps/api/scripts/dev-services.sh` manages local Postgres and Redis. The API opens a pool at startup but does not run migrations.
+The API uses pgx, sqlc, and goose. `node apps/api/scripts/dev-services.mjs` manages local Postgres and Redis. The API opens a pool at startup but does not run migrations.
 
 ## Schema changes
 
-`apps/api/db/migrations/*.sql` is the source used by goose and sqlc. Keep `db/schema.sql`, the human-readable snapshot, in sync; editing it alone doesn't change a database. Add a timestamped migration with goose `Up` and `Down` sections. Use a safe rollback, or make `Down` fail explicitly if the migration is irreversible. Test reversible changes with up, down, and up using `apps/api/scripts/db-migrate.sh`.
+`apps/api/db/migrations/*.sql` is the source used by goose and sqlc. Keep `db/schema.sql`, the human-readable snapshot, in sync; editing it alone doesn't change a database. Add a timestamped migration with goose `Up` and `Down` sections. Use a safe rollback, or make `Down` fail explicitly if the migration is irreversible. Test reversible changes with up, down, and up using `node apps/api/scripts/db-migrate.mjs`.
 
 For managed databases, use the direct owner connection in `CHALK_DATABASE_URL`, not the runtime/PgBouncer URL. The controller runs checked-in migrations to the release manifest's `minimum_migration` before API/Sync activation. Owner credentials stay out of runtime services. Only an explicitly named checked-in repair may fill an out-of-order gap; other gaps fail. API readiness rejects an older schema. Runtime rollback does not undo migrations.
 
