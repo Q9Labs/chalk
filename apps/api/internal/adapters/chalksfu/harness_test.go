@@ -55,6 +55,9 @@ func TestMain(m *testing.M) {
 // real service as a process, so they test the wire contract and not a copy of it.
 func sfuBinary(t *testing.T) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the conformance suite runs the Chalk SFU as a process with real loopback media, and the SFU ships on Linux only")
+	}
 	buildOnce.Do(func() {
 		_, file, _, _ := runtime.Caller(0)
 		source := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", "features", "media", "sfu")
@@ -63,9 +66,6 @@ func sfuBinary(t *testing.T) string {
 			return
 		}
 		binaryPath = filepath.Join(binaryDir, "sfu")
-		if runtime.GOOS == "windows" {
-			binaryPath += ".exe"
-		}
 		output, err := exec.Command("go", "build", "-C", source, "-o", binaryPath, "./cmd/sfu").CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("build sfu: %w\n%s", err, output)

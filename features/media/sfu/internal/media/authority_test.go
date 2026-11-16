@@ -158,6 +158,11 @@ func TestAPacketFromOutsideTheWindowIsNeverSent(t *testing.T) {
 		t.Fatalf("a revoked source resent %d packets", got)
 	}
 
+	// A coarse clock (Windows) gives the revoked sends and the grant one timestamp, so the grant must start on a later tick.
+	revoked := monotonic()
+	for monotonic() == revoked {
+		time.Sleep(time.Millisecond)
+	}
 	now := monotonic()
 	authority.window.Store(&leaseWindow{since: now, until: now + int64(time.Minute)})
 	if got := send(benchPacketsPerFrame); got != benchPacketsPerFrame {
