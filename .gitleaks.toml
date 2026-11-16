@@ -36,4 +36,7 @@ regexes = ['''^chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''', '''^chalk_sk_Pq3m8
 [[allowlists]]
 description = "Postgres integration tests use a fixture object key and a fixture idempotency key."
 regexTarget = "line"
-regexes = ['''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''', '''^\s*if _, err := repository\.Patch\(ctx, tenantID, created\.Endpoint\.ID, webhooks\.PatchInput\{Enabled: &enabled, ExpectedRevision: immediate\.Revision, IdempotencyKey: "disable-fence-0001"\}, "", ""\); err != nil \{$''']
+regexes = [
+  '''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''',
+  '''^\s*if _, err := repository\.Patch\(ctx, tenantID, created\.Endpoint\.ID, webhooks\.PatchInput\{Enabled: &enabled, ExpectedRevision: immediate\.Revision, IdempotencyKey: "disable-fence-0001"\}, "", ""\); err != nil \{$''',
+]
