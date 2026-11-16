@@ -28,11 +28,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform neutral --no-splitting && pnpm run build:types",
-    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform neutral --no-splitting && pnpm run build:types",
+    "build:types": "node ../../scripts/fs.mjs rm tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
     "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/fs.mjs rm dist"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

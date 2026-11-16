@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawnCommand } from "../lib/platform.mjs";
 
 const [command, ...args] = process.argv.slice(2);
 const guard = new URL("./no-network.mjs", import.meta.url).href;
-const child = spawn(command, args, {
+const child = spawnCommand(command, args, {
   stdio: "inherit",
   env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${guard}` },
 });

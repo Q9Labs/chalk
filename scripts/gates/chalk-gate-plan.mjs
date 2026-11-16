@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { gitLines } from "../lib/git.mjs";
+import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 import { demotion, RegisterError, requireRegistered } from "./register.mjs";
 
@@ -356,8 +357,10 @@ function workspaceBuildCommand(workspaces) {
   return ["pnpm", "exec", "turbo", "run", "build", "--force", ...runnable.map((workspace) => `--filter=${workspace.name}...`)];
 }
 
-function task(id, label, selected, reason, command, env = {}) {
+function task(id, label, selected, reason, plannedCommand, env = {}) {
   requireRegistered(id);
+  // A lane that runs bash scripts or Linux services cannot start on Windows: it fails with one line that points to the Gate workflow.
+  const command = plannedCommand && isWindows && plannedCommand[0] === "bash" ? ["node", "scripts/gates/needs-linux.mjs", id] : plannedCommand;
   // A demoted check still runs and reports; demoted.mjs turns its failure into a warning so it cannot fail a gate.
   const wrapped = command && demotion(id) ? ["node", "scripts/gates/demoted.mjs", `gate:${id}`, "--", ...command] : command;
   return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env };
@@ -533,7 +536,7 @@ export function createGatePlan(files, options = {}) {
       "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs scripts/gates/demoted.test.mjs scripts/gates/ci-janitor.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
-    task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
+    task("secrets", "Secret scan", true, "always required for the selected diff", ["node", "scripts/gates/gitleaks.mjs"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),

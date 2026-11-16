@@ -1,7 +1,7 @@
 import { existsSync, renameSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnCommandSync } from "../../../scripts/lib/platform.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const mobileDir = dirname(scriptDir);
@@ -33,7 +33,7 @@ try {
     throw new Error("Missing command for production mobile build wrapper");
   }
 
-  const result = spawnSync(cmd, args, {
+  const result = spawnCommandSync(cmd, args, {
     cwd: mobileDir,
     stdio: "inherit",
     env: {

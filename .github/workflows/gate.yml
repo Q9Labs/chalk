@@ -360,9 +360,9 @@ jobs:
           GITLEAKS_LOG_OPTS: ${{ github.event_name == 'merge_group' && format('{0}..{1}', github.event.merge_group.base_sha, github.sha) || '' }}
         run: |
           if [[ ("${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group") && "${{ needs.changes.result }}" == "success" && "${{ needs.changes.outputs.full }}" == "false" ]]; then
-            pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
+            pnpm exec node scripts/gates/commit.mjs --base "${GATE_BASE_REF}"
           else
-            pnpm exec bash scripts/gates/commit.sh --full
+            pnpm exec node scripts/gates/commit.mjs --full
           fi
 
       # The scorecard reads the reports the lanes above wrote: the call bundle sizes in the build group and the SFU

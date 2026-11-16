@@ -1,0 +1,73 @@
+name: Windows
+
+# Proves that a developer on native Windows (PowerShell, no WSL) can install, check, build and test the repository.
+# The Gate workflow stays the merge authority on Linux; this job covers what only a Windows checkout can break:
+# line endings, path handling, .cmd shims and POSIX shell syntax in scripts.
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-windows-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: "true"
+  # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
+  PNPM_CONFIG_FETCH_RETRIES: "5"
+  PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Check types
+        run: pnpm run check-types
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Check formatting
+        run: pnpm run format:check
+
+      # The pre-commit hook runs this on staged files; CI has none, so it checks the files the change touched.
+      - name: Run the fast gate
+        run: pnpm run gate:fast -- --base "$env:GATE_BASE_REF"
+        env:
+          GATE_BASE_REF: ${{ github.event.merge_group.base_sha || (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.base_ref || 'master') }}
+          # A manual run on master changes no files, and an empty scope is not a failure there.
+          GATE_ALLOW_EMPTY: "1"
+
+      - name: Check generated files
+        run: pnpm run check:generated
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Run unit tests
+        run: pnpm run test

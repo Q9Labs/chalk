@@ -28,13 +28,13 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform node && pnpm run build:types && pnpm run build:logos",
-    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
-    "build:logos": "mkdir -p ./dist && cp -R ./src/logos ./dist/",
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/index.ts --format esm --out-dir ./dist --platform node && pnpm run build:types && pnpm run build:logos",
+    "build:types": "node ../../scripts/fs.mjs rm tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:logos": "node ../../scripts/fs.mjs cp ./src/logos ./dist/",
     "dev": "pnpm run build:logos && tsup ./src/index.ts --format esm --out-dir ./dist --platform node --watch",
     "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/fs.mjs rm dist"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
