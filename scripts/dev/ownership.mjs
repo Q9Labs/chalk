@@ -169,11 +169,12 @@ export async function removeRuntimeFiles(config) {
   await unlink(config.ownerPath).catch(() => {});
 }
 
-export async function validateOwnedPid(pid, { expectedCommand, expectedProcessGroup = false, command = processCommand, processGroup = processGroupId, alive = processAlive } = {}) {
+export async function validateOwnedPid(pid, { expectedCommand, expectedProcessGroup = false, command = processCommand, processGroup = processGroupId, alive = processAlive, platform = process.platform } = {}) {
   if (!(await alive(pid))) return false;
   if (expectedCommand) {
     const actual = await command(pid);
-    if (!actual.includes(expectedCommand)) return false;
+    const normalize = (value) => (platform === "win32" ? value.replaceAll("\\", "/") : value);
+    if (!normalize(actual).includes(normalize(expectedCommand))) return false;
   }
   if (expectedProcessGroup && Number(await processGroup(pid)) !== pid) return false;
   return true;
@@ -200,6 +201,7 @@ async function hasOwnedChild(children, isAlive) {
 }
 
 async function processCommand(pid) {
+  if (process.platform === "win32") return windowsProcessCommand(pid);
   const { execFile } = await import("node:child_process");
   return new Promise((resolveCommand) => {
     execFile("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" }, (_error, stdout) => resolveCommand(stdout || ""));
@@ -207,8 +209,17 @@ async function processCommand(pid) {
 }
 
 async function processGroupId(pid) {
+  if (process.platform === "win32") return pid;
   const { execFile } = await import("node:child_process");
   return new Promise((resolveGroup) => {
     execFile("ps", ["-p", String(pid), "-o", "pgid="], { encoding: "utf8" }, (_error, stdout) => resolveGroup(String(stdout || "").trim()));
+  });
+}
+
+async function windowsProcessCommand(pid) {
+  if (!Number.isInteger(pid) || pid < 1) return "";
+  const { execFile } = await import("node:child_process");
+  return new Promise((resolveCommand) => {
+    execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}').CommandLine`], { encoding: "utf8", windowsHide: true }, (_error, stdout) => resolveCommand(stdout || ""));
   });
 }

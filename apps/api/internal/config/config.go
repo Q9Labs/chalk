@@ -308,15 +308,6 @@ type ProviderBridgeConfig struct {
 	Enabled           bool
 }
 
-type R2Config struct {
-	AccessKeyID     string
-	AccountID       string
-	Bucket          string
-	Endpoint        string
-	SecretAccessKey string
-	RequestTimeout  time.Duration
-}
-
 type RecordingKMSConfig struct {
 	KeyID          string
 	Region         string
@@ -611,12 +602,13 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	r2Config := R2Config{
-		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
-		AccountID:       envOrDefault(R2AccountID, ""),
-		Bucket:          envOrDefault(R2Bucket, ""),
-		Endpoint:        envOrDefault(R2Endpoint, ""),
-		SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
-		RequestTimeout:  r2RequestTimeout,
+		AccessKeyID:      envOrDefault(R2AccessKeyID, ""),
+		AccountID:        envOrDefault(R2AccountID, ""),
+		Bucket:           envOrDefault(R2Bucket, ""),
+		Endpoint:         envOrDefault(R2Endpoint, ""),
+		InternalEndpoint: envOrDefault(R2InternalEndpoint, ""),
+		SecretAccessKey:  envOrDefault(R2SecretAccessKey, ""),
+		RequestTimeout:   r2RequestTimeout,
 	}
 	recorderFleetIssuer, err := loadRecorderFleetIssuerConfig()
 	if err != nil {

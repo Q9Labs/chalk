@@ -1,3 +1,4 @@
+import { writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { randomUUID } from "node:crypto";
 import { writeJsonAtomic } from "./json-file.mjs";
 import { runChecked } from "./chalk-resources.mjs";
@@ -108,5 +109,6 @@ export async function seedDashboard({ config, serviceToken }) {
   }
   const keys = await api(`/tenants/${owner.id}/api-keys?page_size=100`);
   if (!keys.api_keys.some((key) => key.name === "Local development")) await api(`/tenants/${owner.id}/api-keys`, { name: "Local development", scopes: ["spaces:read", "episodes:read"], expires_at: new Date(Date.now() + 90 * 86400000).toISOString() });
+  await writeDashboardArtifacts(config.runtimeRoot, artifacts);
   await writeJsonAtomic(`${config.runtimeRoot}/dashboard-artifacts.json`, artifacts, { redacted: false });
 }

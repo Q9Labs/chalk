@@ -4,7 +4,7 @@ Elixir/OTP WebSocket sync server and the primary `SyncEngine` adapter.
 
 Postgres is the sole durable authority for Episode control state, ordered events, command receipts, participant-episode lifecycle, lifecycle intents and external operation intents. Actual media publications remain MediaPlane truth. Every BEAM process, ETS table, notification and SDK replica is a disposable projection. Redis is not in the correctness path.
 
-Commands: `mix deps.get`, `mix test`, `iex -S mix` (listens on `http://localhost:4100`), `scripts/gate.sh`. The root `pnpm dev` runs Sync with `MIX_ENV=prod` and `CHALK_SYNC_LOCAL_PARITY=true`: real Postgres, API-issued Ed25519 JWTs, and the generated local mTLS provider bridge, with identities created under `.private/chalk-dev/`. That is distinct from `CHALK_SYNC_LOCAL_PROOF`, which also runs on a localhost Postgres but verifies tokens with the development verifier instead of API-issued JWTs.
+Commands: `mix deps.get`, `mix test`, `iex -S mix` (listens on `http://localhost:4100`), `scripts/gate.sh`. The root `pnpm dev` runs Sync in Docker with `MIX_ENV=prod`, `CHALK_SYNC_LOCAL_PARITY=true`, and `CHALK_SYNC_LOCAL_CONTAINER=true`: real Postgres, API-issued Ed25519 JWTs, and the generated local mTLS provider bridge, with identities created under `.private/chalk-dev/`. The container flag permits only the private `postgres` database and `api` provider bridge DNS names. Docker publishes listeners on host loopback only. This is distinct from `CHALK_SYNC_LOCAL_PROOF`, which also runs on a localhost Postgres but verifies tokens with the development verifier instead of API-issued JWTs.
 
 ## Durable command path
 

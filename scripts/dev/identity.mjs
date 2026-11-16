@@ -1,4 +1,4 @@
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
@@ -54,7 +54,6 @@ export async function generateSigningIdentity({ paths, kid = "local-dev", keyPai
   const rawPublic = rawPublicBytes.toString("base64url");
   await writeFile(paths.signingPrivateKey, privatePem, { encoding: "utf8", mode: 0o600 });
   await writeFile(paths.signingPrivateKeyRaw, rawPrivate, { encoding: "utf8", mode: 0o600 });
-  await chmod(paths.signingPrivateKey, 0o600);
   await writeJsonAtomic(paths.signingPublicKeyring, { [kid]: rawPublic }, { redacted: false });
   return { kid, privateKeyPath: paths.signingPrivateKey, privateKeyRawPath: paths.signingPrivateKeyRaw, publicKeyringPath: paths.signingPublicKeyring, rawPrivateKey: rawPrivate, rawPublicKey: rawPublic, publicKeyring: { [kid]: rawPublic } };
 }

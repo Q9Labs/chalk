@@ -34,7 +34,7 @@ for _ in {1..60}; do
   if docker exec "$container" sh -c 'test "$(cat /proc/1/comm)" = postgres && pg_isready -U postgres -d chalk_mcp_eval' >/dev/null 2>&1; then break; fi
   sleep 0.5
 done
-"$source_root/apps/api/scripts/db-migrate.sh" up > "$state/migrations.log" 2>&1
+(cd "$source_root/apps/api" && go tool goose -dir db/migrations postgres "$CHALK_DATABASE_URL" up) > "$state/migrations.log" 2>&1
 psql "$CHALK_DATABASE_URL" -X -v ON_ERROR_STOP=1 -qc 'create table mcp_eval_marker (id boolean primary key check(id)); insert into mcp_eval_marker values(true);'
 (cd "$source_root/apps/api" && GOMAXPROCS=2 go test -tags=mcp_eval -c -o "$state/api" ./internal/adapters/postgres) > "$state/build.log" 2>&1
 "$state/api" -test.run '^TestMCPEvalHost$' -test.timeout=0 > "$state/api.jsonl" 2>&1 &

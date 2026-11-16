@@ -32,6 +32,11 @@ if config_env() == :prod do
 
   local_proof? = System.get_env("CHALK_SYNC_LOCAL_PROOF") == "true"
   local_parity? = System.get_env("CHALK_SYNC_LOCAL_PARITY") == "true"
+  local_container? = System.get_env("CHALK_SYNC_LOCAL_CONTAINER") == "true"
+
+  if local_container? and not local_parity? do
+    raise "CHALK_SYNC_LOCAL_CONTAINER requires CHALK_SYNC_LOCAL_PARITY"
+  end
 
   if System.get_env("CHALK_API_ENV") == "nightly" do
     if local_proof? or local_parity? do
@@ -55,16 +60,20 @@ if config_env() == :prod do
     raise "CHALK_SYNC_LOCAL_PROOF requires a localhost database"
   end
 
-  if local_parity? and URI.parse(database_url).host not in ["127.0.0.1", "localhost", "::1"] do
-    raise "CHALK_SYNC_LOCAL_PARITY requires a localhost database"
+  parity_database_hosts =
+    if local_container?, do: ["postgres"], else: ["127.0.0.1", "localhost", "::1"]
+
+  if local_parity? and URI.parse(database_url).host not in parity_database_hosts do
+    raise "CHALK_SYNC_LOCAL_PARITY requires the local dev database"
   end
 
-  if local_parity? and System.get_env("CHALK_SYNC_BIND_IP") not in [nil, "127.0.0.1"] do
+  if local_parity? and not local_container? and
+       System.get_env("CHALK_SYNC_BIND_IP") not in [nil, "127.0.0.1"] do
     raise "CHALK_SYNC_LOCAL_PARITY requires a localhost bind address"
   end
 
   listen_ip =
-    if local_proof? or local_parity? do
+    if local_proof? or (local_parity? and not local_container?) do
       {127, 0, 0, 1}
     else
       System.get_env("CHALK_SYNC_BIND_IP", "0.0.0.0")
@@ -181,8 +190,10 @@ if config_env() == :prod do
       raise "CHALK_SYNC_PROVIDER_BRIDGE_URL must be an HTTPS origin without credentials, path, query, or fragment"
   end
 
-  if local_parity? and provider_bridge_uri.host not in ["127.0.0.1", "localhost", "::1"] do
-    raise "CHALK_SYNC_LOCAL_PARITY requires a localhost provider bridge"
+  parity_bridge_hosts = if local_container?, do: ["api"], else: ["127.0.0.1", "localhost", "::1"]
+
+  if local_parity? and provider_bridge_uri.host not in parity_bridge_hosts do
+    raise "CHALK_SYNC_LOCAL_PARITY requires the local dev provider bridge"
   end
 
   require_synchronous_standby? =

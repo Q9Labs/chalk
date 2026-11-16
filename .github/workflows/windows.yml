@@ -47,6 +47,9 @@ jobs:
           cache-dependency-path: apps/api/go.sum
 
       # Every step runs even when an earlier one failed, so one run reports every Windows break.
+      - name: Test native Windows dev orchestration
+        run: node --test scripts/dev/*.test.mjs
+
       - name: Check types
         if: ${{ !cancelled() }}
         run: pnpm run check-types

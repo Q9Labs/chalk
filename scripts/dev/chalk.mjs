@@ -1,10 +1,12 @@
+import { openRuntimeControl } from "./control.mjs";
 import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSupervisor } from "./supervisor.mjs";
 import { createSecretResolver } from "./secrets.mjs";
 import { identityEnvironment } from "./identity.mjs";
-import { waitForFileReady, waitForHTTPReady } from "./process.mjs";
+import { containerArguments, containerEnvironment, containerNames, imageName } from "./containers.mjs";
+import { spawnService, stopProcessGroup, waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
@@ -22,7 +24,9 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   let provider;
   let bindings;
   let systemToken;
+  let control;
   let invite;
+  let syncDependencyFingerprint;
   const dashboardToken = randomBytes(32).toString("base64url");
   const dashboardSessionSecret = randomBytes(32).toString("base64url");
   const resolver = config.secretResolver || adapters.resolveSecrets || createSecretResolver({ op: adapters.op || "op" });
@@ -43,6 +47,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       { kind: "container", name: config.postgres.container, reusable: true },
       { kind: "database", name: config.databaseName || "chalk_dev", container: config.postgres.container, reusable: true },
       { kind: "container", name: config.redis.container, reusable: true },
+      ...["api", "sync"].map((service) => ({ kind: "container", name: containerNames(config)[service], reusable: false })),
       { kind: "generated", path: config.runtimeRoot },
     ],
     resolveSecrets: async (context) => {
@@ -51,22 +56,44 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       return provider;
     },
     startResources: async ({ lease }) => {
+      control = await openRuntimeControl(config, () => process.emit("SIGTERM"));
       systemToken = randomBytes(32).toString("base64url");
       await resources.start({ lease });
       if (!resources.state.identity?.signing) throw failure(FailureKind.STARTUP, "runtime signing identity was not generated", { stage: "identity" });
     },
-    stopResources: async () => resources.stop(),
+    stopResources: async () => {
+      try {
+        await resources.stop();
+      } finally {
+        await control?.close();
+      }
+    },
+    startService: async (spec, { childEnv, redactions }) => {
+      if (!spec.container) return spawnService(spec, { config, extraEnv: childEnv, redactions });
+      const env = containerEnvironment(config, spec.id, childEnv);
+      return spawnService({ ...spec, command: "docker", args: containerArguments(config, spec.id, { image: imageName(spec.id, resources.state.versions), env }) }, { config, extraEnv: env, redactions });
+    },
+    stopService: async (spec, running) => {
+      if (spec.container)
+        await runChecked("docker", ["stop", "--time", "3", containerNames(config)[spec.id]]).catch((error) => {
+          if (!running.exited) throw error;
+        });
+      await stopProcessGroup(running, { graceMs: config.timeouts.stopGraceMs });
+    },
     beforeStartService: async (spec) => {
       if (spec.id === "sync") {
-        // A fresh checkout has no Hex packages. Fetch and compile before the readiness clock starts for Sync.
-        const cwd = `${config.root}/apps/sync`;
-        const env = { MIX_ENV: "prod" };
-        for (const args of [["local.hex", "--force", "--if-missing"], ["local.rebar", "--force", "--if-missing"], ["deps.get"], ["compile"]]) await runChecked("mix", args, { cwd, env });
+        const fingerprint = createHash("sha256")
+          .update(readFileSync(`${config.root}/apps/sync/mix.exs`))
+          .update(readFileSync(`${config.root}/apps/sync/mix.lock`))
+          .digest("hex");
+        if (fingerprint === syncDependencyFingerprint) return;
+        await runChecked("docker", containerArguments(config, "sync", { image: imageName("sync", resources.state.versions), command: ["mix", "deps.get"] }));
+        syncDependencyFingerprint = fingerprint;
         return;
       }
-      if (spec.id !== "mobile") return;
-      const bridgePath = `${config.root}/apps/mobile/scripts/prepare-local-bridge.mjs`;
-      const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_WEB_PORT: String(config.ports.web) } });
+      if (spec.id !== "mobile" || config.profile === "ios") return;
+      const bridgePath = `${config.root}/scripts/dev/adb-reverse.mjs`;
+      const result = await runChecked(process.execPath, [bridgePath], { cwd: config.root, env: { CHALK_DEV_API_PORT: String(config.ports.api), RCT_METRO_PORT: String(config.metro.port) } });
       if (result.stdout?.trim()) output(result.stdout.trim());
       if (result.stderr?.trim()) output(result.stderr.trim());
     },
@@ -96,6 +123,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   const runtime = createSupervisor(config, { serviceSpecs: selectedServiceSpecs, hooks: mergedHooks, preflightFn: resources.preflight, acquireLease: adapters.acquireLease });
   runtime.commandHooks = {
     resetResources: async () => resources.reset?.(),
+    stopContainers: async () => resources.stopContainers?.(),
   };
   return runtime;
 
@@ -186,14 +214,14 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
 
 function defaultServiceSpecs(config) {
   const specs = [
-    { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${config.root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` }, watchRoots: [`${config.root}/apps/api`] },
-    { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${config.root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` }, watchRoots: [`${config.root}/apps/sync`] },
+    { id: "api", command: "docker", container: true, args: [], cwd: `${config.root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` }, watchRoots: [`${config.root}/apps/api`] },
+    { id: "sync", command: "docker", container: true, args: [], cwd: `${config.root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` }, watchRoots: [`${config.root}/apps/sync`] },
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
     { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
-    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:raw"], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
+    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:raw"], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], reloadDependsOn: ["sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];
-  if (config.profile === "mobile")
+  if (config.profile !== "core")
     specs.push({
       id: "mobile",
       command: "pnpm",

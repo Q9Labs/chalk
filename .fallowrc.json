@@ -1,6 +1,10 @@
 {
   "entry": [
     "gate.config.ts",
+    "apps/api/scripts/db-migrate.mjs",
+    "apps/api/scripts/dev-postgres.mjs",
+    "apps/api/scripts/dev-redis.mjs",
+    "apps/api/scripts/dev-services.mjs",
     "scripts/nightly-stack/identity.mjs",
     "scripts/nightly-stack/seed.mjs",
     "features/scorecard/scorecard.mjs",

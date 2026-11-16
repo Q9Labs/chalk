@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { spawnCommand, killTree } from "../lib/platform.mjs";
 import { join } from "node:path";
 import { DevFailure, FailureKind, failure } from "./model.mjs";
 import { validateOwnedPid } from "./ownership.mjs";
@@ -18,7 +18,7 @@ function createRedactor({ values = [], env = {} } = {}) {
   return (text) => needles.reduce((result, needle) => result.split(needle).join("[redacted]"), String(text));
 }
 
-export function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
+function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
   const redact = createRedactor({ values: redactions, env });
   const servicePath = join(logRoot, `${service}.log`);
   let ready = false;
@@ -41,7 +41,7 @@ export function spawnService(spec, { config, runtimeId, extraEnv = {}, redaction
   if (!spec?.id || !spec.command) throw failure(FailureKind.CONFIG, "service requires an id and command", { stage: "startup" });
   const env = { ...process.env, ...spec.env, ...extraEnv };
   const mux = createLogMux({ service: spec.id, logRoot: config.logRoot, aggregatePath: config.aggregateLog, redactions: [...(spec.redactions || []), ...redactions], env, mirror });
-  const child = spawn(spec.command, spec.args || [], {
+  const child = spawnCommand(spec.command, spec.args || [], {
     cwd: spec.cwd || config.root,
     env,
     detached: true,
@@ -149,8 +149,7 @@ export async function stopProcessGroup(running, { graceMs = 3000, killGraceMs = 
 
 function sendGroupSignal(pid, signal, child) {
   try {
-    if (process.platform === "win32") child?.kill(signal);
-    else process.kill(-pid, signal);
+    killTree(child || { pid, exitCode: null, signalCode: null, kill: (value) => process.kill(pid, value) }, signal);
   } catch (error) {
     if (error.code !== "ESRCH") throw error;
   }

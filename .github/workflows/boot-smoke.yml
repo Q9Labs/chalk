@@ -65,20 +65,11 @@ jobs:
     env:
       CHALK_CLOUDFLARE_REALTIME_APP_ID: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_ID }}
       CHALK_CLOUDFLARE_REALTIME_APP_SECRET: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_SECRET }}
-      PUBLIC_ORIGIN: http://localhost:3070
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-js
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
-      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
-        with:
-          version-file: .tool-versions
-          version-type: strict
       - uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
@@ -96,11 +87,31 @@ jobs:
           done
           echo "ready_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
 
+      - name: Prove API and Sync run in containers
+        run: |
+          node --input-type=module <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { resolveDevConfig } from './scripts/dev/config.mjs';
+          import { containerNames } from './scripts/dev/containers.mjs';
+          const names = containerNames(resolveDevConfig());
+          for (const service of ['api', 'sync']) {
+            const [container] = JSON.parse(execFileSync('docker', ['inspect', names[service]], {encoding: 'utf8'}));
+            if (!container.State.Running) throw new Error(`${service} container is not running`);
+            console.log(`${service}: running in ${container.Config.Image}`);
+          }
+          NODE
+
       - name: Doctor
         run: |
           started=$(date +%s)
           pnpm dev:doctor | tee .verify/ci/doctor.json
           echo "doctor_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
+
+      - name: Prove artifact reads and loopback-only host bindings
+        run: node scripts/dev/verify-stack.mjs --network
+
+      - name: Reload Go and Elixir source
+        run: node scripts/dev/verify-stack.mjs --reload
 
       - name: Join a call with fake media through the SFU
         run: node .agents/skills/verify-chalk/scripts/join-call.mjs "ci-${GITHUB_RUN_ID}"
@@ -115,7 +126,7 @@ jobs:
           for secret in "$CHALK_CLOUDFLARE_REALTIME_APP_ID" "$CHALK_CLOUDFLARE_REALTIME_APP_SECRET" "$token"; do
             [ -n "$secret" ] && grep -rlaF -- "$secret" .verify | xargs -r rm -f
           done
-          pnpm dev:down
+          node scripts/dev/verify-stack.mjs --teardown
 
       # .verify is a hidden directory, which upload-artifact skips unless told otherwise; without that no run ever
       # uploaded evidence. Read diagnostics.json first: it holds each page's tile state, WebRTC stats and failed requests.

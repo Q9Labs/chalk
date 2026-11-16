@@ -11,20 +11,18 @@ Chalk is an open-source monorepo for low-latency real-time collaboration and com
 
 ## Development
 
-Install dependencies with `pnpm install`. The local stack needs OrbStack (or a Docker-compatible daemon), Go, Elixir/OTP and OpenSSL, plus a Cloudflare SFU credential.
+Install Git, Node.js, pnpm, and Docker Desktop, OrbStack, or Docker Engine. API, Sync, Postgres, and Redis run in containers on macOS, Linux, and Windows. Go, Elixir/Erlang, and OpenSSL are not host prerequisites.
 
-```bash
-pnpm dev                    # core: Postgres, Redis, API, Sync, SDK watchers, web
-pnpm dev --profile mobile   # core plus Expo and the simulator/device bridges
+Follow [Run Chalk locally](docs/getting-started.md) for OS-specific setup, the non-production SFU credential, Android, tests, and the PR workflow.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-`pnpm dev` is for local development and never touches production. It prints the endpoints, a seeded Tenant and a Space on the `cf_sfu` media plane once a seeded guest can join and leave through the web origin. Use that Space for local end-to-end runs. Logs go to `.logs/dev-server.log`.
+Wait for `Chalk dev ready`, then open the printed web URL. Use `pnpm dev --profile android` to add Metro. Inspect the stack with `pnpm dev:doctor`, `pnpm dev:smoke`, and `pnpm dev:logs`. Stop it with `pnpm dev:stop`, or remove its local runtime data with `pnpm dev:down`.
 
-The credential is one non-production Cloudflare SFU `API_CREDENTIAL` item in 1Password that identifies Chalk/SFU and has `app_id` and `app_secret`. Zero or multiple matching items stop startup. On a headless machine set `CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET` instead (both, or startup fails). Set `PUBLIC_ORIGIN` when the web port sits behind another origin.
-
-Inspect and clean up with `pnpm dev:status`, `dev:logs`, `dev:smoke`, `dev:doctor`, `dev:stop` and `dev:down`. `pnpm dev --fresh` recreates only this checkout's Tenant and Space. `pnpm dev:reset` is destructive and asks first. Only one local runtime can own a machine, so worktrees share its ports, database and containers. `dev:status` names the owner.
-
-Run `pnpm run gate` for the canonical quality gate. `pnpm run gate:explain` describes its checks.
+Run `pnpm gate` before submitting a change. Open a draft PR, finish checks and self-review, then check the ready cap before marking it ready. See [gate operations](scripts/gates/README.md).
 
 ## License
 

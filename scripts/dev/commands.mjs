@@ -1,3 +1,4 @@
+import { requestRuntimeStop } from "./control.mjs";
 import { createInterface } from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { readFile } from "node:fs/promises";
@@ -14,7 +15,7 @@ const execFileAsync = promisify(execFile);
 const helpText = `Usage: pnpm dev [command] [options]
 
 Commands: start, status, doctor, logs [service], stop, down, reset
-Options: --profile core|mobile, --fresh, --yes, --ready (status only)
+Options: --profile core|android|mobile|ios, --fresh, --yes, --ready (status only)
 
 start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
 in the ready summary. Use the dev fixture for local media runs. Run pnpm dev:smoke
@@ -143,7 +144,7 @@ async function doctorCommand(config, { output, hooks = {} } = {}) {
   return result;
 }
 
-export async function stopCommand(config, { supervisor, hooks = {}, output } = {}) {
+async function stopCommand(config, { supervisor, hooks = {}, output } = {}) {
   if (supervisor) {
     const result = await supervisor.stop();
     output?.(JSON.stringify(result, null, 2));
@@ -152,29 +153,33 @@ export async function stopCommand(config, { supervisor, hooks = {}, output } = {
   const owner = await readOwner(config);
   if (!owner) return { state: RuntimeState.STOPPED, stopped: false };
   const validatePid = hooks.validatePid || validateOwnedPid;
+  if (owner.checkout && owner.checkout !== config.root) throw failure(FailureKind.OWNERSHIP_CONFLICT, `runtime belongs to another checkout (${owner.checkout}); run dev:stop there`, { stage: "ownership" });
   const supervisorAlive = await validatePid(owner.supervisorPid);
   const supervisorExpectedCommand = owner.supervisorExpectedCommand || owner.supervisor?.expectedCommand;
   if (supervisorAlive) {
-    if (owner.checkout && owner.checkout !== config.root) {
-      throw failure(FailureKind.OWNERSHIP_CONFLICT, `runtime belongs to another checkout (${owner.checkout}, pid ${owner.supervisorPid}); run dev:stop from the owning checkout`, { stage: "ownership" });
-    }
-    if (!supervisorExpectedCommand) {
-      throw failure(FailureKind.OWNERSHIP_CONFLICT, `cannot verify supervisor ${owner.supervisorPid}; its recorded command is missing`, { stage: "ownership" });
-    }
-    if (!(await validatePid(owner.supervisorPid, { expectedCommand: supervisorExpectedCommand }))) {
-      throw failure(FailureKind.OWNERSHIP_CONFLICT, `recorded supervisor ${owner.supervisorPid} no longer matches its expected command`, { stage: "ownership" });
-    }
-    if (owner.supervisorPid === process.pid) throw failure(FailureKind.CLEANUP, "refusing to stop the current supervisor process", { stage: "cleanup" });
-    (hooks.kill || process.kill.bind(process))(owner.supervisorPid, "SIGTERM");
-    await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, { expectedCommand: supervisorExpectedCommand, validate: validatePid });
+    await stopLiveSupervisor(config, owner, supervisorExpectedCommand, validatePid, hooks);
   } else {
     output?.(`Chalk dev supervisor ${owner.supervisorPid} is no longer running; releasing its stale ownership`);
+    await hooks.stopContainers?.();
     await stopManifestProcesses(owner.manifestPath, { hooks, config });
     await releaseStaleOwnership(config, { isAlive: (pid) => validatePid(pid) });
   }
   const result = { state: RuntimeState.STOPPED, stopped: true, runtimeId: owner.runtimeId };
   output?.(JSON.stringify(result, null, 2));
   return result;
+}
+
+async function stopLiveSupervisor(config, owner, supervisorExpectedCommand, validatePid, hooks) {
+  if (!supervisorExpectedCommand) {
+    throw failure(FailureKind.OWNERSHIP_CONFLICT, `cannot verify supervisor ${owner.supervisorPid}; its recorded command is missing`, { stage: "ownership" });
+  }
+  if (!(await validatePid(owner.supervisorPid, { expectedCommand: supervisorExpectedCommand }))) {
+    throw failure(FailureKind.OWNERSHIP_CONFLICT, `recorded supervisor ${owner.supervisorPid} no longer matches its expected command`, { stage: "ownership" });
+  }
+  if (owner.supervisorPid === process.pid) throw failure(FailureKind.CLEANUP, "refusing to stop the current supervisor process", { stage: "cleanup" });
+  if (process.platform === "win32" && !hooks.kill) await requestRuntimeStop(config, owner.supervisorPid);
+  else (hooks.kill || process.kill.bind(process))(owner.supervisorPid, "SIGTERM");
+  await waitForPidExit(owner.supervisorPid, config.timeouts.stopTimeoutMs ?? 120000, { expectedCommand: supervisorExpectedCommand, validate: validatePid });
 }
 
 async function resetCommand(config, { yes = false, confirm = confirmReset, hooks = {}, output } = {}) {
