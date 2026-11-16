@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { pathToFileURL } from "node:url";
 import { CHALK_BACKGROUND_ASSETS } from "../../packages/assets/src/index.ts";
 import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from "../../sdks/typescript/client/src/media/camera-background-images.ts";
 
@@ -44,7 +45,7 @@ test("the generated check rejects manifest drift and regeneration repairs it", a
         import.meta.resolve("tsx"),
         "--input-type=module",
         "-e",
-        `import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from ${JSON.stringify(path.join(root, "sdks/typescript/client/src/media/camera-background-images.ts"))}; console.log(JSON.stringify([CAMERA_BACKGROUND_IMAGES["modern-acoustic-office"].avif, CAMERA_BACKGROUND_OPTIONS.find(({id}) => id === "modern-acoustic-office").avif]));`,
+        `import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from ${JSON.stringify(pathToFileURL(path.join(root, "sdks/typescript/client/src/media/camera-background-images.ts")).href)}; console.log(JSON.stringify([CAMERA_BACKGROUND_IMAGES["modern-acoustic-office"].avif, CAMERA_BACKGROUND_OPTIONS.find(({id}) => id === "modern-acoustic-office").avif]));`,
       ],
       { encoding: "utf8" },
     );

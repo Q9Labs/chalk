@@ -1,12 +1,11 @@
 // @ts-check
 
-import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { execCommand } from "../../../../scripts/lib/platform.mjs";
 import { codegenPath, loadSyncContract, pascalCase, stableJson } from "./sync-contract.mjs";
 
-const execute = promisify(execFile);
+const execute = execCommand;
 const outputPath = codegenPath("CODEGEN_SYNC_TYPESCRIPT_OUTPUT_PATH", "sdks/typescript/client/src/generated/sync.ts");
 const contract = await loadSyncContract();
 const source = renderTypeScript(contract);

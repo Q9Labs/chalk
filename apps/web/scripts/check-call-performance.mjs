@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execCommandSync } from "../../../scripts/lib/platform.mjs";
 import { cpus, loadavg, platform, arch } from "node:os";
 import { parseArgs } from "node:util";
 import { chromium } from "playwright";
@@ -50,11 +50,11 @@ const budgets = loadCallBudgets(await readBudgets());
 validateBudgets(budgets);
 if (!values["record-baseline"]) validateScenarioBudgets(budgets, scenarios);
 if (!values["skip-build"]) {
-  execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], { cwd: root, stdio: "inherit", timeout: 300_000 });
-  execFileSync("pnpm", ["exec", "vite", "build", "--config", "vite.call-performance.config.ts"], { cwd: web, stdio: "inherit", timeout: 300_000 });
+  execCommandSync("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], { cwd: root, stdio: "inherit", timeout: 300_000 });
+  execCommandSync("pnpm", ["exec", "vite", "build", "--config", "vite.call-performance.config.ts"], { cwd: web, stdio: "inherit", timeout: 300_000 });
 }
 const report = {
-  source: process.env.TESTBOX_SOURCE_COMMIT ?? execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+  source: process.env.TESTBOX_SOURCE_COMMIT ?? execCommandSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
   baselineCommit: budgets.baselineCommit,
   recordedAt: new Date().toISOString(),
   machine: { platform: platform(), arch: arch(), cpu: cpus()[0].model, cores: cpus().length, load: loadavg() },

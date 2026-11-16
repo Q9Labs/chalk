@@ -1,9 +1,10 @@
 // Windows and POSIX differences that the repository's Node scripts share: starting a command, importing a file by
 // path, and stopping a process with its children.
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 
 export const isWindows = process.platform === "win32";
 
@@ -83,6 +84,17 @@ export function spawnCommandSync(command, args = [], options = {}) {
 export function execCommandSync(command, args = [], options = {}) {
   const resolved = resolveCommand(command, args, options);
   return execFileSync(resolved.file, resolved.args, { ...options, windowsVerbatimArguments: resolved.windowsVerbatimArguments });
+}
+
+/**
+ * The promise form of `execFile` that also starts `.cmd` shims on Windows.
+ * @param {string} command
+ * @param {readonly string[]} [args]
+ * @param {import("node:child_process").ExecFileOptions} [options]
+ */
+export function execCommand(command, args = [], options = {}) {
+  const resolved = resolveCommand(command, args, options);
+  return promisify(execFile)(resolved.file, resolved.args, { ...options, windowsVerbatimArguments: resolved.windowsVerbatimArguments });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnCommand } from "../../../scripts/lib/platform.mjs";
 import { createServer } from "vite";
 import { localDashboard } from "./local-dashboard.mjs";
 
@@ -15,7 +15,7 @@ for (const signal of ["SIGINT", "SIGTERM"])
 
 function run(command, arguments_) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, arguments_, { cwd: process.cwd(), env: process.env, stdio: "inherit" });
+    const child = spawnCommand(command, arguments_, { cwd: process.cwd(), env: process.env, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolve();

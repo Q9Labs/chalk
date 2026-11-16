@@ -5,13 +5,12 @@
 //
 // Needs `pnpm install` and Playwright's Chromium. It checks the base ref out in a temporary worktree and installs it.
 // Exits 1 when the branch adds a layout finding or the vision review points at a break in a changed region.
-import { execFile, execFileSync } from "node:child_process";
+import { execCommand, execCommandSync } from "../lib/platform.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { serveBuild } from "../../apps/web/scripts/call-performance-server.mjs";
 import { capture, planRuns } from "./capture.mjs";
 import { compareFrames } from "./compare.mjs";
@@ -31,7 +30,7 @@ const only = option("only")?.split(",").filter(Boolean);
 // Master's frames depend only on master and on the check code, so a run can keep them in this directory and reuse them.
 const baseCache = option("base-cache") ? resolve(option("base-cache")) : undefined;
 const started = Date.now();
-const run = promisify(execFile);
+const run = execCommand;
 
 // Written into apps/web of the tree it builds, because that tree may be an older base, and its import must resolve next to that tree's own harness config.
 const BUILD_CONFIG = `import { fileURLToPath } from "node:url";
@@ -75,7 +74,7 @@ async function startHarness(root) {
 
 /** What decides master's frames: its commit, the check code that walked it, and the journeys chosen. */
 function baseKey() {
-  const sha = execFileSync("git", ["rev-parse", baseRef], { cwd: repository, encoding: "utf8" }).trim();
+  const sha = execCommandSync("git", ["rev-parse", baseRef], { cwd: repository, encoding: "utf8" }).trim();
   const code = createHash("sha256");
   for (const file of ["capture.mjs", "journeys.mjs", "page-checks.mjs"]) code.update(readFileSync(join(import.meta.dirname, file)));
   return `${sha}-${code.digest("hex").slice(0, 12)}-${only?.join(",") ?? "all"}`;
@@ -90,8 +89,8 @@ try {
   await mkdir(out, { recursive: true });
   if (baseRoot) {
     if (baseCache && existsSync(dirs.base)) for (const name of readdirSync(dirs.base)) rmSync(join(dirs.base, name), { recursive: true, force: true });
-    execFileSync("git", ["worktree", "add", "--detach", "--force", baseRoot, baseRef], { cwd: repository, stdio: "inherit" });
-    execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: baseRoot, stdio: "ignore" });
+    execCommandSync("git", ["worktree", "add", "--detach", "--force", baseRoot, baseRef], { cwd: repository, stdio: "inherit" });
+    execCommandSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: baseRoot, stdio: "ignore" });
   }
   const [head, base] = await Promise.all([startHarness(repository), baseRoot ? startHarness(baseRoot) : undefined]);
   harnesses.push(head, ...(base ? [base] : []));
@@ -132,7 +131,7 @@ try {
 } finally {
   for (const harness of harnesses) harness.stop();
   if (baseRoot) {
-    execFileSync("git", ["worktree", "remove", "--force", baseRoot], { cwd: repository, stdio: "ignore" });
+    execCommandSync("git", ["worktree", "remove", "--force", baseRoot], { cwd: repository, stdio: "ignore" });
     rmSync(baseRoot, { recursive: true, force: true });
   }
 }

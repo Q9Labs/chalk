@@ -1,15 +1,14 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { execCommand } from "../../../../scripts/lib/platform.mjs";
 import { fileURLToPath } from "node:url";
 
 const contractUrl = new URL("../../../../contract/webhooks/v1/event.schema.json", import.meta.url);
 const fixturesUrl = new URL("../../../../contract/webhooks/v1/fixtures.json", import.meta.url);
 const outputUrl = new URL("../src/webhooks/generated/event-v1.ts", import.meta.url);
 const fixturesOutputUrl = new URL("../src/webhooks/generated/fixtures-v1.ts", import.meta.url);
-const run = promisify(execFile);
+const run = execCommand;
 
 const schema = JSON.parse(await readFile(contractUrl, "utf8"));
 const fixtures = JSON.parse(await readFile(fixturesUrl, "utf8"));

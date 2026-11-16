@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { spawnCommand } from "../../../scripts/lib/platform.mjs";
 import { pnpmVersion } from "../../../scripts/lib/repository.mjs";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -465,7 +466,7 @@ function listeningURL(child) {
 
 function run(command, arguments__, cwd) {
   return new Promise((resolveRun, reject) => {
-    const child = spawn(command, arguments__, { cwd, stdio: "inherit" });
+    const child = spawnCommand(command, arguments__, { cwd, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => (code === 0 ? resolveRun() : reject(new TypeError(`${command} ${arguments__.join(" ")} exited with code ${code}`))));
   });

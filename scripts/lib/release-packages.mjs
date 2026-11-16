@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { execCommandSync } from "./platform.mjs";
 import { repositoryRoot } from "./repository.mjs";
 
 /** Public packages that version on their own. Every other public package moves with the Chalk release version. */
@@ -19,7 +19,7 @@ function deriveReleasePackages(workspaces) {
   return publicWorkspaces.map(({ directory, manifest }) => ({ directory, name: manifest.name, version: manifest.version, independent: independentPackageNames.has(manifest.name) }));
 }
 
-const workspaces = JSON.parse(execFileSync("pnpm", ["--recursive", "list", "--depth", "-1", "--json"], { cwd: repositoryRoot, encoding: "utf8" })).map((workspace) => ({
+const workspaces = JSON.parse(execCommandSync("pnpm", ["--recursive", "list", "--depth", "-1", "--json"], { cwd: repositoryRoot, encoding: "utf8" })).map((workspace) => ({
   directory: path.relative(repositoryRoot, workspace.path),
   manifest: JSON.parse(readFileSync(path.join(workspace.path, "package.json"), "utf8")),
 }));

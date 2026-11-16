@@ -9,10 +9,10 @@
 //   analysis.mjs <complexity|dead-code|duplication>            fails when the baseline is exceeded
 //   analysis.mjs <complexity|dead-code|duplication> --write    lowers the baseline to the current numbers; it refuses to raise any,
 //                                                              and it starts a check that has no baseline yet
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { execCommandSync } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
 const baselineFile = join(repositoryRoot, "scripts/gates/analysis-baseline.json");
@@ -45,7 +45,7 @@ const jscpdIgnore = [
 
 function run(command, args, { cwd = repositoryRoot, okStatuses = [0] } = {}) {
   try {
-    return execFileSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 29, stdio: ["ignore", "pipe", "pipe"] });
+    return execCommandSync(command, args, { cwd, encoding: "utf8", maxBuffer: 1 << 29, stdio: ["ignore", "pipe", "pipe"] });
   } catch (error) {
     if (okStatuses.includes(error.status)) return error.stdout;
     throw new Error(`${command} ${args.join(" ")} failed in ${cwd}: ${error.stderr ?? error.message}`);
@@ -138,7 +138,7 @@ if (import.meta.main) {
     process.exitCode = 1;
   } else if (process.argv.includes("--write")) {
     writeFileSync(baselineFile, `${JSON.stringify({ ...baselines, [name]: current }, null, 2)}\n`);
-    execFileSync("pnpm", ["exec", "oxfmt", baselineFile], { cwd: repositoryRoot, stdio: "inherit" });
+    execCommandSync("pnpm", ["exec", "oxfmt", baselineFile], { cwd: repositoryRoot, stdio: "inherit" });
     console.log(`${name} baseline lowered to the current numbers.`);
   } else {
     console.log(`${name} holds the baseline.`);

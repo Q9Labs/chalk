@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { spawnCommand } from "../lib/platform.mjs";
 import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check } from "../prod-proof/runtime.mjs";
 import { createSpace, onCloudflare, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
@@ -55,7 +55,7 @@ try {
   maskCredentials({ inviteToken: url.hash.slice(1), inviteCredential: entry, canonicalCredential: invite.canonical_url });
   check(!stopping, "Web proof was interrupted");
   const code = await new Promise((accept, reject) => {
-    child = spawn("pnpm", ["exec", "e2e", "run"], {
+    child = spawnCommand("pnpm", ["exec", "e2e", "run"], {
       detached: true,
       stdio: "inherit",
       env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin, mediaPlane }),
