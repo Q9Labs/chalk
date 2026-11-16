@@ -263,6 +263,7 @@ export function BoardIsland(props: IslandProps) {
   const [drag, setDrag] = useState<{ readonly x: number; readonly y: number; readonly near: IslandPlace } | null>(null);
   const dropRect = useRef<DOMRect | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const focusOnExpand = useRef(false);
 
   useLayoutEffect(() => {
     const buttons = [...(island.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
@@ -270,6 +271,13 @@ export function BoardIsland(props: IslandProps) {
     tabStop.current = stop ?? null;
     for (const button of buttons) button.tabIndex = button === stop ? 0 : -1;
   });
+
+  // The launcher unmounts when it opens the tools, so focus moves to the first tool instead of falling to the page.
+  useLayoutEffect(() => {
+    if (!expanded || !focusOnExpand.current) return;
+    focusOnExpand.current = false;
+    island.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [expanded]);
 
   useLayoutEffect(() => {
     const element = island.current;
@@ -351,7 +359,17 @@ export function BoardIsland(props: IslandProps) {
         }}
       >
         {compact && props.idle && !expanded ? (
-          <button type="button" className="chalk-board-tool" data-current aria-label="Open drawing tools" aria-expanded={false} onClick={() => setExpanded(true)}>
+          <button
+            type="button"
+            className="chalk-board-tool"
+            data-current
+            aria-label="Open drawing tools"
+            aria-expanded={false}
+            onClick={(event) => {
+              focusOnExpand.current = event.currentTarget === document.activeElement;
+              setExpanded(true);
+            }}
+          >
             <BoardIcon name={toolEntry(props.tool).glyph} />
           </button>
         ) : compact ? (
