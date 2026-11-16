@@ -36,6 +36,15 @@ class DeployStartTest(unittest.TestCase):
         self.assertIn('no readable SSH key at', result.stderr)
         self.assertFalse((self.root / 'ssh-calls').exists())
 
+    def test_capture_worker_restart_state_stays_in_the_parent_shell(self):
+        source = DEPLOY.read_text()
+        helper = source.index('deploy-capture-worker.sh')
+        restart = source.index('if $capture_on; then', helper)
+        state = source.rfind('capture_on=false', 0, helper)
+        config = source.rfind('if [[ -f "${dir}/capture.conf" ]]', 0, helper)
+        self.assertGreaterEqual(state, 0)
+        self.assertGreater(config, state)
+        self.assertLess(helper, restart)
     @unittest.skipIf(os.geteuid() == 0, 'root reads any file')
     def test_unreadable_key_fails_at_the_start_without_ssh(self):
         key = self.root / 'operator_key'
