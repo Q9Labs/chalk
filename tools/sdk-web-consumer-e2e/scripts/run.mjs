@@ -3,6 +3,7 @@ import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { proveAgreementMatrix } from "./agreement.mjs";
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -124,8 +125,13 @@ try {
     if (browserFailures.length) throw new AggregateError(browserFailures, "Packed browser proofs failed");
   }
 } finally {
-  serverProcess?.kill("SIGTERM");
-  await rm(temporaryDirectory, { recursive: true, force: true });
+  // Windows keeps a folder locked until its process has exited, so wait for the exit and retry a busy removal.
+  if (serverProcess?.exitCode === null) {
+    const exited = once(serverProcess, "exit");
+    serverProcess.kill("SIGTERM");
+    await exited;
+  }
+  await rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 async function runChromiumMatrix(browser, baseURL, secretMarker) {
