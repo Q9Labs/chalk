@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"time"
 )
 
@@ -109,16 +108,10 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 	args := []string{producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--output", output,
 		"--ffmpeg", producer.FFmpegPath, "--encoder", string(producer.Encoder), "--threads", strconv.Itoa(producer.Threads)}
 	command := exec.CommandContext(ctx, producer.NodePath, args...)
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	isolateProcessGroup(command)
 	command.WaitDelay = 3 * time.Second
 	stderr := &boundedCommandOutput{maximum: maximumFrameStderrBytes}
 	command.Stderr = stderr
-	command.Cancel = func() error {
-		pid := command.Process.Pid
-		// Signal the whole group, including FFmpeg children. Escalate if any ignore SIGTERM.
-		time.AfterFunc(2*time.Second, func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
-		return syscall.Kill(-pid, syscall.SIGTERM)
-	}
 	if err := command.Run(); err != nil {
 		return ComposeResult{}, fmt.Errorf("recording compositor: %w: %s", err, stderr.String())
 	}

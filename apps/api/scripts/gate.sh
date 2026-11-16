@@ -32,7 +32,7 @@ Checks:
   - go tool sqlc vet
   - go test -vet=off ./... and lifecycle smoke test in one lane
   - migration validation proofs in one PostgreSQL lane
-  - go vet ./..., staticcheck, and govulncheck in parallel lanes
+  - go vet ./..., GOOS=windows go vet ./..., staticcheck, and govulncheck in parallel lanes
 
 Optional:
   CHALK_API_RACE=1 apps/api/scripts/gate.sh
@@ -231,6 +231,8 @@ run "MCP eval host compile" go test -tags=mcp_eval -run '^$' ./internal/adapters
 run "sqlc vet" go tool sqlc vet
 
 start_lane "go vet" run_lane_command "go vet" go vet ./...
+# Engineers edit Go on Windows, so a Linux-only call outside a unix-tagged file must fail here, not there.
+start_lane "go vet (windows)" run_lane_command "go vet (windows)" env GOOS=windows go vet ./...
 start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./...
 start_lane "Vulnerability check" run_lane_command "Vulnerability check" "${repository_root}/scripts/gates/govulncheck.sh"
 

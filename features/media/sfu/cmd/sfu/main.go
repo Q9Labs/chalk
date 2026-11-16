@@ -63,7 +63,7 @@ func run() error {
 	signals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	drain := make(chan os.Signal, 1)
-	signal.Notify(drain, syscall.SIGUSR1)
+	notifyDrain(drain)
 	defer signal.Stop(drain)
 	ticker := time.NewTicker(time.Second)
 	ticker.Stop() // runs only while a drain waits for the last session

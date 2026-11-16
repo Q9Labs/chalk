@@ -1,4 +1,5 @@
-// Package recordercontrollease enforces one control process per persistent state file.
+//go:build unix
+
 package recordercontrollease
 
 import (

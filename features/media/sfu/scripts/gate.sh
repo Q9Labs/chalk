@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Chalk SFU gate: format (Go and Markdown), module tidiness, vet and the race-enabled tests.
+# Chalk SFU gate: format (Go and Markdown), module tidiness, vet (also for Windows) and the race-enabled tests.
 set -euo pipefail
 
 sfu_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,6 +42,10 @@ go mod tidy -diff
 
 printf '\n==> go vet\n'
 go vet ./...
+
+printf '\n==> go vet (windows)\n'
+# Engineers edit Go on Windows, so a Linux-only call outside a unix-tagged file must fail here.
+GOOS=windows go vet ./...
 
 printf '\n==> go test -race\n'
 if [[ -n "${SFU_TEST_JSON:-}" ]]; then
