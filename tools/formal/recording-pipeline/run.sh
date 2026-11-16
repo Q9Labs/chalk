@@ -13,20 +13,10 @@ mode="${1:-all}"
 out="${FORMAL_OUT:-$(mktemp -d)}"
 failures=0
 
-fail() { echo "FAIL $*"; failures=$((failures + 1)); }
-squash() { tr -s '[:space:]' ' '; }
-
+# shellcheck source=../check-anchors.sh
+source "$here/../check-anchors.sh"
 if [[ "$mode" == all || "$mode" == --anchors ]]; then
-  echo "== Code anchors"
-  while IFS=$'\t' read -r action path fragment; do
-    [[ -z "$action" || "$action" == \#* ]] && continue
-    if [[ ! -f "$repo/$path" ]]; then
-      fail "$action: $path is gone"
-    elif ! squash <"$repo/$path" | grep -qF -- "$(printf '%s' "$fragment" | squash)"; then
-      fail "$action: $path no longer contains: $fragment"
-    fi
-  done <"$model/anchors"
-  ((failures == 0)) && echo "ok   every fragment in anchors is present"
+  check_formal_anchors "$repo" "$here/anchors"
 fi
 
 if [[ "$mode" == all || "$mode" == --tlc ]]; then

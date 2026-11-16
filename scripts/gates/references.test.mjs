@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -45,4 +45,16 @@ test("a workflow path that does not exist and a missing root script are reported
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test("formal model runners share one anchor checker", () => {
+  const runners = ["client-recovery", "episode-lifecycle", "external-operations", "public-invite-access", "recording-pipeline", "screen-share-lease", "sync-entry-leave"];
+  for (const name of runners) {
+    const source = readFileSync(new URL(`../../tools/formal/${name}/run.sh`, import.meta.url), "utf8");
+    assert.match(source, /source "\$here\/\.\.\/check-anchors\.sh"/);
+    assert.doesNotMatch(source, /while IFS=.*read -r action path fragment/);
+  }
+  const helper = readFileSync(new URL("../../tools/formal/check-anchors.sh", import.meta.url), "utf8");
+  assert.match(helper, /while IFS=.*read -r action path fragment/);
 });

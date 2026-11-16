@@ -17,19 +17,9 @@ attempts=2
 revisions=4
 [[ "${1:-}" == "--deep" ]] && { attempts=3; revisions=5; }
 
-fail() { echo "FAIL $*"; failures=$((failures + 1)); }
-squash() { tr -s '[:space:]' ' '; }
-
-echo "== Code anchors"
-while IFS=$'\t' read -r action path fragment; do
-  [[ -z "$action" || "$action" == \#* ]] && continue
-  if [[ ! -f "$repo/$path" ]]; then
-    fail "$action: $path is gone"
-  elif ! squash <"$repo/$path" | grep -qF -- "$(printf '%s' "$fragment" | squash)"; then
-    fail "$action: $path no longer contains: $fragment"
-  fi
-done <"$model/anchors"
-((failures == 0)) && echo "ok   every fragment in anchors is present"
+# shellcheck source=../check-anchors.sh
+source "$here/../check-anchors.sh"
+check_formal_anchors "$repo" "$here/anchors"
 
 # tlc NAME OPS NODES BREAK CHECKS prints TLC's verdict line and keeps the full log.
 #   OPS     one of rt, rem or end (the operations in the run; the model has no run with all three)
