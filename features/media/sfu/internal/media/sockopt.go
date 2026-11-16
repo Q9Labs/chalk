@@ -28,7 +28,7 @@ func (b socketBuffer) granted(conn *net.UDPConn) (int, error) {
 	var size int
 	var sockErr error
 	if err := raw.Control(func(fd uintptr) {
-		size, sockErr = syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, b.option)
+		size, sockErr = getSocketOptionInt(fd, syscall.SOL_SOCKET, b.option)
 	}); err != nil {
 		return 0, err
 	}
