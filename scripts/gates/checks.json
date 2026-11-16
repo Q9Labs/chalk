@@ -41,6 +41,16 @@
       "sample": "New check: no runs recorded yet."
     },
     {
+      "id": "gate:pins",
+      "owner": "Supply chain",
+      "catches": "A GitHub Action or tool version no longer matches its pinned SHA or tag.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New check: no runs recorded yet."
+    },
+    {
       "id": "gate:ratchets",
       "owner": "Code quality",
       "catches": "A file over 300 lines that grows, or a copied value (port, provider name, entrypoint check) that is copied once more.",

@@ -524,6 +524,7 @@ export function createGatePlan(files, options = {}) {
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
+    task("pins", "Every action and tool version matches its pinned source", true, "always required", ["node", "scripts/gates/pins.mjs"]),
     task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", ["node", "scripts/test/run.mjs", "node", "--test", ...workflowGraphNodeTests]),
     task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
@@ -760,7 +761,7 @@ export function selectCiJobs(base, plan = ciJobs) {
 }
 
 // Format is always on so documentation-only changes are still checked.
-export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format"]);
+export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "pins", "ratchets", "hygiene", "secrets", "generated", "format"]);
 
 // The proof file is untrusted input from an earlier run: any doubt about it means no sharing, never a skipped check.
 function applyProof(jobs, base, proofPath) {
