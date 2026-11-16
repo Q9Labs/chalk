@@ -2,23 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"math/big"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
 

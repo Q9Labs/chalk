@@ -3,11 +3,9 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
