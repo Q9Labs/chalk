@@ -46,17 +46,27 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
+      # Every step runs even when an earlier one failed, so one run reports every Windows break.
       - name: Check types
+        if: ${{ !cancelled() }}
         run: pnpm run check-types
 
+      # Lint type-checks each package against its dependencies' built output, so the build comes first.
+      - name: Build
+        if: ${{ !cancelled() }}
+        run: pnpm run build
+
       - name: Lint
+        if: ${{ !cancelled() }}
         run: pnpm run lint
 
       - name: Check formatting
+        if: ${{ !cancelled() }}
         run: pnpm run format:check
 
       # The pre-commit hook runs this on staged files; CI has none, so it checks the files the change touched.
       - name: Run the fast gate
+        if: ${{ !cancelled() }}
         run: pnpm run gate:fast -- --base "$env:GATE_BASE_REF"
         env:
           GATE_BASE_REF: ${{ github.event.merge_group.base_sha || (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.base_ref || 'master') }}
@@ -64,10 +74,9 @@ jobs:
           GATE_ALLOW_EMPTY: "1"
 
       - name: Check generated files
+        if: ${{ !cancelled() }}
         run: pnpm run check:generated
 
-      - name: Build
-        run: pnpm run build
-
       - name: Run unit tests
+        if: ${{ !cancelled() }}
         run: pnpm run test
