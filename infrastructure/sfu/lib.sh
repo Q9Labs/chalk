@@ -1,4 +1,4 @@
-# Sourced by deploy, the live smoke and the bench scripts, which all reach a node the same way:
+# Sourced by deploy, its capture-worker helper, the live smoke and the bench scripts, which all reach a node the same way:
 # SSH as the operator, a tunnel to the control port, and curl with the operator certificate.
 # The ports and the node sizes come from the SFU's own table, internal/config/node.json.
 
@@ -43,4 +43,12 @@ sfu_curl() {
   shift 3
   curl --silent --cacert "${private}/ca.crt" --cert "${private}/operator.crt" --key "${private}/operator.key" \
     --resolve "chalk-sfu:${port}:${address}" "$@"
+}
+
+# put_secret <name> <file> creates the node's Podman secret, or replaces it. Podman 4.9 refuses
+# --replace for a secret that does not exist yet.
+put_secret() {
+  local replace=()
+  as_sfu podman secret inspect "$1" >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" "$1" - <"$2" >/dev/null
 }
