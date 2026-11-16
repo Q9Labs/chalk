@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { CHALK_BACKGROUND_ASSETS } from "../../packages/assets/src/index.ts";
+import * as publicAssets from "../../packages/assets/src/index.ts";
+import { CHALK_BACKGROUND_ASSETS } from "../../packages/assets/src/background-assets.ts";
 import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from "../../sdks/typescript/client/src/media/camera-background-images.ts";
 
 test("picker and camera processor use the manifest URLs in camera-specific order", () => {
@@ -26,11 +27,11 @@ test("the generated check rejects manifest drift and regeneration repairs it", a
   const changedUrl = "https://assets.test/updated-background.avif";
   try {
     await writeFile(path.join(root, "package.json"), '{"type":"module"}');
-    for (const file of ["scripts/codegen/camera-background-urls.mjs", "packages/assets/src/index.ts", "sdks/typescript/client/src/media/camera-background-urls.generated.ts", "sdks/typescript/client/src/media/camera-background-images.ts"]) {
+    for (const file of ["scripts/codegen/camera-background-urls.mjs", "packages/assets/src/background-assets.ts", "sdks/typescript/client/src/media/camera-background-urls.generated.ts", "sdks/typescript/client/src/media/camera-background-images.ts"]) {
       const destination = path.join(root, file);
       await mkdir(path.dirname(destination), { recursive: true });
       const source = await readFile(new URL(`../../${file}`, import.meta.url), "utf8");
-      await writeFile(destination, file.endsWith("index.ts") ? source.replaceAll(CHALK_BACKGROUND_ASSETS["modern-acoustic-office"].avif.url, changedUrl) : source);
+      await writeFile(destination, file.endsWith("background-assets.ts") ? source.replaceAll(CHALK_BACKGROUND_ASSETS["modern-acoustic-office"].avif.url, changedUrl) : source);
     }
     const command = ["--experimental-strip-types", path.join(root, "scripts/codegen/camera-background-urls.mjs")];
     assert.throws(() => execFileSync(process.execPath, command, { stdio: "pipe" }), /Stale camera background URLs/);
@@ -52,4 +53,8 @@ test("the generated check rejects manifest drift and regeneration repairs it", a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("retired background metadata stays out of the public asset entry point", () => {
+  assert.equal("CHALK_BACKGROUND_ASSETS" in publicAssets, false);
 });

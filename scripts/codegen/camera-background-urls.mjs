@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { CHALK_BACKGROUND_ASSETS } from "../../packages/assets/src/index.ts";
+import { CHALK_BACKGROUND_ASSETS } from "../../packages/assets/src/background-assets.ts";
 
 const output = new URL("../../sdks/typescript/client/src/media/camera-background-urls.generated.ts", import.meta.url);
 const urls = Object.entries(CHALK_BACKGROUND_ASSETS).map(([id, asset]) => `  ${JSON.stringify(id)}: {\n    avif: ${JSON.stringify(asset.avif.url)},\n    image: ${JSON.stringify(asset.webp.url)},\n  },`);
