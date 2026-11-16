@@ -63,7 +63,8 @@ export async function installLocalApk(argv, { root, run, platform = process.plat
       const result = await run("adb", ["-s", serial, "install", "-r", "-t", "-g", apk]);
       output(result.stdout);
     } catch (error) {
-      if (!/INSTALL_FAILED_USER_RESTRICTED/.test(`${error.stdout || ""}${error.stderr || ""}`)) throw error;
+      const result = error.cause || error;
+      if (!/INSTALL_FAILED_USER_RESTRICTED/.test(`${result.stdout || ""}${result.stderr || ""}`)) throw error;
       output("Device policy blocked adb install. Pushing the APK to Downloads.");
       delivered = "push";
     }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,7 +10,7 @@ import { validateOwnedPid } from "./ownership.mjs";
 import { runChecked } from "./chalk-resources.mjs";
 import { openRuntimeControl, requestRuntimeStop } from "./control.mjs";
 import { containerArguments, containerEnvironment } from "./containers.mjs";
-import { parseInstallArguments, connectedSerial } from "./android.mjs";
+import { parseInstallArguments, connectedSerial, installLocalApk } from "./android.mjs";
 
 const credentials = { CHALK_CLOUDFLARE_REALTIME_APP_ID: "test", CHALK_CLOUDFLARE_REALTIME_APP_SECRET: "test" };
 
@@ -110,4 +110,32 @@ test("Android device selection and install flags do not require a shell", async 
   );
   assert.equal(parseInstallArguments(["--release", "--install", "--no-launch"]).variant, "release");
   assert.throws(() => parseInstallArguments(["--pair", "ip:port"]), /requires --code/);
+});
+
+test("Windows APK delivery uses gradlew.bat and preserves the device-policy fallback", async () => {
+  const root = await mkdtemp(join(tmpdir(), "chalk-android-"));
+  const apkDirectory = join(root, "apps/mobile/android/app/build/outputs/apk/debug");
+  await mkdir(apkDirectory, { recursive: true });
+  await writeFile(join(apkDirectory, "app-debug.apk"), "apk fixture");
+  const calls = [];
+  try {
+    await installLocalApk(["--install"], {
+      root,
+      platform: "win32",
+      env: { ADB_SERIAL: "emulator-proof" },
+      output: () => {},
+      run: async (command, args, options) => {
+        calls.push({ command, args, options });
+        if (args.includes("install")) throw new Error("wrapped command failure", { cause: { stderr: "Failure [INSTALL_FAILED_USER_RESTRICTED]" } });
+        return { stdout: "" };
+      },
+    });
+    assert.equal(calls[0].command, "gradlew.bat");
+    assert.equal(calls[0].options.cwd, join(root, "apps/mobile/android"));
+    assert.ok(calls.some(({ args }) => args.includes("push")));
+    assert.ok(calls.some(({ args }) => args.includes("android.intent.action.VIEW")));
+    assert.ok(!calls.some(({ args }) => args.includes("monkey")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
