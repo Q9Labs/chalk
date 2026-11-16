@@ -1,31 +1,43 @@
-// Windows and POSIX differences that the repository's Node scripts share: starting a command, importing a file by
-// path, and stopping a process with its children.
+// Windows and POSIX differences that the repository's Node scripts share: starting a command and stopping a process
+// with its children.
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 export const isWindows = process.platform === "win32";
+
+const isFile = (candidate) => existsSync(candidate) && statSync(candidate).isFile();
+
+/** The directories a command name is looked up in: only the name's own when it already has a directory. */
+function searchDirectories(command, environment) {
+  if (command.includes("/") || command.includes("\\")) return [""];
+  const pathKey = Object.keys(environment).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  return (environment[pathKey] ?? "").split(path.delimiter).filter(Boolean);
+}
+
+/** The file names a command can have. `pnpm` also names an extensionless shell script on Windows, which cmd.exe cannot run, so a bare name only matches PATHEXT there. */
+function candidateNames(command, environment) {
+  if (!isWindows || path.extname(command)) return [command];
+  return (environment.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .filter(Boolean)
+    .map((extension) => command + extension);
+}
 
 /**
  * Finds what a bare command name runs. On Windows a tool such as `pnpm` is a `pnpm.cmd` shim that spawn cannot start
  * by name, so this searches PATH with PATHEXT the way cmd.exe does. A name with a directory is checked as given.
  * Returns undefined when nothing matches.
  * @param {string} command
- * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.ProcessEnv} [environment]
  * @returns {string | undefined}
  */
-export function findExecutable(command, env = process.env) {
-  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
-  const directories = command.includes("/") || command.includes("\\") ? [""] : (env[pathKey] ?? "").split(path.delimiter).filter(Boolean);
-  // `pnpm` also names an extensionless shell script on Windows, which cmd.exe cannot run, so a bare name only matches PATHEXT.
-  const extensions = isWindows && !path.extname(command) ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
-  for (const directory of directories) {
-    for (const extension of extensions) {
-      const candidate = path.join(directory, command + extension);
-      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
-    }
+export function findExecutable(command, environment = process.env) {
+  const names = candidateNames(command, environment);
+  for (const directory of searchDirectories(command, environment)) {
+    const found = names.map((name) => path.join(directory, name)).find(isFile);
+    if (found) return found;
   }
   return undefined;
 }
@@ -42,6 +54,7 @@ const cmdShim = /\.(?:cmd|bat)$/i;
  * @param {{ env?: NodeJS.ProcessEnv }} [options]
  * @returns {{ file: string, args: string[], windowsVerbatimArguments?: true }}
  */
+// fallow-ignore-next-line unused-export
 export function resolveCommand(command, args, options = {}) {
   if (!isWindows) return { file: command, args: [...args] };
   const executable = findExecutable(command, options.env) ?? command;
@@ -112,26 +125,20 @@ export function runCommand(command, args = [], options = {}) {
 }
 
 /**
- * Imports a module by file system path. `import("D:\\a\\x.mjs")` fails on Windows because the drive letter reads as a
- * URL scheme, so the path becomes a file URL first. A `file:` URL string passes through unchanged.
- * @param {string} modulePath
- */
-export function importPath(modulePath) {
-  return import(modulePath.startsWith("file:") ? modulePath : pathToFileURL(path.resolve(modulePath)).href);
-}
-
-/**
  * Stops a child and everything it started. On Windows this is `taskkill /T /F`; elsewhere it signals the child's
  * process group, so spawn the child with `detached: true` there. Does nothing when the child already exited.
+ * The dev-container scripts (scripts/dev/process.mjs) call it.
  * @param {import("node:child_process").ChildProcess} child
  * @param {NodeJS.Signals} [signal]
  */
+// fallow-ignore-next-line unused-export
 export function killTree(child, signal = "SIGTERM") {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
-  if (isWindows) {
-    spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    return;
-  }
+  if (isWindows) spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  else signalGroup(child, signal);
+}
+
+function signalGroup(child, signal) {
   try {
     process.kill(-child.pid, signal);
   } catch {

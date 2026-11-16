@@ -516,6 +516,7 @@ export function createGatePlan(files, options = {}) {
       "node",
       "--test",
       "scripts/test/no-network.test.mjs",
+      "scripts/lib/platform.test.mjs",
       "scripts/gates/chalk-gate-plan.test.mjs",
       "scripts/gates/feature-map.test.mjs",
       "scripts/gates/ready-cap.test.mjs",
