@@ -11,7 +11,7 @@ const isFile = (candidate) => existsSync(candidate) && statSync(candidate).isFil
 
 /** The directories a command name is looked up in: only the name's own when it already has a directory. */
 function searchDirectories(command, environment) {
-  if (command.includes("/") || command.includes("\\")) return [""];
+  if (path.basename(command) !== command) return [""];
   const pathKey = Object.keys(environment).find((key) => key.toLowerCase() === "path") ?? "PATH";
   return (environment[pathKey] ?? "").split(path.delimiter).filter(Boolean);
 }
@@ -54,16 +54,23 @@ const cmdShim = /\.(?:cmd|bat)$/i;
  * @param {{ env?: NodeJS.ProcessEnv }} [options]
  * @returns {{ file: string, args: string[], windowsVerbatimArguments?: true }}
  */
-// fallow-ignore-next-line unused-export
 export function resolveCommand(command, args, options = {}) {
-  if (!isWindows) return { file: command, args: [...args] };
+  if (!isWindows) return asGiven(command, args);
   const executable = findExecutable(command, options.env) ?? command;
-  if (!cmdShim.test(executable)) return { file: executable, args: [...args] };
-  for (const argument of args) {
-    if (/["%\r\n]/.test(argument)) throw new Error(`Cannot pass ${JSON.stringify(argument)} to ${command} on Windows: cmd.exe cannot quote it safely`);
-  }
+  return cmdShim.test(executable) ? throughCmd(executable, command, args, options.env) : asGiven(executable, args);
+}
+
+const asGiven = (file, args) => ({ file, args: [...args] });
+
+function throughCmd(executable, command, args, environment) {
+  assertQuotable(command, args);
   const line = [executable, ...args].map((part) => `"${part}"`).join(" ");
-  return { file: options.env?.ComSpec ?? process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true };
+  return { file: environment?.ComSpec ?? process.env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${line}"`], windowsVerbatimArguments: true };
+}
+
+function assertQuotable(command, args) {
+  const unsafe = args.find((argument) => /["%\r\n]/.test(argument));
+  if (unsafe !== undefined) throw new Error(`Cannot pass ${JSON.stringify(unsafe)} to ${command} on Windows: cmd.exe cannot quote it safely`);
 }
 
 /**
@@ -131,12 +138,13 @@ export function runCommand(command, args = [], options = {}) {
  * @param {import("node:child_process").ChildProcess} child
  * @param {NodeJS.Signals} [signal]
  */
-// fallow-ignore-next-line unused-export
 export function killTree(child, signal = "SIGTERM") {
-  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  if (!isRunning(child)) return;
   if (isWindows) spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
   else signalGroup(child, signal);
 }
+
+const isRunning = (child) => child.pid !== undefined && child.exitCode === null && child.signalCode === null;
 
 function signalGroup(child, signal) {
   try {

@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { execCommand, execCommandSync, findExecutable, isWindows, killTree, resolveCommand, runCommand, spawnCommand } from "./platform.mjs";
 
 const node = process.execPath;
@@ -49,7 +50,7 @@ test("killTree stops a child and its own child", async () => {
     stdio: "ignore",
   });
   const exited = new Promise((resolve) => child.once("exit", resolve));
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await delay(300);
   killTree(child);
   await exited;
   assert.notEqual(child.exitCode === null ? child.signalCode : child.exitCode, null);
