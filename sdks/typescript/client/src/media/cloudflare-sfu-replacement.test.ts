@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
-import { bootstrap, FakeTrack, fakeStream, versionedPublicationID, withTimedHarness, type Harness, FakePeerConnection } from "./cloudflare-sfu-replacement.test-support";
+import { bootstrap, FakeTrack, fakeStream, micOn, mute, publishMicrophone, remoteMicrophoneRoster, versionedPublicationID, withTimedHarness, type Harness, FakePeerConnection } from "./cloudflare-sfu-replacement.test-support";
 
 it("replaces the media connection before parked receivers push the offer past the node's 256 KiB cap", async () => {
   const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));

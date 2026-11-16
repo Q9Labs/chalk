@@ -1,18 +1,11 @@
 import { expect, it, vi } from "vitest";
 import type { CloudflareSFUBootstrap } from "./cloudflare-sfu";
-import { bootstrap, FakeTrack, fakeStream, withTimedHarness, type Harness } from "./cloudflare-sfu-replacement.test-support";
+import { bootstrap, FakeTrack, fakeStream, micOn, mute, publishMicrophone, withTimedHarness, type Harness } from "./cloudflare-sfu-replacement.test-support";
 
-const micOn = { operationId: "mic-on", participantId: "participant-1", source: "microphone" as const, enabled: true };
 const muteInPlaceBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, muteInPlace: true } };
-const mute = (h: Harness) => h.client.closeForcedLocalPublication("microphone", "user_pause");
 async function unmute(h: Harness) {
   await h.client.setLocalSourceIntent("microphone", true);
   return h.client.setLocalPublicationTarget(micOn);
-}
-async function publishMicrophone(h: Harness): Promise<void> {
-  await h.client.start(fakeStream());
-  h.client.prepareLocalTrack("microphone", new FakeTrack("local-microphone", "audio") as unknown as MediaStreamTrack);
-  await expect(h.client.setLocalPublicationTarget(micOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
 }
 const microphoneAdds = (h: Harness) => h.transport.addInputs.flatMap((input) => input.tracks).filter((track) => track.source === "microphone");
 

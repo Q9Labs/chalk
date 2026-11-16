@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
-import { vi } from "vitest";
-import { createSfuHarness, FakeTrack as FakeTrackImpl, type HarnessOptions } from "./cloudflare-sfu.test.helpers";
+import { expect, vi } from "vitest";
+import type { CloudflareSFUPublicationSnapshot } from "./cloudflare-sfu";
+import { createSfuHarness, FakeTrack as FakeTrackImpl, fakeStream, versionedPublicationID, type HarnessOptions } from "./cloudflare-sfu.test.helpers";
 export { bootstrap, failAddTracks, FakeTrack, fakeStream, publicationSnapshot, receiverExpired, versionedPublicationID } from "./cloudflare-sfu.test.helpers";
 
 const parkedAudioSection = readFileSync(new URL("./fixtures/chromium-offer-with-parked-receivers.sdp", import.meta.url), "utf8")
@@ -174,4 +175,16 @@ export class FakePeerConnection extends EventTarget {
 export async function withTimedHarness(exercise: (harness: Harness) => Promise<void>, options: HarnessOptions = {}): Promise<void> {
   vi.useFakeTimers();
   await exercise(createHarness(options));
+}
+
+export const micOn = { operationId: "mic-on", participantId: "participant-1", source: "microphone" as const, enabled: true };
+export const mute = (h: Harness) => h.client.closeForcedLocalPublication("microphone", "user_pause");
+export async function publishMicrophone(h: Harness): Promise<void> {
+  await h.client.start(fakeStream());
+  h.client.prepareLocalTrack("microphone", new FakeTrackImpl("local-microphone", "audio") as unknown as MediaStreamTrack);
+  await expect(h.client.setLocalPublicationTarget(micOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+}
+export function remoteMicrophoneRoster(sequence: number, trackName?: string): CloudflareSFUPublicationSnapshot {
+  const publications = trackName ? [{ participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", trackName) }] : [];
+  return { incarnation: 1, sequence, publications };
 }
