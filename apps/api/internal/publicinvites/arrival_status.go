@@ -3,6 +3,7 @@ package publicinvites
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -17,8 +18,7 @@ func (r Runtime) admitPendingArrival(ctx context.Context, space PublicSpace, arr
 		return PublicSpaceArrival{}, err
 	}
 	if err := validateAccessGrant(grant, arrival); err != nil {
-		_ = r.access.DiscardPublicAccess(ctx, grant)
-		return PublicSpaceArrival{}, err
+		return PublicSpaceArrival{}, r.discardProvisionalPublicAccess(ctx, grant, err)
 	}
 	admitted, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
 		TenantID:              arrival.TenantID,
@@ -33,12 +33,12 @@ func (r Runtime) admitPendingArrival(ctx context.Context, space PublicSpace, arr
 		ProviderSubject:       grant.ProviderSubject,
 	})
 	if errors.Is(err, ErrArrivalUnavailable) {
-		_ = r.access.DiscardPublicAccess(ctx, grant)
-		return r.arrivalWithdrawn(ctx, space, arrival)
+		cleanupErr := r.discardProvisionalPublicAccess(ctx, grant, nil)
+		result, withdrawnErr := r.arrivalWithdrawn(ctx, space, arrival)
+		return result, errors.Join(cleanupErr, withdrawnErr)
 	}
 	if err != nil {
-		_ = r.access.DiscardPublicAccess(ctx, grant)
-		return PublicSpaceArrival{}, err
+		return PublicSpaceArrival{}, r.discardProvisionalPublicAccess(ctx, grant, err)
 	}
 	result := r.arrivalResult(space, admitted)
 	result.Access = &grant
@@ -136,6 +136,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 		return PublicSpaceArrival{}, false, nil
 	}
 	state, reason := ArrivalPending, ""
+	var cleanupErr error
 	switch request.State {
 	case AdmissionRequestApproved:
 		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding, RequireAdmission: AdmissionKnock, MediaClients: clients})
@@ -147,8 +148,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 			return PublicSpaceArrival{}, false, err
 		}
 		if err := validateAccessGrant(grant, arrival); err != nil {
-			_ = r.access.DiscardPublicAccess(ctx, grant)
-			return PublicSpaceArrival{}, false, err
+			return PublicSpaceArrival{}, false, r.discardProvisionalPublicAccess(ctx, grant, err)
 		}
 		admitted, err := r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
 			TenantID: arrival.TenantID, ArrivalHandle: arrival.ArrivalHandle, State: ArrivalAdmitted, RequirePending: true, RequireAdmission: AdmissionKnock,
@@ -158,16 +158,16 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 		if err != nil {
 			current, readErr := r.service.GetArrival(ctx, arrival.ArrivalHandle)
 			if readErr != nil || current.State != ArrivalAdmitted || current.Provider != grant.Provider || current.ProviderSubject != grant.ProviderSubject {
-				_ = r.access.DiscardPublicAccess(ctx, grant)
+				cleanupErr = r.discardProvisionalPublicAccess(ctx, grant, nil)
 			}
 			if readErr == nil && current.State != ArrivalPending {
-				return r.arrivalResult(space, current), true, nil
+				return r.arrivalResult(space, current), true, cleanupErr
 			}
 			if readErr == nil && errors.Is(err, ErrArrivalUnavailable) {
 				state, reason = ArrivalUnavailable, "public_arrival_invalidated"
 				break
 			}
-			return PublicSpaceArrival{}, false, err
+			return PublicSpaceArrival{}, false, errors.Join(err, readErr, cleanupErr)
 		}
 		RecordAdmissionOutcome(ctx, admitted, "approved")
 		result := r.arrivalResult(space, admitted)
@@ -185,9 +185,9 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	}
 	terminal, err := r.finishPendingArrival(ctx, arrival, state, reason)
 	if err != nil {
-		return PublicSpaceArrival{}, false, err
+		return PublicSpaceArrival{}, false, errors.Join(err, cleanupErr)
 	}
-	return r.arrivalResult(space, terminal), true, nil
+	return r.arrivalResult(space, terminal), true, cleanupErr
 }
 
 func (r Runtime) pendingGuestArrivalValid(ctx context.Context, arrival Arrival, space PublicSpace) (bool, error) {
@@ -237,4 +237,11 @@ func (r Runtime) finishPendingArrival(ctx context.Context, arrival Arrival, stat
 
 func (r Runtime) Status(ctx context.Context, input PublicInviteArrivalStatusInput, beforeInvalidate func() error) (PublicSpaceArrival, error) {
 	return r.ArrivalStatus(ctx, input, beforeInvalidate)
+}
+
+func (r Runtime) discardProvisionalPublicAccess(ctx context.Context, grant PublicAccessGrant, cause error) error {
+	if err := r.access.DiscardPublicAccess(ctx, grant); err != nil {
+		return errors.Join(cause, fmt.Errorf("discard provisional public access: %w", err))
+	}
+	return cause
 }

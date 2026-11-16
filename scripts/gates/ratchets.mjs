@@ -37,6 +37,7 @@ const copies = {
   "special.sleeps": { regex: "time\\.Sleep\\(|Process\\.sleep\\(|setTimeout\\(r(esolve)?, *[0-9]", paths: [":!*_test.go", ":!*.test.ts", ":!**/test/**"] },
   "special.swallowed_rescue": { regex: "rescue *_ *->|catch *\\{ *\\}|catch *\\(_\\w*\\) *\\{ *\\}", paths: ["*.ex", "*.ts", "*.tsx"] },
   "special.provider_module_checks": { regex: "module *== *ProviderBridge", paths: ["apps/sync/**"] },
+  "special.unchecked_public_access_cleanup": { regex: "_ = r\\.access\\.DiscardPublicAccess", paths: ["apps/api/internal/publicinvites/arrival_status.go"] },
 };
 
 function git(args) {

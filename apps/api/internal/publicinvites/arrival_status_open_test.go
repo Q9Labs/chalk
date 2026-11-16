@@ -60,7 +60,7 @@ type openedAccess struct {
 
 func (a *openedAccess) DiscardPublicAccess(context.Context, PublicAccessGrant) error {
 	a.discarded++
-	return nil
+	return a.discardErr
 }
 
 func (a *openedAccess) GrantPublicAccess(_ context.Context, input PublicAccessInput) (PublicAccessGrant, error) {
@@ -161,5 +161,17 @@ func TestOpenAdmissionStoreFailureDiscardsTheGrant(t *testing.T) {
 	}
 	if access.discarded != 1 {
 		t.Fatalf("discarded grants = %d, want 1", access.discarded)
+	}
+}
+
+func TestOpenAdmissionReturnsTheStoreAndCleanupErrors(t *testing.T) {
+	admissionErr := errors.New("arrival commit failed")
+	cleanupErr := errors.New("provider cleanup failed")
+	runtime, _, access, arrival := openedSpaceRuntime(admissionErr, nil)
+	access.discardErr = cleanupErr
+
+	_, err := pollOpenedSpace(runtime, arrival)
+	if !errors.Is(err, admissionErr) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("status error = %v; want both admission and cleanup failures", err)
 	}
 }
