@@ -108,9 +108,7 @@ func (producer NodeComposeProducer) Compose(ctx context.Context, request FrameRe
 	args := []string{producer.ScriptPath, "--request", requestPath, "--result", resultPath, "--output", output,
 		"--ffmpeg", producer.FFmpegPath, "--encoder", string(producer.Encoder), "--threads", strconv.Itoa(producer.Threads)}
 	command := exec.CommandContext(ctx, producer.NodePath, args...)
-	if err := isolateProcessGroup(command); err != nil {
-		return ComposeResult{}, err
-	}
+	isolateProcessGroup(command)
 	command.WaitDelay = 3 * time.Second
 	stderr := &boundedCommandOutput{maximum: maximumFrameStderrBytes}
 	command.Stderr = stderr

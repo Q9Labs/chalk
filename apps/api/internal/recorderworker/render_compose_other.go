@@ -9,6 +9,7 @@ import (
 
 var errLinuxOnly = errors.New("recorder worker runs only on Linux")
 
-func isolateProcessGroup(*exec.Cmd) error {
-	return errLinuxOnly
+// isolateProcessGroup makes the command fail to start, because process groups need Unix.
+func isolateProcessGroup(command *exec.Cmd) {
+	command.Err = errLinuxOnly
 }
