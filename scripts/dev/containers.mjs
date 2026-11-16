@@ -36,6 +36,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
     args.push("--name", names[service], "--network-alias", service);
     const ports = service === "api" ? [config.ports.api, config.ports.providerBridge] : [config.ports.sync];
     for (const port of ports) args.push("--publish", `127.0.0.1:${port}:${port}`);
+    if (service === "api") args.push("--mount", `type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts,readonly`);
   }
   const mounts =
     service === "api"
@@ -49,7 +50,7 @@ export function containerArguments(config, service, { image, env = {}, command, 
         ];
   for (const [name, target] of mounts) args.push("--mount", `type=volume,source=${names.cache}-${name},target=${target}`);
   for (const key of Object.keys(env)) args.push("--env", key);
-  args.push(image, ...(command || (service === "api" ? ["sh", "-c", "go build -buildvcs=false -o /tmp/chalk-api ./cmd && exec /tmp/chalk-api"] : ["mix", "run", "--no-halt"])));
+  args.push(image, ...(command || (service === "api" ? ["sh", "-c", 'set -e; go build -buildvcs=false -o /tmp/chalk-api ./cmd; python3 -m http.server "$CHALK_DEV_ARTIFACT_PORT" --bind 127.0.0.1 --directory /dashboard-artifacts & exec /tmp/chalk-api'] : ["mix", "run", "--no-halt"])));
   return args;
 }
 
@@ -59,12 +60,9 @@ export function containerEnvironment(config, service, env) {
     if (typeof value === "string" && value.startsWith(config.root)) result[key] = containerPath(config, value);
   }
   if (service === "api") {
-    if (result.CHALK_R2_ENDPOINT) {
-      const endpoint = new URL(result.CHALK_R2_ENDPOINT);
-      if (["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)) {
-        endpoint.hostname = "host.docker.internal";
-        result.CHALK_R2_INTERNAL_ENDPOINT = endpoint.toString();
-      }
+    if (result.CHALK_R2_BUCKET === "local-dashboard") {
+      result.CHALK_R2_INTERNAL_ENDPOINT = `http://127.0.0.1:${config.ports.web}/__local-dashboard-artifacts`;
+      result.CHALK_DEV_ARTIFACT_PORT = String(config.ports.web);
     }
     result.CHALK_API_ADDR = `0.0.0.0:${config.ports.api}`;
     result.CHALK_PROVIDER_BRIDGE_ADDRESS = `0.0.0.0:${config.ports.providerBridge}`;

@@ -197,8 +197,6 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       return {
         ...base,
         ...(config.publicOrigin ? { PUBLIC_ORIGIN: config.publicOrigin } : {}),
-        CHALK_DEV_WEB_HOST: "0.0.0.0",
-        __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: "host.docker.internal",
         CHALK_DEV_SYNC_ORIGIN: config.urls.sync,
         CHALK_DEV_DASHBOARD_SERVICE_TOKEN: dashboardToken,
         CHALK_DEV_DASHBOARD_SESSION_SECRET: dashboardSessionSecret,

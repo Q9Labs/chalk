@@ -109,7 +109,7 @@ Wait for `Chalk dev ready`. The first run downloads images and dependencies and 
 
 The core profile starts Postgres, Redis, API, and Sync containers. SDK watchers and the web server run on the host. Source changes reload the affected services. Go module/build caches and Mix `deps`/`_build` stay in named Docker volumes. Host builds never share those outputs.
 
-The web dev server accepts host-interface connections so containers can fetch local dashboard artifacts, including through Linux Docker Engine's host gateway. Browser URLs still use loopback. Running the web app alone keeps its default loopback listener.
+All default host listeners are loopback-only. The API reads dashboard artifacts from a dedicated read-only mount, served only inside its container. It does not connect to the host web server. Setting `PUBLIC_ORIGIN` explicitly opts the web dev server into listening on all interfaces for a reverse proxy or Orb. That exposes the passwordless fixture dashboard to reachable peers; use this only in an isolated development environment.
 
 Backend edits keep the web server running. Sync fetches dependencies at startup and when `apps/sync/mix.exs` or `apps/sync/mix.lock` changes. Source-only edits compile incrementally.
 

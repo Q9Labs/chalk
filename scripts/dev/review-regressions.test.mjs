@@ -7,8 +7,9 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { validateOwnedPid } from "./ownership.mjs";
 import { reverseAndroidPorts } from "./android.mjs";
-import { containerEnvironment } from "./containers.mjs";
+import { containerArguments, containerEnvironment } from "./containers.mjs";
 import { dashboardArtifactBindings } from "./dashboard-seed.mjs";
+import { previewAudio, writeDashboardArtifacts } from "./dashboard-artifacts.mjs";
 import { executeDevCommand } from "./exec.mjs";
 import { resolveDevConfig } from "./config.mjs";
 import { spawnCommand, killTree } from "../lib/platform.mjs";
@@ -57,12 +58,16 @@ test("adb CRLF listings forward both ports for every authorized device", async (
   ]);
 });
 
-test("container artifact reads use host DNS without changing browser download URLs", () => {
+test("container artifact reads stay internal without changing browser download URLs", () => {
   const bindings = dashboardArtifactBindings(config);
   const env = containerEnvironment(config, "api", bindings);
   assert.equal(env.CHALK_R2_ENDPOINT, bindings.CHALK_R2_ENDPOINT);
   const internal = new URL(env.CHALK_R2_INTERNAL_ENDPOINT);
-  assert.equal(internal.hostname, "host.docker.internal");
+  assert.equal(internal.hostname, "127.0.0.1");
+  assert.equal(internal.port, String(config.ports.web));
+  const args = containerArguments(config, "api", { image: "test", env });
+  assert.ok(args.includes(`type=bind,source=${config.runtimeRoot}/dashboard-artifacts,target=/dashboard-artifacts,readonly`));
+  for (let index = 0; index < args.length; index++) if (args[index] === "--publish") assert.ok(args[index + 1].startsWith("127.0.0.1:"));
   assert.equal(internal.pathname, "/__local-dashboard-artifacts");
   const remote = containerEnvironment(config, "api", { CHALK_R2_ENDPOINT: "https://artifacts.example.test" });
   assert.equal(remote.CHALK_R2_INTERNAL_ENDPOINT, undefined);
@@ -110,3 +115,17 @@ for (const signal of [undefined, "SIGINT", "SIGTERM"]) {
     assert.equal(signals.listenerCount("SIGTERM"), 0);
   });
 }
+
+test("the mounted artifact directory contains byte-identical JSON/audio and refuses path escapes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "chalk-artifact-files-"));
+  try {
+    const document = { schemaVersion: "transcript.v1", cues: [{ text: "Local transcript" }] };
+    await writeDashboardArtifacts(root, { "/local-dashboard/transcript.json": document, "/local-dashboard/preview.wav": "preview-audio" });
+    const base = join(root, "dashboard-artifacts", "__local-dashboard-artifacts", "local-dashboard");
+    assert.equal(await readFile(join(base, "transcript.json"), "utf8"), JSON.stringify(document));
+    assert.deepEqual(await readFile(join(base, "preview.wav")), previewAudio());
+    await assert.rejects(writeDashboardArtifacts(root, { "/../../escape.json": {} }), /Invalid local artifact key/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

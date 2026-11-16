@@ -1,5 +1,5 @@
-import { createServer } from "node:http";
-import { randomBytes } from "node:crypto";
+import { createConnection } from "node:net";
+import { networkInterfaces } from "node:os";
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
@@ -58,22 +58,74 @@ async function verifyStopped(before, phase) {
   console.log(`${phase}: all owned processes, service containers, and ports released`);
 }
 
-if (process.argv[2] === "--network") {
-  const challenge = randomBytes(16).toString("hex");
-  const server = createServer((_request, response) => response.end(challenge));
-  await new Promise((resolve) => server.listen(0, "0.0.0.0", resolve));
-  try {
-    const { stdout } = await runChecked("docker", ["exec", containerNames(config).api, "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "10", `http://host.docker.internal:${server.address().port}/probe`]);
-    assert.equal(stdout, challenge);
-    const artifacts = JSON.parse(await readFile(`${config.runtimeRoot}/dashboard-artifacts.json`, "utf8"));
-    const [key, expected] = Object.entries(artifacts).find(([, value]) => typeof value === "object");
-    const { stdout: artifact } = await runChecked("docker", ["exec", containerNames(config).api, "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "10", `http://host.docker.internal:${config.ports.web}/__local-dashboard-artifacts${key}`]);
-    assert.deepEqual(JSON.parse(artifact), expected, "containers must reach the actual Vite artifact endpoint");
-    assert.equal((await fetch(`${config.urls.api}/readyz`)).status, 200);
-    console.log("network: host-to-container and container-to-host requests passed");
-  } finally {
-    await new Promise((resolve) => server.close(resolve));
+async function verifyDashboardArtifacts() {
+  const artifacts = JSON.parse(await readFile(`${config.runtimeRoot}/dashboard-artifacts.json`, "utf8"));
+  const [key, expected] = Object.entries(artifacts).find(([, value]) => typeof value === "object");
+  const { stdout } = await runChecked("docker", ["exec", containerNames(config).api, "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "10", `http://127.0.0.1:${config.ports.web}/__local-dashboard-artifacts${key}`]);
+  assert.deepEqual(JSON.parse(stdout), expected, "the API container must read its mounted dashboard artifacts");
+  assert.deepEqual(await (await fetch(`${config.urls.web}/__local-dashboard-artifacts${key}`)).json(), expected);
+  const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
+  const { stdout: row } = await runChecked("docker", ["exec", config.postgres.container, "psql", "-U", "postgres", "-d", config.databaseName, "-At", "-F", ",", "-c", `select tenant_id,id from transcriptions where episode_id='${expected.episodeId}' and status='complete' limit 1`]);
+  const [tenantId, transcriptId] = row.trim().split(",");
+  const url = `${config.urls.api}/v1/tenants/${tenantId}/transcripts/${transcriptId}`;
+  const options = { headers: { Authorization: `Bearer ${seed.systemToken}` } };
+  const document = await fetch(`${url}/document`, options);
+  assert.equal(document.status, 200, "API transcript document reads must work through the mounted object store");
+  assert.equal((await document.json()).cues[0].text, expected.cues[0].text);
+  const text = await fetch(`${url}/text`, options);
+  assert.equal(text.status, 200);
+  assert.ok((await text.text()).includes(expected.cues[0].text));
+  const { stdout: mounts } = await runChecked("docker", ["inspect", "--format", "{{json .Mounts}}", containerNames(config).api]);
+  assert.equal(JSON.parse(mounts).find(({ Destination }) => Destination === "/dashboard-artifacts").RW, false);
+}
+
+async function verifyContainerPublications() {
+  for (const name of [containerNames(config).api, containerNames(config).sync, config.postgres.container, config.redis.container]) {
+    const { stdout } = await runChecked("docker", ["inspect", "--format", "{{json .NetworkSettings.Ports}}", name]);
+    for (const bindings of Object.values(JSON.parse(stdout))) {
+      for (const binding of bindings || []) assert.ok(["127.0.0.1", "::1"].includes(binding.HostIp), `${name} publishes ${binding.HostPort} on ${binding.HostIp}`);
+    }
   }
+}
+
+async function verifyHostIsolation() {
+  const addresses = [
+    ...new Set(
+      Object.values(networkInterfaces())
+        .flat()
+        .filter((entry) => entry && !entry.internal && entry.family === "IPv4")
+        .map(({ address }) => address),
+    ),
+  ];
+  assert.ok(addresses.length, "isolation proof needs a non-loopback interface");
+  const ports = [config.ports.api, config.ports.sync, config.ports.postgres, config.ports.redis, config.ports.providerBridge];
+  if (!config.publicOrigin) ports.push(config.ports.web);
+  for (const host of addresses) for (const port of ports) await assertUnreachable(host, port);
+  console.log(`isolation: ${ports.length} host ports refuse connections on ${addresses.length} non-loopback interfaces`);
+}
+
+function assertUnreachable(host, port) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host, port });
+    const unavailable = () => {
+      socket.destroy();
+      resolve();
+    };
+    socket.once("error", unavailable);
+    socket.setTimeout(1500, unavailable);
+    socket.once("connect", () => {
+      socket.destroy();
+      reject(new Error(`${host}:${port} is reachable outside loopback`));
+    });
+  });
+}
+
+if (process.argv[2] === "--network") {
+  await verifyDashboardArtifacts();
+  await verifyContainerPublications();
+  await verifyHostIsolation();
+  assert.equal((await fetch(`${config.urls.api}/readyz`)).status, 200);
+  console.log("network: mounted artifact reads, API transcript reads and loopback-only host bindings passed");
 } else if (process.argv[2] === "--reload") {
   for (const service of ["api", "sync"]) await verifyReload(service);
 } else if (process.argv[2] === "--teardown") {

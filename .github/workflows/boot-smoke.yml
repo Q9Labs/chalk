@@ -65,7 +65,6 @@ jobs:
     env:
       CHALK_CLOUDFLARE_REALTIME_APP_ID: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_ID }}
       CHALK_CLOUDFLARE_REALTIME_APP_SECRET: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_SECRET }}
-      PUBLIC_ORIGIN: http://localhost:3070
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -108,7 +107,7 @@ jobs:
           pnpm dev:doctor | tee .verify/ci/doctor.json
           echo "doctor_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
 
-      - name: Prove host and container networking
+      - name: Prove artifact reads and loopback-only host bindings
         run: node scripts/dev/verify-stack.mjs --network
 
       - name: Reload Go and Elixir source

@@ -45,6 +45,7 @@ export function createResourceManager(config, { runner = runChecked, docker = do
       return preflight(config, { ...options, allowBusyPorts });
     },
     async start({ lease } = {}) {
+      await mkdir(join(config.runtimeRoot, "dashboard-artifacts"), { recursive: true });
       state.versions = await prepareImages(config, (command, args) => runResource(command, args, { cwd: config.root }, "images"));
       const network = containerNames(config).network;
       try {
