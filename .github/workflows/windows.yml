@@ -77,6 +77,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run check:generated
 
+      # The packed web consumer test drives Chromium and fails in CI when the browser is missing.
+      - name: Install Chromium
+        if: ${{ !cancelled() }}
+        run: pnpm --dir sdks/typescript/client exec playwright install chromium
+
       - name: Run unit tests
         if: ${{ !cancelled() }}
         run: pnpm run test

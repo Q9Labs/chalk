@@ -423,7 +423,7 @@ function workspacePolicy(archiveDirectory_, archives) {
     "@q9labsai/chalk-client": archives.clientArchive,
     "@q9labsai/chalk-react": archives.reactArchive,
   };
-  const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive)}"`);
+  const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive).replaceAll("\\", "/")}"`);
   return [
     "packages:",
     '  - "."',

@@ -1,8 +1,14 @@
 # Chalk Gate on q9gate
 
-`pnpm gate` runs tracker generation checks, then `q9gate run` with Chalk's checks declared as custom lanes in `gate.config.ts`; `pnpm gate:full` adds `--full`. Locally each gate runs single-threaded (`GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, q9gate concurrency 1) so it fits a small machine; an already-set variable replaces the default. "gate.report.json" records every selected and skipped lane.
+`pnpm gate` runs `scripts/gates/commit.mjs --local`, which checks the install and the docs, runs the tracker check, then `q9gate run` with Chalk's checks declared as custom lanes in `gate.config.ts`; `pnpm gate:full` adds `--full`. `commit.mjs --local` makes each gate run single-threaded (`GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, q9gate concurrency 1) so it fits a small machine; an already-set variable replaces the default. "gate.report.json" records every selected and skipped lane.
 
 Every profile first runs `doclint.mjs`. The pre-commit hook runs `pnpm gate:fast` (doc checks, tracker check, and the `scope`, `format`, `hygiene` and `secrets` lanes on staged files). The `generated` lane is too slow for the hook, so run `pnpm run check:generated` yourself after editing a generator input. A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended.
+
+## Native Windows
+
+A developer on Windows (PowerShell, no WSL) runs the same `pnpm` commands: `gate:fast`, `check:generated`, `regen`, `build`, `lint`, `format:check` and `test`. The gate entrypoints (`commit.mjs`, `gitleaks.mjs`, `fallow-health.mjs`, `package-attw.mjs`, `apps/api/scripts/db-generate.mjs`) are Node scripts, and `scripts/lib/platform.mjs` starts `.cmd` shims such as `pnpm`, imports paths as file URLs and stops process trees. Package scripts use `scripts/with-env.mjs` for environment variables and `scripts/fs.mjs` for `rm`, `mkdir` and `cp`. The repository is checked out with LF line endings (`.gitattributes`), so formatting and generated-file checks match Linux.
+
+A lane that runs bash scripts or needs Linux services (the API and Sync gates, release contracts, OSV) stops on Windows with one line that points to the Gate workflow, which runs it on Linux. `.github/workflows/windows.yml` runs install, check-types, build, lint, format:check, gate:fast, check:generated and the unit tests on `windows-latest`; it is advisory and not a required check.
 
 ## The Gate workflow
 
