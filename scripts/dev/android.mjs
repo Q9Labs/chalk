@@ -2,6 +2,21 @@ import { access } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import ports from "./ports.json" with { type: "json" };
+
+export async function reverseAndroidPorts({ run, env = process.env }) {
+  try {
+    await run("adb", ["version"]);
+  } catch {
+    return;
+  }
+  const { stdout } = await run("adb", ["devices"]);
+  for (const line of stdout.split(/\r?\n/)) {
+    const [serial, state] = line.trim().split(/\s+/);
+    if (state !== "device") continue;
+    for (const port of [Number(env.CHALK_DEV_API_PORT || ports.api), Number(env.RCT_METRO_PORT || ports.metro)]) await run("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
+  }
+}
 
 export async function connectedSerial(run, env = process.env) {
   if (env.ADB_SERIAL) return env.ADB_SERIAL;
@@ -57,6 +72,11 @@ export async function installLocalApk(argv, { root, run, platform = process.plat
   const apk = join(root, "apps/mobile/android/app/build/outputs/apk", options.variant, `app-${options.variant}.apk`);
   if (!options.skipBuild) await run(platform === "win32" ? "gradlew.bat" : "./gradlew", [options.variant === "release" ? "assembleRelease" : "assembleDebug"], { cwd: join(root, "apps/mobile/android") });
   await access(apk);
+  const delivered = await deliverApk(options, { run, serial, apk, env, output });
+  output(`delivery=${delivered}\nserial=${serial}\napk=${apk}`);
+}
+
+async function deliverApk(options, { run, serial, apk, env, output }) {
   let delivered = options.delivery;
   if (delivered === "install") {
     try {
@@ -80,5 +100,5 @@ export async function installLocalApk(argv, { root, run, platform = process.plat
     if (!env.CHALK_MOBILE_PACKAGE) throw new Error("Set CHALK_MOBILE_PACKAGE to launch, or pass --no-launch.");
     await run("adb", ["-s", serial, "shell", "monkey", "-p", env.CHALK_MOBILE_PACKAGE, "-c", "android.intent.category.LAUNCHER", "1"]);
   }
-  output(`delivery=${delivered}\nserial=${serial}\napk=${apk}`);
+  return delivered;
 }

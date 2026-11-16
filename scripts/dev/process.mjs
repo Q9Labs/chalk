@@ -18,7 +18,7 @@ function createRedactor({ values = [], env = {} } = {}) {
   return (text) => needles.reduce((result, needle) => result.split(needle).join("[redacted]"), String(text));
 }
 
-export function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
+function createLogMux({ service, logRoot, aggregatePath, redactions = [], env = {}, mirror = process.stdout } = {}) {
   const redact = createRedactor({ values: redactions, env });
   const servicePath = join(logRoot, `${service}.log`);
   let ready = false;

@@ -59,6 +59,13 @@ export function containerEnvironment(config, service, env) {
     if (typeof value === "string" && value.startsWith(config.root)) result[key] = containerPath(config, value);
   }
   if (service === "api") {
+    if (result.CHALK_R2_ENDPOINT) {
+      const endpoint = new URL(result.CHALK_R2_ENDPOINT);
+      if (["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname)) {
+        endpoint.hostname = "host.docker.internal";
+        result.CHALK_R2_INTERNAL_ENDPOINT = endpoint.toString();
+      }
+    }
     result.CHALK_API_ADDR = `0.0.0.0:${config.ports.api}`;
     result.CHALK_PROVIDER_BRIDGE_ADDRESS = `0.0.0.0:${config.ports.providerBridge}`;
     result.CHALK_REDIS_URL = `redis://${config.redis.container}:6379/0`;

@@ -190,9 +190,9 @@ export_database_url() {
       echo "CHALK_GATE_POSTGRES_MIGRATION_TARGET must be a numeric Goose version" >&2
       exit 2
     fi
-    CHALK_DATABASE_URL="${database_url}" node "${repository_root}/apps/api/scripts/db-migrate.mjs" up-to "${CHALK_GATE_POSTGRES_MIGRATION_TARGET}"
+    (cd "${repository_root}/apps/api" && go tool goose -dir db/migrations postgres "${database_url}" up-to "${CHALK_GATE_POSTGRES_MIGRATION_TARGET}")
   else
-    CHALK_DATABASE_URL="${database_url}" node "${repository_root}/apps/api/scripts/db-migrate.mjs" up
+    (cd "${repository_root}/apps/api" && go tool goose -dir db/migrations postgres "${database_url}" up)
   fi
 
   export CHALK_API_ENV=local

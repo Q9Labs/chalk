@@ -65,6 +65,10 @@ if (process.argv[2] === "--network") {
   try {
     const { stdout } = await runChecked("docker", ["exec", containerNames(config).api, "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "10", `http://host.docker.internal:${server.address().port}/probe`]);
     assert.equal(stdout, challenge);
+    const artifacts = JSON.parse(await readFile(`${config.runtimeRoot}/dashboard-artifacts.json`, "utf8"));
+    const [key, expected] = Object.entries(artifacts).find(([, value]) => typeof value === "object");
+    const { stdout: artifact } = await runChecked("docker", ["exec", containerNames(config).api, "curl", "--noproxy", "*", "--fail", "--silent", "--max-time", "10", `http://host.docker.internal:${config.ports.web}/__local-dashboard-artifacts${key}`]);
+    assert.deepEqual(JSON.parse(artifact), expected, "containers must reach the actual Vite artifact endpoint");
     assert.equal((await fetch(`${config.urls.api}/readyz`)).status, 200);
     console.log("network: host-to-container and container-to-host requests passed");
   } finally {

@@ -60,13 +60,15 @@ if config_env() == :prod do
     raise "CHALK_SYNC_LOCAL_PROOF requires a localhost database"
   end
 
-  parity_database_hosts = if local_container?, do: ["postgres"], else: ["127.0.0.1", "localhost", "::1"]
+  parity_database_hosts =
+    if local_container?, do: ["postgres"], else: ["127.0.0.1", "localhost", "::1"]
 
   if local_parity? and URI.parse(database_url).host not in parity_database_hosts do
     raise "CHALK_SYNC_LOCAL_PARITY requires the local dev database"
   end
 
-  if local_parity? and not local_container? and System.get_env("CHALK_SYNC_BIND_IP") not in [nil, "127.0.0.1"] do
+  if local_parity? and not local_container? and
+       System.get_env("CHALK_SYNC_BIND_IP") not in [nil, "127.0.0.1"] do
     raise "CHALK_SYNC_LOCAL_PARITY requires a localhost bind address"
   end
 

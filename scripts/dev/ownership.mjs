@@ -169,11 +169,12 @@ export async function removeRuntimeFiles(config) {
   await unlink(config.ownerPath).catch(() => {});
 }
 
-export async function validateOwnedPid(pid, { expectedCommand, expectedProcessGroup = false, command = processCommand, processGroup = processGroupId, alive = processAlive } = {}) {
+export async function validateOwnedPid(pid, { expectedCommand, expectedProcessGroup = false, command = processCommand, processGroup = processGroupId, alive = processAlive, platform = process.platform } = {}) {
   if (!(await alive(pid))) return false;
   if (expectedCommand) {
     const actual = await command(pid);
-    if (!actual.includes(expectedCommand)) return false;
+    const normalize = (value) => (platform === "win32" ? value.replaceAll("\\", "/") : value);
+    if (!normalize(actual).includes(normalize(expectedCommand))) return false;
   }
   if (expectedProcessGroup && Number(await processGroup(pid)) !== pid) return false;
   return true;
@@ -199,7 +200,7 @@ async function hasOwnedChild(children, isAlive) {
   return false;
 }
 
-export async function processCommand(pid) {
+async function processCommand(pid) {
   if (process.platform === "win32") return windowsProcessCommand(pid);
   const { execFile } = await import("node:child_process");
   return new Promise((resolveCommand) => {

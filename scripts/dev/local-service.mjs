@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 
 const exec = promisify(execFile);
@@ -49,6 +50,11 @@ export async function manageLocalService(kind, command = "start", { env = proces
     return `${kind} ${command === "stop" ? "stopped" : "removed"}`;
   }
   if (command !== "start") throw new Error(`Unknown command: ${command}`);
+  return startLocalService(service, { env, docker, exists });
+}
+
+async function startLocalService(service, { env, docker, exists }) {
+  const { kind } = service;
   if (env.CHALK_REMOTE_RESOURCE_DIR) {
     await mkdir(env.CHALK_REMOTE_RESOURCE_DIR, { recursive: true });
     const temporary = join(env.CHALK_REMOTE_RESOURCE_DIR, `.${kind}-${randomUUID()}`);
@@ -68,7 +74,7 @@ export async function manageLocalService(kind, command = "start", { env = proces
       ready = true;
       break;
     } catch {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await delay(500);
     }
   }
   if (!ready) throw new Error(`${kind} did not become ready. Run docker logs ${service.name}.`);

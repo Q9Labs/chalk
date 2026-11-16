@@ -561,6 +561,7 @@
         "GLOSSARY.md",
         "LICENSE",
         "README.md",
+        "docs/getting-started.md",
         "design.md",
         "e2e.config.ts",
         "features.json",
