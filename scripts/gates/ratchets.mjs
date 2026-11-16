@@ -10,10 +10,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { baselineIncreases, readBaselineAt } from "./baseline-guard.mjs";
 
 const baselineFile = join(repositoryRoot, "scripts/gates/ratchets.json");
 const maxLines = 300;
 const sourceFile = /\.(go|ex|exs|ts|tsx|mjs|cjs|js|py|sh)$/;
+const shellShebang = /^#!.*(?:^|[ /])(?:ba)?sh(?:\s|$)/;
 const generatedFile = /(^|\/)(generated|sqlc)\/|\.gen\.ts$|\.generated\.|(^|\/)routeTree\.gen\.ts$|(^|\/)pnpm-lock\.yaml$|\/node_modules\//;
 
 const generatedExclusions = [":!scripts/gates/ratchets.*", ":!**/generated/**", ":!**/*.gen.ts", ":!**/*.generated.*", ":!pnpm-lock.yaml", ":!**/sqlc/**", ":!**/routeTree.gen.ts"];
@@ -46,11 +48,19 @@ function git(args) {
   }
 }
 
+export function isSourceFile(file, content = "") {
+  return sourceFile.test(file) || shellShebang.test(content.split("\n", 1)[0] ?? "");
+}
+
 function longFiles() {
   const sizes = {};
   for (const file of git(["ls-files", "-z"]).split("\0").filter(Boolean)) {
-    if (!sourceFile.test(file) || generatedFile.test(file)) continue;
-    const lines = readFileSync(join(repositoryRoot, file), "utf8").split("\n").length - 1;
+    if (generatedFile.test(file)) continue;
+    const basename = file.slice(file.lastIndexOf("/") + 1);
+    if (!sourceFile.test(file) && basename.includes(".")) continue;
+    const source = readFileSync(join(repositoryRoot, file), "utf8");
+    if (!isSourceFile(file, source)) continue;
+    const lines = source.split("\n").length - 1;
     if (lines > maxLines) sizes[file] = lines;
   }
   return sizes;
@@ -85,10 +95,39 @@ export function rises(baseline, current) {
   return messages;
 }
 
+export function baselineRises(previous, candidate, previouslyLong = {}) {
+  const failures = baselineIncreases(previous.copies, candidate.copies, "copy baseline");
+  for (const [file, lines] of Object.entries(candidate.files)) {
+    const allowed = previous.files[file];
+    if (allowed !== undefined && lines > allowed) failures.push(`${file} baseline rose from ${allowed} to ${lines}; baselines may only fall.`);
+    if (allowed === undefined && (previouslyLong[file] === undefined || lines > previouslyLong[file] || previouslyLong[file] <= maxLines)) {
+      failures.push(`${file} is new in the file-size baseline without already exceeding ${maxLines} lines on the base branch.`);
+    }
+  }
+  return failures;
+}
+
+function previouslyLongFiles(ref, candidateFiles, previousFiles) {
+  const sizes = {};
+  for (const file of Object.keys(candidateFiles)) {
+    if (Object.hasOwn(previousFiles, file)) continue;
+    try {
+      const source = execFileSync("git", ["show", `${ref}:${file}`], { cwd: repositoryRoot, encoding: "utf8" });
+      sizes[file] = source.split("\n").length - 1;
+    } catch {
+      // Missing base files are deliberately left unapproved.
+    }
+  }
+  return sizes;
+}
+
 if (import.meta.main) {
+  const baseRef = process.env.GATE_BASE_REF || "origin/master";
   const baseline = JSON.parse(readFileSync(baselineFile, "utf8"));
+  const previous = readBaselineAt(baseRef, "scripts/gates/ratchets.json");
   const current = { files: longFiles(), copies: copyCounts() };
-  const failures = rises(baseline, current);
+  const baselineFailures = baselineRises(previous, baseline, previouslyLongFiles(baseRef, baseline.files, previous.files));
+  const failures = [...baselineFailures, ...rises(baseline, current)];
   if (failures.length > 0) {
     for (const failure of failures) console.error(failure);
     process.exitCode = 1;

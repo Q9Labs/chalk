@@ -167,6 +167,8 @@
     "features/media/sfu/internal/media/transport.go": 773,
     "features/media/sfu/internal/media/udpbatch_linux.go": 469,
     "features/media/sfu/protocol/protocol.go": 539,
+    "features/media/sfu/scripts/bench/bench": 337,
+    "features/media/sfu/scripts/bench/faults": 415,
     "features/media/sfu/tests/constrained_link_test.go": 408,
     "features/media/sfu/tests/fencing_test.go": 390,
     "features/media/sfu/tests/live_smoke_test.go": 1178,

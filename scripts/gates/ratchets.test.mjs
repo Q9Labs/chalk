@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rises } from "./ratchets.mjs";
+import { baselineRises, isSourceFile, rises } from "./ratchets.mjs";
 
 const baseline = { files: { "a.mjs": 400 }, copies: { "copy.x": 3 } };
 
@@ -14,4 +14,21 @@ test("a file that grew, a new long file and a higher count are all reported", ()
 
 test("equal or lower numbers pass", () => {
   assert.deepEqual(rises(baseline, { files: { "a.mjs": 400 }, copies: { "copy.x": 2 } }), []);
+});
+
+
+test("ratchet baselines may fall, but cannot rise or add an unapproved long-file exception", () => {
+  const previous = { files: { "a.mjs": 400 }, copies: { "copy.x": 3 } };
+  assert.deepEqual(baselineRises(previous, { files: { "a.mjs": 399 }, copies: { "copy.x": 2 } }), []);
+  assert.equal(baselineRises(previous, { files: { "a.mjs": 401 }, copies: { "copy.x": 3 } }).length, 1);
+  assert.equal(baselineRises(previous, { files: { "a.mjs": 400, "new.sh": 320 }, copies: { "copy.x": 3 } }).length, 1);
+  assert.deepEqual(baselineRises(previous, { files: { "a.mjs": 400, "old.sh": 330 }, copies: { "copy.x": 3 } }, { "old.sh": 330 }), []);
+  assert.equal(baselineRises(previous, { files: { "a.mjs": 400, "old.sh": 331 }, copies: { "copy.x": 3 } }, { "old.sh": 330 }).length, 1);
+  assert.equal(baselineRises(previous, { files: { "a.mjs": 400 }, copies: { "copy.x": 4 } }).length, 1);
+});
+
+
+test("the size ratchet includes extensionless Bash scripts", () => {
+  assert.equal(isSourceFile("scripts/tools/deploy", "#!/usr/bin/env bash\necho ok\n"), true);
+  assert.equal(isSourceFile("scripts/tools/data", "plain text\n"), false);
 });

@@ -11,6 +11,14 @@ const selected = (files, event) =>
     .tasks.filter((task) => task.selected)
     .map((task) => task.id);
 
+test("size and analysis ratchets compare their allowances with the merge base", () => {
+  const base = "refs/remotes/origin/other-branch";
+  const plan = createGatePlan([], { scope: "merge base to HEAD", base, services: "external", event: "pull_request" });
+  for (const id of ["ratchets", "complexity", "dead-code", "duplication"]) {
+    assert.equal(plan.tasks.find((task) => task.id === id)?.env.GATE_BASE_REF, base, id);
+  }
+});
+
 test("documentation selects only the always-on lane group on every event", () => {
   for (const event of ["pull_request", undefined]) {
     assert.deepEqual(jobs(["docs/observability.md"], event), { api: false, sync: false, rootGroups: ["checks"], planFull: false });

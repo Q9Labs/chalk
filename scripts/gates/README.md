@@ -57,6 +57,10 @@ Four workflows stay advisory because only a change to the repository ruleset can
 
 Documentation-only changes keep the hygiene, secrets, feature-map, generated-output and format checks and do not force unrelated service or workspace checks. Workspace builds run through Turbo with their dependency closure and are forced, never trusted from cache. The boundary gate rejects relative reach-through into another workspace's private source and packages or SDKs importing applications; it does not enforce intra-workspace cycles or orphans. `infrastructure/managed-episode` and `infrastructure/nightly` run the API, Sync and recorder gates because those tests read them.
 
+## Size and code-quality ratchets
+
+The `ratchets` lane measures tracked source files over 300 lines and repeated values or special-case shapes. Bash files are detected by extension or shebang. Existing over-limit files may shrink but not grow; a new baseline entry is accepted only for a file that already exceeded the limit on the merge base, and its allowance cannot exceed that base size. The complexity, dead-code and clone baselines follow the same merge-base rule: committed allowances may only fall, never rise or gain new entries. These checks fail closed when the merge-base baseline cannot be read. `GATE_BASE_REF` supplies that ref; the Gate planner sets it from the pull-request base. Ratchet `--write` commands lower measured allowances, but do not bypass the comparison.
+
 ## Design-token ratchet
 
 The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow values in web, UI, SDK and mobile source against `design-tokens-baseline.json`. A new raw value fails. A removed value also fails until the baseline shrinks, so the removing change runs `pnpm exec q9gate accept-baseline design-tokens --message "shrink design-token baseline"` and commits the smaller file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on the line or the line above.

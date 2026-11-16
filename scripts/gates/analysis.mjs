@@ -14,6 +14,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { baselineIncreases, readBaselineAt } from "./baseline-guard.mjs";
 
 const baselineFile = join(repositoryRoot, "scripts/gates/analysis-baseline.json");
 const maxComplexity = 15;
@@ -130,9 +131,14 @@ if (import.meta.main) {
     console.error(`usage: analysis.mjs ${Object.keys(checks).join("|")} [--write]`);
     process.exit(2);
   }
+  const baseRef = process.env.GATE_BASE_REF || "origin/master";
   const baselines = JSON.parse(readFileSync(baselineFile, "utf8"));
+  const previous = readBaselineAt(baseRef, "scripts/gates/analysis-baseline.json");
   const current = checks[name].measure();
-  const failures = name in baselines ? rises(name, baselines[name], current) : [];
+  const failures = [
+    ...baselineIncreases(previous[name] ?? {}, baselines[name] ?? {}, `${name} baseline`),
+    ...(name in baselines ? rises(name, baselines[name], current) : []),
+  ];
   if (failures.length > 0) {
     for (const failure of failures) console.error(failure);
     process.exitCode = 1;

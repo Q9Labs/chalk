@@ -53,7 +53,7 @@
     {
       "id": "gate:ratchets",
       "owner": "Code quality",
-      "catches": "A file over 300 lines that grows, or a copied value (port, provider name, entrypoint check) that is copied once more.",
+      "catches": "A tracked source file over 300 lines grows, including extensionless Bash, a copy count rises, or a size/copy allowance is raised above the merge-base baseline.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
