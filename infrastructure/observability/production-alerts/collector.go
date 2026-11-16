@@ -3,17 +3,15 @@ package main
 
 import (
 	"context"
-	"crypto/x509"
 	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
