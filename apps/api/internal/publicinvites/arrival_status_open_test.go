@@ -51,11 +51,12 @@ func (s openedSpace) GetPublicSpace(context.Context, utilities.ID, utilities.ID)
 
 type openedAccess struct {
 	Access
-	arrival   Arrival
-	grants    int
-	grantErr  error
-	requested []PublicAccessInput
-	discarded int
+	arrival    Arrival
+	grants     int
+	grantErr   error
+	requested  []PublicAccessInput
+	discarded  int
+	discardErr error
 }
 
 func (a *openedAccess) DiscardPublicAccess(context.Context, PublicAccessGrant) error {
