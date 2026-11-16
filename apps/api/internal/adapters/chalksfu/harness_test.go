@@ -63,6 +63,9 @@ func sfuBinary(t *testing.T) string {
 			return
 		}
 		binaryPath = filepath.Join(binaryDir, "sfu")
+		if runtime.GOOS == "windows" {
+			binaryPath += ".exe"
+		}
 		output, err := exec.Command("go", "build", "-C", source, "-o", binaryPath, "./cmd/sfu").CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("build sfu: %w\n%s", err, output)
