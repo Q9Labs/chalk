@@ -51,13 +51,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// sfuBinary builds the SFU from the repository once. The conformance tests run the
-// real service as a process, so they test the wire contract and not a copy of it.
+// sfuBinary builds the SFU once; the conformance tests run it as a real process, so they test the wire contract and not a copy.
 func sfuBinary(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the conformance suite runs the Chalk SFU as a process with real loopback media, and the SFU ships on Linux only")
-	}
+	skipWhereTheSFUDoesNotRun(t)
 	buildOnce.Do(func() {
 		_, file, _, _ := runtime.Caller(0)
 		source := filepath.Join(filepath.Dir(file), "..", "..", "..", "..", "..", "features", "media", "sfu")

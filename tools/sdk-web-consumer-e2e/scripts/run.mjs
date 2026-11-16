@@ -471,15 +471,3 @@ function run(command, arguments__, cwd) {
     child.once("exit", (code) => (code === 0 ? resolveRun() : reject(new TypeError(`${command} ${arguments__.join(" ")} exited with code ${code}`))));
   });
 }
-
-function readArchiveManifest(archivePath) {
-  return new Promise((resolveManifest, rejectManifest) => {
-    const child = spawn("tar", ["-xOf", archivePath, "package/package.json"], { stdio: ["ignore", "pipe", "inherit"] });
-    let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += String(chunk);
-    });
-    child.once("error", rejectManifest);
-    child.once("exit", (code) => (code === 0 ? resolveManifest(output) : rejectManifest(new TypeError(`tar ${archivePath} exited with code ${code}`))));
-  });
-}
