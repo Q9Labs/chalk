@@ -192,6 +192,11 @@ fi
 sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" \
   "${node_dir}/chalk-sfu.container.in" |
   as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
+# Keep the restart decision in this process; the helper installs or removes the worker in a child shell.
+capture_on=false
+if [[ -f "${dir}/capture.conf" ]]; then
+  capture_on=true
+fi
 "${node_dir}/deploy-capture-worker.sh" "$dir" "$environment" "$spiffe_environment" "$revision" "$node_size" "$host" "$SFU_SSH_KEY" "${dir}/known_hosts" "$sfu_root" "$node_dir"
 remote systemctl --user -M chalk-sfu@ daemon-reload
 
