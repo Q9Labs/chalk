@@ -95,8 +95,9 @@ test("containers use their private network and paths, never host build output", 
   assert.equal(env.CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE, "/workspace/.private/chalk-dev/identity/sync-client-key.pem");
   assert.equal(env.CHALK_SYNC_PROVIDER_BRIDGE_URL, `https://api:${config.ports.providerBridge}`);
   assert.ok(!env.CHALK_DATABASE_URL.includes("127.0.0.1"));
-  const args = containerArguments(config, "sync", { image: "fixture", env });
+  const args = containerArguments(config, "sync", { image: "fixture", env, platform: "linux" });
   assert.ok(args.includes("host.docker.internal:host-gateway"));
+  assert.ok(!containerArguments(config, "sync", { image: "fixture", platform: "win32" }).includes("--add-host"));
   assert.ok(args.some((arg) => arg.includes("type=volume") && arg.endsWith("target=/workspace/apps/sync/_build")));
   assert.ok(args.some((arg) => arg.includes("type=volume") && arg.endsWith("target=/workspace/apps/sync/deps")));
 });

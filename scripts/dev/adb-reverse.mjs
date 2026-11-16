@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Forwards the API and Metro ports of every attached Android device to this machine. Does nothing without adb or a device.
-import { execFileSync } from "node:child_process";
+import { execCommandSync } from "../lib/platform.mjs";
 import ports from "./ports.json" with { type: "json" };
 
 function adb(...args) {
-  return execFileSync("adb", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  return execCommandSync("adb", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
 function attachedDevices() {
@@ -22,5 +22,5 @@ try {
   process.exit(0);
 }
 for (const serial of attachedDevices()) {
-  for (const port of [ports.api, ports.metro]) adb("-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`);
+  for (const port of [Number(process.env.CHALK_DEV_API_PORT || ports.api), Number(process.env.RCT_METRO_PORT || ports.metro)]) adb("-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`);
 }

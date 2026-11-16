@@ -84,9 +84,9 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         await runChecked("docker", containerArguments(config, "sync", { image: imageName("sync", resources.state.versions), command: ["sh", "-c", "mix deps.get && mix compile"] }), { env: { MIX_ENV: "prod" } });
         return;
       }
-      if (spec.id !== "mobile") return;
-      const bridgePath = `${config.root}/apps/mobile/scripts/prepare-local-bridge.mjs`;
-      const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_WEB_PORT: String(config.ports.web) } });
+      if (spec.id !== "mobile" || config.profile === "ios") return;
+      const bridgePath = `${config.root}/scripts/dev/adb-reverse.mjs`;
+      const result = await runChecked(process.execPath, [bridgePath], { cwd: config.root, env: { CHALK_DEV_API_PORT: String(config.ports.api), RCT_METRO_PORT: String(config.metro.port) } });
       if (result.stdout?.trim()) output(result.stdout.trim());
       if (result.stderr?.trim()) output(result.stderr.trim());
     },

@@ -108,6 +108,9 @@ jobs:
           pnpm dev:doctor | tee .verify/ci/doctor.json
           echo "doctor_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
 
+      - name: Prove host and container networking
+        run: node scripts/dev/verify-stack.mjs --network
+
       - name: Reload Go and Elixir source
         run: node scripts/dev/verify-stack.mjs --reload
 

@@ -26,7 +26,7 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
   if (!page.ok || !(page.headers.get("content-type") || "").includes("text/html")) {
     throw failure(FailureKind.STARTUP, `seeded invite page did not load from ${origin} (HTTP ${page.status})`, { stage: "signin" });
   }
-  // The arrival opens a real media connection, so a provider timeout can fail one attempt; a 4xx never retries.
+  // A provider timeout or an Episode finishing its previous guest leave can make an arrival transiently unavailable.
   let arrival;
   for (let attempt = 1; ; attempt += 1) {
     arrival = await fetchImpl(new URL("/v1/public/space-invite-arrivals", origin), {
@@ -34,7 +34,15 @@ export async function proveSeededSignIn({ origin, invite, fetchImpl = fetch, att
       headers: { "content-type": "application/json", "Idempotency-Key": randomUUID(), origin },
       body: JSON.stringify({ display_name: "Seeded guest", space_invite_token: invite.code }),
     });
-    if (arrival.status < 500 || attempt === attempts) break;
+    const endingEpisode =
+      arrival.status === 409 &&
+      (
+        await arrival
+          .clone()
+          .json()
+          .catch(() => undefined)
+      )?.error?.code === "episode.not_active";
+    if ((!endingEpisode && arrival.status < 500) || attempt === attempts) break;
     await arrival.arrayBuffer();
     await delay(retryDelayMs);
   }

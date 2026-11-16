@@ -29,9 +29,9 @@ export function imageName(service, versions) {
   return service === "api" ? `chalk-dev-api:go-${versions.go}` : `chalk-dev-sync:elixir-${versions.elixir}-otp-${versions.erlang}`;
 }
 
-export function containerArguments(config, service, { image, env = {}, command, interactive = false } = {}) {
+export function containerArguments(config, service, { image, env = {}, command, interactive = false, platform = process.platform } = {}) {
   const names = containerNames(config);
-  const args = ["run", "--rm", "--init", ...(interactive ? ["-it"] : []), "--network", names.network, "--add-host", "host.docker.internal:host-gateway", "--mount", `type=bind,source=${config.root},target=/workspace`, "--workdir", `/workspace/apps/${service}`];
+  const args = ["run", "--rm", "--init", ...(interactive ? ["-it"] : []), "--network", names.network, ...(platform === "linux" ? ["--add-host", "host.docker.internal:host-gateway"] : []), "--mount", `type=bind,source=${config.root},target=/workspace`, "--workdir", `/workspace/apps/${service}`];
   if (!command) {
     args.push("--name", names[service], "--network-alias", service);
     const ports = service === "api" ? [config.ports.api, config.ports.providerBridge] : [config.ports.sync];
