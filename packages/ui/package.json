@@ -179,14 +179,14 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup && pnpm run build:types && pnpm run build:css && pnpm run build:logos",
-    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
-    "build:css": "mkdir -p ./dist && cp ./src/styles/index.css ./dist/styles.css",
-    "build:logos": "mkdir -p ./dist && cp -R ../assets/src/logos ./dist/",
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup && pnpm run build:types && pnpm run build:css && pnpm run build:logos",
+    "build:types": "node ../../scripts/fs.mjs rm tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:css": "node ../../scripts/fs.mjs cp ./src/styles/index.css ./dist/styles.css",
+    "build:logos": "node ../../scripts/fs.mjs cp ../assets/src/logos ./dist/",
     "dev": "pnpm run build:css && pnpm run build:logos && tsup --watch",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --project tsconfig.check-types.json --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/fs.mjs rm dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",

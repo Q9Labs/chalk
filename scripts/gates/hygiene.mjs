@@ -48,11 +48,11 @@ for (const sdk of ["client", "react", "react-native"]) {
 }
 
 const rootPackage = readJson("package.json");
-const commitScript = readFileSync(path.join(repoRoot, "scripts/gates/commit.sh"), "utf8");
-const referencedScripts = [...commitScript.matchAll(/pnpm run ([A-Za-z0-9:_-]+)/g)].map((match) => match[1]);
+const commitScript = readFileSync(path.join(repoRoot, "scripts/gates/commit.mjs"), "utf8");
+const referencedScripts = [...commitScript.matchAll(/runCommand\("pnpm", \["run", "([A-Za-z0-9:_-]+)"/g)].map((match) => match[1]);
 for (const scriptName of referencedScripts) {
   if (!rootPackage.scripts?.[scriptName]) {
-    errors.push(`scripts/gates/commit.sh references missing root package script "${scriptName}"`);
+    errors.push(`scripts/gates/commit.mjs references missing root package script "${scriptName}"`);
   }
 }
 

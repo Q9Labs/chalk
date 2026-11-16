@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnCommand } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
 // Each entry reuses an existing check. None needs Postgres or Docker.
@@ -10,7 +10,7 @@ const checks = [
   { name: "Recording render contract", command: ["node", "scripts/codegen/recording-render-contract.mjs"] },
   { name: "Mobile release facts", command: ["node", "scripts/codegen/mobile-release-facts.mjs"] },
   { name: "OpenAPI, SDK, and Sync contract", command: ["pnpm", "run", "check:sdk-generated"] },
-  { name: "sqlc", command: ["bash", "apps/api/scripts/db-generate.sh", "check"] },
+  { name: "sqlc", command: ["node", "apps/api/scripts/db-generate.mjs", "check"] },
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
   { name: "Tracker views", command: ["pnpm", "run", "check:tracker"] },
   { name: "Docs search index", command: ["node", "apps/web/scripts/docs-search-index.mjs"] },
@@ -18,7 +18,7 @@ const checks = [
 
 function run({ name, command, fix }) {
   return new Promise((resolve) => {
-    const child = spawn(command[0], command.slice(1), { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawnCommand(command[0], command.slice(1), { cwd: repositoryRoot, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));

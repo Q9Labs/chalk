@@ -1517,6 +1517,17 @@
       "sample": "5 runs since 18 October: 2 failed, 2 cancelled."
     },
     {
+      "id": "workflow:windows.yml#windows",
+      "owner": "Gate",
+      "catches": "A script, path or line ending that works on Linux and macOS but breaks a developer on native Windows.",
+      "runs": ["pull_request", "merge_queue", "push", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "A new job: no runs in the audit sample.",
+      "reason": "It proves that a Windows checkout installs, checks, builds and tests. It becomes a required context only after it stays green on pull requests and in the queue, and a ruleset change needs the repository owner."
+    },
+    {
       "id": "scorecard:web.route",
       "owner": "Call",
       "catches": "The pre-join route's JavaScript or CSS growing past its gzip ceiling.",

@@ -467,6 +467,7 @@
         ".github/workflows/rollback-rehearsal.yml",
         ".github/workflows/sdk-web-consumer-e2e.yml",
         ".github/workflows/ui-check.yml",
+        ".github/workflows/windows.yml",
         "infrastructure/.gitignore",
         "infrastructure/host-change-alert",
         "infrastructure/README.md",

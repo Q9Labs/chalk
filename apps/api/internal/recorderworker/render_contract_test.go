@@ -3,6 +3,7 @@ package recorderworker
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -52,9 +53,10 @@ func TestRenderRequestMatchesTheSharedContract(t *testing.T) {
 		t.Fatalf("request version %q, contract %q", FrameRenderRequestVersion, contract.Version)
 	}
 	valid := func(mutate func(*FrameRenderRequest)) error {
+		workspace := t.TempDir()
 		request := FrameRenderRequest{
 			SchemaVersion: FrameRenderRequestVersion, RecordingID: "recording", EpisodeID: "episode",
-			WorkspaceDirectory: "/work", PresentationPath: "/work/presentation.json", AssetDirectory: "/work/assets", DecodedMediaPath: "/work/decoded",
+			WorkspaceDirectory: workspace, PresentationPath: filepath.Join(workspace, "presentation.json"), AssetDirectory: filepath.Join(workspace, "assets"), DecodedMediaPath: filepath.Join(workspace, "decoded"),
 			PresentationSHA256: strings.Repeat("a", 64), DecodedMediaSHA256: strings.Repeat("b", 64),
 			Width: 640, Height: 360, FPS: 30, DurationMs: 1000,
 		}

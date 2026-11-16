@@ -5,10 +5,10 @@
 //   sdk.mjs check      writes them into a temporary folder and fails when any differs from the repository
 //
 // Both modes run the same steps; only the output root differs.
-import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { execCommandSync } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
 const clientGenerated = "sdks/typescript/client/src/generated";
@@ -29,13 +29,13 @@ const formatted = [openapi, openapiTypes, ...emitters.flatMap((emitter) => Objec
 const outputs = [...formatted, ...emitters.flatMap((emitter) => Object.values(emitter.outputs)).filter((file) => file.endsWith(".ex"))];
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, { cwd: repositoryRoot, stdio: ["ignore", "inherit", "inherit"], ...options });
+  return execCommandSync(command, args, { cwd: repositoryRoot, stdio: ["ignore", "inherit", "inherit"], ...options });
 }
 
 function writeAll(root) {
   const at = (file) => join(root, file);
   mkdirSync(dirname(at(openapi)), { recursive: true });
-  const document = execFileSync(process.env.GO ?? "go", ["run", "./cmd/codegen"], { cwd: join(repositoryRoot, "apps/api"), stdio: ["ignore", "pipe", "inherit"], maxBuffer: 1 << 28 });
+  const document = execCommandSync(process.env.GO ?? "go", ["run", "./cmd/codegen"], { cwd: join(repositoryRoot, "apps/api"), stdio: ["ignore", "pipe", "inherit"], maxBuffer: 1 << 28 });
   writeFileSync(at(openapi), document);
   run("pnpm", ["exec", "oxfmt", "--write", at(openapi)]);
   for (const { script, outputs: files } of emitters) {
@@ -56,9 +56,9 @@ if (mode === "generate") {
     const stale = outputs.filter((file) => readFileSync(join(repositoryRoot, file), "utf8") !== readFileSync(join(scratch, file), "utf8"));
     for (const file of stale) {
       try {
-        execFileSync("diff", ["-u", join(repositoryRoot, file), join(scratch, file)], { stdio: ["ignore", "inherit", "inherit"] });
+        execCommandSync("git", ["diff", "--no-index", "--no-color", "--", join(repositoryRoot, file), join(scratch, file)], { stdio: ["ignore", "inherit", "inherit"] });
       } catch {
-        // diff exits 1 on a difference, which is the output wanted here.
+        // git diff --no-index exits 1 on a difference, which is the output wanted here.
       }
     }
     if (stale.length > 0) {

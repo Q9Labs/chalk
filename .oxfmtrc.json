@@ -21,6 +21,7 @@
     "scripts/gates/design-tokens-baseline.json",
     "scripts/diagnose-call/fixtures/cases.json",
     "**/routeTree.gen.ts",
+    "sdks/typescript/react-native/embedded/**",
     "tracker-human.html",
     "tracker-human.md",
     "apps/api/docs/api-design.html",

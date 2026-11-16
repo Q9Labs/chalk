@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -128,8 +129,13 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 	if len(refusals) != 2 || refusals["node_full"] != 2 || refusals["cpu_steal"] != 1 {
 		t.Errorf("refusals %v, want node_full 2 and cpu_steal 1", refusals)
 	}
-	if len(points["process.cpu.time"]) != 1 {
-		t.Error("process CPU time is missing")
+	// Windows has no getrusage, so the node reports no process CPU time there.
+	wantCPU := 1
+	if runtime.GOOS == "windows" {
+		wantCPU = 0
+	}
+	if len(points["process.cpu.time"]) != wantCPU {
+		t.Errorf("process CPU time has %d points, want %d", len(points["process.cpu.time"]), wantCPU)
 	}
 	for name, series := range points {
 		for _, p := range series {

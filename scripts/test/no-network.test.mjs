@@ -65,7 +65,7 @@ test("allows real loopback HTTP, but blocks a redirect to a remote host", () => 
 });
 
 test("loading the guard a second time, as a vitest setup file does, keeps one guard", () => {
-  const guard = fileURLToPath(new URL("./no-network.mjs", import.meta.url));
+  const guard = new URL("./no-network.mjs", import.meta.url).href;
   const request = `
     import assert from "node:assert/strict";
     import { Socket } from "node:net";

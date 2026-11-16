@@ -158,7 +158,7 @@ func TestAPacketFromOutsideTheWindowIsNeverSent(t *testing.T) {
 		t.Fatalf("a revoked source resent %d packets", got)
 	}
 
-	now := monotonic()
+	now := nextTick()
 	authority.window.Store(&leaseWindow{since: now, until: now + int64(time.Minute)})
 	if got := send(benchPacketsPerFrame); got != benchPacketsPerFrame {
 		t.Fatalf("a regranted source forwarded %d of %d packets", got, benchPacketsPerFrame)

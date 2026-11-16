@@ -3,7 +3,7 @@ import { fixtureParticipant, syncFixtureEntry } from "./sync-fixture-entry.mjs";
 // Real Chromium + Sync wire fixture. No production requests or credentials.
 // Run: node scripts/web-proof/connection-lost.mjs [output-dir]
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execCommandSync } from "../lib/platform.mjs";
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -16,7 +16,7 @@ const budgets = recoveryBudgets();
 const output = resolve(process.argv[2] ?? ".private/connection-lost-proof");
 await mkdir(output, { recursive: true });
 await writeFile(resolve(output, "input.css"), `@import "${resolve("packages/ui/src/styles/index.css")}";\n@source "${resolve("sdks/typescript/react/src")}";\n@source "${resolve("packages/ui/src")}";`);
-execFileSync("pnpm", ["--dir", "packages/ui", "exec", "tailwindcss", "-i", resolve(output, "input.css"), "-o", resolve(output, "styles.css")], { stdio: "pipe" });
+execCommandSync("pnpm", ["--dir", "packages/ui", "exec", "tailwindcss", "-i", resolve(output, "input.css"), "-o", resolve(output, "styles.css")], { stdio: "pipe" });
 const entry = resolve(output, "page.tsx");
 await writeFile(
   entry,
@@ -146,7 +146,7 @@ try {
       await new Promise((resolve) => server.close(resolve));
     }
   }
-  await writeFile(resolve(output, "results.json"), JSON.stringify({ head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), results }, null, 2));
+  await writeFile(resolve(output, "results.json"), JSON.stringify({ head: execCommandSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), results }, null, 2));
   console.log(JSON.stringify(results.map(({ device, exhausted, rejoinVerified }) => ({ device, status: exhausted.connection.status, code: exhausted.connection.lastError?.code, roster: exhausted.roster, rejoinVerified }))));
 } finally {
   clearTimeout(lifetime);

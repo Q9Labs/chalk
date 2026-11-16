@@ -3,12 +3,14 @@ import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
 import { proveAgreementMatrix } from "./agreement.mjs";
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { spawnCommand } from "../../../scripts/lib/platform.mjs";
 import { pnpmVersion } from "../../../scripts/lib/repository.mjs";
 
 const fixtureDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -123,8 +125,13 @@ try {
     if (browserFailures.length) throw new AggregateError(browserFailures, "Packed browser proofs failed");
   }
 } finally {
-  serverProcess?.kill("SIGTERM");
-  await rm(temporaryDirectory, { recursive: true, force: true });
+  // Windows keeps a folder locked until its process has exited, so wait for the exit and retry a busy removal.
+  if (serverProcess?.exitCode === null) {
+    const exited = once(serverProcess, "exit");
+    serverProcess.kill("SIGTERM");
+    await exited;
+  }
+  await rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 async function runChromiumMatrix(browser, baseURL, secretMarker) {
@@ -422,7 +429,7 @@ function workspacePolicy(archiveDirectory_, archives) {
     "@q9labsai/chalk-client": archives.clientArchive,
     "@q9labsai/chalk-react": archives.reactArchive,
   };
-  const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive)}"`);
+  const overrides = Object.entries(byPackage).map(([name, archive]) => `  "${name}": "file:${join(archiveDirectory_, archive).replaceAll("\\", "/")}"`);
   return [
     "packages:",
     '  - "."',
@@ -465,20 +472,8 @@ function listeningURL(child) {
 
 function run(command, arguments__, cwd) {
   return new Promise((resolveRun, reject) => {
-    const child = spawn(command, arguments__, { cwd, stdio: "inherit" });
+    const child = spawnCommand(command, arguments__, { cwd, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => (code === 0 ? resolveRun() : reject(new TypeError(`${command} ${arguments__.join(" ")} exited with code ${code}`))));
-  });
-}
-
-function readArchiveManifest(archivePath) {
-  return new Promise((resolveManifest, rejectManifest) => {
-    const child = spawn("tar", ["-xOf", archivePath, "package/package.json"], { stdio: ["ignore", "pipe", "inherit"] });
-    let output = "";
-    child.stdout.on("data", (chunk) => {
-      output += String(chunk);
-    });
-    child.once("error", rejectManifest);
-    child.once("exit", (code) => (code === 0 ? resolveManifest(output) : rejectManifest(new TypeError(`tar ${archivePath} exited with code ${code}`))));
   });
 }

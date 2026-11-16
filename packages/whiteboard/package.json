@@ -74,8 +74,8 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "build": "rm -rf ./dist && tsup ./src/assets.ts ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types && pnpm run build:renderer",
-    "build:types": "rm -f tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
+    "build": "node ../../scripts/fs.mjs rm ./dist && tsup ./src/assets.ts ./src/index.ts ./src/react/index.ts ./src/collab/index.ts ./src/embedded/index.ts --format esm --out-dir ./dist --platform browser --splitting --external react --external react-dom --external @excalidraw/excalidraw && pnpm run build:types && pnpm run build:renderer",
+    "build:types": "node ../../scripts/fs.mjs rm tsconfig.tsbuildinfo && tsc --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:embedded": "pnpm run build:embedded-module && pnpm run build:renderer",
     "build:embedded-module": "tsup ./src/embedded/index.ts --format esm --out-dir ./dist/embedded --platform browser && tsc --project tsconfig.embedded.json --emitDeclarationOnly --declaration --outDir dist && node ../../scripts/rewrite-declaration-specifiers.mjs ./dist",
     "build:renderer": "node --experimental-strip-types ./scripts/build-embedded.mjs",
@@ -83,7 +83,7 @@
     "test": "node ../../scripts/test/run.mjs pnpm exec vitest run",
     "check-types": "tsc-rs --project tsconfig.check-types.json --noEmit",
     "lint": "pnpm exec oxfmt --check . && tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/fs.mjs rm dist"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

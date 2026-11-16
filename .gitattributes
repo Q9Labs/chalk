@@ -1,3 +1,23 @@
+# Every text file is LF in the index and in every checkout, on Windows too: oxfmt, the tracker check and the
+# generated-file checks compare bytes. Git detects binaries; the extensions below are listed so detection never decides.
+# SDP fixtures and Windows batch files keep the CRLF they were committed with.
+* text=auto eol=lf
+*.sdp -text
+*.bat -text
+*.png binary
+*.webp binary
+*.avif binary
+*.jpg binary
+*.ico binary
+*.wav binary
+*.flac binary
+*.ivf binary
+*.gz binary
+*.jar binary
+*.ttf binary
+*.woff2 binary
+*.tflite binary
+
 # Generated files. `pnpm run regen` rebuilds them from their sources.
 # The `generated` merge driver keeps the current side without conflict markers
 # (installed by `pnpm run hooks:install`; clones without it fall back to a normal merge).

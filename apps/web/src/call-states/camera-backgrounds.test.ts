@@ -23,16 +23,21 @@ async function runProof(origin: string, xvfbLog: string) {
   }
 }
 
-it("sends processed camera video and keeps the publication while choosing backgrounds", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "chalk-camera-browser-"));
-  const { origin, stop } = await startCallHarness().catch(async (error: unknown) => {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  });
-  try {
-    await runProof(origin, join(directory, "xvfb.log"));
-  } finally {
-    await stop();
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 180_000);
+// The call harness uses a detached process group and `process.kill(-pid)`, so it runs only on POSIX.
+it.skipIf(process.platform === "win32")(
+  "sends processed camera video and keeps the publication while choosing backgrounds",
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), "chalk-camera-browser-"));
+    const { origin, stop } = await startCallHarness().catch(async (error: unknown) => {
+      await rm(directory, { recursive: true, force: true });
+      throw error;
+    });
+    try {
+      await runProof(origin, join(directory, "xvfb.log"));
+    } finally {
+      await stop();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  180_000,
+);

@@ -16,4 +16,4 @@ The API gate checks new migrations for destructive changes. A deliberate second-
 
 ## Queries and verification
 
-Write named sqlc queries in `apps/api/db/queries`, then run `apps/api/scripts/db-generate.sh run`; do not edit generated Go under `apps/api/internal/adapters/postgres/sqlc`. Use `queries.WithTx(tx)` for transaction-scoped queries. Run `apps/api/scripts/gate.sh` with Postgres available; migration up/down checks are separate.
+Write named sqlc queries in `apps/api/db/queries`, then run `node apps/api/scripts/db-generate.mjs run`; do not edit generated Go under `apps/api/internal/adapters/postgres/sqlc`. Use `queries.WithTx(tx)` for transaction-scoped queries. Run `apps/api/scripts/gate.sh` with Postgres available; migration up/down checks are separate.
