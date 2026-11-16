@@ -32,6 +32,7 @@ async function verifyReload(service) {
     await writeFile(source, `${original}\n${service === "api" ? "//" : "#"} local reload proof\n`);
     changed = await waitForReady((manifest) => serviceRecords(manifest)[service].pid !== serviceRecords(before)[service].pid);
     assert.equal((await fetch(`${config.urls[service]}/readyz`)).status, 200);
+    assert.equal(serviceRecords(changed).web.pid, serviceRecords(before).web.pid, "backend reload must preserve the web proxy process");
     console.log(JSON.stringify({ service, reloadMs: Date.now() - started, beforePid: serviceRecords(before)[service].pid, afterPid: serviceRecords(changed)[service].pid }));
   } finally {
     await writeFile(source, original);

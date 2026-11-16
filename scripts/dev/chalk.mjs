@@ -26,6 +26,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   let systemToken;
   let control;
   let invite;
+  let syncDependencyFingerprint;
   const dashboardToken = randomBytes(32).toString("base64url");
   const dashboardSessionSecret = randomBytes(32).toString("base64url");
   const resolver = config.secretResolver || adapters.resolveSecrets || createSecretResolver({ op: adapters.op || "op" });
@@ -81,7 +82,13 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     },
     beforeStartService: async (spec) => {
       if (spec.id === "sync") {
-        await runChecked("docker", containerArguments(config, "sync", { image: imageName("sync", resources.state.versions), command: ["sh", "-c", "mix deps.get && mix compile"] }), { env: { MIX_ENV: "prod" } });
+        const fingerprint = createHash("sha256")
+          .update(readFileSync(`${config.root}/apps/sync/mix.exs`))
+          .update(readFileSync(`${config.root}/apps/sync/mix.lock`))
+          .digest("hex");
+        if (fingerprint === syncDependencyFingerprint) return;
+        await runChecked("docker", containerArguments(config, "sync", { image: imageName("sync", resources.state.versions), command: ["mix", "deps.get"] }));
+        syncDependencyFingerprint = fingerprint;
         return;
       }
       if (spec.id !== "mobile" || config.profile === "ios") return;
@@ -212,7 +219,7 @@ function defaultServiceSpecs(config) {
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
     { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
-    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:raw"], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
+    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:raw"], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], reloadDependsOn: ["sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];
   if (config.profile !== "core")
     specs.push({

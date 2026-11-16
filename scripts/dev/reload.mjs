@@ -26,7 +26,8 @@ export function dependencyOrder(specs = []) {
 
 export function dependantIds(specs, serviceId) {
   const reverse = new Map(specs.map((spec) => [spec.id, []]));
-  for (const spec of specs) for (const dependency of spec.dependsOn || []) reverse.get(dependency)?.push(spec.id);
+  // Startup order also includes stable network dependencies that need no client restart.
+  for (const spec of specs) for (const dependency of spec.reloadDependsOn ?? spec.dependsOn ?? []) reverse.get(dependency)?.push(spec.id);
   const result = [];
   const seen = new Set();
   const visit = (id) => {

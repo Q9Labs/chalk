@@ -109,6 +109,8 @@ Wait for `Chalk dev ready`. The first run downloads images and dependencies and 
 
 The core profile starts Postgres, Redis, API, and Sync containers. SDK watchers and the web server run on the host. Source changes reload the affected services. Go module/build caches and Mix `deps`/`_build` stay in named Docker volumes. Host builds never share those outputs.
 
+Backend edits keep the web server running. Sync fetches dependencies at startup and when `apps/sync/mix.exs` or `apps/sync/mix.lock` changes. Source-only edits compile incrementally.
+
 Choose a profile when needed:
 
 ```sh
