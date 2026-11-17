@@ -88,15 +88,32 @@ function connectionReports(call) {
 }
 
 const EVENT_FIELDS = ["outcome", "step", "code", "state", "source", "receive_state", "duration_ms", "media_error_kind", "media_error_step"];
+const eventOf = (row) => ({ event: attr(row, "type"), ...Object.fromEntries(EVENT_FIELDS.map((name) => [name, attr(row, name)]).filter(([, value]) => value !== undefined)) });
 
-/** One telemetry row is one client event, and the rules read it as a report of that one event. */
+/** The failed join steps of the client session before a terminal failure, latest first: the latest one names the cause. */
+function failedJoinSteps(call, terminal) {
+  const before = number(terminal, "elapsed_ms");
+  return call.rows
+    .filter((row) => row.event === "sdk.telemetry" && attr(row, "type") === "space_join_span" && row.participant === terminal.participant && attr(row, "client_session_id") === attr(terminal, "client_session_id") && number(row, "elapsed_ms") <= before)
+    .sort((a, b) => number(b, "elapsed_ms") - number(a, "elapsed_ms"))
+    .map(eventOf);
+}
+
+/** One telemetry row is one client event. A failed join is its terminal `connection_failed`, with the join steps that failed before it naming the cause. */
 const EVENT_RULES = {
-  // The outer `join` span fails with its inner step, which names the cause, so only the inner step is a finding.
-  space_join_span: (call, row, [event]) => (event.outcome === "failed" && event.step in JOIN_STEP_SIDES ? failedJoin(call, row, [event]) : []),
-  connection_failed: (call, row, [event]) => (event.state === "joining" ? failedJoin(call, row, [event]) : lostConnection(call, row, [event])),
+  connection_failed: (call, row, [event]) => (event.state === "joining" ? failedJoin(call, row, failedJoinSteps(call, row)) : lostConnection(call, row, [event])),
   recovery_exhausted: lostConnection,
   audio_receive_stuck: stuckAudio,
   media_projection_mismatch: projectionMismatch,
+};
+
+/** An SDK from before client telemetry replays earlier events in every report, so a row counts only when its report was sent for that kind of event. */
+const LEGACY_TRIGGER_TYPES = {
+  join_failed: ["connection_failed"],
+  connection_lost: ["connection_failed", "recovery_exhausted"],
+  recovery_exhausted: ["connection_failed", "recovery_exhausted"],
+  audio_receive_stuck: ["audio_receive_stuck"],
+  media_projection_mismatch: ["media_projection_mismatch"],
 };
 
 function telemetryReports(call) {
@@ -104,9 +121,7 @@ function telemetryReports(call) {
     .filter((row) => row.event === "sdk.telemetry")
     .flatMap((row) => {
       const type = attr(row, "type");
-      // An SDK from before client telemetry replays earlier events in its periodic summary; the event's own report is the one that counts.
-      if (attr(row, "legacy_route") && attr(row, "trigger") === "audio_receive_summary") return [];
-      const event = { event: type, ...Object.fromEntries(EVENT_FIELDS.map((name) => [name, attr(row, name)]).filter(([, value]) => value !== undefined)) };
-      return (EVENT_RULES[type] ?? (() => []))(call, row, [event]);
+      if (attr(row, "legacy_route") && !LEGACY_TRIGGER_TYPES[attr(row, "trigger")]?.includes(type)) return [];
+      return (EVENT_RULES[type] ?? (() => []))(call, row, [eventOf(row)]);
     });
 }

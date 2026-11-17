@@ -91,7 +91,7 @@ Add `['attributes.connection_type']` to separate relayed calls from direct ones,
 
 A failed chat file upload is `chat_upload_failed`, with `upload_failure` naming where it broke: `initiate_failed` or `finalize_failed` (an API error), `storage_rejected` (storage answered with `http_status`), or `storage_unreachable` (the browser got no HTTP answer from storage: a network failure or a CORS block). `storage_unreachable` from a browser that otherwise works means the bucket CORS rule is wrong.
 
-SDKs from before client telemetry (mobile 3.0.6 and older embedders) still post to `/connection-reports` and `/call-stats`. The API translates their reports into the same rows, numbers their events in the order listed, and marks each row `legacy_route` and `trigger`. Those SDKs replay earlier events in each report, so a row may repeat; the alerts and `pnpm diagnose:call` leave out the rows of an audio summary. Both routes and their translators are deleted when those SDKs are gone.
+SDKs from before client telemetry (mobile 3.0.6 and older embedders) still post to `/connection-reports` and `/call-stats`. The API translates their reports into the same rows, numbers their events in the order listed, and marks each row `legacy_route` and `trigger`. Those SDKs replay earlier events in each report, so a row may repeat; the alerts and `pnpm diagnose:call` count a row from the old routes only for the failure its `trigger` names. Both routes and their translators are deleted when those SDKs are gone.
 
 ## Follow one Participant through the Chalk SFU
 

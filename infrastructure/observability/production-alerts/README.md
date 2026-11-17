@@ -54,7 +54,7 @@ A managed release replaces only the managed runtime files and leaves `/opt/chalk
 
 ## Connection-report rules
 
-[connection-reports.apl](connection-reports.apl) joins the first monitor and uses the three-monitor allowance. It covers `join_failed`, `media_start_failed`, `media_recovery_exhausted`, `media_projection_mismatch` and `audio_receive_stuck` reports, grouped by Tenant ID, Episode ID and failure. A report from an SDK from before client telemetry that was sent as the periodic audio summary replays earlier events, so the query leaves those rows out.
+[connection-reports.apl](connection-reports.apl) joins the first monitor and uses the three-monitor allowance. It covers `join_failed`, `media_start_failed`, `media_recovery_exhausted`, `media_projection_mismatch` and `audio_receive_stuck` reports, grouped by Tenant ID, Episode ID and failure. An SDK from before client telemetry replays earlier events in every report, so a row from the old routes counts only for the failure its report's trigger names.
 
 - Only accepted `sdk.telemetry` API events count, and each one is classified alone from its `type`, `code` and `state` (a report from an older SDK is translated into the same events). Rejected uploads, ordinary state changes, connection-loss reports and retries that recover do not, but permission or device failures that stop a join do; do not hide a real class failure as noise.
 - Repeated uploads and multiple diagnostics count once per participant. A failed media start is the more specific join-failure category, not a second alert for the same join.
