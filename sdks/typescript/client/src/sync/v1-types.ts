@@ -1,4 +1,4 @@
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
@@ -242,7 +242,7 @@ export type V1CollaborationClient = {
 };
 export type V1SyncClientOptions = {
   readonly traceparent?: string;
-  readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onDiagnostic?: (event: TransportDiagnostic) => void;
   readonly url: string;
   readonly token: () => Promise<string>;
   readonly webSocket: SyncWebSocketFactory;

@@ -10,18 +10,20 @@ import {
   createReactNativeWebSocketFactory,
   createV1SyncClient,
   mediaBootstrap,
+  TelemetryOutbox,
   setSessionSource,
   type GetAccess,
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
-import { createSpaceClientForPlatform, DEFAULT_API_BASE_URL, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import { apiUrls, createSpaceClientForPlatform, DEFAULT_API_BASE_URL, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
 import { releaseNativeTrack } from "../media/native-release-track";
 import { createNativeSession, type NativeSession } from "./native-session";
+import { createNativeTelemetryPlatform } from "./native-telemetry-platform";
 import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
@@ -61,7 +63,9 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
   const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
+  const telemetry = new TelemetryOutbox({ platform: createNativeTelemetryPlatform({ appState: AppState, fetch }), endpoint: (tenantId) => apiUrls.telemetry(apiBaseURL, tenantId) });
   const dependencies: PlatformDependencies = {
+    telemetry,
     clock: {
       now: () => Date.now(),
       setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
@@ -139,6 +143,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
     },
     onError: input.onFailure,
     onScreenEnded: input.onScreenEnded,
+    telemetry: input.telemetry,
   });
   return createSFUConnectionMediaClient(client);
 }

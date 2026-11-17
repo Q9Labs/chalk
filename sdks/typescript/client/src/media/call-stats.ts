@@ -1,24 +1,21 @@
-import type { components } from "../generated/openapi-types";
+import type { TelemetryDraft, TelemetryStats } from "../telemetry/types";
 
-export type CallStatsRequest = components["schemas"]["CallStatsRequest"];
-export type CallStatsSample = CallStatsRequest["samples"][number];
+/** One window of what the connection did. The call menu reads the latest ones, and the outbox sends them. */
+export type CallStatsSample = TelemetryStats;
+type Track = NonNullable<CallStatsSample["tracks"]>[number];
+type Playout = NonNullable<Track["playout"]>;
 
 /** One summary covers this long, so a call makes about six per minute. */
 export const CALL_STATS_WINDOW_MS = 10_000;
-/** A batch uploads once it holds this many samples (about a minute of call). */
-const CALL_STATS_UPLOAD_SAMPLES = 6;
-/** The API rejects larger batches. */
-const CALL_STATS_MAX_BATCH = 30;
-/** The API rejects a window longer than this and drops the whole batch, so a longer gap (a stalled tab, a sleeping device) is skipped. */
+/** A longer window is not a measurement: the page or the network stopped the poll, and the window says so as a gap. */
 export const CALL_STATS_MAX_WINDOW_MS = 60_000;
-/** Per-call cap: about an hour of samples. Later windows are dropped. */
-export const CALL_STATS_CALL_CAP = 360;
-/** The call menu charts this many of the latest windows (about a minute), kept apart from the upload buffer. */
+/** The call menu charts this many of the latest windows (about a minute). */
 export const CALL_STATS_HISTORY = 6;
 const NO_SAMPLES: readonly CallStatsSample[] = Object.freeze([]);
+const MAX_TRACKS = 32;
+const MAX_MS = 2_147_483_647;
 
 const RID_ORDER = ["h", "m", "l"] as const;
-const MAX_ELAPSED_MS = 2_147_483_647;
 
 type Stat = Record<string, unknown>;
 type Baseline = {
@@ -30,57 +27,51 @@ type Gauges = { sum: number; count: number };
 export type CallStatsCollector = {
   /** Feed one `getStats()` report. Cheap; summarises once a window has elapsed. */
   readonly observe: (report: RTCStatsReport, delivery?: CallStatsDelivery) => void;
-  /** Close the open window (if long enough) and upload what is buffered with `upload`, once any upload in flight ends. */
-  readonly flush: (upload: Upload) => Promise<void>;
-  /** A new peer connection starts new counters: drop the open window and its baseline, keep what is already buffered. */
+  /** Close the open window, if it is long enough. */
+  readonly flush: () => void;
+  /** A new peer connection starts new counters: the open window becomes a gap, and measuring starts again. */
   readonly reset: () => void;
-  /** The latest windows, oldest first. The array is replaced, never changed, when a window closes. */
+  /** The latest measured windows, oldest first. The array is replaced, never changed, when a window closes. */
   readonly recent: () => readonly CallStatsSample[];
 };
 
-type Upload = (request: CallStatsRequest) => Promise<void>;
-/** What the viewer and the SFU did to remote video. Planes that report no subscription state leave out `pausedVideos`. */
-export type CallStatsDelivery = { readonly pausedVideos?: number; readonly hiddenVideos: number };
+/** What the viewer and the SFU did to remote media. Planes that report no subscription state leave out `pausedVideos`. */
+export type CallStatsDelivery = {
+  readonly pausedVideos?: number;
+  readonly hiddenVideos: number;
+  /** What the page did with the audio of a remote track, by the id the browser gives the track. */
+  readonly playout?: (trackId: string) => Playout;
+};
 
-export function createCallStatsCollector(options: { readonly upload: Upload; readonly now?: () => number }): CallStatsCollector {
+export type CallStatsOptions = {
+  readonly record: (draft: TelemetryDraft) => void;
+  /** Why the platform may have stopped the poll, to name a gap. */
+  readonly interruption: (withinMs: number) => "offline" | "hidden" | null;
+  readonly now?: () => number;
+};
+
+export function createCallStatsCollector(options: CallStatsOptions): CallStatsCollector {
   const now = options.now ?? (() => Date.now());
-  const startedAt = now();
-  let buffer: CallStatsSample[] = [];
   let history = NO_SAMPLES;
-  let produced = 0;
-  let uploading: Promise<void> | null = null;
   let baseline: Baseline | null = null;
   const gauges: Windowed = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges() };
   let latest: RTCStatsReport | null = null;
   let delivery: CallStatsDelivery | undefined;
 
+  const gap = (windowMs: number): void => {
+    options.record({ type: "call_stats", stats: { window_ms: Math.min(MAX_MS, Math.round(windowMs)), gap: options.interruption(windowMs) ?? "poll_failed" } });
+  };
+
   const closeWindow = (at: number): void => {
     if (!baseline || !latest) return;
     const windowMs = at - baseline.at;
     if (windowMs < 1000) return;
-    const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges, delivery);
+    const sample = summarise(latest, baseline, windowMs, gauges, delivery);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
-    if (windowMs > CALL_STATS_MAX_WINDOW_MS) return;
+    if (windowMs > CALL_STATS_MAX_WINDOW_MS) return gap(windowMs);
     history = Object.freeze([...history, sample].slice(-CALL_STATS_HISTORY));
-    if (produced >= CALL_STATS_CALL_CAP) return;
-    produced++;
-    buffer.push(sample);
-    if (buffer.length > CALL_STATS_MAX_BATCH) buffer = buffer.slice(-CALL_STATS_MAX_BATCH);
-  };
-
-  const send = (upload: Upload): Promise<void> => {
-    if (uploading || buffer.length === 0) return uploading ?? Promise.resolve();
-    const samples = buffer;
-    buffer = [];
-    uploading = upload({ version: 1, samples })
-      .catch(() => {
-        /* Stats are best effort: a failed batch is dropped, never retried or queued. */
-      })
-      .finally(() => {
-        uploading = null;
-      });
-    return uploading;
+    options.record({ type: "call_stats", stats: sample });
   };
 
   return {
@@ -91,15 +82,11 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
       baseline ??= readBaseline(report, at);
       addGauges(report, gauges);
       if (at - baseline.at >= CALL_STATS_WINDOW_MS) closeWindow(at);
-      if (buffer.length >= CALL_STATS_UPLOAD_SAMPLES) void send(options.upload);
     },
-    async flush(upload) {
-      closeWindow(now());
-      if (uploading) await uploading;
-      await send(upload);
-    },
+    flush: () => closeWindow(now()),
     recent: () => history,
     reset() {
+      if (baseline && now() - baseline.at >= 1000) gap(now() - baseline.at);
       baseline = null;
       latest = null;
       delivery = undefined;
@@ -110,7 +97,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
 
 type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges };
 
-function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed, delivery: CallStatsDelivery | undefined): CallStatsSample {
+function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, gauges: Windowed, delivery: CallStatsDelivery | undefined): CallStatsSample {
   const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
   const recvLost = delta("inbound-rtp", "packetsLost");
   const pair = selectedPair(report);
@@ -118,7 +105,6 @@ function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number,
   const remote = pair ? (report.get(String(pair.remoteCandidateId)) as Stat | undefined) : undefined;
   // Absent measurements stay undefined, which JSON leaves out of the upload.
   return {
-    elapsed_ms: Math.min(Math.round(elapsedMs), MAX_ELAPSED_MS),
     window_ms: Math.round(windowMs),
     connection_type: connectionType(local),
     local_candidate_type: candidateType(local),
@@ -137,6 +123,7 @@ function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number,
     freeze_ms: scaled(delta("inbound-rtp", "totalFreezesDuration", "video"), 1000, 600000),
     recv_paused_videos: scaled(delivery?.pausedVideos ?? null, 1, 64),
     recv_hidden_videos: scaled(delivery?.hiddenVideos ?? null, 1, 64),
+    tracks: trackWindows(report, baseline, delivery),
   };
 }
 
@@ -166,7 +153,7 @@ function readBaseline(report: RTCStatsReport, at: number): Baseline {
   return { at, counters };
 }
 
-const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount"] as const;
+const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount", "totalAudioEnergy"] as const;
 
 /** Sum of per-stream growth since the window began. Streams that vanished or restarted count as zero. */
 function sumDelta(report: RTCStatsReport, baseline: Baseline, type: string, field: string, kind?: string): number | null {
@@ -264,4 +251,28 @@ function recvHeight(report: RTCStatsReport): number | null {
     if (typeof stat.frameHeight === "number") height = Math.max(height ?? 0, stat.frameHeight);
   }
   return height;
+}
+
+/** What each remote track received in the window, under the media id the SFU logs for the same subscription. */
+function trackWindows(report: RTCStatsReport, baseline: Baseline, delivery: CallStatsDelivery | undefined): CallStatsSample["tracks"] {
+  const tracks: Track[] = [];
+  for (const stat of stats(report, "inbound-rtp")) {
+    const kind = stat.kind ?? stat.mediaType;
+    if (typeof stat.mid !== "string" || (kind !== "audio" && kind !== "video") || tracks.length >= MAX_TRACKS) continue;
+    const grown = (field: string): number | undefined => {
+      const before = baseline.counters.get(`${String(stat.id)}:${field}`);
+      const current = stat[field];
+      return typeof current === "number" && before !== undefined ? Math.max(0, current - before) : undefined;
+    };
+    const energy = grown("totalAudioEnergy");
+    tracks.push({
+      mid: stat.mid,
+      kind,
+      packets: scaled(grown("packetsReceived") ?? null, 1, 10_000_000),
+      lost: scaled(grown("packetsLost") ?? null, 1, 10_000_000),
+      ...(kind === "audio" && energy !== undefined ? { audio_energy: scaled(energy, 1000, MAX_MS) } : {}),
+      playout: kind === "audio" && typeof stat.trackIdentifier === "string" ? (delivery?.playout?.(stat.trackIdentifier) ?? "unknown") : "unknown",
+    });
+  }
+  return tracks.length > 0 ? tracks : undefined;
 }

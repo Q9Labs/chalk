@@ -17,6 +17,8 @@ type ReportedDiagnosticEventName =
 
 type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
 
+export type ConnectionRecoveryMechanism = "ice_restart" | "media_reconnect" | "sync_reconnect" | "sync_digest" | "access_refresh";
+
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
 
 type ConnectionJoinTraceOutcome = "started" | "succeeded" | "failed" | "cancelled";
@@ -54,6 +56,10 @@ export type ConnectionDiagnostic = {
   readonly parentSpanId?: string;
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
+  /** What a recovery did to bring the connection back. */
+  readonly mechanism?: ConnectionRecoveryMechanism;
+  /** How long the connection was down before the recovery that this event ends. */
+  readonly outageMs?: number;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
   /** Which network path carried a plane, so a trial can compare the direct door with the Tunnel. */
   readonly transport?: import("../direct-path").TransportPath;
@@ -160,7 +166,7 @@ export class ConnectionDiagnostics {
   }
 }
 
-/** A diagnostic the server problem report can carry. The report has a fixed schema, so a `transport_path` record stays with the client for a trial harness. */
+/** A diagnostic the telemetry schema can carry. A `transport_path` record stays with the client for a trial harness. */
 export type ReportedConnectionDiagnostic = ConnectionDiagnostic & { readonly event: ReportedDiagnosticEventName };
 
 export function isReportedDiagnostic(diagnostic: ConnectionDiagnostic): diagnostic is ReportedConnectionDiagnostic {

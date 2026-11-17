@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ChalkChatFileTransport, createChalkChatFileHttpTransport } from "../chat-files";
-import { ConnectionLifecycleFailure } from "../connection/lifecycle";
+import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
 import { ChalkChatFileError } from "../chat-files/types";
 import { reportUploadFailure } from "./chat-upload-report";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
@@ -29,7 +29,7 @@ describe("public chat attachment failures", () => {
       {
         ...platform,
         fetch: storageFetch,
-        dependencies: { ...platform.dependencies, createConnectionReporter: () => undefined, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) },
+        dependencies: { ...platform.dependencies, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) },
       },
     );
     try {
@@ -54,7 +54,6 @@ describe("public chat attachment failures", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          createConnectionReporter: () => undefined,
           createChatFileTransport: () =>
             createChalkChatFileHttpTransport({
               baseUrl: "https://api.chalk.test",
@@ -152,7 +151,7 @@ describe("public chat attachment failures", () => {
 
 function attachmentClient(createChatFileTransport: (input: { readonly token: () => Promise<string> }) => ChalkChatFileTransport, fetch = vi.fn<typeof globalThis.fetch>()) {
   const platform = createCoreTestPlatform();
-  return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("chat-failure") }, { ...platform, fetch, dependencies: { ...platform.dependencies, createConnectionReporter: () => undefined, createChatFileTransport } });
+  return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("chat-failure") }, { ...platform, fetch, dependencies: { ...platform.dependencies, createChatFileTransport } });
 }
 
 describe("reporting a failed chat upload", () => {

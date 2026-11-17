@@ -1,4 +1,4 @@
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 
 type Source = "microphone" | "camera";
 type Observation = {
@@ -14,7 +14,7 @@ type Options = {
   readonly now: () => number;
   readonly schedule: (callback: () => void, milliseconds: number) => unknown;
   readonly cancel: (timer: unknown) => void;
-  readonly report: (event: ConnectionReportTransportEvent) => void;
+  readonly report: (event: TransportDiagnostic) => void;
   readonly pause: (source: Source, revision: number) => void;
   readonly changed: () => void;
 };

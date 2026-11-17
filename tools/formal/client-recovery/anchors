@@ -20,7 +20,7 @@ AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	const rep
 AttemptRestartMedia	sdks/typescript/client/src/connection/lifecycle.ts	yield* foreign(() => media.restart(grant.media), "media_start_failed", "Media transport could not restart");
 AttemptRestartSync	sdks/typescript/client/src/connection/lifecycle.ts	if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
 AttemptFatal	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(Effect.suspend(() => (model.epoch === epoch && active(model) ? failForSnapshot(failure) : Effect.void)));
-AttemptSucceeds	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(finishRecovery(outcome.attempt, epoch));
+AttemptSucceeds	sdks/typescript/client/src/connection/lifecycle.ts	enqueueBackground(finishRecovery(outcome.attempt, epoch, plan.kind));
 AttemptExhausted	sdks/typescript/client/src/connection/lifecycle.ts	if (remaining <= 0) return null;
 ProcessExh	sdks/typescript/client/src/connection/lifecycle.ts	if (plan.kind === "sync" && model.sync?.getSnapshot().connection.phase === "live") {
 ProcessExh	sdks/typescript/client/src/connection/lifecycle.ts	model.recoveryQueued = "media";

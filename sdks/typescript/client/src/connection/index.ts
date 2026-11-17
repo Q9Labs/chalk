@@ -47,5 +47,6 @@ export type ConnectionOptions = {
   };
   readonly dependencies?: Partial<ConnectionDependencies>;
 };
-export { ConnectionLifecycleFailure, ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from "./lifecycle";
+export { ConnectionLifecycleFailure } from "./lifecycle-failure";
+export { ConnectionLifecycleService, makeConnectionLifecycleLayer, makeFakeConnectionLifecycleLayer } from "./lifecycle";
 export type { ConnectionLifecycleCapability } from "./lifecycle";

@@ -50,6 +50,7 @@
         "sdks/typescript/client/src/space-client/join-concurrency.test.ts",
         "sdks/typescript/client/src/space-client/preconnect.test.ts",
         "sdks/typescript/client/src/space-client/preconnect.ts",
+        "sdks/typescript/client/src/telemetry",
         "sdks/typescript/react-native/android/src/main",
         "sdks/typescript/react-native/ios",
         "sdks/typescript/react-native/src/android",

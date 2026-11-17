@@ -1,7 +1,7 @@
-import type { ConnectionReport } from "../transport-diagnostics";
+import type { TelemetryEvent } from "../telemetry/types";
 import { CloudflareSFUError } from "./types";
 
-type ReportEvent = ConnectionReport["events"][number];
+type ReportEvent = TelemetryEvent;
 export type MediaFailureDiagnostic = Required<Pick<ReportEvent, "media_error_kind" | "media_error_step">> & Pick<ReportEvent, "http_status">;
 export type GrantedMedia = Required<Pick<ReportEvent, "granted_audio" | "granted_video">>;
 export type MediaFailureStep = NonNullable<ReportEvent["media_error_step"]>;

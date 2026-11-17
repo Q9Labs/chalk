@@ -7,7 +7,6 @@ import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, directOrigin, directPathBlocked, markDi
 import { withRequestContext } from "../session";
 import * as apiUrls from "../api-urls";
 import { trimTrailingSlashes } from "../urls";
-import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
 /** One SFU signaling call. The per-operation routes carry it in the URL; the unified `signal` route carries it in the body. */
@@ -27,7 +26,6 @@ const READS: ReadonlySet<SignalOp> = new Set(["publications", "subscriptions"]);
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
-  let lastToken = "";
   const base = trimTrailingSlashes(options.apiBaseURL);
   const subject = { tenantId: options.tenantId, spaceId: options.spaceId, episodeId: options.episodeId, participantId: options.participantId };
   const direct = directOrigin(options.directBaseURL);
@@ -55,14 +53,12 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     announced = key;
     notifyObserver(() => options.onPath?.({ plane: "signalling", path, fellBack }));
   };
-  const statsPath = apiUrls.callStats(base, options.tenantId);
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
   const freshToken = async (op?: SignalOp): Promise<string> => {
     const startedAt = performance.now();
     try {
-      lastToken = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal)));
-      return lastToken;
+      return nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal)));
     } finally {
       // A user-timing entry shows in a latency run whether the credential provider waits on a network round trip.
       if (op) notifyObserver(() => performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } }));
@@ -111,7 +107,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         } catch (error) {
           if (!options.refreshCredential || !(error instanceof CloudflareSFUError) || error.options.status !== 403) throw error;
           const refresh = options.refreshCredential;
-          token = lastToken = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal)));
+          token = nonEmptyToken(await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal)));
           return await send(origin);
         }
       };
@@ -185,21 +181,6 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     },
     renegotiate: async (input) => {
       await request("renegotiate", { connection_id: input.connectionId, session_description: input.sessionDescription });
-    },
-    uploadCallStats: async (stats: CallStatsRequest, closing: boolean) => {
-      // A hidden tab stops signaling, so the cached token can expire during a call. Only the closing batch skips the provider.
-      const token = closing ? lastToken : await freshToken();
-      if (!token) return;
-      await withDeadline(timeoutMs, async (signal) => {
-        const response = await fetch(statsPath, {
-          method: "POST",
-          signal,
-          keepalive: true,
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify(stats),
-        });
-        if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
-      });
     },
     listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
     pullPublishedAudio: async (input) => {

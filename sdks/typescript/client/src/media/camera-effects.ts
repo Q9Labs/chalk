@@ -1,4 +1,4 @@
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { CameraBackground } from "./camera-background-settings";
 import type { CameraEffectStore, CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack } from "./camera-effects-track";
 export type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack, CameraSegmenter } from "./camera-effects-track";
@@ -16,7 +16,7 @@ const failures = new WeakSet<MediaStreamTrack>();
 export function markCameraEffectFailure(track: MediaStreamTrack): void {
   failures.add(track);
 }
-export function cameraEffectFailure(track: MediaStreamTrack): ConnectionReportTransportEvent | undefined {
+export function cameraEffectFailure(track: MediaStreamTrack): TransportDiagnostic | undefined {
   if (!failures.has(track)) return;
   return { event: "media_state", source: "camera", phase: "failed", outcome: "failed", code: "media_capture_failed", media_error_kind: "OperationError", media_error_step: "local_capture" };
 }

@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect";
 import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
-import { ConnectionLifecycleFailure } from "../connection/lifecycle";
+import { ConnectionLifecycleFailure } from "../connection/lifecycle-failure";
 import type { ConnectionError } from "../connection/types";
 import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";

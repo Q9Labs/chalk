@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
 
@@ -16,7 +16,7 @@ function element(track: MediaStreamTrack, paused = true): HTMLAudioElement {
 }
 
 function harness() {
-  const events: ConnectionReportTransportEvent[] = [];
+  const events: TransportDiagnostic[] = [];
   const tracks: CloudflareSFURemoteTrack[] = [];
   const rows = new Map<string, object>();
   const getStats = vi.fn(async () => rows as unknown as RTCStatsReport);
@@ -27,7 +27,7 @@ function harness() {
     clearInterval: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
     connection: () => connection,
     tracks: () => tracks,
-    onEvent: (event: ConnectionReportTransportEvent) => events.push(event),
+    onEvent: (event: TransportDiagnostic) => events.push(event),
   };
   const tracker = new AudioReceiveHealth(options);
   const bytes = (track: MediaStreamTrack, count: number, extra = {}) => rows.set(track.id, { type: "inbound-rtp", kind: "audio", trackIdentifier: track.id, bytesReceived: count, ...extra });
