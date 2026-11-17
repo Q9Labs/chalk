@@ -190,11 +190,11 @@ func (r Registry) deploymentRuns(provider mediaplane.Provider) bool {
 func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *providercontracts.Resolution, pin mediaplane.Provider) (*resolvedProviderConfig, error) {
 	provider := pin
 	if pin == "" {
-		selected, err := r.selectedProvider(tenant, space)
+		choice, err := r.selectedProvider(tenant, space)
 		if err != nil {
 			return nil, err
 		}
-		provider = selected
+		provider = choice.Plane
 	}
 	resolution.Provider = provider
 	if provider == "" {
@@ -291,12 +291,12 @@ func failureClass(err error) string {
 // selectedProvider is the plane the settings choose for a new Episode: the Space,
 // then the Tenant, then the platform default. The guards (kill switch, allowlist,
 // client capability, node room) apply after it.
-func (r Registry) selectedProvider(tenant tenants.Tenant, space spaces.Space) (mediaplane.Provider, error) {
-	selected, err := spaces.SelectPlane(r.defaultProvider, tenant, space)
+func (r Registry) selectedProvider(tenant tenants.Tenant, space spaces.Space) (spaces.PlaneChoice, error) {
+	choice, err := spaces.SelectPlane(r.defaultProvider, tenant, space)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", providercontracts.ErrUnknownProvider, err)
+		return spaces.PlaneChoice{}, fmt.Errorf("%w: %v", providercontracts.ErrUnknownProvider, err)
 	}
-	return selected, nil
+	return choice, nil
 }
 
 func (r Registry) tenantManagedConfig(providerName mediaplane.Provider, providerConfig mediaplane.TenantConfig) (runtimeconfig.CloudflareRealtimeConfig, error) {

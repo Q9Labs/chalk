@@ -19,7 +19,7 @@ import (
 )
 
 func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPlaneWrite(ctx, r.pool)
 	if err != nil {
 		return spaces.Space{}, err
 	}
@@ -99,7 +99,7 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 }
 
 func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPlaneWrite(ctx, r.pool)
 	if err != nil {
 		return spaces.Space{}, err
 	}

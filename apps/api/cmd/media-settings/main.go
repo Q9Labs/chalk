@@ -1,17 +1,21 @@
 // media-settings is the operator's way to choose the media plane for a Tenant or a
 // Space. The public API cannot select the Chalk SFU, and no operator principal exists in
-// production, so this command is the only write path to it. It logs one JSON line per
+// production, so this command is the only write path to it. It prints one JSON line per
 // change to stdout and keeps Tenant and Space IDs out of metrics.
 //
 //	media-settings get --tenant ID [--space ID]
-//	media-settings set --tenant ID [--space ID] --plane cf_sfu|chalk_sfu|inherit
+//	media-settings set --tenant ID [--space ID] --plane cf_sfu|chalk_sfu|inherit --operator NAME --reason TEXT
 //	media-settings backfill [--dry-run]
 //	media-settings new-episodes [--state on|off --operator NAME --reason TEXT]
 //
+// Every change needs --operator and --reason. The database writes one row of
+// media_plane_changes (who, why, scope, before, after, trace) in the transaction of the
+// change, and the API announces it as the media_plane.changed event. An undo is another
+// change: run set or new-episodes again with its own reason.
+//
 // new-episodes is the kill switch of the Chalk SFU, stored in the database so a flip needs
 // no API restart. off sends every new Episode to Cloudflare; Episodes already on the own
-// SFU keep running there. With --state it flips the switch and writes an audit row (who,
-// why, before, after) in the same transaction; without it, it reads the switch.
+// SFU keep running there. Without --state it reads the switch.
 //
 // Run it with the same settings the API runs with: it reads CHALK_DATABASE_URL,
 // CHALK_DEFAULT_MEDIA_PLANE, CHALK_SFU_ALLOWED_SPACES and CHALK_SFU_NEW_EPISODES.
@@ -26,7 +30,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -62,8 +65,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	planeFlag := flags.String("plane", "", "cf_sfu, chalk_sfu, or inherit to clear (set only)")
 	dryRun := flags.Bool("dry-run", false, "list the changes without writing them (backfill only)")
 	stateFlag := flags.String("state", "", "on or off (new-episodes only); omit to read")
-	operatorFlag := flags.String("operator", "", "who flips the switch (new-episodes --state only)")
-	reasonFlag := flags.String("reason", "", "why (new-episodes --state only)")
+	operatorFlag := flags.String("operator", "", "who makes the change (set and new-episodes --state)")
+	reasonFlag := flags.String("reason", "", "why (set and new-episodes --state)")
 	limit := flags.Duration("timeout", time.Minute, "whole-command deadline, at most 10 minutes")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -76,10 +79,10 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	switch {
 	case command == "new-episodes":
 		parsed, err = parseSwitchRequest(*tenantFlag, *spaceFlag, *planeFlag, *dryRun, *stateFlag, *operatorFlag, *reasonFlag)
-	case *stateFlag != "" || *operatorFlag != "" || *reasonFlag != "":
-		err = errors.New("--state, --operator and --reason apply to new-episodes only")
+	case *stateFlag != "":
+		err = errors.New("--state applies to new-episodes only")
 	default:
-		parsed, err = parseRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun)
+		parsed, err = parseRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun, *operatorFlag, *reasonFlag)
 	}
 	if err != nil {
 		return err
@@ -100,6 +103,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()
+	if ctx, err = parsed.withOrigin(ctx); err != nil {
+		return err
+	}
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		return errors.New("open database")
@@ -115,42 +121,21 @@ type request struct {
 	plane   *mediaplane.Provider
 	dryRun  bool
 	// flip is set for new-episodes --state: paused is the value to write.
-	flip     bool
-	paused   bool
-	operator string
-	reason   string
+	flip   bool
+	paused bool
+	// origin is who and why, for a command that changes a plane. It is empty for the others.
+	origin mediaplane.ChangeOrigin
 }
 
-func parseSwitchRequest(tenant, space, plane string, dryRun bool, state, operator, reason string) (request, error) {
-	if tenant != "" || space != "" || plane != "" || dryRun {
-		return request{}, errors.New("new-episodes takes only --state, --operator and --reason")
-	}
-	r := request{command: "new-episodes"}
-	switch state {
-	case "":
-		if operator != "" || reason != "" {
-			return request{}, errors.New("--operator and --reason apply to --state")
-		}
-		return r, nil
-	case "on":
-	case "off":
-		r.paused = true
-	default:
-		return request{}, errors.New("--state must be on or off")
-	}
-	if strings.TrimSpace(operator) == "" || strings.TrimSpace(reason) == "" {
-		return request{}, errors.New("flipping the switch needs --operator and --reason")
-	}
-	r.flip, r.operator, r.reason = true, strings.TrimSpace(operator), strings.TrimSpace(reason)
-	return r, nil
-}
-
-func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool) (request, error) {
+func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool, operator, reason string) (request, error) {
 	r := request{command: command, dryRun: dryRun}
 	switch command {
 	case "get", "set", "backfill":
 	default:
 		return request{}, errors.New(usage)
+	}
+	if command != "set" && (operator != "" || reason != "") {
+		return request{}, errors.New("--operator and --reason apply to set and new-episodes --state")
 	}
 	if command == "backfill" {
 		if tenantText != "" || spaceText != "" || planeText != "" {
@@ -161,14 +146,8 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool)
 	if dryRun {
 		return request{}, errors.New("--dry-run applies to backfill only")
 	}
-	var err error
-	if r.tenant, err = utilities.ParseID(tenantText); err != nil {
-		return request{}, errors.New("--tenant must be a Tenant ID")
-	}
-	if spaceText != "" {
-		if r.space, err = utilities.ParseID(spaceText); err != nil {
-			return request{}, errors.New("--space must be a Space ID")
-		}
+	if err := r.parseTarget(tenantText, spaceText); err != nil {
+		return request{}, err
 	}
 	if command == "get" {
 		if planeText != "" {
@@ -176,18 +155,12 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool)
 		}
 		return r, nil
 	}
-	switch planeText {
-	case "inherit":
-	case "":
-		return request{}, errors.New("set needs --plane cf_sfu, chalk_sfu or inherit")
-	default:
-		plane, err := mediaplane.ParseSettingName(planeText)
-		if err != nil {
-			return request{}, errors.New("--plane must be cf_sfu, chalk_sfu or inherit")
-		}
-		r.plane = &plane
+	var err error
+	if r.plane, err = parsePlane(planeText); err != nil {
+		return request{}, err
 	}
-	return r, nil
+	r.origin, err = parseOrigin(operator, reason)
+	return r, err
 }
 
 type settings struct {
@@ -255,7 +228,7 @@ func (s settings) get(ctx context.Context, r request) error {
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
 			"space_setting", valueOrInherit(mediaplane.OptionalSettingName(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
 			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", s.policy.Platform.SettingName(),
-			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", effective.SettingName()}
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", effective.Plane.SettingName(), "selected_by", effective.By}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil
@@ -270,11 +243,11 @@ func (s settings) newEpisodes(ctx context.Context, r request) error {
 		s.log.Info("media plane kill switch", "new_episodes", onOff(!live), "floor_new_episodes", onOff(!s.policy.NewEpisodesPaused))
 		return nil
 	}
-	before, err := s.killSwitch.SetNewEpisodesPaused(ctx, r.paused, r.operator, r.reason)
+	before, err := s.killSwitch.SetNewEpisodesPaused(ctx, r.paused)
 	if err != nil {
 		return err
 	}
-	s.log.Info("media plane kill switch changed", "event", "media_plane.kill_switch_changed", "operator", r.operator, "reason", r.reason,
+	s.log.Info("media plane kill switch changed", "operator", r.origin.Actor, "reason", r.origin.Reason, "change_trace_id", r.origin.TraceID,
 		"before", onOff(!before), "after", onOff(!r.paused))
 	return nil
 }
@@ -292,14 +265,14 @@ func (s settings) set(ctx context.Context, r request) error {
 		if err != nil {
 			return err
 		}
-		s.log.Info("media plane setting changed", "scope", "tenant", "tenant_id", r.tenant.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After))
+		s.log.Info(changeMessage(change), "scope", "tenant", "tenant_id", r.tenant.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After), "change_trace_id", r.origin.TraceID)
 		return nil
 	}
 	change, err := s.operator.SetSpace(ctx, r.tenant, r.space, r.plane)
 	if err != nil {
 		return err
 	}
-	s.log.Info("media plane setting changed", "scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After))
+	s.log.Info(changeMessage(change), "scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After), "change_trace_id", r.origin.TraceID)
 	return nil
 }
 
