@@ -22,8 +22,6 @@ export function callEndNotice(reason: CallEndReason | undefined): { readonly tit
   switch (reason) {
     case "maximum_duration":
       return { title: "The call reached its time limit", detail: "This call has ended for everyone." };
-    case "linger_expired":
-      return { title: "The call ended", detail: "Everyone left, so the call closed." };
     case "ended_by_participant":
     case "tenant_recovery":
       return { title: "The call ended", detail: "The host ended this call for everyone." };

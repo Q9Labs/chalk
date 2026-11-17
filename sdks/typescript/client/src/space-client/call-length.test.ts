@@ -24,7 +24,6 @@ it("names the limit and says why a call ended", () => {
   expect(callLimitMessage(1)).toBe("1 minute left.");
   expect(callLimitMessage(10)).toBe("10 minutes left.");
   expect(callEndNotice("maximum_duration").title).toBe("The call reached its time limit");
-  expect(callEndNotice("linger_expired").detail).toBe("Everyone left, so the call closed.");
   expect(callEndNotice("ended_by_participant").detail).toBe("The host ended this call for everyone.");
   expect(callEndNotice(undefined)).toEqual({ title: "The call ended", detail: "" });
 });
