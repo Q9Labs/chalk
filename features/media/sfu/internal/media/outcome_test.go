@@ -231,6 +231,23 @@ func TestEndEpisodeReportsEachParticipantSessionOutcome(t *testing.T) {
 	}
 }
 
+// A session that was already closing when the Episode ended records its outcome after it leaves
+// the Episode's list, and the end waits for it.
+func TestEndEpisodeWaitsForClosesAlreadyUnderWay(t *testing.T) {
+	node := newLoggedTestNode(t, nil, &trailLog{})
+	leaving := node.newTestSession(t, testScope("alice", 1))
+	node.remove(leaving)
+	node.closing.Add(1)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		node.recordOutcome(leaving, ClosePeerClosed, OutcomeLeft, connectivity{Connected: true}, time.Now())
+		node.closing.Add(-1)
+	}()
+	if response := node.EndEpisode("tenant-1", "episode-1", Trace{}); len(response.Sessions) != 1 {
+		t.Fatalf("the end reported %d outcomes, want the one that was closing", len(response.Sessions))
+	}
+}
+
 func TestOutcomesAreBoundedAndExpire(t *testing.T) {
 	node := newLoggedTestNode(t, nil, &trailLog{})
 	for generation := int64(1); generation <= outcomeSessionLimit+10; generation++ {
