@@ -19,7 +19,6 @@
     "**/tests/results/**",
     "**/*.snap",
     "scripts/gates/design-tokens-baseline.json",
-    "scripts/diagnose-call/fixtures/cases.json",
     "**/routeTree.gen.ts",
     "sdks/typescript/react-native/embedded/**",
     "tracker-human.html",

@@ -42,28 +42,6 @@ func (q *Queries) ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error) {
 	return paused, err
 }
 
-const recordMediaPlaneKillSwitchChange = `-- name: RecordMediaPlaneKillSwitchChange :exec
-insert into media_plane_kill_switch_changes (paused_before, paused_after, operator, reason)
-values ($1, $2, $3, $4)
-`
-
-type RecordMediaPlaneKillSwitchChangeParams struct {
-	PausedBefore bool   `json:"paused_before"`
-	PausedAfter  bool   `json:"paused_after"`
-	Operator     string `json:"operator"`
-	Reason       string `json:"reason"`
-}
-
-func (q *Queries) RecordMediaPlaneKillSwitchChange(ctx context.Context, arg RecordMediaPlaneKillSwitchChangeParams) error {
-	_, err := q.db.Exec(ctx, recordMediaPlaneKillSwitchChange,
-		arg.PausedBefore,
-		arg.PausedAfter,
-		arg.Operator,
-		arg.Reason,
-	)
-	return err
-}
-
 const setMediaPlaneKillSwitch = `-- name: SetMediaPlaneKillSwitch :exec
 update media_plane_kill_switch set paused = $1, updated_at = now() where singleton
 `

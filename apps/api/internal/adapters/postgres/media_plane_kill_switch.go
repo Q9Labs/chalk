@@ -2,15 +2,14 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
-// KillSwitch is the stored Chalk SFU kill switch. A flip and its audit row commit together.
+// KillSwitch is the stored Chalk SFU kill switch. A flip and its audit row commit together: a trigger writes the row.
 type KillSwitch struct {
 	pool *pgxpool.Pool
 }
@@ -29,30 +28,28 @@ func (k KillSwitch) NewEpisodesPaused(ctx context.Context) (bool, error) {
 	return paused, nil
 }
 
-// SetNewEpisodesPaused flips the switch and records who did it and why. It returns the value
-// before the flip. Setting the value it already has still writes an audit row, so a repeated
-// command leaves a trace.
-func (k KillSwitch) SetNewEpisodesPaused(ctx context.Context, paused bool, operator, reason string) (before bool, err error) {
-	operator, reason = strings.TrimSpace(operator), strings.TrimSpace(reason)
-	if operator == "" || reason == "" {
-		return false, errors.New("the kill switch needs an operator and a reason")
+// SetNewEpisodesPaused flips the switch and returns the value before the flip. The audit row
+// is written by a trigger, with the origin that ctx carries. The command refuses a flip
+// without one. Setting the value it already has still writes a row, so a repeated command
+// leaves a trace.
+func (k KillSwitch) SetNewEpisodesPaused(ctx context.Context, paused bool) (before bool, err error) {
+	if _, err := mediaplane.RequireChangeOrigin(ctx); err != nil {
+		return false, fmt.Errorf("flip the new-Episode kill switch: %w", err)
 	}
 	tx, err := k.pool.Begin(ctx)
 	if err != nil {
 		return false, fmt.Errorf("flip the new-Episode kill switch: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err := tagPlaneChange(ctx, tx); err != nil {
+		return false, err
+	}
 	queries := sqlc.New(tx)
 	if before, err = queries.LockMediaPlaneKillSwitchForUpdate(ctx); err != nil {
 		return false, fmt.Errorf("lock the new-Episode kill switch: %w", err)
 	}
 	if err := queries.SetMediaPlaneKillSwitch(ctx, paused); err != nil {
 		return false, fmt.Errorf("write the new-Episode kill switch: %w", err)
-	}
-	if err := queries.RecordMediaPlaneKillSwitchChange(ctx, sqlc.RecordMediaPlaneKillSwitchChangeParams{
-		PausedBefore: before, PausedAfter: paused, Operator: operator, Reason: reason,
-	}); err != nil {
-		return false, fmt.Errorf("audit the new-Episode kill switch: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return false, fmt.Errorf("commit the new-Episode kill switch: %w", err)

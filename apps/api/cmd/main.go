@@ -162,7 +162,7 @@ func run() error {
 	}
 	apiKeyRepository := postgres.NewAPIKeyRepository(operationQueries, pool, diagnostics.Queries)
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
-	tenantRepository := postgres.NewTenantRepository(operationQueries)
+	tenantRepository := postgres.NewTenantRepository(operationQueries, pool)
 	planePolicy := spaces.PlanePolicy{Platform: cfg.DefaultMediaPlane, Allowed: cfg.ChalkSFU.AllowedSpaces, NewSpace: cfg.NewSpace.MediaPlane, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused}
 	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool {
 		provider, err := mediaplane.ParseSettingName(plane)
@@ -709,8 +709,7 @@ func run() error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if chalkSFU != nil {
-		// Placement reads node load from these probes. The first round finishes, within the probe
-		// timeout, before the server takes a request; a node with no answer is not placed on.
+		// Placement reads node load from these probes; the first round ends before the server takes a request.
 		chalkSFU.Probe(signalCtx)
 		go chalkSFU.Watch(signalCtx)
 		// Chalk SFU nodes forward a source only while the API renews its grant.
@@ -718,6 +717,7 @@ func run() error {
 		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
 		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
+	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(pool))
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

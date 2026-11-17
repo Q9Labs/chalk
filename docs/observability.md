@@ -41,6 +41,12 @@ Do not add a ledger event for transient delivery that the client observes, such 
 
 When a lifecycle boundary changes, update the ledger and the executable proof in the same change. The proof is a test that drives the real journey and checks the ledger rows, the trace correlation and the redaction. A success path alone is not enough: check that a rejected or failed report emits no success evidence.
 
+## Diagnose one call
+
+`pnpm diagnose:call <episode-id>` reads the database, the API, client and SFU log dataset, and the Sync trace dataset for one Episode, and joins every row by id (Episode, connection, journey, trace). It prints a verdict, a summary, a timeline for each Participant and a list of missing data. Each timeline step names its stage, the side that owns it (client, API, Sync, SFU or recorder, or unknown when the rows do not say) and the ids of the rows that prove it. It needs `AXIOM_TOKEN`, `AXIOM_ORG_ID`, `CHALK_LOG_DATASET`, `CHALK_TRACE_DATASET` and a read-only `CHALK_DATABASE_URL`.
+
+A source it cannot read is a gap, never a silent omission. When no rule finds a failure and a source is missing, the verdict says "Not enough evidence" and names the source. `--strict` exits 3 when it finds a bad call and 2 when it found none but evidence is missing. The thresholds are in `infrastructure/observability/production-alerts/call-verdict.json`. A new event needs a rule in `scripts/diagnose-call/rules.mjs` and, to read well, a line in `scripts/diagnose-call/timeline.mjs`. CI runs the checker's tests when those files, or the code that writes the rows it reads, change.
+
 ## Reading call quality
 
 The SDK uploads a WebRTC summary about every minute while a call is open, and the API logs each one as `sdk.call_stats` with the session ID, a hashed participant ID, the connection type (`udp`, `tcp`, `turn`), loss, jitter, RTT, freezes and the provider. `provider_session_id` is the connection ID the Chalk SFU logs and returns from `/inspect`, so a device joins to the SFU's view of the same connection.
@@ -109,3 +115,22 @@ The API emits `recording.job_recovered` for each job that committed recovery ret
 ## Recorder fleet conflicts
 
 Expected recorder fleet 409 responses emit `recorder_fleet.operation_failed` at info level with `operation`, `error_code` and `http_status`. The codes distinguish inventory that is not ready, pending bootstrap and closed admission. A pending bootstrap with a validated diagnostic also carries its allowlisted `stage`; invalid or missing diagnostics omit it. These events carry no error text, request fields or node IDs. A conflict records a refusal or retry, not proof that a recording failed.
+
+## Media plane changes and decisions
+
+Two events say where Episodes go and why. Both carry bounded values only, never credentials or free text from a request.
+
+**`media_plane.changed`** is one event for each change to a Space's plane, a Tenant's default plane or the Chalk SFU kill switch. A database trigger writes the durable row (`media_plane_changes`) in the same transaction as the change, so the operator command, the public API and the previous release all leave one, and a change cannot happen without it. The API reads the unannounced rows every 10 seconds, logs each once and stamps `emitted_at`, so the event arrives up to about 10 seconds after the change and may repeat after a crash. Fields: `change_id` (dedupe key), `scope` (`space`, `tenant` or `kill_switch`), `tenant_id` and `space_id` when the scope has them, `old_plane` and `new_plane` (`cf_sfu`, `chalk_sfu` or `inherit`; the kill switch is `cf_sfu` while it holds new Episodes on Cloudflare and `inherit` while the settings decide), `actor`, `reason`, `changed_at` and `change_trace_id`. The `trace_id` of the log line is the relay's, so join a change to the command that made it by `change_trace_id`. A writer that names nobody is recorded as `unattributed`; today that is the previous release, which writes only the legacy columns. An undo is another change with its own reason, and a write that changes no plane leaves no row. If the relay cannot read the table it logs `media_plane.changes_unannounced`; the rows stay and go out when it recovers.
+
+**`media_plane.selected`** is one event for each Episode that gets a binding, after its transaction commits, with `episode_id`, `tenant_id`, `space_id`, `provider`, `selected_by`, `configuration_source`, `placement_reason` and `node`. The same `selected_by` is stored in the Episode's binding (`episodes.config_snapshot`, `media_plane_binding.selected_by`), so a checker can read it from the row and need not wait for the event. The event is a log line, so a crash between the commit and the line loses the line and never the stored value. Values:
+
+- `kill_switch`: the kill switch held new Episodes on Cloudflare.
+- `allowlist`: the Space is not on the Chalk SFU allowlist.
+- `client`: the SDK does not declare `chalk_sfu`.
+- `space`: the Space's own setting chose the plane.
+- `tenant`: the Tenant's approved default chose it.
+- `tenant_config`: the Tenant runs its own Cloudflare credentials.
+- `default`: `CHALK_DEFAULT_MEDIA_PLANE` chose it.
+- `overflow`: the Chalk SFU was chosen but no node had room, so Cloudflare took the Episode.
+
+The field is additive and checked by shape (lowercase letters and underscores, at most 32 characters), not against this list, so a later release can add a value and a rollback still reads every binding. A binding written before this field existed has none, and its event says `unknown`. A live Episode keeps its binding, so a later change never rewrites `selected_by`.

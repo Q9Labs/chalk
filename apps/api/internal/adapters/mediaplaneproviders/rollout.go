@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
@@ -29,20 +30,22 @@ type Rollout struct {
 	Now func() time.Time
 }
 
-// AdmitsNewChalkSFUEpisode is false while the kill switch is on or the Space is off
-// the allowlist: its new Episodes start on Cloudflare.
-func (p Rollout) AdmitsNewChalkSFUEpisode(ctx context.Context, space spaces.Space) (bool, error) {
-	if !p.Spaces.Allows(space.ID) || p.NewEpisodesPaused {
-		return false, nil
-	}
-	paused, carried := spaces.NewEpisodesPausedFrom(ctx)
-	if !carried && p.Switch != nil {
-		var err error
-		if paused, err = p.Switch.NewEpisodesPaused(ctx); err != nil {
-			return false, err
+// Refusal is the guard that sends a new Chalk SFU Episode of the Space to Cloudflare:
+// the kill switch, or the Space being off the allowlist. It is empty when the Episode
+// may start on the Chalk SFU.
+func (p Rollout) Refusal(ctx context.Context, space spaces.Space) (mediaplane.Selector, error) {
+	paused := p.NewEpisodesPaused
+	if !paused {
+		if carried, ok := spaces.NewEpisodesPausedFrom(ctx); ok {
+			paused = carried
+		} else if p.Switch != nil {
+			var err error
+			if paused, err = p.Switch.NewEpisodesPaused(ctx); err != nil {
+				return "", err
+			}
 		}
 	}
-	return !paused, nil
+	return spaces.Refusal(paused, p.Spaces, space.ID), nil
 }
 
 // SunsetPassed is true once clients that cannot run the Chalk SFU are refused.
