@@ -1,9 +1,15 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { cite, shortConnection } from "./call.mjs";
-import { attr, number } from "./rows.mjs";
+import { mediaOf, middle, streamSummary, trackSummary } from "./quality.mjs";
+import { attr, flag, number } from "./rows.mjs";
 
 const STEP_LIMIT = 60;
 const NORMAL_CLOSES = ["removed", "replaced", "episode_ended", "peer_closed"];
+const NORMAL_OUTCOMES = ["left", "ended"];
+const SESSION_FIELDS = ["outcome", "cause", "lifetime_ms", "connect_ms", "disconnects", "outage_ms", "publications", "subscriptions"];
+
+/** A session ended in a way that is part of a call: the node names its outcome, and a line from before outcomes is read by its cause. */
+const endedNormally = (row) => (attr(row, "outcome") ? NORMAL_OUTCOMES.includes(attr(row, "outcome")) : NORMAL_CLOSES.includes(attr(row, "cause")));
 
 const detail = (row, names) =>
   names
@@ -25,8 +31,15 @@ const STEPS = {
   "media_plane.selected": (row) => step("joining", "API", said("the API chose the media plane", row, ["provider", "selected_by"])),
   "sfu.session.refused": (row) => step("joining", "SFU", said("the node refused the session", row, ["code"])),
   "sfu.admission.refused": (row) => step("joining", "SFU", said("the node refused admission", row, ["reason", "sessions"])),
-  "sfu.session.closed": (row) => step(NORMAL_CLOSES.includes(attr(row, "cause")) ? "leaving" : "connecting", "SFU", said("the node closed the session", row, ["cause", "lifetime_ms", "publications", "subscriptions"])),
-  "sfu.peer.state": (row) => step("connecting", "SFU", `peer connection ${attr(row, "state") ?? "state not logged"}`),
+  "sfu.session.closed": (row) => step(endedNormally(row) ? "leaving" : "connecting", "SFU", said("the node closed the session", row, SESSION_FIELDS)),
+  "db.media_session": (row) => step(endedNormally(row) ? "leaving" : "connecting", "SFU", said("the durable outcome of the media session", row, SESSION_FIELDS)),
+  "sfu.peer.state": (row) => step("connecting", "SFU", said(`peer connection ${attr(row, "state") ?? "state not logged"}`, row, ["connect_ms", "outage_ms"])),
+  "sfu.negotiation.failed": (row) => step("connecting", "SFU", said("the node failed a negotiation step", row, ["step", "reason"])),
+  "sfu.control.failed": (row) => step("connecting", "SFU", said("a control call to the node failed", row, ["operation", "status", "code"])),
+  "sfu.publication.held": (row) => step("publishing", "SFU", said(flag(row, "held") ? "the node applied a mute" : "the node applied an unmute", row, ["source", "media_kind", "unmute_seq"])),
+  "sfu.unmute.first_voiced": (row) => step("publishing", "SFU", said("the first voiced packet after an unmute reached the node", row, ["source", "unmute_seq", "since_unmute_ms"])),
+  "sfu.unmute.first_forwarded": (row) => step("forwarding", "SFU", said("the node forwarded the first voiced packet after an unmute", row, ["source", "unmute_seq", "since_unmute_ms", "since_voiced_ms"])),
+  "db.media_plane_change": (row) => step("joining", "API", said(`the ${attr(row, "scope") ?? "a"} media plane setting changed from ${attr(row, "old_plane") ?? "?"} to ${attr(row, "new_plane") ?? "?"}`, row, ["actor", "reason"])),
   "sfu.ice.state": (row) => step("connecting", "SFU", said(`ICE ${attr(row, "state") ?? "state not logged"}`, row, ["path", "protocol"])),
   "sfu.dtls.state": (row) => step("connecting", "SFU", `DTLS ${attr(row, "state") ?? "state not logged"}`),
   "sfu.publication.started": (row) => step("publishing", "SFU", said("the node accepted a publication", row, ["source", "media_kind"])),
@@ -60,13 +73,7 @@ function statsSteps(call, participant) {
   const byConnection = new Map();
   for (const sample of call.samples.filter((candidate) => candidate.participant === participant)) byConnection.set(sample.connection, [...(byConnection.get(sample.connection) ?? []), sample]);
   return [...byConnection].map(([connection, samples]) => {
-    const median = (name) => {
-      const values = samples
-        .map((sample) => number(sample.row, name))
-        .filter(Number.isFinite)
-        .sort((a, b) => a - b);
-      return values.length === 0 ? undefined : values[Math.floor(values.length / 2)];
-    };
+    const median = (name) => middle(samples.map((sample) => number(sample.row, name)));
     const worst = (name) => Math.max(...samples.map((sample) => number(sample.row, name)).filter(Number.isFinite));
     const unmeasured = samples.every((sample) => number(sample.row, "available_incoming_kbps") === undefined);
     const parts = [
@@ -100,7 +107,16 @@ const leaveNote = (call, row) => {
   return row.event === "sfu.source.lease_lost" && departed !== undefined && Math.abs(row.time - departed) <= 5000 ? " as the Participant left, which is normal cleanup" : "";
 };
 
-const SKIPPED = ["sdk.call_stats", "db.episode", "db.participant"];
+/** Rows the timeline summarizes with one step per connection and not one step each: a call has hundreds of them. */
+const SKIPPED = ["sdk.call_stats", "db.episode", "db.participant", "sfu.media.ingress", "sfu.media.egress", "sfu.media.transport"];
+
+/** What the node measured of the Participant's tracks and downlink, one step each, from the node's own stats rows. */
+function nodeMediaSteps(call, participant) {
+  const media = mediaOf(call);
+  const tracks = media.ingress.filter((track) => track.participant === participant).map((track) => ({ time: track.rows[0].time, ...step("publishing", "SFU", trackSummary(track)), proof: cite(track.rows) }));
+  const streams = media.egress.filter((stream) => stream.participant === participant).map((stream) => ({ time: stream.rows[0].time, ...step("receiving", "SFU", streamSummary(stream)), proof: cite(stream.rows) }));
+  return [...tracks, ...streams];
+}
 
 function stepsOf(call, participant, findings) {
   const own = call.rowsOf(participant).filter((row) => !SKIPPED.includes(row.event));
@@ -111,7 +127,7 @@ function stepsOf(call, participant, findings) {
   const found = findings
     .filter((finding) => finding.participant === participant)
     .map((finding) => ({ time: finding.from, stage: finding.stage, side: finding.side, text: [finding.experience, finding.cause, ...finding.notes].join("; "), proof: finding.proof, finding: finding.benign ? "note" : "problem" }));
-  return [...lifecycleSteps(call, participant), ...statsSteps(call, participant), ...rows, ...found];
+  return [...lifecycleSteps(call, participant), ...statsSteps(call, participant), ...nodeMediaSteps(call, participant), ...rows, ...found];
 }
 
 /** Keeps every finding and the first and last steps; the middle is left out with a count, so a 40-minute call stays readable. */

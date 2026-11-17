@@ -6,7 +6,7 @@ import { participantHash } from "./rows.mjs";
 export const EPISODE = "9feb0ff6-1111-4222-8333-444455556666";
 export const T0 = Date.parse("2026-11-11T10:00:00Z");
 const TENANT = "00000000-0000-4000-8000-000000000001";
-const RAW = { publisher: "participant-publisher", viewer: "participant-viewer" };
+export const RAW = { publisher: "participant-publisher", viewer: "participant-viewer" };
 export const hashOf = { publisher: participantHash(RAW.publisher), viewer: participantHash(RAW.viewer) };
 
 export const at = (seconds) => new Date(T0 + seconds * 1000).toISOString();
@@ -71,7 +71,19 @@ export function fixture(prefix = "fx") {
     node(2, "sfu.session.registered", "viewer", viewerConnection, { allocation: 1 }),
     node(3, "sfu.subscription.started", "viewer", viewerConnection, { publisher_id: RAW.publisher, source: "camera", media_kind: "video", mid: "0" }),
   ];
-  return { api, node, sync, db, stats, flow, cast, nodeStart, healthyViewing, starvedViewing };
+  /** What the node writes every 10 s for a connected session. `fields(second)` gives the counters of the row written at that second. */
+  const every = (from, to, build) => Array.from({ length: Math.floor((to - from) / 10) + 1 }, (_, step) => build(from + step * 10)).flat();
+  /** The publisher's video track as the node receives it (`sfu.media.ingress`). Counters are cumulative. */
+  const uplink = (who, connection, from, to, fields) =>
+    every(from, to, (second) =>
+      node(second, "sfu.media.ingress", who, connection, { source: "camera", media_kind: "video", mid: "0", packets: second * 100, bytes: second * 100_000, lost: 0, repaired: 0, jitter_ms: 3, bitrate_bps: 1_500_000, layers: 3, layers_active: 3, held: false, ...fields(second) }),
+    );
+  /** What the subscriber's own reports say of the video the node sends it (`sfu.media.egress`). */
+  const downlink = (who, connection, from, to, fields) =>
+    every(from, to, (second) => node(second, "sfu.media.egress", who, connection, { media_kind: "video", subscriptions: 1, paused_subscriptions: 0, high_layer: 0, low_layer: 1, loss_share: 0, rtt_ms: 40, jitter_ms: 5, bitrate_bps: 26_000, ...fields(second) }));
+  /** The send side of the subscriber's session (`sfu.media.transport`). */
+  const sendSide = (who, connection, from, to, fields) => every(from, to, (second) => node(second, "sfu.media.transport", who, connection, { estimate_bps: 5_000_000, proven_bps: 4_000_000, queued_bytes: 0, feedback_age_ms: 50, dropped: 0, repairs_cut: 0, ...fields(second) }));
+  return { api, node, sync, db, stats, flow, cast, nodeStart, healthyViewing, starvedViewing, uplink, downlink, sendSide };
 }
 
 const subscription = { publisher_id: RAW.publisher, source: "camera", media_kind: "video", mid: "0" };

@@ -46,6 +46,12 @@ export function number(row, name) {
   return value === undefined ? undefined : Number(value);
 }
 
+/** A flag attribute: the export writes one as true, 1 or "true". Undefined when the row does not carry it. */
+export function flag(row, name) {
+  const value = attr(row, name);
+  return value === undefined ? undefined : value === true || value === 1 || value === "1" || value === "true";
+}
+
 /** Lines logged before the builds that name their event are known by their message. */
 const LEGACY_EVENTS = {
   "SDK call stats": "sdk.call_stats",
