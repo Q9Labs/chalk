@@ -1,6 +1,7 @@
 defmodule ChalkSync.Transport.SocketLiveRequestsTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Live.Episode.Publication
   alias ChalkSync.Observability.Journey
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -9,8 +10,8 @@ defmodule ChalkSync.Transport.SocketLiveRequestsTest do
   defp coordinator do
     spawn_link(fn ->
       receive do
-        {:"$gen_call", from, {:live_target, _socket, _identity, _target}} ->
-          GenServer.reply(from, {:ok, %{"type" => "live_target_result"}})
+        {:"$gen_call", from, {:live_target, _socket, _identity, target}} ->
+          GenServer.reply(from, {:ok, Publication.live_result(target, :confirmed)})
       end
     end)
   end
