@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { diagnoseRows, thresholds } from "./index.mjs";
 import { EPISODE, dormantReplacementCall, fixture, hashOf, neverConnectedCall, scenarios, starvedViewerCall, starvedWithoutNodeCall, stuckAudioCall } from "./scenarios.mjs";
+import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
 
 const normalized = (rows) => rows.map((row) => normalizeRow(row));
@@ -61,6 +62,22 @@ test("an Episode no row reaches is not a good call, and a call with a missing so
   const partial = diagnose(scenarios["missing sources"]());
   assert.match(partial.verdict, /^Not enough evidence.*Missing sources: API, SFU node, Sync, database\./u);
   assert.doesNotMatch(partial.verdict, /No bad call/u);
+});
+
+test("the summary names the media plane and who chose it when the database or the API logged it, and says nothing when neither did", () => {
+  const rows = scenarios["clean call"]();
+  assert.doesNotMatch(render({ ...diagnose(rows), elapsedMs: 0 }), /Media plane/u);
+  const episode = rows.find((row) => row.event === "db.episode");
+  const chosen = rows.map((row) => (row === episode ? { ...row, media_plane_provider: "chalk_sfu", media_plane_selected_by: "space_setting" } : row));
+  const result = diagnose(chosen);
+  assert.equal(result.plane.selectedBy, "space_setting");
+  assert.match(render({ ...result, elapsedMs: 0 }), /Media plane: chalk_sfu, chosen by space_setting \[db:episodes:/u);
+  const event = fixture("fx-plane").api(-4, "media_plane.selected", undefined, { provider: "chalk_sfu", selected_by: "kill_switch" });
+  assert.equal(diagnose([...rows, event]).plane.selectedBy, "kill_switch");
+  assert.equal(
+    diagnose([...rows, event]).timeline.episode.some((step) => step.text.startsWith("the API chose the media plane")),
+    true,
+  );
 });
 
 test("a call with every source and flowing media is a clean call, and a lease revoked as the Participant leaves is not a cause", () => {

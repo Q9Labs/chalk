@@ -22,6 +22,7 @@ const step = (stage, side, text) => ({ stage, side, text });
  */
 const STEPS = {
   "sfu.session.registered": (row) => step("connecting", "SFU", said("the node registered the session", row, ["session_kind", "allocation"])),
+  "media_plane.selected": (row) => step("joining", "API", said("the API chose the media plane", row, ["provider", "selected_by"])),
   "sfu.session.refused": (row) => step("joining", "SFU", said("the node refused the session", row, ["code"])),
   "sfu.admission.refused": (row) => step("joining", "SFU", said("the node refused admission", row, ["reason", "sessions"])),
   "sfu.session.closed": (row) => step(NORMAL_CLOSES.includes(attr(row, "cause")) ? "leaving" : "connecting", "SFU", said("the node closed the session", row, ["cause", "lifetime_ms", "publications", "subscriptions"])),

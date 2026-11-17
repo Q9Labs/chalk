@@ -80,4 +80,16 @@ export function buildCall(rows) {
   };
 }
 
+/**
+ * Which media plane the Episode got and who chose it: the database's stored binding (`selected_by`) and the API's
+ * `media_plane.selected` event. Both are absent on an Episode that predates them, so an absent plane is not a gap.
+ */
+export function mediaPlane(call) {
+  const selected = call.rows.filter((row) => row.event === "media_plane.selected");
+  const proof = [call.episode, ...selected].filter((row) => row && (attr(row, "selected_by") ?? attr(row, "media_plane_selected_by")));
+  const first = proof[0];
+  if (!first) return undefined;
+  return { selectedBy: attr(first, "selected_by") ?? attr(first, "media_plane_selected_by"), provider: attr(first, "provider") ?? attr(first, "media_plane_provider"), proof };
+}
+
 export const hiddenByViewer = (row) => number(row, "recv_hidden_videos") > 0;

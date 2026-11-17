@@ -29,7 +29,13 @@ export function episodeSql(episodeId, since) {
   const ep = `ep as (select * from episodes where id = ${quote(episodeId)}::uuid and created_at >= ${quote(new Date(since).toISOString())}::timestamptz)`;
   const row = (id, time, event, fields, from) => `select jsonb_build_object('_rowId', ${id}, '_time', ${time}, 'event', '${event}', 'episode_id', ep.id${fields ? `, ${fields}` : ""}) from ${from}`;
   const branches = [
-    row("'db:episodes:' || left(ep.id::text, 8)", "ep.created_at", "db.episode", "'status', ep.status, 'started_at', ep.started_at, 'ended_at', ep.ended_at, 'end_reason', ep.end_reason", "ep"),
+    row(
+      "'db:episodes:' || left(ep.id::text, 8)",
+      "ep.created_at",
+      "db.episode",
+      "'status', ep.status, 'started_at', ep.started_at, 'ended_at', ep.ended_at, 'end_reason', ep.end_reason, 'media_plane_provider', ep.config_snapshot->'media_plane_binding'->>'provider', 'media_plane_selected_by', ep.config_snapshot->'media_plane_binding'->>'selected_by'",
+      "ep",
+    ),
     row(
       "'db:participants:' || left(p.id::text, 8)",
       "coalesce(p.joined_at, p.created_at)",

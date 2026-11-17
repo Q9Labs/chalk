@@ -16,12 +16,13 @@ function header(timeline) {
 }
 
 /** The summary, one timeline per Participant, and the list of what the diagnosis could not see. */
-export function render({ episodeId, verdict, findings, gaps, stats, timeline, elapsedMs }) {
+export function render({ episodeId, plane, verdict, findings, gaps, stats, timeline, elapsedMs }) {
   const out = [`Episode ${episodeId}`, "", `VERDICT: ${verdict}`, ""];
   const bad = findings.filter((finding) => !finding.benign);
   out.push("Summary");
   out.push("  Timeline columns: time UTC, stage, side, what happened, ids of the rows that prove it. ▶ marks a finding, · a note.");
   out.push(`  Rows by source: ${SOURCES.map((source) => `${source} ${stats[source].rows}`).join(", ")}`);
+  if (plane) out.push(`  Media plane: ${plane.provider ?? "provider not logged"}, chosen by ${plane.selectedBy} ${proofOf({ ids: plane.proof.map((row) => row.id), total: plane.proof.length })}`);
   if (bad.length === 0) out.push("  Findings: none that fail the call");
   for (const finding of bad) {
     out.push(`  Finding: Participant ${short(finding.participant)} ${finding.experience} at ${clock(finding.from)} UTC [${finding.stage}/${finding.side}] ${finding.cause} ${proofOf(finding.proof)}`);

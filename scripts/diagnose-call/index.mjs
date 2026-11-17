@@ -5,7 +5,7 @@
 // happened to each Participant, what went wrong, on whose side, and which rows prove it.
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
-import { buildCall } from "./call.mjs";
+import { buildCall, mediaPlane } from "./call.mjs";
 import { gapsOf } from "./gaps.mjs";
 import { joinByIds } from "./join.mjs";
 import { render } from "./render.mjs";
@@ -32,7 +32,7 @@ export function diagnoseRows(episodeId, rows, sourceGaps = []) {
   const call = buildCall(joined);
   const findings = findingsOf(call, thresholds);
   const gaps = gapsOf(call, sourceGaps, unjoined.length);
-  return { episodeId, verdict: verdictLine(findings, gaps, call), findings, gaps, stats, timeline: timelines(call, findings), unjoined };
+  return { episodeId, plane: mediaPlane(call), verdict: verdictLine(findings, gaps, call), findings, gaps, stats, timeline: timelines(call, findings), unjoined };
 }
 
 /** 3 when a bad call was found, 2 when something that could hide one is missing, else 0. */
