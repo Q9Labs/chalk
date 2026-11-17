@@ -21,6 +21,8 @@ func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
 			return mcpInvoke(b, getEpisodeEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
 		case "attendance":
 			return mcpInvoke(b, getEpisodeAttendanceEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
+		case "talk_time":
+			return mcpInvoke(b, getEpisodeTalkTimeEndpoint(o.EpisodeTalkTime, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
 		case "live":
 			return mcpInvoke(b, listSpaceLiveEpisodesEndpoint(o.Episodes, o.TenantAuthz), listSpaceLiveEpisodesRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumLiveEpisodeSpaces)})
 		case "activity":

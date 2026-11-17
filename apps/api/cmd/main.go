@@ -65,6 +65,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/apps/api/internal/talktime"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 
@@ -456,6 +457,7 @@ func run() error {
 		transcriptService = transcripts.NewService(transcriptRepository)
 	}
 	var transcriptArtifacts httpapi.TranscriptArtifactService
+	var episodeTalkTime httpapi.EpisodeTalkTimeService
 	var transcriptWorker httpapi.TranscriptWorkerService
 	var workloadAuthorizer httpapi.WorkloadAuthorizer
 	var transcriptionAuthority *transcriptionObjectAuthority
@@ -482,6 +484,7 @@ func run() error {
 			Nonces:      nonces,
 		})
 		transcriptArtifacts = transcriptService
+		episodeTalkTime = talktime.NewService(episodeService, postgres.NewEpisodeTalkTimeRepository(operationQueries), *transcriptionStorage)
 		transcriptWorker = transcriptService
 		workloadAuthorizer = authorizer
 	}
@@ -636,6 +639,7 @@ func run() error {
 		EntranceInvites:            entranceInvites,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
+		EpisodeTalkTime:            episodeTalkTime,
 		ParticipantJoins:           episodeService,
 		SyncTokens:                 syncTokenService,
 		SyncTokenRefresh:           syncTokenRefresh,
@@ -1050,6 +1054,7 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 		return
 	}
 	options.TranscriptArtifacts = nil
+	options.EpisodeTalkTime = nil
 	options.TranscriptWorker = nil
 	options.WorkloadAuthorizer = nil
 	options.ChunkAuthority = nil

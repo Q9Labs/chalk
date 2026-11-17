@@ -229,12 +229,13 @@ type externalOperationResponse struct {
 	CreatedAt                   string  `json:"created_at"`
 }
 
-func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
+func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, talkTime EpisodeTalkTimeService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {
 	endpoints := []RouteEndpoint{
 		createEpisodeEndpoint(lifecycle, authorizer),
 		listEpisodesEndpoint(lifecycle, authorizer),
 		getEpisodeEndpoint(lifecycle, authorizer),
 		getEpisodeAttendanceEndpoint(lifecycle, authorizer),
+		getEpisodeTalkTimeEndpoint(talkTime, authorizer),
 		listSpaceLiveEpisodesEndpoint(lifecycle, authorizer),
 		listSpaceActivityEndpoint(lifecycle, authorizer),
 		admitParticipantEndpoint(lifecycle, tokens, refresh, mediaTokens, generations, spacesService, tenantsService, media, authorizer),

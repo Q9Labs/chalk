@@ -275,6 +275,10 @@ type Querier interface {
 	// cleanup at current active seats, never at retained admitted-request history.
 	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
+	// Each Recording of the Episode with its transcript, if any. A Recording's
+	// timeline starts when its capture became ready, falling back to the row's
+	// creation time for Recordings that predate presentation sources.
+	ListEpisodeTalkTimeRecordings(ctx context.Context, arg ListEpisodeTalkTimeRecordingsParams) ([]ListEpisodeTalkTimeRecordingsRow, error)
 	ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error)

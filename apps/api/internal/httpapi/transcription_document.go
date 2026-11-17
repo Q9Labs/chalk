@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -54,7 +53,7 @@ func readTranscriptDocument(ctx context.Context, service TranscriptArtifactServi
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err
 	}
-	if !transcriptDocumentReady(transcript) {
+	if !transcript.DocumentReady() {
 		return transcripts.Transcript{}, transcripts.Document{}, apiErrorTranscriptNotReady
 	}
 
@@ -62,7 +61,7 @@ func readTranscriptDocument(ctx context.Context, service TranscriptArtifactServi
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err
 	}
-	if !transcriptDocumentArtifactMatches(transcript, artifact) {
+	if artifact.Body == nil || !transcript.ArtifactMatches(artifact.Key, artifact.Size, artifact.ContentType) {
 		if artifact.Body != nil {
 			_ = artifact.Body.Close()
 		}
@@ -84,14 +83,6 @@ func decodeTranscriptDocumentRequest(r *http.Request) (transcriptDocumentRequest
 		return transcriptDocumentRequest{}, err
 	}
 	return transcriptDocumentRequest{TenantID: tenantID, TranscriptID: transcriptID}, nil
-}
-
-func transcriptDocumentReady(transcript transcripts.Transcript) bool {
-	return transcript.Status == transcripts.StatusComplete && transcript.DeletedAt == nil && transcript.ArtifactKey != nil && transcript.ArtifactSize != nil && *transcript.ArtifactSize > 0 && *transcript.ArtifactSize <= transcripts.MaxDocumentBytes && transcript.ArtifactContentType != nil && *transcript.ArtifactContentType == "application/json"
-}
-
-func transcriptDocumentArtifactMatches(transcript transcripts.Transcript, artifact objectstorage.ObjectReader) bool {
-	return artifact.Body != nil && artifact.Key == *transcript.ArtifactKey && artifact.Size == *transcript.ArtifactSize && artifact.ContentType == *transcript.ArtifactContentType && artifact.Size <= transcripts.MaxDocumentBytes
 }
 
 func newTranscriptDocumentResponse(transcript transcripts.Transcript, document transcripts.Document) transcriptDocumentResponse {
