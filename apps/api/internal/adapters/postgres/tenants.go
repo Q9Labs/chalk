@@ -19,6 +19,7 @@ import (
 
 type TenantRepository struct {
 	queries tenantQuerier
+	pool    *pgxpool.Pool
 }
 
 type tenantQuerier interface {
@@ -30,23 +31,58 @@ type tenantQuerier interface {
 	UpdateTenant(ctx context.Context, arg sqlc.UpdateTenantParams) (sqlc.UpdateTenantRow, error)
 }
 
-func NewTenantRepository(queries tenantQuerier) TenantRepository {
-	return TenantRepository{queries: queries}
+// NewTenantRepository reads and writes Tenants through queries. With a pool, a write that
+// sets the default plane runs in its own transaction that names its writer (see
+// tagPlaneChange). Without one, the caller's transaction or the untagged "unattributed"
+// record applies.
+func NewTenantRepository(queries tenantQuerier, pools ...*pgxpool.Pool) TenantRepository {
+	var pool *pgxpool.Pool
+	if len(pools) > 0 {
+		pool = pools[0]
+	}
+	return TenantRepository{queries: queries, pool: pool}
+}
+
+// namingTheWriter runs write on queries, or, when the write sets the default plane and the
+// repository has a pool, in a transaction that tells the plane audit who is writing.
+func (s TenantRepository) namingTheWriter(ctx context.Context, setsPlane bool, write func(tenantQuerier) error) error {
+	if !setsPlane || s.pool == nil {
+		return write(s.queries)
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tenant write: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := tagPlaneChange(ctx, tx); err != nil {
+		return err
+	}
+	if err := write(sqlc.New(tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tenant write: %w", err)
+	}
+	return nil
 }
 
 func (s TenantRepository) CreateTenant(ctx context.Context, input tenants.CreateTenantInput) (tenants.Tenant, error) {
-	tenant, err := s.queries.CreateTenant(ctx, sqlc.CreateTenantParams{
-		ID:                 pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
-		Name:               input.Name,
-		CreatedByServiceID: text(input.CreatedByServiceID),
-		ExternalID:         text(input.ExternalID),
+	var tenant sqlc.CreateTenantRow
+	err := s.namingTheWriter(ctx, input.DefaultMediaPlane != nil, func(queries tenantQuerier) (err error) {
+		tenant, err = queries.CreateTenant(ctx, sqlc.CreateTenantParams{
+			ID:                 pgtype.UUID{Bytes: input.ID.Bytes(), Valid: true},
+			Name:               input.Name,
+			CreatedByServiceID: text(input.CreatedByServiceID),
+			ExternalID:         text(input.ExternalID),
 
-		DefaultMediaPlane:        text(input.DefaultMediaPlane),
-		MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
-		StorageProviderConfig:    jsonBytes(input.StorageProviderConfig),
-		CorsAllowedOrigins:       input.CORSAllowedOrigins,
-		LogoKey:                  text(input.LogoKey),
-		Website:                  text(input.Website),
+			DefaultMediaPlane:        text(input.DefaultMediaPlane),
+			MediaPlaneProviderConfig: jsonBytes(input.MediaPlaneProviderConfig),
+			StorageProviderConfig:    jsonBytes(input.StorageProviderConfig),
+			CorsAllowedOrigins:       input.CORSAllowedOrigins,
+			LogoKey:                  text(input.LogoKey),
+			Website:                  text(input.Website),
+		})
+		return err
 	})
 	if err != nil {
 		return tenants.Tenant{}, fmt.Errorf("create tenant: %w", err)
@@ -123,40 +159,44 @@ func (s TenantRepository) listTenants(ctx context.Context, page pagination.PageR
 }
 
 func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, input tenants.UpdateTenantInput) (tenants.Tenant, error) {
-	tenant, err := s.queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
-		ID:                     pgtype.UUID{Bytes: id.Bytes(), Valid: true},
-		RecordingRenderModeSet: input.RecordingRenderMode.Set,
-		RecordingRenderMode:    requiredText(input.RecordingRenderMode),
-		NameSet:                input.Name.Set,
-		Name:                   requiredText(input.Name),
+	var tenant sqlc.UpdateTenantRow
+	err := s.namingTheWriter(ctx, input.DefaultMediaPlane.Set, func(queries tenantQuerier) (err error) {
+		tenant, err = queries.UpdateTenant(ctx, sqlc.UpdateTenantParams{
+			ID:                     pgtype.UUID{Bytes: id.Bytes(), Valid: true},
+			RecordingRenderModeSet: input.RecordingRenderMode.Set,
+			RecordingRenderMode:    requiredText(input.RecordingRenderMode),
+			NameSet:                input.Name.Set,
+			Name:                   requiredText(input.Name),
 
-		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
-		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
-		DefaultMediaPlaneApproved:     input.DefaultMediaPlaneApproved,
-		MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
-		MediaPlaneProviderConfig:      jsonBytes(input.MediaPlaneProviderConfig.Value),
-		StorageProviderConfigSet:      input.StorageProviderConfig.Set,
-		StorageProviderConfig:         jsonBytes(input.StorageProviderConfig.Value),
-		CorsAllowedOriginsSet:         input.CORSAllowedOrigins.Set,
-		CorsAllowedOrigins:            input.CORSAllowedOrigins.Value,
-		LogoKeySet:                    input.LogoKey.Set,
-		LogoKey:                       text(input.LogoKey.Value),
-		WebsiteSet:                    input.Website.Set,
-		Website:                       text(input.Website.Value),
-		TranscriptionCeilingSet:       input.ArtifactPolicy.TranscriptionCeiling.Set,
-		TranscriptionCeiling:          requiredText(input.ArtifactPolicy.TranscriptionCeiling),
-		TranscriptionDefaultModeSet:   input.ArtifactPolicy.TranscriptionDefaultMode.Set,
-		TranscriptLanguageSet:         input.ArtifactPolicy.TranscriptLanguage.Set,
-		TranscriptLanguage:            optionalLanguageValue(input.ArtifactPolicy.TranscriptLanguage.Value),
-		TranscriptionDefaultMode:      requiredText(input.ArtifactPolicy.TranscriptionDefaultMode),
-		ProviderPolicyVersionSet:      input.ArtifactPolicy.ProviderPolicyVersion.Set,
-		ProviderPolicyVersion:         text(input.ArtifactPolicy.ProviderPolicyVersion.Value),
-		RecordingRetentionSecondsSet:  input.ArtifactPolicy.RecordingRetentionSeconds.Set,
-		RecordingRetentionSeconds:     optionalTenantInt8(input.ArtifactPolicy.RecordingRetentionSeconds),
-		TranscriptRetentionSecondsSet: input.ArtifactPolicy.TranscriptRetentionSeconds.Set,
-		TranscriptRetentionSeconds:    optionalTenantInt8(input.ArtifactPolicy.TranscriptRetentionSeconds),
-		SourceWindowSecondsSet:        input.ArtifactPolicy.TranscriptionSourceWindowSeconds.Set,
-		SourceWindowSeconds:           optionalTenantInt8(input.ArtifactPolicy.TranscriptionSourceWindowSeconds),
+			DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
+			DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
+			DefaultMediaPlaneApproved:     input.DefaultMediaPlaneApproved,
+			MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
+			MediaPlaneProviderConfig:      jsonBytes(input.MediaPlaneProviderConfig.Value),
+			StorageProviderConfigSet:      input.StorageProviderConfig.Set,
+			StorageProviderConfig:         jsonBytes(input.StorageProviderConfig.Value),
+			CorsAllowedOriginsSet:         input.CORSAllowedOrigins.Set,
+			CorsAllowedOrigins:            input.CORSAllowedOrigins.Value,
+			LogoKeySet:                    input.LogoKey.Set,
+			LogoKey:                       text(input.LogoKey.Value),
+			WebsiteSet:                    input.Website.Set,
+			Website:                       text(input.Website.Value),
+			TranscriptionCeilingSet:       input.ArtifactPolicy.TranscriptionCeiling.Set,
+			TranscriptionCeiling:          requiredText(input.ArtifactPolicy.TranscriptionCeiling),
+			TranscriptionDefaultModeSet:   input.ArtifactPolicy.TranscriptionDefaultMode.Set,
+			TranscriptLanguageSet:         input.ArtifactPolicy.TranscriptLanguage.Set,
+			TranscriptLanguage:            optionalLanguageValue(input.ArtifactPolicy.TranscriptLanguage.Value),
+			TranscriptionDefaultMode:      requiredText(input.ArtifactPolicy.TranscriptionDefaultMode),
+			ProviderPolicyVersionSet:      input.ArtifactPolicy.ProviderPolicyVersion.Set,
+			ProviderPolicyVersion:         text(input.ArtifactPolicy.ProviderPolicyVersion.Value),
+			RecordingRetentionSecondsSet:  input.ArtifactPolicy.RecordingRetentionSeconds.Set,
+			RecordingRetentionSeconds:     optionalTenantInt8(input.ArtifactPolicy.RecordingRetentionSeconds),
+			TranscriptRetentionSecondsSet: input.ArtifactPolicy.TranscriptRetentionSeconds.Set,
+			TranscriptRetentionSeconds:    optionalTenantInt8(input.ArtifactPolicy.TranscriptRetentionSeconds),
+			SourceWindowSecondsSet:        input.ArtifactPolicy.TranscriptionSourceWindowSeconds.Set,
+			SourceWindowSeconds:           optionalTenantInt8(input.ArtifactPolicy.TranscriptionSourceWindowSeconds),
+		})
+		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tenants.Tenant{}, tenants.ErrTenantNotFound

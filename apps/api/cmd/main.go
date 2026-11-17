@@ -162,7 +162,7 @@ func run() error {
 	}
 	apiKeyRepository := postgres.NewAPIKeyRepository(operationQueries, pool, diagnostics.Queries)
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
-	tenantRepository := postgres.NewTenantRepository(operationQueries)
+	tenantRepository := postgres.NewTenantRepository(operationQueries, pool)
 	planePolicy := spaces.PlanePolicy{Platform: cfg.DefaultMediaPlane, Allowed: cfg.ChalkSFU.AllowedSpaces, NewSpace: cfg.NewSpace.MediaPlane, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused}
 	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool {
 		provider, err := mediaplane.ParseSettingName(plane)

@@ -9,6 +9,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -107,11 +108,22 @@ func TestEveryPlaneWriterLeavesARow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A public Tenant update that sets the default plane is named after its credential too, and an
+	// update of another field leaves no row.
+	publicTenants := NewTenantRepository(sqlc.New(pool), pool)
+	if _, err := publicTenants.UpdateTenant(request, tenant, tenants.UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: &cloudflare}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publicTenants.UpdateTenant(request, tenant, tenants.UpdateTenantInput{Name: utilities.OptionalString{Set: true, Value: &renamed}}); err != nil {
+		t.Fatal(err)
+	}
+
 	expectTrail(t, trailOf(t, pool, tenant), []trailRow{
 		{"tenant", "inherit", "chalk_sfu", "hasan", "pilot", proofTraceID},
 		{"space", "inherit", "cf_sfu", "api_key:" + key.String(), "public API request", ""},
 		{"space", "cf_sfu", "chalk_sfu", "unattributed", "unattributed", ""},
 		{"tenant", "chalk_sfu", "inherit", "hasan", "pilot over", proofTraceID},
+		{"tenant", "inherit", "cf_sfu", "api_key:" + key.String(), "public API request", ""},
 	})
 }
 
