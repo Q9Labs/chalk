@@ -507,6 +507,21 @@
       ]
     },
     {
+      "name": "talk-time",
+      "summary": "Measures who talked in an Episode from its transcripts and shows it on the past-session page.",
+      "paths": [
+        "apps/api/db/queries/episode_talk_time.sql",
+        "apps/api/internal/adapters/postgres/episode_talk_time.go",
+        "apps/api/internal/adapters/postgres/sqlc/episode_talk_time.sql.go",
+        "apps/api/internal/httpapi/episode_talk_time.go",
+        "apps/api/internal/httpapi/episode_talk_time_test.go",
+        "apps/api/internal/talktime",
+        "apps/web/src/components/dashboard/TalkTime.tsx",
+        "apps/web/src/lib/dashboard/talk-time.test.ts",
+        "apps/web/src/lib/dashboard/talk-time.ts"
+      ]
+    },
+    {
       "name": "invite-codes",
       "summary": "Creates and accepts public Invite codes for joining a Space.",
       "paths": [

@@ -224,3 +224,15 @@ func (mode persistedTranscriptLanguage) validate() bool {
 	_, err := artifactpolicy.ParseTranscriptLanguage(mode.Language)
 	return err == nil
 }
+
+// DocumentReady reports whether the transcript has a readable transcript.v1
+// artifact: complete, not deleted, and within the document size limit.
+func (t Transcript) DocumentReady() bool {
+	return t.Status == StatusComplete && t.DeletedAt == nil && t.ArtifactKey != nil && t.ArtifactSize != nil && *t.ArtifactSize > 0 && *t.ArtifactSize <= MaxDocumentBytes && t.ArtifactContentType != nil && *t.ArtifactContentType == "application/json"
+}
+
+// ArtifactMatches reports whether a stored object is the artifact this
+// transcript row points at.
+func (t Transcript) ArtifactMatches(key string, size int64, contentType string) bool {
+	return t.ArtifactKey != nil && t.ArtifactSize != nil && t.ArtifactContentType != nil && key == *t.ArtifactKey && size == *t.ArtifactSize && contentType == *t.ArtifactContentType && size <= MaxDocumentBytes
+}

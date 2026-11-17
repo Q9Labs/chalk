@@ -21,7 +21,11 @@ export type Parts = {
   readonly transcript: TranscriptView["kind"];
   readonly media: ReactNode;
   readonly panel: ReactNode;
+  /** The playing recording's clock and a way to move it, only while its player is on the page. */
+  readonly playback: Playback | null;
 };
+
+export type Playback = { readonly recordingId: string; readonly time: number; readonly seek: (seconds: number) => void };
 
 /** Only a different video resets playback, so the viewer is keyed by it; transcript selection resets its own panel. */
 export function SessionViewer({ ids, page, actions, children }: { readonly ids: Ids; readonly page: Page; readonly actions: Actions; readonly children: (parts: Parts) => ReactNode }) {
@@ -42,7 +46,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
   const downloadableTranscript = transcript.kind === "ready" ? transcript.transcript : null;
-  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null });
+  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null, playback: null });
 
   async function prepareRecording(target: RecordingDTO) {
     if (exporting) return;
@@ -79,7 +83,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
     ) : (
       <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
-  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel });
+  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel, playback: playable ? { recordingId: recording.id, time, seek: (seconds) => seek.current(seconds) } : null });
 }
 
 type MediaProps = {

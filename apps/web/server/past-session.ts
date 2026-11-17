@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, listedRecording, recordingTranscripts, run, transcriptPageSize } from "./engine";
+import { attendance, listedRecording, recordingTranscripts, run, talkTime, transcriptPageSize } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { DashboardEnvironment } from "./config";
@@ -9,15 +9,17 @@ import type { ActionResult, ArtifactURLDTO, CueDTO, PastSessionAction, PastSessi
 export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string, viewerParticipantId: string | null = null): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
-  const [space, recordings, people] = await Promise.all([
+  const [space, recordings, people, talk] = await Promise.all([
     run(engine.api.spaces.getSpace({ params: { tenant_id: engine.tenantId, space_id: params.space_id } })),
     run(engine.api.recordings.listRecordings({ params: { tenant_id: engine.tenantId }, query: { space_id: params.space_id, episode_id: params.episode_id, page_size: 30, cursor } })),
     attendance(engine, params),
+    talkTime(engine, params),
   ]);
   return {
     callName: space.name,
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
+    talkTime: talk,
     // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
     recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, transcriptPageSize("past-session")))),
     nextCursor: recordings.pagination.next_cursor,

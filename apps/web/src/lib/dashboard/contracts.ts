@@ -5,6 +5,7 @@ import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
+import type { TalkTimeDTO } from "./talk-time";
 
 const id = z.uuid();
 export const spaceNameMaxCodePoints = ChalkCodePointLimits["CreateSpaceRequest.name"];
@@ -187,7 +188,7 @@ export type CallPageDTO = {
   nextCursor: string | null;
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
-export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; talkTime: TalkTimeDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 /** One past session of one call, with what it kept. `recording` is the session's newest completed recording, else its newest. */
 export type SessionRowDTO = {
   spaceId: string;

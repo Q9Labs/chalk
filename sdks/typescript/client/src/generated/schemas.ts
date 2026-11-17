@@ -945,6 +945,51 @@ export const EpisodeListSchema = /* @__PURE__ */ (() =>
   }))();
 export type EpisodeList = typeof EpisodeListSchema.Type;
 
+export const RecordingIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId")))();
+export type RecordingId = typeof RecordingIdSchema.Type;
+
+export const EpisodeTalkTimeSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    source: Schema.String,
+    status: Schema.String,
+    talk_time: Schema.NullOr(
+      Schema.Struct({
+        bucket_ms: Schema.Number,
+        episode_duration_ms: Schema.Number,
+        intervals_truncated: Schema.Boolean,
+        overlap_ms: Schema.Number,
+        recordings: Schema.Array(
+          Schema.Struct({
+            offset_ms: Schema.Number,
+            recording_id: RecordingIdSchema,
+            transcribed: Schema.Boolean,
+          }),
+        ),
+        silence_ms: Schema.Number,
+        speakers: Schema.Array(
+          Schema.Struct({
+            bucket_talk_ms: Schema.Array(Schema.Number),
+            display_name: Schema.String,
+            intervals: Schema.Array(
+              Schema.Struct({
+                end_ms: Schema.Number,
+                start_ms: Schema.Number,
+              }),
+            ),
+            participant_id: Schema.NullOr(ParticipantIdSchema),
+            share: Schema.Number,
+            speaker_key: Schema.String,
+            talk_ms: Schema.Number,
+            turns: Schema.Number,
+          }),
+        ),
+        total_talk_ms: Schema.Number,
+      }),
+    ),
+  }))();
+export type EpisodeTalkTime = typeof EpisodeTalkTimeSchema.Type;
+
 export const ErrorResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     error: Schema.Struct({
@@ -1219,9 +1264,6 @@ export const RecordingExportSchema = /* @__PURE__ */ (() =>
     status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
   }))();
 export type RecordingExport = typeof RecordingExportSchema.Type;
-
-export const RecordingIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId")))();
-export type RecordingId = typeof RecordingIdSchema.Type;
 
 export const RecordingSourceSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3148,6 +3190,25 @@ export const GetEpisodeAttendance429ResponseHeadersSchema = /* @__PURE__ */ (() 
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetEpisodeTalkTimePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetEpisodeTalkTimePathParams = typeof GetEpisodeTalkTimePathParamsSchema.Type;
+
+export const GetEpisodeTalkTimeResponseSchema = /* @__PURE__ */ (() => EpisodeTalkTimeSchema)();
+export type GetEpisodeTalkTimeResponse = typeof GetEpisodeTalkTimeResponseSchema.Type;
+
+export const GetEpisodeTalkTime429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetEpisodeTalkTime429ResponseHeaders = typeof GetEpisodeTalkTime429ResponseHeadersSchema.Type;
 
 export const GetParticipantEpisodeStatusPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -7139,6 +7200,19 @@ export const GetEpisodeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 
+export const GetEpisodeTalkTimeErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetEpisodeTalkTimeError = typeof GetEpisodeTalkTimeErrorSchema.Type;
+
 export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -8023,6 +8097,7 @@ export const ChalkOperationPolicies = {
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getEpisodeTalkTime: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

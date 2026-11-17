@@ -11,6 +11,7 @@ import { BadgeView } from "./ListParts";
 import { Page, Stat } from "./Page";
 import { DownloadMenu, SessionViewer, type Parts } from "./SessionViewer";
 import { usePastSession, type Ids, type Page as Loaded } from "./session-reads";
+import { TalkTime } from "./TalkTime";
 import { CopyAction, ErrorPanel, Sk } from "./kit";
 import { VIDEO_BADGE } from "../../lib/dashboard/lists";
 
@@ -206,7 +207,7 @@ function NoRecording() {
 
 function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page: Loaded; readonly parts: Parts; readonly crumb: ReactNode }) {
   const { episode, attendance } = page.session;
-  const { recording, playable, downloadableTranscript, media, panel } = parts;
+  const { recording, playable, downloadableTranscript, media, panel, playback } = parts;
   const end = episode.endedAt ?? episode.startedAt;
   const video = recording ? videoState(recording) : null;
   const stat = VIDEO_STAT[video ?? "off"];
@@ -226,6 +227,7 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
     >
       <SessionStats startedAt={episode.startedAt} end={end} participants={attendance.participants} video={stat} transcript={words} />
       {recording ? <RecordingSplit video={video} media={media} panel={panel} /> : <NoRecording />}
+      <TalkTime talk={page.session.talkTime} playback={playback} />
       <WhoJoined attendance={attendance} startedAt={episode.startedAt} endedAt={end} />
     </Page>
   );

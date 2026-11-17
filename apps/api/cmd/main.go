@@ -634,14 +634,14 @@ func run() error {
 		EntranceInvites:            entranceInvites,
 		Spaces:                     spaceService,
 		Episodes:                   episodeService,
+		EpisodeTalkTime:            newEpisodeTalkTime(cfg.Capabilities.Transcription, episodeService, postgres.NewEpisodeTalkTimeRepository(operationQueries), transcriptionStorage),
 		ParticipantJoins:           episodeService,
 		SyncTokens:                 syncTokenService,
 		SyncTokenRefresh:           syncTokenRefresh,
 		TenantAuthz:                tenantAuthz,
 		Tenants:                    tenantService,
-		// Synchronous application-node provider calls are intentionally absent.
-		// Transcription work is claimed and fenced through the internal worker
-		// boundary after the request transaction commits.
+		// Synchronous application-node provider calls are intentionally absent. Transcription work
+		// is claimed and fenced through the internal worker boundary after the request transaction commits.
 		TranscriptArtifacts:    transcriptArtifacts,
 		TranscriptTextMetadata: postgres.NewTranscriptTextRepository(operationQueries),
 		TranscriptWorker:       transcriptWorker,

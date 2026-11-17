@@ -13,14 +13,25 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+// inspectOneEpisode answers the views that read a single Episode.
+func inspectOneEpisode(b *mcpRequest, o Options, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
+	request := getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)}
+	switch i.View {
+	case "attendance":
+		return mcpInvoke(b, getEpisodeAttendanceEndpoint(o.Episodes, o.TenantAuthz), request)
+	case "talk_time":
+		return mcpInvoke(b, getEpisodeTalkTimeEndpoint(o.EpisodeTalkTime, o.TenantAuthz), request)
+	default:
+		return mcpInvoke(b, getEpisodeEndpoint(o.Episodes, o.TenantAuthz), request)
+	}
+}
+
 func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
 	mcptools.Bind(registry, mcptools.InspectEpisodes, func(ctx context.Context, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
-		case "episode":
-			return mcpInvoke(b, getEpisodeEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
-		case "attendance":
-			return mcpInvoke(b, getEpisodeAttendanceEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
+		case "episode", "attendance", "talk_time":
+			return inspectOneEpisode(b, o, i)
 		case "live":
 			return mcpInvoke(b, listSpaceLiveEpisodesEndpoint(o.Episodes, o.TenantAuthz), listSpaceLiveEpisodesRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumLiveEpisodeSpaces)})
 		case "activity":
