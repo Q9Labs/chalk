@@ -343,17 +343,3 @@ test("a passing lane prints a demoted check's warning, because q9gate drops a pa
     console.log = log;
   }
 });
-
-test("the call diagnosis runs when the code that writes the rows it reads changes", () => {
-  for (const file of [
-    "features/media/sfu/internal/media/trail.go",
-    "features/media/sfu/internal/telemetry/export.go",
-    "apps/api/internal/httpapi/call_stats.go",
-    "apps/api/internal/observability/media_replacement.go",
-    "sdks/typescript/client/src/connection/report.ts",
-    "scripts/diagnose-call/rules.mjs",
-  ]) {
-    assert.ok(selected([file], "pull_request").includes("diagnose-call"), file);
-  }
-  assert.ok(!selected(["features/media/sfu/server/main.go"], "pull_request").includes("diagnose-call"));
-});

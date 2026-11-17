@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { DIAGNOSE_CALL_INPUTS } from "../diagnose-call/inputs.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
@@ -366,21 +367,6 @@ function task(id, label, selected, reason, plannedCommand, env = {}) {
   return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env };
 }
 
-/** The checker and the code that writes the rows it reads: the SFU node's events, the API's call stats, connection reports, replacements and presence expiry, and the SDK's report. */
-const DIAGNOSE_CALL_INPUTS = [
-  "scripts/diagnose-call",
-  "infrastructure/observability/production-alerts/call-verdict",
-  "features/media/sfu/internal/media/events.go",
-  "features/media/sfu/internal/media/trail.go",
-  "features/media/sfu/internal/telemetry",
-  "apps/api/internal/httpapi/call_stats.go",
-  "apps/api/internal/httpapi/connection_reports.go",
-  "apps/api/internal/observability/media_replacement.go",
-  "apps/api/internal/adapters/postgres/participant_presence.go",
-  "sdks/typescript/client/src/connection/report.ts",
-  "sdks/typescript/client/src/media/audio-receive-health.ts",
-];
-
 export function createGatePlan(files, options = {}) {
   const normalizedFiles = normalizeFiles(files);
   const snapshot = options.snapshot ?? { mode: "worktree" };
@@ -497,7 +483,6 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  // The checker reads these emitters' rows, so a change to what they log can break its rules without touching scripts/diagnose-call.
   const diagnoseCall = full || normalizedFiles.some((file) => startsWithAny(file, DIAGNOSE_CALL_INPUTS));
   const proofBundle = full || normalizedFiles.some((file) => startsWithAny(file, proofTestRoots));
   // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
@@ -605,7 +590,7 @@ export function createGatePlan(files, options = {}) {
       ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/${CALL_LEAK_SHARDS}`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
-    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis, its thresholds or an emitter of the rows it reads changed" : "call diagnosis is unaffected", ["node", "--test", "scripts/diagnose-call/diagnose-call.test.mjs"]),
+    task("diagnose-call", "Call diagnosis joins every source by id", diagnoseCall, diagnoseCall ? "diagnosis, its thresholds or an emitter of the rows it reads changed" : "call diagnosis is unaffected", ["node", "--test", "scripts/diagnose-call/*.test.mjs"]),
     task("proof-bundle", "Proof scripts: unit tests and the bundle against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof scripts are unaffected", ["node", "--test", "scripts/prod-proof/*.test.mjs", "scripts/web-proof/*.test.mjs"]),
     task("sfu", "SFU service Go module", sfu, sfu ? "SFU inputs changed" : "no SFU inputs changed", ["bash", "features/media/sfu/scripts/gate.sh"]),
     task(
