@@ -3,6 +3,7 @@
 package media
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -47,8 +48,8 @@ const (
 	rtcpBufferLimit = 32 << 10
 )
 
-// closeWait bounds how long Close waits for the node's goroutines.
-const closeWait = 5 * time.Second
+// CloseWait bounds how long Close waits for the node's goroutines.
+const CloseWait = 5 * time.Second
 
 // iceTCPReadBuffer is the datagram queue each ICE-TCP connection may hold unread.
 const iceTCPReadBuffer = 32
@@ -80,6 +81,7 @@ type Node struct {
 	closedCreates *orderedTable[string, struct{}]            // create operation IDs whose session closed; bounded
 	fences        *orderedTable[participantKey, int64]       // highest generation seen per Participant; outlives sessions
 	retired       *orderedTable[episodeKey, retirement]      // Episodes retired at an allocation generation (see RetireEpisode)
+	outcomes      *orderedTable[episodeKey, outcomeLog]      // how Participant sessions ended, for EndEpisode to report; bounded
 	sources       *orderedTable[sourceKey, *sourceAuthority] // newest grant or revoke per source; outlives sessions; its limit also bounds sourceFloors
 	sourceFloors  map[episodeKey]int64                       // highest revision of a source evicted per Episode
 
@@ -143,7 +145,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	n := &Node{
 		cfg:           cfg,
 		log:           log,
-		incarnation:   randomHex(4),
+		incarnation:   cmp.Or(cfg.Incarnation, randomHex(4)),
 		peers:         peers,
 		conn:          conn,
 		media:         media,
@@ -166,6 +168,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		plans:         map[episodeKey]int64{},
 		refusals:      map[string]uint64{},
 		retired:       newOrderedTable[episodeKey, retirement](retiredLimit),
+		outcomes:      newOrderedTable[episodeKey, outcomeLog](outcomeEpisodeLimit),
 	}
 	n.wg.Go(n.run)
 	return n, nil
@@ -241,19 +244,6 @@ func (n *Node) SessionCount() int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return len(n.sessions)
-}
-
-// EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
-func (n *Node) EndEpisode(tenantID, episodeID string) int {
-	n.mu.Lock()
-	key := episodeKey{tenantID, episodeID}
-	ended := n.episodes[key].list()
-	n.clearHold(key)
-	n.mu.Unlock()
-	for _, session := range ended {
-		session.CloseFor(CloseEpisodeEnded)
-	}
-	return len(ended)
 }
 
 // Session finds a live session. A session outside the scope reads as gone,
@@ -342,8 +332,8 @@ func (n *Node) Close() {
 	}()
 	select {
 	case <-waited:
-	case <-time.After(closeWait):
-		n.log.Error("media readers still running after close", "wait", closeWait)
+	case <-time.After(CloseWait):
+		n.log.Error("media readers still running after close", "wait", CloseWait)
 	}
 	if n.tcpMux != nil {
 		_ = n.tcpMux.Close()

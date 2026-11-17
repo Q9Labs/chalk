@@ -63,13 +63,25 @@ type ingressLayer struct {
 	// audioLevelID is the negotiated RFC 6464 extension ID of a microphone, or 0.
 	audioLevelID uint8
 
+	// Link quality, from the packets the layer's reader sees (see arrived). The reader writes
+	// them and the control loop reads them.
+	received, skipped    atomic.Uint64 // distinct packets that arrived; packets a mute skipped
+	firstExt, newestExt  atomic.Uint64 // the range of extended sequence numbers, 0 before the first packet
+	jitter               atomic.Uint64 // float64 bits: interarrival jitter in milliseconds
+	keyframeRequests     atomic.Uint64 // PLIs the node sent for the layer
+	clockRate            float64
+	holding, haveArrival bool
+	lastAt               int64
+	lastTS               uint32
+	jitterTicks          float64
+
 	// Owned by the layer's reader.
 	extStarted bool
 	highest    uint64
 }
 
 func newIngressLayer(index int, remote *webrtc.TrackRemote, source string, memory config.Memory) *ingressLayer {
-	layer := &ingressLayer{index: index, rid: remote.RID(), ssrc: uint32(remote.SSRC()), remote: remote}
+	layer := &ingressLayer{index: index, rid: remote.RID(), ssrc: uint32(remote.SSRC()), remote: remote, clockRate: float64(remote.Codec().ClockRate)}
 	if bytes := historyBytes(memory, remote.Kind(), source, layer.rid); bytes > 0 {
 		layer.history.Store(newHistory(bytes, historySlots))
 	}

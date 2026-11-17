@@ -38,7 +38,7 @@ func TestPublisherChosenRIDStaysOnTheNode(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "Authorization=Bearer test-token")
 	var journal bytes.Buffer
 	var journalMu sync.Mutex
-	logger, shutdown, err := telemetry.NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.URL, OTLPInsecure: true},
+	logger, _, shutdown, err := telemetry.NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.URL, OTLPInsecure: true}, "instance-1",
 		slog.NewJSONHandler(lockedWriter{&journalMu, &journal}, nil))
 	if err != nil {
 		t.Fatal(err)

@@ -660,10 +660,8 @@ func (a *Adapter) RemoveParticipant(context.Context, mediaplane.RemoveParticipan
 }
 
 func (a *Adapter) EndEpisode(ctx context.Context, input mediaplane.EndEpisodeInput) error {
-	if input.Provider != mediaplane.ProviderChalkSFU {
-		return mediaplane.ErrInvalidProvider
-	}
-	return a.call(ctx, protocol.RouteEpisodesEnd, protocol.EndEpisodeRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeRef}, nil)
+	_, err := a.EndEpisodeSessions(ctx, input)
+	return err
 }
 
 // maxSourceControls is the node's limit on one source control request.

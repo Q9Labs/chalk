@@ -34,7 +34,7 @@ func TestRetireEndsTheSessionsBelowTheFloorAndSparesTheRest(t *testing.T) {
 	if _, err := f.node.Create("other", scopeOf("two", "other"), ParticipantSession, generation(1)); err != nil {
 		t.Fatal(err)
 	}
-	response, err := f.node.RetireEpisode(retireRequest("one", 2))
+	response, err := f.node.RetireEpisode(retireRequest("one", 2), Trace{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestRetireEndsTheSessionsBelowTheFloorAndSparesTheRest(t *testing.T) {
 func retireMany(t *testing.T, f *reserveFixture, count int) {
 	t.Helper()
 	for index := range count {
-		if _, err := f.node.RetireEpisode(retireRequest(fmt.Sprintf("episode-%d", index), 2)); err != nil {
+		if _, err := f.node.RetireEpisode(retireRequest(fmt.Sprintf("episode-%d", index), 2), Trace{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -63,7 +63,7 @@ func TestAFullTableOfFloorsNeverForgetsOneAndClosesAdmission(t *testing.T) {
 	if _, err := f.node.Create("hosted", scopeOf("hosted", "p"), ParticipantSession, generation(1)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.node.RetireEpisode(retireRequest("first", 1)); err != nil {
+	if _, err := f.node.RetireEpisode(retireRequest("first", 1), Trace{}); err != nil {
 		t.Fatal(err)
 	}
 	retireMany(t, f, retiredLimit-1)
@@ -71,7 +71,7 @@ func TestAFullTableOfFloorsNeverForgetsOneAndClosesAdmission(t *testing.T) {
 	if _, err := f.node.Create("late", scopeOf("first", "late"), ParticipantSession, generation(0)); !errors.Is(err, ErrStaleGeneration) {
 		t.Fatalf("a create under generation 0 after %d other retirements: %v, want stale generation", retiredLimit, err)
 	}
-	if _, err := f.node.RetireEpisode(retireRequest("overflow", 2)); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.RetireEpisode(retireRequest("overflow", 2), Trace{}); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a retire of a new Episode on a full table: %v, want capacity exceeded", err)
 	}
 	f.node.mu.Lock()
@@ -157,7 +157,7 @@ func TestRetireLapsesSourceLeasesBelowTheFloor(t *testing.T) {
 	if count := leases(); count != 1 {
 		t.Fatalf("%d leases after a grant, want 1", count)
 	}
-	if _, err := f.node.RetireEpisode(retireRequest("one", 2)); err != nil {
+	if _, err := f.node.RetireEpisode(retireRequest("one", 2), Trace{}); err != nil {
 		t.Fatal(err)
 	}
 	if count := leases(); count != 0 {
@@ -190,10 +190,10 @@ func TestRetireLapsesSourceLeasesBelowTheFloor(t *testing.T) {
 
 func TestRetireValidatesItsRequest(t *testing.T) {
 	f := newReserveNode(t)
-	if _, err := f.node.RetireEpisode(retireRequest("one", 0)); !errors.Is(err, ErrInvalidRequest) {
+	if _, err := f.node.RetireEpisode(retireRequest("one", 0), Trace{}); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("retire at generation 0: %v, want invalid request", err)
 	}
-	if _, err := f.node.RetireEpisode(retireRequest("", 1)); err == nil {
+	if _, err := f.node.RetireEpisode(retireRequest("", 1), Trace{}); err == nil {
 		t.Fatal("retire without an Episode succeeded")
 	}
 }

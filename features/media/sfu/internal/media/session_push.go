@@ -60,10 +60,10 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		if errors.Is(err, ErrInvalidRequest) || errors.Is(err, ErrCapacityExceeded) {
 			return protocol.TracksResponse{}, err
 		}
-		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepReadOffer, err)
 	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
-		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepApplyOffer, err)
 	}
 	var response protocol.TracksResponse
 	var refused []*webrtc.RTPTransceiver
@@ -107,11 +107,11 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		err = s.pc.SetLocalDescription(answer)
 	}
 	if err != nil {
-		return protocol.TracksResponse{}, s.failNegotiation("answer the offer", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepAnswerOffer, err)
 	}
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
-		return protocol.TracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepGatherICE, err)
 	}
 	response.SessionDescription = description
 	return response, nil

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/attribute"
@@ -22,11 +23,13 @@ import (
 // the diagnosis trail also goes over OTLP/HTTP to the store the API's logs go to, so one query by
 // Episode id reads both sides. Only the events in exportedEvents leave, with their listed fields.
 // The exporter reads its token and dataset from OTEL_EXPORTER_OTLP_LOGS_HEADERS. The returned
-// function sends the last records and stops the exporter.
-func NewLogger(ctx context.Context, cfg config.Telemetry, local slog.Handler) (*slog.Logger, func(context.Context) error, error) {
-	// Without a token the store would refuse every batch, so the node logs locally only.
+// function sends the last records and stops the exporter. The Diagnostics say whether the export
+// runs and count what it loses. Without a token the store would refuse every batch, so the node
+// logs locally only, and the Diagnostics say so: the caller must make that visible.
+func NewLogger(ctx context.Context, cfg config.Telemetry, instance string, local slog.Handler) (*slog.Logger, *Diagnostics, func(context.Context) error, error) {
+	diag := &Diagnostics{}
 	if cfg.OTLPEndpoint == "" || os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS") == "" {
-		return slog.New(local), func(context.Context) error { return nil }, nil
+		return slog.New(local), diag, func(context.Context) error { return nil }, nil
 	}
 	options := []otlploghttp.Option{otlploghttp.WithEndpointURL(logsURL(cfg.OTLPEndpoint))}
 	if cfg.OTLPInsecure {
@@ -34,19 +37,23 @@ func NewLogger(ctx context.Context, cfg config.Telemetry, local slog.Handler) (*
 	}
 	exporter, err := otlploghttp.New(ctx, options...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create OTLP log exporter: %w", err)
+		return nil, nil, nil, fmt.Errorf("create OTLP log exporter: %w", err)
 	}
 	attributes, err := fixedResource(ctx,
 		semconv.ServiceName("chalk-sfu"),
 		semconv.ServiceVersion(cfg.Version),
+		semconv.ServiceInstanceID(instance),
 		semconv.DeploymentEnvironmentName(cfg.Environment),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create log resource: %w", err)
+		return nil, nil, nil, fmt.Errorf("create log resource: %w", err)
 	}
-	provider := sdklog.NewLoggerProvider(sdklog.WithResource(attributes), sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
+	var held atomic.Int64
+	batch := sdklog.NewBatchProcessor(countingExporter{Exporter: exporter, held: &held, diag: diag}, sdklog.WithMaxQueueSize(2*exportQueueLimit))
+	provider := sdklog.NewLoggerProvider(sdklog.WithResource(attributes), sdklog.WithProcessor(boundedProcessor{BatchProcessor: batch, held: &held, diag: diag}))
 	remote := otelslog.NewHandler(scope, otelslog.WithLoggerProvider(provider), otelslog.WithVersion(cfg.Version))
-	return slog.New(fanout{local, newExportOnly(remote)}), provider.Shutdown, nil
+	diag.logsExport.Store(true)
+	return slog.New(fanout{local, newExportOnly(remote, diag)}), diag, provider.Shutdown, nil
 }
 
 // fixedResource builds the node's resource from the given attributes and nothing else. The SDK

@@ -39,11 +39,11 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 		err = s.pc.SetLocalDescription(offer)
 	}
 	if err != nil {
-		return protocol.TracksResponse{}, s.failNegotiation("offer the tracks", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepOfferTracks, err)
 	}
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
-		return protocol.TracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+		return protocol.TracksResponse{}, s.failNegotiation(stepGatherICE, err)
 	}
 
 	s.mu.Lock()
