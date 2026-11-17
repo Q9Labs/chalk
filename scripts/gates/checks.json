@@ -379,7 +379,7 @@
     {
       "id": "gate:diagnose-call",
       "owner": "Call",
-      "catches": "A change to the call diagnosis command or its verdict thresholds that no longer joins client, API, Sync and SFU rows by id or no longer names the failing stage.",
+      "catches": "A change to the call diagnosis, its thresholds or the code that writes the rows it reads that stops it joining by id, naming stage, side and proof rows, or listing missing evidence.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,

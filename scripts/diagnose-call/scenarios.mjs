@@ -1,99 +1,185 @@
-// Raw rows, shaped as Axiom returns them, for the calls the verdict has to name.
+// Fake calls in the shape the real sources return: Axiom rows keep a nested `service` and `attributes` beside flat dotted
+// keys that are null, and carry a long tail of null attributes; node events name the raw Participant id and a
+// `<incarnation>.<hex>` connection id; database rows are what database.mjs selects. Every id and value here is invented.
 import { participantHash } from "./rows.mjs";
 
 export const EPISODE = "9feb0ff6-1111-4222-8333-444455556666";
 export const T0 = Date.parse("2026-11-11T10:00:00Z");
-const publisher = "participant-publisher";
-const viewer = "participant-viewer";
-export const hashOf = { publisher: participantHash(publisher), viewer: participantHash(viewer) };
+const TENANT = "00000000-0000-4000-8000-000000000001";
+const RAW = { publisher: "participant-publisher", viewer: "participant-viewer" };
+export const hashOf = { publisher: participantHash(RAW.publisher), viewer: participantHash(RAW.viewer) };
 
 export const at = (seconds) => new Date(T0 + seconds * 1000).toISOString();
 
-/** An API log line, shaped as Axiom returns it. */
-export const api = (seconds, event, who, attributes = {}) => ({
-  _time: at(seconds),
-  "service.name": "chalk-api",
-  attributes: { event, episode_id: EPISODE, participant_id_hash: hashOf[who], provider: "chalk_sfu", ...attributes },
-});
+/** The null-filled attributes every real log row carries, so a reader that trusts the first key it finds would misread the row. */
+const NOISE = { actor_id: null, address: null, cause: null, code: null, connection_id: null, error_code: null, exception: { message: null, type: null }, reason: null, session: { id: null }, state: null, status: null, trace_id: null };
 
-/** An SFU node event: it names the connection and the raw Participant id, never a hash. */
-const node = (seconds, event, who, connection, attributes = {}) => ({
-  _time: at(seconds),
-  "service.name": "chalk-sfu",
-  attributes: { event, episode_id: EPISODE, participant_id: who === "publisher" ? publisher : viewer, connection_id: connection, ...attributes },
-});
-
-/** One sdk.call_stats row per sample, as the API logs them, every ten seconds from `from` to `to`. */
-export function callStats(who, connection, from, to, fields) {
-  const rows = [];
-  for (let second = from; second < to; second += 10) {
-    rows.push(api(second + 10, "sdk.call_stats", who, { connection_id: connection, provider_session_id: connection, elapsed_ms: (second + 10) * 1000, window_ms: 10_000, rtt_ms: 40, recv_loss_pct: 0, ...fields(second) }));
-  }
-  return rows;
+/** One fake call's rows. A fresh fixture numbers its rows from 1, so a row id in a finding names the same row on every run. */
+export function fixture(prefix = "fx") {
+  let counter = 0;
+  const id = () => `${prefix}-${String(++counter).padStart(4, "0")}`;
+  const axiom = (service, seconds, event, attributes) => ({
+    _time: at(seconds),
+    _rowId: id(),
+    "attributes.event": null,
+    "attributes.provider": null,
+    "service.name": null,
+    service: { name: service, version: "0.0.0-fixture" },
+    body: event,
+    attributes: { ...NOISE, event, ...attributes },
+  });
+  const api = (seconds, event, who, attributes = {}) => axiom("chalk-api", seconds, event, { episode_id: EPISODE, participant_id_hash: hashOf[who], provider: "chalk_sfu", ...attributes });
+  /** An SFU node event: the node logs the raw Participant id, never a hash. */
+  const node = (seconds, event, who, connection, attributes = {}) => axiom("chalk-sfu", seconds, event, { tenant_id: TENANT, episode_id: EPISODE, participant_id: RAW[who], connection_id: connection, generation: 1, session_kind: "participant", node_incarnation: "3a47f23d", ...attributes });
+  const sync = (seconds, name, who) => ({ _time: at(seconds), _rowId: id(), "service.name": null, resource: { service: { name: "chalk-sync" } }, name, attributes: { custom: { episode_id: EPISODE, participant_id_hash: hashOf[who] } } });
+  const db = (seconds, event, key, fields) => ({ _rowId: `db:${key}`, _time: at(seconds), event, episode_id: EPISODE, ...fields });
+  const stats = (who, connection, from, to, fields) => {
+    const rows = [];
+    for (let second = from; second < to; second += 10) {
+      rows.push(api(second + 10, "sdk.call_stats", who, { connection_id: connection, provider_session_id: connection, elapsed_ms: (second + 10) * 1000, window_ms: 10_000, rtt_ms: 40, recv_loss_pct: 0, ...fields(second) }));
+    }
+    return rows;
+  };
+  const viewing = (fields) => stats("viewer", "conn-view", 0, 300, fields);
+  const healthyViewing = () => viewing(() => ({ recv_bitrate_kbps: 1400, recv_height: 720, available_incoming_kbps: 6000 }));
+  /** Video that falls from 1200 kbps to 26 kbps after 20 s. */
+  const starvedViewing = (height, extra = {}) => viewing((second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 26, recv_height: height, ...extra }));
+  const flow = (connection = "conn-pub") => stats("publisher", connection, 0, 300, () => ({ send_bitrate_kbps: 1500 }));
+  /** The Episode, its two Participants and the Sync sockets, as the database and Sync hold them. */
+  const cast = ({ viewerConnection = "conn-view", viewerLeft = 300, viewerLeaveReason = "left" } = {}) => [
+    db(-5, "db.episode", "episodes:9feb0ff6", { status: "ended", started_at: at(-5), ended_at: at(310), end_reason: "ended" }),
+    db(-2, "db.participant", "participants:pub00001", { participant_id: RAW.publisher, role: "publisher", status: "left", generation: 1, joined_at: at(-2), left_at: at(300), last_left_reason: "left", connection_id: "conn-pub" }),
+    db(-1, "db.participant", "participants:view0001", {
+      participant_id: RAW.viewer,
+      role: "viewer",
+      status: viewerLeft ? "left" : "joined",
+      generation: 1,
+      joined_at: at(-1),
+      left_at: viewerLeft ? at(viewerLeft) : null,
+      last_left_reason: viewerLeft ? viewerLeaveReason : null,
+      connection_id: viewerConnection,
+    }),
+    api(-2, "http.request", "publisher", { status: 200, route: "/v1/episodes/join" }),
+    api(-1, "http.request", "viewer", { status: 200, route: "/v1/episodes/join" }),
+    sync(-2, "sync.participant.socket_up", "publisher"),
+    sync(-1, "sync.participant.socket_up", "viewer"),
+  ];
+  /** The node's view of a healthy start: sessions registered, the publication accepted, the subscription started. */
+  const nodeStart = (viewerConnection = "conn-view") => [
+    node(0, "sfu.session.registered", "publisher", "conn-pub", { allocation: 1 }),
+    node(1, "sfu.publication.started", "publisher", "conn-pub", { source: "camera", media_kind: "video" }),
+    node(2, "sfu.session.registered", "viewer", viewerConnection, { allocation: 1 }),
+    node(3, "sfu.subscription.started", "viewer", viewerConnection, { publisher_id: RAW.publisher, source: "camera", media_kind: "video", mid: "0" }),
+  ];
+  return { api, node, sync, db, stats, flow, cast, nodeStart, healthyViewing, starvedViewing };
 }
 
-export const flow = (publisherConnection) => callStats("publisher", publisherConnection, 0, 300, () => ({ send_bitrate_kbps: 1500 }));
+const subscription = { publisher_id: RAW.publisher, source: "camera", media_kind: "video", mid: "0" };
 
 export function dormantReplacementCall() {
+  const f = fixture();
   return [
-    ...flow("conn-pub"),
-    ...callStats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 1400, recv_height: 720 })),
-    api(100, "media.connection_replacement", "viewer", { connection_id: "conn-view-2", replacement_cause: "dormant_connection" }),
-    ...callStats("viewer", "conn-view-2", 100, 300, (second) => ({ recv_bitrate_kbps: second < 160 ? 0 : 1400, recv_height: 720 })),
-    node(0, "sfu.session.registered", "publisher", "conn-pub"),
-    node(2, "sfu.session.registered", "viewer", "conn-view"),
-    node(3, "sfu.subscription.started", "viewer", "conn-view"),
-    node(100, "sfu.session.registered", "viewer", "conn-view-2"),
+    ...f.cast({ viewerConnection: "conn-view-2" }),
+    ...f.flow(),
+    ...f.stats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 1400, recv_height: 720, available_incoming_kbps: 6000 })),
+    // The real replacement row names the new connection and no Participant.
+    f.api(100, "media.connection_replacement", "viewer", { participant_id_hash: null, connection_id: "conn-view-2", replacement_cause: "dormant_connection" }),
+    ...f.stats("viewer", "conn-view-2", 100, 300, (second) => ({ recv_bitrate_kbps: second < 160 ? 0 : 1400, recv_height: 720, available_incoming_kbps: 6000 })),
+    ...f.nodeStart("conn-view"),
+    f.node(100, "sfu.session.registered", "viewer", "conn-view-2", { allocation: 1 }),
   ];
 }
 
-/** The node paused the viewer's video at 100 s and resumed that same subscription at 110 s, so the pause is over by the time the silence ends. */
-function resumedPauseCall() {
-  const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
-  return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.resumed", "viewer", "conn-view-2", subscription)];
-}
+/** The node paused the viewer's video at 100 s and then resumed or detached that subscription at 110 s, so the pause is over when the silence ends. */
+const pausedCall = (ending) => {
+  const f = fixture("fy");
+  return [...dormantReplacementCall(), f.node(100, "sfu.subscription.paused", "viewer", "conn-view-2", { ...subscription, reason: "congestion" }), f.node(110, ending, "viewer", "conn-view-2", subscription)];
+};
 
-/** The node paused the viewer's video at 100 s and detached that subscription at 110 s without resuming it, so the pause is over by the time the silence ends. */
-function stoppedPauseCall() {
-  const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
-  return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.stopped", "viewer", "conn-view-2", subscription)];
-}
-
+/** A viewer held at 26 kbps on a measured-clear link while the node's estimate for it was low. */
 export function starvedViewerCall() {
+  const f = fixture();
   return [
-    ...flow("conn-pub"),
-    ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 26, recv_height: 180, available_incoming_kbps: 6000 })),
-    node(0, "sfu.session.registered", "viewer", "conn-view"),
-    node(20, "sfu.subscription.layer", "viewer", "conn-view", { layer: "low", ceiling: "high", server_limit: "low" }),
+    ...f.cast(),
+    ...f.flow(),
+    ...f.starvedViewing(180, { available_incoming_kbps: 6000 }),
+    ...f.nodeStart(),
+    // The congestion line still exports camelCase names.
+    f.node(25, "sfu.subscription.congestion", "viewer", "conn-view", { mid: "0", layer: "low", reason: "estimate", estimateBps: 30_000, deliveredShare: 0.4, lossShare: 0 }),
   ];
+}
+
+/** The 40-minute call's shape: a starved viewer, a publisher sending, and no SFU rows and no bandwidth estimate at all. */
+export function starvedWithoutNodeCall() {
+  const f = fixture();
+  return [...f.cast(), ...f.flow(), ...f.starvedViewing(480)];
+}
+
+/** The viewer's session never found a media path: ICE only ever checked, and the node closed it after 60 s. The lease expired with no leave. */
+export function neverConnectedCall({ withPeerStates = true } = {}) {
+  const f = fixture();
+  return [
+    ...f.cast({ viewerLeft: 0 }),
+    ...f.flow(),
+    f.node(0, "sfu.session.registered", "publisher", "conn-pub", { allocation: 1 }),
+    f.node(2, "sfu.session.registered", "viewer", "conn-view", { allocation: 1 }),
+    ...(withPeerStates ? [f.node(3, "sfu.ice.state", "viewer", "conn-view", { state: "checking" })] : []),
+    f.node(62, "sfu.session.closed", "viewer", "conn-view", { cause: "never_connected", lifetime_ms: 60_000, publications: 0, subscriptions: 0 }),
+    f.db(70, "db.journey_event", "journey:conn0001", { journey_name: "participant.connection_expired", journey_id: "journey-expired", trace_id: "trace-expired", participant_id_hash: hashOf.viewer, expiry_path: "lease_sweep", last_seen_age_ms: 65_000 }),
+  ];
+}
+
+/** The viewer was told the audio track was pulled, and no sound came: the report names how far the receive got. */
+export function stuckAudioCall() {
+  const f = fixture();
+  const report = JSON.stringify({ trigger: "audio_receive_stuck", events: [{ event: "audio_receive_stuck", source: "microphone", receive_state: "pull_succeeded", duration_ms: 20_000, media_error_kind: "unknown" }] });
+  return [...f.cast(), ...f.flow(), ...f.healthyViewing(), ...f.nodeStart(), f.api(60, "sdk.connection_report", "viewer", { connection_id: "conn-view", trigger: "audio_receive_stuck", report })];
+}
+
+/** Every source answered, media flowed, and the publisher's lease was revoked as it left: cleanup, not a fault. */
+function healthyCall() {
+  const f = fixture();
+  return [
+    ...f.cast(),
+    ...f.flow(),
+    ...f.healthyViewing(),
+    ...f.nodeStart(),
+    f.node(300, "sfu.source.lease_lost", "publisher", undefined, { source: "camera", cause: "revoked", revision: 1 }),
+    f.node(301, "sfu.session.closed", "publisher", "conn-pub", { cause: "removed", lifetime_ms: 301_000, publications: 1, subscriptions: 0 }),
+  ];
+}
+
+/** Only the client logged anything: the database, the node and Sync were not read. */
+function missingSourcesCall() {
+  const f = fixture();
+  return [...f.flow(), ...f.stats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 1400, recv_height: 720 }))];
 }
 
 function failedJoinCall() {
-  const journey = "journey-1";
-  return [api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: journey }), api(5, "http.request", "viewer", { status: 403, error_code: "episode.full", journey_id: journey })];
+  const f = fixture();
+  return [f.api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: "journey-1" }), f.api(5, "http.request", "viewer", { status: 403, error_code: "episode.full", journey_id: "journey-1" })];
 }
 
 function earlyReplacementCall() {
-  return [api(1, "http.request", "viewer", {}), api(13, "media.connection_replacement", "viewer", { replacement_cause: "access_refresh" })];
-}
-
-function healthyCall() {
-  return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 1400, recv_height: 720 }))];
+  const f = fixture();
+  return [f.api(1, "http.request", "viewer", {}), f.api(13, "media.connection_replacement", "viewer", { replacement_cause: "access_refresh" })];
 }
 
 /** A viewer whose tab hid the video receives nothing on purpose; the rule must not call that silence or starvation. */
 function hiddenByViewerCall() {
-  return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, recv_hidden_videos: second < 20 ? 0 : 1 }))];
+  const f = fixture();
+  return [...f.flow(), ...f.stats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, recv_hidden_videos: second < 20 ? 0 : 1 }))];
 }
 
 /** The publisher's sender reports 0 kbps from the start while the viewer waits: the node accepted the publication and nothing came. */
 function silentPublisherCall() {
+  const f = fixture();
   return [
-    ...callStats("publisher", "conn-pub", 0, 300, () => ({ send_bitrate_kbps: 0 })),
-    ...callStats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 0, recv_height: 720 })),
-    node(0, "sfu.session.registered", "publisher", "conn-pub"),
-    node(1, "sfu.publication.started", "publisher", "conn-pub"),
-    node(3, "sfu.subscription.started", "viewer", "conn-view"),
+    ...f.stats("publisher", "conn-pub", 0, 300, () => ({ send_bitrate_kbps: 0 })),
+    ...f.stats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 0, recv_height: 720 })),
+    f.node(0, "sfu.session.registered", "publisher", "conn-pub"),
+    f.node(1, "sfu.publication.started", "publisher", "conn-pub", { source: "camera", media_kind: "video" }),
+    f.node(3, "sfu.subscription.started", "viewer", "conn-view", subscription),
   ];
 }
 
@@ -102,30 +188,32 @@ const CONGESTED_LINK = { recv_bitrate_kbps: 60, recv_loss_pct: 11, rtt_ms: 420, 
 
 /** A viewer whose downlink lost packets and queued: the bitrate fell to a trickle while the node and the publisher were fine. */
 function congestedViewerCall() {
-  return [
-    ...flow("conn-pub"),
-    ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_height: 360, ...(second < 20 ? CLEAR_LINK : CONGESTED_LINK) })),
-    node(0, "sfu.session.registered", "viewer", "conn-view"),
-    node(20, "sfu.subscription.layer", "viewer", "conn-view", { layer: "low", ceiling: "high", server_limit: "high" }),
-  ];
+  const f = fixture();
+  return [...f.flow(), ...f.stats("viewer", "conn-view", 0, 300, (second) => ({ recv_height: 360, ...(second < 20 ? CLEAR_LINK : CONGESTED_LINK) })), f.node(0, "sfu.session.registered", "viewer", "conn-view")];
 }
 
 /** A viewer that never took any media while a sender was sending: the start never finished. */
 function neverReceivedCall() {
-  return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 0, recv_height: 640 }))];
+  const f = fixture();
+  return [...f.flow(), ...f.stats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 0, recv_height: 640 }))];
 }
 
-/** Every scenario the verdict rules must name, as raw rows. The Go collector reads the same file, so the two implementations agree. */
+/** Every scenario the rules must name, as raw rows. */
 export const scenarios = {
   "dormant replacement then silence": dormantReplacementCall,
-  "viewer starved on a healthy link": starvedViewerCall,
+  "viewer starved with node rows": starvedViewerCall,
+  "viewer starved without node rows": starvedWithoutNodeCall,
+  "never connected with peer states": neverConnectedCall,
+  "never connected without peer states": () => neverConnectedCall({ withPeerStates: false }),
+  "stuck audio": stuckAudioCall,
+  "clean call": healthyCall,
+  "missing sources": missingSourcesCall,
   "failed join": failedJoinCall,
   "replacement soon after join": earlyReplacementCall,
-  "healthy call": healthyCall,
   "viewer hid the video itself": hiddenByViewerCall,
   "publisher sent nothing": silentPublisherCall,
   "congested viewer": congestedViewerCall,
   "receiver never took media": neverReceivedCall,
-  "pause ended by a resume": resumedPauseCall,
-  "pause ended by a stop": stoppedPauseCall,
+  "pause ended by a resume": () => pausedCall("sfu.subscription.resumed"),
+  "pause ended by a stop": () => pausedCall("sfu.subscription.stopped"),
 };
