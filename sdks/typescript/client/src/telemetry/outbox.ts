@@ -1,4 +1,4 @@
-import { EventQueue } from "./queue";
+import { EventQueue, lostBy } from "./queue";
 import type { PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySendResult, TelemetrySink } from "./types";
 
 /** Events that say a bad thing may be starting go out at once, because the client may not live to send them later. */
@@ -7,7 +7,7 @@ const ROUTINE_DELAY_MS = 1500;
 const STATS_DELAY_MS = 30_000;
 const AWAIT_CREDENTIAL_MS = 5000;
 const MAX_BATCH_EVENTS = 100;
-/** The server takes 64 KiB a request, and a keepalive request may not go over that. */
+/** The server takes 64 KiB a request. Every request is sent with keepalive so a closing page cannot cancel it, and a keepalive request may not go over that. */
 const MAX_BATCH_BYTES = 48 * 1024;
 const MAX_QUEUE_BYTES = 256 * 1024;
 const SEND_TIMEOUT_MS = 10_000;
@@ -36,7 +36,9 @@ export class TelemetryOutbox implements TelemetrySink {
   readonly #closing = new Set<() => void>();
   readonly #unsubscribe: () => void;
   #source: TelemetryCredentialSource | null = null;
-  #lastCredential: TelemetryCredential | null = null;
+  /** The newest credential seen for each subject, so events of a call that ended still leave under that call's credential. */
+  readonly #credentials = new Map<string, TelemetryCredential>();
+  #subject: string | null = null;
   #lastInterruption: { readonly reason: "offline" | "hidden"; readonly at: number } | null = null;
   #seq = 0;
   #dropped = 0;
@@ -45,7 +47,7 @@ export class TelemetryOutbox implements TelemetrySink {
   #timer: ReturnType<typeof globalThis.setTimeout> | null = null;
   #timerDue = 0;
   #running: Promise<void> | null = null;
-  #keepalive = false;
+  #refreshTried = false;
   #disposed = false;
 
   constructor(options: TelemetryOutboxOptions) {
@@ -72,9 +74,8 @@ export class TelemetryOutbox implements TelemetrySink {
   record(draft: TelemetryDraft): void {
     if (this.#disposed) return;
     this.#remember();
-    const event: TelemetryEvent = { ...draft, seq: this.#seq, elapsed_ms: this.#elapsed() };
-    this.#seq += 1;
-    this.#dropped += this.#queue.push(event);
+    const event = this.#stamp(draft);
+    this.#dropped += this.#queue.push(event, this.#subject);
     this.#schedule(delayFor(event));
   }
 
@@ -91,10 +92,9 @@ export class TelemetryOutbox implements TelemetrySink {
     return () => this.#closing.delete(handler);
   }
 
-  /** Sends what is queued now, with keepalive so the request outlives a closing page. Resolves when nothing more can be sent. */
+  /** Sends what is queued now, without waiting for a request already in flight, so a closing page loses nothing. Resolves when nothing more can be sent. */
   flush(): Promise<void> {
-    this.#keepalive = true;
-    return this.#drain();
+    return this.#loop();
   }
 
   /** Sends one last time and stops. Later `record` calls do nothing. */
@@ -108,6 +108,12 @@ export class TelemetryOutbox implements TelemetrySink {
     await last;
   }
 
+  #stamp(draft: TelemetryDraft): TelemetryEvent {
+    const event: TelemetryEvent = { ...draft, seq: this.#seq, elapsed_ms: this.#elapsed() };
+    this.#seq += 1;
+    return event;
+  }
+
   #elapsed(): number {
     return Math.max(0, Math.min(MAX_MILLISECONDS, Math.round(this.#platform.now() - this.#startedAt)));
   }
@@ -119,23 +125,32 @@ export class TelemetryOutbox implements TelemetrySink {
       return;
     }
     this.record({ type: "platform_changed", platform_state: change });
-    if (change === "offline" || change === "hidden" || change === "background") this.#lastInterruption = { reason: change === "offline" ? "offline" : "hidden", at: this.#platform.now() };
-    if (change !== "online") return;
+    if (change === "online") this.#resume();
+    else if (change === "offline") this.#lastInterruption = { reason: "offline", at: this.#platform.now() };
+    else if (change === "hidden" || change === "background") {
+      this.#lastInterruption = { reason: "hidden", at: this.#platform.now() };
+      void this.flush();
+    }
+  }
+
+  #resume(): void {
     this.#failures = 0;
     this.#blockedUntil = 0;
     this.#schedule(0);
   }
 
+  /** A drain never fires before `#blockedUntil`, so a new event cannot replace the wake-up a backoff set. */
   #schedule(delayMs: number): void {
     if (this.#disposed) return;
-    const due = this.#platform.now() + delayMs;
+    const now = this.#platform.now();
+    const due = Math.max(now + delayMs, this.#blockedUntil);
     if (this.#timer !== null && this.#timerDue <= due) return;
     this.#cancelTimer();
     this.#timerDue = due;
     this.#timer = globalThis.setTimeout(() => {
       this.#timer = null;
       void this.#drain();
-    }, delayMs);
+    }, due - now);
   }
 
   #cancelTimer(): void {
@@ -146,55 +161,61 @@ export class TelemetryOutbox implements TelemetrySink {
   #drain(): Promise<void> {
     this.#running ??= this.#loop().finally(() => {
       this.#running = null;
-      this.#keepalive = false;
     });
     return this.#running;
   }
 
-  /** One batch is in flight at a time, so events leave in `seq` order. */
+  /** One batch is in flight at a time per loop, so events leave in `seq` order. Every batch holds the events of one subject. */
   async #loop(): Promise<void> {
-    let refreshed = false;
     for (;;) {
       this.#reportDrops();
       const credential = this.#sendable();
       if (!credential) return;
+      const subject = credential.subject;
       const batch = this.#queue.take(MAX_BATCH_EVENTS, MAX_BATCH_BYTES);
-      const outcome = await this.#settle(batch, await this.#post(credential, batch), refreshed);
-      if (outcome === "stop") return;
-      refreshed = outcome === "refreshed";
+      if ((await this.#settle(subject, batch, await this.#post(credential, batch))) === "stop") return;
     }
   }
 
-  /** The credential to send with, or null when nothing can be sent now. */
+  /** The credential for the oldest queued event, or null when nothing can be sent now. A subject whose credential is gone loses its events, and they are counted. */
   #sendable(): TelemetryCredential | null {
-    const credential = this.#credential();
-    if (this.#queue.length === 0 || !this.#platform.online() || this.#platform.now() < this.#blockedUntil) return null;
-    // Before the first grant the outbox keeps asking. Once it has had a credential and lost it, nothing will bring one back.
-    if (!credential && !this.#lastCredential) this.#schedule(AWAIT_CREDENTIAL_MS);
-    return credential;
+    this.#remember();
+    for (;;) {
+      const subject = this.#queue.headSubject;
+      if (subject === undefined || !this.#platform.online()) return null;
+      if (this.#platform.now() < this.#blockedUntil) {
+        this.#schedule(0);
+        return null;
+      }
+      // Before the first grant the outbox keeps asking: nothing yet says which credential these events belong to.
+      if (subject === null) {
+        this.#schedule(AWAIT_CREDENTIAL_MS);
+        return null;
+      }
+      const credential = this.#credentials.get(subject);
+      if (credential) return credential;
+      this.#dropped += this.#queue.discard(subject);
+    }
   }
 
   /** Decides what the answer to one batch means for the queue and for the next batch. */
-  async #settle(batch: readonly TelemetryEvent[], result: TelemetrySendResult | null, refreshed: boolean): Promise<"sent" | "refreshed" | "stop"> {
-    if (result === null) {
-      this.#backoff(batch, 0);
+  async #settle(subject: string, batch: readonly TelemetryEvent[], result: TelemetrySendResult | null): Promise<"continue" | "stop"> {
+    const verdict = judge(result, !this.#refreshTried, subject === this.#source?.current()?.subject);
+    if (verdict === "retry") {
+      this.#backoff(subject, batch, result?.retryAfterMs ?? 0);
       return "stop";
     }
-    if (result.status >= 200 && result.status < 300) {
+    if (verdict === "accepted") {
       this.#failures = 0;
-      return "sent";
+      this.#refreshTried = false;
     }
-    if (result.status === 401 && !refreshed) {
-      this.#dropped += this.#queue.restore(batch);
+    if (verdict === "lost") this.#dropped += lostBy(batch);
+    if (verdict === "refresh") {
+      this.#refreshTried = true;
+      this.#restore(subject, batch);
       await this.#source?.refresh().catch(() => undefined);
-      return "refreshed";
     }
-    if (result.status === 429 || result.status >= 500) {
-      this.#backoff(batch, result.retryAfterMs);
-      return "stop";
-    }
-    this.#dropped += batch.length;
-    return "sent";
+    return "continue";
   }
 
   async #post(credential: TelemetryCredential, events: readonly TelemetryEvent[]) {
@@ -206,7 +227,7 @@ export class TelemetryOutbox implements TelemetrySink {
         token: credential.token,
         traceparent: this.traceparent,
         body: JSON.stringify({ version: 1, client_session_id: this.#sessionId, events }),
-        keepalive: this.#keepalive,
+        keepalive: true,
         signal: controller.signal,
       });
     } catch {
@@ -217,8 +238,8 @@ export class TelemetryOutbox implements TelemetrySink {
   }
 
   /** Puts the batch back and waits, with full jitter, for as long as the server asked or the failures call for. */
-  #backoff(batch: readonly TelemetryEvent[], retryAfterMs: number): void {
-    this.#dropped += this.#queue.restore(batch);
+  #backoff(subject: string, batch: readonly TelemetryEvent[], retryAfterMs: number): void {
+    this.#restore(subject, batch);
     this.#failures += 1;
     const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.min(this.#failures, 10));
     const delay = Math.max(retryAfterMs, this.#random() * ceiling);
@@ -226,24 +247,38 @@ export class TelemetryOutbox implements TelemetrySink {
     this.#schedule(delay);
   }
 
-  /** The next batch says how many events this client lost, so the server can tell a hole in `seq` from a bug. */
+  #restore(subject: string, batch: readonly TelemetryEvent[]): void {
+    this.#dropped += this.#queue.restore(batch, subject);
+  }
+
+  /** The next batch of real events says how many events this client lost, so the server can tell a hole in `seq` from a bug. A loss alone never causes a request. */
   #reportDrops(): void {
-    if (this.#dropped === 0) return;
+    const tail = this.#queue.tailSubject;
+    if (this.#dropped === 0 || tail === undefined) return;
     const dropped = Math.min(this.#dropped, MAX_MILLISECONDS);
     this.#dropped = 0;
-    this.record({ type: "telemetry_dropped", dropped });
+    this.#dropped += this.#queue.push(this.#stamp({ type: "telemetry_dropped", dropped }), tail);
   }
 
-  /** Keeps the newest grant seen. A participant who left or failed to join has released the grant, but its credential is good until it expires. */
+  /** Keeps the newest grant seen for each subject. A participant who left or failed to join has released the grant, but its credential is good until it expires. */
   #remember(): void {
-    this.#lastCredential = this.#source?.current() ?? this.#lastCredential;
+    const credential = this.#source?.current();
+    for (const [subject, kept] of this.#credentials) if (kept.expiresAt <= Date.now()) this.#credentials.delete(subject);
+    if (!credential || credential.expiresAt <= Date.now()) return;
+    this.#credentials.set(credential.subject, credential);
+    this.#subject = credential.subject;
+    this.#queue.adopt(credential.subject);
   }
+}
 
-  #credential(): TelemetryCredential | null {
-    this.#remember();
-    const credential = this.#lastCredential;
-    return credential && credential.expiresAt > Date.now() ? credential : null;
-  }
+type Verdict = "accepted" | "refresh" | "retry" | "lost";
+
+/** Only the current grant can be refreshed, and only once until a request succeeds, so a rejected credential of an earlier call is gone for good. */
+function judge(result: TelemetrySendResult | null, canRefresh: boolean, current: boolean): Verdict {
+  if (result === null) return "retry";
+  if (result.status >= 200 && result.status < 300) return "accepted";
+  if (result.status === 401) return !current ? "lost" : canRefresh ? "refresh" : "retry";
+  return result.status === 429 || result.status >= 500 ? "retry" : "lost";
 }
 
 function hex(uuid: string): string {

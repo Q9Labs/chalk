@@ -12,6 +12,8 @@ export type PlatformChange = PlatformState | "closing";
 /** The participant media credential. The server accepts it until it expires, even after the participant left. */
 export type TelemetryCredential = {
   readonly tenantId: string;
+  /** Names who the credential speaks for (tenant, Episode and participant). An event leaves only under the credential of the subject it was recorded for. */
+  readonly subject: string;
   readonly token: string;
   /** Epoch milliseconds. */
   readonly expiresAt: number;

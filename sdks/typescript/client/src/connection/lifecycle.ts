@@ -267,7 +267,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           if (model.state === state) return;
           const from = model.state;
           model.state = state;
-          if (state === "left" || state === "failed") telemetry?.record({ type: "call_ended", end_reason: callEndReason(from, state, model) });
+          if (state === "left" || state === "failed") {
+            telemetry?.record({ type: "call_ended", end_reason: callEndReason(from, state, model) });
+            void telemetry?.flush();
+          }
           diagnostics.record({ event: "state_changed", state, epoch: model.epoch });
           yield* publish();
         });
@@ -1187,11 +1190,11 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           model.closed = true;
-          void telemetry?.dispose();
           accessReplacementUnsubscribe();
           foregroundUnsubscribe?.();
           if (activeJoin) yield* Fiber.interrupt(activeJoin);
-          yield* performLeave().pipe(Effect.ignore);
+          // The teardown records its last events first. Delivery runs on after the finalizer, with keepalive.
+          yield* performLeave().pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => void telemetry?.dispose())));
         }),
       );
       return {

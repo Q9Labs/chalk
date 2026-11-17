@@ -8,7 +8,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const credential = () => ({ tenantId: "tenant", token: "token", expiresAt: Date.now() + 300_000 });
+const credential = (subject = "tenant/episode/participant", token = "token", tenantId = "tenant") => ({ tenantId, subject, token, expiresAt: Date.now() + 300_000 });
 const seconds = (count: number) => vi.advanceTimersByTimeAsync(count * 1000);
 
 describe("recording", () => {
@@ -113,7 +113,7 @@ describe("faults", () => {
   it("refreshes an expired credential once and retries the same batch", async () => {
     const test = createTestOutbox();
     const refresh = vi.fn(async () => undefined);
-    test.outbox.bind({ current: credential, refresh });
+    test.outbox.bind({ current: () => credential(), refresh });
     test.answer({ status: 401, retryAfterMs: 0 });
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(2);
@@ -121,39 +121,62 @@ describe("faults", () => {
     expect(test.accepted.map((event) => event.seq)).toEqual([0]);
   });
 
-  it("drops a batch the server rejects with 401 after a refresh, and counts it in the next batch", async () => {
-    const test = createTestOutbox();
+  it("refreshes once for a credential the server keeps rejecting, then backs off and keeps the events", async () => {
+    const test = createTestOutbox({ random: () => 0.5 });
     const refresh = vi.fn(async () => undefined);
-    test.outbox.bind({ current: credential, refresh });
-    test.answer({ status: 401, retryAfterMs: 0 }, { status: 401, retryAfterMs: 0 });
+    test.outbox.bind({ current: () => credential(), refresh });
+    test.answer(...Array.from({ length: 4 }, () => ({ status: 401, retryAfterMs: 0 })));
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(test.requests).toHaveLength(2);
+    await seconds(60);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(test.requests).toHaveLength(5);
+    expect(test.accepted.map((event) => event.seq)).toEqual([0]);
+    expectUnbrokenSequence(test.accepted);
+  });
+
+  it("answers a rejected batch with no request of its own, and counts the loss in the next batch that real events make", async () => {
+    const test = createTestOutbox();
+    test.answer({ status: 400, retryAfterMs: 0 });
+    test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
+    await seconds(120);
+    expect(test.requests).toHaveLength(1);
+    expect(test.accepted).toHaveLength(0);
     test.outbox.record({ type: "connection_failed", code: "media_failed" });
     await seconds(2);
-    expect(refresh).toHaveBeenCalledTimes(1);
-    expect(test.accepted.map((event) => [event.type, event.dropped ?? event.code])).toEqual([
-      ["telemetry_dropped", 1],
-      ["connection_failed", "media_failed"],
+    expect(test.requests).toHaveLength(2);
+    expect(test.accepted.map((event) => [event.seq, event.type, event.dropped ?? event.code])).toEqual([
+      [1, "connection_failed", "media_failed"],
+      [2, "telemetry_dropped", 1],
     ]);
     expectUnbrokenSequence(test.accepted);
   });
 
-  it("drops a batch the server rejects with another 4xx, and counts it in the next batch", async () => {
+  it("keeps the count of a rejected batch that carried a count", async () => {
     const test = createTestOutbox();
-    test.answer({ status: 400, retryAfterMs: 0 });
+    test.answer({ status: 400, retryAfterMs: 0 }, { status: 400, retryAfterMs: 0 });
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(2);
-    expect(test.accepted.map((event) => [event.type, event.dropped])).toEqual([["telemetry_dropped", 1]]);
+    test.outbox.record({ type: "connection_failed", code: "media_failed" });
+    await seconds(2);
+    test.outbox.record({ type: "connection_failed", code: "media_failed" });
+    await seconds(2);
+    expect(test.accepted.map((event) => [event.type, event.dropped])).toEqual([
+      ["connection_failed", undefined],
+      ["telemetry_dropped", 3],
+    ]);
     expectUnbrokenSequence(test.accepted);
   });
 
   it("holds events while the credential is expired and sends them when a fresh one arrives", async () => {
-    const test = createTestOutbox();
-    test.outbox.bind({ current: () => ({ tenantId: "tenant", token: "old", expiresAt: Date.now() - 1 }), refresh: async () => undefined });
+    const test = createTestOutbox({ bound: false });
+    test.outbox.bind({ current: () => ({ tenantId: "tenant", subject: "tenant/episode/participant", token: "old", expiresAt: Date.now() - 1 }), refresh: async () => undefined });
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(10);
     expect(test.requests).toHaveLength(0);
-    test.outbox.bind({ current: credential, refresh: async () => undefined });
+    test.outbox.bind({ current: () => credential(), refresh: async () => undefined });
     await seconds(0);
     expect(test.accepted).toHaveLength(1);
   });
@@ -201,7 +224,7 @@ describe("faults", () => {
 
   it("stays unbroken and inside the 4 MiB budget for a 135 minute call", async () => {
     const test = createTestOutbox();
-    test.outbox.bind({ current: credential, refresh: async () => undefined });
+    test.outbox.bind({ current: () => credential(), refresh: async () => undefined });
     for (let window = 0; window < 135 * 6; window++) {
       test.outbox.record(statsEvent());
       await seconds(10);

@@ -10,6 +10,7 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
   const requests: { readonly send: TelemetrySend; readonly events: TelemetryEvent[]; readonly status: number | "network_error" }[] = [];
   const accepted: TelemetryEvent[] = [];
   const answers: Answer[] = [];
+  let gate: Promise<void> | null = null;
   let ids = 0;
   const state = { online: true, hidden: false };
   const platform: TelemetryPlatform = {
@@ -25,6 +26,7 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
       const body: { readonly events: TelemetryEvent[] } = JSON.parse(send.body);
       const answer = answers.shift() ?? { status: 200, retryAfterMs: 0 };
       requests.push({ send, events: body.events, status: answer === "network_error" ? answer : answer.status });
+      await gate;
       if (answer === "network_error") throw new TypeError("network error");
       if (answer.status >= 200 && answer.status < 300) accepted.push(...body.events);
       return answer;
@@ -36,6 +38,15 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
     /** Every event a 2xx answer took, in the order the server saw them. */
     accepted,
     state,
+    /** Holds the answer of every POST from now on, until the returned function is called. The request itself is already seen by the fake server. */
+    hold: () => {
+      let release: () => void = () => undefined;
+      gate = new Promise<void>((resolve) => (release = () => resolve()));
+      return () => {
+        release();
+        gate = null;
+      };
+    },
     /** The next POSTs get these answers, one each, in order. */
     answer: (...next: Answer[]) => answers.push(...next),
     emit: (change: PlatformChange) => {
@@ -49,10 +60,10 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
 }
 
 /** An outbox over the test platform, bound to a credential that stays valid. */
-export function createTestOutbox(options: { readonly now?: () => number; readonly random?: () => number } = {}) {
+export function createTestOutbox(options: { readonly now?: () => number; readonly random?: () => number; readonly bound?: boolean } = {}) {
   const harness = createTestTelemetryPlatform(options);
   const outbox = new TelemetryOutbox({ platform: harness.platform, endpoint: (tenantId) => `https://api.test/v1/tenants/${tenantId}/telemetry`, random: options.random ?? (() => 0.5) });
-  outbox.bind({ current: () => ({ tenantId: "tenant", token: "token", expiresAt: Date.now() + 3_600_000 }), refresh: async () => undefined });
+  if (options.bound !== false) outbox.bind({ current: () => ({ tenantId: "tenant", subject: "tenant/episode/participant", token: "token", expiresAt: Date.now() + 3_600_000 }), refresh: async () => undefined });
   return { ...harness, outbox };
 }
 
