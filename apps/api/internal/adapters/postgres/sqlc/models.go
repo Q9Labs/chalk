@@ -721,6 +721,9 @@ type RecordingPipeline struct {
 	CommittedAt             pgtype.Timestamptz `json:"committed_at"`
 	CaptureMediaBundleCount pgtype.Int4        `json:"capture_media_bundle_count"`
 	CaptureGapBundleCount   pgtype.Int4        `json:"capture_gap_bundle_count"`
+	CaptureTrackCount       pgtype.Int4        `json:"capture_track_count"`
+	CapturePacketCount      pgtype.Int8        `json:"capture_packet_count"`
+	CaptureCompleteness     pgtype.Text        `json:"capture_completeness"`
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	// Immutable recording clock origin established by the first authoritative capture-ready callback.

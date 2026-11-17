@@ -10,10 +10,16 @@ alter table recordings
     add constraint recordings_failure_state_check
     check ((status = 'failed') = (failure_code is not null) and (failure_code is null) = (failed_at is null)) not valid;
 
--- Capture facts recorded when the capture completes. NULL means the capture predates the counters.
+-- Capture facts recorded when the capture completes. NULL means the capture predates the facts, or
+-- the recorder did not report them (track and packet counts come only from the recorder).
+-- capture_completeness is 'partial' when the Episode stopped without confirmation and the capture
+-- completed from the bundles committed so far: the tail before the real stop may be missing.
 alter table recording_pipelines
     add column capture_media_bundle_count integer check (capture_media_bundle_count is null or capture_media_bundle_count >= 0),
-    add column capture_gap_bundle_count integer check (capture_gap_bundle_count is null or capture_gap_bundle_count >= 0);
+    add column capture_gap_bundle_count integer check (capture_gap_bundle_count is null or capture_gap_bundle_count >= 0),
+    add column capture_track_count integer check (capture_track_count is null or capture_track_count >= 0),
+    add column capture_packet_count bigint check (capture_packet_count is null or capture_packet_count >= 0),
+    add column capture_completeness text check (capture_completeness is null or capture_completeness in ('complete', 'partial'));
 
 -- +goose StatementBegin
 create function recording_sync_failed_status() returns trigger language plpgsql as $$
@@ -97,4 +103,5 @@ drop function recording_sync_failed_status();
 update recordings set status = 'pending', failure_code = null, failed_at = null where status = 'failed';
 alter table recordings drop constraint recordings_failure_state_check;
 alter table recordings drop column failure_code, drop column failed_at;
-alter table recording_pipelines drop column capture_media_bundle_count, drop column capture_gap_bundle_count;
+alter table recording_pipelines drop column capture_media_bundle_count, drop column capture_gap_bundle_count,
+    drop column capture_track_count, drop column capture_packet_count, drop column capture_completeness;

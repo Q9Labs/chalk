@@ -156,14 +156,16 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			writeError(w, http.StatusInternalServerError, "internal.error", "Recorder claim authority is unavailable")
 			return
 		}
-		leaseExpiresAt := utilities.FormatTimestamp(job.Authority.LeaseExpiresAt)
-		writeJSON(w, http.StatusOK, recorderprotocol.ClaimResponse{
+		response := recorderprotocol.ClaimResponse{
 			ClaimRequestID: claimRequestID.String(), Envelope: job.Authority.Envelope,
 			EnvelopeDigest: recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest),
 			LeaseToken:     job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner,
-			LeaseExpiresAt: leaseExpiresAt,
-			JourneyID:      job.Authority.JourneyID.String(), TraceID: job.Authority.TraceID,
-		})
+			LeaseExpiresAt: utilities.FormatTimestamp(job.Authority.LeaseExpiresAt),
+		}
+		if body.SupportsClaimCorrelation {
+			response.JourneyID, response.TraceID = job.Authority.JourneyID.String(), job.Authority.TraceID
+		}
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -390,6 +392,9 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
+			return
+		}
+		if lease.Observed, ok = recorderWorkerObservations(w, body.Observed); !ok {
 			return
 		}
 		if service == nil {

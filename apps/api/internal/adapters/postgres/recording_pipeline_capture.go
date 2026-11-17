@@ -154,6 +154,10 @@ func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInp
 		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit, TranscriptionEnabled: transcriptionEnabled,
 		MediaBundleCount: pgtype.Int4{Int32: int32(counts.MediaBundles), Valid: true}, GapBundleCount: pgtype.Int4{Int32: int32(counts.GapBundles), Valid: true},
 	}
+	if observed := input.Observed; observed != nil {
+		params.TrackCount = pgtype.Int4{Int32: int32(observed.Tracks), Valid: true}
+		params.PacketCount = pgtype.Int8{Int64: observed.Packets, Valid: true}
+	}
 	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
 		params.TraceID = optionalText(span.TraceID().String())
 		params.SpanID = optionalText(span.SpanID().String())

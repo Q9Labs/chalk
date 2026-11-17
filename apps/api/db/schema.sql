@@ -2606,6 +2606,9 @@ create table recording_pipelines (
     committed_at timestamptz,
     capture_media_bundle_count integer check (capture_media_bundle_count is null or capture_media_bundle_count >= 0),
     capture_gap_bundle_count integer check (capture_gap_bundle_count is null or capture_gap_bundle_count >= 0),
+    capture_track_count integer check (capture_track_count is null or capture_track_count >= 0),
+    capture_packet_count bigint check (capture_packet_count is null or capture_packet_count >= 0),
+    capture_completeness text check (capture_completeness is null or capture_completeness in ('complete', 'partial')),
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     constraint recording_pipelines_stop_pair_check check ((stop_operation_id is null) = (stop_requested_at is null))

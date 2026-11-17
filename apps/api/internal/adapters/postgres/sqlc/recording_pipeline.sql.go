@@ -508,9 +508,12 @@ with completion_eligibility as materialized (
     update recording_pipelines
     set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
         capture_completed_at = now(), updated_at = now(),
-        capture_media_bundle_count = $10, capture_gap_bundle_count = $11
+        capture_media_bundle_count = $10, capture_gap_bundle_count = $11,
+        capture_track_count = $12, capture_packet_count = $13,
+        capture_completeness = case when eligibility.completion_available and not eligibility.stop_confirmed then 'partial' else 'complete' end
     from completed
     join tenants on tenants.id = completed.tenant_id
+    join completion_eligibility eligibility on eligibility.id = completed.id
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), salvage_event as (
@@ -561,7 +564,7 @@ with completion_eligibility as materialized (
     )
     select gen_random_uuid(), completed.tenant_id, completed.episode_id, completed.recording_id,
         'render', 'render:' || completed.recording_id::text,
-        $12, 'pending', $13, now(), $14
+        $14, 'pending', $15, now(), $16
     from completed
     join tenants on tenants.id = completed.tenant_id
     where exists (select 1 from reservation_release)
@@ -573,9 +576,9 @@ with completion_eligibility as materialized (
         event_id, journey_id, sequence, occurred_at, name, phase, state,
         origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
     )
-    select render_job.id, coalesce($15::uuid, render_job.recording_id),
+    select render_job.id, coalesce($17::uuid, render_job.recording_id),
         coalesce((select max(sequence) + 1 from observability_journey_events
-                  where journey_id = coalesce($15::uuid, render_job.recording_id)), 0),
+                  where journey_id = coalesce($17::uuid, render_job.recording_id)), 0),
         now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
         $1::text, $2::text,
         jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
@@ -587,13 +590,13 @@ with completion_eligibility as materialized (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $16, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
-        'transcription:' || completed.recording_id::text, $12, 'pending',
-        $13, now(), $14
+    select $18, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
+        'transcription:' || completed.recording_id::text, $14, 'pending',
+        $15, now(), $16
     from completed
     join episodes on episodes.id = completed.episode_id
     where exists (select 1 from reservation_release)
-      and $17::boolean
+      and $19::boolean
       and episodes.config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('automatic', 'on_demand')
     on conflict (recording_id, kind) do nothing
 ), source_cleanup_objects as (
@@ -652,6 +655,8 @@ type CompleteCaptureRecordingJobParams struct {
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
 	MediaBundleCount     pgtype.Int4 `json:"media_bundle_count"`
 	GapBundleCount       pgtype.Int4 `json:"gap_bundle_count"`
+	TrackCount           pgtype.Int4 `json:"track_count"`
+	PacketCount          pgtype.Int8 `json:"packet_count"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
@@ -700,6 +705,8 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.EnvelopeDigest,
 		arg.MediaBundleCount,
 		arg.GapBundleCount,
+		arg.TrackCount,
+		arg.PacketCount,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,

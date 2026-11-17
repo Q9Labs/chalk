@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"net/http"
+
 	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -50,4 +52,17 @@ func checksumString(value []byte) string {
 		result[index*2+1] = hexChars[item&15]
 	}
 	return string(result)
+}
+
+// recorderWorkerObservations turns what the recorder reported into the stored facts. A negative
+// count cannot come from a capture, so it is a bad request, not a value to clamp.
+func recorderWorkerObservations(w http.ResponseWriter, observed *recorderprotocol.CaptureObserved) (*recordingpipeline.CaptureObservations, bool) {
+	if observed != nil {
+		if observed.Tracks < 0 || observed.Packets < 0 {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture observations")
+			return nil, false
+		}
+		return &recordingpipeline.CaptureObservations{Tracks: observed.Tracks, Packets: observed.Packets}, true
+	}
+	return nil, true
 }

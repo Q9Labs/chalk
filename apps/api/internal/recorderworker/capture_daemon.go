@@ -59,6 +59,8 @@ type CaptureAttempt interface {
 	Run(context.Context) error
 	RenewLease(capturesignaling.WorkerLease) error
 	Close(context.Context) error
+	// Observed is what the finished capture saw, nil when none is reportable.
+	Observed() *recordingpipeline.CaptureObservations
 }
 
 type CaptureAttemptFactory interface {
@@ -375,6 +377,7 @@ func (d *CaptureDaemon) finishCaptureAttempt(ctx context.Context, attempt Captur
 		}
 		return reportErr
 	}
+	lease.Observed = attempt.Observed()
 	if err := d.completeCapture(ctx, lease, leaseExpiresAt, false); err != nil {
 		return d.reportCompletionFailure(ctx, lease, err)
 	}

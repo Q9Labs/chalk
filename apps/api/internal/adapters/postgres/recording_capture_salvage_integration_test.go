@@ -109,6 +109,7 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 			completed, err := postgres.NewRecordingPipelineRepository(queries).CompleteCapture(ctx, recordingpipeline.LeaseInput{
 				JobID: f.jobID, AttemptCount: int(claimed.AttemptCount), FencingGeneration: claimed.FencingGeneration,
 				LeaseOwner: claimed.LeaseOwner.String, LeaseToken: claimed.LeaseToken.String, CaptureEpoch: claimed.CaptureEpoch, EnvelopeDigest: f.digest,
+				Observed: &recordingpipeline.CaptureObservations{Tracks: 2, Packets: 41},
 			}, f.recordingID)
 			otel.SetTracerProvider(previousProvider)
 			_ = provider.Shutdown(ctx)
@@ -124,6 +125,19 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 				and name='recording.capture.salvaged' and phase='capture_completion' and state='succeeded'
 				and attributes=jsonb_build_object('recording_id',$2::uuid,'capture_epoch',1,'reason','stop_unconfirmed','source','committed_bundles')`, f.jobID.Bytes(), f.recordingID.Bytes()).Scan(&salvageEvents); err != nil || salvageEvents != wantSalvageEvents {
 				t.Fatalf("salvaged completion must leave bounded journey evidence: count=%d err=%v", salvageEvents, err)
+			}
+			wantCompleteness := "partial"
+			if scenario.confirmedStop {
+				wantCompleteness = "complete"
+			}
+			var completeness string
+			var tracks int
+			var packets int64
+			if err := tx.QueryRow(ctx, `select capture_completeness, capture_track_count, capture_packet_count from recording_pipelines where recording_id=$1`, f.recordingID.Bytes()).Scan(&completeness, &tracks, &packets); err != nil {
+				t.Fatal(err)
+			}
+			if completeness != wantCompleteness || tracks != 2 || packets != 41 {
+				t.Fatalf("completion must store completeness %q and what the recorder saw: completeness=%q tracks=%d packets=%d", wantCompleteness, completeness, tracks, packets)
 			}
 			if !scenario.confirmedStop {
 				var traceID, spanID pgtype.Text

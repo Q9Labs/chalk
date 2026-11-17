@@ -106,7 +106,7 @@ The API emits `recording.job_recovered` for each job that committed recovery ret
 
 ## Recording failures and capture facts
 
-`recordings.status` is `pending`, `processing`, `completed` or `failed`. A `failed` Recording carries `failure_code` (also in the API `Recording`) and `failed_at`. A trigger on `recording_pipelines` sets both when the pipeline reaches `terminal_failure` and clears them when a retry reopens the pipeline, so `Fail`, lease recovery and reservation expiry all take the same path. The code is the terminal job's `error_code`; with none, an unclaimed reservation reads `capture_reservation_expired` and anything else reads `recording_failed`. The `recording.failed` webhook already fires when `Fail` reaches a terminal state.
+`recordings.status` is `pending`, `processing`, `completed` or `failed`. A `failed` Recording carries `failure_code` (also in the API `Recording`) and `failed_at`. A trigger on `recording_pipelines` sets both when the pipeline reaches `terminal_failure` and clears them when a retry reopens the pipeline, so `Fail`, lease recovery and reservation expiry all take the same path. The code is the terminal job's `error_code`; with none, an unclaimed reservation reads `capture_reservation_expired` and anything else reads `recording_failed`. The `recording.failed` webhook fires from `Fail`, from lease recovery and from reservation expiry.
 
 Codes an operator sees:
 
@@ -114,9 +114,13 @@ Codes an operator sees:
 - `render_<stage>_failed`: the render stage that failed (`download_capture`, `source_preparation`, `commit` and so on). The API keeps only this shape, and `render_attempt_failed` means no stage claimed the error.
 - `capture_stopped_before_completion`, `capture_completion_expired`, `lease_expired`, `recording_source_expired` and the other existing job codes pass through unchanged.
 
-`recording_pipelines.capture_media_bundle_count` and `capture_gap_bundle_count` hold what a completed capture committed, and are null for captures that completed before the counters. Track and packet counts stay inside the encrypted bundle manifest. The recorder logs them at the end of each capture as `recording.capture_finished` (`outcome` of `stopped`, `stopped_without_media` or `failed`, `track_count`, `packet_count`, `stop_cause`), so a capture that saw no packets is visible before the API counts bundles.
+`recording_pipelines` holds what a completed capture saw, so an operator can read it without decrypting a manifest: `capture_media_bundle_count` and `capture_gap_bundle_count` (counted by the API from committed bundles), `capture_track_count` and `capture_packet_count` (reported by the recorder in the completion request as `observed`), and `capture_completeness`. All are null for captures that completed before the columns, and the track and packet counts are also null when the recorder is older than the API or the job was a completion-only recovery. The recorder still logs the same numbers as `recording.capture_finished` (`outcome` of `stopped`, `stopped_without_media` or `failed`, `track_count`, `packet_count`, `stop_cause`).
 
-A capture that the Episode stopped without confirmation and that completed from committed bundles still completes; the `recording.capture.salvaged` ledger event marks it. It is not a failed state.
+`capture_completeness` is `complete` when the Episode confirmed the stop, and `partial` when the Episode stopped without confirmation and the capture completed from the bundles committed so far. A partial capture is usable, so the Recording is not failed and its exports and transcripts run, but the tail between the last committed bundle and the real stop may be missing. The `recording.capture.salvaged` ledger event marks the same case.
+
+Transcription is independent of the MP4 export. A failed export fails the Recording (`status` `failed`), but a transcription job that already holds a valid lease still commits its prepared source for a failed Recording, as long as the capture completed, the lease holds, the capture is not deleted and the source window is open.
+
+A Recording that ends in `terminal_failure` through lease recovery publishes the same `recording.failed` webhook as `Fail`, and the semantic key is per Recording, so a failure after a retry does not publish a second event.
 
 A lease that expired during an attempt writes its `recording_job_attempt_failures` row at recovery, since `Fail` never ran. A job that was never claimed has no attempt to record, so its reason stays on the job row.
 

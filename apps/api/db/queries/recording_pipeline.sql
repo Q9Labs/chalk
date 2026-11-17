@@ -819,9 +819,12 @@ with completion_eligibility as materialized (
     update recording_pipelines
     set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
         capture_completed_at = now(), updated_at = now(),
-        capture_media_bundle_count = sqlc.arg(media_bundle_count), capture_gap_bundle_count = sqlc.arg(gap_bundle_count)
+        capture_media_bundle_count = sqlc.arg(media_bundle_count), capture_gap_bundle_count = sqlc.arg(gap_bundle_count),
+        capture_track_count = sqlc.narg(track_count), capture_packet_count = sqlc.narg(packet_count),
+        capture_completeness = case when eligibility.completion_available and not eligibility.stop_confirmed then 'partial' else 'complete' end
     from completed
     join tenants on tenants.id = completed.tenant_id
+    join completion_eligibility eligibility on eligibility.id = completed.id
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), salvage_event as (

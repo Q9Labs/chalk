@@ -177,6 +177,7 @@
         "apps/api/internal/httpapi/recorder_worker_auth.go",
         "apps/api/internal/httpapi/recorder_worker_capture_signaling.go",
         "apps/api/internal/httpapi/recorder_worker_capture_signaling_test.go",
+        "apps/api/internal/httpapi/recorder_worker_claim_test.go",
         "apps/api/internal/httpapi/recorder_worker_fail_test.go",
         "apps/api/internal/httpapi/recorder_worker_publication_test.go",
         "apps/api/internal/httpapi/recorder_worker_recording_authority.go",

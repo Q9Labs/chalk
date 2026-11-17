@@ -119,12 +119,16 @@ func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.
 	if err != nil || input.ClaimRequestID.IsZero() {
 		return ClaimResult{}, fmt.Errorf("%w: claim input", ErrInvalidControlPlaneRequest)
 	}
-	payload := recorderprotocol.ClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true}
+	payload := recorderprotocol.ClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true, SupportsClaimCorrelation: true}
 	body, status, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	var httpErr HTTPError
+	// An older API rejects a field it does not know. Drop the newest capability first, so an API
+	// that knows completion-only work but not claim correlation still hands out completion-only work.
 	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
-		// Older APIs reject the new field; the same claim may still take
-		// ordinary Capture work, but cannot receive completion-only work.
+		payload.SupportsClaimCorrelation = false
+		body, status, err = c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
+	}
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
 		payload.SupportsCompletionOnly = false
 		body, status, err = c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	}
@@ -250,7 +254,11 @@ func (c *ControlPlaneClient) Complete(ctx context.Context, input recordingpipeli
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsComplete.Path(), payload, ControlPlaneResponseLimit)
+	request := recorderprotocol.CompleteRequest{LeaseRequest: payload}
+	if input.Observed != nil {
+		request.Observed = &recorderprotocol.CaptureObserved{Tracks: input.Observed.Tracks, Packets: input.Observed.Packets}
+	}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsComplete.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
@@ -642,8 +650,9 @@ func decodeBoundedJSON(data []byte, destination any, limit int) error {
 	if len(data) > limit {
 		return errors.New("response payload is too large")
 	}
+	// Unknown fields are ignored: a newer API may add fields, and a worker that rejects them
+	// would lease a job it can never start.
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return err
 	}

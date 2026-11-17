@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 // finishByCause settles a capture's stop. Only the media stop and the deadline are normal stops:
@@ -60,4 +62,32 @@ func captureStopCause(stop error) string {
 	default:
 		return "error"
 	}
+}
+
+// captureObserver keeps what the capture saw until the daemon completes the job. It reports only
+// when the API answered the claim with the Episode journey: an API that predates journey carry
+// also rejects the observed fields on completion.
+type captureObserver struct {
+	enabled  bool
+	mu       sync.Mutex
+	observed *recordingpipeline.CaptureObservations
+}
+
+func (o *captureObserver) record(writer *captureBundleWriter) {
+	if writer == nil {
+		return
+	}
+	o.mu.Lock()
+	o.observed = &recordingpipeline.CaptureObservations{Tracks: len(writer.clocks), Packets: int64(writer.packets)}
+	o.mu.Unlock()
+}
+
+// Observed is what the finished capture saw, or nil when the API cannot take it.
+func (a *PionCaptureAttempt) Observed() *recordingpipeline.CaptureObservations {
+	if !a.observer.enabled {
+		return nil
+	}
+	a.observer.mu.Lock()
+	defer a.observer.mu.Unlock()
+	return a.observer.observed
 }

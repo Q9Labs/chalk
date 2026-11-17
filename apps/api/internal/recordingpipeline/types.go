@@ -329,6 +329,8 @@ type LeaseInput struct {
 	LeaseFor          time.Duration
 	CaptureEpoch      int64
 	EnvelopeDigest    []byte
+	// Observed is set only when a capture completes.
+	Observed *CaptureObservations
 }
 
 type FailureInput struct {

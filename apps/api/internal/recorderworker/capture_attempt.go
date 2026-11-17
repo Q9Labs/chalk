@@ -132,6 +132,7 @@ func (f *PionCaptureAttemptFactory) NewCaptureAttempt(ctx context.Context, claim
 		lifecycle:   f.lifecycle,
 		config:      f.config,
 		ready:       authority.CaptureReadyAt != nil,
+		observer:    captureObserver{enabled: !claim.JourneyID.IsZero()},
 	}
 	return attempt, nil
 }
@@ -159,6 +160,7 @@ type PionCaptureAttempt struct {
 	closeErr   error
 	ready      bool
 	readyEvent CaptureReadyEvent
+	observer   captureObserver
 }
 
 type captureCoordinator interface {
@@ -217,6 +219,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	finish := func(err error, writer *captureBundleWriter) error {
 		result := a.finishByCause(runCtx, err, writer)
 		logCaptureSummary(ctx, writer, err, result)
+		a.observer.record(writer)
 		return result
 	}
 
