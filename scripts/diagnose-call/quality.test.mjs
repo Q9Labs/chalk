@@ -66,6 +66,13 @@ test("without the transport row the node's own drops are not ruled out, so the s
   assert.equal(kind(result, "downlink_degraded").side, "unknown");
 });
 
+test("repair packets are in the packet counter, so first-arrival loss divides by what arrived first time plus what was missing", () => {
+  const f = fixture();
+  const rows = f.uplink("publisher", "conn-pub", 10, 20, (second) => ({ packets: (second - 10) * 1000, lost: 0, repaired: (second - 10) * 20 }));
+  const [interval] = mediaOf(callOf([...f.cast(), ...rows])).ingress[0].intervals;
+  assert.ok(Math.abs(interval.missingPct - 2) < 0.001, `first-arrival loss was ${interval.missingPct}`);
+});
+
 test("a packet counter that falls is a recreated track and its interval says nothing; a held track and a gap in the export are no loss", () => {
   const f = fixture();
   const lossy = (second) => ({ packets: second * 100, lost: (second - 10) * 6 });

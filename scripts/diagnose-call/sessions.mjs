@@ -112,7 +112,7 @@ function recoveries(call) {
     const own = states.filter((row) => row.connection === connection);
     found.push({ connection, participant: own[0].participant, drops: own.map((row) => ({ from: row.time - number(row, "outage_ms"), to: row.time, ms: number(row, "outage_ms") })), rows: own });
   }
-  for (const end of call.ends.filter((candidate) => !faultOf(candidate) && number(candidate.row, "disconnects") > 0 && number(candidate.row, "outage_ms") > 0 && !found.some((one) => one.connection === candidate.connection))) {
+  for (const end of call.ends.filter((candidate) => candidate.outcome === "left" && !faultOf(candidate) && number(candidate.row, "disconnects") > 0 && number(candidate.row, "outage_ms") > 0 && !found.some((one) => one.connection === candidate.connection))) {
     found.push({ connection: end.connection, participant: end.participant, drops: Array.from({ length: number(end.row, "disconnects") }, () => ({ ms: number(end.row, "outage_ms") / number(end.row, "disconnects") })), total: true, rows: [end.row] });
   }
   return found;
@@ -152,10 +152,13 @@ function recoveredDrops(call) {
   });
 }
 
+/** Control calls whose failure on a session that is already gone is the expected end of cleanup, never a publishing, renegotiation or update that was lost. */
+const CLEANUP_OPERATIONS = new Set(["close_tracks", "remove_session"]);
+
 /** `sfu.control.failed`: a control call to the node that failed, with the HTTP status and problem code. A 5xx is the node's, a 4xx is the request's. */
 function controlFailures(call) {
   return call.rows
-    .filter((row) => row.event === "sfu.control.failed" && attr(row, "code") !== "session_gone")
+    .filter((row) => row.event === "sfu.control.failed" && !(attr(row, "code") === "session_gone" && CLEANUP_OPERATIONS.has(attr(row, "operation"))))
     .map((row) => {
       const status = number(row, "status");
       const side = status >= 500 ? "SFU" : "API";

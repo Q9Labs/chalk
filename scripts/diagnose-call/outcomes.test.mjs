@@ -51,11 +51,13 @@ test("a failed control call to the node is the node's fault on a 5xx and the req
   const failure = (status) => diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "subscribe", status, code: "problem" })]);
   assert.equal(kind(failure(503), "control_failed").side, "SFU");
   assert.equal(kind(failure(409), "control_failed").side, "API");
-  const gone = diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "unsubscribe", status: 404, code: "session_gone" })]);
+  const gone = diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "close_tracks", status: 404, code: "session_gone" })]);
   assert.equal(
     gone.findings.some((one) => one.kind === "control_failed"),
     false,
   );
+  const lost = diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "add_tracks", status: 404, code: "session_gone" })]);
+  assert.equal(kind(lost, "control_failed").side, "API");
 });
 
 test("the durable outcome of a call Axiom no longer holds is read: a session that ended while down, and a recovery known by its total", () => {

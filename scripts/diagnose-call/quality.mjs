@@ -39,7 +39,7 @@ function intervalsOf(rows, build) {
 /**
  * One interval of a publisher's track at the node. `lost` counts packets still missing, so a late repair lowers it: the packets that
  * did not arrive first time are what it grew plus what was repaired, and the packets still missing are what it grew, never below zero.
- * A packet counter that fell means the track was recreated, and that interval says nothing about loss.
+ * The packet counter holds repair packets too, so the packets that arrived first time are the counter's growth less the repairs. A packet counter that fell means the track was recreated, and that interval says nothing about loss.
  */
 function ingressInterval(a, b) {
   const packets = growth(a, b, "packets");
@@ -47,13 +47,14 @@ function ingressInterval(a, b) {
   const lostBy = (number(b, "lost") ?? 0) - (number(a, "lost") ?? 0);
   const repaired = Math.max(0, (number(b, "repaired") ?? 0) - (number(a, "repaired") ?? 0));
   const missing = Math.max(0, lostBy + repaired);
+  const firstArrived = packets === undefined ? undefined : Math.max(0, packets - repaired);
   const unrepaired = Math.max(0, lostBy);
   return {
     rows: [a, b],
     reset,
     held: flag(b, "held") === true || flag(a, "held") === true,
-    missingPct: reset ? undefined : percent(missing, packets + missing),
-    unrepairedPct: reset ? undefined : percent(unrepaired, packets + unrepaired),
+    missingPct: reset ? undefined : percent(missing, firstArrived + missing),
+    unrepairedPct: reset ? undefined : percent(unrepaired, firstArrived + missing),
     jitter: number(b, "jitter_ms"),
     bitrate: number(b, "bitrate_bps"),
     layersActive: number(b, "layers_active"),
@@ -245,7 +246,7 @@ export function qualityFindings(call, thresholds) {
 /** Intervals of one connection's downlink that overlap [from, to]. */
 const overlapping = (call, connection, from, to) =>
   mediaOf(call)
-    .egress.filter((stream) => stream.connection === connection)
+    .egress.filter((stream) => stream.connection === connection && stream.kind === "video")
     .map((stream) => ({ ...stream, intervals: stream.intervals.filter((interval) => interval.to > from && interval.from < to) }))
     .filter((stream) => stream.intervals.length > 0);
 
