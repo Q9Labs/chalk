@@ -15,6 +15,9 @@ type rtpPacket struct {
 	// so subscribers learn who speaks.
 	audioLevel    byte
 	hasAudioLevel bool
+	// unmute is set on the one packet that was the first voiced one after an unmute, so the
+	// egress side can stamp when it left for each subscription.
+	unmute *unmute
 }
 
 // switchPoint reports whether a subscriber can start on this packet: any audio

@@ -253,6 +253,9 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 		}
 		return
 	}
+	if p.unmute != nil {
+		s.owner.traceFirstForwarded(s, p.unmute)
+	}
 	if switched && int64(layer.highest-p.extSeq) > 0 {
 		s.flush(layer, p.extSeq, w)
 	}

@@ -51,8 +51,10 @@ type publication struct {
 	// resumes counts resumes: a packet queued before one carries the older count and is dropped,
 	// so a quick unmute never sends what the mute had already fenced.
 	resumes atomic.Uint64
-	done    chan struct{}
-	layers  [maxLayers]atomic.Pointer[ingressLayer]
+	// unmuting is the latest unmute of a microphone and its milestones; nil before the first.
+	unmuting atomic.Pointer[unmute]
+	done     chan struct{}
+	layers   [maxLayers]atomic.Pointer[ingressLayer]
 	// subscribers is copied on write, so readers never lock.
 	subscribers atomic.Pointer[[]*subscription]
 
@@ -202,6 +204,7 @@ func (p *publication) readAudioLevel(layer *ingressLayer, header *rtp.Header, pa
 	packet.audioLevel, packet.hasAudioLevel = extension[0], true
 	if extension[0]&0x7f <= voicedLevel {
 		p.session.lastVoiced.Store(packet.arrival)
+		p.markVoiced(packet)
 	}
 }
 
@@ -302,10 +305,11 @@ func (p *publication) setHeld(held bool) bool {
 	// The count rises before the flag clears, so no queued packet sees an unparked publication
 	// and its own count together.
 	if !held {
-		p.resumes.Add(1)
+		p.watchUnmute(p.resumes.Add(1))
 	}
 	p.held.Store(held)
 	p.mu.Unlock()
+	p.session.traceHeld(p, held)
 	// Layer selection follows the hold: parking idles every subscription, including one that
 	// subscribes during the mute, and resuming selects a layer for each and asks for its keyframe.
 	p.reselect()

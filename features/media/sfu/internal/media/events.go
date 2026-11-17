@@ -46,6 +46,9 @@ const (
 	EventMediaIngress           = "sfu.media.ingress"
 	EventMediaEgress            = "sfu.media.egress"
 	EventMediaTransport         = "sfu.media.transport"
+	EventPublicationHeld        = "sfu.publication.held"
+	EventUnmuteVoiced           = "sfu.unmute.first_voiced"
+	EventUnmuteForwarded        = "sfu.unmute.first_forwarded"
 )
 
 // FieldSources lists every field that may leave the node, and where its value comes from.
@@ -71,6 +74,7 @@ var FieldSources = map[string]FieldSource{
 	"probing": Number, "host_pressure": Number, "acked_bps": Number, "loss_share": Number, "lossy": Number,
 	"trend": Enum, "decrease_cause": Enum, "decrease_ago_ms": Number, "decrease_from_bps": Number,
 	"decrease_to_bps": Number, "decrease_acked_bps": Number,
+	"unmute_seq": Number, "since_unmute_ms": Number, "since_voiced_ms": Number,
 }
 
 // IDFields name who and where an event happened. Every event may carry them.
@@ -95,6 +99,9 @@ var EventFields = map[string][]string{
 	EventDTLSState:           {"state"},
 	EventPublicationStarted:  {"source", "media_kind"},
 	EventPublicationStopped:  {"source", "media_kind", "reason"},
+	EventPublicationHeld:     {"source", "media_kind", "held", "unmute_seq"},
+	EventUnmuteVoiced:        {"source", "unmute_seq", "since_unmute_ms"},
+	EventUnmuteForwarded:     {"publisher_id", "source", "mid", "unmute_seq", "since_unmute_ms", "since_voiced_ms"},
 	EventSubscriptionStarted: {"publisher_id", "source", "media_kind", "mid"},
 	EventSubscriptionStopped: {"publisher_id", "source", "media_kind", "mid", "reason"},
 	EventSubscriptionPaused:  {"publisher_id", "source", "media_kind", "mid", "reason"},
