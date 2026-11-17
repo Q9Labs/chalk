@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -69,6 +70,11 @@ func TestCaptureWithoutMediaFailsTheRecordingAsEmpty(t *testing.T) {
 			}
 			if job.State != recordingpipeline.JobStateTerminalFailure || job.ErrorCode == nil || *job.ErrorCode != recordingpipeline.ErrorCodeCaptureEmpty {
 				t.Fatalf("empty capture must end terminal as %s: state=%s code=%v", recordingpipeline.ErrorCodeCaptureEmpty, job.State, job.ErrorCode)
+			}
+			// The recorder lost the answer and asks again with the same lease.
+			replay, err := transactionalPipelineRepository(tx).CompleteCapture(ctx, lease, f.recordingID)
+			if err != nil || replay.ID != job.ID || replay.State != recordingpipeline.JobStateTerminalFailure {
+				t.Fatalf("a retried empty completion must get the same terminal job: job=%+v err=%v", replay, err)
 			}
 			facts := readRecordingFacts(t, tx, f.recordingID)
 			if facts.status != "failed" || facts.failureCode == nil || *facts.failureCode != recordingpipeline.ErrorCodeCaptureEmpty || !facts.hasFailedAt || facts.pipelineState != "terminal_failure" {
@@ -179,5 +185,33 @@ func TestStartCorrelationJoinsTheEpisodeJourney(t *testing.T) {
 	}
 	if utilities.IDFromBytes(joined.JourneyID.Bytes) != journeyID || joined.TraceID.String != traceID {
 		t.Fatalf("claim must carry the start operation's journey and trace: %+v", joined)
+	}
+}
+
+// The failure event sits on the trace of the start that began the work, so the trace that explains
+// the failure opens from the Episode's timeline.
+func TestRecordingFailureEventCarriesTheStartTrace(t *testing.T) {
+	ctx := t.Context()
+	tx, f, lease := newStoppedCompletionFixture(t)
+	defer tx.Rollback(ctx)
+	journeyID, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const traceID, spanID = "0af7651916cd43dd8448eb211c80319c", "00f067aa0ba902b7"
+	startEmptyCapture(t, tx, f.recordingID, `delete from recording_bundles where recording_id = $1`)
+	execCleanupFixture(t, tx, `update sync_external_operations set journey_id = $2, producing_trace_id = $3, producing_span_id = $4
+		where recording_id = $1 and operation_name = 'start_recording'`, f.recordingID.Bytes(), journeyID.Bytes(), traceID, spanID)
+	if _, err := transactionalPipelineRepository(tx).CompleteCapture(ctx, lease, f.recordingID); err != nil {
+		t.Fatalf("complete empty capture: %v", err)
+	}
+	var journey pgtype.UUID
+	var trace, span string
+	if err := tx.QueryRow(ctx, `select journey_id, trace_id, span_id from observability_journey_events
+		where name = 'recording.failed' and attributes->>'recording_id' = $1`, f.recordingID.String()).Scan(&journey, &trace, &span); err != nil {
+		t.Fatalf("read the failure event: %v", err)
+	}
+	if utilities.IDFromBytes(journey.Bytes) != journeyID || trace != traceID || span != spanID {
+		t.Fatalf("failure event journey/trace/span = %x/%s/%s, want the start's", journey.Bytes, trace, span)
 	}
 }

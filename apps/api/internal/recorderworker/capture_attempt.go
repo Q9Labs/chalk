@@ -275,7 +275,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 	writer := newCaptureBundleWriter(a)
 	if plan.StopState() != captureplan.StopStateRunning {
-		return a.finishSuccess(writer)
+		return finish(capturesignaling.ErrMediaStopped, writer)
 	}
 	readers := make(map[string]CaptureMediaTrack)
 	if len(snapshot.Tracks) == 0 {
@@ -298,7 +298,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		if stopped {
 			cancel(nil)
-			return a.finishSuccess(writer)
+			return finish(capturesignaling.ErrMediaStopped, writer)
 		}
 	}
 	if len(readers) == 0 && len(snapshot.Tracks) > 0 {
@@ -402,7 +402,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if event.plan.StopState() != captureplan.StopStateRunning {
 				cancel(nil)
-				return a.finishSuccess(writer)
+				return finish(capturesignaling.ErrMediaStopped, writer)
 			}
 			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers, late)
 			if err != nil {
@@ -411,7 +411,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if stopped {
 				cancel(nil)
-				return a.finishSuccess(writer)
+				return finish(capturesignaling.ErrMediaStopped, writer)
 			}
 			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, updatedReaders, readers)); err != nil {
 				cancel(nil)

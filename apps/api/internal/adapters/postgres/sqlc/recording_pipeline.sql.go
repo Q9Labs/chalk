@@ -1516,8 +1516,8 @@ join recording_job_attempt_authorities authority
  and authority.fencing_generation = jobs.fencing_generation
 where jobs.id = $1
   and jobs.kind = 'capture'
-  and jobs.state = 'succeeded'
-  and pipelines.capture_completed_at is not null
+  and ((jobs.state = 'succeeded' and pipelines.capture_completed_at is not null)
+    or (jobs.state = 'terminal_failure' and jobs.error_code = 'capture_empty'))
   and jobs.attempt_count = $2
   and jobs.fencing_generation = $3
   and authority.capture_epoch = $4
@@ -1536,6 +1536,7 @@ type GetCompletedCaptureRecordingJobParams struct {
 	LeaseOwner        string      `json:"lease_owner"`
 }
 
+// A capture that ended without media is settled too: a retry whose answer was lost gets the same terminal job.
 func (q *Queries) GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error) {
 	row := q.db.QueryRow(ctx, getCompletedCaptureRecordingJob,
 		arg.ID,

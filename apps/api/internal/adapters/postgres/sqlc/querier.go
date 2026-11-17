@@ -156,6 +156,7 @@ type Querier interface {
 	GetAutoSpaceLifecycle(ctx context.Context, arg GetAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	GetChatAttachmentByClientID(ctx context.Context, arg GetChatAttachmentByClientIDParams) (GetChatAttachmentByClientIDRow, error)
 	GetChatAttachmentByUploadID(ctx context.Context, arg GetChatAttachmentByUploadIDParams) (GetChatAttachmentByUploadIDRow, error)
+	// A capture that ended without media is settled too: a retry whose answer was lost gets the same terminal job.
 	GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error)
 	GetEpisodeAttendance(ctx context.Context, arg GetEpisodeAttendanceParams) ([]GetEpisodeAttendanceRow, error)
 	GetEpisodeCreateRequest(ctx context.Context, arg GetEpisodeCreateRequestParams) (EpisodeCreateRequest, error)

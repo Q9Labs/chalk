@@ -741,6 +741,7 @@ left join recording_transcription_sources transcription_source on transcription_
     and transcription_source.tenant_id = sqlc.arg(tenant_id);
 
 -- name: GetCompletedCaptureRecordingJob :one
+-- A capture that ended without media is settled too: a retry whose answer was lost gets the same terminal job.
 select jobs.*
 from recording_jobs jobs
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -751,8 +752,8 @@ join recording_job_attempt_authorities authority
  and authority.fencing_generation = jobs.fencing_generation
 where jobs.id = sqlc.arg(id)
   and jobs.kind = 'capture'
-  and jobs.state = 'succeeded'
-  and pipelines.capture_completed_at is not null
+  and ((jobs.state = 'succeeded' and pipelines.capture_completed_at is not null)
+    or (jobs.state = 'terminal_failure' and jobs.error_code = 'capture_empty'))
   and jobs.attempt_count = sqlc.arg(attempt_count)
   and jobs.fencing_generation = sqlc.arg(fencing_generation)
   and authority.capture_epoch = sqlc.arg(capture_epoch)

@@ -42,17 +42,18 @@ begin
             -- The Episode's own timeline shows the failure next to the claim that started the work.
             insert into observability_journey_events (
                 event_id, journey_id, sequence, occurred_at, name, phase, state,
-                origin_kind, first_observed_layer, upstream_visibility, parent_event_id, attributes
+                origin_kind, first_observed_layer, upstream_visibility, parent_event_id, trace_id, span_id, attributes
             )
             select gen_random_uuid(), journey.journey_id,
                 coalesce((select max(events.sequence) + 1 from observability_journey_events events
                           where events.journey_id = journey.journey_id), 0),
                 now(), 'recording.failed', 'recording_failure', 'failed', 'server', 'api', 'visible',
-                journey.parent_event_id,
+                journey.parent_event_id, journey.trace_id, journey.span_id,
                 jsonb_build_object('recording_id', new.recording_id, 'failure_code', failed_code)
             from (
                 select coalesce(start_operation.journey_id, new.recording_id) as journey_id,
-                    start_operation.parent_journey_event_id as parent_event_id
+                    start_operation.parent_journey_event_id as parent_event_id,
+                    start_operation.producing_trace_id as trace_id, start_operation.producing_span_id as span_id
                 from recordings
                 left join sync_recordings recording on recording.recording_id = recordings.id
                 left join sync_external_operations start_operation

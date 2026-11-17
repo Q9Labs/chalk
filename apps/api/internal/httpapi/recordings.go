@@ -155,6 +155,11 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 			if _, err := exports.RequestExport(ctx, recordingpipeline.ExportInput{TenantID: request.TenantID, RecordingID: request.RecordingID}); err != nil {
 				return requestRecordingExportResponse{}, err
 			}
+			// A retry reopens a failed Recording, so the answer must not repeat the failure it just cleared.
+			recording, err = service.Get(ctx, request.TenantID, request.RecordingID)
+			if err != nil {
+				return requestRecordingExportResponse{}, err
+			}
 			state, err = exports.GetArtifactState(ctx, request.TenantID, request.RecordingID)
 			if err != nil {
 				return requestRecordingExportResponse{}, err

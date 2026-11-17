@@ -188,6 +188,7 @@
         "apps/api/internal/httpapi/recording_capture_pool.go",
         "apps/api/internal/httpapi/recording_preparation.go",
         "apps/api/internal/httpapi/recordings.go",
+        "apps/api/internal/httpapi/recordings_export_retry_test.go",
         "apps/api/internal/httpapi/recordings_preparation.go",
         "apps/api/internal/mtls",
         "apps/api/internal/providerbridge",
