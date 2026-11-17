@@ -73,6 +73,14 @@ test("repair packets are in the packet counter, so first-arrival loss divides by
   assert.ok(Math.abs(interval.missingPct - 2) < 0.001, `first-arrival loss was ${interval.missingPct}`);
 });
 
+test("feedback of fully paused video subscriptions is stale and starts no degraded downlink", () => {
+  const f = fixture();
+  const paused = f.downlink("viewer", "conn-view", 10, 300, () => ({ loss_share: 0.2, rtt_ms: 500, paused_subscriptions: 1 }));
+  assert.equal(kind(diagnose([...f.cast(), ...paused]), "downlink_degraded"), undefined);
+  const live = f.downlink("viewer", "conn-view", 10, 300, () => ({ loss_share: 0.2, rtt_ms: 500 }));
+  assert.ok(kind(diagnose([...f.cast(), ...live]), "downlink_degraded"));
+});
+
 test("a packet counter that falls is a recreated track and its interval says nothing; a held track and a gap in the export are no loss", () => {
   const f = fixture();
   const lossy = (second) => ({ packets: second * 100, lost: (second - 10) * 6 });

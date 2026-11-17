@@ -79,6 +79,7 @@ function egressInterval(a, b, transport) {
     high: number(b, "high_layer"),
     low: number(b, "low_layer"),
     paused: number(b, "paused_subscriptions"),
+    allPaused: number(b, "subscriptions") > 0 && number(b, "paused_subscriptions") >= number(b, "subscriptions"),
     transport: after !== undefined && before !== undefined,
     dropped: before && after ? (attr(a, "media_kind") === "video" ? growth(before, after, "dropped") : 0) : undefined,
     repairsCut: before && after ? growth(before, after, "repairs_cut") : undefined,
@@ -144,8 +145,8 @@ const kbps = (bps) => Math.round(bps / 1000);
 const uplinkBad = (interval, thresholds) => !interval.reset && !interval.held && (interval.missingPct > thresholds.healthy_loss_pct || interval.jitter > thresholds.healthy_jitter_ms);
 /** The node's own pacer dropped video for the session in this interval. */
 const nodeBad = (interval) => interval.dropped > 0;
-/** The subscriber's own reports show a poor link and the node dropped nothing, or its transport row is missing. */
-const downlinkBad = (interval, thresholds) => !nodeBad(interval) && (interval.lossPct > thresholds.healthy_loss_pct || interval.rtt > thresholds.healthy_rtt_ms || interval.jitter > thresholds.healthy_jitter_ms);
+/** The subscriber's own reports show a poor link and the node dropped nothing, or its transport row is missing. Paused subscriptions keep their last feedback, which is stale, so it says nothing. */
+const downlinkBad = (interval, thresholds) => !nodeBad(interval) && !interval.allPaused && (interval.lossPct > thresholds.healthy_loss_pct || interval.rtt > thresholds.healthy_rtt_ms || interval.jitter > thresholds.healthy_jitter_ms);
 
 function uplinkFindings(call, thresholds) {
   return mediaOf(call).ingress.flatMap((track) =>

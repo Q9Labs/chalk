@@ -112,8 +112,8 @@ function recoveries(call) {
     const own = states.filter((row) => row.connection === connection);
     found.push({ connection, participant: own[0].participant, drops: own.map((row) => ({ from: row.time - number(row, "outage_ms"), to: row.time, ms: number(row, "outage_ms") })), rows: own });
   }
-  for (const end of call.ends.filter((candidate) => candidate.outcome === "left" && !faultOf(candidate) && number(candidate.row, "disconnects") > 0 && number(candidate.row, "outage_ms") > 0 && !found.some((one) => one.connection === candidate.connection))) {
-    found.push({ connection: end.connection, participant: end.participant, drops: Array.from({ length: number(end.row, "disconnects") }, () => ({ ms: number(end.row, "outage_ms") / number(end.row, "disconnects") })), total: true, rows: [end.row] });
+  for (const end of call.ends.filter((candidate) => (candidate.outcome === "left" || candidate.outcome === "ended") && !faultOf(candidate) && number(candidate.row, "disconnects") > 0 && number(candidate.row, "outage_ms") > 0 && !found.some((one) => one.connection === candidate.connection))) {
+    found.push({ connection: end.connection, participant: end.participant, outcome: end.outcome, drops: Array.from({ length: number(end.row, "disconnects") }, () => ({ ms: number(end.row, "outage_ms") / number(end.row, "disconnects") })), total: true, rows: [end.row] });
   }
   return found;
 }
@@ -121,7 +121,9 @@ function recoveries(call) {
 /** Other Participants who started a second session while this one was down: a rejoin that the recovery should have made unnecessary. */
 function rejoinsDuring(call, participant, from, to) {
   const registered = call.rows.filter((row) => row.event === "sfu.session.registered" && row.participant && row.participant !== participant);
-  return registered.filter((row) => row.time >= from && row.time <= to && registered.some((earlier) => earlier.participant === row.participant && earlier.time < row.time && earlier.connection !== row.connection));
+  const first = new Map();
+  for (const row of registered) if (!first.has(row.connection)) first.set(row.connection, row);
+  return [...first.values()].filter((row) => row.time >= from && row.time <= to && [...first.values()].some((earlier) => earlier.participant === row.participant && earlier.time < row.time));
 }
 
 /**
@@ -138,7 +140,9 @@ function recoveredDrops(call) {
     const rejoined = timed ? [...new Set(timed.flatMap((drop) => rejoinsDuring(call, recovery.participant, drop.from, drop.to)))] : [];
     const once = `${seconds(total)} s`;
     const lengthText = lengths.length === 1 ? once : `${lengths.length} times (${once} in all)`;
-    const experience = `lost its media path for ${lengthText}${timed ? ` at ${clock(first)} UTC` : ""} and ${rejoined.length > 0 ? "recovered, but other Participants had to rejoin meanwhile" : "recovered without rejoining"}`;
+    const unproven = recovery.outcome === "ended";
+    const outcomeText = unproven ? "the session then ended with the Episode, and the node's totals do not say whether it had recovered" : rejoined.length > 0 ? "recovered, but other Participants had to rejoin meanwhile" : "recovered without rejoining";
+    const experience = `lost its media path for ${lengthText}${timed ? ` at ${clock(first)} UTC` : ""} and ${outcomeText}`;
     const rejoinNote = rejoined.length > 0 ? [`${new Set(rejoined.map((row) => row.participant)).size} other Participants started a new session while it was down, so the recovery was not on its own`] : [];
     const why = cause(
       rejoined.length > 0

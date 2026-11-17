@@ -26,6 +26,15 @@ test("a drop the connection recovered from on its own is a recovered drop with i
   assert.match(result.verdict, /recovered on its own/u);
 });
 
+test("a retried session create is not a new session: only the first registration of a connection can be a rejoin", () => {
+  const f = fixture();
+  const early = f.node(80, "sfu.session.registered", "publisher", "conn-pub-2", { allocation: 2 });
+  const retry = f.node(95, "sfu.session.registered", "publisher", "conn-pub-2", { allocation: 2 });
+  const result = diagnose([...recoveredDropCall(), early, retry]);
+  assert.ok(kind(result, "recovered_drop"));
+  assert.equal(kind(result, "drop_needed_rejoin"), undefined);
+});
+
 test("a recovery during which another Participant had to start a new session fails the 10 s criterion", () => {
   const result = diagnose(recoveredDropCall({ rejoin: true }));
   const drop = kind(result, "drop_needed_rejoin");
