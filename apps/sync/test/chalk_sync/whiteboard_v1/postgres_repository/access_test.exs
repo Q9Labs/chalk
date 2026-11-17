@@ -64,7 +64,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryAccessTest do
 
     # An Episode end that completes closes every remaining socket.
     lifecycle(connection, PlannerSQL.mark_episode_ending(), ended)
-    lifecycle(connection, FinalizerSQL.complete_external_episode(), ended)
+    lifecycle(connection, FinalizerSQL.complete_external_episode(), ended ++ ["tenant_recovery"])
 
     assert {:stop, :normal, {1008, "policy violation"}, closed} =
              deliver(live_socket(host, scene_id), scene_id)

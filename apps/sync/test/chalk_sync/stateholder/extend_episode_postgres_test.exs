@@ -51,8 +51,8 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
 
     Postgrex.query!(
       connection,
-      "update episodes set created_at = to_timestamp($2::double precision / 1000.0), deadline_at = to_timestamp($3::double precision / 1000.0) where id = $1",
-      [UUID.dump!(fixture.episode.episode_id), created_ms, created_ms + @hour_ms]
+      "update episodes set created_at = to_timestamp($2::double precision / 1000.0) where id = $1",
+      [UUID.dump!(fixture.episode.episode_id), created_ms]
     )
 
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
