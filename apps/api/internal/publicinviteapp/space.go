@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -20,10 +21,6 @@ var (
 	ErrSpacePortUnavailable = errors.New("public Space adapter unavailable")
 	ErrInvalidSpacePort     = errors.New("invalid public Space adapter configuration")
 )
-
-// startCallLingerWindowSeconds keeps a Start-a-call Episode open after its last
-// departure, so a host who taps Rejoin within this window continues the same call.
-const startCallLingerWindowSeconds int32 = 30
 
 // SpaceConfig contains the platform-owned defaults for an auto-created public
 // Space. The managed Tenant is resolved before creation so a bad deployment
@@ -99,9 +96,9 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		MediaPlaneFromConfig:          true,
 		Metadata:                      json.RawMessage(`{}`),
 		AdmissionPolicy:               json.RawMessage(`{"mode":"open"}`),
-		DefaultEpisodeDurationSeconds: 3600,
-		MaximumEpisodeDurationSeconds: 3600,
-		LingerWindowSeconds:           startCallLingerWindowSeconds,
+		DefaultEpisodeDurationSeconds: calllength.Anonymous.DefaultSeconds,
+		MaximumEpisodeDurationSeconds: calllength.Anonymous.MaximumSeconds,
+		LingerWindowSeconds:           calllength.Anonymous.LingerSeconds,
 		RequestKey:                    input.RequestKey,
 	})
 	if err != nil {

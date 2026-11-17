@@ -57,7 +57,7 @@ defmodule ChalkSync.Stateholder.Postgres.CommandDecision do
              state,
              identity.participant_id,
              command.name,
-             command.payload
+             reducer_payload(command, episode_policy)
            ) do
       case decision do
         {:change, event, next_state} ->
@@ -74,6 +74,20 @@ defmodule ChalkSync.Stateholder.Postgres.CommandDecision do
         CommandPersistence.reject(connection, identity, command, terminal_reason(reason))
     end
   end
+
+  # An extension asks for time. The Episode's deadline moves by that much but never past
+  # the ceiling its configuration fixed when it began.
+  defp reducer_payload(%{name: :extend_episode, payload: payload}, policy) do
+    deadline_ms = DateTime.to_unix(policy.deadline_at, :millisecond)
+
+    ceiling_ms =
+      DateTime.to_unix(policy.created_at, :millisecond) +
+        policy.maximum_duration_ceiling_seconds * 1_000
+
+    %{"deadlineAtMs" => min(deadline_ms + payload["extensionSeconds"] * 1_000, ceiling_ms)}
+  end
+
+  defp reducer_payload(command, _policy), do: command.payload
 
   def from_receipt(
         command,

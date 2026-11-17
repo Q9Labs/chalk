@@ -179,6 +179,13 @@ func prepareEpisodeEndInput(input *RequestEpisodeEndInput) error {
 		return err
 	}
 	payload := json.RawMessage(`{}`)
+	switch input.Reason {
+	case "", EndReasonTenantRecovery:
+	case EndReasonLingerExpired, EndReasonMaximumDuration:
+		payload = json.RawMessage(`{"reason":"` + string(input.Reason) + `"}`)
+	default:
+		return ErrInvalidIntentPayload
+	}
 	if err := prepareRequest(&input.Request, payload); err != nil {
 		return err
 	}
@@ -226,7 +233,7 @@ func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt
 	if failedAttempts > 0 {
 		key += "-retry-" + strconv.Itoa(failedAttempts)
 	}
-	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Request: Request{Key: key}}
+	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Reason: EndReasonLingerExpired, Request: Request{Key: key}}
 	if err := prepareEpisodeEndInput(&input); err != nil {
 		return Request{}, err
 	}

@@ -206,19 +206,6 @@ select released.id, released.tenant_id, released.space_id, released.episode_id,
     released.starts_at, released.ends_at, released.updated_at, released.created_at
 from released join deleted_pipeline on deleted_pipeline.recording_id = released.recording_id;
 
--- name: ExtendRecordingReservation :one
-update recording_reservations
-set max_duration_seconds = sqlc.arg(max_duration_seconds),
-    ends_at = sqlc.arg(ends_at),
-    updated_at = now()
-where tenant_id = sqlc.arg(tenant_id)
-  and id = sqlc.arg(id)
-  and state = 'reserved'
-  and sqlc.arg(max_duration_seconds)::integer between max_duration_seconds and 14400
-returning id, tenant_id, space_id, episode_id, recording_id, idempotency_key,
-    policy_snapshot_version, participant_count, max_duration_seconds, input_bitrate_bps, state,
-    starts_at, ends_at, updated_at, created_at;
-
 -- name: GetRecordingPipeline :one
 select recording_id, tenant_id, reservation_id, capture_epoch, state, stop_operation_id, stop_requested_at,
     capture_completed_at, committed_at, updated_at, created_at

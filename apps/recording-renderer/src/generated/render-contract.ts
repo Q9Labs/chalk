@@ -3,7 +3,7 @@ export const COMPOSE_REQUEST_VERSION = "recording-frame-render-request.v1";
 export const MAXIMUM_RENDER_WIDTH = 3840;
 export const MAXIMUM_RENDER_HEIGHT = 2160;
 export const MAXIMUM_RENDER_FPS = 60;
-export const MAXIMUM_RECORDING_DURATION_MS = 14400000;
+export const MAXIMUM_RECORDING_DURATION_MS = 86400000;
 
 export const COMPOSE_RESULT_VERSION = "recording-compose-result.v1";
 

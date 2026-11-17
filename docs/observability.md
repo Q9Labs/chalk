@@ -35,6 +35,8 @@ A terminal failure, rejection or timeout must say why, in a bounded and redacted
 
 Add a ledger event when a durable lifecycle boundary changes: the Episode, a participant, a publication, a recording, a webhook delivery. Do it in the same transaction as the change, link it to the parent event, and carry trace and span IDs. The webhook events are listed in `contract/webhooks/v1/journey-events.json`. MCP adds no parallel ledger. A capture claim writes `recording.claimed` to the Recording's start journey in the claim transaction, with `claim_lag_ms` and `placement`, so a slow start reads off the Episode's own timeline.
 
+Every Episode end records why it ended: `episodes.end_reason` is one of `maximum_duration`, `ended_by_participant`, `tenant_recovery` (the host or dashboard ended it for everyone) or `linger_expired` (everyone left and the linger window ran out). Sync emits it on the `sync.episode.ended` span with `episode_id` and `end_reason`, so "why did this call end" is one search for the Episode ID. The reason is a bounded enum, so it is also safe as a metric attribute, unlike the ID.
+
 Do not add a ledger event for transient delivery that the client observes, such as a congestion pause, a retry, an ICE detail or a diagnostic sample. Their evidence is logs, metrics and call stats. Telemetry from the SFU cannot replace durable Postgres lifecycle evidence.
 
 When a lifecycle boundary changes, update the ledger and the executable proof in the same change. The proof is a test that drives the real journey and checks the ledger rows, the trace correlation and the redaction. A success path alone is not enough: check that a rejected or failed report emits no success evidence.

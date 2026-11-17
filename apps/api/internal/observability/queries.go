@@ -195,13 +195,6 @@ func (q operationQuerier) UpdateTenantSpace(ctx context.Context, arg sqlc.Update
 	return space, err
 }
 
-func (q operationQuerier) UpdateTenantEpisode(ctx context.Context, arg sqlc.UpdateTenantEpisodeParams) (sqlc.Episode, error) {
-	startedAt := time.Now()
-	episode, err := q.next.UpdateTenantEpisode(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "UpdateTenantEpisode", startedAt, err)
-	return episode, err
-}
-
 func (q operationQuerier) UpdateTenantTranscription(ctx context.Context, arg sqlc.UpdateTenantTranscriptionParams) (sqlc.Transcription, error) {
 	startedAt := time.Now()
 	transcription, err := q.next.UpdateTenantTranscription(ctx, arg)

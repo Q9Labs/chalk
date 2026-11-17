@@ -107,8 +107,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
   defp expected_fact(%{name: :end_episode}, _state),
     do: {:episode_ended, %{"reason" => "ended_by_participant"}}
 
-  defp expected_fact(%{name: :tenant_end_episode}, _state),
-    do: {:episode_ended, %{"reason" => "tenant_recovery"}}
+  defp expected_fact(%{name: :tenant_end_episode} = external, _state),
+    do: {:episode_ended, %{"reason" => Map.get(external.payload, "reason", "tenant_recovery")}}
 
   defp expected_fact(%{name: :maximum_duration_expired}, _state),
     do: {:episode_ended, %{"reason" => "maximum_duration"}}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/attribute"
@@ -590,24 +591,15 @@ func (s Service) lifecycleCreate(ctx context.Context, lifecycle AutoLifecycle) (
 // ports are required at construction so request handlers never discover a
 // missing dependency after accepting a request.
 type Runtime struct {
-	service               Service
-	space                 Space
-	lifecycle             Lifecycle
-	access                Access
-	accounts              Accounts
-	links                 Links
-	autoLifecycleLifetime time.Duration
+	service   Service
+	space     Space
+	lifecycle Lifecycle
+	access    Access
+	accounts  Accounts
+	links     Links
 }
 
 func NewRuntime(service Service, space Space, lifecycle Lifecycle, access Access, accounts Accounts, links Links) (Runtime, error) {
-	return NewRuntimeWithConfig(service, space, lifecycle, access, accounts, links, RuntimeConfig{AutoLifecycleLifetime: DefaultAutoLifecycleLifetime})
-}
-
-type RuntimeConfig struct {
-	AutoLifecycleLifetime time.Duration
-}
-
-func NewRuntimeWithConfig(service Service, space Space, lifecycle Lifecycle, access Access, accounts Accounts, links Links, config RuntimeConfig) (Runtime, error) {
 	if space == nil {
 		return Runtime{}, ErrSpaceUnavailable
 	}
@@ -623,11 +615,8 @@ func NewRuntimeWithConfig(service Service, space Space, lifecycle Lifecycle, acc
 	if links == nil {
 		return Runtime{}, ErrLinksUnavailable
 	}
-	if config.AutoLifecycleLifetime <= 0 || config.AutoLifecycleLifetime > DefaultAutoLifecycleLifetime {
-		return Runtime{}, ErrInvalidLifecycleState
-	}
 	service.lifecycle = lifecycle
-	return Runtime{service: service, space: space, lifecycle: lifecycle, access: access, accounts: accounts, links: links, autoLifecycleLifetime: config.AutoLifecycleLifetime}, nil
+	return Runtime{service: service, space: space, lifecycle: lifecycle, access: access, accounts: accounts, links: links}, nil
 }
 
 const guestCredentialDerivationContext = "chalk/public-invite/guest-credential/v1"
@@ -918,7 +907,7 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	if err := validateAccessGrant(grant, arrival); err != nil {
 		return PublicSpaceCreated{}, err
 	}
-	deadline := r.service.now().Add(r.autoLifecycleLifetime)
+	deadline := r.service.now().Add(calllength.Anonymous.MaximumLifetime())
 	lifecycle, err := r.service.CreateAutoLifecycle(ctx, AutoLifecycle{
 		TenantID:             space.TenantID,
 		SpaceID:              space.SpaceID,

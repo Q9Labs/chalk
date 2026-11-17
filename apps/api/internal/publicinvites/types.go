@@ -57,15 +57,14 @@ const (
 	DefaultArrivalLifetime   = 15 * time.Minute
 	AdmissionRequestLifetime = 5 * time.Minute
 
-	MinIdempotencyKeyBytes       = 16
-	MaxIdempotencyKeyBytes       = 128
-	MaxCredentialFamilyBytes     = 256
-	MaxDisplayNameBytes          = 256
-	MaxProviderBytes             = 128
-	MaxProviderSubjectBytes      = 256
-	MaxClientPayloadFieldBytes   = 4096
-	MaxLifecycleErrorFamilySize  = 64
-	DefaultAutoLifecycleLifetime = time.Hour
+	MinIdempotencyKeyBytes      = 16
+	MaxIdempotencyKeyBytes      = 128
+	MaxCredentialFamilyBytes    = 256
+	MaxDisplayNameBytes         = 256
+	MaxProviderBytes            = 128
+	MaxProviderSubjectBytes     = 256
+	MaxClientPayloadFieldBytes  = 4096
+	MaxLifecycleErrorFamilySize = 64
 )
 
 const (

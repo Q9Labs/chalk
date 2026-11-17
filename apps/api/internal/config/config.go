@@ -48,21 +48,20 @@ const (
 	OAuthConsentURL        = "CHALK_OAUTH_CONSENT_URL"
 	OAuthExtraRedirectURIs = "CHALK_OAUTH_EXTRA_REDIRECT_URIS"
 
-	APIVersion                       = "CHALK_API_VERSION"
-	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
-	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
-	SyncTokenKeyID                   = "CHALK_SYNC_TOKEN_KEY_ID"
-	SyncTokenPrivateKey              = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
-	MediaTokenVerificationKeys       = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
-	PublicInviteManagedTenantID      = "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID"
-	PublicInviteDefaultMediaPlane    = "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE"
-	PublicInviteWebOrigin            = "CHALK_PUBLIC_INVITE_WEB_ORIGIN"
-	PublicInviteKeyID                = "CHALK_PUBLIC_INVITE_KEY_ID"
-	PublicInvitePrivateKey           = "CHALK_PUBLIC_INVITE_PRIVATE_KEY"
-	PublicInviteVerificationKeys     = "CHALK_PUBLIC_INVITE_VERIFICATION_KEYS"
-	PublicInviteAutoLifecycleSeconds = "CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS"
-	PublicInviteSchedulerIntervalMS  = "CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS"
-	PublicInviteSchedulerBatch       = "CHALK_PUBLIC_INVITE_SCHEDULER_BATCH"
+	APIVersion                      = "CHALK_API_VERSION"
+	SyncTokenAudience               = "CHALK_SYNC_TOKEN_AUDIENCE"
+	SyncTokenIssuer                 = "CHALK_SYNC_TOKEN_ISSUER"
+	SyncTokenKeyID                  = "CHALK_SYNC_TOKEN_KEY_ID"
+	SyncTokenPrivateKey             = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
+	MediaTokenVerificationKeys      = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
+	PublicInviteManagedTenantID     = "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID"
+	PublicInviteDefaultMediaPlane   = "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE"
+	PublicInviteWebOrigin           = "CHALK_PUBLIC_INVITE_WEB_ORIGIN"
+	PublicInviteKeyID               = "CHALK_PUBLIC_INVITE_KEY_ID"
+	PublicInvitePrivateKey          = "CHALK_PUBLIC_INVITE_PRIVATE_KEY"
+	PublicInviteVerificationKeys    = "CHALK_PUBLIC_INVITE_VERIFICATION_KEYS"
+	PublicInviteSchedulerIntervalMS = "CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS"
+	PublicInviteSchedulerBatch      = "CHALK_PUBLIC_INVITE_SCHEDULER_BATCH"
 
 	DatabaseURL                 = "CHALK_DATABASE_URL"
 	DatabaseMaxConns            = "CHALK_DATABASE_MAX_CONNS"
@@ -133,15 +132,14 @@ const (
 	WebhookEncryptionKeyring        = "CHALK_WEBHOOK_ENCRYPTION_KEYRING"
 	WebhookEncryptionCurrentVersion = "CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION"
 
-	DefaultAPIAddress                       = ":8080"
-	DefaultDatabaseURL                      = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns                       = int32(10)
-	DefaultDBMinConns                       = int32(0)
-	DefaultDeadlineSchedulerIntervalMS      = int64(1000)
-	DefaultDeadlineSchedulerBatch           = int32(50)
-	DefaultPublicInviteSchedulerIntervalMS  = int64(60 * 1000)
-	DefaultPublicInviteSchedulerBatch       = int32(50)
-	DefaultPublicInviteAutoLifecycleSeconds = int32(60 * 60)
+	DefaultAPIAddress                      = ":8080"
+	DefaultDatabaseURL                     = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
+	DefaultDBMaxConns                      = int32(10)
+	DefaultDBMinConns                      = int32(0)
+	DefaultDeadlineSchedulerIntervalMS     = int64(1000)
+	DefaultDeadlineSchedulerBatch          = int32(50)
+	DefaultPublicInviteSchedulerIntervalMS = int64(60 * 1000)
+	DefaultPublicInviteSchedulerBatch      = int32(50)
 
 	DefaultEnvironment                        = "local"
 	DefaultLogFormat                          = "json"
@@ -329,16 +327,15 @@ type SyncTokenConfig struct {
 }
 
 type PublicInviteConfig struct {
-	Enabled               bool
-	ManagedTenantID       string
-	DefaultMediaPlane     mediaplane.Provider
-	WebOrigin             string
-	KeyID                 string
-	PrivateKey            ed25519.PrivateKey
-	VerificationKeys      map[string]ed25519.PublicKey
-	AutoLifecycleLifetime time.Duration
-	SchedulerInterval     time.Duration
-	SchedulerBatch        int32
+	Enabled           bool
+	ManagedTenantID   string
+	DefaultMediaPlane mediaplane.Provider
+	WebOrigin         string
+	KeyID             string
+	PrivateKey        ed25519.PrivateKey
+	VerificationKeys  map[string]ed25519.PublicKey
+	SchedulerInterval time.Duration
+	SchedulerBatch    int32
 }
 
 type ObservabilityConfig struct {
@@ -1183,10 +1180,8 @@ func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
 }
 
 const (
-	publicInviteMaxSchedulerIntervalMS  = int64(24 * 60 * 60 * 1000)
-	publicInviteMaxSchedulerBatch       = int32(1000)
-	publicInviteMinAutoLifecycleSeconds = int32(60)
-	publicInviteMaxAutoLifecycleSeconds = int32(60 * 60)
+	publicInviteMaxSchedulerIntervalMS = int64(24 * 60 * 60 * 1000)
+	publicInviteMaxSchedulerBatch      = int32(1000)
 )
 
 var publicInviteUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -1255,10 +1250,6 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	if !ok || !configuredCurrent.Equal(currentPublicKey) {
 		return PublicInviteConfig{}, fmt.Errorf("%s must contain the current %s public key", PublicInviteVerificationKeys, PublicInviteKeyID)
 	}
-	autoLifecycleSeconds, err := envBoundedInt32(PublicInviteAutoLifecycleSeconds, DefaultPublicInviteAutoLifecycleSeconds, publicInviteMinAutoLifecycleSeconds, publicInviteMaxAutoLifecycleSeconds)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
 	schedulerInterval, err := envBoundedMilliseconds(PublicInviteSchedulerIntervalMS, DefaultPublicInviteSchedulerIntervalMS, 1, publicInviteMaxSchedulerIntervalMS)
 	if err != nil {
 		return PublicInviteConfig{}, err
@@ -1269,16 +1260,15 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	}
 
 	return PublicInviteConfig{
-		Enabled:               true,
-		ManagedTenantID:       canonicalTenantID,
-		DefaultMediaPlane:     plane,
-		WebOrigin:             webOrigin,
-		KeyID:                 keyID,
-		PrivateKey:            privateKey,
-		VerificationKeys:      verificationKeys,
-		AutoLifecycleLifetime: time.Duration(autoLifecycleSeconds) * time.Second,
-		SchedulerInterval:     schedulerInterval,
-		SchedulerBatch:        schedulerBatch,
+		Enabled:           true,
+		ManagedTenantID:   canonicalTenantID,
+		DefaultMediaPlane: plane,
+		WebOrigin:         webOrigin,
+		KeyID:             keyID,
+		PrivateKey:        privateKey,
+		VerificationKeys:  verificationKeys,
+		SchedulerInterval: schedulerInterval,
+		SchedulerBatch:    schedulerBatch,
 	}, nil
 }
 

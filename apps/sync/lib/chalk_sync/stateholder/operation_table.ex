@@ -33,7 +33,6 @@ defmodule ChalkSync.Stateholder.OperationTable do
     %{name: :recording_capture_failed, plane: :local, intake: true},
     %{name: :participant_leave, plane: :local, intake: true},
     %{name: :start_episode, plane: :none, intake: true, stored: false},
-    %{name: :extend_episode, plane: :none, intake: true, stored: false},
     %{name: :end_episode, plane: :episode_end, intake: true},
     %{name: :tenant_set_deadline, plane: :local, intake: true},
     %{name: :tenant_end_episode, plane: :episode_end, intake: true},

@@ -27,9 +27,8 @@ defmodule ChalkSync.Stateholder.OperationTableTest do
     assert :maximum_duration_expired in OperationTable.episode_end_names()
   end
 
-  test "an Episode start or extension is intake-only and never read back from storage" do
+  test "an Episode start is intake-only and never read back from storage" do
     assert :error = OperationTable.from_stored("start_episode")
-    assert :error = OperationTable.from_stored("extend_episode")
   end
 
   test "an unknown name is rejected by intake" do

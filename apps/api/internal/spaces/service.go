@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -43,15 +44,17 @@ var (
 )
 
 const (
-	MinimumEpisodeDurationSeconds int32 = 60
-	MaximumEpisodeDurationSeconds int32 = 7 * 24 * 60 * 60
+	MinimumEpisodeDurationSeconds = calllength.MinimumSeconds
+	MaximumEpisodeDurationSeconds = calllength.MaximumSeconds
+)
 
-	// These defaults keep a newly created Space usable when callers omit
-	// optional policy values. The database carries the same defaults for direct
-	// inserts, while the service validates values before crossing the boundary.
-	DefaultEpisodeDurationSeconds        int32 = 24 * 60 * 60
-	DefaultMaximumEpisodeDurationSeconds int32 = 24 * 60 * 60
-	DefaultLingerWindowSeconds           int32 = 0
+// These defaults keep a newly created Space usable when callers omit optional
+// policy values. The database carries the same defaults for direct inserts,
+// while the service validates values before crossing the boundary.
+var (
+	DefaultEpisodeDurationSeconds        = calllength.API.DefaultSeconds
+	DefaultMaximumEpisodeDurationSeconds = calllength.API.MaximumSeconds
+	DefaultLingerWindowSeconds           = calllength.API.LingerSeconds
 )
 
 var DefaultAdmissionPolicy = json.RawMessage(`{"mode":"open"}`)

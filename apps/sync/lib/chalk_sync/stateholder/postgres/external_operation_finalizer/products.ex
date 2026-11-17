@@ -95,9 +95,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     complete_external_participant(connection, episode, external)
   end
 
-  def update_external_products(connection, episode, external, _event, _state)
+  def update_external_products(connection, episode, external, event, _state)
       when OperationTable.is_episode_end_name(external.name) do
-    complete_external_episode(connection, episode, external)
+    complete_external_episode(connection, episode, external, event.payload["reason"])
   end
 
   def update_external_products(connection, episode, %{name: name} = external, _event, _state)
@@ -183,9 +183,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     end
   end
 
-  defp complete_external_episode(connection, episode, external) do
+  defp complete_external_episode(connection, episode, external, end_reason) do
     webhook_object =
-      case Postgrex.query!(connection, SQL.complete_external_episode(), Scope.episode(episode)).rows do
+      case Postgrex.query!(
+             connection,
+             SQL.complete_external_episode(),
+             Scope.episode(episode) ++ [end_reason]
+           ).rows do
         [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
           %{
             id: UUID.load!(id),

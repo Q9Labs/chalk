@@ -9,7 +9,8 @@ defmodule ChalkSync.Stateholder.Command do
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
-    "assign_roles" => :assign_roles
+    "assign_roles" => :assign_roles,
+    "extend_episode" => :extend_episode
   }
 
   @enforce_keys [:id, :name, :payload, :fingerprint, :normalized_bytes]
@@ -21,7 +22,8 @@ defmodule ChalkSync.Stateholder.Command do
             :set_hand_raised
             | :set_display_name
             | :set_admission_policy
-            | :assign_roles,
+            | :assign_roles
+            | :extend_episode,
           payload: map(),
           fingerprint: binary(),
           normalized_bytes: pos_integer(),
@@ -95,6 +97,10 @@ defmodule ChalkSync.Stateholder.Command do
        do: :ok,
        else: {:error, :invalid_payload}
   end
+
+  defp validate_payload(:extend_episode, %{"extensionSeconds" => seconds} = payload)
+       when map_size(payload) == 1 and is_integer(seconds) and seconds > 0,
+       do: :ok
 
   defp validate_payload(_name, _payload), do: {:error, :invalid_payload}
 end

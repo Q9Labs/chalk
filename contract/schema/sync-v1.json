@@ -556,6 +556,18 @@
           "trimmedNonEmpty": true
         }
       }
+    },
+    {
+      "direction": "client-to-server",
+      "type": "command",
+      "name": "extend_episode",
+      "capability": "extendEpisode",
+      "payload": {
+        "extensionSeconds": {
+          "kind": "integer",
+          "minimum": 1
+        }
+      }
     }
   ],
   "operations": [
@@ -644,18 +656,6 @@
       "name": "start_episode",
       "capability": "startEpisode",
       "payload": {}
-    },
-    {
-      "direction": "client-to-server",
-      "type": "operation",
-      "name": "extend_episode",
-      "capability": "extendEpisode",
-      "payload": {
-        "extensionSeconds": {
-          "kind": "integer",
-          "minimum": 1
-        }
-      }
     },
     {
       "direction": "client-to-server",
@@ -922,7 +922,6 @@
     "stop_recording",
     "participant_leave",
     "start_episode",
-    "extend_episode",
     "end_episode",
     "tenant_set_deadline",
     "tenant_end_episode",
@@ -970,7 +969,7 @@
       "name": "episode_ended",
       "origin": "external",
       "payload": {
-        "reason": ["ended_by_participant", "tenant_recovery", "maximum_duration"]
+        "reason": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
       }
     },
     {
@@ -1021,7 +1020,7 @@
     },
     {
       "name": "deadline_changed",
-      "origin": "external",
+      "origin": "command_or_external",
       "payload": {
         "deadlineAtMs": {
           "kind": "integer",

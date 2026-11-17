@@ -59,6 +59,8 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
               "external_operation"
             )
 
+            if OperationTable.is_episode_end_name(name), do: observe_episode_end(episode)
+
           _ ->
             :ok
         end
@@ -85,6 +87,35 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   end
 
   def lifecycle(_episode, _lifecycle_intent_id, _decision), do: :ok
+
+  # The Episode row is the one record of why a call ended, whichever operation
+  # ended it. Only the finalizing call finds the row ended.
+  defp observe_episode_end(episode) do
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.alternate_connection(episode),
+               "select end_reason from episodes where tenant_id = $1 and space_id = $2 and id = $3 and status = 'ended'",
+               [
+                 Scope.uuid(episode.tenant_id),
+                 Scope.uuid(episode.space_id),
+                 Scope.uuid(episode.episode_id)
+               ],
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: [[end_reason]]}} when is_binary(end_reason) ->
+            Observability.linked_phase(nil, "sync.episode.ended", %{
+              episode_id: episode.episode_id,
+              end_reason: end_reason
+            })
+
+          _ ->
+            :ok
+        end
+      end,
+      :ok
+    )
+  end
 
   defp observe_webhook_production(episode, transition_key, transition) do
     Database.guard(

@@ -4,7 +4,7 @@ defmodule ChalkSync.RecordingPlane do
   alias ChalkSync.MediaPlane
   alias ChalkSync.Stateholder.EpisodeKey
 
-  @maximum_duration_seconds 4 * 60 * 60
+  @maximum_duration_seconds 24 * 60 * 60
 
   @doc "The longest recording the provider contract accepts."
   @spec maximum_duration_seconds() :: pos_integer()

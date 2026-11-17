@@ -7,6 +7,7 @@ defmodule ChalkSync.Episodes.Reducer.Events do
 
   @admission_policies Validation.admission_policies()
   @max_participants Validation.max_participants()
+  @end_reasons Validation.end_reasons()
 
   defp joined?(state, participant_id), do: Map.has_key?(state.participants, participant_id)
 
@@ -181,7 +182,7 @@ defmodule ChalkSync.Episodes.Reducer.Events do
   def apply_payload(state, "episode_ended", payload) do
     with :ok <- Validation.exact_keys(payload, ["reason"]),
          true <-
-           payload["reason"] in ["ended_by_participant", "tenant_recovery", "maximum_duration"] do
+           payload["reason"] in @end_reasons do
       {:ok,
        %{
          state

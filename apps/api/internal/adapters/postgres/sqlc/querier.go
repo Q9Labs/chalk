@@ -133,7 +133,6 @@ type Querier interface {
 	ExpireRecordingReservations(ctx context.Context, now pgtype.Timestamptz) ([]ExpireRecordingReservationsRow, error)
 	ExpireUncollectedPublicArrival(ctx context.Context, arg ExpireUncollectedPublicArrivalParams) error
 	ExpiredParticipantPresence(ctx context.Context, arg ExpiredParticipantPresenceParams) ([]ExpiredParticipantPresenceRow, error)
-	ExtendRecordingReservation(ctx context.Context, arg ExtendRecordingReservationParams) (ExtendRecordingReservationRow, error)
 	FailChatAttachmentUpload(ctx context.Context, arg FailChatAttachmentUploadParams) (int64, error)
 	FailPendingTenantControlOperationsForEnd(ctx context.Context, arg FailPendingTenantControlOperationsForEndParams) (int64, error)
 	FailRecordingCaptureCommand(ctx context.Context, arg FailRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
@@ -441,7 +440,6 @@ type Querier interface {
 	UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error)
 	UpdateSpaceRole(ctx context.Context, arg UpdateSpaceRoleParams) (SpaceRole, error)
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (UpdateTenantRow, error)
-	UpdateTenantEpisode(ctx context.Context, arg UpdateTenantEpisodeParams) (Episode, error)
 	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (UpdateTenantMembershipRow, error)
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)

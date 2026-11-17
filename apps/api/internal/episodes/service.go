@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -75,8 +76,8 @@ const (
 	MaximumActiveParticipants           int64 = 500
 	MaximumSnapshotBytes                int64 = 1024 * 1024
 	AdmissionRequestLifetime                  = 5 * time.Minute
-	MinimumEpisodeDurationSeconds       int32 = 60
-	MaximumEpisodeDurationSeconds       int32 = 7 * 24 * 60 * 60
+	MinimumEpisodeDurationSeconds             = calllength.MinimumSeconds
+	MaximumEpisodeDurationSeconds             = calllength.MaximumSeconds
 )
 
 // Capability names are a closed wire vocabulary. Roles are customer-defined
@@ -263,11 +264,26 @@ type RequestParticipantRemovalInput struct {
 	Request               Request
 }
 
+// EndReason says why the API ended an Episode. It is the vocabulary of Sync's
+// episode_ended event; an end that a participant asks for never passes here.
+type EndReason string
+
+const (
+	// EndReasonTenantRecovery is the default: the tenant's server ended the call.
+	EndReasonTenantRecovery EndReason = "tenant_recovery"
+	// EndReasonLingerExpired means everyone left and nobody came back in time.
+	EndReasonLingerExpired EndReason = "linger_expired"
+	// EndReasonMaximumDuration means the call reached its time limit.
+	EndReasonMaximumDuration EndReason = "maximum_duration"
+)
+
 type RequestEpisodeEndInput struct {
 	TenantID  utilities.ID
 	SpaceID   utilities.ID
 	EpisodeID utilities.ID
-	Request   Request
+	// Reason is EndReasonTenantRecovery when empty.
+	Reason  EndReason
+	Request Request
 }
 
 type SetDeadlineInput struct {

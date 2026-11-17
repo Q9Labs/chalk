@@ -375,6 +375,22 @@ defmodule ChalkSync.Episodes.Reducer do
     end
   end
 
+  # The caller resolves an extension against the Episode's ceiling and passes the new deadline,
+  # because the ceiling is Episode configuration and not part of the replicated state.
+  defp command_target(state, _actor_id, :extend_episode, payload) do
+    with :ok <- Validation.exact_keys(payload, ["deadlineAtMs"]),
+         deadline_at_ms when is_integer(deadline_at_ms) <- payload["deadlineAtMs"],
+         true <- deadline_at_ms > state.deadline_at_ms do
+      {:ok, "deadline_changed",
+       %{
+         "deadline_at_ms" => deadline_at_ms,
+         "deadline_generation" => state.deadline_generation + 1
+       }}
+    else
+      _ -> {:error, :invalid_state}
+    end
+  end
+
   defp command_target(_state, _actor_id, _name, _payload), do: {:error, :unknown_command}
 
   defp hand_event_name(true), do: "hand_raised"

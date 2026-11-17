@@ -45,7 +45,6 @@ type recordingPipelineQuerier interface {
 	GetRecordingArtifact(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error)
 	GetRecordingReservationFingerprint(context.Context, sqlc.GetRecordingReservationFingerprintParams) ([]byte, error)
 	GetRecordingReservationByKey(context.Context, sqlc.GetRecordingReservationByKeyParams) (sqlc.GetRecordingReservationByKeyRow, error)
-	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
 	RelinquishCaptureRecordingJob(context.Context, sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error)
 	ListRecordingDeferredArtifactStates(context.Context, sqlc.ListRecordingDeferredArtifactStatesParams) ([]sqlc.ListRecordingDeferredArtifactStatesRow, error)
@@ -390,14 +389,6 @@ func (r RecordingPipelineRepository) ReleaseReservation(ctx context.Context, ten
 		return recordingpipeline.Reservation{}, fmt.Errorf("release recording reservation: %w", err)
 	}
 	return mapReleasedReservation(row), nil
-}
-
-func (r RecordingPipelineRepository) ExtendReservation(ctx context.Context, tenantID, reservationID utilities.ID, duration time.Duration, endsAt time.Time) (recordingpipeline.Reservation, error) {
-	_ = tenantID
-	_ = reservationID
-	_ = duration
-	_ = endsAt
-	return recordingpipeline.Reservation{}, recordingpipeline.ErrExtensionUnavailable
 }
 
 func (r RecordingPipelineRepository) ExpireReservations(ctx context.Context, now time.Time) ([]recordingpipeline.Reservation, error) {

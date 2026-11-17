@@ -80,16 +80,23 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare.Record
   defp validate_recording_episode(%{status: "active"}), do: :ok
   defp validate_recording_episode(_policy), do: {:error, :episode_ended}
 
+  # The reservation covers the call up to its ceiling, so an extension never
+  # outlives the recording; the Episode end is what stops the recording.
   defp derive_recording_reservation(episode, %{
          artifact_policy: artifact_policy,
-         deadline_at: deadline_at
+         created_at: %DateTime{} = created_at,
+         maximum_duration_ceiling_seconds: ceiling_seconds
        })
        when is_map(artifact_policy) do
     with "episode_config.v2" <- artifact_policy["schema_version"],
          %{"mode" => mode} <- artifact_policy["recording"],
-         true <- mode in ["manual", "automatic"],
-         true <- match?(%DateTime{}, deadline_at) do
-      max_duration_seconds = DateTime.diff(deadline_at, DateTime.utc_now(), :second)
+         true <- mode in ["manual", "automatic"] do
+      max_duration_seconds =
+        DateTime.diff(
+          DateTime.add(created_at, ceiling_seconds, :second),
+          DateTime.utc_now(),
+          :second
+        )
 
       if max_duration_seconds > 0 do
         {:ok,

@@ -15,34 +15,24 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
 
   def lock_episode(connection, episode) do
     case Postgrex.query!(connection, SQL.lock_episode(), Scope.episode(episode)).rows do
-      [
-        [
-          status,
-          config_snapshot,
-          deadline_at,
-          deadline_generation,
-          created_at
-        ]
-      ] ->
-        snapshot = if is_map(config_snapshot), do: config_snapshot, else: %{}
-
-        role_capabilities =
-          Map.get(snapshot, "roles", Map.get(snapshot, "role_capabilities", %{}))
-
-        %{
-          status: status,
-          role_capabilities: role_capabilities,
-          artifact_policy: Map.get(snapshot, "artifact_policy"),
-          deadline_at: deadline_at,
-          deadline_generation: deadline_generation,
-          maximum_duration_ceiling_seconds:
-            Map.get(snapshot, "maximum_episode_duration_seconds", 2_592_000),
-          created_at: created_at
-        }
-
-      [] ->
-        Postgrex.rollback(connection, {:error, :episode_not_found})
+      [row] -> episode_policy(row)
+      [] -> Postgrex.rollback(connection, {:error, :episode_not_found})
     end
+  end
+
+  defp episode_policy([status, config_snapshot, deadline_at, deadline_generation, created_at]) do
+    snapshot = if is_map(config_snapshot), do: config_snapshot, else: %{}
+
+    %{
+      status: status,
+      role_capabilities: Map.get(snapshot, "roles", Map.get(snapshot, "role_capabilities", %{})),
+      artifact_policy: Map.get(snapshot, "artifact_policy"),
+      deadline_at: deadline_at,
+      deadline_generation: deadline_generation,
+      maximum_duration_ceiling_seconds:
+        Map.get(snapshot, "maximum_episode_duration_seconds", 2_592_000),
+      created_at: created_at
+    }
   end
 
   def lock_participant(connection, episode, participant_id) do
@@ -101,20 +91,8 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
 
     episode_policy =
       case Postgrex.query!(connection, SQL.lock_episode(), episode_params).rows do
-        [[status, config_snapshot, deadline_at, deadline_generation, created_at]] ->
-          snapshot = if is_map(config_snapshot), do: config_snapshot, else: %{}
-
-          %{
-            status: status,
-            role_capabilities:
-              Map.get(snapshot, "roles", Map.get(snapshot, "role_capabilities", %{})),
-            deadline_at: deadline_at,
-            deadline_generation: deadline_generation,
-            created_at: created_at
-          }
-
-        [] ->
-          Postgrex.rollback(connection, {:retryable, :dependency_unavailable})
+        [row] -> episode_policy(row)
+        [] -> Postgrex.rollback(connection, {:retryable, :dependency_unavailable})
       end
 
     participant =
@@ -190,6 +168,7 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
 
   defp required_capability(:participant_leave), do: "self"
   defp required_capability(:end_episode), do: "endEpisode"
+  defp required_capability(:extend_episode), do: "extendEpisode"
 
   def validate_command(identity, command, control, episode_policy, participant) do
     with :ok <- validate_product_state(identity, command, episode_policy, participant),
