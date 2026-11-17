@@ -34,6 +34,9 @@ type Binding struct {
 	// the binding and a binding written before they existed stays valid.
 	NodeIncarnation string          `json:"node_incarnation,omitempty"`
 	PlacementReason PlacementReason `json:"placement_reason,omitempty"`
+	// Selector is the rule that chose the provider (selected_by). It is additive like the two
+	// above, and it is not an enum: see Selector.valid.
+	Selector Selector `json:"selected_by,omitempty"`
 	// Generation counts the moves of a live Episode between allocations (recovery). It is
 	// absent until the first move. A move commits only against the generation it read, and
 	// the database refuses any other step, so two writers never both win.
@@ -234,6 +237,9 @@ func (binding Binding) Validate() error {
 		if !ValidNodeID(previous.Node) || previous.Incarnation != "" && !ValidIncarnation(previous.Incarnation) {
 			return ErrInvalidBinding
 		}
+	}
+	if !binding.Selector.valid() {
+		return ErrInvalidBinding
 	}
 	switch binding.PlacementReason {
 	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowHostGuard, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:

@@ -159,6 +159,59 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
+// A binding says which rule chose its provider, in the order the rules apply: the kill switch,
+// then the allowlist and the client, then the Space, the Tenant and the platform default.
+func TestBindingRecordsWhichRuleChoseTheProvider(t *testing.T) {
+	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
+	onlyListed, err := spaces.ParseChalkSFUAllowlist([]string{listed.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nobody, err := spaces.ParseChalkSFUAllowlist(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
+	ownText := string(own)
+	runsChalkSFU := mediaplane.ParseClientProviders(string(own))
+	cloudflareOnly := mediaplane.ParseClientProviders(string(cloudflare))
+	registry := func(allowed spaces.ChalkSFUAllowlist, paused bool) Registry {
+		return NewRegistry(Config{
+			DefaultProvider: cloudflare, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
+			Rollout: Rollout{Spaces: allowed, NewEpisodesPaused: paused},
+		})
+	}
+	chalkSpace := spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}
+	for _, c := range []struct {
+		name     string
+		registry Registry
+		tenant   tenants.Tenant
+		space    spaces.Space
+		clients  mediaplane.ClientProviders
+		want     mediaplane.Selector
+	}{
+		{"platform default", registry(onlyListed, false), tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: "cf_sfu"}, runsChalkSFU, mediaplane.SelectedByDefault},
+		{"Tenant default", registry(onlyListed, false), tenants.Tenant{DefaultMediaPlane: strPtr("cf_sfu")}, spaces.Space{ID: listed, MediaPlane: "cf_sfu"}, runsChalkSFU, mediaplane.SelectedByTenant},
+		{"Space setting", registry(onlyListed, false), tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: "cf_sfu", MediaPlaneSetting: &cloudflare}, runsChalkSFU, mediaplane.SelectedBySpace},
+		{"allowlist", registry(nobody, false), tenants.Tenant{}, chalkSpace, runsChalkSFU, mediaplane.SelectedByAllowlist},
+		{"kill switch", registry(onlyListed, true), tenants.Tenant{}, chalkSpace, runsChalkSFU, mediaplane.SelectedByKillSwitch},
+		{"kill switch beats the allowlist", registry(nobody, true), tenants.Tenant{}, chalkSpace, runsChalkSFU, mediaplane.SelectedByKillSwitch},
+		{"client that cannot run the Chalk SFU", registry(onlyListed, false), tenants.Tenant{}, chalkSpace, cloudflareOnly, mediaplane.SelectedByClient},
+	} {
+		binding, err := c.registry.ResolveBinding(context.Background(), c.tenant, c.space, c.clients)
+		if err != nil || binding == nil || binding.Provider != cloudflare.SettingName() {
+			t.Errorf("%s: %#v %v, want a Cloudflare binding", c.name, binding, err)
+			continue
+		}
+		if binding.Selector != c.want {
+			t.Errorf("%s: selected_by = %q, want %q", c.name, binding.Selector, c.want)
+		}
+		if err := binding.Validate(); err != nil {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+}
+
 // A new Episode starts on the Chalk SFU only for a caller whose SDK declares it.
 // With no fleet configured, an attempt on the Chalk SFU fails as unavailable, so a
 // Cloudflare binding shows the selector never tried it for the old caller.

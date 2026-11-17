@@ -35,17 +35,44 @@ func TestParseRequestRefusesWhatItCannotDo(t *testing.T) {
 		{"backfill aimed at a Tenant", "backfill", someID, "", "", false, "takes no"},
 	}
 	for _, c := range bad {
-		if _, err := parseRequest(c.command, c.tenant, c.space, c.plane, c.dryRun); err == nil || !strings.Contains(err.Error(), c.want) {
+		operator, reason := "", ""
+		if c.command == "set" {
+			operator, reason = "test", "proof"
+		}
+		if _, err := parseRequest(c.command, c.tenant, c.space, c.plane, c.dryRun, operator, reason); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v, want %q", c.name, err, c.want)
 		}
 	}
-	inherit, err := parseRequest("set", someID, someID, "inherit", false)
+	inherit, err := parseRequest("set", someID, someID, "inherit", false, "test", "proof")
 	if err != nil || inherit.plane != nil || inherit.space.IsZero() {
 		t.Fatalf("inherit = %+v, %v", inherit, err)
 	}
-	own, err := parseRequest("set", someID, "", "chalk_sfu", false)
+	own, err := parseRequest("set", someID, "", "chalk_sfu", false, " hasan ", " rollback ")
 	if err != nil || own.plane == nil || *own.plane != mediaplane.ProviderChalkSFU {
 		t.Fatalf("chalk_sfu = %+v, %v", own, err)
+	}
+	if own.origin.Actor != "hasan" || own.origin.Reason != "rollback" {
+		t.Fatalf("origin = %+v, want the trimmed operator and reason", own.origin)
+	}
+}
+
+// Every change names who made it and why, so no plane change reaches the trail unexplained.
+func TestAChangeNeedsAnOperatorAndAReason(t *testing.T) {
+	for name, c := range map[string]struct{ operator, reason string }{
+		"neither":     {"", ""},
+		"no reason":   {"hasan", ""},
+		"no operator": {"", "rollback"},
+		"blank":       {" ", " "},
+	} {
+		if _, err := parseRequest("set", someID, "", "inherit", false, c.operator, c.reason); err == nil || !strings.Contains(err.Error(), "--operator and --reason") {
+			t.Errorf("set with %s: err = %v", name, err)
+		}
+		if _, err := parseSwitchRequest("", "", "", false, "off", c.operator, c.reason); err == nil || !strings.Contains(err.Error(), "--operator and --reason") {
+			t.Errorf("new-episodes --state with %s: err = %v", name, err)
+		}
+	}
+	if _, err := parseRequest("get", someID, "", "", false, "hasan", "why"); err == nil {
+		t.Error("get took an operator and a reason")
 	}
 }
 
@@ -178,11 +205,11 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	}
 
 	// Tenant and Space writes log one line each, with before and after.
-	got := invoke("set", "--tenant", tenantID.String(), "--plane", "chalk_sfu")
+	got := invoke("set", "--tenant", tenantID.String(), "--plane", "chalk_sfu", "--operator", "test", "--reason", "proof")
 	if len(got) != 1 || got[0]["before"] != "inherit" || got[0]["after"] != "chalk_sfu" || got[0]["scope"] != "tenant" {
 		t.Fatalf("tenant set = %v", got)
 	}
-	got = invoke("set", "--tenant", tenantID.String(), "--space", listed.String(), "--plane", "inherit")
+	got = invoke("set", "--tenant", tenantID.String(), "--space", listed.String(), "--plane", "inherit", "--operator", "test", "--reason", "proof")
 	if len(got) != 1 || got[0]["before"] != "chalk_sfu" || got[0]["after"] != "inherit" {
 		t.Fatalf("space clear = %v", got)
 	}
@@ -192,9 +219,28 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "chalk_sfu" || got[0]["tenant_default"] != "chalk_sfu" {
 		t.Fatalf("get = %v", got)
 	}
-	invoke("set", "--tenant", tenantID.String(), "--plane", "inherit")
+	invoke("set", "--tenant", tenantID.String(), "--plane", "inherit", "--operator", "test", "--reason", "proof")
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
 		t.Fatalf("get after undo = %v", got)
+	}
+	// The three writes above, and the undo, are rows in the trail with the operator and reason,
+	// and the backfill and the get left none.
+	trail, err := pool.Query(t.Context(), `select scope, old_plane, new_plane, actor, reason from media_plane_changes where tenant_id = $1 order by id`, tenantID.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []string
+	for trail.Next() {
+		var scope, before, after, actor, reason string
+		if err := trail.Scan(&scope, &before, &after, &actor, &reason); err != nil {
+			t.Fatal(err)
+		}
+		rows = append(rows, strings.Join([]string{scope, before, after, actor, reason}, " "))
+	}
+	trail.Close()
+	want := []string{"tenant inherit chalk_sfu test proof", "space chalk_sfu inherit test proof", "tenant chalk_sfu inherit test proof"}
+	if strings.Join(rows, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("trail = %q, want %q", rows, want)
 	}
 
 	// A value no operator approved never selects the Chalk SFU, and an operator can repair one
@@ -207,7 +253,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
 		t.Fatalf("an unknown legacy default broke the resolution: %v", got)
 	}
-	if got = invoke("set", "--tenant", tenantID.String(), "--plane", "inherit"); got[0]["before"] != "bogus" || got[0]["after"] != "inherit" {
+	if got = invoke("set", "--tenant", tenantID.String(), "--plane", "inherit", "--operator", "test", "--reason", "proof"); got[0]["before"] != "bogus" || got[0]["after"] != "inherit" {
 		t.Fatalf("clearing an unknown legacy default = %v", got)
 	}
 
@@ -224,7 +270,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 
 	// The Chalk SFU is refused for a Tenant that runs its own credentials.
 	var out bytes.Buffer
-	err = run(t.Context(), []string{"set", "--tenant", otherTenant.String(), "--plane", "chalk_sfu"}, &out)
+	err = run(t.Context(), []string{"set", "--tenant", otherTenant.String(), "--plane", "chalk_sfu", "--operator", "test", "--reason", "proof"}, &out)
 	if err == nil || !strings.Contains(err.Error(), spaces.ErrTenantCannotServePlane.Error()) {
 		t.Fatalf("set on a Tenant with its own credentials: %v", err)
 	}

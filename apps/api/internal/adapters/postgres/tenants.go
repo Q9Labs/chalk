@@ -426,6 +426,9 @@ func (o TenantOperator) SetDefaultMediaPlane(ctx context.Context, id utilities.I
 	if _, err := tx.Exec(ctx, `select set_config('chalk.operator_write', 'on', true)`); err != nil {
 		return tenants.Tenant{}, fmt.Errorf("set default media plane: %w", err)
 	}
+	if err := tagPlaneChange(ctx, tx); err != nil {
+		return tenants.Tenant{}, err
+	}
 	tenant, err := tenants.NewService(NewTenantRepository(sqlc.New(tx))).SetDefaultMediaPlane(ctx, id, plane)
 	if err != nil {
 		return tenants.Tenant{}, err

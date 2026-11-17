@@ -720,6 +720,8 @@ func run() error {
 		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
 		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
+	// Every plane change is a row the database wrote; this announces each one as an event.
+	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(pool))
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

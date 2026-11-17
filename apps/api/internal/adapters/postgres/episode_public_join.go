@@ -195,6 +195,9 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		return episodes.PublicJoinResult{}, err
 	}
 	commitMetric.Record(ctx)
+	if episodeCreated {
+		announceEpisodeBinding(ctx, result.Episode)
+	}
 	return result, nil
 }
 

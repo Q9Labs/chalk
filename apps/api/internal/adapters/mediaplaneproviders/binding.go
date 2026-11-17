@@ -19,21 +19,25 @@ import (
 // fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
 // Cloudflare for good.
 func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	selected, err := r.selectedProvider(tenant, space)
+	choice, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
+	selectedBy := choice.By
 	var pin mediaplane.Provider
-	if selected == mediaplane.ProviderChalkSFU {
-		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
+	if choice.Plane == mediaplane.ProviderChalkSFU {
+		if err := r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients); err != nil {
 			return nil, err
 		}
-		admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
+		refusal, err := r.rollout.Refusal(ctx, space)
 		if err != nil {
 			return nil, fmt.Errorf("read the new-Episode switch: %w", err)
 		}
-		if !admits || !clients.Runs(mediaplane.ProviderChalkSFU) {
-			pin = mediaplane.ProviderCloudflareSFU
+		switch {
+		case refusal != "":
+			pin, selectedBy = mediaplane.ProviderCloudflareSFU, refusal
+		case !clients.Runs(mediaplane.ProviderChalkSFU):
+			pin, selectedBy = mediaplane.ProviderCloudflareSFU, mediaplane.SelectedByClient
 		}
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
@@ -75,10 +79,14 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 			}
 			resolved, resolution = fallback, fallbackResolution
 			placement.Node, placement.Incarnation = "", ""
+			selectedBy = mediaplane.SelectedByOverflow
 		}
 	}
 	binding, err := mediaplane.NewBinding(resolution.Provider, resolution.ConfigurationSource, r.applicationID(resolved))
 	if err != nil {
+		return nil, err
+	}
+	if binding, err = binding.SelectedBy(selectedBy); err != nil {
 		return nil, err
 	}
 	if placement.Reason != "" {
@@ -123,11 +131,11 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 // that must refuse before it writes anything. A Space that does not exist yet
 // has the zero ID, so only the allowlist entry * covers it.
 func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) error {
-	selected, err := r.selectedProvider(tenant, space)
+	choice, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return err
 	}
-	return r.refuseAfterSunset(ctx, tenant, space, selected, clients)
+	return r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients)
 }
 
 // refuseAfterSunset refuses a client that cannot run the Chalk SFU once the client
@@ -137,11 +145,11 @@ func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, 
 	if selected != mediaplane.ProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || !r.rollout.SunsetPassed() {
 		return nil
 	}
-	admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
+	refusal, err := r.rollout.Refusal(ctx, space)
 	if err != nil {
 		return fmt.Errorf("read the new-Episode switch: %w", err)
 	}
-	if !admits {
+	if refusal != "" {
 		return nil
 	}
 	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: mediaplane.ModeUnknown}

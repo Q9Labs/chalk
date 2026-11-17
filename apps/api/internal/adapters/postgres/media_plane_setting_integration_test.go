@@ -49,7 +49,7 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		for _, statement := range []string{`delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from tenants where id=$1`} {
+		for _, statement := range []string{`delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from media_plane_changes where tenant_id=$1`, `delete from tenants where id=$1`} {
 			mustExec(t, pool, statement, tenant.Bytes())
 		}
 	})
@@ -63,11 +63,15 @@ type policyResolver struct{ policy spaces.PlanePolicy }
 
 func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	live, _ := spaces.NewEpisodesPausedFrom(ctx)
-	plane, err := r.policy.Paused(live).Effective(tenant, space)
+	choice, err := r.policy.Paused(live).Effective(tenant, space)
 	if err != nil {
 		return nil, err
 	}
-	binding, err := mediaplane.NewBinding(plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
+	binding, err := mediaplane.NewBinding(choice.Plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
+	if err != nil {
+		return nil, err
+	}
+	binding, err = binding.SelectedBy(choice.By)
 	return &binding, err
 }
 
@@ -88,17 +92,18 @@ func TestEpisodeCreationBindsThePlaneTheSettingsSelect(t *testing.T) {
 		paused        bool
 		allowed       bool
 		want          string
+		by            string
 	}{
-		{"nothing set", nil, nil, cf, false, true, cf},
-		{"tenant sets the Chalk SFU", &own, nil, cf, false, true, own},
-		{"space sets the Chalk SFU", nil, &own, own, false, true, own},
-		{"space sets Cloudflare under a tenant on the Chalk SFU", &own, &cf, cf, false, true, cf},
-		{"space sets the Chalk SFU under a tenant on Cloudflare", &cf, &own, own, false, true, own},
-		{"kill switch beats the space", nil, &own, own, true, true, cf},
-		{"kill switch beats the tenant", &own, nil, cf, true, true, cf},
-		{"allowlist stays an AND", &own, &own, own, false, false, cf},
-		{"a Space stored before the setting existed", nil, nil, own, false, true, own},
-		{"that Space behind the kill switch", nil, nil, own, true, true, cf},
+		{"nothing set", nil, nil, cf, false, true, cf, "default"},
+		{"tenant sets the Chalk SFU", &own, nil, cf, false, true, own, "tenant"},
+		{"space sets the Chalk SFU", nil, &own, own, false, true, own, "space"},
+		{"space sets Cloudflare under a tenant on the Chalk SFU", &own, &cf, cf, false, true, cf, "space"},
+		{"space sets the Chalk SFU under a tenant on Cloudflare", &cf, &own, own, false, true, own, "space"},
+		{"kill switch beats the space", nil, &own, own, true, true, cf, "kill_switch"},
+		{"kill switch beats the tenant", &own, nil, cf, true, true, cf, "kill_switch"},
+		{"allowlist stays an AND", &own, &own, own, false, false, cf, "allowlist"},
+		{"a Space stored before the setting existed", nil, nil, own, false, true, own, "space"},
+		{"that Space behind the kill switch", nil, nil, own, true, true, cf, "kill_switch"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -121,10 +126,11 @@ func TestEpisodeCreationBindsThePlaneTheSettingsSelect(t *testing.T) {
 				t.Fatal(err)
 			}
 			var binding struct {
-				Provider string `json:"provider"`
+				Provider   string `json:"provider"`
+				SelectedBy string `json:"selected_by"`
 			}
-			if err := json.Unmarshal(stored, &binding); err != nil || binding.Provider != c.want {
-				t.Fatalf("binding = %s (%v), want provider %s", stored, err, c.want)
+			if err := json.Unmarshal(stored, &binding); err != nil || binding.Provider != c.want || binding.SelectedBy != c.by {
+				t.Fatalf("binding = %s (%v), want provider %s selected by %s", stored, err, c.want, c.by)
 			}
 		})
 	}

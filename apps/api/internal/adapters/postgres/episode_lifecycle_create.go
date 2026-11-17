@@ -20,6 +20,7 @@ import (
 func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input episodes.CreateEpisodeInput) (episodes.Episode, error) {
 	var result episodes.Episode
 	var commitMetric webhookCommitMetric
+	var created bool
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 		request, err := queries.ReserveEpisodeCreateRequest(ctx, sqlc.ReserveEpisodeCreateRequestParams{
@@ -125,13 +126,16 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			return fmt.Errorf("produce episode.started webhook: %w", err)
 		}
 
-		result = mapLifecycleEpisode(episode)
+		result, created = mapLifecycleEpisode(episode), true
 		return nil
 	})
 	if err != nil {
 		return episodes.Episode{}, err
 	}
 	commitMetric.Record(ctx)
+	if created {
+		announceEpisodeBinding(ctx, result)
+	}
 	return result, nil
 }
 
