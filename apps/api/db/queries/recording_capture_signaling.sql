@@ -13,8 +13,7 @@ select
     authority.attempt_count,
     authority.fencing_generation,
     authority.capture_epoch,
-    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp()
-     or (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz <= clock_timestamp())::boolean as media_stopped
+    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp())::boolean as media_stopped
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
@@ -47,8 +46,7 @@ select
     authority.attempt_count,
     authority.fencing_generation,
     authority.capture_epoch,
-    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp()
-     or (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'hard_deadline')::timestamptz <= clock_timestamp())::boolean as media_stopped
+    (pipelines.stop_requested_at is not null or reservations.ends_at <= clock_timestamp())::boolean as media_stopped
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
 join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id

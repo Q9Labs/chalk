@@ -1392,7 +1392,7 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || envelope.HardDeadline != hardDeadline.UTC().Format(time.RFC3339Nano) {
+	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || !envelopeDeadlineHolds(job.Kind, envelope.HardDeadline, hardDeadline) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrInvalidEnvelope
 	}
 	job.Authority = &recordingpipeline.JobAuthority{
@@ -1406,6 +1406,19 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 		IssuedAt:       timestamp(row.IssuedAt),
 	}
 	return job, nil
+}
+
+// A capture's deadline is the end of its reservation, which a later call deadline moves past the end its
+// envelope was signed with. The signed end is where the reservation began, so it may fall short of the current one.
+func envelopeDeadlineHolds(kind recordingpipeline.JobKind, signed string, current time.Time) bool {
+	signedAt, err := time.Parse(time.RFC3339Nano, signed)
+	if err != nil {
+		return false
+	}
+	if kind == recordingpipeline.JobKindCapture {
+		return !signedAt.After(current)
+	}
+	return signedAt.Equal(current)
 }
 
 func recordingJobDeadline(kind recordingpipeline.JobKind, captureDeadline, jobCreatedAt pgtype.Timestamptz) (time.Time, error) {

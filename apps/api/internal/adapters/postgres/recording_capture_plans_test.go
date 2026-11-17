@@ -123,6 +123,24 @@ func TestBuildRecordingCapturePlanDecodesEveryStoredPublicationShape(t *testing.
 	}
 }
 
+func TestBuildRecordingCapturePlanFollowsAnExtendedReservation(t *testing.T) {
+	source, input, signed := capturePlanSourceFixture(t)
+	extended := signed.Add(30 * time.Minute)
+	source.EndsAt = pgtype.Timestamptz{Time: extended, Valid: true}
+	plan, err := buildRecordingCapturePlan(source, input, 2, signed.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("build plan for an extended reservation: %v", err)
+	}
+	if !plan.EffectiveDeadline().Equal(extended) || plan.StopState() != captureplan.StopStateRunning {
+		t.Fatalf("plan deadline/stop = %s %s, want %s running past the signed %s", plan.EffectiveDeadline(), plan.StopState(), extended, signed)
+	}
+
+	source.EndsAt = pgtype.Timestamptz{Time: signed.Add(-time.Minute), Valid: true}
+	if _, err := buildRecordingCapturePlan(source, input, 3, signed.Add(-2*time.Minute)); !errors.Is(err, captureplan.ErrInvalidPlan) {
+		t.Fatalf("a reservation that ends before the signed deadline built a plan: %v", err)
+	}
+}
+
 func TestBuildRecordingCapturePlanRejectsEnvelopeAuthorityMismatch(t *testing.T) {
 	source, input, deadline := capturePlanSourceFixture(t)
 	input.PlanHandle = captureplan.PlanHandle("88888888-8888-4888-8888-888888888888")

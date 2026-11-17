@@ -340,7 +340,16 @@ export class V1CommandScheduler {
 }
 
 function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV1ClientFrame, { readonly type: "command" }> {
-  return { type: "command", command_id: commandId, ...command };
+  switch (command.name) {
+    case "set_hand_raised":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "set_display_name":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "set_admission_policy":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "assign_roles":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+  }
 }
 
 function satisfiedAck(commandId: string, revision: number, stateDigest: string): V1CommandResult {

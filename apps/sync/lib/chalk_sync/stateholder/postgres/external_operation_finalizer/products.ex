@@ -4,9 +4,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission
+  alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts
   alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: SQL
@@ -95,9 +97,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     complete_external_participant(connection, episode, external)
   end
 
-  def update_external_products(connection, episode, external, event, _state)
+  def update_external_products(connection, episode, external, _event, _state)
       when OperationTable.is_episode_end_name(external.name) do
-    complete_external_episode(connection, episode, external, event.payload["reason"])
+    complete_external_episode(connection, episode, external, Facts.end_reason(external))
   end
 
   def update_external_products(connection, episode, %{name: name} = external, _event, _state)
@@ -147,10 +149,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   def update_external_products(
         connection,
         episode,
-        %{name: :tenant_set_deadline} = external,
+        %{name: name} = external,
         _event,
         _state
-      ),
+      )
+      when name in [:tenant_set_deadline, :extend_episode],
       do: update_deadline_product(connection, episode, external)
 
   def update_external_products(_connection, _episode, _external, _event, _state), do: :ok
@@ -239,8 +242,18 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
         [external.payload["deadlineAtMs"], external.deadline_generation]
 
     case Postgrex.query!(connection, SQL.update_episode_deadline(), params).rows do
-      [[_id]] -> :ok
-      [] -> Postgrex.rollback(connection, {:error, :stale_deadline_generation})
+      [[_id]] ->
+        Postgrex.query!(
+          connection,
+          SQL.move_recording_reservations(),
+          Scope.episode(episode) ++
+            [external.payload["deadlineAtMs"], RecordingPlane.maximum_duration_seconds()]
+        )
+
+        :ok
+
+      [] ->
+        Postgrex.rollback(connection, {:error, :stale_deadline_generation})
     end
   end
 

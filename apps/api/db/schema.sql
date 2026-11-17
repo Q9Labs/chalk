@@ -1861,7 +1861,7 @@ create table sync_external_operations (
         'stop_participant_camera', 'stop_participant_screen_share',
         'remove_participant', 'start_recording', 'stop_recording',
         'recording_capture_ready', 'recording_capture_stopped', 'recording_capture_failed',
-        'participant_leave', 'end_episode', 'tenant_assign_roles', 'tenant_set_deadline',
+        'participant_leave', 'end_episode', 'extend_episode', 'tenant_assign_roles', 'tenant_set_deadline',
         'tenant_end_episode', 'maximum_episode_duration_expired',
         'role_transition_cleanup', 'role_transition_source_stop'
     )),
@@ -1871,8 +1871,8 @@ create table sync_external_operations (
     check ((target_participant_id is null) = (target_participant_generation is null)),
     check (target_participant_generation is null or target_participant_generation > 0),
     check (deadline_generation is null or deadline_generation > 0),
-    check (
-        (operation_name in ('tenant_set_deadline', 'maximum_episode_duration_expired'))
+    constraint sync_external_operations_deadline_generation_check check (
+        (operation_name in ('tenant_set_deadline', 'extend_episode', 'maximum_episode_duration_expired'))
         = (deadline_generation is not null)
     ),
     check ((journey_id is null) = (parent_journey_event_id is null)),
@@ -2571,7 +2571,7 @@ create table recording_reservations (
     request_fingerprint bytea not null check (octet_length(request_fingerprint) = 32),
     policy_snapshot_version text not null check (policy_snapshot_version = 'episode_config.v2'),
     participant_count integer not null check (participant_count between 1 and 10),
-    max_duration_seconds integer not null constraint recording_reservations_max_duration_seconds_check1 check (max_duration_seconds between 1 and 86400),
+    max_duration_seconds integer not null constraint recording_reservations_max_duration_seconds_check1 check (max_duration_seconds between 1 and 14400),
     input_bitrate_bps bigint not null check (input_bitrate_bps between 1 and 4000000),
     state text not null check (state in ('reserved', 'released', 'expired')),
     starts_at timestamptz,
@@ -3973,7 +3973,7 @@ create table recording_render_object_allocations (
         or (state in ('allocated', 'committed') and expected_content_type is not null and expected_byte_size > 0 and octet_length(expected_sha256) = 32 and octet_length(upload_token_hash) = 32 and upload_expires_at is not null)
     ),
     constraint recording_render_allocations_purpose_facts_check check (
-		(purpose = 'recording_video' and (state = 'reserved' or (expected_content_type = 'video/mp4' and expected_byte_size <= 34359738368 and expected_duration_millis between 1 and 86400000)))
+		(purpose = 'recording_video' and (state = 'reserved' or (expected_content_type = 'video/mp4' and expected_byte_size <= 34359738368 and expected_duration_millis between 1 and 14400000)))
 		or (purpose = 'transcription_manifest' and (state = 'reserved' or (expected_content_type = 'application/json' and expected_byte_size <= 1048576 and expected_duration_millis is null)))
 		or (purpose = 'transcription_audio' and (state = 'reserved' or (expected_content_type = 'audio/flac' and expected_byte_size <= 524288000 and expected_duration_millis between 1 and 900000)))
     ),

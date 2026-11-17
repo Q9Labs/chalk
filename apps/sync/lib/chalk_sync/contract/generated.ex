@@ -10,8 +10,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
     "set_admission_policy" => :set_admission_policy,
-    "assign_roles" => :assign_roles,
-    "extend_episode" => :extend_episode
+    "assign_roles" => :assign_roles
   }
   @client_operations %{
     "admit_participant" => :admit_participant,
@@ -24,6 +23,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "stop_recording" => :stop_recording,
     "participant_leave" => :participant_leave,
     "start_episode" => :start_episode,
+    "extend_episode" => :extend_episode,
     "end_episode" => :end_episode
   }
   @event_origins %{
@@ -36,7 +36,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     "participant_display_name_changed" => "command",
     "admission_policy_changed" => "command",
     "role_assigned" => "command",
-    "deadline_changed" => "command_or_external",
+    "deadline_changed" => "external",
     "admission_requested" => "lifecycle",
     "admission_denied" => "external",
     "admission_expired" => "external",
@@ -234,6 +234,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       "stop_recording",
       "participant_leave",
       "start_episode",
+      "extend_episode",
       "end_episode",
       "tenant_set_deadline",
       "tenant_end_episode",
@@ -750,13 +751,6 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     role == String.trim(role)
   end
 
-  defp valid_command_payload?("extend_episode",
-      %{"extension_seconds" => extension_seconds} = payload) do
-    exact_keys?(payload, [
-  "extension_seconds"
-]) and valid_positive_integer?(extension_seconds)
-  end
-
   defp valid_command_payload?(_name, _payload), do: false
 
   defp decode_operation(%{"command_id" => command_id, "name" => name,
@@ -833,6 +827,13 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     exact_keys?(payload, [
 
 ]) and true
+  end
+
+  defp valid_operation_payload?("extend_episode",
+      %{"extension_seconds" => extension_seconds} = payload) do
+    exact_keys?(payload, [
+  "extension_seconds"
+]) and valid_positive_integer?(extension_seconds)
   end
 
   defp valid_operation_payload?("end_episode", %{} = payload) do
@@ -1197,7 +1198,6 @@ defmodule ChalkSync.Contract.GeneratedV1 do
 ]) and reason in [
   "ended_by_participant",
   "tenant_recovery",
-  "linger_expired",
   "maximum_duration"
 ]
   end

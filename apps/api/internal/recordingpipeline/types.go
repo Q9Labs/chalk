@@ -36,7 +36,7 @@ var (
 	ErrInvalidReservationID         = errors.New("invalid recording reservation id")
 	ErrInvalidJobID                 = errors.New("invalid recording job id")
 	ErrInvalidParticipantCount      = errors.New("recording participant count must be between one and ten")
-	ErrInvalidDuration              = errors.New("recording duration must be greater than zero and at most 24 hours")
+	ErrInvalidDuration              = errors.New("recording duration must be greater than zero and at most four hours")
 	ErrInvalidInputBitrate          = errors.New("recording input bitrate must be greater than zero and at most four Mbps")
 	ErrReservationConflict          = errors.New("recording reservation idempotency conflict")
 	ErrCaptureUnsupported           = errors.New("recording capture is not supported for this media plane")

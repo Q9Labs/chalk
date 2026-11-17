@@ -136,7 +136,7 @@
       "payload": {}
     },
     {
-      "type": "command",
+      "type": "operation",
       "command_id": "operation-command-10",
       "name": "extend_episode",
       "payload": {

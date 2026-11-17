@@ -104,17 +104,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
      }}
   end
 
-  defp expected_fact(%{name: :end_episode}, _state),
-    do: {:episode_ended, %{"reason" => "ended_by_participant"}}
+  defp expected_fact(%{name: name} = external, _state)
+       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       do: {:episode_ended, %{"reason" => wire_end_reason(end_reason(external))}}
 
-  defp expected_fact(%{name: :tenant_end_episode} = external, _state),
-    do: {:episode_ended, %{"reason" => Map.get(external.payload, "reason", "tenant_recovery")}}
-
-  defp expected_fact(%{name: :maximum_duration_expired}, _state),
-    do: {:episode_ended, %{"reason" => "maximum_duration"}}
-
-  defp expected_fact(%{name: :tenant_set_deadline} = external, _state),
-    do:
+  defp expected_fact(%{name: name} = external, _state)
+       when name in [:tenant_set_deadline, :extend_episode],
+       do:
       {:deadline_changed,
        %{
          "deadline_at_ms" => external.payload["deadlineAtMs"],
@@ -122,4 +118,19 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
        }}
 
   defp expected_fact(_external, _state), do: :invalid
+
+  @doc """
+  The precise reason an Episode ended, as the Episode row stores it.
+  """
+  def end_reason(%{name: :end_episode}), do: "ended_by_participant"
+
+  def end_reason(%{name: :tenant_end_episode, payload: payload}),
+    do: Map.get(payload, "reason", "tenant_recovery")
+
+  def end_reason(%{name: :maximum_duration_expired}), do: "maximum_duration"
+
+  # Deployed clients validate the three reasons Sync v1 published, so a linger that ran out is
+  # told to them as the Tenant ending the call. The Episode row keeps the precise reason.
+  defp wire_end_reason("linger_expired"), do: "tenant_recovery"
+  defp wire_end_reason(reason), do: reason
 end

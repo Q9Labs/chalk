@@ -352,7 +352,7 @@ function validateSyncContractDocument(value) {
     validateFieldMap(command.payload, `command ${name} payload is required`);
     return name;
   });
-  if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles", "extend_episode"])) {
+  if (JSON.stringify(commandNames) !== JSON.stringify(["set_hand_raised", "set_display_name", "set_admission_policy", "assign_roles"])) {
     throw new Error("Invalid sync v1 contract: durable target command set must be exhaustive");
   }
 
@@ -366,7 +366,7 @@ function validateSyncContractDocument(value) {
     validateFieldMap(operation.payload, `operation ${name} payload is required`);
     return name;
   });
-  const expectedOperations = ["admit_participant", "deny_admission", "mute_participant", "stop_participant_camera", "stop_participant_screen_share", "remove_participant", "start_recording", "stop_recording", "participant_leave", "start_episode", "end_episode"];
+  const expectedOperations = ["admit_participant", "deny_admission", "mute_participant", "stop_participant_camera", "stop_participant_screen_share", "remove_participant", "start_recording", "stop_recording", "participant_leave", "start_episode", "extend_episode", "end_episode"];
   if (JSON.stringify(operationNames) !== JSON.stringify(expectedOperations)) {
     throw new Error("Invalid sync v1 contract: durable operation set must be exhaustive");
   }
@@ -381,7 +381,7 @@ function validateSyncContractDocument(value) {
     ["participant_display_name_changed", "command"],
     ["admission_policy_changed", "command"],
     ["role_assigned", "command"],
-    ["deadline_changed", "command_or_external"],
+    ["deadline_changed", "external"],
     ["admission_requested", "lifecycle"],
     ["admission_denied", "external"],
     ["admission_expired", "external"],
@@ -418,6 +418,7 @@ function validateSyncContractDocument(value) {
     "stop_recording",
     "participant_leave",
     "start_episode",
+    "extend_episode",
     "end_episode",
     "tenant_set_deadline",
     "tenant_end_episode",

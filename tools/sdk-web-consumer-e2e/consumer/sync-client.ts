@@ -128,7 +128,7 @@ export class FixtureSyncClient {
   }
   stopRecording = (recordingId: string) => this.#command("stop_recording", { recording_id: recordingId });
   endEpisode = () => this.#command("end_episode", {});
-  extendEpisode = (minutes: number) => this.#command("extend_episode", { extension_seconds: minutes * 60 });
+  extendEpisode = (minutes: number) => this.#command("extend_episode", { minutes });
 
   getCollaborationExtensionState = () => ({
     negotiated: true,

@@ -8,7 +8,6 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.Command, as: SQL
-  alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Fanout, as: WhiteboardFanout
   alias ChalkSync.WhiteboardV1.SQL, as: WhiteboardSQL
@@ -196,15 +195,6 @@ defmodule ChalkSync.Stateholder.Postgres.CommandPersistence do
     ])
 
     :ok
-  end
-
-  defp update_command_product(connection, identity, %{name: "deadline_changed"} = event) do
-    product_update!(
-      connection,
-      FinalizerSQL.update_episode_deadline(),
-      Scope.episode(identity.episode) ++
-        [event.payload["deadline_at_ms"], event.payload["deadline_generation"]]
-    )
   end
 
   defp update_command_product(_connection, _identity, _event), do: :ok

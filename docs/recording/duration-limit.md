@@ -8,20 +8,17 @@ the Episode. If both deadlines coincide, neither has a guaranteed order.
 
 ## Which deadline applies
 
-- A Recording reserves the call's whole remaining life up to its ceiling
-  (`created_at` plus the Space's `maximum_episode_duration_seconds`), capped at
-  24 hours (`recordingpipeline.MaximumRecordingDuration`). The reservation is
-  sealed at start, but it already covers every extension the call can still
-  get, so extending the call never leaves the Recording behind. What stops a
-  Recording is the end of the Episode. Starting late gives a shorter
-  reservation. No public override exceeds the cap.
-- A Space whose maximum is above 24 hours keeps its calls, but a Recording in
-  such a call stops at 24 hours with `duration_limit`. The cap is one constant
-  per language, not a product rule, and it waits on a measured render budget
-  (see Sizing judgment).
+- A Recording reserves the Episode's remaining lifetime when it starts, capped at
+  four hours (`recordingpipeline.MaximumRecordingDuration`). Starting late gives
+  a shorter Recording. A later deadline (an extension or a new deadline from
+  the Tenant) moves the end of the reservation in the same Sync transaction that
+  moves the Episode's deadline, and a running Recording follows through its next
+  capture plan. The reservation never ends earlier than it did and never runs
+  past four hours from the Recording's start. An older recorder node keeps the
+  deadline it was given when it started. No public override exceeds the ceiling.
 - Space settings (`default_episode_duration_seconds`,
   `maximum_episode_duration_seconds`) are snapshotted into each Episode. The 24
-  hour API defaults are Episode limits. A Recording follows them up to the cap.
+  hour defaults are Episode limits, not a promise of 24 hours of Recording.
 - The Space's `recording_policy` decides whether a Recording starts. A Space
   created without one gets `automatic`.
 - Public Spaces have a one-hour lifecycle, and joining late does not reset it.
@@ -36,7 +33,7 @@ Export status are separate.
 
 ## Sizing judgment
 
-The 24-hour limit rests on bounded memory, not on a hardware qualification.
+The four-hour limit rests on bounded memory, not on a hardware qualification.
 
 - Capture keeps one Recording per node and uploads bounded bundles as it runs. A
   slow upload fails Capture rather than building a local backlog, so the node disk
@@ -44,10 +41,8 @@ The 24-hour limit rests on bounded memory, not on a hardware qualification.
 - Render admission, decoder and MP4 bounds are fixed in the recording pipeline
   code. They are not measured peak disk use.
 - Render time is budgeted at seven times the maximum duration, including staging
-  and retries, so a render lease can last seven days. The fixture runs near 5.9
-  times realtime, so 24 hours is a projection, not a measurement. A 24-hour
-  Recording also stays under the 32 GiB MP4 cap only at moderate bitrates;
-  raise the cap above 24 hours only after measuring both.
+  and retries. The fixture runs near 5.9 times, so four hours is a projection,
+  not a measurement.
 - Transcription splits microphone audio into independent five-minute chunks, so
   longer Recordings add chunks, not larger provider requests. The transcription
   source lease's grace after retention expiry is a lease window, not a duration
@@ -62,7 +57,7 @@ each keep one constant for their language.
 ## Rollback
 
 Keep the widened database bounds in a runtime rollback. The migration's down step
-fails atomically if any row exceeds the old bounds. Reverting code restores the
-old ceiling for new Recordings, but old validators can reject in-flight
-Recordings longer than four hours or their exports. Finish or stop those
-Recordings, and finish their exports, before rolling back.
+fails atomically if any row exceeds the old two-hour bounds. Reverting code
+restores the old ceiling for new Recordings, but old validators can reject
+in-flight four-hour authority or exports. Finish or stop those Recordings, and
+finish their exports, before rolling back.

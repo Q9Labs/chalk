@@ -197,6 +197,25 @@ func (a *PionCaptureAttempt) Close(ctx context.Context) error {
 	return a.closeLocal(closeCtx, nil, recordingbundle.CloseReasonExplicit)
 }
 
+// watchDeadline calls expire when the capture's end passes. A later capture plan moves the end,
+// so the wait starts over each time it does.
+func watchDeadline(ctx context.Context, authority recordercapture.AttemptAuthority, after func(time.Duration) <-chan time.Time, now func() time.Time, expire func()) {
+	for {
+		armed := authority.EndsAt()
+		select {
+		case <-after(armed.Sub(now().UTC())):
+			if authority.EndsAt().After(armed) {
+				continue
+			}
+			expire()
+			return
+		case <-authority.DeadlineMoved():
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	if a == nil || a.peer == nil || a.coordinator == nil || a.plans == nil || a.keys == nil || a.objects == nil || a.bundles == nil || a.lifecycle == nil {
 		return ErrInvalidCaptureAttempt
@@ -228,22 +247,17 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		if cause == recordercapture.ErrDeadlineExpired ||
 			(cause == context.Canceled && errors.Is(context.Cause(runCtx), recordercapture.ErrDeadlineExpired)) {
-			return a.finishStopped(writer, a.authority.HardDeadline, recordingbundle.CloseReasonMaxDuration)
+			return a.finishStopped(writer, a.authority.EndsAt(), recordingbundle.CloseReasonMaxDuration)
 		}
 		return a.finishFailure(err, writer)
 	}
 
-	if !a.authority.HardDeadline.IsZero() {
-		deadline := a.config.After(a.authority.HardDeadline.Sub(a.config.Now().UTC()))
+	if !a.authority.EndsAt().IsZero() {
 		deadlineDone := make(chan struct{})
 		defer func() { cancel(nil); <-deadlineDone }()
 		go func() {
 			defer close(deadlineDone)
-			select {
-			case <-deadline:
-				cancel(recordercapture.ErrDeadlineExpired)
-			case <-runCtx.Done():
-			}
+			watchDeadline(runCtx, a.authority, a.config.After, a.config.Now, func() { cancel(recordercapture.ErrDeadlineExpired) })
 		}()
 	}
 	plan, err := a.initialPlan(runCtx)
@@ -837,7 +851,7 @@ func (a *PionCaptureAttempt) consumeAuthorizedPacket(ctx context.Context, writer
 }
 
 func (a *PionCaptureAttempt) packetAuthority(ctx context.Context) (captureplan.Plan, error) {
-	if !a.authority.HardDeadline.IsZero() && !a.config.Now().UTC().Before(a.authority.HardDeadline) {
+	if !a.authority.EndsAt().IsZero() && !a.config.Now().UTC().Before(a.authority.EndsAt()) {
 		return captureplan.Plan{}, recordercapture.ErrDeadlineExpired
 	}
 	lease := a.currentLease()
@@ -918,8 +932,8 @@ func (a *PionCaptureAttempt) finishSuccess(writer *captureBundleWriter) error {
 	// durable signaling command fingerprint.
 	stoppedAt := a.config.Now().UTC()
 	reason := recordingbundle.CloseReasonFinalStop
-	if !a.authority.HardDeadline.IsZero() && !stoppedAt.Before(a.authority.HardDeadline) {
-		stoppedAt = a.authority.HardDeadline
+	if endsAt := a.authority.EndsAt(); !endsAt.IsZero() && !stoppedAt.Before(endsAt) {
+		stoppedAt = endsAt
 		reason = recordingbundle.CloseReasonMaxDuration
 	}
 	return a.finishStopped(writer, stoppedAt, reason)
@@ -1002,8 +1016,8 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	result = errors.Join(result, a.peer.Close())
 	if writer != nil {
 		endedAt := a.config.Now().UTC()
-		if !a.authority.HardDeadline.IsZero() && (reason == recordingbundle.CloseReasonMaxDuration || endedAt.After(a.authority.HardDeadline)) {
-			endedAt = a.authority.HardDeadline
+		if endsAt := a.authority.EndsAt(); !endsAt.IsZero() && (reason == recordingbundle.CloseReasonMaxDuration || endedAt.After(endsAt)) {
+			endedAt = endsAt
 		}
 		result = errors.Join(result, writer.closeWithContext(ctx, reason, endedAt))
 		writer.clearTerminalState()

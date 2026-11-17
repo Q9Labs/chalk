@@ -41,7 +41,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
     insert_pending_operation_receipt(connection, identity, operation, external)
 
     increment_pending_receipt_capacity(connection, identity.episode, accepted_state.revision)
-    finalize_local_leave(connection, identity.episode, external)
+    finalize_inline(connection, identity.episode, external)
   end
 
   def persist_internal_operation_acceptance(
@@ -58,10 +58,21 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
     _accepted_state =
       PreCallAuthority.persist_pre_call_authority(connection, episode, external, state, context)
 
-    finalize_local_leave(connection, episode, external)
+    finalize_inline(connection, episode, external)
   end
 
-  defp finalize_local_leave(connection, episode, %{name: :participant_leave} = external) do
+  # An extension has no provider to call, so it finalizes in the transaction that accepts it:
+  # no pending row of a name an older node cannot read is ever visible.
+  defp finalize_inline(connection, episode, %{name: :extend_episode} = external),
+    do:
+      ExternalOperationFinalizer.finalize_transaction(
+        connection,
+        episode,
+        external.external_operation_id,
+        {:confirmed, :local}
+      )
+
+  defp finalize_inline(connection, episode, %{name: :participant_leave} = external) do
     case JoinSeats.prepare_leave(connection, episode, external.external_operation_id) do
       :ready ->
         ExternalOperationFinalizer.finalize_transaction(
@@ -76,7 +87,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
     end
   end
 
-  defp finalize_local_leave(_connection, _episode, external),
+  defp finalize_inline(_connection, _episode, external),
     do: ExternalOperationDecision.build(external, :original)
 
   defp build_external_operation(identity, operation, context) do
@@ -113,6 +124,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Persist do
 
   defp persisted_operation_payload(identity, %{name: :participant_leave} = operation, _context),
     do: Map.put(operation.payload, "entryGeneration", identity.entry_generation || 0)
+
+  defp persisted_operation_payload(_identity, %{name: :extend_episode} = operation, context),
+    do: Map.put(operation.payload, "deadlineAtMs", context.deadline_at_ms)
 
   defp persisted_operation_payload(_identity, operation, context) do
     case context[:recording_reservation] do

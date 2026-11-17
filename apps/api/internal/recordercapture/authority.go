@@ -26,7 +26,7 @@ var (
 	ErrNegotiationLoop    = errors.New("recorder capture negotiation exceeded its bound")
 	ErrProtocol           = errors.New("invalid recorder capture signaling result")
 	ErrNotBootstrapped    = errors.New("recorder capture connection is not bootstrapped")
-	ErrDeadlineMismatch   = errors.New("recorder capture plan exceeds the attempt deadline")
+	ErrDeadlineMismatch   = errors.New("recorder capture plan ends later than a recording may run")
 	ErrDeadlineExpired    = errors.New("recorder capture attempt deadline expired")
 	ErrLeaseRenewal       = errors.New("invalid recorder capture lease renewal")
 	ErrCaptureClosed      = errors.New("recorder capture connection is closed")
@@ -50,8 +50,11 @@ type AttemptAuthority struct {
 	AttemptCount      int
 	FencingGeneration int64
 	CaptureEpoch      captureplane.CaptureEpoch
-	HardDeadline      time.Time
-	CaptureReadyAt    *time.Time
+	// HardDeadline is the end the envelope was signed with. A later plan moves the capture past
+	// it through Deadline; read where the capture ends through EndsAt.
+	HardDeadline   time.Time
+	Deadline       *Deadline
+	CaptureReadyAt *time.Time
 }
 
 // NewAttemptAuthority validates the envelope, its digest, and the current
@@ -149,6 +152,7 @@ func NewAttemptAuthorityAt(envelope recordingpipeline.RecorderJobEnvelope, envel
 		FencingGeneration: validatedEnvelope.FencingGeneration,
 		CaptureEpoch:      captureplane.CaptureEpoch(validatedEnvelope.CaptureEpoch),
 		HardDeadline:      hardDeadline.UTC(),
+		Deadline:          NewDeadline(),
 		CaptureReadyAt:    captureReadyAt,
 	}, nil
 }
@@ -209,7 +213,7 @@ func (a AttemptAuthority) validatePlan(plan captureplan.Plan) error {
 	if plan.Revision() == 0 {
 		return fmt.Errorf("%w: revision", ErrInvalidPlan)
 	}
-	if !a.HardDeadline.IsZero() && plan.EffectiveDeadline().After(a.HardDeadline) {
+	if !a.HardDeadline.IsZero() && plan.EffectiveDeadline().After(a.HardDeadline.Add(MaximumDeadlineExtension)) {
 		return ErrDeadlineMismatch
 	}
 	return nil

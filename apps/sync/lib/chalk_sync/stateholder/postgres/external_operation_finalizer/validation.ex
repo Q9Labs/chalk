@@ -67,9 +67,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Validation d
   end
 
   defp validate_finalization_deadline(
-         %{name: :tenant_set_deadline, deadline_generation: generation},
+         %{name: name, deadline_generation: generation},
          policy
-       ) do
+       )
+       when name in [:tenant_set_deadline, :extend_episode] do
     if generation == policy.deadline_generation + 1,
       do: :ok,
       else: {:error, :stale_deadline_generation}

@@ -294,8 +294,10 @@ func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, inp
 		return captureplan.Plan{}, err
 	}
 
-	effectiveDeadline, err := time.Parse(time.RFC3339Nano, envelope.HardDeadline)
-	if err != nil || !effectiveDeadline.Equal(timestamp(source.EndsAt)) {
+	// The reservation's end is the deadline. It starts as the end the envelope was signed with and moves later when the call is extended.
+	signedDeadline, err := time.Parse(time.RFC3339Nano, envelope.HardDeadline)
+	effectiveDeadline := timestamp(source.EndsAt)
+	if err != nil || effectiveDeadline.Before(signedDeadline) {
 		return captureplan.Plan{}, fmt.Errorf("capture plan deadline does not match reservation: %w", captureplan.ErrInvalidPlan)
 	}
 	stopState := captureplan.StopStateRunning

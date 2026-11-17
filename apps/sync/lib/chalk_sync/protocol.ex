@@ -324,13 +324,13 @@ defmodule ChalkSync.ProtocolV1 do
        when name in [:start_recording, :stop_recording],
        do: %{"recordingId" => id}
 
+  defp normalize_operation_payload(:extend_episode, %{"extension_seconds" => seconds}),
+    do: %{"extensionSeconds" => seconds}
+
   defp normalize_operation_payload(_name, payload), do: payload
 
   defp normalize_command_payload(:set_display_name, %{"display_name" => display_name}),
     do: %{"displayName" => display_name}
-
-  defp normalize_command_payload(:extend_episode, %{"extension_seconds" => seconds}),
-    do: %{"extensionSeconds" => seconds}
 
   defp normalize_command_payload(:assign_roles, payload) do
     %{

@@ -1,14 +1,13 @@
 defmodule ChalkSync.Stateholder.Operation do
   @moduledoc "Validated external-operation intent with a stable request fingerprint."
 
-  alias ChalkSync.Episodes.Reducer.Validation
   alias ChalkSync.Stateholder.Intake
   alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.UUID
 
   @request_key ~r/\A[A-Za-z0-9_-]{16,128}\z/
-  @tenant_end_reasons Validation.end_reasons() -- ["ended_by_participant"]
+  @tenant_end_reasons ["linger_expired", "maximum_duration"]
   @enforce_keys [:request_key, :name, :payload, :fingerprint, :normalized_bytes]
   defstruct [:request_key, :name, :payload, :fingerprint, :normalized_bytes, :observed_context]
 
@@ -135,11 +134,15 @@ defmodule ChalkSync.Stateholder.Operation do
     if map_size(payload) == 0, do: :ok, else: {:error, :invalid_payload}
   end
 
-  # An empty payload is the Tenant's own end, recorded as `tenant_recovery`.
+  # An empty payload is the Tenant's own end, stored as `tenant_recovery`.
   defp validate_payload(:tenant_end_episode, payload) when map_size(payload) == 0, do: :ok
 
   defp validate_payload(:tenant_end_episode, %{"reason" => reason} = payload)
        when map_size(payload) == 1 and reason in @tenant_end_reasons,
+       do: :ok
+
+  defp validate_payload(:extend_episode, %{"extensionSeconds" => seconds} = payload)
+       when map_size(payload) == 1 and is_integer(seconds) and seconds > 0,
        do: :ok
 
   defp validate_payload(

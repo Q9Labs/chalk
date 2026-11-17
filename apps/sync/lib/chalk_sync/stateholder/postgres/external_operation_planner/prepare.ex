@@ -65,6 +65,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
       :end_episode ->
         prepare_end_operation(connection, identity.episode, nil)
 
+      :extend_episode ->
+        prepare_extension(operation, policy)
+
       _ ->
         {:error, :invalid_state}
     end
@@ -258,20 +261,36 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner.Prepare do
     deadline_at_ms = operation.payload["deadlineAtMs"]
     generation = operation.payload["deadlineGeneration"]
 
-    ceiling_ms =
-      DateTime.to_unix(policy.created_at, :millisecond) +
-        policy.maximum_duration_ceiling_seconds * 1_000
-
-    if generation == policy.deadline_generation + 1 and deadline_at_ms <= ceiling_ms do
-      {:ok,
-       %{
-         target: nil,
-         sources: [],
-         deadline_generation: generation,
-         deadline_at_ms: deadline_at_ms
-       }}
+    if generation == policy.deadline_generation + 1 and deadline_at_ms <= ceiling_ms(policy) do
+      {:ok, deadline_context(generation, deadline_at_ms)}
     else
       {:error, :invalid_state}
     end
   end
+
+  # An extension asks for time. The deadline moves by that much but never past the ceiling the
+  # Episode's configuration fixed when it began, and an Episode already at the ceiling has none to give.
+  defp prepare_extension(operation, policy) do
+    deadline_ms = DateTime.to_unix(policy.deadline_at, :millisecond)
+
+    extended_ms =
+      min(deadline_ms + operation.payload["extensionSeconds"] * 1_000, ceiling_ms(policy))
+
+    if extended_ms > deadline_ms,
+      do: {:ok, deadline_context(policy.deadline_generation + 1, extended_ms)},
+      else: {:error, :invalid_state}
+  end
+
+  defp ceiling_ms(policy) do
+    DateTime.to_unix(policy.created_at, :millisecond) +
+      policy.maximum_duration_ceiling_seconds * 1_000
+  end
+
+  defp deadline_context(generation, deadline_at_ms),
+    do: %{
+      target: nil,
+      sources: [],
+      deadline_generation: generation,
+      deadline_at_ms: deadline_at_ms
+    }
 end

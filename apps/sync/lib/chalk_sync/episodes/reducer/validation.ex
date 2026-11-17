@@ -4,9 +4,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
   """
 
   @admission_policies ["open", "knock", "members_only"]
-  # Why an Episode ended: someone in it ended it, the Tenant ended it, the call ran out of people
-  # (`linger_expired`) or the call ran out of time (`maximum_duration`).
-  @end_reasons ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
   @capabilities ~w(
     publishAudio publishVideo publishScreen subscribe raiseHand renameSelf sendChat
     sendReaction drawWhiteboard manageWhiteboard manageAdmission assignRoles muteOthers
@@ -21,7 +18,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   def max_participants, do: @max_participants
   def admission_policies, do: @admission_policies
-  def end_reasons, do: @end_reasons
   def capabilities, do: @capabilities
 
   def valid_state?(state) do

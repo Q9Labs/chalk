@@ -6,7 +6,8 @@ import type { V1AdmissionRequest, V1ControlState, V1Participant, V1Role, V1Targe
 type EventFrame = Extract<SyncV1ServerFrame, { readonly type: "event" }>;
 type Snapshot = typeof SnapshotSchema.Type;
 
-const digestPrefix = new TextEncoder().encode("chalk-sync-state-v1");
+const encoder = new TextEncoder();
+const digestPrefix = encoder.encode("chalk-sync-state-v1");
 
 export class V1ReplicaError extends Error {
   constructor(message: string) {
@@ -207,7 +208,6 @@ function reduceEvent(state: V1ControlState, event: EventFrame): V1ControlState {
 }
 
 function applyOptimistic(state: V1ControlState, actorId: string, command: V1TargetCommand): V1ControlState {
-  if (command.name === "extend_episode") return state;
   switch (command.name) {
     case "set_hand_raised":
       return updateParticipant(state, actorId, (participant) => ({ ...participant, handRaised: command.payload.raised }), false);

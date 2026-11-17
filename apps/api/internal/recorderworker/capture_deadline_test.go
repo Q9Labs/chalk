@@ -79,7 +79,7 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 		storage.commitErr = failure
 	}
 	lifecycle := &captureTestLifecycle{}
-	// Jumping the clock leaves a checkpoint tail as long as the recording limit to close at once.
+	// Jumping the clock leaves a four-hour checkpoint tail to close at once.
 	// Keep the production close budget instead of the short-fixture timeout.
 	attempt := capturePlanWatchAttempt(t, initial.Authority(), &origin, peer, coordinator, plans, &storage.captureTestStorage, lifecycle, clock.Now, time.Second, defaultCaptureCloseTimeout)
 	attempt.bundles = storage
@@ -119,7 +119,7 @@ func testCaptureDeadlinePreservesFlowingMedia(t *testing.T, timer, failStorage b
 		}
 	}
 	last := storage.manifests[len(storage.manifests)-1]
-	if packets == 0 || last.MediaRange.EndMilliseconds != recordingpipeline.MaximumRecordingDuration.Milliseconds() || last.CloseReason != recordingbundle.CloseReasonMaxDuration {
+	if packets == 0 || last.MediaRange.EndMilliseconds != (4*time.Hour).Milliseconds() || last.CloseReason != recordingbundle.CloseReasonMaxDuration {
 		t.Fatalf("packets=%d tail=%+v", packets, last)
 	}
 }
@@ -166,4 +166,43 @@ func (s *captureDeadlineStorage) Commit(ctx context.Context, input CaptureBundle
 
 func TestCaptureDeadlineKeepsJoinedStorageFailure(t *testing.T) {
 	testCaptureDeadlinePreservesFlowingMedia(t, true, true)
+}
+
+func TestWatchDeadlineStartsOverWhenAPlanMovesTheEnd(t *testing.T) {
+	origin := time.Now().UTC()
+	authority := recordercapture.AttemptAuthority{HardDeadline: origin.Add(time.Hour), Deadline: recordercapture.NewDeadline()}
+	type timer struct {
+		wait time.Duration
+		fire chan time.Time
+	}
+	timers := make(chan timer, 4)
+	after := func(wait time.Duration) <-chan time.Time {
+		fire := make(chan time.Time, 1)
+		timers <- timer{wait: wait, fire: fire}
+		return fire
+	}
+	expired := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchDeadline(ctx, authority, after, func() time.Time { return origin }, func() { close(expired) })
+
+	if first := <-timers; first.wait != time.Hour {
+		t.Fatalf("first wait = %v, want the signed hour", first.wait)
+	}
+	authority.FollowPlan(captureTestPlanAtEpoch(t, 1, 1, origin.Add(time.Hour)))
+	second := <-timers
+	if second.wait != 2*time.Hour {
+		t.Fatalf("wait after the plan moved the end = %v, want two hours", second.wait)
+	}
+	select {
+	case <-expired:
+		t.Fatal("the capture expired at the signed end although a plan moved it")
+	case <-time.After(20 * time.Millisecond):
+	}
+	second.fire <- origin
+	select {
+	case <-expired:
+	case <-time.After(time.Second):
+		t.Fatal("the capture did not expire at the moved end")
+	}
 }
