@@ -1704,7 +1704,6 @@ create table sync_command_receipts (
                 (
                     outcome = 'committed'
                     and command_name <> 'start_episode'
-                    and (command_name <> 'extend_episode' or external_operation_id is null)
                     and rejection_reason is null
                     and event_id is not null
                     and resulting_revision > 0
@@ -1713,7 +1712,6 @@ create table sync_command_receipts (
                 )
                 or (
                     outcome = 'satisfied'
-                    and command_name <> 'extend_episode'
                     and rejection_reason is null
                     and event_id is null
                     and resulting_revision >= 0
@@ -1723,7 +1721,7 @@ create table sync_command_receipts (
                 )
                 or (
                     outcome = 'pending'
-                    and command_name not in ('start_episode', 'extend_episode')
+                    and command_name <> 'start_episode'
                     and rejection_reason is null
                     and external_operation_id is not null
                     and completed_at is null
@@ -1745,7 +1743,6 @@ create table sync_command_receipts (
                 or (
                     outcome = 'rejected'
                     and command_name <> 'start_episode'
-                    and (command_name <> 'extend_episode' or external_operation_id is null)
                     and rejection_reason in (
                         'episode_ended',
                         'participant_inactive',
@@ -1871,7 +1868,7 @@ create table sync_external_operations (
     check ((target_participant_id is null) = (target_participant_generation is null)),
     check (target_participant_generation is null or target_participant_generation > 0),
     check (deadline_generation is null or deadline_generation > 0),
-    constraint sync_external_operations_deadline_generation_check check (
+    constraint sync_external_operations_deadline_operation_check check (
         (operation_name in ('tenant_set_deadline', 'extend_episode', 'maximum_episode_duration_expired'))
         = (deadline_generation is not null)
     ),

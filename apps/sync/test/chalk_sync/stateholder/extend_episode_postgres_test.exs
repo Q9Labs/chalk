@@ -1,11 +1,12 @@
 defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
   @moduledoc """
-  Extending an Episode moves its deadline by the requested time, never past the ceiling its
-  configuration fixed, and records the move as one control event.
+  Extending an Episode is a Sync operation. It moves the deadline by the requested time, never past
+  the ceiling its configuration fixed, and records the move as one `deadline_changed` event that
+  names the operation, the shape deployed v1 clients already understand.
   """
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Stateholder.Command
+  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -63,9 +64,10 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
   test "an extension moves the deadline and the replicated deadline together", ctx do
     [host | _] = ctx.fixture.identities
 
-    assert {:ok, %{result: :committed, event: event}} = extend(host, 1_800)
+    assert {:ok, %{result: :applied, external_operation_id: id}} = extend(host, 1_800)
 
-    assert event.name == "deadline_changed"
+    event = deadline_event(ctx)
+    assert event.external_operation_id == id
     assert event.payload["deadline_generation"] == 3
     assert event.payload["deadline_at_ms"] == ctx.created_ms + @hour_ms + 1_800_000
     assert episode_deadline_ms(ctx) == event.payload["deadline_at_ms"]
@@ -74,15 +76,15 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
   test "an extension past the ceiling stops at the ceiling", ctx do
     [host | _] = ctx.fixture.identities
 
-    assert {:ok, %{result: :committed, event: event}} = extend(host, 4 * 3_600)
+    assert {:ok, %{result: :applied}} = extend(host, 4 * 3_600)
 
-    assert event.payload["deadline_at_ms"] == ctx.created_ms + 2 * @hour_ms
+    assert deadline_event(ctx).payload["deadline_at_ms"] == ctx.created_ms + 2 * @hour_ms
     assert episode_deadline_ms(ctx) == ctx.created_ms + 2 * @hour_ms
   end
 
   test "an Episode already at its ceiling has nothing to extend", ctx do
     [host | _] = ctx.fixture.identities
-    assert {:ok, %{result: :committed}} = extend(host, 4 * 3_600)
+    assert {:ok, %{result: :applied}} = extend(host, 4 * 3_600)
 
     assert {:ok, %{result: :rejected, reason: :invalid_state}} = extend(host, 60)
     assert episode_deadline_ms(ctx) == ctx.created_ms + 2 * @hour_ms
@@ -95,11 +97,36 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
     assert episode_deadline_ms(ctx) == ctx.created_ms + @hour_ms
   end
 
-  defp extend(identity, seconds) do
-    {:ok, command} =
-      Command.new(UUID.generate(), :extend_episode, %{"extensionSeconds" => seconds})
+  test "an extension leaves no pending operation for another node to find", ctx do
+    [host | _] = ctx.fixture.identities
+    assert {:ok, %{result: :applied, external_operation_id: id}} = extend(host, 600)
 
-    Postgres.decide_command(identity, command)
+    %{rows: [[status]]} =
+      Postgrex.query!(
+        ctx.connection,
+        "select status from sync_external_operations where external_operation_id = $1",
+        [UUID.dump!(id)]
+      )
+
+    assert status != "pending"
+  end
+
+  defp extend(identity, seconds) do
+    {:ok, operation} =
+      Operation.new(UUID.generate(), :extend_episode, %{"extensionSeconds" => seconds})
+
+    Postgres.begin_operation(identity, operation)
+  end
+
+  defp deadline_event(ctx) do
+    %{rows: [[payload, operation_id]]} =
+      Postgrex.query!(
+        ctx.connection,
+        "select payload, external_operation_id from sync_control_events where tenant_id = $1 and event_name = 'deadline_changed' order by revision desc limit 1",
+        [UUID.dump!(ctx.fixture.episode.tenant_id)]
+      )
+
+    %{payload: payload, external_operation_id: UUID.load!(operation_id)}
   end
 
   defp episode_deadline_ms(ctx) do

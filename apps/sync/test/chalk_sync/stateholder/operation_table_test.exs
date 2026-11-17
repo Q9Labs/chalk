@@ -12,7 +12,7 @@ defmodule ChalkSync.Stateholder.OperationTableTest do
   end
 
   test "a stored name reads back to the operation that wrote it" do
-    for name <- [:end_episode, :tenant_end_episode, :maximum_duration_expired, :mute_participant] do
+    for name <- [:end_episode, :tenant_end_episode, :maximum_duration_expired, :extend_episode, :mute_participant] do
       assert {:ok, ^name} = name |> OperationTable.stored_name() |> OperationTable.from_stored()
     end
   end

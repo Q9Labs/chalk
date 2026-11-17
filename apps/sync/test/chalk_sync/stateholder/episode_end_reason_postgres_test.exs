@@ -36,32 +36,58 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
     {:ok, seed: seed}
   end
 
-  test "an end that names a reason stores it", ctx do
+  test "a linger end stores its own reason and tells clients the v1 recovery reason", ctx do
     assert {:ok, %{result: :applied}} =
-             end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "linger_expired")
+             end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "tenant_recovery")
 
     assert stored_reason(ctx) == "linger_expired"
+    assert ended_event_reason(ctx) == "tenant_recovery"
+  end
+
+  test "a maximum duration end stores and replicates the same reason", ctx do
+    assert {:ok, %{result: :applied}} =
+             end_episode(ctx.seed.episode, %{"reason" => "maximum_duration"}, "maximum_duration")
+
+    assert stored_reason(ctx) == "maximum_duration"
+    assert ended_event_reason(ctx) == "maximum_duration"
   end
 
   test "an end with no reason is a host end", ctx do
     assert {:ok, %{result: :applied}} = end_episode(ctx.seed.episode, %{}, "tenant_recovery")
 
     assert stored_reason(ctx) == "tenant_recovery"
+    assert ended_event_reason(ctx) == "tenant_recovery"
   end
 
   test "an end that reports another reason than the request carried is refused", ctx do
     assert {:error, _} =
-             end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "tenant_recovery")
+             end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "maximum_duration")
 
     assert stored_reason(ctx) == nil
   end
 
-  defp end_episode(episode, payload, reason) do
+  defp end_episode(episode, payload, wire_reason) do
     {:ok, operation} =
       Operation.new("end_reason_" <> UUID.generate(), :tenant_end_episode, payload)
 
     {:ok, %{external_operation_id: id}} = Postgres.begin_internal_operation(episode, operation)
-    Postgres.finalize_operation(episode, id, {:applied, :episode_ended, %{"reason" => reason}})
+
+    Postgres.finalize_operation(
+      episode,
+      id,
+      {:applied, :episode_ended, %{"reason" => wire_reason}}
+    )
+  end
+
+  defp ended_event_reason(ctx) do
+    %{rows: [[payload]]} =
+      Postgrex.query!(
+        ctx.connection,
+        "select payload from sync_control_events where tenant_id = $1 and event_name = 'episode_ended'",
+        [UUID.dump!(ctx.seed.episode.tenant_id)]
+      )
+
+    payload["reason"]
   end
 
   defp stored_reason(ctx) do
