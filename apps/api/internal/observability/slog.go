@@ -40,6 +40,9 @@ func (h correlationHandler) Handle(ctx context.Context, record slog.Record) erro
 	if journeyID, ok := JourneyIDFromContext(ctx); ok {
 		record.AddAttrs(slog.String("journey_id", journeyID.String()))
 	}
+	if fields, ok := recordingFieldsFromContext(ctx); ok {
+		record.AddAttrs(fields.attrs()...)
+	}
 	if sessionID, ok := SessionIDFromContext(ctx); ok {
 		record.AddAttrs(slog.String(SessionIDKey, sessionID))
 	}

@@ -13,6 +13,10 @@ type ClaimRequest struct {
 	ClaimRequestID         string `json:"claim_request_id"`
 	LeaseForSeconds        int    `json:"lease_for_seconds"`
 	SupportsCompletionOnly bool   `json:"supports_completion_only,omitempty"`
+	// SupportsClaimCorrelation says the worker decodes journey_id and trace_id in the response. A
+	// worker of an earlier release rejects unknown fields, so the API sends them only to a worker
+	// that asks.
+	SupportsClaimCorrelation bool `json:"supports_claim_correlation,omitempty"`
 }
 
 type CapturePlanWaitRequest struct {
@@ -60,6 +64,14 @@ type FailRequest struct {
 
 type CompleteRequest struct {
 	LeaseRequest
+	// Observed is what the capture saw. Only a worker whose claim answer carried journey_id sends
+	// it, because that answer proves the API accepts the field.
+	Observed *CaptureObserved `json:"observed,omitempty"`
+}
+
+type CaptureObserved struct {
+	Tracks  int   `json:"tracks"`
+	Packets int64 `json:"packets"`
 }
 
 type PoolHealthRequest struct {
@@ -101,6 +113,10 @@ type ClaimResponse struct {
 	LeaseToken     string                                `json:"lease_token"`
 	LeaseOwner     string                                `json:"lease_owner"`
 	LeaseExpiresAt string                                `json:"lease_expires_at"`
+	// JourneyID and TraceID place the worker on the Episode's journey and trace. They sit beside
+	// the envelope because its digest binds authority, not correlation.
+	JourneyID string `json:"journey_id,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
 }
 
 type CapturePlanResponse struct {

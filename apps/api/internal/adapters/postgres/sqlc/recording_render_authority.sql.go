@@ -1505,7 +1505,7 @@ where inputs.render_input_handle = $1
   and pipelines.state <> 'deleted'
   and pipelines.capture_completed_at +
       (recording_transcription_source_window_seconds(episodes.config_snapshot) * interval '1 second') > clock_timestamp()
-  and recordings.status in ('pending', 'processing', 'completed')
+  and recordings.status in ('pending', 'processing', 'completed', 'failed')
 for update of jobs, recordings
 `
 

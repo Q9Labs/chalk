@@ -2,7 +2,6 @@ package recorderworker
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,11 +12,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -62,6 +59,8 @@ type CaptureAttempt interface {
 	Run(context.Context) error
 	RenewLease(capturesignaling.WorkerLease) error
 	Close(context.Context) error
+	// Observed is what the finished capture saw, nil when none is reportable.
+	Observed() *recordingpipeline.CaptureObservations
 }
 
 type CaptureAttemptFactory interface {
@@ -289,7 +288,7 @@ func (d *CaptureDaemon) Drain() {
 }
 
 func (d *CaptureDaemon) runClaim(ctx context.Context, claim ClaimResult) (err error) {
-	ctx, err = captureAttemptContext(ctx, claim)
+	ctx, err = claimAttemptContext(ctx, claim, "capture", ErrInvalidCaptureDaemon)
 	if err != nil {
 		return err
 	}
@@ -378,6 +377,7 @@ func (d *CaptureDaemon) finishCaptureAttempt(ctx context.Context, attempt Captur
 		}
 		return reportErr
 	}
+	lease.Observed = attempt.Observed()
 	if err := d.completeCapture(ctx, lease, leaseExpiresAt, false); err != nil {
 		return d.reportCompletionFailure(ctx, lease, err)
 	}
@@ -546,30 +546,6 @@ func (d *CaptureDaemon) shutdownCaptureAttempt(cancel context.CancelFunc, attemp
 		}
 	}
 	return runErr, closeErr, shutdownErr
-}
-
-func captureAttemptContext(ctx context.Context, claim ClaimResult) (context.Context, error) {
-	if claim.ClaimRequestID.IsZero() || len(claim.EnvelopeDigest) != sha256.Size {
-		return nil, fmt.Errorf("%w: capture attempt correlation", ErrInvalidCaptureDaemon)
-	}
-	digest := sha256.New()
-	_, _ = digest.Write([]byte("chalk.recording.capture_attempt.v1"))
-	claimRequestID := claim.ClaimRequestID.Bytes()
-	_, _ = digest.Write(claimRequestID[:])
-	_, _ = digest.Write(claim.EnvelopeDigest)
-	correlation := digest.Sum(nil)
-	var traceID trace.TraceID
-	var spanID trace.SpanID
-	copy(traceID[:], correlation[:len(traceID)])
-	copy(spanID[:], correlation[len(traceID):len(traceID)+len(spanID)])
-	clear(correlation)
-	if !traceID.IsValid() || !spanID.IsValid() {
-		return nil, fmt.Errorf("%w: capture attempt trace correlation", ErrInvalidCaptureDaemon)
-	}
-	ctx = observability.ContextWithJourneyID(ctx, claim.ClaimRequestID)
-	return trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled,
-	})), nil
 }
 
 func (d *CaptureDaemon) reportAttemptFailure(ctx context.Context, lease recordingpipeline.LeaseInput, cause error) error {

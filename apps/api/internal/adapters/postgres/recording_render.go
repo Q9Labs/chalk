@@ -293,7 +293,7 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 				}
 			}
 		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(input, committedAt))
+		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(ctx, input, committedAt))
 		if err != nil {
 			return mapRenderTranscriptionError(err)
 		}
@@ -381,7 +381,7 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 				}
 			}
 		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(input, committedAt))
+		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(ctx, input, committedAt))
 		if err != nil {
 			return mapRenderTranscriptionError(err)
 		}
@@ -559,43 +559,6 @@ func verifyRenderCommitObject(ctx context.Context, queries sqlc.Querier, authori
 		return recordingrender.ErrObjectFactsMismatch
 	}
 	return nil
-}
-
-func renderTranscriptionAdmission(input recordingrender.CommitInput, committedAt time.Time) transcripts.RenderAdmissionInput {
-	admission := transcripts.RenderAdmissionInput{
-		TenantID: input.Authority.TenantID, SpaceID: input.Authority.SpaceID, EpisodeID: input.Authority.EpisodeID,
-		RecordingID: input.Authority.RecordingID, RenderJobID: input.Authority.JobID, Attempt: input.Authority.AttemptCount,
-		FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
-		CommitDigest: input.CommitDigest, PresentationSHA256: input.PresentationSHA256, CommittedAt: committedAt,
-	}
-	if input.TranscriptionSource == nil {
-		return admission
-	}
-	manifest := input.TranscriptionSource.Manifest
-	admission.Manifest = &transcripts.CommittedObject{
-		AllocationID: manifest.AllocationID, Key: manifest.Object.ObjectKey, ObjectVersion: manifest.Object.ObjectVersion,
-		ETag: manifest.Object.ObjectETag, SHA256: append([]byte(nil), manifest.Object.SHA256...), Size: manifest.Object.ByteSize, ContentType: manifest.Object.ContentType,
-	}
-	admission.Chunks = make([]transcripts.ChunkInput, 0, len(input.TranscriptionSource.Chunks))
-	for _, chunk := range input.TranscriptionSource.Chunks {
-		admission.Chunks = append(admission.Chunks, transcripts.ChunkInput{
-			ID: chunk.ChunkID, Index: chunk.Index, Generation: chunk.Generation, StartMS: chunk.StartMillis, EndMS: chunk.EndMillis,
-			SourceStartMS: chunk.SourceStartMillis, SourceEndMS: chunk.SourceEndMillis, ParticipantRef: chunk.ParticipantRef,
-			ParticipantGeneration: chunk.ParticipantGeneration, TrackID: chunk.TrackID, TrackEpoch: chunk.TrackEpoch,
-			IdentityKind: chunk.IdentityKind, TrackClass: chunk.TrackClass, DisplayNameSnapshot: chunk.DisplayNameSnapshot, Overlap: chunk.Overlap,
-			StorageKey: chunk.Object.Object.ObjectKey, AllocationID: chunk.Object.AllocationID, ObjectVersion: chunk.Object.Object.ObjectVersion,
-			ObjectETag: chunk.Object.Object.ObjectETag, Checksum: append([]byte(nil), chunk.Object.Object.SHA256...), Size: chunk.Object.Object.ByteSize, ContentType: chunk.Object.Object.ContentType,
-		})
-	}
-	return admission
-}
-
-func transcriptionPreparationAdmission(input recordingrender.TranscriptionPreparationInput, committedAt time.Time) transcripts.RenderAdmissionInput {
-	return renderTranscriptionAdmission(recordingrender.CommitInput{
-		Authority: input.Authority, CommitDigest: input.CommitDigest,
-		PresentationSHA256: input.PresentationSHA256, DurationMillis: input.DurationMillis,
-		TranscriptionSource: input.TranscriptionSource,
-	}, committedAt)
 }
 
 func mapRenderTranscriptionError(err error) error {

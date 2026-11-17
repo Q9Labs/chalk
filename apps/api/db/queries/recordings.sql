@@ -13,6 +13,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings
@@ -35,6 +37,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings
@@ -73,6 +77,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings

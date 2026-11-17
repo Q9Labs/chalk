@@ -1244,6 +1244,7 @@ export const RecordingSchema = /* @__PURE__ */ (() =>
     created_at: DateTimeStringSchema,
     episode_id: EpisodeIdSchema,
     export: RecordingExportSchema,
+    failure_code: Schema.NullOr(Schema.String),
     id: RecordingIdSchema,
     metadata: Schema.Unknown,
     source: RecordingSourceSchema,

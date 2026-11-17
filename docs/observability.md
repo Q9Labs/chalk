@@ -33,7 +33,7 @@ A terminal failure, rejection or timeout must say why, in a bounded and redacted
 
 ## Journey ledger and proof
 
-Add a ledger event when a durable lifecycle boundary changes: the Episode, a participant, a publication, a recording, a webhook delivery. Do it in the same transaction as the change, link it to the parent event, and carry trace and span IDs. The webhook events are listed in `contract/webhooks/v1/journey-events.json`. MCP adds no parallel ledger. A capture claim writes `recording.claimed` to the Recording's start journey in the claim transaction, with `claim_lag_ms` and `placement`, so a slow start reads off the Episode's own timeline.
+Add a ledger event when a durable lifecycle boundary changes: the Episode, a participant, a publication, a recording, a webhook delivery. Do it in the same transaction as the change, link it to the parent event, and carry trace and span IDs. The webhook events are listed in `contract/webhooks/v1/journey-events.json`. MCP adds no parallel ledger. A capture claim writes `recording.claimed` to the Recording's start journey in the claim transaction, with `claim_lag_ms` and `placement`, so a slow start reads off the Episode's own timeline. A Recording that ends in `terminal_failure` writes `recording.failed` (phase `recording_failure`, with `recording_id` and `failure_code`) to the same journey in the same transaction, from the pipeline trigger, so every path that fails a Recording leaves one. Proof: `apps/api/internal/adapters/postgres/recording_failed_state_integration_test.go` drives an empty capture and checks the row, the Recording state and the ledger event; the success path in the same file checks that no failure state or event appears.
 
 Do not add a ledger event for transient delivery that the client observes, such as a congestion pause, a retry, an ICE detail or a diagnostic sample. Their evidence is logs, metrics and call stats. Telemetry from the SFU cannot replace durable Postgres lifecycle evidence.
 
@@ -162,6 +162,36 @@ Transcript failures carry a bounded `provider_*` reason (see `apps/transcription
 ## Recording maintenance events
 
 The API emits `recording.job_recovered` for each job that committed recovery returns, and `recording.reservation_expired` for each expired reservation. "Recovered" means the job row moved to a retry or a terminal failure, not that media was recovered. The `reason` is the committed row's code, not proof of which recovery predicate matched. The reservation event has no job ID, so join it to jobs by Recording ID. Events appear only after the enclosing transaction commits, and they never carry free text, payloads, leases, worker identity or storage paths.
+
+## Recording failures and capture facts
+
+`recordings.status` is `pending`, `processing`, `completed` or `failed`. A `failed` Recording carries `failure_code` (also in the API `Recording`) and `failed_at`. A trigger on `recording_pipelines` sets both when the pipeline reaches `terminal_failure` and clears them when a retry reopens the pipeline, so `Fail`, lease recovery and reservation expiry all take the same path. The code is the terminal job's `error_code`; with none, an unclaimed reservation reads `capture_reservation_expired` and anything else reads `recording_failed`. The `recording.failed` webhook fires from `Fail`, from lease recovery and from reservation expiry.
+
+Codes an operator sees:
+
+- `capture_empty`: the capture completed with no committed media bundle. A bundle with codec `gap` holds no media, so a gap-only capture is empty too. The API decides this from committed bundles at `CompleteCapture`; the recorder needs no protocol change. The job detail carries `media_bundles` and `gap_bundles`.
+- `render_<stage>_failed`: the render stage that failed (`download_capture`, `source_preparation`, `commit` and so on). The API keeps only this shape, and `render_attempt_failed` means no stage claimed the error.
+- `capture_stopped_before_completion`, `capture_completion_expired`, `lease_expired`, `recording_source_expired` and the other existing job codes pass through unchanged.
+
+`recording_pipelines` holds what a completed capture saw, so an operator can read it without decrypting a manifest: `capture_media_bundle_count` and `capture_gap_bundle_count` (counted by the API from committed bundles), `capture_track_count` and `capture_packet_count` (reported by the recorder in the completion request as `observed`), and `capture_completeness`. All are null for captures that completed before the columns, and the track and packet counts are also null when the recorder is older than the API or the job was a completion-only recovery. The recorder still logs the same numbers as `recording.capture_finished` (`outcome` of `stopped`, `stopped_without_media` or `failed`, `track_count`, `packet_count`, `stop_cause`).
+
+`capture_completeness` is `complete` when the Episode confirmed the stop, and `partial` when the Episode stopped without confirmation and the capture completed from the bundles committed so far. A partial capture is usable, so the Recording is not failed and its exports and transcripts run, but the tail between the last committed bundle and the real stop may be missing. The `recording.capture.salvaged` ledger event marks the same case.
+
+Transcription is independent of the MP4 export. A failed export fails the Recording (`status` `failed`), but a transcription job that already holds a valid lease still commits its prepared source for a failed Recording, as long as the capture completed, the lease holds, the capture is not deleted and the source window is open.
+
+A Recording that ends in `terminal_failure` through lease recovery publishes the same `recording.failed` webhook as `Fail`, and the semantic key is per Recording, so a failure after a retry does not publish a second event.
+
+A lease that expired during an attempt writes its `recording_job_attempt_failures` row at recovery, since `Fail` never ran. A job that was never claimed has no attempt to record, so its reason stays on the job row.
+
+A Transcript whose source was never built reads "No audio source was available for this recording, so nothing was transcribed." instead of "No speech was transcribed."
+
+## Recorder telemetry
+
+The capture and render binaries (`chalk-recorder-capture`, `chalk-recorder-render`) export logs, traces and metrics through `observability.StartWorker`, the same way the API does. Settings: `CHALK_RECORDER_OTLP_ENDPOINT` (`https://api.axiom.co` for Axiom), `CHALK_RECORDER_OTLP_INSECURE`, `CHALK_RECORDER_ENVIRONMENT` and `CHALK_RECORDER_VERSION`. The OTLP exporters read the credential from `OTEL_EXPORTER_OTLP_LOGS_HEADERS`, `OTEL_EXPORTER_OTLP_TRACES_HEADERS` and `OTEL_EXPORTER_OTLP_METRICS_HEADERS` (an `Authorization` bearer token and the `X-Axiom-Dataset` header). Put the headers in the unit's secret store, never in a deploy template or env file in Git. With no endpoint, nothing is exported and logs go to stderr, so a deployment enables telemetry by adding these variables to the worker unit of each deployment form (the SFU-adjacent capture unit, the recorder images and the managed-episode render unit). The SFU deploy wires the SFU-adjacent capture unit: with `otlp-headers`, `otlp-log-headers` and `otlp-trace-headers` in the operator directory it sets the endpoint and maps the three Podman secrets (steps in `infrastructure/sfu/README.md`). The on-demand fleet's render worker and the managed-episode units are not wired yet.
+
+Every row carries `tenant_id`, `episode_id`, `recording_id`, `job_id`, `attempt` and `capture_epoch`. The claim response carries the Episode's `journey_id` and `trace_id`, so a recorder attempt runs on the Episode's journey and trace; an API that predates them sends neither, and the attempt then uses the claim request id as its journey. Render-started transcription admission keeps the journey and `traceparent` too.
+
+Recorder events: `recording.capture_connection_created`, `recording.capture_media_stopped` (the SFU answered 409 because media had already stopped), `recording.capture_finished` and `recording.render_stage` (`stage`, `outcome`, `duration_ms`). The API records `recording.capture_attempt_failed` and `recording.render_attempt_failed` from the worker's fenced report; the render worker does not log its own copy. Metrics: `chalk.recorder.jobs.claimed`, `chalk.recorder.jobs.lease_recoveries`, `chalk.recorder.jobs.terminal_failures` (API) and `chalk.recorder.render.stage_duration_seconds` (render worker). Alerts are out of scope here; these events and states are what an alert or the diagnose-call checker reads.
 
 ## Recorder fleet conflicts
 

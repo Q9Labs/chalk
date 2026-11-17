@@ -141,6 +141,9 @@ func TestRecordingCaptureReconcileRetirementPostgres(t *testing.T) {
 			}
 			// Successful retirement leaves normal completion available even at the media
 			// attempt limit. No media failure or completion-only claim is needed.
+			// A capture with no committed media now fails as empty; this one recorded before the outage.
+			execCleanupFixture(t, tx, `insert into recording_bundles(id,tenant_id,recording_id,capture_job_id,sequence_number,fencing_generation,object_key,content_type,codec,byte_size,checksum,monotonic_start_millis,monotonic_end_millis,media_start_millis,media_end_millis)
+				values(gen_random_uuid(),$1,$2,$3,0,$4,'fixture/committed-before-reconcile','application/octet-stream','chalk.bundle.v1',9,decode(repeat('ab',32),'hex'),0,1000,0,1000)`, identity.TenantID.Bytes(), identity.RecordingID.Bytes(), job.ID.Bytes(), job.FencingGeneration)
 			lease := recordingpipeline.LeaseInput{JobID: job.ID, AttemptCount: job.AttemptCount, FencingGeneration: job.FencingGeneration, CaptureEpoch: job.Authority.Envelope.CaptureEpoch, EnvelopeDigest: job.Authority.EnvelopeDigest, LeaseToken: *job.LeaseToken, LeaseOwner: *job.LeaseOwner}
 			completed, err := postgres.NewRecordingPipelineRepository(sqlc.New(tx)).CompleteCapture(t.Context(), lease, newCaptureRetryID(t))
 			if err != nil {

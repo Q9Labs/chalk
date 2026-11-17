@@ -26,6 +26,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings
@@ -56,6 +58,8 @@ func (q *Queries) GetTenantRecording(ctx context.Context, arg GetTenantRecording
 		&i.DurationMillis,
 		&i.CompletedAt,
 		&i.Metadata,
+		&i.FailureCode,
+		&i.FailedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
 	)
@@ -77,6 +81,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings
@@ -142,6 +148,8 @@ func (q *Queries) ListTenantRecordings(ctx context.Context, arg ListTenantRecord
 			&i.DurationMillis,
 			&i.CompletedAt,
 			&i.Metadata,
+			&i.FailureCode,
+			&i.FailedAt,
 			&i.UpdatedAt,
 			&i.CreatedAt,
 		); err != nil {
@@ -170,6 +178,8 @@ select
     duration_millis,
     completed_at,
     metadata,
+    failure_code,
+    failed_at,
     updated_at,
     created_at
 from recordings
@@ -232,6 +242,8 @@ func (q *Queries) ListTenantSpaceRecordings(ctx context.Context, arg ListTenantS
 			&i.DurationMillis,
 			&i.CompletedAt,
 			&i.Metadata,
+			&i.FailureCode,
+			&i.FailedAt,
 			&i.UpdatedAt,
 			&i.CreatedAt,
 		); err != nil {

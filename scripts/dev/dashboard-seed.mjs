@@ -62,8 +62,8 @@ export async function seedDashboard({ config, serviceToken }) {
         ${
           index === 1
             ? ""
-            : `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,storage_key,storage_content_type,duration_millis,completed_at,created_at)
-          values('${recordingId}','${owner.id}','${space.id}','${episode.id}','${index === 0 ? "completed" : "failed"}','r2',${index === 0 ? `'tenants/${owner.id}/recordings/preview.wav','audio/wav',12000,now()` : "null,null,null,null"},now()-interval '${age} days');`
+            : `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,storage_key,storage_content_type,duration_millis,completed_at,failure_code,failed_at,created_at)
+          values('${recordingId}','${owner.id}','${space.id}','${episode.id}','${index === 0 ? "completed" : "failed"}','r2',${index === 0 ? `'tenants/${owner.id}/recordings/preview.wav','audio/wav',12000,now()` : "null,null,null,null"},${index === 0 ? "null,null" : "'recording_failed',now()"},now()-interval '${age} days');`
         }
         ${
           index === 0

@@ -2,22 +2,17 @@ package recorderworker
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync/atomic"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
-	DefaultRenderLease       = 30 * time.Minute
-	defaultRenderFailureCode = "render_attempt_failed"
+	DefaultRenderLease = 30 * time.Minute
 )
 
 var (
@@ -140,7 +135,7 @@ func (d *RenderDaemon) Drain() {
 }
 
 func (d *RenderDaemon) runClaim(ctx context.Context, claim ClaimResult) error {
-	attemptCtx, err := renderAttemptContext(ctx, claim)
+	attemptCtx, err := claimAttemptContext(ctx, claim, "render", ErrInvalidRenderDaemon)
 	if err != nil {
 		return err
 	}
@@ -209,10 +204,9 @@ func (d *RenderDaemon) reportAttemptFailure(ctx context.Context, lease recording
 	input := recordingpipeline.FailureInput{
 		LeaseInput:  lease,
 		AvailableAt: d.config.Now().UTC().Add(d.config.AttemptRetryDelay),
-		ErrorCode:   defaultRenderFailureCode,
+		ErrorCode:   renderFailureCode(cause),
 		ErrorDetail: boundedFailureDetail(cause),
 	}
-	observability.LogRenderAttemptFailure(ctx, slog.Default(), input)
 	_, reportErr := d.control.Fail(ctx, input)
 	if reportErr != nil {
 		return fmt.Errorf("report recorder render failure: %w", errors.Join(cause, reportErr))
@@ -247,30 +241,6 @@ func renewedRenderLease(previous recordingpipeline.LeaseInput, expectedKind reco
 	}
 	previous.LeaseFor = leaseFor
 	return previous, nil
-}
-
-func renderAttemptContext(ctx context.Context, claim ClaimResult) (context.Context, error) {
-	if claim.ClaimRequestID.IsZero() || len(claim.EnvelopeDigest) != sha256.Size {
-		return nil, fmt.Errorf("%w: render attempt correlation", ErrInvalidRenderDaemon)
-	}
-	digest := sha256.New()
-	_, _ = digest.Write([]byte("chalk.recording.render_attempt.v1"))
-	claimRequestID := claim.ClaimRequestID.Bytes()
-	_, _ = digest.Write(claimRequestID[:])
-	_, _ = digest.Write(claim.EnvelopeDigest)
-	correlation := digest.Sum(nil)
-	defer clear(correlation)
-	var traceID trace.TraceID
-	var spanID trace.SpanID
-	copy(traceID[:], correlation[:len(traceID)])
-	copy(spanID[:], correlation[len(traceID):len(traceID)+len(spanID)])
-	if !traceID.IsValid() || !spanID.IsValid() {
-		return nil, fmt.Errorf("%w: render attempt trace correlation", ErrInvalidRenderDaemon)
-	}
-	ctx = observability.ContextWithJourneyID(ctx, claim.ClaimRequestID)
-	return trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled,
-	})), nil
 }
 
 func normalizeRenderDaemonConfig(config RenderDaemonConfig) RenderDaemonConfig {

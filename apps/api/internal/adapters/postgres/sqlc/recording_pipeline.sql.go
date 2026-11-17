@@ -507,9 +507,13 @@ with completion_eligibility as materialized (
 ), pipeline as (
     update recording_pipelines
     set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
-        capture_completed_at = now(), updated_at = now()
+        capture_completed_at = now(), updated_at = now(),
+        capture_media_bundle_count = $10, capture_gap_bundle_count = $11,
+        capture_track_count = $12, capture_packet_count = $13,
+        capture_completeness = case when eligibility.completion_available and not eligibility.stop_confirmed then 'partial' else 'complete' end
     from completed
     join tenants on tenants.id = completed.tenant_id
+    join completion_eligibility eligibility on eligibility.id = completed.id
     where recording_pipelines.recording_id = completed.recording_id
     returning recording_pipelines.recording_id, recording_pipelines.reservation_id, recording_pipelines.capture_completed_at
 ), salvage_event as (
@@ -560,7 +564,7 @@ with completion_eligibility as materialized (
     )
     select gen_random_uuid(), completed.tenant_id, completed.episode_id, completed.recording_id,
         'render', 'render:' || completed.recording_id::text,
-        $10, 'pending', $11, now(), $12
+        $14, 'pending', $15, now(), $16
     from completed
     join tenants on tenants.id = completed.tenant_id
     where exists (select 1 from reservation_release)
@@ -572,9 +576,9 @@ with completion_eligibility as materialized (
         event_id, journey_id, sequence, occurred_at, name, phase, state,
         origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes
     )
-    select render_job.id, coalesce($13::uuid, render_job.recording_id),
+    select render_job.id, coalesce($17::uuid, render_job.recording_id),
         coalesce((select max(sequence) + 1 from observability_journey_events
-                  where journey_id = coalesce($13::uuid, render_job.recording_id)), 0),
+                  where journey_id = coalesce($17::uuid, render_job.recording_id)), 0),
         now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
         $1::text, $2::text,
         jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
@@ -586,13 +590,13 @@ with completion_eligibility as materialized (
         id, tenant_id, episode_id, recording_id, kind, idempotency_key,
         payload_schema_version, state, priority, available_at, attempt_limit
     )
-    select $14, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
-        'transcription:' || completed.recording_id::text, $10, 'pending',
-        $11, now(), $12
+    select $18, completed.tenant_id, completed.episode_id, completed.recording_id, 'transcription',
+        'transcription:' || completed.recording_id::text, $14, 'pending',
+        $15, now(), $16
     from completed
     join episodes on episodes.id = completed.episode_id
     where exists (select 1 from reservation_release)
-      and $15::boolean
+      and $19::boolean
       and episodes.config_snapshot -> 'artifact_policy' -> 'transcription' ->> 'mode' in ('automatic', 'on_demand')
     on conflict (recording_id, kind) do nothing
 ), source_cleanup_objects as (
@@ -649,6 +653,10 @@ type CompleteCaptureRecordingJobParams struct {
 	LeaseOwner           pgtype.Text `json:"lease_owner"`
 	CaptureEpoch         int64       `json:"capture_epoch"`
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
+	MediaBundleCount     pgtype.Int4 `json:"media_bundle_count"`
+	GapBundleCount       pgtype.Int4 `json:"gap_bundle_count"`
+	TrackCount           pgtype.Int4 `json:"track_count"`
+	PacketCount          pgtype.Int8 `json:"packet_count"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
@@ -695,6 +703,10 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.LeaseOwner,
 		arg.CaptureEpoch,
 		arg.EnvelopeDigest,
+		arg.MediaBundleCount,
+		arg.GapBundleCount,
+		arg.TrackCount,
+		arg.PacketCount,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,
@@ -803,6 +815,27 @@ func (q *Queries) CompleteRecordingJob(ctx context.Context, arg CompleteRecordin
 		&i.CreatedAt,
 		&i.ResultMetadata,
 	)
+	return i, err
+}
+
+const countCommittedCaptureBundles = `-- name: CountCommittedCaptureBundles :one
+select (count(*) filter (where bundles.codec <> 'gap'))::integer as media_bundle_count,
+    (count(*) filter (where bundles.codec = 'gap'))::integer as gap_bundle_count
+from recording_jobs jobs
+left join recording_bundles bundles on bundles.recording_id = jobs.recording_id
+where jobs.id = $1
+`
+
+type CountCommittedCaptureBundlesRow struct {
+	MediaBundleCount int32 `json:"media_bundle_count"`
+	GapBundleCount   int32 `json:"gap_bundle_count"`
+}
+
+// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
+func (q *Queries) CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error) {
+	row := q.db.QueryRow(ctx, countCommittedCaptureBundles, jobID)
+	var i CountCommittedCaptureBundlesRow
+	err := row.Scan(&i.MediaBundleCount, &i.GapBundleCount)
 	return i, err
 }
 
@@ -1273,40 +1306,41 @@ with failure_policy as (
         (jobs.kind = 'capture' and (($1::text in ('capture_completion_failed', 'capture_stop_publication_failed')
          and pipelines.stop_requested_at is not null)
          or recording_capture_completion_available(jobs.recording_id)))::boolean as completion_failure,
-        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts
+        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts,
+        $2::boolean as forced_terminal
     from recording_jobs jobs
     left join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
-    where jobs.id = $2
+    where jobs.id = $3
 ), failed as (
     update recording_jobs
-    set state = case when failure_policy.completion_failure then
+    set state = case when failure_policy.forced_terminal then 'terminal_failure' when failure_policy.completion_failure then
             case when failure_policy.completion_attempts >= 3 and $1::text is distinct from 'capture_stop_publication_failed' then 'terminal_failure' else 'pending' end
         when attempt_count >= attempt_limit then 'terminal_failure' else 'pending' end,
-        available_at = $3,
+        available_at = $4,
         lease_token = null, lease_owner = null, lease_expires_at = null,
-        error_code = $1, error_detail = $4,
-        terminal_at = case when failure_policy.completion_failure then
+        error_code = $1, error_detail = $5,
+        terminal_at = case when failure_policy.forced_terminal then now() when failure_policy.completion_failure then
             case when failure_policy.completion_attempts >= 3 and $1::text is distinct from 'capture_stop_publication_failed' then now() else null end
             when attempt_count >= attempt_limit then now() else null end,
         updated_at = now()
     from failure_policy
     where recording_jobs.id = failure_policy.id
       and state = 'leased'
-      and recording_jobs.attempt_count = $5
-      and recording_jobs.fencing_generation = $6
-      and recording_jobs.lease_token = $7
-      and recording_jobs.lease_owner = $8
+      and recording_jobs.attempt_count = $6
+      and recording_jobs.fencing_generation = $7
+      and recording_jobs.lease_token = $8
+      and recording_jobs.lease_owner = $9
       and recording_jobs.lease_expires_at > now()
       and exists (
           select 1 from recording_job_attempt_authorities authority
           where authority.job_id = recording_jobs.id
             and authority.kind = recording_jobs.kind
-            and authority.attempt_count = $5
-            and authority.fencing_generation = $6
-            and authority.capture_epoch = $9
-            and authority.envelope_digest = $10
-            and authority.lease_token = $7
-            and authority.lease_owner = $8
+            and authority.attempt_count = $6
+            and authority.fencing_generation = $7
+            and authority.capture_epoch = $10
+            and authority.envelope_digest = $11
+            and authority.lease_token = $8
+            and authority.lease_owner = $9
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), attempt_failure as (
@@ -1315,7 +1349,7 @@ with failure_policy as (
         job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
     )
     select failed.id, failed.attempt_count, failed.fencing_generation, failed.kind,
-        $1, $4, $8
+        $1, $5, $9
     from failed
     on conflict do nothing
 ), publication_failure as (
@@ -1394,6 +1428,7 @@ from failed cross join (select count(*) from reservation_release) released
 
 type FailRecordingJobParams struct {
 	ErrorCode         pgtype.Text        `json:"error_code"`
+	Terminal          bool               `json:"terminal"`
 	ID                pgtype.UUID        `json:"id"`
 	AvailableAt       pgtype.Timestamptz `json:"available_at"`
 	ErrorDetail       pgtype.Text        `json:"error_detail"`
@@ -1432,6 +1467,7 @@ type FailRecordingJobRow struct {
 func (q *Queries) FailRecordingJob(ctx context.Context, arg FailRecordingJobParams) (FailRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, failRecordingJob,
 		arg.ErrorCode,
+		arg.Terminal,
 		arg.ID,
 		arg.AvailableAt,
 		arg.ErrorDetail,
@@ -1480,8 +1516,8 @@ join recording_job_attempt_authorities authority
  and authority.fencing_generation = jobs.fencing_generation
 where jobs.id = $1
   and jobs.kind = 'capture'
-  and jobs.state = 'succeeded'
-  and pipelines.capture_completed_at is not null
+  and ((jobs.state = 'succeeded' and pipelines.capture_completed_at is not null)
+    or (jobs.state = 'terminal_failure' and jobs.error_code = 'capture_empty'))
   and jobs.attempt_count = $2
   and jobs.fencing_generation = $3
   and authority.capture_epoch = $4
@@ -1500,6 +1536,7 @@ type GetCompletedCaptureRecordingJobParams struct {
 	LeaseOwner        string      `json:"lease_owner"`
 }
 
+// A capture that ended without media is settled too: a retry whose answer was lost gets the same terminal job.
 func (q *Queries) GetCompletedCaptureRecordingJob(ctx context.Context, arg GetCompletedCaptureRecordingJobParams) (RecordingJob, error) {
 	row := q.db.QueryRow(ctx, getCompletedCaptureRecordingJob,
 		arg.ID,
@@ -1970,6 +2007,32 @@ func (q *Queries) GetRecordingReservationFingerprint(ctx context.Context, arg Ge
 	var request_fingerprint []byte
 	err := row.Scan(&request_fingerprint)
 	return request_fingerprint, err
+}
+
+const getRecordingStartCorrelation = `-- name: GetRecordingStartCorrelation :one
+select coalesce(start_operation.journey_id, jobs.recording_id)::uuid as journey_id,
+    start_operation.producing_trace_id as trace_id
+from recording_jobs jobs
+left join sync_recordings recording on recording.recording_id = jobs.recording_id and recording.tenant_id = jobs.tenant_id
+left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
+    and start_operation.tenant_id = jobs.tenant_id and start_operation.episode_id = jobs.episode_id
+    and start_operation.recording_id = jobs.recording_id and start_operation.operation_name = 'start_recording'
+where jobs.id = $1
+`
+
+type GetRecordingStartCorrelationRow struct {
+	JourneyID pgtype.UUID `json:"journey_id"`
+	TraceID   pgtype.Text `json:"trace_id"`
+}
+
+// The Episode journey and trace the Recording's start belongs to. Recorder work joins them
+// instead of opening a journey of its own. A Recording without a start operation uses its own id,
+// as the journey ledger does.
+func (q *Queries) GetRecordingStartCorrelation(ctx context.Context, jobID pgtype.UUID) (GetRecordingStartCorrelationRow, error) {
+	row := q.db.QueryRow(ctx, getRecordingStartCorrelation, jobID)
+	var i GetRecordingStartCorrelationRow
+	err := row.Scan(&i.JourneyID, &i.TraceID)
+	return i, err
 }
 
 const heartbeatRecordingJob = `-- name: HeartbeatRecordingJob :one
@@ -2703,7 +2766,7 @@ with completed_captures as materialized (
     from completed_captures
     on conflict (recording_id) do nothing
 ), expired as (
-    select jobs.id, jobs.state as prior_state, ((jobs.kind in ('render', 'transcription') and
+    select jobs.id, jobs.state as prior_state, jobs.lease_owner as prior_lease_owner, ((jobs.kind in ('render', 'transcription') and
         pipelines.capture_completed_at +
             ((case when jobs.kind = 'transcription'
                 then recording_transcription_source_window_seconds(episodes.config_snapshot)
@@ -2764,6 +2827,19 @@ with completed_captures as materialized (
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
+), expired_attempt_failure as (
+    -- A lease that ran out never reached Fail, so the attempt would leave no failure row.
+    insert into recording_job_attempt_failures (
+        job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
+    )
+    select recovered.id, recovered.attempt_count, recovered.fencing_generation, recovered.kind,
+        left(coalesce(recovered.error_code, 'lease_expired'), 128), left(coalesce(recovered.error_detail, ''), 2048),
+        left(expired.prior_lease_owner, 256)
+    from recovered
+    join expired on expired.id = recovered.id
+    where expired.prior_state = 'leased' and recovered.attempt_count > 0 and recovered.fencing_generation > 0
+      and expired.prior_lease_owner is not null and expired.prior_lease_owner <> ''
+    on conflict do nothing
 ), pipeline as (
     update recording_pipelines
     set state = case when recovered.state = 'terminal_failure' then 'terminal_failure' else 'retryable_failure' end,
