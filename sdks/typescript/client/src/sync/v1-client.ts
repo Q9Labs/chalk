@@ -381,7 +381,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   extendEpisode(minutes: number, options?: CommandOptions): Promise<V1CommandResult> {
     if (!Number.isSafeInteger(minutes) || minutes < 1) throw new V1SyncError("episode extension must be a positive whole number of minutes", "invalid_payload");
-    return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "extend_episode", payload: { extension_seconds: minutes * 60 } }), options);
+    return this.#sendTarget({ name: "extend_episode", payload: { extension_seconds: minutes * 60 } }, options);
   }
   setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
     return this.#liveTargets.send("set_microphone_enabled", "microphone", enabled, options);

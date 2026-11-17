@@ -217,6 +217,8 @@ function applyOptimistic(state: V1ControlState, actorId: string, command: V1Targ
       return { ...state, admissionPolicy: command.payload.policy };
     case "assign_roles":
       return updateParticipant(state, command.payload.participant_id, (participant) => withDerivedRole(state, participant, command.payload.role), false);
+    case "extend_episode":
+      return state;
   }
 }
 

@@ -349,6 +349,8 @@ function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
     case "assign_roles":
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
+    case "extend_episode":
+      return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
   }
 }
 

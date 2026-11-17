@@ -159,8 +159,14 @@ export type V1TargetCommand =
         readonly participant_id: string;
         readonly role: V1AssignableRole;
       };
+    }
+  | {
+      readonly name: "extend_episode";
+      readonly payload: {
+        readonly extension_seconds: number;
+      };
     };
-export type V1OperationName = "admit_participant" | "deny_admission" | "mute_participant" | "stop_participant_camera" | "stop_participant_screen_share" | "remove_participant" | "start_recording" | "stop_recording" | "participant_leave" | "start_episode" | "extend_episode" | "end_episode";
+export type V1OperationName = "admit_participant" | "deny_admission" | "mute_participant" | "stop_participant_camera" | "stop_participant_screen_share" | "remove_participant" | "start_recording" | "stop_recording" | "participant_leave" | "start_episode" | "end_episode";
 export type V1PendingTarget = {
   readonly commandId: string;
   readonly command: V1TargetCommand;

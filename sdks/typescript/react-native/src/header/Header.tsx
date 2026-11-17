@@ -64,10 +64,14 @@ function RecordingDot(): React.JSX.Element | null {
   );
 }
 
-/** Minutes and seconds since the call started, in tabular figures. Re-renders once a second, alone. */
+/**
+ * Minutes and seconds since the call started, in tabular figures, until the last ten minutes before
+ * its time limit, when it counts down what is left. Re-renders once a second, alone.
+ */
 function CallTimer(): React.JSX.Element | null {
   const { episode } = useConnection();
   const startedAt = episode?.startedAt ? Date.parse(episode.startedAt) : null;
+  const deadline = episode?.deadline ? Date.parse(episode.deadline) : null;
   const [now, setNow] = useState(Date.now);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh elapsed call time once a second; clear the interval when the Episode start changes.
   useEffect(() => {
@@ -76,12 +80,22 @@ function CallTimer(): React.JSX.Element | null {
     return () => clearInterval(timer);
   }, [startedAt]);
   if (startedAt === null) return null;
+  const remaining = deadline === null ? null : deadline - now;
+  if (remaining !== null && remaining <= LIMIT_WARNING_WINDOW_MS) {
+    return (
+      <ChalkText accessibilityLabel={`${formatElapsed(remaining)} until the call ends`} tabular testID="header.timer" tone="warning" variant="bodyMedium">
+        {`${formatElapsed(remaining)} left`}
+      </ChalkText>
+    );
+  }
   return (
     <ChalkText accessibilityLabel={`Call time ${formatElapsed(now - startedAt)}`} tabular testID="header.timer" tone="textMuted" variant="bodyMedium">
       {formatElapsed(now - startedAt)}
     </ChalkText>
   );
 }
+
+const LIMIT_WARNING_WINDOW_MS = 10 * 60 * 1000;
 
 export function formatElapsed(milliseconds: number): string {
   const total = Math.max(0, Math.floor(milliseconds / 1000));

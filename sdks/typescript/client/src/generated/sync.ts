@@ -137,7 +137,6 @@ export const SyncProtocolMetadata = {
     "stop_recording",
     "participant_leave",
     "start_episode",
-    "extend_episode",
     "end_episode",
     "tenant_set_deadline",
     "tenant_end_episode",
@@ -430,6 +429,8 @@ function strictCommand(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, ["policy"]);
     case "assign_roles":
       return exactObject(value.payload, ["participant_id", "role"]);
+    case "extend_episode":
+      return exactObject(value.payload, ["extension_seconds"]);
     default:
       return false;
   }
@@ -492,8 +493,6 @@ function strictOperation(value: Record<string, unknown>): boolean {
       return exactObject(value.payload, []);
     case "start_episode":
       return exactObject(value.payload, []);
-    case "extend_episode":
-      return exactObject(value.payload, ["extension_seconds"]);
     case "end_episode":
       return exactObject(value.payload, []);
     default:
@@ -591,7 +590,7 @@ function strictEvent(value: Record<string, unknown>): boolean {
     case "role_assigned":
       return exactObject(value.payload, ["participant_id", "role"]) && exactObjectWithCorrelation(value, [...common, "command_id"]);
     case "deadline_changed":
-      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && exactObjectWithCorrelation(value, [...common, "external_operation_id"]);
+      return exactObject(value.payload, ["deadline_at_ms", "deadline_generation"]) && (exactObjectWithCorrelation(value, [...common, "command_id"]) || exactObjectWithCorrelation(value, [...common, "external_operation_id"]));
     case "admission_requested":
       return exactObject(value.payload, ["admission_request_id", "participant_id", "display_name", "role", "expires_at_ms"]) && exactObjectWithCorrelation(value, [...common, "lifecycle_intent_id"]);
     case "admission_denied":
@@ -876,6 +875,8 @@ export const AssignRolesCommandFrameSchema = Schema.Struct({
   payload: Schema.Struct({ participant_id: UuidSchema, role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
 }).check(boundedFrame(65536));
 export type AssignRolesCommandFrame = typeof AssignRolesCommandFrameSchema.Type;
+export const ExtendEpisodeCommandFrameSchema = Schema.Struct({ type: Schema.Literal("command"), command_id: CommandIdSchema, name: Schema.Literal("extend_episode"), payload: Schema.Struct({ extension_seconds: PositiveIntegerSchema }) }).check(boundedFrame(65536));
+export type ExtendEpisodeCommandFrame = typeof ExtendEpisodeCommandFrameSchema.Type;
 export const AdmitParticipantOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("admit_participant"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
 export type AdmitParticipantOperationFrame = typeof AdmitParticipantOperationFrameSchema.Type;
 export const DenyAdmissionOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("deny_admission"), payload: Schema.Struct({ admission_request_id: UuidSchema }) }).check(boundedFrame(65536));
@@ -896,8 +897,6 @@ export const ParticipantLeaveOperationFrameSchema = Schema.Struct({ type: Schema
 export type ParticipantLeaveOperationFrame = typeof ParticipantLeaveOperationFrameSchema.Type;
 export const StartEpisodeOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("start_episode"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
 export type StartEpisodeOperationFrame = typeof StartEpisodeOperationFrameSchema.Type;
-export const ExtendEpisodeOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("extend_episode"), payload: Schema.Struct({ extension_seconds: PositiveIntegerSchema }) }).check(boundedFrame(65536));
-export type ExtendEpisodeOperationFrame = typeof ExtendEpisodeOperationFrameSchema.Type;
 export const EndEpisodeOperationFrameSchema = Schema.Struct({ type: Schema.Literal("operation"), command_id: CommandIdSchema, name: Schema.Literal("end_episode"), payload: Schema.Struct({}) }).check(boundedFrame(65536));
 export type EndEpisodeOperationFrame = typeof EndEpisodeOperationFrameSchema.Type;
 
@@ -1030,7 +1029,7 @@ const EpisodeEndedExternalOperationIdEventVariantSchema = Schema.Struct({
   revision: PositiveIntegerSchema,
   schema_version: PositiveIntegerSchema,
   resulting_state_digest: StateDigestSchema,
-  payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("ended_by_participant"), Schema.Literal("tenant_recovery"), Schema.Literal("maximum_duration")]) }),
+  payload: Schema.Struct({ reason: Schema.Union([Schema.Literal("ended_by_participant"), Schema.Literal("tenant_recovery"), Schema.Literal("linger_expired"), Schema.Literal("maximum_duration")]) }),
   external_operation_id: UuidSchema,
   ...ServerCorrelationFields,
 }).check(
@@ -1111,6 +1110,22 @@ const RoleAssignedCommandIdEventVariantSchema = Schema.Struct({
   schema_version: PositiveIntegerSchema,
   resulting_state_digest: StateDigestSchema,
   payload: Schema.Struct({ participant_id: UuidSchema, role: boundedUtf8String(64, 1).check(Schema.makeFilter((value) => (value.length > 0 && value === value.trim() ? undefined : { path: [], issue: "must be non-empty without surrounding whitespace" }))) }),
+  command_id: CommandIdSchema,
+  ...ServerCorrelationFields,
+}).check(
+  Schema.makeFilter((frame) => (frame.revision === frame.base_revision + 1 ? undefined : { path: ["revision"], issue: "revision must equal base_revision + 1" })),
+  boundedFrame(32768),
+);
+const DeadlineChangedCommandIdEventVariantSchema = Schema.Struct({
+  type: Schema.Literal("event"),
+  stream: Schema.Literal("control"),
+  name: Schema.Literal("deadline_changed"),
+  event_id: UuidSchema,
+  base_revision: NonNegativeIntegerSchema,
+  revision: PositiveIntegerSchema,
+  schema_version: PositiveIntegerSchema,
+  resulting_state_digest: StateDigestSchema,
+  payload: Schema.Struct({ deadline_at_ms: PositiveIntegerSchema, deadline_generation: PositiveIntegerSchema }),
   command_id: CommandIdSchema,
   ...ServerCorrelationFields,
 }).check(
@@ -1260,7 +1275,7 @@ export const HandLoweredEventFrameSchema = HandLoweredCommandIdEventVariantSchem
 export const ParticipantDisplayNameChangedEventFrameSchema = ParticipantDisplayNameChangedCommandIdEventVariantSchema;
 export const AdmissionPolicyChangedEventFrameSchema = AdmissionPolicyChangedCommandIdEventVariantSchema;
 export const RoleAssignedEventFrameSchema = RoleAssignedCommandIdEventVariantSchema;
-export const DeadlineChangedEventFrameSchema = DeadlineChangedExternalOperationIdEventVariantSchema;
+export const DeadlineChangedEventFrameSchema = Schema.Union([DeadlineChangedCommandIdEventVariantSchema, DeadlineChangedExternalOperationIdEventVariantSchema]);
 export const AdmissionRequestedEventFrameSchema = AdmissionRequestedLifecycleIntentIdEventVariantSchema;
 export const AdmissionDeniedEventFrameSchema = AdmissionDeniedExternalOperationIdEventVariantSchema;
 export const AdmissionExpiredEventFrameSchema = AdmissionExpiredExternalOperationIdEventVariantSchema;
@@ -1527,6 +1542,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         SetDisplayNameCommandFrameSchema,
         SetAdmissionPolicyCommandFrameSchema,
         AssignRolesCommandFrameSchema,
+        ExtendEpisodeCommandFrameSchema,
         AdmitParticipantOperationFrameSchema,
         DenyAdmissionOperationFrameSchema,
         MuteParticipantOperationFrameSchema,
@@ -1537,7 +1553,6 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         StopRecordingOperationFrameSchema,
         ParticipantLeaveOperationFrameSchema,
         StartEpisodeOperationFrameSchema,
-        ExtendEpisodeOperationFrameSchema,
         EndEpisodeOperationFrameSchema,
         LiveTargetFrameSchema,
         DirectedRequestSendFrameSchema,

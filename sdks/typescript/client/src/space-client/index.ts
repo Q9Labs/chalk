@@ -1,6 +1,7 @@
 export { SpaceClientError } from "./errors";
 export { callEvents, type CallEvent } from "./call-events";
 export { nextHandOrder } from "./hand-order";
+export { callCountdown, callEndNotice, callLimitMessage, canExtendCall, type CallEndReason, type CallLimitWarning } from "./call-length";
 export { createSpaceClient } from "./space-client";
 export { preconnect, releasePreconnect, type PreconnectOptions } from "./preconnect";
 export type { AccessGrant } from "../access/grant";
