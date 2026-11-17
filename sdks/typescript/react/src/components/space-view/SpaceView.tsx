@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
-import { callCountdown, callLimitMessage, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
+import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
@@ -168,7 +168,7 @@ export function SpaceView({
   const deadline = connection.episode?.deadline;
   const [now, setNow] = useState(Date.now);
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
-  const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: number } | null>(null);
+  const [limitWarning, setLimitWarning] = useState<{ id: string; minutes: CallLimitWarning } | null>(null);
   const countdown = callCountdown(deadline, now);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh the call-limit clock each second; clear the interval when the deadline changes.
   useEffect(() => {

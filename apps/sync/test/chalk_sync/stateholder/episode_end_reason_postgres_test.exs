@@ -50,13 +50,16 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
   end
 
   test "an end that reports another reason than the request carried is refused", ctx do
-    assert {:error, _} = end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "tenant_recovery")
+    assert {:error, _} =
+             end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "tenant_recovery")
 
     assert stored_reason(ctx) == nil
   end
 
   defp end_episode(episode, payload, reason) do
-    {:ok, operation} = Operation.new("end_reason_" <> UUID.generate(), :tenant_end_episode, payload)
+    {:ok, operation} =
+      Operation.new("end_reason_" <> UUID.generate(), :tenant_end_episode, payload)
+
     {:ok, %{external_operation_id: id}} = Postgres.begin_internal_operation(episode, operation)
     Postgres.finalize_operation(episode, id, {:applied, :episode_ended, %{"reason" => reason}})
   end
