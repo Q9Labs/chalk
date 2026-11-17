@@ -1,3 +1,4 @@
+import type { TelemetryDraft, TelemetryEvent } from "../telemetry/types";
 /** Capture failures describe the recovery, without exposing device labels. */
 export function describeMediaCaptureError(cause: unknown) {
   const name = typeof cause === "object" && cause !== null && "name" in cause ? cause.name : undefined;
@@ -28,4 +29,24 @@ export function permissionBlockOf(cause: unknown): "system" | undefined {
     if (current.name === "NotAllowedError" && /by system/i.test(current.message)) return "system";
   }
   return undefined;
+}
+
+type ErrorName = NonNullable<TelemetryEvent["error_name"]>;
+const ERROR_NAMES: readonly ErrorName[] = ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"];
+/** Names older browsers still throw. */
+const ERROR_ALIASES: Readonly<Record<string, ErrorName>> = { PermissionDeniedError: "NotAllowedError", DevicesNotFoundError: "NotFoundError", TrackStartError: "NotReadableError", ConstraintNotSatisfiedError: "OverconstrainedError" };
+
+/** A device that would not open. Only the error's name crosses, never its message, a device label or an id. */
+export function deviceFailedEvent(cause: unknown, deviceKind: NonNullable<TelemetryEvent["device_kind"]>): TelemetryDraft {
+  const errorName = errorNameOf(cause);
+  return { type: "device_failed", error_name: errorName, device_kind: deviceKind, permission_state: errorName === "NotAllowedError" ? "denied" : "unknown" };
+}
+
+function errorNameOf(cause: unknown): ErrorName {
+  for (let depth = 0, current = cause; depth < 4 && typeof current === "object" && current !== null; depth += 1, current = "cause" in current ? current.cause : undefined) {
+    const name = "name" in current && typeof current.name === "string" ? (ERROR_ALIASES[current.name] ?? current.name) : "";
+    const known = ERROR_NAMES.find((candidate) => candidate === name);
+    if (known) return known;
+  }
+  return "unknown";
 }

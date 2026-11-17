@@ -37,6 +37,7 @@ export function acquireInitialMedia(
     camera: boolean;
   }>,
   mediaDevices: ConnectionMediaDevices,
+  onDeviceFailure: (source: "microphone" | "camera", cause: unknown) => void,
 ): Effect.Effect<
   {
     stream: MediaStream;
@@ -48,7 +49,10 @@ export function acquireInitialMedia(
     Effect.map((stream) => ({ stream, failure: null })),
     Effect.catch((cause) => {
       const initialFailure = captureFailure(cause);
-      if (!initialFailure.recoverable) return Effect.fail(initialFailure);
+      if (!initialFailure.recoverable) {
+        for (const source of ["microphone", "camera"] as const) if (intent[source]) onDeviceFailure(source, cause);
+        return Effect.fail(initialFailure);
+      }
       const tracks = new Set<MediaStreamTrack>();
       return Effect.gen(function* () {
         const failures: {
@@ -58,6 +62,7 @@ export function acquireInitialMedia(
         for (const source of ["microphone", "camera"] as const) {
           if (!intent[source]) continue;
           if (!intent.microphone || !intent.camera) {
+            onDeviceFailure(source, cause);
             failures.push({ source, failure: initialFailure });
             continue;
           }
@@ -69,6 +74,7 @@ export function acquireInitialMedia(
             ),
             Effect.catch((cause) =>
               Effect.sync(() => {
+                onDeviceFailure(source, cause);
                 failures.push({ source, failure: captureFailure(cause) });
               }),
             ),

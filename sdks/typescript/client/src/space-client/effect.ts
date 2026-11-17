@@ -1,3 +1,4 @@
+import type { AppTelemetry } from "../telemetry/app";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import type { ChalkChatPageResult } from "../collaboration/types";
 import type { ChalkWhiteboardV1Transport } from "../whiteboard/types";
@@ -29,6 +30,7 @@ export type EffectSpaceClient = {
   readonly offline: EffectOfflineController;
   readonly reactions: EffectReactionsController;
   readonly whiteboard: EffectWhiteboardController;
+  readonly telemetry: AppTelemetry;
   readonly join: (options?: JoinOptions) => ClientEffect<void>;
   readonly leave: () => ClientEffect<void>;
   readonly dispose: () => Effect.Effect<void, unknown>;
@@ -63,6 +65,7 @@ function effectClientFromCore(core: SpaceClientCore, dispose: () => Effect.Effec
     offline: core.controllers.offline,
     reactions: core.controllers.reactions,
     whiteboard: core.controllers.whiteboard,
+    telemetry: core.telemetry,
     join: (options) => core.join(options),
     leave: () => core.leave(),
     dispose,

@@ -50,6 +50,7 @@
         "sdks/typescript/client/src/session",
         "sdks/typescript/client/src/space-client/call-length.test.ts",
         "sdks/typescript/client/src/space-client/call-length.ts",
+        "sdks/typescript/client/src/space-client/device-failed.test.ts",
         "sdks/typescript/client/src/space-client/join-capture.test.ts",
         "sdks/typescript/client/src/space-client/join-concurrency.test.ts",
         "sdks/typescript/client/src/space-client/preconnect.test.ts",
@@ -549,7 +550,15 @@
     {
       "name": "problem-reports",
       "summary": "Captures and routes diagnostic reports submitted by Participants.",
-      "paths": ["apps/api/internal/adapters/discordreports", "apps/api/internal/httpapi/problem_report_outcomes.go", "apps/api/internal/httpapi/problem_reports.go", "apps/api/internal/problemreports", "apps/web/src/lib/problem-reports.test.tsx", "apps/web/src/lib/problem-reports.ts"]
+      "paths": [
+        "apps/api/internal/adapters/discordreports",
+        "apps/api/internal/httpapi/problem_report_outcomes.go",
+        "apps/api/internal/httpapi/problem_reports.go",
+        "apps/api/internal/problemreports",
+        "apps/web/src/lib/problem-reports.telemetry.test.ts",
+        "apps/web/src/lib/problem-reports.test.tsx",
+        "apps/web/src/lib/problem-reports.ts"
+      ]
     },
     {
       "name": "notifications",
@@ -760,6 +769,7 @@
         "apps/web/src/components/site",
         "apps/web/src/docs",
         "apps/web/src/lib/chalk-mark.ts",
+        "apps/web/src/lib/chunkReload.test.ts",
         "apps/web/src/lib/chunkReload.ts",
         "apps/web/src/lib/dialog-focus.ts",
         "apps/web/src/lib/direct-path-control.test.ts",

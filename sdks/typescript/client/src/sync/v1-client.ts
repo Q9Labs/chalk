@@ -15,6 +15,7 @@ import { rejectV1Deferred as rejectDeferred, resolveV1Deferred as resolveDeferre
 import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
+import { reportLiveTarget } from "./v1-live-target-telemetry";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { V1TimerMap } from "./v1-timer-map";
 import { copyProjection, copyPublication, mediaItem, mediaKey, presenceItem, updateProjection, validMediaPublication } from "./v1-projection-items";
@@ -29,6 +30,7 @@ import type {
   V1DirectedRequestResult,
   V1MediaPublication,
   V1MediaPause,
+  V1MediaSource,
   V1PendingTarget,
   V1Presence,
   V1Projection,
@@ -385,13 +387,17 @@ export class V1SyncClient implements V1CollaborationClient {
     return this.#sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "extend_episode", payload: { extension_seconds: minutes * 60 } }), options);
   }
   setMicrophoneEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#liveTargets.send("set_microphone_enabled", "microphone", enabled, options);
+    return this.#sendLiveTarget("set_microphone_enabled", "microphone", enabled, options);
   }
   setCameraEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#liveTargets.send("set_camera_enabled", "camera", enabled, options);
+    return this.#sendLiveTarget("set_camera_enabled", "camera", enabled, options);
   }
   setScreenShareEnabled(enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
-    return this.#liveTargets.send("set_screen_share_enabled", "screen", enabled, options);
+    return this.#sendLiveTarget("set_screen_share_enabled", "screen", enabled, options);
+  }
+  #sendLiveTarget(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: RequestOptions): Promise<V1SelfMediaTargetResult> {
+    const requestId = options?.requestId ?? this.#nextRequestId();
+    return reportLiveTarget(this.#options.telemetry, name, enabled, requestId, () => this.#liveTargets.send(name, source, enabled, { ...options, requestId }));
   }
   requestUnmute(participantId: string, options?: RequestOptions): Promise<V1DirectedRequestResult> {
     return this.#sendDirectedRequest("request_unmute", participantId, options);

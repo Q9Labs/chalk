@@ -6,9 +6,26 @@ defmodule ChalkSync.Live.Episode.Publication do
   alias ChalkSync.Live.Episode.MediaObservation
   alias ChalkSync.Live.Episode.ScreenLeases
   alias ChalkSync.Live.MediaPlaneCall
+  alias ChalkSync.Observability
   alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Telemetry
+
+  @doc """
+  Stamps when Sync took a live target, on Sync's own clock. The client's `media_intent` carries the same `operation_id`, so the stamp joins the client's intent to the SFU's `sfu.publication.held` events by participant and source.
+  """
+  @spec stamp_intent(map(), atom(), map()) :: :ok
+  def stamp_intent(authority, source, target) do
+    Observability.phase(nil, "sync.media.intent", %{
+      operation_id: target.operation_id,
+      participant_id: authority.participant_id,
+      source: Atom.to_string(source),
+      enabled: target.enabled,
+      at_ms: System.system_time(:millisecond)
+    })
+
+    :ok
+  end
 
   def apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
     {next, result} = enable_publication(state, identity, authority, source, target)

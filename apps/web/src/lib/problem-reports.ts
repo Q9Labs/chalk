@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Schema } from "effect";
-import { currentSessionId, lastFailedRequest, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
+import { currentSessionId, lastFailedRequest, withRequestContext, type AppTelemetry, type SpaceClient } from "@q9labsai/chalk-client";
 import { apiUrls } from "@q9labsai/chalk-client/effect";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 import { backoffMs } from "./backoff";
@@ -78,7 +78,19 @@ function failedRequestLine(): string {
   return failed ? `${failed.journeyId} (HTTP ${failed.status})` : "none";
 }
 
-export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReportConnection }): ReportProblem {
+export function problemReporter({
+  baseURL,
+  tenantId,
+  mediaProof,
+  connection,
+  telemetry,
+}: {
+  readonly telemetry?: Pick<AppTelemetry, "sessionId" | "problemReported">;
+  readonly baseURL: string;
+  readonly tenantId: string | undefined;
+  readonly mediaProof: () => string | undefined;
+  readonly connection: () => ReportConnection;
+}): ReportProblem {
   return async ({ description, diagnostics }) => {
     const credential = mediaProof();
     const snapshot = connection();
@@ -92,14 +104,21 @@ export function problemReporter({ baseURL, tenantId, mediaProof, connection }: {
         ...(diagnostics === undefined
           ? {}
           : {
-              diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Last failed request: ${failedRequestLine()}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join(
-                "\n",
-              ),
+              diagnostics: [
+                `Connection: ${snapshot.status}`,
+                `Last error: ${snapshot.lastError?.code ?? "none"}`,
+                `App version: ${__APP_VERSION__}`,
+                `Session: ${currentSessionId() ?? "none"}`,
+                `Client session: ${telemetry?.sessionId || "none"}`,
+                `Last failed request: ${failedRequestLine()}`,
+                `Browser: ${navigator.userAgent.slice(0, 400)}`,
+              ].join("\n"),
             }),
       }),
     });
     if (!response.ok) {
       throw new Error("Your report could not be sent. Try again.");
     }
+    telemetry?.problemReported();
   };
 }

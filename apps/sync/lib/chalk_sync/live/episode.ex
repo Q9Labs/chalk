@@ -139,6 +139,7 @@ defmodule ChalkSync.Live.Episode do
     with {:ok, authority} <- actor_authority(state, identity),
          source = target_source(target.name),
          :ok <- authorize(authority, target_capability(source)) do
+      Publication.stamp_intent(authority, source, target)
       Publication.apply_live_target(state, identity, authority, source, target)
     else
       {:retryable, reason} -> {state, Publication.live_result(target, :retryable_failure, reason)}

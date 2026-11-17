@@ -48,9 +48,15 @@ export type TelemetryPlatform = {
   readonly send: (request: TelemetrySend) => Promise<TelemetrySendResult>;
 };
 
+/** A media operation the person or the call asked for. `op_id` is the id the Sync frame carries when there is one, and a fresh UUID otherwise. */
+export type MediaOperationStart = Pick<TelemetryEvent, "action" | "source"> & { readonly op_id?: string };
+export type MediaOperationResult = Pick<TelemetryEvent, "code" | "media_error_kind" | "http_status"> & { readonly outcome: "succeeded" | "failed" | "cancelled" };
+
 /** What observers hold: they say what happened and nothing else. */
 export type TelemetrySink = {
   readonly record: (draft: TelemetryDraft) => void;
+  /** Records `media_intent` now. The returned function records the matching `media_result` once, with the time since the intent. */
+  readonly operation: (start: MediaOperationStart) => (result: MediaOperationResult) => void;
   /** What stopped the platform, if anything did, in the last `withinMs` milliseconds. */
   readonly interruption: (withinMs: number) => "offline" | "hidden" | null;
 };

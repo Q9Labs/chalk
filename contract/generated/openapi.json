@@ -15445,7 +15445,10 @@
                     "collaboration_unavailable",
                     "chat_cursor_reset_required",
                     "rate_limited",
-                    "invalid_payload"
+                    "invalid_payload",
+                    "media_timeout",
+                    "retry_exhausted",
+                    "not_live"
                   ],
                   "type": "string"
                 },
@@ -18095,7 +18098,10 @@
                     "collaboration_unavailable",
                     "chat_cursor_reset_required",
                     "rate_limited",
-                    "invalid_payload"
+                    "invalid_payload",
+                    "media_timeout",
+                    "retry_exhausted",
+                    "not_live"
                   ],
                   "type": "string"
                 },

@@ -1,5 +1,6 @@
+import { startOperation } from "./operation";
 import { EventQueue, lostBy } from "./queue";
-import type { PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySendResult, TelemetrySink } from "./types";
+import type { MediaOperationResult, MediaOperationStart, PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySendResult, TelemetrySink } from "./types";
 
 /** Events that say a bad thing may be starting go out at once, because the client may not live to send them later. */
 const STARTED_PLATFORM_STATES: ReadonlySet<PlatformState | undefined> = new Set(["offline", "hidden", "background"]);
@@ -78,6 +79,10 @@ export class TelemetryOutbox implements TelemetrySink {
     const event = this.#stamp(draft);
     this.#dropped += this.#queue.push(event, this.#subject);
     this.#schedule(delayFor(event));
+  }
+
+  operation(start: MediaOperationStart): (result: MediaOperationResult) => void {
+    return startOperation((draft) => this.record(draft), this.#platform, start);
   }
 
   interruption(withinMs: number): "offline" | "hidden" | null {

@@ -6,6 +6,7 @@ import type { SpaceClientPlatform } from "./core";
 import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
 export type CoreTestPlatform = SpaceClientPlatform & {
+  readonly outbox: ReturnType<typeof createTestOutbox>;
   readonly dependencies: Pick<ConnectionDependencies, "telemetry" | "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient" | "cancelPendingAdmission" | "getEpisodeStatus">;
   readonly media: {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
@@ -16,6 +17,7 @@ export type CoreTestPlatform = SpaceClientPlatform & {
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
 export function createCoreTestPlatform(): CoreTestPlatform {
+  const outbox = createTestOutbox();
   let mediaSnapshot: CoreTestMediaSnapshot = {
     connection: { phase: "idle", peerConnectionState: null, iceConnectionState: null },
     cursor: null,
@@ -82,9 +84,11 @@ export function createCoreTestPlatform(): CoreTestPlatform {
     setCameraEnabled: async () => ({ operationId: "camera-target", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
   } as unknown as ConnectionSyncClient;
   return {
+    /** The outbox every observer of this platform records into, with the events its fake server took. */
+    outbox,
     whiteboardUrl: null,
     dependencies: {
-      telemetry: createTestOutbox().outbox,
+      telemetry: outbox.outbox,
       getEpisodeStatus: async () => "active",
       cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },

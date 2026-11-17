@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
 import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
+import { onPageFailure } from "../../lib/chunkReload";
+import { CallErrorBoundary } from "./CallErrorBoundary";
 import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
 import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
@@ -45,7 +47,7 @@ export function LocalSpace({
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const tenantId = session.reloadMarker().tenantId;
-  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection }), [credential.apiBaseURL, tenantId, session, client]);
+  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [credential.apiBaseURL, tenantId, session, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -68,7 +70,7 @@ export function LocalSpace({
         tenantId,
         callName: spaceName,
         endReason: client.getSnapshot().connection.episodeEndReason,
-        reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }),
+        reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }), telemetry: client.telemetry }),
         reportExpiresAt: session.mediaExpiresAt(),
       });
     },
@@ -110,38 +112,41 @@ export function LocalSpace({
     globalThis.addEventListener("pagehide", releaseOnPageHide);
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
   }, [client, credential.space, displayName, session]);
+  useEffect(() => onPageFailure((cause) => client.telemetry.renderCrashed(cause)), [client]);
   return (
     <main className="h-full min-h-0 w-full overflow-hidden">
-      {homeError ? <p role="alert">{homeError}</p> : null}
-      <Chalk
-        timeLimit={{
-          message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",
-          action: offerSignUp ? signUp : undefined,
-          endAction: offerSignUp ? signUp : undefined,
-        }}
-        theme={{ colorScheme: mode }}
-        onColorSchemeChange={setPreference}
-        client={client}
-        onReportProblem={reportsAvailable ? reportProblem : undefined}
-        reportUnavailableReason={reportUnavailableReason}
-        onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
-        displayName={displayName}
-        defaults={defaults}
-        spaceName={spaceName}
-        inviteLink={inviteLink}
-        onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
-        onLeft={() => {
-          releaseFromLifecycle(sessionExit(client.getSnapshot().connection) ?? "left");
-        }}
-        onJoined={() => {
-          intentionallyLeft.current = false;
-        }}
-        onHome={() => {
-          void release()
-            .then(() => globalThis.location.assign("/"))
-            .catch(() => setHomeError("Couldn’t leave the call. Try Home again."));
-        }}
-      />
+      <CallErrorBoundary onCrash={() => client.telemetry.renderCrashed("render_error")}>
+        {homeError ? <p role="alert">{homeError}</p> : null}
+        <Chalk
+          timeLimit={{
+            message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",
+            action: offerSignUp ? signUp : undefined,
+            endAction: offerSignUp ? signUp : undefined,
+          }}
+          theme={{ colorScheme: mode }}
+          onColorSchemeChange={setPreference}
+          client={client}
+          onReportProblem={reportsAvailable ? reportProblem : undefined}
+          reportUnavailableReason={reportUnavailableReason}
+          onOpenReportProblem={() => onOpenReportProblem(reportProblem, `Call: ${spaceName ?? "Call"}\nStatus: ${connection.status}`)}
+          displayName={displayName}
+          defaults={defaults}
+          spaceName={spaceName}
+          inviteLink={inviteLink}
+          onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
+          onLeft={() => {
+            releaseFromLifecycle(sessionExit(client.getSnapshot().connection) ?? "left");
+          }}
+          onJoined={() => {
+            intentionallyLeft.current = false;
+          }}
+          onHome={() => {
+            void release()
+              .then(() => globalThis.location.assign("/"))
+              .catch(() => setHomeError("Couldn’t leave the call. Try Home again."));
+          }}
+        />
+      </CallErrorBoundary>
     </main>
   );
 }

@@ -1,7 +1,6 @@
 import type { ActiveReaction, Capability, ChatAttachment, ChatMessage, ChatSendInput, ChatUploadFile, ClientEventHandler, ClientEventName, IncomingMediaRequest, MediaRequestKind, OfflineActionsPolicy, Reaction, SpaceClient, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewMediaDevices } from "./preview-devices";
 import { callEvents, createSpaceClient } from "@q9labsai/chalk-client";
-
 export { PREVIEW_DEVICE_FIXTURES } from "./preview-devices";
 
 export type PreviewClientCommand =
@@ -174,6 +173,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
       setPolicy: async (policy: OfflineActionsPolicy) => updateSnapshot((current) => ({ ...current, offline: { ...current.offline, policy } })),
     },
     whiteboard: { transport: () => null },
+    telemetry: { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
     close: async () => dispose(),

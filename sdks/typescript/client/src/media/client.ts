@@ -33,6 +33,7 @@ import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delive
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure } from "./failure-diagnostics";
+import { observeOperation } from "../telemetry/operation";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -116,9 +117,11 @@ const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
 // resume operation rather than trusting Chalk's registry as provider liveness.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
+const subscribeFailure = (error: unknown) => classifyMediaFailure(error, "sfu_subscriptions");
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
+  readonly #telemetry: CloudflareSFUClientOptions["telemetry"];
   readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
   readonly #onReceiveHealth: CloudflareSFUClientOptions["onReceiveHealth"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
@@ -219,6 +222,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now(), options.unreportedVideoTileWaitMs ?? UNREPORTED_TILE_WAIT_MS);
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
+    this.#telemetry = options.telemetry;
     this.#onDiagnostic = options.onDiagnostic;
     this.#onReceiveHealth = options.onReceiveHealth;
     this.#callStats = createCallStatsCollector({ record: (draft) => options.telemetry?.record(draft), interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null });
@@ -1877,6 +1881,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     if (publications.length === 0) return [];
+    return observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullTracks(publications, generation), subscribeFailure);
+  }
+  async #pullTracks(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     this.#receiveHealth.pullRequested(publications.map((publication) => publication.publicationId));
     return this.#serializeSDP(() =>
       this.#negotiateRemotePull(publications, generation, async (connectionId) => {

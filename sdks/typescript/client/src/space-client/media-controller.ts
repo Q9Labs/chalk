@@ -4,7 +4,7 @@ import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
 import { cameraEffectFailure } from "../media/camera-effects";
-import { describeMediaCaptureError } from "../media/capture-error";
+import { describeMediaCaptureError, deviceFailedEvent } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
 import { displayMediaConstraints, releaseTracks, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
@@ -1144,9 +1144,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
-      if (source === "microphone") {
-        this.#watchMicrophone(null);
-      }
+      if (source === "microphone") this.#watchMicrophone(null);
       this.#tracks.delete(source);
       return;
     }
@@ -1384,6 +1382,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #rollbackCapture(input: CaptureRollback): Effect.Effect<void, unknown> {
     if (isAccessInvalid(input.cause)) return Effect.fail(input.cause);
+    if (input.track === null) this.#connection.telemetry?.record(deviceFailedEvent(input.cause, input.source));
     const rollback = input.track ? this.#discardCaptured(input.source, input.track, input.media, input.prepared) : input.fallback;
     const captureWasUnavailable = input.action === "startScreenShare" && !input.prepared && input.track === null;
     const failure = isPermissionDenied(input.cause) || captureWasUnavailable ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;

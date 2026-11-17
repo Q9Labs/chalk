@@ -154,6 +154,7 @@ function createSyncClient(syncURL: string, syncDirectURL: string | null | undefi
     url: syncURL,
     onDiagnostic: input.onTransportDiagnostic,
     traceparent: input.traceparent,
+    telemetry: input.telemetry,
     token: input.token,
     mediaPlane: input.media,
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },

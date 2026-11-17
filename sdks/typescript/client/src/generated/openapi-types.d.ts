@@ -1734,7 +1734,10 @@ export interface components {
           | "collaboration_unavailable"
           | "chat_cursor_reset_required"
           | "rate_limited"
-          | "invalid_payload";
+          | "invalid_payload"
+          | "media_timeout"
+          | "retry_exhausted"
+          | "not_live";
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
@@ -2748,7 +2751,10 @@ export interface components {
           | "collaboration_unavailable"
           | "chat_cursor_reset_required"
           | "rate_limited"
-          | "invalid_payload";
+          | "invalid_payload"
+          | "media_timeout"
+          | "retry_exhausted"
+          | "not_live";
         /** @enum {string} */
         device_kind?: "microphone" | "camera" | "speaker" | "screen";
         dropped?: number | null;

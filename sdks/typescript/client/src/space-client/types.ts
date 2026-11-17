@@ -13,12 +13,9 @@ import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
 import type { AccessContext, AccessReason } from "../access/context";
+import type { AppTelemetry } from "../telemetry/app";
 export type { AccessContext, AccessReason };
-/**
- * What `getAccess` resolves with: the server-minted grant returned unchanged, either as the
- * `Response` that carries it or as its decoded JSON. Chalk validates it before use; the
- * application never constructs or inspects a grant.
- */
+/** What `getAccess` resolves with: the server-minted grant, as the `Response` that carries it or its decoded JSON. */
 export type AccessGrantSource = AccessGrant | Response | object;
 export type GetAccess = (context: AccessContext) => Promise<AccessGrantSource>;
 export type Logger = {
@@ -336,6 +333,7 @@ export type SpaceClient = {
   readonly recording: RecordingController;
   readonly whiteboard: WhiteboardController;
   readonly offline: OfflineController;
+  readonly telemetry: AppTelemetry;
   readonly join: (options?: JoinOptions) => Promise<void>;
   readonly leave: () => Promise<void>;
   /** Frees the camera, microphone and connections. Leaves first unless already left, logs a failed leave, and does nothing the second time. */
