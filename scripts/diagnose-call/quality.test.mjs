@@ -5,7 +5,8 @@ import { diagnoseRows } from "./index.mjs";
 import { joinByIds } from "./join.mjs";
 import { mediaOf } from "./quality.mjs";
 import { normalizeRow } from "./rows.mjs";
-import { EPISODE, downlinkLossCall, downlinkWithoutTransportCall, fixture, nodeDroppingCall, uplinkLossCall } from "./scenarios.mjs";
+import { EPISODE, fixture } from "./scenarios.mjs";
+import { downlinkLossCall, downlinkWithoutTransportCall, nodeDroppingCall, uplinkLossCall } from "./scenarios-sfu.mjs";
 
 const diagnose = (rows) =>
   diagnoseRows(

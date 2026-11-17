@@ -77,7 +77,7 @@ export function unmutesOf(call) {
 }
 
 /** The unmutes whose node total went past the budget, worst first, each with the leg that took the time. */
-export function overBudget(report, thresholds) {
+function overBudget(report, thresholds) {
   return report.unmutes.flatMap((unmute) => unmute.forwards.filter((forward) => forward.totalMs > thresholds.unmute_audible_p95_ms).map((forward) => ({ unmute, forward }))).sort((a, b) => b.forward.totalMs - a.forward.totalMs);
 }
 

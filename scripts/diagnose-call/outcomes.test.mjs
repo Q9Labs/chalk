@@ -3,7 +3,8 @@ import test from "node:test";
 import { diagnoseRows, strictCode } from "./index.mjs";
 import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
-import { EPISODE, durableOnlyCall, fixture, neverConnectedCall, planeChangeCall, recoveredDropCall, scenarios } from "./scenarios.mjs";
+import { EPISODE, fixture, neverConnectedCall, scenarios } from "./scenarios.mjs";
+import { durableOnlyCall, planeChangeCall, recoveredDropCall } from "./scenarios-sfu.mjs";
 
 const diagnose = (rows, gaps = []) =>
   diagnoseRows(

@@ -3,7 +3,8 @@ import test from "node:test";
 import { diagnoseRows, strictCode } from "./index.mjs";
 import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
-import { EPISODE, fixture, unmuteCall, unmuteOverBudgetCall, unmuteWithinBudgetCall } from "./scenarios.mjs";
+import { EPISODE, fixture } from "./scenarios.mjs";
+import { unmuteCall, unmuteOverBudgetCall, unmuteWithinBudgetCall } from "./scenarios-sfu.mjs";
 import { percentile } from "./unmute.mjs";
 
 const diagnose = (rows) =>

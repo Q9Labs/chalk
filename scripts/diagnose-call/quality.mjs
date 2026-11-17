@@ -130,22 +130,21 @@ const worst = (intervals, name, pick = Math.max) => {
   const values = intervals.map((interval) => interval[name]).filter(Number.isFinite);
   return values.length === 0 ? undefined : pick(...values);
 };
-const median = (intervals, name) => {
-  const values = intervals
-    .map((interval) => interval[name])
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b);
-  return values.length === 0 ? undefined : values[Math.floor(values.length / 2)];
-};
+/** The middle value of the numbers in a list, or undefined when it holds none. */
+export function middle(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  return sorted.length === 0 ? undefined : sorted[Math.floor(sorted.length / 2)];
+}
+const median = (intervals, name) => middle(intervals.map((interval) => interval[name]));
 const rowsOfRun = (run) => run.intervals.flatMap((interval) => interval.rows);
 const one = (value, digits = 1) => Number(value.toFixed(digits));
 const kbps = (bps) => Math.round(bps / 1000);
 
-export const uplinkBad = (interval, thresholds) => !interval.reset && !interval.held && (interval.missingPct > thresholds.healthy_loss_pct || interval.jitter > thresholds.healthy_jitter_ms);
+const uplinkBad = (interval, thresholds) => !interval.reset && !interval.held && (interval.missingPct > thresholds.healthy_loss_pct || interval.jitter > thresholds.healthy_jitter_ms);
 /** The node's own pacer dropped video for the session in this interval. */
-export const nodeBad = (interval) => interval.dropped > 0;
+const nodeBad = (interval) => interval.dropped > 0;
 /** The subscriber's own reports show a poor link and the node dropped nothing, or its transport row is missing. */
-export const downlinkBad = (interval, thresholds) => !nodeBad(interval) && (interval.lossPct > thresholds.healthy_loss_pct || interval.rtt > thresholds.healthy_rtt_ms || interval.jitter > thresholds.healthy_jitter_ms);
+const downlinkBad = (interval, thresholds) => !nodeBad(interval) && (interval.lossPct > thresholds.healthy_loss_pct || interval.rtt > thresholds.healthy_rtt_ms || interval.jitter > thresholds.healthy_jitter_ms);
 
 function uplinkFindings(call, thresholds) {
   return mediaOf(call).ingress.flatMap((track) =>
@@ -211,7 +210,7 @@ function transportClause(run) {
 }
 
 /** The cause text of a run of bad downlink intervals of one session: whether the node dropped the packets or the subscriber's link lost them. */
-export function downlinkCause(run) {
+function downlinkCause(run) {
   const dropped = run.intervals.reduce((total, interval) => total + (interval.dropped ?? 0), 0);
   const loss = worst(run.intervals, "lossPct");
   const rtt = worst(run.intervals, "rtt");

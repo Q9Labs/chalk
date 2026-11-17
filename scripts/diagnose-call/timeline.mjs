@@ -1,6 +1,6 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { cite, shortConnection } from "./call.mjs";
-import { mediaOf, streamSummary, trackSummary } from "./quality.mjs";
+import { mediaOf, middle, streamSummary, trackSummary } from "./quality.mjs";
 import { attr, flag, number } from "./rows.mjs";
 
 const STEP_LIMIT = 60;
@@ -73,13 +73,7 @@ function statsSteps(call, participant) {
   const byConnection = new Map();
   for (const sample of call.samples.filter((candidate) => candidate.participant === participant)) byConnection.set(sample.connection, [...(byConnection.get(sample.connection) ?? []), sample]);
   return [...byConnection].map(([connection, samples]) => {
-    const median = (name) => {
-      const values = samples
-        .map((sample) => number(sample.row, name))
-        .filter(Number.isFinite)
-        .sort((a, b) => a - b);
-      return values.length === 0 ? undefined : values[Math.floor(values.length / 2)];
-    };
+    const median = (name) => middle(samples.map((sample) => number(sample.row, name)));
     const worst = (name) => Math.max(...samples.map((sample) => number(sample.row, name)).filter(Number.isFinite));
     const unmeasured = samples.every((sample) => number(sample.row, "available_incoming_kbps") === undefined);
     const parts = [

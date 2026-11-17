@@ -13,6 +13,7 @@ import { missingSources } from "./gaps.mjs";
 import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
 import { EPISODE, T0, at, fixture, neverConnectedCall, scenarios } from "./scenarios.mjs";
+import { sfuScenarios } from "./scenarios-sfu.mjs";
 import { readSources } from "./sources.mjs";
 
 const run = promisify(execFile);
@@ -183,7 +184,7 @@ test("--strict fails on a bad call, then on missing evidence, and passes a clean
 });
 
 test("the fixtures hold no production identifier: every id is invented", () => {
-  const text = JSON.stringify(Object.values(scenarios).map((build) => build()));
+  const text = JSON.stringify(Object.values({ ...scenarios, ...sfuScenarios }).map((build) => build()));
   assert.doesNotMatch(text, /52730039|479a5f5e|688d874b|6b0f58f2|ff75a37c|3a47f23d-[0-9a-f]{4}/u);
   assert.doesNotMatch(text, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-(?!444455556666|000000000001)[0-9a-f]{12}/u);
 });

@@ -69,7 +69,7 @@ export function episodeSql(episodeId, since) {
  * How each media session of the Episode ended, from `participant_media_sessions`: one durable row per session with the same outcome fields
  * the node logs on `sfu.session.closed`. Axiom keeps 30 days and this table keeps the Episode's life, so it answers for an older call.
  */
-export function sessionsSql(episodeId, since) {
+function sessionsSql(episodeId, since) {
   const { row, join } = scoped(episodeId, since);
   return join([
     row(
@@ -86,7 +86,7 @@ export function sessionsSql(episodeId, since) {
  * The changes to a media plane setting made while the Episode lasted, from `media_plane_changes`: its Space's, its Tenant's, and the global kill switch.
  * An Episode keeps the plane it was bound to, so a change in this window tells what later Episodes got, and what to suspect for a call that switched plane.
  */
-export function planesSql(episodeId, since) {
+function planesSql(episodeId, since) {
   const { row, join } = scoped(episodeId, since);
   return join([
     row(
