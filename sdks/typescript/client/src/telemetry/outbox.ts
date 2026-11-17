@@ -1,5 +1,5 @@
 import { EventQueue } from "./queue";
-import type { PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySink } from "./types";
+import type { PlatformChange, PlatformState, TelemetryCredential, TelemetryCredentialSource, TelemetryDraft, TelemetryEvent, TelemetryPlatform, TelemetrySendResult, TelemetrySink } from "./types";
 
 /** Events that say a bad thing may be starting go out at once, because the client may not live to send them later. */
 const STARTED_PLATFORM_STATES: ReadonlySet<PlatformState | undefined> = new Set(["offline", "hidden", "background"]);
@@ -156,34 +156,45 @@ export class TelemetryOutbox implements TelemetrySink {
     let refreshed = false;
     for (;;) {
       this.#reportDrops();
-      const credential = this.#credential();
-      if (this.#queue.length === 0 || !this.#platform.online() || this.#platform.now() < this.#blockedUntil) return;
-      if (!credential) {
-        // Before the first grant the outbox keeps asking. Once it has had a credential and lost it, nothing will bring one back.
-        if (!this.#lastCredential) this.#schedule(AWAIT_CREDENTIAL_MS);
-        return;
-      }
+      const credential = this.#sendable();
+      if (!credential) return;
       const batch = this.#queue.take(MAX_BATCH_EVENTS, MAX_BATCH_BYTES);
-      const result = await this.#post(credential, batch);
-      if (result === null) {
-        this.#backoff(batch, 0);
-        return;
-      }
-      if (result.status >= 200 && result.status < 300) {
-        this.#failures = 0;
-      } else if (result.status === 401 && !refreshed) {
-        refreshed = true;
-        this.#dropped += this.#queue.restore(batch);
-        await this.#source?.refresh().catch(() => undefined);
-        continue;
-      } else if (result.status === 429 || result.status >= 500) {
-        this.#backoff(batch, result.retryAfterMs);
-        return;
-      } else {
-        this.#dropped += batch.length;
-      }
-      refreshed = false;
+      const outcome = await this.#settle(batch, await this.#post(credential, batch), refreshed);
+      if (outcome === "stop") return;
+      refreshed = outcome === "refreshed";
     }
+  }
+
+  /** The credential to send with, or null when nothing can be sent now. */
+  #sendable(): TelemetryCredential | null {
+    const credential = this.#credential();
+    if (this.#queue.length === 0 || !this.#platform.online() || this.#platform.now() < this.#blockedUntil) return null;
+    // Before the first grant the outbox keeps asking. Once it has had a credential and lost it, nothing will bring one back.
+    if (!credential && !this.#lastCredential) this.#schedule(AWAIT_CREDENTIAL_MS);
+    return credential;
+  }
+
+  /** Decides what the answer to one batch means for the queue and for the next batch. */
+  async #settle(batch: readonly TelemetryEvent[], result: TelemetrySendResult | null, refreshed: boolean): Promise<"sent" | "refreshed" | "stop"> {
+    if (result === null) {
+      this.#backoff(batch, 0);
+      return "stop";
+    }
+    if (result.status >= 200 && result.status < 300) {
+      this.#failures = 0;
+      return "sent";
+    }
+    if (result.status === 401 && !refreshed) {
+      this.#dropped += this.#queue.restore(batch);
+      await this.#source?.refresh().catch(() => undefined);
+      return "refreshed";
+    }
+    if (result.status === 429 || result.status >= 500) {
+      this.#backoff(batch, result.retryAfterMs);
+      return "stop";
+    }
+    this.#dropped += batch.length;
+    return "sent";
   }
 
   async #post(credential: TelemetryCredential, events: readonly TelemetryEvent[]) {

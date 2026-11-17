@@ -257,22 +257,35 @@ function recvHeight(report: RTCStatsReport): number | null {
 function trackWindows(report: RTCStatsReport, baseline: Baseline, delivery: CallStatsDelivery | undefined): CallStatsSample["tracks"] {
   const tracks: Track[] = [];
   for (const stat of stats(report, "inbound-rtp")) {
-    const kind = stat.kind ?? stat.mediaType;
-    if (typeof stat.mid !== "string" || (kind !== "audio" && kind !== "video") || tracks.length >= MAX_TRACKS) continue;
-    const grown = (field: string): number | undefined => {
-      const before = baseline.counters.get(`${String(stat.id)}:${field}`);
-      const current = stat[field];
-      return typeof current === "number" && before !== undefined ? Math.max(0, current - before) : undefined;
-    };
-    const energy = grown("totalAudioEnergy");
-    tracks.push({
-      mid: stat.mid,
-      kind,
-      packets: scaled(grown("packetsReceived") ?? null, 1, 10_000_000),
-      lost: scaled(grown("packetsLost") ?? null, 1, 10_000_000),
-      ...(kind === "audio" && energy !== undefined ? { audio_energy: scaled(energy, 1000, MAX_MS) } : {}),
-      playout: kind === "audio" && typeof stat.trackIdentifier === "string" ? (delivery?.playout?.(stat.trackIdentifier) ?? "unknown") : "unknown",
-    });
+    const track = trackWindow(stat, baseline, delivery);
+    if (track && tracks.length < MAX_TRACKS) tracks.push(track);
   }
   return tracks.length > 0 ? tracks : undefined;
+}
+
+function trackWindow(stat: Stat, baseline: Baseline, delivery: CallStatsDelivery | undefined): Track | null {
+  const kind = stat.kind ?? stat.mediaType;
+  if (typeof stat.mid !== "string" || (kind !== "audio" && kind !== "video")) return null;
+  const track: Track = {
+    mid: stat.mid,
+    kind,
+    packets: scaled(grown(baseline, stat, "packetsReceived") ?? null, 1, 10_000_000),
+    lost: scaled(grown(baseline, stat, "packetsLost") ?? null, 1, 10_000_000),
+    playout: "unknown",
+  };
+  return kind === "audio" ? { ...track, ...audioWindow(stat, baseline, delivery) } : track;
+}
+
+/** The audio-only fields of a track window. */
+function audioWindow(stat: Stat, baseline: Baseline, delivery: CallStatsDelivery | undefined): Pick<Track, "audio_energy" | "playout"> {
+  const energy = grown(baseline, stat, "totalAudioEnergy");
+  const playout = typeof stat.trackIdentifier === "string" ? delivery?.playout?.(stat.trackIdentifier) : undefined;
+  return { ...(energy === undefined ? {} : { audio_energy: scaled(energy, 1000, MAX_MS) }), playout: playout ?? "unknown" };
+}
+
+/** How much a counter grew since the last window, or undefined when it has no earlier reading. */
+function grown(baseline: Baseline, stat: Stat, field: string): number | undefined {
+  const before = baseline.counters.get(`${String(stat.id)}:${field}`);
+  const current = stat[field];
+  return typeof current === "number" && before !== undefined ? Math.max(0, current - before) : undefined;
 }

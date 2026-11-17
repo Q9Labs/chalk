@@ -64,14 +64,12 @@ export class EventQueue {
   }
 
   #foldOldestStats(): boolean {
-    const first = this.#entries.findIndex((entry) => entry.event.type === "call_stats");
-    const second = this.#entries.findIndex((entry, index) => index > first && entry.event.type === "call_stats");
-    const older = this.#entries[first]?.event;
-    const newer = this.#entries[second]?.event;
-    if (first === -1 || second === -1 || !older || !newer) return false;
-    const windowMs = (older.stats?.window_ms ?? 0) + (newer.stats?.window_ms ?? 0);
-    const folded: TelemetryEvent = { ...older, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
-    this.#remove(second);
+    const [older, newer] = this.#entries.filter((entry) => entry.event.type === "call_stats");
+    if (!older || !newer) return false;
+    const windowMs = (older.event.stats?.window_ms ?? 0) + (newer.event.stats?.window_ms ?? 0);
+    const folded: TelemetryEvent = { ...older.event, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
+    const first = this.#entries.indexOf(older);
+    this.#remove(this.#entries.indexOf(newer));
     this.#remove(first);
     this.#insert(first, { event: folded, bytes: sizeOf(folded) });
     return true;

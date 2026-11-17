@@ -12,6 +12,11 @@ const mediaControls = [
 export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false, checkCameraFrames = true }) {
   const failures = [];
   const agree = (pages, options) => assertAgreement(pages, { ...options, checkCameraFrames });
+  const settled = async (pages, evidence) => {
+    await enabledCapture(pages);
+    await agree(pages);
+    assert.equal(evidence.get(pages[0]).reports.filter((event) => event.type === "media_projection_mismatch").length, 0);
+  };
   const scenario = scenarioRunner({ browser, baseURL, invoke, waitForState, device, failures, fault, agree });
   async function fault(configuration) {
     const response = await fetch(`${baseURL}/test/fault`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ participant: "agreementalice", ...configuration }) });
@@ -101,8 +106,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
           await wait(2000);
           const mismatch = reports.filter((event) => event.type === "media_projection_mismatch").map(({ source, attempt, outcome }) => ({ source, attempt, outcome }));
           const expectedReports = projection === "reject" ? [] : [{ source, attempt: 0, outcome: "failed" }];
-          assert.equal(mismatch.length, expectedReports.length, "Only persistent live drift sends a report");
-          assert.deepEqual(mismatch, expectedReports);
+          assert.deepEqual(mismatch, expectedReports, "Only persistent live drift sends a report");
           assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 1, "The monitor must not send automatic repair targets");
           await fault({ clear: true });
           await agree(pages);
@@ -125,9 +129,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await wait(300);
         await truth(pages);
         await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
-        await enabledCapture(pages);
-        await agree(pages);
-        assert.equal(evidence.get(pages[0]).reports.filter((event) => event.type === "media_projection_mismatch").length, 0);
+        await settled(pages, evidence);
       });
       await scenario(`Pending ${source} cancels with shortcut and recovers with button`, async (pages, _open, evidence) => {
         await invoke(pages[0], action, false);
@@ -141,9 +143,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false);
         await fault({ clear: true });
         await clickControl(pages[0], onLabel);
-        await enabledCapture(pages);
-        await agree(pages);
-        assert.equal(evidence.get(pages[0]).reports.filter((event) => event.type === "media_projection_mismatch").length, 0);
+        await settled(pages, evidence);
       });
     }
   }
