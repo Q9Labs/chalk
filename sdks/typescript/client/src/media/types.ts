@@ -1,4 +1,5 @@
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TelemetrySink } from "../telemetry/types";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
 export type CloudflareSFUIceServer = {
   readonly urls: readonly string[];
@@ -124,7 +125,6 @@ export type CloudflareSFUSignalingTransport = {
    * batch reuses the last token and never asks the credential provider, which could refresh access
    * for a participant who just left or was evicted.
    */
-  readonly uploadCallStats?: (stats: import("./call-stats").CallStatsRequest, closing: boolean) => Promise<void>;
 };
 export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;
@@ -182,7 +182,9 @@ export type CloudflareSFUClientOptions = {
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
-  readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
+  readonly onReceiveHealth?: (event: TransportDiagnostic) => void;
+  /** Where call stats windows go. */
+  readonly telemetry?: TelemetrySink;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };
@@ -193,7 +195,7 @@ export type CloudflareSFURestartOptions = {
 export type CloudflareSFUCredentialProvider = (signal?: AbortSignal) => string | Promise<string>;
 export type CloudflareSFUHTTPTransportOptions = {
   readonly traceparent?: string;
-  readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onDiagnostic?: (event: TransportDiagnostic) => void;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
   /**

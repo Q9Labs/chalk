@@ -2,31 +2,19 @@ import { afterEach, expect, it, vi } from "vitest";
 import { capturedClient, mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform } from "./core.test.helpers";
 import type { ConnectionSyncClient } from "../connection/dependencies";
-import { ConnectionReporter, type ConnectionReport } from "../connection/report";
+import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 
 afterEach(() => vi.useRealTimers());
-let reportSequence = 0;
 
 function scenario(source: "microphone" | "camera" = "microphone", media: NonNullable<Parameters<typeof capturedClient>[2]>["media"] = {}) {
-  const reportClockOffset = ++reportSequence * 120000;
   const base = createCoreTestPlatform();
-  const reports: ConnectionReport[] = [];
+  const telemetry = createTestOutbox();
   const platform = {
     ...base,
     dependencies: {
       ...base.dependencies,
       clock: { ...base.dependencies.clock, setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds), clearTimeout: (timer) => globalThis.clearTimeout(timer) },
-      createConnectionReporter: (access: ConstructorParameters<typeof ConnectionReporter>[0]["access"]) =>
-        new ConnectionReporter({
-          access,
-          now: () => Date.now() + reportClockOffset,
-          traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
-          online: () => true,
-          subscribeOnline: () => () => {},
-          send: async (_access, report) => {
-            reports.push(report);
-          },
-        }),
+      telemetry: telemetry.outbox,
     },
   };
   const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
@@ -47,7 +35,12 @@ function scenario(source: "microphone" | "camera" = "microphone", media: NonNull
   const client = capturedClient(platform, track, { media, sync: { setMicrophoneEnabled: command, setCameraEnabled: command } });
   const peer = capturedClient(observer, mediaTrack());
   return {
-    reports,
+    telemetry,
+    /** The mismatch events the server took, once the outbox has sent them. */
+    mismatches: async () => {
+      await telemetry.outbox.flush();
+      return telemetry.accepted.filter((event) => event.type === "media_projection_mismatch");
+    },
     platform,
     track,
     received,
@@ -110,10 +103,9 @@ it("automatically reports a persistent mismatch once, with zero retries and no r
     vi.useFakeTimers();
     test.project(false);
     await vi.advanceTimersByTimeAsync(10000);
-    expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.trigger).toBe("media_projection_mismatch");
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", attempt: 0, outcome: "failed" });
-    expect(test.reports[0]?.events.at(-1)?.duration_ms).toBe(10000);
+    expect(await test.mismatches()).toHaveLength(1);
+    expect((await test.mismatches())[0]).toMatchObject({ type: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", attempt: 0, outcome: "failed" });
+    expect((await test.mismatches())[0]?.duration_ms).toBe(10000);
     expect(test.command).not.toHaveBeenCalled();
     expect(test.track.enabled).toBe(false);
   } finally {
@@ -138,7 +130,7 @@ it.each(["microphone", "camera"] as const)("accepts a healthy %s confirmation ju
     expect(test.track.enabled).toBe(true);
     expect(test.received.enabled).toBe(true);
     expect(test.command).not.toHaveBeenCalled();
-    expect(test.reports).toHaveLength(0);
+    expect(await test.mismatches()).toHaveLength(0);
   } finally {
     test.dispose();
   }
@@ -193,7 +185,7 @@ it.each(lateConfirmationCases)("closes only its own $source after a late confirm
     expect(test.track.enabled).toBe(true);
     expect(test.client.getSnapshot().media.local[source].state).toBe("enabled");
     expect(test.received.enabled).toBe(true);
-    expect(test.reports).toHaveLength(1);
+    expect(await test.mismatches()).toHaveLength(1);
   } finally {
     finishClose();
     test.dispose();
@@ -400,8 +392,8 @@ it("does not automatically send cleanup after a rejected enable", async () => {
     test.project(true);
     await vi.advanceTimersByTimeAsync(10000);
     expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
-    expect(test.reports.at(-1)?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", attempt: 0 });
-    expect(JSON.stringify(test.reports)).not.toContain("private provider");
+    expect((await test.mismatches()).at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", attempt: 0 });
+    expect(JSON.stringify(test.telemetry.accepted)).not.toContain("private provider");
   } finally {
     test.dispose();
   }
@@ -447,8 +439,8 @@ it.each(["microphone", "camera"] as const)("never resumes failed %s capture or s
     // Round-one P1: receiver's stale gate may be on, but this capture must be off.
     expect(test.received.enabled).toBe(true);
     expect(test.command).not.toHaveBeenCalled();
-    expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "on", projection_state: "on", duration_ms: 10000, attempt: 0, outcome: "failed" });
+    expect(await test.mismatches()).toHaveLength(1);
+    expect((await test.mismatches())[0]).toMatchObject({ publication_state: "on", projection_state: "on", duration_ms: 10000, attempt: 0, outcome: "failed" });
   } finally {
     vi.useRealTimers();
     test.dispose();
@@ -470,8 +462,8 @@ it("reports off/on drift while a manual mute is pending without sending an extra
     );
     const off = test.client.media.setMicrophoneEnabled(false);
     await vi.advanceTimersByTimeAsync(10000);
-    expect(test.reports).toHaveLength(1);
-    expect(test.reports[0]?.events.at(-1)).toMatchObject({ publication_state: "off", projection_state: "on", duration_ms: 10000, attempt: 0 });
+    expect(await test.mismatches()).toHaveLength(1);
+    expect((await test.mismatches())[0]).toMatchObject({ publication_state: "off", projection_state: "on", duration_ms: 10000, attempt: 0 });
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
     expect(test.client.getSnapshot().media.local.microphone.state).toBe("disabled");
     finish();

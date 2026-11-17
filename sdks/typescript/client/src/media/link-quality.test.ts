@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CallStatsSample } from "./call-stats";
 import { createLinkTracker, enterTier, holdTier, linkWindow, LINK_MIN_SHOWN_MS } from "./link-quality";
 
-const sample = (fields: Partial<CallStatsSample> = {}): CallStatsSample => ({ elapsed_ms: 10_000, window_ms: 10_000, connection_type: "udp", ...fields });
+const sample = (fields: Partial<CallStatsSample> = {}): CallStatsSample => ({ window_ms: 10_000, connection_type: "udp", ...fields });
 const tier = (fields: Partial<CallStatsSample>, syncDegraded = false) => enterTier(linkWindow(sample(fields), syncDegraded));
 const held = (fields: Partial<CallStatsSample>) => holdTier(linkWindow(sample(fields), false));
 

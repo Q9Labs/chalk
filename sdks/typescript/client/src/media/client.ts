@@ -1,4 +1,6 @@
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
+import type { TransportDiagnostic } from "../transport-diagnostics";
+import { validateBootstrap, validateClientOptions, validateTrackSource } from "./client-validation";
 import { ReceiveStallRecovery } from "./receive-stall";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
@@ -26,7 +28,7 @@ import {
   transceiverOf,
   withDeadline,
 } from "./peer-connection";
-import { createCallStatsCollector } from "./call-stats";
+import { createCallStatsCollector, type CallStatsCollector } from "./call-stats";
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
@@ -207,7 +209,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
-  readonly #callStats = createCallStatsCollector({ upload: async (stats) => this.#transport?.uploadCallStats?.(stats, false) });
+  readonly #callStats: CallStatsCollector;
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
@@ -219,6 +221,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#onError = options.onError;
     this.#onDiagnostic = options.onDiagnostic;
     this.#onReceiveHealth = options.onReceiveHealth;
+    this.#callStats = createCallStatsCollector({ record: (draft) => options.telemetry?.record(draft), interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null });
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -1068,9 +1071,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
-    // Retiring publications clears the transport before a pending upload ends, so the closing batch keeps its own reference.
-    const transport = this.#transport;
-    void this.#callStats.flush(async (stats) => transport?.uploadCallStats?.(stats, true));
+    this.#callStats.flush();
     this.#receiveHealth.roster([]);
     this.#receiveHealth.dispose();
     this.#receiveProgress.expect([], this.#participantId);
@@ -1781,6 +1782,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: batch.length, bundle_tag_held: batch.some(({ mid }) => mid === bundleTagOf(this.#connection)) }));
     }
   }
+  #reportHealth(event: TransportDiagnostic): void {
+    this.#invokeListener(() => this.#onReceiveHealth?.(event));
+  }
   #heldRemoteTracks(): ReadonlySet<MediaStreamTrack> {
     return new Set([...this.#remoteTracks.values()].map((publication) => publication.track));
   }
@@ -2270,7 +2274,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
-        this.#callStats.observe(report, { hiddenVideos: this.#hiddenVideos, ...(this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : {}) });
+        this.#callStats.observe(report, { hiddenVideos: this.#hiddenVideos, playout: (trackId) => this.#receiveHealth.playout(trackId), ...(this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : {}) });
         this.#publishCallStats();
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
@@ -2358,13 +2362,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // Once the budget fails the attempt, every later step drops its result. A path that recovered on
     // its own still applies an answer the SFU sent, so both sides keep the same ICE credentials.
     const pending = () => current() && restart.state !== "failed";
+    const startedAt = Date.now();
+    this.#reportHealth({ event: "recovery_attempt", mechanism: "ice_restart" });
     void this.#restartIceWithinBudget(connection, generation, pending).then(
       () => {
         restart.state = "succeeded";
+        this.#reportHealth({ event: "recovery_succeeded", mechanism: "ice_restart", outage_ms: Date.now() - startedAt });
       },
       (error: unknown) => {
         if (restart.state !== "running") return;
         restart.state = "failed";
+        this.#reportHealth({ event: "recovery_attempt", mechanism: "ice_restart", outcome: "failed" });
         if (current()) this.#setFailure(error, "ice_connection_failed");
       },
     );
@@ -2695,22 +2703,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#transport) throw new CloudflareSFUError("SFU signaling unavailable", "signaling_failed");
     return this.#transport;
   }
-}
-function validateClientOptions(options: CloudflareSFUClientOptions): void {
-  validateBootstrap(options.bootstrap);
-  if (!options.participantId.trim()) throw new CloudflareSFUError("Cloudflare SFU participant is missing", "invalid_bootstrap");
-  if (invalidDuration(options.pollIntervalMs)) throw new CloudflareSFUError("Cloudflare SFU polling interval is invalid", "invalid_bootstrap");
-  if (invalidDuration(options.unreportedVideoTileWaitMs)) throw new CloudflareSFUError("Cloudflare SFU unreported video tile wait is invalid", "invalid_bootstrap");
-}
-function invalidDuration(ms: number | undefined): boolean {
-  return ms !== undefined && (!Number.isFinite(ms) || ms < 0);
-}
-function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
-  if (!bootstrap.connectionId.trim() || (bootstrap.stunServer !== undefined && !bootstrap.stunServer.trim())) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
-}
-function validateTrackSource(source: MediaPublicationSource, track: MediaStreamTrack): void {
-  const valid = source === "microphone" || source === "screen_audio" ? track.kind === "audio" : track.kind === "video";
-  if (!valid) throw new CloudflareSFUError(`The prepared ${source} track has an incompatible kind`, "media_failed");
 }
 function isVideoPublication(publication: Pick<CloudflareSFUPublication, "source">): boolean {
   return publication.source === "camera" || publication.source === "screen";

@@ -1,10 +1,10 @@
 import { SYNC_PATH } from "../urls";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { LinkWatch, type LinkJudge } from "./link-watch";
-import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
+import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -17,6 +17,7 @@ import { frameSignature } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
 import { V1TimerMap } from "./v1-timer-map";
+import { copyProjection, copyPublication, mediaItem, mediaKey, presenceItem, updateProjection, validMediaPublication } from "./v1-projection-items";
 import { syncEntryUrl } from "./entry-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
@@ -689,7 +690,7 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#control = control;
       if (control.status === "ended") this.#options.mediaPlane?.remotePublicationsChanged?.([]);
       this.#snapshotRevision = control.revision;
-      this.#snapshotRecoveryRequested = false;
+      this.#finishDigestRecovery();
       this.#controlHeads.clear();
       this.#controlEvents.clear();
       this.#rememberControlHead(this.#control.revision, this.#control.stateDigest);
@@ -885,6 +886,7 @@ export class V1SyncClient implements V1CollaborationClient {
       return;
     }
     this.#lastDigestRecoveryAt = now;
+    this.#diagnostic({ event: "recovery_attempt", mechanism: "sync_digest" });
     this.#snapshotRecoveryRequested = true;
     this.#control = null;
     this.#snapshotRevision = null;
@@ -892,7 +894,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#controlEvents.clear();
     this.#recover("state_digest_mismatch");
   }
+  #finishDigestRecovery(): void {
+    if (!this.#snapshotRecoveryRequested) return;
+    this.#snapshotRecoveryRequested = false;
+    this.#diagnostic({ event: "recovery_succeeded", mechanism: "sync_digest", outage_ms: this.#clock().now() - (this.#lastDigestRecoveryAt ?? 0) });
+  }
   #failDigestRecovery(): void {
+    this.#diagnostic({ event: "recovery_attempt", mechanism: "sync_digest", outcome: "failed" });
     this.#phase = { phase: "terminal", terminalReason: "state_digest_recovery_failed" };
     this.#timers.cancel("reconnect");
     this.#commandScheduler.stop("state_digest_recovery_failed");
@@ -988,7 +996,7 @@ export class V1SyncClient implements V1CollaborationClient {
     }
     this.#emit();
   }
-  #diagnostic(event: ConnectionReportTransportEvent): void {
+  #diagnostic(event: TransportDiagnostic): void {
     try {
       this.#options.onDiagnostic?.(event);
     } catch {
@@ -1052,64 +1060,17 @@ export class V1SyncClient implements V1CollaborationClient {
     for (const listener of this.#listeners) listener(snapshot);
   }
 }
-function updateProjection<T>(projection: V1Projection<T> | null, projectionId: string, sequence: number, item: T, key: (item: T) => string): V1Projection<T> {
-  if (!projection || projection.projectionId !== projectionId) throw new V1ReplicaError("projection event has no matching replace snapshot");
-  if (sequence !== projection.sequence + 1) throw new V1ReplicaError("projection event is not exact-next");
-  const itemKey = key(item);
-  return { projectionId, sequence, items: [...projection.items.filter((candidate) => key(candidate) !== itemKey), item] };
-}
-function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublication {
-  return {
-    participantId: item.participant_id,
-    source: item.source,
-    enabled: item.enabled,
-    publicationId: item.publication_id,
-    ...(item.off_reason === undefined ? {} : { offReason: item.off_reason }),
-    ...(item.off_revision === undefined ? {} : { offRevision: item.off_revision }),
-  };
-}
-function presenceItem(item: typeof import("../generated/sync").PresenceProjectionItemSchema.Type): V1Presence {
-  return {
-    participantId: item.participant_id,
-    admissionRevision: item.admission_revision,
-    identityId: item.identity_id,
-    deviceType: item.device_type,
-    state: item.state,
-    speaking: item.speaking,
-    activeSpeaker: item.active_speaker,
-    ...(item.connection_quality === undefined ? {} : { connectionQuality: item.connection_quality }),
-  };
-}
-function mediaKey(item: V1MediaPublication): string {
-  return `${item.participantId}:${item.source}`;
-}
 function sameHead(control: V1ControlState | null, head: Head): boolean {
   return control !== null && control.revision === head.revision && control.stateSchemaVersion === head.state_schema_version && control.stateDigest === head.state_digest;
 }
 function sameRawHead(left: Head, right: Head): boolean {
   return left.revision === right.revision && left.state_schema_version === right.state_schema_version && left.state_digest === right.state_digest;
 }
-function copyProjection<T>(projection: V1Projection<T> | null): V1Projection<T> | null {
-  return projection && { ...projection, items: projection.items.map((item) => ({ ...item })) };
-}
 function rememberBoundedEvidence(evidence: Map<number, string>, sequence: number, signature: string, capacity: number): void {
   evidence.set(sequence, signature);
   if (evidence.size <= capacity) return;
   const oldest = evidence.keys().next().value;
   if (oldest !== undefined) evidence.delete(oldest);
-}
-function copyPublication(publication: V1MediaPublication): V1MediaPublication {
-  return { ...publication };
-}
-function validMediaPublication(publication: V1MediaPublication): boolean {
-  return (
-    typeof publication.participantId === "string" &&
-    publication.participantId.length > 0 &&
-    (publication.source === "microphone" || publication.source === "camera" || publication.source === "screen" || publication.source === "screen_audio") &&
-    typeof publication.enabled === "boolean" &&
-    (publication.publicationId === null || typeof publication.publicationId === "string") &&
-    (!publication.enabled || publication.publicationId !== null)
-  );
 }
 function assertV1Url(value: string): void {
   const url = new URL(value);

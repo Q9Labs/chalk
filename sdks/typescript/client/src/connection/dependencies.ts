@@ -1,6 +1,8 @@
 import type { ParticipantEpisodeStatus } from "../generated/schemas";
 import type { TransportPath } from "../direct-path";
-import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
+import type { TelemetryOutbox } from "../telemetry/outbox";
+import type { TelemetrySink } from "../telemetry/types";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
@@ -91,7 +93,8 @@ export type ConnectionMediaFactoryInput = {
   readonly refreshCredential?: () => Promise<string>;
   readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
-  readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly telemetry?: TelemetrySink;
+  readonly onTransportDiagnostic?: (event: TransportDiagnostic) => void;
   readonly onTransportPath?: (path: TransportPath) => void;
   readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
@@ -101,7 +104,7 @@ export type ConnectionSyncFactoryInput = {
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
-  readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportDiagnostic?: (event: TransportDiagnostic) => void;
   readonly onTransportPath?: (path: TransportPath) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
@@ -114,7 +117,8 @@ export type ConnectionChatFileFactoryInput = {
 };
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
-  readonly createConnectionReporter?: (access: () => ParsedAccessGrant | null) => ConnectionReporter | undefined;
+  /** One per SDK client. Every observer records into it; nothing else sends telemetry. */
+  readonly telemetry?: TelemetryOutbox;
   readonly getEpisodeStatus?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<ParticipantEpisodeStatus["status"]>;
   readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;

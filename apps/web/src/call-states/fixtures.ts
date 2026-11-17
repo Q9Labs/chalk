@@ -73,7 +73,6 @@ function networkSamples(kind: "steady" | "unstable"): readonly CallStatsSample[]
   const rtt = kind === "steady" ? STEADY_RTT : UNSTABLE_RTT;
   const loss = kind === "steady" ? STEADY_LOSS : UNSTABLE_LOSS;
   return rtt.map((rtt_ms, index) => ({
-    elapsed_ms: (index + 1) * 10_000,
     window_ms: 10_000,
     connection_type: "udp" as const,
     rtt_ms,

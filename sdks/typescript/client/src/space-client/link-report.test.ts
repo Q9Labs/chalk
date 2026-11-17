@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CallStatsSample } from "../media/call-stats";
 import { createConvergenceScenario, enterRecovery } from "../../tests/helpers/media-convergence";
 
-const window = (): CallStatsSample => ({ elapsed_ms: 10_000, window_ms: 10_000, connection_type: "udp", recv_loss_pct: 20 });
+const window = (): CallStatsSample => ({ window_ms: 10_000, connection_type: "udp", recv_loss_pct: 20 });
 
 describe("sharing the link tier with Sync", () => {
   it("tells the next live socket the tier again, because Sync forgets a rating with its socket", async () => {

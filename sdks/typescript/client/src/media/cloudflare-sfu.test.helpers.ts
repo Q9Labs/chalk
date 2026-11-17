@@ -1,5 +1,5 @@
 import { afterEach, vi } from "vitest";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
@@ -43,7 +43,6 @@ export class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly force: boolean;
   }[] = [];
   blockPublicationList = false;
-  uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
   listSubscriptions: CloudflareSFUSignalingTransport["listSubscriptions"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
@@ -268,7 +267,7 @@ export function failAddTracks(transport: FakeTransport, shouldFail: (input: Para
   });
 }
 
-export interface HarnessOptions {
+export interface HarnessOptions extends Pick<ConstructorParameters<typeof CloudflareSFUClient>[0], "telemetry"> {
   readonly autoConnect?: boolean;
   /** Decides per peer, by creation index, whether it ever connects. */
   readonly connectsPeer?: (index: number) => boolean;
@@ -278,7 +277,7 @@ export interface HarnessOptions {
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
   readonly unreportedVideoTileWaitMs?: number;
-  readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
+  readonly onReceiveHealth?: (event: TransportDiagnostic) => void;
   readonly bootstrap?: CloudflareSFUBootstrap;
   readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
 }
@@ -313,6 +312,7 @@ export function createSfuHarness<Peer extends TransportPeer>(options: HarnessOpt
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
     onReceiveHealth: options.onReceiveHealth,
+    telemetry: options.telemetry,
     onRemoteTrack: options.onRemoteTrack,
     peerConnectionFactory,
   });

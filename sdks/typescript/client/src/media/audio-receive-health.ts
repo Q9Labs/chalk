@@ -1,11 +1,12 @@
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TransportDiagnostic } from "../transport-diagnostics";
+import { audioStats, increased, readStats, type AudioStats } from "./audio-stats";
 import type { MediaPublication } from "./plane";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
 
-type ReceiveState = NonNullable<ConnectionReportTransportEvent["receive_state"]>;
-type PlayResult = NonNullable<ConnectionReportTransportEvent["play_result"]>;
-type FailureKind = NonNullable<ConnectionReportTransportEvent["media_error_kind"]>;
-type Counts = NonNullable<ConnectionReportTransportEvent["receive_counts"]>;
+type ReceiveState = NonNullable<TransportDiagnostic["receive_state"]>;
+type PlayResult = NonNullable<TransportDiagnostic["play_result"]>;
+type FailureKind = NonNullable<TransportDiagnostic["media_error_kind"]>;
+type Counts = NonNullable<TransportDiagnostic["receive_counts"]>;
 type AudioSource = "microphone" | "screen_audio";
 type Observation = { element: HTMLAudioElement; result?: PlayResult; started: boolean; time?: number; playing: boolean; onPlaying(): void };
 type Entry = {
@@ -19,7 +20,7 @@ type Entry = {
   trackId?: string;
   bytes?: number;
 };
-type Snapshot = Pick<ConnectionReportTransportEvent, "receive_state" | "track_state" | "element_state" | "play_result">;
+type Snapshot = Pick<TransportDiagnostic, "receive_state" | "track_state" | "element_state" | "play_result">;
 
 export type AudioReceiveHealthOptions = {
   now: () => number;
@@ -27,7 +28,7 @@ export type AudioReceiveHealthOptions = {
   clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   connection: () => RTCPeerConnection | null;
   tracks: () => Iterable<CloudflareSFURemoteTrack>;
-  onEvent: (event: ConnectionReportTransportEvent) => void;
+  onEvent: (event: TransportDiagnostic) => void;
 };
 
 export class AudioReceiveHealth {
@@ -216,6 +217,16 @@ export class AudioReceiveHealth {
     }
   }
 
+  /** What the page does with the audio of one remote track, for the stats window that names it. */
+  playout(trackId: string): "playing" | "paused" | "no_element" | "unknown" {
+    for (const [track, observations] of this.#elements) {
+      if (track.id !== trackId) continue;
+      const observation = boundElement(observations, track);
+      return observation ? (observation.element.paused ? "paused" : "playing") : "no_element";
+    }
+    return "unknown";
+  }
+
   #enabled(entry: Entry, track: MediaStreamTrack | undefined): boolean {
     if (this.#projection === undefined) return track?.enabled !== false;
     return this.#projection.has(entry.projectionKey);
@@ -257,18 +268,8 @@ export class AudioReceiveHealth {
   }
 }
 
-type AudioStats = { bytesReceived?: number };
-
 function projectionKey(participantId: string, source: string): string {
   return `${participantId}\u0000${source === "screen_audio" ? "screen" : source}`;
-}
-
-function audioStats(report: RTCStatsReport | undefined): Map<string, AudioStats> {
-  const result = new Map<string, AudioStats>();
-  report?.forEach((row) => {
-    if (row.type === "inbound-rtp" && row.kind === "audio" && typeof row.trackIdentifier === "string") result.set(row.trackIdentifier, row);
-  });
-  return result;
 }
 
 function updateBytes(entry: Entry, track: MediaStreamTrack, stats: AudioStats | undefined): boolean {
@@ -282,21 +283,9 @@ function updateBytes(entry: Entry, track: MediaStreamTrack, stats: AudioStats | 
   return flowing;
 }
 
-function increased(current: number | undefined, previous: number | undefined): boolean {
-  return current !== undefined && previous !== undefined && current > previous;
-}
-
 function trackState(track: MediaStreamTrack): Snapshot["track_state"] {
   if (track.readyState === "ended") return "ended";
   return track.muted ? "muted" : "live";
-}
-
-async function readStats(connection: RTCPeerConnection | null): Promise<RTCStatsReport | undefined> {
-  try {
-    return await connection?.getStats();
-  } catch {
-    return undefined;
-  }
 }
 
 function boundElement(observations: Set<Observation> | undefined, track: MediaStreamTrack): Observation | undefined {

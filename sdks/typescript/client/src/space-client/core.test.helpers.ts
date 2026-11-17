@@ -3,9 +3,10 @@ import type { V1MediaPause } from "../sync/v1-types";
 import type { AccessGrant } from "./index";
 import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
 import type { SpaceClientPlatform } from "./core";
+import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
 export type CoreTestPlatform = SpaceClientPlatform & {
-  readonly dependencies: Pick<ConnectionDependencies, "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient" | "cancelPendingAdmission" | "getEpisodeStatus">;
+  readonly dependencies: Pick<ConnectionDependencies, "telemetry" | "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient" | "cancelPendingAdmission" | "getEpisodeStatus">;
   readonly media: {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
@@ -83,6 +84,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
   return {
     whiteboardUrl: null,
     dependencies: {
+      telemetry: createTestOutbox().outbox,
       getEpisodeStatus: async () => "active",
       cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },

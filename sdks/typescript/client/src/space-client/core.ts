@@ -5,6 +5,9 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
 import type { ConnectionDiagnostic } from "../connection/diagnostics";
 import { createDefaultConnectionDependencies } from "../connection/production";
+import * as apiUrls from "../api-urls";
+import { TelemetryOutbox } from "../telemetry/outbox";
+import { createWebTelemetryPlatform } from "../telemetry/web-platform";
 import { callEvents } from "./call-events";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
 import { foreign, normalizeClientError, SpaceClientError, type ClientEffect } from "./errors";
@@ -36,7 +39,8 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
+  const telemetry = platform.dependencies?.telemetry ?? new TelemetryOutbox({ platform: createWebTelemetryPlatform(platform.fetch), endpoint: (tenantId) => apiUrls.telemetry(apiBaseUrl, tenantId) });
+  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), telemetry, ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
     access: async (request) => requireParsedAccessGrant(await fetchAccessGrant({ request, options, platform })),

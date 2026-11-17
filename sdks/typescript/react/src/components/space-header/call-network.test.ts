@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { callCharts } from "./CallCharts";
 import { connectionQuality as rate } from "./call-network";
 
-const sample = (fields: Partial<CallStatsSample> = {}): CallStatsSample => ({ elapsed_ms: 10_000, window_ms: 10_000, connection_type: "udp", ...fields });
+const sample = (fields: Partial<CallStatsSample> = {}): CallStatsSample => ({ window_ms: 10_000, connection_type: "udp", ...fields });
 
 it("maps call stats windows to chart series with headline values from the newest window", () => {
   const charts = callCharts([sample({ rtt_ms: 44, send_loss_pct: 0, recv_loss_pct: 0.4, send_bitrate_kbps: 1100, recv_bitrate_kbps: 3100 }), sample({ rtt_ms: 42, send_loss_pct: 0.1, recv_loss_pct: 0, send_bitrate_kbps: 1240, recv_bitrate_kbps: 3400 })]);

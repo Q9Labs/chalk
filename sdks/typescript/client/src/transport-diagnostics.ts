@@ -1,13 +1,15 @@
-import type { components } from "./generated/openapi-types";
-export type ConnectionReport = components["schemas"]["ConnectionReportRequest"];
-export type ConnectionReportTransportEvent = Pick<
-  ConnectionReport["events"][number],
+import type { TelemetryEvent } from "./telemetry/types";
+
+/** What a transport says about itself. The telemetry outbox sends it as an event of type `event`. */
+export type TransportDiagnostic = Pick<
+  TelemetryEvent,
   | "code"
   | "media_error_kind"
   | "media_error_step"
-  | "event"
   | "phase"
   | "attempt"
+  | "mechanism"
+  | "outage_ms"
   | "duration_ms"
   | "heartbeat_gap_ms"
   | "close_code"
@@ -24,4 +26,4 @@ export type ConnectionReportTransportEvent = Pick<
   | "receivers_stopped"
   | "bundle_tag_held"
   | "upload_failure"
->;
+> & { readonly event: TelemetryEvent["type"] };

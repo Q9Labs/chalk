@@ -1,5 +1,4 @@
 import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
-import { ConnectionReporter } from "./report";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
 import { createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
@@ -15,32 +14,6 @@ const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
     clock: defaultClock,
-    createConnectionReporter: (access) => {
-      const random = globalThis.crypto;
-      if (!random?.randomUUID) return undefined;
-      return new ConnectionReporter({
-        traceparent: `00-${random.randomUUID().replaceAll("-", "")}-${random.randomUUID().replaceAll("-", "").slice(0, 16)}-01`,
-        now: () => performance.now(),
-        access,
-        online: () => globalThis.navigator?.onLine !== false,
-        subscribeOnline: (listener) => {
-          globalThis.window?.addEventListener("online", listener);
-          return () => globalThis.window?.removeEventListener("online", listener);
-        },
-        send: async (grant, report, signal, traceparent) => {
-          const response = await apiFetch(apiUrls.connectionReports(options.apiBaseURL, grant.subject.tenantId), {
-            method: "POST",
-            headers: { Authorization: `Bearer ${grant.media.token}`, "Content-Type": "application/json", traceparent },
-            body: JSON.stringify(report),
-            signal,
-            keepalive: true,
-            credentials: "omit",
-          });
-          // A response (including rejection) is final; retry only transport failures.
-          await response.body?.cancel();
-        },
-      });
-    },
     mediaDevices: createBrowserMediaDevices(),
     getEpisodeStatus: async (access, signal) => {
       const response = await apiFetch(apiUrls.episodeStatus(options.apiBaseURL, access.subject), {
@@ -120,6 +93,7 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
     // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
     onDiagnostic: (event) => console.warn("chalk.media.local_offer_pending", event),
     onReceiveHealth: input.onTransportDiagnostic,
+    telemetry: input.telemetry,
     onScreenEnded: input.onScreenEnded,
   });
   return bindConnectionMediaClient(client, (input) => client.restart("provider" in input ? mediaBootstrap(input) : input));

@@ -10,7 +10,8 @@ import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { provenShort } from "../../tests/helpers/media-convergence";
-import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { TelemetryDraft } from "../telemetry/types";
+import type { TransportDiagnostic } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
@@ -37,7 +38,7 @@ it("stops receive health sampling when stopped", async () => {
 
 it("reports a remote track error as a stuck pull failure", async () => {
   vi.useFakeTimers();
-  const events: ConnectionReportTransportEvent[] = [];
+  const events: TransportDiagnostic[] = [];
   const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
   await h.client.start(fakeStream());
   h.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|microphone");
@@ -50,7 +51,7 @@ it("reports a remote track error as a stuck pull failure", async () => {
 
 it.each(["microphone", "screen_audio"] as const)("suppresses disabled %s projections without a pulled track and restarts their clock", async (source) => {
   vi.useFakeTimers();
-  const events: ConnectionReportTransportEvent[] = [];
+  const events: TransportDiagnostic[] = [];
   const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
   await h.client.start(fakeStream());
   const publication = { participantId: "participant-2", source, publicationId: `remote-connection|${source}` };
@@ -71,7 +72,7 @@ it.each(["microphone", "screen_audio"] as const)("suppresses disabled %s project
 
 it("starts receive health timing and pull state afresh after peer replacement", async () => {
   vi.useFakeTimers();
-  const events: ConnectionReportTransportEvent[] = [];
+  const events: TransportDiagnostic[] = [];
   const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
   await h.client.start(fakeStream());
   h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone" }] };
@@ -92,7 +93,7 @@ it("starts receive health timing and pull state afresh after peer replacement", 
 
 it("retains receive health after automatic pull recovery with an unchanged cursor", async () => {
   vi.useFakeTimers();
-  const events: ConnectionReportTransportEvent[] = [];
+  const events: TransportDiagnostic[] = [];
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const h = createHarness({ replaceMediaConnection, onReceiveHealth: (event) => events.push(event) });
   await h.client.start(fakeStream());
@@ -2270,7 +2271,7 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
 
   async function joinSecond(publications: readonly Remote[], unreportedVideoTileWaitMs = 0) {
     const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
-    const events: ConnectionReportTransportEvent[] = [];
+    const events: TransportDiagnostic[] = [];
     const harness = createHarness({ replaceMediaConnection, unreportedVideoTileWaitMs, onReceiveHealth: (event) => events.push(event) });
     harness.transport.uniqueRemoteMids = true;
     harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
@@ -3172,36 +3173,6 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
   });
-  it("uploads periodic call stats with a fresh credential so a hidden tab never reuses an expired one", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
-    const tokens = ["token-1", "token-2"];
-    const credential = vi.fn(async () => tokens.shift() ?? "token-3");
-    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
-    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
-
-    await transport.uploadCallStats?.(stats, false);
-    await transport.uploadCallStats?.(stats, false);
-    const [url, init] = fetch.mock.calls[1] ?? [];
-    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-2");
-    expect(credential).toHaveBeenCalledTimes(2);
-  });
-  it("uploads the closing call stats with the last token and never asks the credential provider, which can refresh access", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
-    const credential = vi.fn(async () => "media-token");
-    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
-    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
-
-    await transport.uploadCallStats?.(stats, true);
-    expect(fetch).not.toHaveBeenCalled();
-
-    await transport.listPublications();
-    await transport.uploadCallStats?.(stats, true);
-    const [url, init] = fetch.mock.calls[1] ?? [];
-    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer media-token");
-    expect(credential).toHaveBeenCalledTimes(1);
-  });
   it("sends replacement diagnostics in an optional query without changing legacy bodies or CORS headers", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
@@ -4056,27 +4027,24 @@ function reviewStats(h: Harness, packets: (source: string) => number) {
   const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
-it("sends the closing call stats through the transport that was live at leave, even after a receive-only stop clears it", async () => {
-  await withTimedHarness(async (h) => {
-    await h.client.start(fakeStream());
-    const uploads: { readonly samples: number; readonly closing: boolean }[] = [];
-    let finishPeriodic: () => void = () => undefined;
-    h.transport.uploadCallStats = (stats, closing) => {
-      uploads.push({ samples: stats.samples.length, closing });
-      return closing ? Promise.resolve() : new Promise<void>((resolve) => void (finishPeriodic = resolve));
-    };
-    vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
-      const seconds = Date.now() / 1000;
-      return new Map([["O", { id: "O", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: seconds * 100, bytesSent: seconds * 125_000 }]]);
-    });
-    await vi.advanceTimersByTimeAsync(70_000);
-    expect(uploads).toEqual([{ samples: 6, closing: false }]);
+it("records the open call stats window into telemetry when the client stops", async () => {
+  const telemetry: TelemetryDraft[] = [];
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream());
+      vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+        const seconds = Date.now() / 1000;
+        return new Map([["O", { id: "O", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: seconds * 100, bytesSent: seconds * 125_000 }]]);
+      });
+      await vi.advanceTimersByTimeAsync(25_000);
+      const periodic = telemetry.filter((event) => event.type === "call_stats").length;
+      expect(periodic).toBeGreaterThan(0);
 
-    h.client.stop();
-    finishPeriodic();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(uploads.at(-1)?.closing).toBe(true);
-  });
+      h.client.stop();
+      expect(telemetry.filter((event) => event.type === "call_stats").length).toBeGreaterThanOrEqual(periodic);
+    },
+    { telemetry: { record: (event) => telemetry.push(event), interruption: () => null } },
+  );
 });
 describe("viewer layer switching", () => {
   const healthyCameraStats = (h: Harness) => {
@@ -5436,7 +5404,6 @@ it.each([
       ...hostPlatform,
       dependencies: {
         ...hostPlatform.dependencies,
-        createConnectionReporter: () => undefined,
         createSyncClient: () => ({
           ...hostPlatform.sync,
           endEpisode: async () => {
@@ -5457,7 +5424,6 @@ it.each([
       dependencies: {
         ...guestPlatform.dependencies,
         mediaDevices: { ...guestPlatform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(new FakeTrack("mic", "audio")) },
-        createConnectionReporter: () => undefined,
         getEpisodeStatus: async () => episodeStatus,
         createMediaClient: harnessMediaClient(harness, (sink) => (onFailure = sink)),
       },
@@ -5521,7 +5487,6 @@ it.each([401, 403])("current-generation poll %s during real ICE recovery require
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        createConnectionReporter: () => undefined,
         createMediaClient: harnessMediaClient(harness, (sink) => (onFailure = sink)),
       },
     },
@@ -5663,7 +5628,6 @@ it("real SFU rejection must not replace its binding while status is unavailable"
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        createConnectionReporter: () => undefined,
         getEpisodeStatus: statusRead,
         createMediaClient: harnessMediaClient(harness, (sink) => (onFailure = sink)),
       },
@@ -5711,7 +5675,6 @@ it.each(
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        createConnectionReporter: () => undefined,
         getEpisodeStatus: statusRead,
         createMediaClient: harnessMediaClient(harness, (sink) => (onFailure = sink)),
       },
@@ -5791,7 +5754,6 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        createConnectionReporter: () => undefined,
         clock: { now: () => started + manual.now(), setTimeout: manual.setTimeout.bind(manual), clearTimeout: manual.clearTimeout.bind(manual) },
         subscribeForeground: (listener) => {
           foreground = listener;
@@ -5887,7 +5849,6 @@ it.each([401, 403].flatMap((code) => ["unknown", "active", "ending"].map((answer
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        createConnectionReporter: () => undefined,
         mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => reviewStream(microphone) },
         getEpisodeStatus: status,
         createMediaClient: harnessMediaClient(harness, (sink) => (failure = sink)),

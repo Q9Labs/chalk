@@ -2,31 +2,24 @@ import { afterEach, expect, it, vi } from "vitest";
 import { capturedClient, createConvergenceScenario, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform } from "./core.test.helpers";
 import { control } from "./terminal.test.helpers";
-import { ConnectionReporter, type ConnectionReport } from "../connection/report";
+import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 
 afterEach(() => vi.useRealTimers());
 
-let reportClock = 0;
 function reportedPlatform() {
   const platform = createCoreTestPlatform();
-  const reports: ConnectionReport[] = [];
-  const offset = ++reportClock * 120000;
+  const telemetry = createTestOutbox();
   return {
     ...platform,
-    reports,
+    /** The mismatch events the server took, once the outbox has sent them. */
+    mismatches: async () => {
+      await telemetry.outbox.flush();
+      return telemetry.accepted.filter((event) => event.type === "media_projection_mismatch");
+    },
     dependencies: {
       ...platform.dependencies,
       clock: { ...platform.dependencies.clock, setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds), clearTimeout: (timer) => globalThis.clearTimeout(timer) },
-      createConnectionReporter: (access: ConstructorParameters<typeof ConnectionReporter>[0]["access"]) =>
-        new ConnectionReporter({
-          access,
-          now: () => Date.now() + offset,
-          online: () => true,
-          subscribeOnline: () => () => {},
-          send: async (_access, report) => {
-            reports.push(report);
-          },
-        }),
+      telemetry: telemetry.outbox,
     },
   };
 }
@@ -124,9 +117,9 @@ it.each(["microphone", "camera"] as const)("two clients sharing a participant ne
     expect(first.sync.getSnapshot().media?.items[0]?.enabled).toBe(true);
     expect(a.getSnapshot().media.local[source].state).toBe("enabled");
     expect(b.getSnapshot().media.local[source].state).toBe("disabled");
-    expect(first.reports).toHaveLength(0);
-    expect(second.reports).toHaveLength(1);
-    expect(second.reports[0]?.events.at(-1)).toMatchObject({ event: "media_projection_mismatch", source, publication_state: "off", projection_state: "on", attempt: 0 });
+    expect(await first.mismatches()).toHaveLength(0);
+    expect(await second.mismatches()).toHaveLength(1);
+    expect((await second.mismatches())[0]).toMatchObject({ type: "media_projection_mismatch", source, publication_state: "off", projection_state: "on", attempt: 0 });
   } finally {
     a.dispose();
     b.dispose();
