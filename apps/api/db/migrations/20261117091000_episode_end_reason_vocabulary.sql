@@ -1,7 +1,7 @@
 -- +goose Up
 -- episodes.end_reason now names the real cause, in the vocabulary of Sync's
 -- episode_ended event. Rows written with the old words are mapped first.
--- chalk:removed-in #0
+-- chalk:removed-in #1469
 alter table episodes drop constraint episodes_end_reason_check;
 update episodes set end_reason = case end_reason
     when 'explicit' then 'ended_by_participant'
