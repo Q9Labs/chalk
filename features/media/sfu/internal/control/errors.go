@@ -68,13 +68,15 @@ func classify(err error) problem {
 	return problem{http.StatusInternalServerError, protocol.CodeInternal}
 }
 
-func writeProblem(w http.ResponseWriter, err error) {
+// writeProblem answers a failure and returns the problem it sent.
+func writeProblem(w http.ResponseWriter, err error) problem {
 	found := classify(err)
 	message := err.Error()
 	if found.code == protocol.CodeInternal {
 		message = "internal error"
 	}
 	writeJSON(w, found.status, protocol.ErrorResponse{Error: protocol.ErrorBody{Code: found.code, Message: message}})
+	return found
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

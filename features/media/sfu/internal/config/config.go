@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +14,10 @@ import (
 
 // Config holds every tunable of the service. Load enforces the bounds.
 type Config struct {
+	// Incarnation names this process boot. Load makes it, so the log and metric exports can carry
+	// it as the instance id before the node starts. A zero Config leaves it empty and the node
+	// makes its own.
+	Incarnation string
 	// ControlAddr is the mutual-TLS control listener. It defaults to all
 	// interfaces: the listener is public, and mutual TLS plus a firewall guard it.
 	ControlAddr string
@@ -108,20 +111,6 @@ type Memory struct {
 	PacerQueueBytes    int
 }
 
-// Telemetry exports the node's metrics over OTLP/HTTP, the way the API does. The exporter reads
-// its headers, which carry the token, from OTEL_EXPORTER_OTLP_METRICS_HEADERS.
-type Telemetry struct {
-	// OTLPEndpoint is the collector's base URL, without a path. Empty turns export off.
-	OTLPEndpoint string
-	// OTLPInsecure sends plain HTTP. Only a local environment may set it.
-	OTLPInsecure bool
-	// Environment is "local", "staging" or "production"; Version the source revision.
-	Environment string
-	Version     string
-	// Interval is how often the node exports.
-	Interval time.Duration
-}
-
 // Guard holds the host-health thresholds that close admission of new Episodes.
 type Guard struct {
 	// MaxStealPercent is the CPU steal, over Window, above which new Episodes are refused.
@@ -202,6 +191,7 @@ func Load(lookup Lookup) (Config, error) {
 		stealPercent = nodes.StealPercent.Production
 	}
 	cfg := Config{
+		Incarnation:                newIncarnation(),
 		ControlAddr:                r.text("SFU_CONTROL_ADDR", fmt.Sprintf(":%d", nodes.Ports.Control)),
 		UDPAddr:                    r.text("SFU_UDP_ADDR", fmt.Sprintf(":%d", nodes.Ports.Media)),
 		TCPAddr:                    r.text("SFU_TCP_ADDR", ""),
@@ -367,33 +357,4 @@ func (r *reader) duration(key string, fallback, minimum, maximum time.Duration) 
 		return fallback
 	}
 	return parsed
-}
-
-func validateTelemetry(t Telemetry) error {
-	switch t.Environment {
-	case "local", "staging", "production":
-	default:
-		return errors.New(`SFU_ENVIRONMENT: must be "local", "staging" or "production"`)
-	}
-	if t.OTLPEndpoint == "" {
-		if t.OTLPInsecure {
-			return errors.New("SFU_OTLP_INSECURE: requires SFU_OTLP_ENDPOINT")
-		}
-		return nil
-	}
-	if t.OTLPInsecure && t.Environment != "local" {
-		return errors.New("SFU_OTLP_INSECURE: only a local environment may send plain HTTP")
-	}
-	endpoint, err := url.Parse(t.OTLPEndpoint)
-	if err != nil || endpoint.Host == "" || endpoint.Path != "" && endpoint.Path != "/" || endpoint.RawQuery != "" {
-		return errors.New("SFU_OTLP_ENDPOINT: must be an absolute base URL without a path")
-	}
-	want := "https"
-	if t.OTLPInsecure {
-		want = "http"
-	}
-	if endpoint.Scheme != want {
-		return fmt.Errorf("SFU_OTLP_ENDPOINT: must use %s", want)
-	}
-	return nil
 }

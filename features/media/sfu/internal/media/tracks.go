@@ -2,7 +2,6 @@ package media
 
 import (
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,8 +50,10 @@ type publication struct {
 	// resumes counts resumes: a packet queued before one carries the older count and is dropped,
 	// so a quick unmute never sends what the mute had already fenced.
 	resumes atomic.Uint64
-	done    chan struct{}
-	layers  [maxLayers]atomic.Pointer[ingressLayer]
+	// unmuting is the latest unmute of a microphone and its milestones; nil before the first.
+	unmuting atomic.Pointer[unmute]
+	done     chan struct{}
+	layers   [maxLayers]atomic.Pointer[ingressLayer]
 	// subscribers is copied on write, so readers never lock.
 	subscribers atomic.Pointer[[]*subscription]
 
@@ -62,6 +63,9 @@ type publication struct {
 	// Owned by the node's control loop.
 	order uint64
 	plan  uint8 // the Episode plan level of a camera
+	// statsPackets and statsIdle are the media event's last count and whether it was flat (see due).
+	statsPackets uint64
+	statsIdle    bool
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
@@ -141,6 +145,7 @@ func (p *publication) read(layer *ingressLayer) {
 func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, header *rtp.Header, writer *packetWriter) {
 	layer.meter.add(len(raw))
 	if p.held.Load() {
+		layer.holding = true
 		return
 	}
 	packet, ok := parseRTP(header, raw, p.video())
@@ -153,6 +158,7 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 	newest := layer.newest()
 	packet.extSeq = layer.extend(header.SequenceNumber)
 	packet.arrival = monotonic()
+	layer.arrived(packet.extSeq, header.Timestamp, packet.arrival, repaired)
 	if layer.nack != nil {
 		layer.nack.observe(packet.extSeq, newest, packet.arrival)
 	}
@@ -197,6 +203,7 @@ func (p *publication) readAudioLevel(layer *ingressLayer, header *rtp.Header, pa
 	packet.audioLevel, packet.hasAudioLevel = extension[0], true
 	if extension[0]&0x7f <= voicedLevel {
 		p.session.lastVoiced.Store(packet.arrival)
+		p.markVoiced(packet)
 	}
 }
 
@@ -297,10 +304,11 @@ func (p *publication) setHeld(held bool) bool {
 	// The count rises before the flag clears, so no queued packet sees an unparked publication
 	// and its own count together.
 	if !held {
-		p.resumes.Add(1)
+		p.watchUnmute(p.resumes.Add(1))
 	}
 	p.held.Store(held)
 	p.mu.Unlock()
+	p.session.traceHeld(p, held)
 	// Layer selection follows the hold: parking idles every subscription, including one that
 	// subscribes during the mute, and resuming selects a layer for each and asks for its keyframe.
 	p.reselect()
@@ -380,26 +388,6 @@ func (p *publication) active(now int64) bool {
 	return false
 }
 
-// inspectLayers lists a video publication's ingress layers in RID order; a
-// single encoding is one layer with an empty RID.
-func (p *publication) inspectLayers(now int64) []protocol.InspectedLayer {
-	if !p.video() {
-		return nil
-	}
-	var layers []protocol.InspectedLayer
-	for index := range p.layers {
-		if layer := p.layers[index].Load(); layer != nil {
-			inspected := protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && !p.held.Load() && p.authority.allows(now, now) && layer.active(now), RepairedPackets: layer.repaired.Load()}
-			if layer.nack != nil {
-				inspected.RequestedPackets = layer.nack.requested.Load()
-			}
-			layers = append(layers, inspected)
-		}
-	}
-	slices.SortFunc(layers, func(a, b protocol.InspectedLayer) int { return strings.Compare(a.RID, b.RID) })
-	return layers
-}
-
 func (p *publication) layer(index int) *ingressLayer {
 	if index < 0 || index >= maxLayers {
 		return nil
@@ -418,6 +406,7 @@ func (p *publication) requestKeyframe(index int) {
 	if (last != 0 && now-last < int64(keyframeInterval)) || !layer.lastAsked.CompareAndSwap(last, now) {
 		return
 	}
+	layer.keyframeRequests.Add(1)
 	_ = p.session.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: layer.ssrc}})
 }
 

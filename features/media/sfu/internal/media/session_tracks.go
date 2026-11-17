@@ -66,7 +66,7 @@ func (s *Session) Renegotiate(_ context.Context, request protocol.RenegotiateReq
 			return struct{}{}, ErrNoPendingOffer
 		}
 		if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: description.SDP}); err != nil {
-			return struct{}{}, s.failNegotiation("apply the answer", err)
+			return struct{}{}, s.failNegotiation(stepApplyAnswer, err)
 		}
 		pending.timer.Stop()
 		s.mu.Lock()
@@ -135,7 +135,7 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 		}
 	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepApplyCloseOffer, err)
 	}
 	var response protocol.CloseTracksResponse
 	for _, track := range request.Tracks {
@@ -146,11 +146,11 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 		err = s.pc.SetLocalDescription(answer)
 	}
 	if err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("answer the close offer", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepAnswerCloseOffer, err)
 	}
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepGatherICE, err)
 	}
 	response.SessionDescription = description
 	return response, nil
@@ -258,19 +258,11 @@ func (s *Session) completeLocalDescription(ctx context.Context) (*protocol.Sessi
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(gatherTimeout):
-		return nil, errors.New("ICE gathering timed out")
+		return nil, errGatherTimeout
 	}
 	local := s.pc.LocalDescription()
 	if local == nil {
 		return nil, errors.New("no local description")
 	}
 	return &protocol.SessionDescription{SDP: local.SDP, Type: local.Type.String()}, nil
-}
-
-// failNegotiation closes the session: after a failed step its peer connection
-// cannot return to a stable state, and the client replaces the connection.
-func (s *Session) failNegotiation(step string, cause error) error {
-	s.node.log.Warn("negotiation failed", "connection_id", s.id, "step", step, "error", cause)
-	s.CloseFor(CloseNegotiationFailed)
-	return fmt.Errorf("%w: %s: %w", ErrNegotiationFailed, step, cause)
 }

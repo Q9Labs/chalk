@@ -309,9 +309,7 @@ func TestConformanceSignaling(t *testing.T) {
 	})
 
 	t.Run("ending the Episode removes its sessions and usage stays empty", func(t *testing.T) {
-		if err := service.EndEpisode(ctx, mediaplane.EndEpisodeInput{Provider: mediaplane.ProviderChalkSFU, TenantID: "tenant-1", EpisodeRef: "ep-signal"}); err != nil {
-			t.Fatalf("end Episode: %v", err)
-		}
+		requireEpisodeEndReportsSessions(ctx, t, box, "ep-signal", map[string]string{aliceConn: "alice", bobConn: "bob"})
 		for _, connection := range []struct {
 			id    string
 			scope mediaplane.Scope

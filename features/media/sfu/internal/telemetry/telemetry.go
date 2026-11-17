@@ -37,7 +37,7 @@ type Exporter struct {
 
 // Start exports the node's metrics when an endpoint is configured, and returns a no-op exporter
 // otherwise. instance names this process boot, the node's incarnation.
-func Start(ctx context.Context, cfg config.Telemetry, instance string, read Read, log *slog.Logger) (*Exporter, error) {
+func Start(ctx context.Context, cfg config.Telemetry, instance string, read Read, diag *Diagnostics, log *slog.Logger) (*Exporter, error) {
 	if cfg.OTLPEndpoint == "" {
 		log.Info("telemetry export off: SFU_OTLP_ENDPOINT is not set")
 		return &Exporter{}, nil
@@ -63,9 +63,12 @@ func Start(ctx context.Context, cfg config.Telemetry, instance string, read Read
 		sdkmetric.WithResource(attributes),
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter, sdkmetric.WithInterval(cfg.Interval))),
 	)
-	// A failed export retries on the next interval; the log names it so an operator sees a gap.
-	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) { log.Warn("telemetry export failed", "error", err) }))
-	if err := Register(provider.Meter(scope), read); err != nil {
+	// A failed export retries on the next interval; the log names it and the count shows the gap.
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		diag.exportErrors.Add(1)
+		log.Warn("telemetry export failed", "error", err)
+	}))
+	if err := Register(provider.Meter(scope), read, diag); err != nil {
 		return nil, errors.Join(err, provider.Shutdown(ctx))
 	}
 	log.Info("telemetry export on", "interval", cfg.Interval.String())
@@ -95,10 +98,11 @@ const (
 	keyKind      = "chalk.sfu.media_kind"     // in: audio, video; out: audio, video, repair, probe
 	keyReason    = "chalk.sfu.refusal_reason" // a media.Refused* constant
 	keyAdmission = "chalk.sfu.admission_reason"
+	keyDrop      = "chalk.sfu.drop_reason" // a telemetry.Drop* constant
 )
 
 // Register creates the node's instruments on meter and the one callback that observes them.
-func Register(meter metric.Meter, read Read) error {
+func Register(meter metric.Meter, read Read, diag *Diagnostics) error {
 	var errs []error
 	gauge := func(name, unit, description string) metric.Int64ObservableGauge {
 		instrument, err := meter.Int64ObservableGauge(name, metric.WithUnit(unit), metric.WithDescription(description))
@@ -150,6 +154,9 @@ func Register(meter metric.Meter, read Read) error {
 	sendRefused := counter("chalk.sfu.udp.send_refused", "{datagram}", "Datagrams the kernel refused to send on the media socket.")
 	sendDropped := counter("chalk.sfu.udp.send_dropped", "{datagram}", "Datagrams the media socket's send rings dropped for a stalled socket, by class.")
 	receiveTruncated := counter("chalk.sfu.udp.receive_truncated", "{datagram}", "Datagrams cut short by the media socket's read buffer and dropped.")
+	logsExport := gauge("chalk.sfu.telemetry.logs_export", "1", "1 while the diagnosis trail is exported, 0 while it stays in the journal only.")
+	dropped := counter("chalk.sfu.telemetry.dropped", "{record}", "Log records or fields the export lost, by reason.")
+	exportErrors := counter("chalk.sfu.telemetry.export_errors", "{batch}", "Telemetry export batches that failed, logs and metrics together.")
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("create telemetry instruments: %w", err)
 	}
@@ -195,6 +202,11 @@ func Register(meter metric.Meter, read Read) error {
 			o.ObserveInt64(udpErrors, count(t.UDPReceiveErrors))
 			o.ObserveInt64(udpSendErrors, count(t.UDPSendErrors))
 		}
+		o.ObserveInt64(logsExport, flag(diag.LogsExport()))
+		for _, reason := range []string{DropQueueFull, DropExportFailed, DropFieldRejected} {
+			o.ObserveInt64(dropped, count(diag.Dropped(reason)), metric.WithAttributes(attribute.String(keyDrop, reason)))
+		}
+		o.ObserveInt64(exportErrors, count(diag.ExportErrors()))
 		if seconds, ok := processCPUSeconds(); ok {
 			o.ObserveFloat64(cpu, seconds)
 		}
@@ -204,7 +216,7 @@ func Register(meter metric.Meter, read Read) error {
 		return nil
 	}, sessions, episodes, draining, admission, budget, reserved, packetRate, bitrate, queueDelay, scheduler,
 		steal, busy, paused, plannerPaused, capped, pausedCameras, rss, cpu, packets, bytes, drops, cut, nacks, keyframes, rtx,
-		switches, refusals, udpErrors, udpSendErrors, sendRefused, sendDropped, receiveTruncated)
+		switches, refusals, udpErrors, udpSendErrors, sendRefused, sendDropped, receiveTruncated, logsExport, dropped, exportErrors)
 	if err != nil {
 		return fmt.Errorf("register telemetry callback: %w", err)
 	}

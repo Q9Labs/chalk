@@ -13,7 +13,7 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 	// The same MID belongs to different subscriptions on different connections.
 	for _, connectionID := range []string{"connection-a", "connection-b"} {
 		sub := &subscription{
-			owner: &Session{kind: ParticipantSession, id: connectionID},
+			owner: &Session{node: node, kind: ParticipantSession, id: connectionID},
 			mid:   "2",
 			alloc: allocation{decided: true, rid: "l"},
 			transport: &transport{estimator: bandwidthEstimator{

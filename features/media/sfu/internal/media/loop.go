@@ -11,7 +11,8 @@ const (
 	allocationInterval = 100 * time.Millisecond
 	// guardInterval is how often the host-health guard samples.
 	guardInterval = time.Second
-	// telemetryInterval is how often the node logs one line of media telemetry.
+	// telemetryInterval is how often the node logs one line of media telemetry and every connected
+	// session's media events.
 	telemetryInterval = 10 * time.Second
 )
 
@@ -36,6 +37,7 @@ func (n *Node) run() {
 			n.pressure.stealSample(monotonic(), n.guard.recentSteal())
 		case <-telemetry.C:
 			n.logTelemetry()
+			n.traceMedia()
 		}
 	}
 }
