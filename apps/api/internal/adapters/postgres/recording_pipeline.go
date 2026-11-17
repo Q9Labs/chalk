@@ -46,7 +46,6 @@ type recordingPipelineQuerier interface {
 	GetRecordingArtifact(context.Context, sqlc.GetRecordingArtifactParams) (sqlc.RecordingArtifact, error)
 	GetRecordingReservationFingerprint(context.Context, sqlc.GetRecordingReservationFingerprintParams) ([]byte, error)
 	GetRecordingReservationByKey(context.Context, sqlc.GetRecordingReservationByKeyParams) (sqlc.GetRecordingReservationByKeyRow, error)
-	ExtendRecordingReservation(context.Context, sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error)
 	FailRecordingJob(context.Context, sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error)
 	RelinquishCaptureRecordingJob(context.Context, sqlc.RelinquishCaptureRecordingJobParams) (sqlc.RelinquishCaptureRecordingJobRow, error)
 	ListRecordingDeferredArtifactStates(context.Context, sqlc.ListRecordingDeferredArtifactStatesParams) ([]sqlc.ListRecordingDeferredArtifactStatesRow, error)
@@ -391,14 +390,6 @@ func (r RecordingPipelineRepository) ReleaseReservation(ctx context.Context, ten
 		return recordingpipeline.Reservation{}, fmt.Errorf("release recording reservation: %w", err)
 	}
 	return mapReleasedReservation(row), nil
-}
-
-func (r RecordingPipelineRepository) ExtendReservation(ctx context.Context, tenantID, reservationID utilities.ID, duration time.Duration, endsAt time.Time) (recordingpipeline.Reservation, error) {
-	_ = tenantID
-	_ = reservationID
-	_ = duration
-	_ = endsAt
-	return recordingpipeline.Reservation{}, recordingpipeline.ErrExtensionUnavailable
 }
 
 func (r RecordingPipelineRepository) ExpireReservations(ctx context.Context, now time.Time) ([]recordingpipeline.Reservation, error) {
@@ -1337,7 +1328,7 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || envelope.HardDeadline != hardDeadline.UTC().Format(time.RFC3339Nano) {
+	if envelope.JobID != job.ID.String() || envelope.TenantID != job.TenantID.String() || envelope.EpisodeID != job.EpisodeID.String() || envelope.RecordingID != job.RecordingID.String() || envelope.Kind != job.Kind || envelope.AttemptCount != job.AttemptCount || envelope.FencingGeneration != job.FencingGeneration || envelope.CaptureEpoch != job.CaptureEpoch || envelope.SpaceID != utilities.IDFromBytes(row.SpaceID.Bytes).String() || envelope.PolicySnapshotVersion != row.PolicySnapshotVersion || !envelopeDeadlineHolds(job.Kind, envelope.HardDeadline, hardDeadline) {
 		return recordingpipeline.Job{}, recordingpipeline.ErrInvalidEnvelope
 	}
 	job.Authority = &recordingpipeline.JobAuthority{
@@ -1351,6 +1342,19 @@ func mapAuthorityJob(row sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow) 
 		IssuedAt:       timestamp(row.IssuedAt),
 	}
 	return job, nil
+}
+
+// A capture's deadline is the end of its reservation, which a later call deadline moves past the end its
+// envelope was signed with. The signed end is where the reservation began, so it may fall short of the current one.
+func envelopeDeadlineHolds(kind recordingpipeline.JobKind, signed string, current time.Time) bool {
+	signedAt, err := time.Parse(time.RFC3339Nano, signed)
+	if err != nil {
+		return false
+	}
+	if kind == recordingpipeline.JobKindCapture {
+		return !signedAt.After(current)
+	}
+	return signedAt.Equal(current)
 }
 
 func recordingJobDeadline(kind recordingpipeline.JobKind, captureDeadline, jobCreatedAt pgtype.Timestamptz) (time.Time, error) {

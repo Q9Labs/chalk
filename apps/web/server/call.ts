@@ -1,13 +1,13 @@
 import { Schema } from "effect";
 import { z } from "zod";
 import type { Episode } from "@q9labsai/chalk-client/effect";
-import { DateTimeStringSchema, EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
+import { EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { attendance, listedRecording, live, run, transcriptPageSize } from "./engine";
 import { callDTO, episodeDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
-import { CALL_MAX_SECONDS, knockDecisionAction, knockDecisionState, type ActionResult, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
+import { knockDecisionAction, knockDecisionState, type ActionResult, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
 function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
   return requests
     .filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now())
@@ -69,13 +69,6 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
   switch (action.action) {
     case "rotate-link":
       return { inviteUrl: (await run(engine.api.spaces.rotateSpacePublicInvite({ params, headers }))).canonical_url };
-    case "extend-call": {
-      const episodeParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(action.episodeId) };
-      const episode = await run(engine.api.episodes.getEpisode({ params: episodeParams }));
-      const deadline = new Date(Math.min(Date.parse(action.deadline), Date.parse(episodeDeadlineCeiling(episode)))).toISOString();
-      await run(engine.api.episodes.setEpisodeDeadline({ params: episodeParams, headers, payload: { deadline_at: Schema.decodeUnknownSync(DateTimeStringSchema)(deadline) } }));
-      return { ok: true };
-    }
     case "end-for-everyone": {
       await run(engine.api.episodes.endEpisode({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(action.episodeId) }, headers }));
       return { ok: true };
@@ -92,5 +85,5 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
 const deadlineConfig = z.object({ maximum_episode_duration_seconds: z.number().int().positive() });
 export function episodeDeadlineCeiling(episode: Episode): string {
   const config = deadlineConfig.parse(episode.config_snapshot);
-  return new Date(Date.parse(episode.created_at) + Math.min(config.maximum_episode_duration_seconds, CALL_MAX_SECONDS) * 1000).toISOString();
+  return new Date(Date.parse(episode.created_at) + config.maximum_episode_duration_seconds * 1000).toISOString();
 }

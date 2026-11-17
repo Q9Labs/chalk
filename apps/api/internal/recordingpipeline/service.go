@@ -84,16 +84,6 @@ func (s Service) GetReservation(ctx context.Context, tenantID, reservationID uti
 	return s.repository.GetReservation(ctx, tenantID, reservationID)
 }
 
-func (s Service) ExtendReservation(ctx context.Context, tenantID, reservationID utilities.ID, duration time.Duration, endsAt time.Time) (Reservation, error) {
-	if tenantID.IsZero() {
-		return Reservation{}, ErrInvalidTenantID
-	}
-	if reservationID.IsZero() {
-		return Reservation{}, ErrInvalidReservationID
-	}
-	return s.repository.ExtendReservation(ctx, tenantID, reservationID, duration, endsAt)
-}
-
 func (s Service) ReleaseReservation(ctx context.Context, tenantID, reservationID utilities.ID, state ReservationState) (Reservation, error) {
 	if tenantID.IsZero() {
 		return Reservation{}, ErrInvalidTenantID

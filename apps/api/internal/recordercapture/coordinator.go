@@ -113,7 +113,7 @@ func NewCoordinator(authority AttemptAuthority, signaling SignalingPort, peer Pe
 	if err := authority.Lease.ValidateAt(observedAt); err != nil {
 		return nil, fmt.Errorf("%w: lease: %w", ErrInvalidAuthority, err)
 	}
-	if authority.HardDeadline.IsZero() || !authority.HardDeadline.After(observedAt) {
+	if authority.EndsAt().IsZero() || !authority.EndsAt().After(observedAt) {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidAuthority, ErrDeadlineExpired)
 	}
 	return &Coordinator{
@@ -137,7 +137,7 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.checkDeadlineLocked(); err != nil {
 		return Snapshot{}, err
 	}
-	if err := c.authority.validatePlan(plan); err != nil {
+	if err := c.authority.adoptPlan(plan); err != nil {
 		return Snapshot{}, err
 	}
 	if c.bootstrapped {
@@ -209,7 +209,7 @@ func (c *Coordinator) Reconcile(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.checkDeadlineLocked(); err != nil {
 		return Snapshot{}, err
 	}
-	if err := c.authority.validatePlan(plan); err != nil {
+	if err := c.authority.adoptPlan(plan); err != nil {
 		return Snapshot{}, err
 	}
 	if !c.bootstrapped {
@@ -230,7 +230,7 @@ func (c *Coordinator) WaitAndReconcile(ctx context.Context, source PlanSource, m
 		c.mu.Unlock()
 		return Snapshot{}, ErrNotBootstrapped
 	}
-	remaining := c.authority.HardDeadline.Sub(c.now().UTC())
+	remaining := c.authority.EndsAt().Sub(c.now().UTC())
 	if remaining < captureplan.MinimumWait {
 		c.mu.Unlock()
 		return Snapshot{}, ErrDeadlineExpired
@@ -528,7 +528,7 @@ func (c *Coordinator) execute(ctx context.Context, operation captureplane.Operat
 }
 
 func (c *Coordinator) checkDeadlineLocked() error {
-	if c.authority.HardDeadline.IsZero() || !c.now().UTC().Before(c.authority.HardDeadline) {
+	if c.authority.EndsAt().IsZero() || !c.now().UTC().Before(c.authority.EndsAt()) {
 		return ErrDeadlineExpired
 	}
 	return nil

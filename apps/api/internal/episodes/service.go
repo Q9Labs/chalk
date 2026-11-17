@@ -75,8 +75,6 @@ const (
 	MaximumActiveParticipants           int64 = 500
 	MaximumSnapshotBytes                int64 = 1024 * 1024
 	AdmissionRequestLifetime                  = 5 * time.Minute
-	MinimumEpisodeDurationSeconds       int32 = 60
-	MaximumEpisodeDurationSeconds       int32 = 7 * 24 * 60 * 60
 )
 
 // Capability names are a closed wire vocabulary. Roles are customer-defined
@@ -267,6 +265,7 @@ type RequestEpisodeEndInput struct {
 	TenantID  utilities.ID
 	SpaceID   utilities.ID
 	EpisodeID utilities.ID
+	Reason    EndReason
 	Request   Request
 }
 

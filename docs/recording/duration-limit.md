@@ -10,9 +10,12 @@ the Episode. If both deadlines coincide, neither has a guaranteed order.
 
 - A Recording reserves the Episode's remaining lifetime when it starts, capped at
   four hours (`recordingpipeline.MaximumRecordingDuration`). Starting late gives
-  a shorter Recording. The reservation is sealed at start, so extending the
-  Episode later does not extend a running Recording. No public override exceeds
-  the ceiling.
+  a shorter Recording. A later deadline (an extension or a new deadline from
+  the Tenant) moves the end of the reservation in the same Sync transaction that
+  moves the Episode's deadline, and a running Recording follows through its next
+  capture plan. The reservation never ends earlier than it did and never runs
+  past four hours from the Recording's start. An older recorder node keeps the
+  deadline it was given when it started. No public override exceeds the ceiling.
 - Space settings (`default_episode_duration_seconds`,
   `maximum_episode_duration_seconds`) are snapshotted into each Episode. The 24
   hour defaults are Episode limits, not a promise of 24 hours of Recording.

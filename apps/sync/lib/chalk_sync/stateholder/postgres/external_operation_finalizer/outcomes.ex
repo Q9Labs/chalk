@@ -49,7 +49,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Outcomes do
         state,
         {:confirmed, :local}
       )
-      when name in [:deny_admission, :admission_request_expired, :tenant_set_deadline],
+      when name in [
+             :deny_admission,
+             :admission_request_expired,
+             :tenant_set_deadline,
+             :extend_episode
+           ],
       do: finalize_confirmed_operation(connection, episode, external, state)
 
   def finalize_pending_operation(

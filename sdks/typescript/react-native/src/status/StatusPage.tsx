@@ -1,5 +1,5 @@
 import { forwardRef, memo, useEffect, useRef } from "react";
-import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure } from "@q9labsai/chalk-client";
+import { callEndNotice, formatSyncConnectDiagnostic, getConnectionFailureDetail, type CallEndReason, type ClientFailure } from "@q9labsai/chalk-client";
 import { AccessibilityInfo, findNodeHandle, Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useMeasuredRef } from "../frame/measurement";
@@ -16,6 +16,8 @@ export type StatusPageProps = {
   readonly outcome: CallOutcome;
   readonly callName: string;
   readonly failure?: ClientFailure | null;
+  /** Why the call ended, for the `ended` outcome. */
+  readonly endReason?: CallEndReason;
   readonly onRejoin: () => void;
   readonly onHome: () => void;
 };
@@ -25,12 +27,12 @@ type Action = "rejoin" | "home";
 type Page = { readonly title: string; readonly detail?: string; readonly actions: readonly Action[]; readonly rejoinLabel?: string };
 
 /** The mockup's copy for each outcome (`SP` in renderLimbo). */
-function pageFor(outcome: CallOutcome, callName: string): Page {
+function pageFor(outcome: CallOutcome, callName: string, endReason: CallEndReason | undefined): Page {
   switch (outcome) {
     case "left":
       return { title: `You left ${callName}`, actions: ["rejoin", "home"] };
     case "ended":
-      return { title: "The call ended", actions: ["rejoin", "home"] };
+      return { ...callEndNotice(endReason), actions: ["rejoin", "home"] };
     case "failed":
       return { title: `Couldn’t connect to ${callName}`, actions: ["rejoin", "home"], rejoinLabel: "Try again" };
     case "removed":
@@ -46,9 +48,9 @@ function pageFor(outcome: CallOutcome, callName: string): Page {
  * A full-screen status page on the canvas (`.status`): a title, an optional line saying what to do,
  * and the ways forward as round actions with their names under them.
  */
-export function StatusPage({ outcome, callName, failure, onRejoin, onHome }: StatusPageProps): React.JSX.Element {
+export function StatusPage({ outcome, callName, failure, endReason, onRejoin, onHome }: StatusPageProps): React.JSX.Element {
   const { colors } = useTheme();
-  const page = pageFor(outcome, callName);
+  const page = pageFor(outcome, callName, endReason);
   const detail = outcome === "failed" ? getConnectionFailureDetail({ code: failure?.code, sync: failure?.sync }) : page.detail;
   const pageStyle = [styles.page, { backgroundColor: colors.canvas }];
   const ref = useMeasuredRef<View>("status.page", pageStyle);

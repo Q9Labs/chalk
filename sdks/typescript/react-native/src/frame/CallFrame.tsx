@@ -23,6 +23,7 @@ import { ArrivalScreen } from "../status/ChalkArrival";
 import { callScreen } from "../status/call-screen";
 import { useTheme } from "../theme/theme";
 import { useCallEventToasts, type Permission } from "../toasts/CallEventToasts";
+import { useCallLimitWarning } from "../toasts/useCallLimitWarning";
 import { useDevScenario } from "../dev-scenario";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalCount } from "./portal";
@@ -57,6 +58,7 @@ export function CallFrame({ displayName, callName = "Call", inviteLink, onLeave,
   const { soundsEnabled } = usePreferences();
   const toasts = useToasts();
   const callEvents = useCallEventToasts({ onOpenSettings, resumedAfterSettings });
+  useCallLimitWarning();
   const [leftByChoice, setLeftByChoice] = useState(false);
   const [sheet, setSheet] = useState<OpenSheet>(null);
   const moreRef = useRef<View>(null);

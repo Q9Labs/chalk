@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 import { THEME_COOKIE_NAME, type ThemePreference } from "../../lib/theme";
-import { SIGNED_IN_COOKIE } from "../../lib/signed-in-hint";
+import { SIGNED_IN_COOKIE, hasSignedInHint } from "../../lib/signed-in-hint";
 import { useTheme } from "../../lib/theme-context";
 import { Icon } from "./Icon";
 
@@ -9,8 +9,6 @@ import { Icon } from "./Icon";
 // It reads the same cookie as readThemePreference in lib/theme, and marks a signed-in visitor so the
 // site header can swap Sign in for Dashboard in CSS, with no flash and no hydration mismatch.
 const THEME_SCRIPT = `var r=document.currentScript.parentElement;r.setAttribute("data-chalk-theme",/(?:^|;\\s*)${THEME_COOKIE_NAME}=light(?:;|$)/.test(document.cookie)?"light":"dark");if(/(?:^|;\\s*)${SIGNED_IN_COOKIE}=1(?:;|$)/.test(document.cookie))r.setAttribute("data-chalk-signed-in","")`;
-
-const SIGNED_IN_PATTERN = new RegExp(`(?:^|;\\s*)${SIGNED_IN_COOKIE}=1(?:;|$)`);
 
 const noSubscription = () => () => {};
 
@@ -35,11 +33,7 @@ export function useSiteTheme(): { readonly theme: ThemePreference; readonly setT
 
 /** True when this browser holds the session hint. False while hydrating, where the inline script has already marked the page. */
 function useSignedInHint(): boolean {
-  return useSyncExternalStore(
-    noSubscription,
-    () => SIGNED_IN_PATTERN.test(document.cookie),
-    () => false,
-  );
+  return useSyncExternalStore(noSubscription, hasSignedInHint, () => false);
 }
 
 /** Opens the call's token scope for a site, docs or dashboard page. */

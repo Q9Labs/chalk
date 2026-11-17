@@ -57,13 +57,6 @@ func (q operationQuerier) ExpireRecordingReservations(ctx context.Context, now p
 	return reservations, err
 }
 
-func (q operationQuerier) ExtendRecordingReservation(ctx context.Context, arg sqlc.ExtendRecordingReservationParams) (sqlc.ExtendRecordingReservationRow, error) {
-	startedAt := time.Now()
-	reservation, err := q.next.ExtendRecordingReservation(ctx, arg)
-	LogOperation(ctx, q.logger, "db.query", "ExtendRecordingReservation", startedAt, err)
-	return reservation, err
-}
-
 func (q operationQuerier) FailRecordingJob(ctx context.Context, arg sqlc.FailRecordingJobParams) (sqlc.FailRecordingJobRow, error) {
 	startedAt := time.Now()
 	job, err := q.next.FailRecordingJob(ctx, arg)

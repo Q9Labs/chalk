@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -53,10 +54,10 @@ func prepareCreateEpisodeInput(input *CreateEpisodeInput) error {
 		if input.MaximumDurationCeilingSeconds == 0 {
 			input.MaximumDurationCeilingSeconds = config.MaximumEpisodeDurationSeconds
 		}
-		if input.MaximumDurationSeconds < MinimumEpisodeDurationSeconds || input.MaximumDurationSeconds > MaximumEpisodeDurationSeconds {
+		if input.MaximumDurationSeconds < calllength.MinimumSeconds || input.MaximumDurationSeconds > calllength.MaximumSeconds {
 			return ErrInvalidMaximumDuration
 		}
-		if input.MaximumDurationCeilingSeconds < MinimumEpisodeDurationSeconds || input.MaximumDurationCeilingSeconds > MaximumEpisodeDurationSeconds || input.MaximumDurationSeconds > input.MaximumDurationCeilingSeconds {
+		if input.MaximumDurationCeilingSeconds < calllength.MinimumSeconds || input.MaximumDurationCeilingSeconds > calllength.MaximumSeconds || input.MaximumDurationSeconds > input.MaximumDurationCeilingSeconds {
 			return ErrInvalidMaximumDurationCeiling
 		}
 	}
@@ -174,65 +175,6 @@ func prepareParticipantRemovalInput(input *RequestParticipantRemovalInput) error
 	return nil
 }
 
-func prepareEpisodeEndInput(input *RequestEpisodeEndInput) error {
-	if err := validateTenantSpaceEpisodeIDs(input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
-		return err
-	}
-	payload := json.RawMessage(`{}`)
-	if err := prepareRequest(&input.Request, payload); err != nil {
-		return err
-	}
-	input.Request.Fingerprint = lifecycleFingerprint(struct {
-		TenantID      string          `json:"tenant_id"`
-		SpaceID       string          `json:"space_id"`
-		EpisodeID     string          `json:"episode_id"`
-		OperationName string          `json:"operation_name"`
-		Payload       json.RawMessage `json:"payload"`
-	}{
-		TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
-		OperationName: OperationTenantEndEpisode, Payload: payload,
-	})
-	return nil
-}
-
-func prepareSetDeadlineInput(input *SetDeadlineInput) error {
-	if err := validateTenantSpaceEpisodeIDs(input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
-		return err
-	}
-	if input.Deadline.IsZero() {
-		return ErrInvalidDeadline
-	}
-	input.Deadline = input.Deadline.UTC().Truncate(time.Millisecond)
-	if err := prepareRequest(&input.Request, json.RawMessage(`{}`)); err != nil {
-		return err
-	}
-	input.Request.Fingerprint = lifecycleFingerprint(struct {
-		TenantID      string `json:"tenant_id"`
-		SpaceID       string `json:"space_id"`
-		EpisodeID     string `json:"episode_id"`
-		OperationName string `json:"operation_name"`
-		DeadlineAtMS  int64  `json:"deadline_at_ms"`
-	}{
-		TenantID: input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
-		OperationName: OperationTenantSetDeadline, DeadlineAtMS: input.Deadline.UnixMilli(),
-	})
-	return nil
-}
-
-// NewLingerRequest keys the end of one empty window. Each failed earlier end
-// of that window adds a retry suffix, so a retry is a new operation.
-func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt time.Time, failedAttempts int) (Request, error) {
-	key := "empty-episode-linger-" + strconv.FormatInt(lastDepartureAt.UnixMicro(), 10)
-	if failedAttempts > 0 {
-		key += "-retry-" + strconv.Itoa(failedAttempts)
-	}
-	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Request: Request{Key: key}}
-	if err := prepareEpisodeEndInput(&input); err != nil {
-		return Request{}, err
-	}
-	return input.Request, nil
-}
-
 func NewMaximumDurationRequest(tenantID, spaceID, episodeID utilities.ID, generation int64, failedAttempts int) (Request, error) {
 	payload, err := json.Marshal(struct {
 		DeadlineGeneration int64 `json:"deadlineGeneration"`
@@ -294,10 +236,10 @@ func validateConfigSnapshot(raw json.RawMessage) (json.RawMessage, EpisodeConfig
 		return nil, EpisodeConfigSnapshot{}, err
 	}
 	snapshot.Roles = roles
-	if snapshot.MaximumEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.MaximumEpisodeDurationSeconds > MaximumEpisodeDurationSeconds {
+	if snapshot.MaximumEpisodeDurationSeconds < calllength.MinimumSeconds || snapshot.MaximumEpisodeDurationSeconds > calllength.MaximumSeconds {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidMaximumDuration
 	}
-	if snapshot.DefaultEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.DefaultEpisodeDurationSeconds > snapshot.MaximumEpisodeDurationSeconds {
+	if snapshot.DefaultEpisodeDurationSeconds < calllength.MinimumSeconds || snapshot.DefaultEpisodeDurationSeconds > snapshot.MaximumEpisodeDurationSeconds {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidMaximumDuration
 	}
 	if snapshot.LingerWindowSeconds < 0 || snapshot.LingerWindowSeconds > snapshot.MaximumEpisodeDurationSeconds {

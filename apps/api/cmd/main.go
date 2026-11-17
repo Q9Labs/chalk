@@ -560,9 +560,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure public invite link port: %w", err)
 		}
-		runtime, err := publicinvites.NewRuntimeWithConfig(service, spacePort, publicInviteRepository, accessPort, accountsPort, linksPort, publicinvites.RuntimeConfig{
-			AutoLifecycleLifetime: publicInviteConfig.AutoLifecycleLifetime,
-		})
+		runtime, err := publicinvites.NewRuntime(service, spacePort, publicInviteRepository, accessPort, accountsPort, linksPort)
 		if err != nil {
 			return fmt.Errorf("configure public invite runtime: %w", err)
 		}
@@ -948,16 +946,15 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 		return config.PublicInviteConfig{}, errors.New("derive local public invite verification key")
 	}
 	return config.PublicInviteConfig{
-		Enabled:               true,
-		ManagedTenantID:       managedTenant.ID.String(),
-		DefaultMediaPlane:     mediaplane.ProviderCloudflareSFU,
-		WebOrigin:             webOrigin,
-		KeyID:                 localPublicInviteKeyID,
-		PrivateKey:            privateKey,
-		VerificationKeys:      map[string]ed25519.PublicKey{localPublicInviteKeyID: append(ed25519.PublicKey(nil), publicKey...)},
-		AutoLifecycleLifetime: time.Duration(config.DefaultPublicInviteAutoLifecycleSeconds) * time.Second,
-		SchedulerInterval:     time.Duration(config.DefaultPublicInviteSchedulerIntervalMS) * time.Millisecond,
-		SchedulerBatch:        config.DefaultPublicInviteSchedulerBatch,
+		Enabled:           true,
+		ManagedTenantID:   managedTenant.ID.String(),
+		DefaultMediaPlane: mediaplane.ProviderCloudflareSFU,
+		WebOrigin:         webOrigin,
+		KeyID:             localPublicInviteKeyID,
+		PrivateKey:        privateKey,
+		VerificationKeys:  map[string]ed25519.PublicKey{localPublicInviteKeyID: append(ed25519.PublicKey(nil), publicKey...)},
+		SchedulerInterval: time.Duration(config.DefaultPublicInviteSchedulerIntervalMS) * time.Millisecond,
+		SchedulerBatch:    config.DefaultPublicInviteSchedulerBatch,
 	}, nil
 }
 

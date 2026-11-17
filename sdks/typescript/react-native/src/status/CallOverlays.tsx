@@ -58,7 +58,7 @@ export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, on
         </View>
       ) : null}
       {limbo ? <Limbo callName={callName} recording={recording} state={limbo} /> : null}
-      {screen.kind === "status" ? <StatusPage callName={callName} failure={connection.lastError} onHome={onHome} onRejoin={onRejoin} outcome={screen.outcome} /> : null}
+      {screen.kind === "status" ? <StatusPage callName={callName} endReason={connection.episodeEndReason} failure={connection.lastError} onHome={onHome} onRejoin={onRejoin} outcome={screen.outcome} /> : null}
     </View>
   );
 }

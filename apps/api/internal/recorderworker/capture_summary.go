@@ -26,7 +26,7 @@ func (a *PionCaptureAttempt) finishByCause(runCtx context.Context, err error, wr
 	}
 	if cause == recordercapture.ErrDeadlineExpired ||
 		(cause == context.Canceled && errors.Is(context.Cause(runCtx), recordercapture.ErrDeadlineExpired)) {
-		return a.finishStopped(writer, a.authority.HardDeadline, recordingbundle.CloseReasonMaxDuration)
+		return a.finishStopped(writer, a.authority.EndsAt(), recordingbundle.CloseReasonMaxDuration)
 	}
 	return a.finishFailure(err, writer)
 }

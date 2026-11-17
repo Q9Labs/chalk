@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { formatSyncConnectDiagnostic, getConnectionFailureDetail, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
+import { callEndNotice, formatSyncConnectDiagnostic, getConnectionFailureDetail, type CallEndReason, type ClientFailure, type ErrorCode } from "@q9labsai/chalk-client";
 import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 
 export type StatusSurfacePhase = "entering" | "left" | "timed-out" | "episode-ended" | "failed" | "removed" | "full" | "elsewhere";
@@ -9,7 +9,7 @@ export interface StatusSurfaceProps {
   readonly phase: StatusSurfacePhase;
   readonly callName?: string;
   readonly reason?: string;
-  readonly episodeEndReason?: string;
+  readonly episodeEndReason?: CallEndReason;
   readonly endAction?: { readonly label: string; readonly onClick: () => void };
   readonly errorCode?: ErrorCode;
   readonly sync?: ClientFailure["sync"];
@@ -29,7 +29,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
     entering: { title: `Joining ${callName}…`, detail: "" },
     left: { title: `You left ${callName}`, detail: "" },
     "timed-out": { title: `You were disconnected from ${callName}`, detail: "Your connection was lost for too long, so your seat was released. Rejoin to come back." },
-    "episode-ended": episodeEndReason === "maximum_duration" ? { title: "The call reached its time limit", detail: "This call has ended for everyone." } : { title: "The call ended", detail: "" },
+    "episode-ended": callEndNotice(episodeEndReason),
     failed: { title: connectionLost ? "Connection lost" : `Couldn’t connect to ${callName}`, detail: getConnectionFailureDetail({ code: errorCode, sync }) },
     removed: { title: `You were removed from ${callName}`, detail: "The host removed you from this call." },
     full: { title: "This call is full", detail: `${callName} has reached 100 people. Ask the host to make room, then try again.` },

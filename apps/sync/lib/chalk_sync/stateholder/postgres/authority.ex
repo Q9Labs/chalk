@@ -190,6 +190,7 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
 
   defp required_capability(:participant_leave), do: "self"
   defp required_capability(:end_episode), do: "endEpisode"
+  defp required_capability(:extend_episode), do: "extendEpisode"
 
   def validate_command(identity, command, control, episode_policy, participant) do
     with :ok <- validate_product_state(identity, command, episode_policy, participant),

@@ -4,6 +4,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products
@@ -11,6 +12,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: SQL
+  alias ChalkSync.Stateholder.Postgres.SQL.RecordingReservation, as: RecordingReservationSQL
   alias ChalkSync.UUID
 
   def finalize_recording_reservation(connection, episode, external, state) do
@@ -22,6 +24,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.RecordingOut
       [[event_id, revision]] ->
         event_id = UUID.load!(event_id)
         PublicationFences.delete(connection, episode, external)
+
+        Postgrex.query!(
+          connection,
+          RecordingReservationSQL.move(),
+          Scope.episode(episode) ++ [RecordingPlane.maximum_duration_seconds()]
+        )
+
         Receipts.mark_external_applied(connection, episode, external, event_id, revision)
         Receipts.commit_external_receipt(connection, episode, external, event_id, revision, state)
 

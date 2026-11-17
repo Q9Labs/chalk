@@ -72,7 +72,7 @@ func TestNewAttemptAuthorityAndPlanFence(t *testing.T) {
 			t.Fatalf("%s: expected authority mismatch", name)
 		}
 	}
-	deadlinePlan := newPlanWithDeadline(t, attempt, 1, []planTrack{{name: "one"}}, coordinatorNow.Add(2*time.Hour))
+	deadlinePlan := newPlanWithDeadline(t, attempt, 1, []planTrack{{name: "one"}}, attempt.HardDeadline.Add(MaximumDeadlineExtension+time.Minute))
 	if !errors.Is(attempt.validatePlan(deadlinePlan), ErrDeadlineMismatch) {
 		t.Fatalf("expected deadline mismatch")
 	}

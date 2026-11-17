@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -40,18 +41,6 @@ var (
 	ErrSpaceSlugAlreadyUsed       = errors.New("space slug already used")
 	ErrInvalidRequestKey          = errors.New("invalid space request key")
 	ErrIdempotencyConflict        = errors.New("space request key conflicts with original request")
-)
-
-const (
-	MinimumEpisodeDurationSeconds int32 = 60
-	MaximumEpisodeDurationSeconds int32 = 7 * 24 * 60 * 60
-
-	// These defaults keep a newly created Space usable when callers omit
-	// optional policy values. The database carries the same defaults for direct
-	// inserts, while the service validates values before crossing the boundary.
-	DefaultEpisodeDurationSeconds        int32 = 24 * 60 * 60
-	DefaultMaximumEpisodeDurationSeconds int32 = 24 * 60 * 60
-	DefaultLingerWindowSeconds           int32 = 0
 )
 
 var DefaultAdmissionPolicy = json.RawMessage(`{"mode":"open"}`)
@@ -663,21 +652,21 @@ func validAdmissionMode(mode string) bool {
 
 func applySpaceDefaults(input *CreateSpaceInput) {
 	if input.DefaultEpisodeDurationSeconds == 0 {
-		input.DefaultEpisodeDurationSeconds = DefaultEpisodeDurationSeconds
+		input.DefaultEpisodeDurationSeconds = calllength.API.DefaultSeconds
 	}
 	if input.MaximumEpisodeDurationSeconds == 0 {
-		input.MaximumEpisodeDurationSeconds = DefaultMaximumEpisodeDurationSeconds
+		input.MaximumEpisodeDurationSeconds = calllength.API.MaximumSeconds
 	}
 	if input.LingerWindowSeconds == 0 {
-		input.LingerWindowSeconds = DefaultLingerWindowSeconds
+		input.LingerWindowSeconds = calllength.API.LingerSeconds
 	}
 }
 
 func validateEpisodeDurations(defaultDuration, maximumDuration int32) error {
-	if defaultDuration < MinimumEpisodeDurationSeconds || defaultDuration > MaximumEpisodeDurationSeconds {
+	if defaultDuration < calllength.MinimumSeconds || defaultDuration > calllength.MaximumSeconds {
 		return ErrInvalidEpisodeDuration
 	}
-	if maximumDuration < MinimumEpisodeDurationSeconds || maximumDuration > MaximumEpisodeDurationSeconds || defaultDuration > maximumDuration {
+	if maximumDuration < calllength.MinimumSeconds || maximumDuration > calllength.MaximumSeconds || defaultDuration > maximumDuration {
 		return ErrInvalidEpisodeCeiling
 	}
 	return nil
@@ -687,14 +676,14 @@ func validateOptionalDuration(value OptionalInt32, invalid error) error {
 	if !value.Set || value.Value == nil {
 		return nil
 	}
-	if *value.Value < MinimumEpisodeDurationSeconds || *value.Value > MaximumEpisodeDurationSeconds {
+	if *value.Value < calllength.MinimumSeconds || *value.Value > calllength.MaximumSeconds {
 		return invalid
 	}
 	return nil
 }
 
 func validateLingerWindow(value int32) error {
-	if value < 0 || value > MaximumEpisodeDurationSeconds {
+	if value < 0 || value > calllength.MaximumSeconds {
 		return ErrInvalidLingerWindow
 	}
 	return nil

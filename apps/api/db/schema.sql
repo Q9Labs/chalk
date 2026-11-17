@@ -435,7 +435,7 @@ create table episodes (
     started_at timestamptz,
     ended_at timestamptz,
     config_snapshot jsonb not null check (validate_episode_config_snapshot(config_snapshot)),
-    end_reason text check (end_reason in ('explicit', 'natural', 'deadline')),
+    end_reason text check (end_reason in ('ended_by_participant', 'tenant_recovery', 'linger_expired', 'maximum_duration')),
     deadline_at timestamptz not null default (now() + interval '24 hours'),
     deadline_generation bigint not null default 1,
     updated_at timestamptz not null default now(),
@@ -1704,7 +1704,6 @@ create table sync_command_receipts (
                 (
                     outcome = 'committed'
                     and command_name <> 'start_episode'
-                    and (command_name <> 'extend_episode' or external_operation_id is null)
                     and rejection_reason is null
                     and event_id is not null
                     and resulting_revision > 0
@@ -1713,7 +1712,6 @@ create table sync_command_receipts (
                 )
                 or (
                     outcome = 'satisfied'
-                    and command_name <> 'extend_episode'
                     and rejection_reason is null
                     and event_id is null
                     and resulting_revision >= 0
@@ -1723,7 +1721,7 @@ create table sync_command_receipts (
                 )
                 or (
                     outcome = 'pending'
-                    and command_name not in ('start_episode', 'extend_episode')
+                    and command_name <> 'start_episode'
                     and rejection_reason is null
                     and external_operation_id is not null
                     and completed_at is null
@@ -1745,7 +1743,6 @@ create table sync_command_receipts (
                 or (
                     outcome = 'rejected'
                     and command_name <> 'start_episode'
-                    and (command_name <> 'extend_episode' or external_operation_id is null)
                     and rejection_reason in (
                         'episode_ended',
                         'participant_inactive',
@@ -1861,7 +1858,7 @@ create table sync_external_operations (
         'stop_participant_camera', 'stop_participant_screen_share',
         'remove_participant', 'start_recording', 'stop_recording',
         'recording_capture_ready', 'recording_capture_stopped', 'recording_capture_failed',
-        'participant_leave', 'end_episode', 'tenant_assign_roles', 'tenant_set_deadline',
+        'participant_leave', 'end_episode', 'extend_episode', 'tenant_assign_roles', 'tenant_set_deadline',
         'tenant_end_episode', 'maximum_episode_duration_expired',
         'role_transition_cleanup', 'role_transition_source_stop'
     )),
@@ -1871,8 +1868,8 @@ create table sync_external_operations (
     check ((target_participant_id is null) = (target_participant_generation is null)),
     check (target_participant_generation is null or target_participant_generation > 0),
     check (deadline_generation is null or deadline_generation > 0),
-    check (
-        (operation_name in ('tenant_set_deadline', 'maximum_episode_duration_expired'))
+    constraint sync_external_operations_deadline_operation_check check (
+        (operation_name in ('tenant_set_deadline', 'extend_episode', 'maximum_episode_duration_expired'))
         = (deadline_generation is not null)
     ),
     check ((journey_id is null) = (parent_journey_event_id is null)),

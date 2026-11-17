@@ -59,6 +59,8 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
               "external_operation"
             )
 
+            observe_episode_end(episode, name, operation.external_operation_id)
+
           _ ->
             :ok
         end
@@ -85,6 +87,62 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   end
 
   def lifecycle(_episode, _lifecycle_intent_id, _decision), do: :ok
+
+  # The Episode row is the one record of why a call ended, whichever operation
+  # ended it. Only the finalizing call finds the row ended.
+  defp observe_episode_end(episode, name, external_operation_id) do
+    if OperationTable.is_episode_end_name(name),
+      do: observe_ended_row(episode, external_operation_id),
+      else: :ok
+  end
+
+  defp ended_context(nil, _trace_id, _span_id), do: nil
+
+  defp ended_context(journey_id, trace_id, span_id),
+    do: Observability.persisted_context(UUID.load!(journey_id), trace_id, span_id)
+
+  defp observe_ended_row(episode, external_operation_id) do
+    Database.guard(
+      fn ->
+        case Postgrex.query(
+               Database.alternate_connection(episode),
+               """
+               select episodes.end_reason, operations.journey_id, operations.producing_trace_id,
+                      operations.producing_span_id
+               from episodes
+               join sync_external_operations operations
+                 on operations.tenant_id = episodes.tenant_id
+                and operations.episode_id = episodes.id
+                and operations.external_operation_id = $4
+               where episodes.tenant_id = $1 and episodes.space_id = $2 and episodes.id = $3
+                 and episodes.status = 'ended'
+               """,
+               [
+                 Scope.uuid(episode.tenant_id),
+                 Scope.uuid(episode.space_id),
+                 Scope.uuid(episode.episode_id),
+                 Scope.uuid(external_operation_id)
+               ],
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: [[end_reason, journey_id, trace_id, span_id]]}}
+          when is_binary(end_reason) ->
+            Observability.linked_phase(
+              ended_context(journey_id, trace_id, span_id),
+              "sync.episode.ended",
+              %{
+                episode_id: episode.episode_id,
+                end_reason: end_reason
+              }
+            )
+
+          _ ->
+            :ok
+        end
+      end,
+      :ok
+    )
+  end
 
   defp observe_webhook_production(episode, transition_key, transition) do
     Database.guard(

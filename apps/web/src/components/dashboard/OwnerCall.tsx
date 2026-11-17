@@ -3,16 +3,18 @@ import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./language-choice";
+import { startCall } from "./language-choice";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { ownerAccess } from "./owner-seat";
+const EXTENSION_MINUTES = 30;
+
 /** The call screen for the call's owner, through the React SDK's own call UI. */
 export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { profile, failure, retry } = useSession();
@@ -85,7 +87,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
           startingCall.current = true;
           owner.clearReload();
           setStartError("Starting a new call…");
-          void act("home", createCallAction(startKey.current, readNewCallLanguage()))
+          void startCall(startKey.current)
             .then(({ call }) => navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } }))
             .catch(() => setStartError("Couldn’t start a new call. Try again."))
             .finally(() => {
@@ -121,35 +123,24 @@ function OwnerCallSurface({
   const access = useSyncExternalStore(owner.subscribe, owner.reportAccess, owner.reportAccess);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
   const [extension, setExtension] = useState<"idle" | "pending" | "failed">("idle");
-  const intent = useRef<{ deadline: string; key: string } | null>(null);
-  const inFlight = useRef(false);
   const deadline = connection.episode?.deadline;
   const ceiling = owner.deadlineCeiling();
   const atCeiling = !!(deadline && ceiling && Date.parse(deadline) >= Date.parse(ceiling));
   useEffect(() => {
     setExtension("idle");
-    intent.current = null;
-    inFlight.current = false;
   }, [deadline]);
   useEffect(() => {
     if (extension !== "pending") return;
-    const timer = window.setTimeout(() => {
-      inFlight.current = false;
-      setExtension("failed");
-    }, 30000);
+    const timer = window.setTimeout(() => setExtension("failed"), 30000);
     return () => window.clearTimeout(timer);
   }, [extension]);
   const extend = async () => {
-    if (inFlight.current || !deadline || !ceiling || !access || atCeiling) return;
-    inFlight.current = true;
-    const request = intent.current ?? { deadline: new Date(Math.min(Date.parse(deadline) + 1800000, Date.parse(ceiling))).toISOString(), key: intentKey() };
-    intent.current = request;
+    if (extension === "pending" || !deadline || atCeiling) return;
     setExtension("pending");
     try {
-      await act("call", { action: "extend-call", spaceId: access.subject.space_id, episodeId: access.subject.episode_id, deadline: request.deadline, idempotencyKey: request.key });
+      await client.extendEpisode(EXTENSION_MINUTES);
     } catch {
       setExtension("failed");
-      inFlight.current = false;
     }
   };
   const tenantId = access?.subject.tenant_id;
@@ -177,8 +168,8 @@ function OwnerCallSurface({
       {...props}
       client={client}
       timeLimit={{
-        message: atCeiling ? "This is the last extension. Calls can last up to 24 hours." : extension === "pending" ? "Adding time…" : extension === "failed" ? "Couldn’t add time. Try again." : "Need more time?",
-        action: deadline && ceiling && !atCeiling && extension !== "pending" ? { label: "Add 30 min", onClick: () => void extend() } : undefined,
+        message: atCeiling ? "This is the longest this call can run." : extension === "pending" ? "Adding time…" : extension === "failed" ? "Couldn’t add time. Try again." : "Need more time?",
+        action: deadline && ceiling && !atCeiling && extension !== "pending" ? { label: `Add ${EXTENSION_MINUTES} min`, onClick: () => void extend() } : undefined,
         endAction: { label: "Start a new call", onClick: onStartNewCall },
       }}
       onReportProblem={reportsAvailable ? onReportProblem : undefined}

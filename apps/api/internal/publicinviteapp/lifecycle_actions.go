@@ -67,6 +67,7 @@ func (a lifecycleActions) EndEpisode(ctx context.Context, input publicinvites.Li
 				TenantID:  input.TenantID,
 				SpaceID:   input.SpaceID,
 				EpisodeID: episode.ID,
+				Reason:    episodes.EndReasonMaximumDuration,
 				Request:   episodes.Request{Key: input.RequestKey},
 			})
 			if err != nil {

@@ -83,7 +83,12 @@ await client.extendEpisode(15);
 client.dispose();
 ```
 
-`endEpisode` and `extendEpisode` are capability-gated. Use `dispose()` when
+`endEpisode` and `extendEpisode` are capability-gated. `extendEpisode` rejects
+when the Episode is already at the Space's maximum length; the new deadline
+reaches every client through `connection.episode.deadline`. Build limit UI with
+`callCountdown` (the warning to show now), `canExtendCall` (whether to offer an
+extension) and `callEndNotice(connection.episodeEndReason)` (why the call ended).
+Use `dispose()` when
 the client will no longer be used; it releases the Connection and its resources.
 
 ## Recording and artifact Events

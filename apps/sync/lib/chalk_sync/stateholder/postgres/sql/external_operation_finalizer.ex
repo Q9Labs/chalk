@@ -119,7 +119,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
   def complete_external_episode do
     """
     update episodes
-    set status = 'ended', ended_at = now(), updated_at = now()
+    set status = 'ended', ended_at = now(), end_reason = $4, updated_at = now()
     where tenant_id = $1 and space_id = $2 and id = $3 and status = 'ending'
     returning id, space_id, status, started_at, ended_at, created_at, updated_at
     """

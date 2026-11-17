@@ -6,7 +6,7 @@ import { Icon } from "../site/Icon";
 import { useLoad, type Update } from "./use-dashboard";
 import type { Load } from "./load-machine";
 import { MoreButton, SkeletonRows, useToast } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./language-choice";
+import { startCall as startOwnedCall } from "./language-choice";
 import { inviteLink, type Row, type Home, merge, capped, shown, rowsOf, newestFirst, replay, readHomeStatus } from "./home-rows";
 import { CallRow } from "./HomeRow";
 import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
@@ -23,8 +23,7 @@ function useCallActions(update: UpdateHome, show: (dialog: HomeDialog) => void) 
     if (starting) return;
     setStarting(true);
     try {
-      // No name: the server names it, and the person can rename it from the row.
-      const { call } = await act("home", createCallAction(startKey.current, readNewCallLanguage()));
+      const { call } = await startOwnedCall(startKey.current);
       startKey.current = intentKey();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));

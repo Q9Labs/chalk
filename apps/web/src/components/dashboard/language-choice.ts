@@ -1,4 +1,5 @@
 import type { TranscriptLanguage, WhisperLanguage } from "@chalk/transcript-language";
+import { act } from "../../lib/dashboard/client";
 import { asWhisper } from "./transcript-languages";
 
 /** What this device remembers about languages, and what the next new call starts with. */
@@ -49,9 +50,10 @@ export function readNewCallLanguage(): NewCallLanguage {
   return raw ? asWhisper(raw) : null;
 }
 
-/** The request that starts a call: the account default when no language is chosen, else the chosen one. */
-export function createCallAction(idempotencyKey: string, language: NewCallLanguage) {
-  return { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey } as const;
+/** Starts a call for the signed-in person, in the account default language unless this device chose another. No name: the server names it. */
+export function startCall(idempotencyKey: string) {
+  const language = readNewCallLanguage();
+  return act("home", { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey });
 }
 
 export function saveNewCallLanguage(value: NewCallLanguage) {

@@ -12,7 +12,13 @@ defmodule ChalkSync.Stateholder.OperationTableTest do
   end
 
   test "a stored name reads back to the operation that wrote it" do
-    for name <- [:end_episode, :tenant_end_episode, :maximum_duration_expired, :mute_participant] do
+    for name <- [
+          :end_episode,
+          :tenant_end_episode,
+          :maximum_duration_expired,
+          :extend_episode,
+          :mute_participant
+        ] do
       assert {:ok, ^name} = name |> OperationTable.stored_name() |> OperationTable.from_stored()
     end
   end
@@ -27,9 +33,8 @@ defmodule ChalkSync.Stateholder.OperationTableTest do
     assert :maximum_duration_expired in OperationTable.episode_end_names()
   end
 
-  test "an Episode start or extension is intake-only and never read back from storage" do
+  test "an Episode start is intake-only and never read back from storage" do
     assert :error = OperationTable.from_stored("start_episode")
-    assert :error = OperationTable.from_stored("extend_episode")
   end
 
   test "an unknown name is rejected by intake" do

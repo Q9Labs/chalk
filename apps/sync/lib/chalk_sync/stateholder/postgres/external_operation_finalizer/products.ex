@@ -4,13 +4,16 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   """
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Admission
+  alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts
   alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: SQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: LifecycleSQL
+  alias ChalkSync.Stateholder.Postgres.SQL.RecordingReservation, as: RecordingReservationSQL
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.UUID
   require OperationTable
@@ -97,7 +100,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
 
   def update_external_products(connection, episode, external, _event, _state)
       when OperationTable.is_episode_end_name(external.name) do
-    complete_external_episode(connection, episode, external)
+    complete_external_episode(connection, episode, external, Facts.end_reason(external))
   end
 
   def update_external_products(connection, episode, %{name: name} = external, _event, _state)
@@ -147,10 +150,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   def update_external_products(
         connection,
         episode,
-        %{name: :tenant_set_deadline} = external,
+        %{name: name} = external,
         _event,
         _state
-      ),
+      )
+      when name in [:tenant_set_deadline, :extend_episode],
       do: update_deadline_product(connection, episode, external)
 
   def update_external_products(_connection, _episode, _external, _event, _state), do: :ok
@@ -183,9 +187,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     end
   end
 
-  defp complete_external_episode(connection, episode, external) do
+  defp complete_external_episode(connection, episode, external, end_reason) do
     webhook_object =
-      case Postgrex.query!(connection, SQL.complete_external_episode(), Scope.episode(episode)).rows do
+      case Postgrex.query!(
+             connection,
+             SQL.complete_external_episode(),
+             Scope.episode(episode) ++ [end_reason]
+           ).rows do
         [[id, space_id, status, started_at, ended_at, created_at, updated_at]] ->
           %{
             id: UUID.load!(id),
@@ -235,8 +243,17 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
         [external.payload["deadlineAtMs"], external.deadline_generation]
 
     case Postgrex.query!(connection, SQL.update_episode_deadline(), params).rows do
-      [[_id]] -> :ok
-      [] -> Postgrex.rollback(connection, {:error, :stale_deadline_generation})
+      [[_id]] ->
+        Postgrex.query!(
+          connection,
+          RecordingReservationSQL.move(),
+          Scope.episode(episode) ++ [RecordingPlane.maximum_duration_seconds()]
+        )
+
+        :ok
+
+      [] ->
+        Postgrex.rollback(connection, {:error, :stale_deadline_generation})
     end
   end
 
