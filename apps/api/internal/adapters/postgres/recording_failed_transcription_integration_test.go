@@ -31,6 +31,8 @@ func transcriptionAuthorityParams(t *testing.T, tx pgx.Tx, fixture transcription
 // the transcription lease that was already valid must still commit its prepared source.
 func TestFailedExportDoesNotBlockTranscriptionPreparation(t *testing.T) {
 	tx, fixture := newAllocationCleanupFixture(t, false, "transcription")
+	defer tx.Rollback(t.Context())
+	execCleanupFixture(t, tx, `update recordings set status = 'pending' where id = $1`, fixture.recordingID.Bytes())
 	execCleanupFixture(t, tx, `update recording_pipelines set state = 'terminal_failure' where recording_id = $1`, fixture.recordingID.Bytes())
 	if facts := readRecordingFacts(t, tx, fixture.recordingID); facts.status != "failed" {
 		t.Fatalf("status %q: the failed export must have failed the Recording", facts.status)
