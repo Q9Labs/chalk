@@ -16285,11 +16285,24 @@
               "overlap_ms": {
                 "type": "integer"
               },
-              "recordings_total": {
-                "type": "integer"
-              },
-              "recordings_transcribed": {
-                "type": "integer"
+              "recordings": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "offset_ms": {
+                      "type": "integer"
+                    },
+                    "recording_id": {
+                      "$ref": "#/components/schemas/RecordingId"
+                    },
+                    "transcribed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["offset_ms", "recording_id", "transcribed"],
+                  "type": "object"
+                },
+                "type": "array"
               },
               "silence_ms": {
                 "type": "integer"
@@ -16355,7 +16368,7 @@
                 "type": "integer"
               }
             },
-            "required": ["bucket_ms", "episode_duration_ms", "intervals_truncated", "overlap_ms", "recordings_total", "recordings_transcribed", "silence_ms", "speakers", "total_talk_ms"],
+            "required": ["bucket_ms", "episode_duration_ms", "intervals_truncated", "overlap_ms", "recordings", "silence_ms", "speakers", "total_talk_ms"],
             "type": ["object", "null"]
           }
         },

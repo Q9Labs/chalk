@@ -945,6 +945,9 @@ export const EpisodeListSchema = /* @__PURE__ */ (() =>
   }))();
 export type EpisodeList = typeof EpisodeListSchema.Type;
 
+export const RecordingIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId")))();
+export type RecordingId = typeof RecordingIdSchema.Type;
+
 export const EpisodeTalkTimeSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
@@ -956,8 +959,13 @@ export const EpisodeTalkTimeSchema = /* @__PURE__ */ (() =>
         episode_duration_ms: Schema.Number,
         intervals_truncated: Schema.Boolean,
         overlap_ms: Schema.Number,
-        recordings_total: Schema.Number,
-        recordings_transcribed: Schema.Number,
+        recordings: Schema.Array(
+          Schema.Struct({
+            offset_ms: Schema.Number,
+            recording_id: RecordingIdSchema,
+            transcribed: Schema.Boolean,
+          }),
+        ),
         silence_ms: Schema.Number,
         speakers: Schema.Array(
           Schema.Struct({
@@ -1256,9 +1264,6 @@ export const RecordingExportSchema = /* @__PURE__ */ (() =>
     status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
   }))();
 export type RecordingExport = typeof RecordingExportSchema.Type;
-
-export const RecordingIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId")))();
-export type RecordingId = typeof RecordingIdSchema.Type;
 
 export const RecordingSourceSchema = /* @__PURE__ */ (() =>
   Schema.Struct({

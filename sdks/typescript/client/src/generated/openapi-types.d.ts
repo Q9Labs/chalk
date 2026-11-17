@@ -2117,8 +2117,11 @@ export interface components {
         episode_duration_ms: number;
         intervals_truncated: boolean;
         overlap_ms: number;
-        recordings_total: number;
-        recordings_transcribed: number;
+        recordings: {
+          offset_ms: number;
+          recording_id: components["schemas"]["RecordingId"];
+          transcribed: boolean;
+        }[];
         silence_ms: number;
         speakers: {
           bucket_talk_ms: number[];

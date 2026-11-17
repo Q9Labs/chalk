@@ -49,7 +49,7 @@ type talkTimeRecordingBody struct {
 }
 
 type talkTimeSpeakerBody struct {
-	SpeakerID     string                 `json:"speaker_id"`
+	SpeakerKey    string                 `json:"speaker_key"`
 	ParticipantID *string                `json:"participant_id"`
 	DisplayName   string                 `json:"display_name"`
 	TalkMS        int64                  `json:"talk_ms"`
@@ -108,7 +108,7 @@ func newTalkTimeResponse(available talktime.Available) *talkTimeResponse {
 	}
 	for _, speaker := range report.Speakers {
 		body := talkTimeSpeakerBody{
-			SpeakerID: speaker.ID, DisplayName: speaker.DisplayName, TalkMS: speaker.TalkMS, Share: speaker.Share, Turns: speaker.Turns,
+			SpeakerKey: speaker.ID, DisplayName: speaker.DisplayName, TalkMS: speaker.TalkMS, Share: speaker.Share, Turns: speaker.Turns,
 			Intervals: make([]talkTimeIntervalBody, 0, len(speaker.Intervals)), BucketTalkMS: speaker.BucketTalkMS,
 		}
 		if speaker.ParticipantID != "" {

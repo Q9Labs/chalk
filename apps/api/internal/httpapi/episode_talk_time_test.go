@@ -74,7 +74,7 @@ func TestEpisodeTalkTimeAvailableCarriesTheMeasurements(t *testing.T) {
 				Transcribed bool  `json:"transcribed"`
 			} `json:"recordings"`
 			Speakers []struct {
-				SpeakerID     string  `json:"speaker_id"`
+				SpeakerKey    string  `json:"speaker_key"`
 				ParticipantID *string `json:"participant_id"`
 				TalkMS        int64   `json:"talk_ms"`
 				Share         float64 `json:"share"`
@@ -95,7 +95,7 @@ func TestEpisodeTalkTimeAvailableCarriesTheMeasurements(t *testing.T) {
 	if alice.ParticipantID == nil || *alice.ParticipantID != participant || alice.TalkMS != 8_000 || alice.Share != 0.8 || len(alice.Intervals) != 1 || alice.Intervals[0].EndMS != 9_000 {
 		t.Fatalf("Alice = %+v", alice)
 	}
-	if dana.ParticipantID != nil || dana.SpeakerID != "ref:dana" {
+	if dana.ParticipantID != nil || dana.SpeakerKey != "ref:dana" {
 		t.Fatalf("a speaker with no matching Participant has a null participant_id: %+v", dana)
 	}
 }
