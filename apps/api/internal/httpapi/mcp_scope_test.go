@@ -194,6 +194,7 @@ func TestMCPInspectViewsNeedTheirFields(t *testing.T) {
 		{"chalk_inspect_spaces", `{"view":"invite"}`, "space_id"},
 		{"chalk_inspect_episodes", `{}`, "space_id"},
 		{"chalk_inspect_episodes", `{"view":"episode","space_id":"` + space + `"}`, "episode_id"},
+		{"chalk_inspect_episodes", `{"view":"talk_time","space_id":"` + space + `"}`, "episode_id"},
 		{"chalk_inspect_episodes", `{"view":"live"}`, "space_ids"},
 		{"chalk_inspect_episodes", `{"view":"activity"}`, "space_ids"},
 		{"chalk_inspect_episodes", `{"view":"admissions"}`, "space_id"},

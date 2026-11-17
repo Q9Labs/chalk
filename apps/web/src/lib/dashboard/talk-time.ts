@@ -37,6 +37,16 @@ export function sessionMsAt(offset: number, width: number, durationMs: number): 
   return Math.min(Math.max(offset / width, 0), 1) * durationMs;
 }
 
+/** How many buckets wide a lane is. The last bucket may be partial, so this is not a whole number when the session isn't a multiple of the bucket. */
+export function laneExtent(talk: Pick<MeasuredTalk, "durationMs" | "bucketMs">): number {
+  return talk.durationMs / talk.bucketMs;
+}
+
+/** Where bucket `index` sits in a lane `extent` buckets wide: the last bucket is clipped to the end of the session, so a bar lines up with what a click on it seeks to. */
+export function bucketBar(index: number, extent: number): { readonly x: number; readonly width: number } {
+  return { x: index, width: Math.max(0, Math.min(1, extent - index)) };
+}
+
 const offsetOf = (talk: MeasuredTalk, recordingId: string) => talk.recordings.find((recording) => recording.id === recordingId)?.offsetMs;
 
 /** Where a point of the session sits in the playing recording, in seconds. Null when the recording isn't part of the measurement. */

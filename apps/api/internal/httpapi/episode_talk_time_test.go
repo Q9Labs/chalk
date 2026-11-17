@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -129,5 +130,29 @@ func TestEpisodeTalkTimeAnswersLikeAttendanceForMissingEpisodesAndForbiddenTenan
 	unavailable := serveTalkTime(t, nil, allowAllTenants{})
 	if unavailable.Code != http.StatusServiceUnavailable {
 		t.Fatalf("no service = %d %s", unavailable.Code, unavailable.Body.String())
+	}
+}
+
+type talkTimeSpy struct{ calls int }
+
+func (s *talkTimeSpy) Get(context.Context, utilities.ID, utilities.ID, utilities.ID) (talktime.Outcome, error) {
+	s.calls++
+	return talktime.Live{}, nil
+}
+
+func TestMCPInspectEpisodesTalkTimeViewReachesTheService(t *testing.T) {
+	spy := &talkTimeSpy{}
+	handler := NewMCPHandler(Options{EpisodeTalkTime: spy, TenantAuthz: allowAllTenants{}})
+	principal := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesRead)
+	space, _ := utilities.NewID()
+	episode, _ := utilities.NewID()
+	arguments := `{"view":"talk_time","space_id":"` + space.String() + `","episode_id":"` + episode.String() + `"}`
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(toolCallBody("chalk_inspect_episodes", arguments)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request.WithContext(authentication.ContextWithPrincipal(request.Context(), principal)))
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), `"isError":true`) || !strings.Contains(response.Body.String(), `\"status\":\"live\"`) || spy.calls != 1 {
+		t.Fatalf("%d calls=%d %s", response.Code, spy.calls, response.Body.String())
 	}
 }

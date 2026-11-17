@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MeasuredTalk } from "./talk-time";
-import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength } from "./talk-time";
+import { bucketBar, laneExtent, playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength } from "./talk-time";
 
 const talk: MeasuredTalk = {
   kind: "available",
@@ -52,5 +52,29 @@ describe("talk time and the player", () => {
     expect(playheadFraction(talk, "late", 60)).toBe(0.3);
     expect(playheadFraction(talk, "late", 10_000)).toBe(1);
     expect(playheadFraction(talk, "other", 0)).toBeNull();
+  });
+});
+
+describe("the lanes and the click share one timeline", () => {
+  // 2 h and 1 s with 120 s buckets: 61 buckets, the last one 1 s long.
+  const long = { durationMs: 7_201_000, bucketMs: 120_000 };
+
+  it("spans the session, not a whole number of buckets", () => {
+    expect(laneExtent(long)).toBeCloseTo(60.0083, 4);
+  });
+
+  it("clips the last bucket to the end of the session", () => {
+    const extent = laneExtent(long);
+    expect(bucketBar(59, extent)).toEqual({ x: 59, width: 1 });
+    expect(bucketBar(60, extent).width).toBeCloseTo(1_000 / 120_000, 6);
+    expect(bucketBar(61, extent).width).toBe(0);
+  });
+
+  it("puts speech at 2 h at the x that a click there seeks to", () => {
+    const extent = laneExtent(long);
+    const barX = bucketBar(60, extent).x;
+    const width = 1000;
+    const pixel = (barX / extent) * width;
+    expect(sessionMsAt(pixel, width, long.durationMs)).toBeCloseTo(7_200_000, 3);
   });
 });

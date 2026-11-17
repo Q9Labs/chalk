@@ -1,7 +1,7 @@
 import { useId, useState, type MouseEvent } from "react";
 
 import { playbackTime } from "../../lib/dashboard/format";
-import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength, type MeasuredTalk, type TalkSpeakerDTO, type TalkTimeDTO } from "../../lib/dashboard/talk-time";
+import { bucketBar, laneExtent, playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength, type MeasuredTalk, type TalkSpeakerDTO, type TalkTimeDTO } from "../../lib/dashboard/talk-time";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import type { Playback } from "./SessionViewer";
@@ -115,7 +115,7 @@ function Timeline({ talk, speakers, playback }: { readonly talk: MeasuredTalk; r
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the slider below is the keyboard and screen reader way to do what a click here does */}
         <div className={seekable ? "ttp seek" : "ttp"} onClick={seekable ? click : undefined}>
           {speakers.map((speaker) => (
-            <Lane key={speaker.key} speaker={speaker} bucketMs={talk.bucketMs} />
+            <Lane key={speaker.key} speaker={speaker} bucketMs={talk.bucketMs} extent={laneExtent(talk)} />
           ))}
           {head !== null ? <span className="ttm" style={{ left: `${head * 100}%` }} aria-hidden="true" /> : null}
           <div className="tta" aria-hidden="true">
@@ -147,14 +147,14 @@ function Timeline({ talk, speakers, playback }: { readonly talk: MeasuredTalk; r
 }
 
 /** One speaker's lane: a bar per bucket, as tall as the share of that bucket they spoke in. */
-function Lane({ speaker, bucketMs }: { readonly speaker: TalkSpeakerDTO; readonly bucketMs: number }) {
-  const count = speaker.buckets.length;
+function Lane({ speaker, bucketMs, extent }: { readonly speaker: TalkSpeakerDTO; readonly bucketMs: number; readonly extent: number }) {
   return (
-    <svg className="ttb" viewBox={`0 0 ${count} 1`} preserveAspectRatio="none" role="img" aria-label={`${speaker.name}: talked ${talkLength(speaker.talkMs)} in ${speaker.turns} ${speaker.turns === 1 ? "turn" : "turns"}`}>
+    <svg className="ttb" viewBox={`0 0 ${extent} 1`} preserveAspectRatio="none" role="img" aria-label={`${speaker.name}: talked ${talkLength(speaker.talkMs)} in ${speaker.turns} ${speaker.turns === 1 ? "turn" : "turns"}`}>
       {speaker.buckets.map((talk, index) => {
-        if (talk <= 0) return null;
-        const height = Math.min(Math.max(talk / bucketMs, 0.15), 1);
-        return <rect key={index} x={index} y={1 - height} width={1} height={height} />;
+        const bar = bucketBar(index, extent);
+        if (talk <= 0 || bar.width <= 0) return null;
+        const height = Math.min(Math.max(talk / (bar.width * bucketMs), 0.15), 1);
+        return <rect key={index} x={bar.x} y={1 - height} width={bar.width} height={height} />;
       })}
     </svg>
   );
