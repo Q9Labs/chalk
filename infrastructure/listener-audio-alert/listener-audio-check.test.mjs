@@ -93,7 +93,7 @@ test("posts exact payload, requests a ten-minute APL window and logs aggregates 
   assert.doesNotMatch(body.apl, /publication_id|tenant|space/);
   assert.deepEqual(SIGNALS, [
     { name: "api_unpulled", event: "media.listener_publication_unpulled" },
-    { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck", minParticipants: 2 },
+    { name: "client_audio_stuck", event: "sdk.telemetry", type: "audio_receive_stuck", minParticipants: 2 },
   ]);
   assert.equal(calls[1].url, env.ONCALL_WEBHOOK_URL);
   const payload = JSON.parse(calls[1].options.body);
@@ -202,8 +202,8 @@ test("HTTP, JSON, malformed and network failures fail safely", async () => {
 
 test("the provider-neutral audio_receive_stuck client report is a signal, tagged with a bounded provider", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("(['attributes.event'] == 'sdk.connection_report' and ['attributes.trigger'] == 'audio_receive_stuck')"));
-  assert.ok(apl.includes("['attributes.event'] in ('media.listener_publication_unpulled', 'sdk.connection_report')"));
+  assert.ok(apl.includes("(['attributes.event'] == 'sdk.telemetry' and ['attributes.type'] == 'audio_receive_stuck')"));
+  assert.ok(apl.includes("['attributes.event'] in ('media.listener_publication_unpulled', 'sdk.telemetry')"));
   assert.deepEqual(PROVIDERS, ["cloudflare_sfu", "chalk_sfu"]);
   assert.ok(apl.includes("tostring(['attributes.provider']) in ('cloudflare_sfu', 'chalk_sfu')"));
   assert.ok(apl.includes("strcat(signal, ':', provider)"));

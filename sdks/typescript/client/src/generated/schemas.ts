@@ -601,7 +601,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         ),
         receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
         receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
-        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio"])),
+        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio", "screen_video"])),
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
         track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
@@ -1615,6 +1615,174 @@ export const SyncTokenSchema = /* @__PURE__ */ (() =>
     sync_token: Schema.String,
   }))();
 export type SyncToken = typeof SyncTokenSchema.Type;
+
+export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    client_session_id: UUIDSchema,
+    events: Schema.Array(
+      Schema.Struct({
+        action: Schema.optional(Schema.Literals(["mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"])),
+        attempt: Schema.optional(Schema.NullOr(Schema.Number)),
+        bundle_tag_held: Schema.optional(Schema.NullOr(Schema.Boolean)),
+        close_code: Schema.optional(Schema.NullOr(Schema.Number)),
+        code: Schema.optional(
+          Schema.Literals([
+            "invalid_state",
+            "invalid_access",
+            "access_unavailable",
+            "permission_denied",
+            "device_not_found",
+            "device_busy",
+            "device_constraint_invalid",
+            "media_capture_failed",
+            "sync_start_failed",
+            "state_digest_recovery_failed",
+            "sync_hello_timeout",
+            "media_start_failed",
+            "join_cleanup_unconfirmed",
+            "sync_recovery_exhausted",
+            "media_recovery_exhausted",
+            "command_rejected",
+            "leave_unconfirmed",
+            "episode_ended",
+            "unsupported_environment",
+            "internal_error",
+            "collaboration_unavailable",
+            "chat_cursor_reset_required",
+            "rate_limited",
+            "invalid_payload",
+          ]),
+        ),
+        device_kind: Schema.optional(Schema.Literals(["microphone", "camera", "speaker", "screen"])),
+        dropped: Schema.optional(Schema.NullOr(Schema.Number)),
+        duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        elapsed_ms: Schema.Number,
+        element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
+        end_reason: Schema.optional(Schema.Literals(["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"])),
+        error_name: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"])),
+        granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
+        granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
+        heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        http_status: Schema.optional(Schema.NullOr(Schema.Number)),
+        mechanism: Schema.optional(Schema.Literals(["ice_restart", "media_reconnect", "sync_reconnect", "sync_digest", "access_refresh"])),
+        media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
+        media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"])),
+        op_id: Schema.optional(UUIDSchema),
+        outage_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
+        permission_state: Schema.optional(Schema.Literals(["granted", "denied", "prompt", "unknown"])),
+        phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
+        platform_state: Schema.optional(Schema.Literals(["online", "offline", "hidden", "visible", "background", "foreground"])),
+        play_result: Schema.optional(Schema.Literals(["ok", "NotAllowedError", "AbortError", "unknown"])),
+        projection_state: Schema.optional(Schema.Literals(["on", "off"])),
+        publication_state: Schema.optional(Schema.Literals(["on", "off"])),
+        receive_counts: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              announced: Schema.optional(Schema.NullOr(Schema.Number)),
+              bytes_flowing: Schema.optional(Schema.NullOr(Schema.Number)),
+              element_bound: Schema.optional(Schema.NullOr(Schema.Number)),
+              playing: Schema.optional(Schema.NullOr(Schema.Number)),
+              projection_off: Schema.optional(Schema.NullOr(Schema.Number)),
+              pull_failed: Schema.optional(Schema.NullOr(Schema.Number)),
+              pull_requested: Schema.optional(Schema.NullOr(Schema.Number)),
+              pull_succeeded: Schema.optional(Schema.NullOr(Schema.Number)),
+              track_received: Schema.optional(Schema.NullOr(Schema.Number)),
+            }),
+          ),
+        ),
+        receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
+        receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
+        render_cause: Schema.optional(Schema.Literals(["render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"])),
+        seq: Schema.Number,
+        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio", "screen_video"])),
+        state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
+        stats: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              connection_type: Schema.optional(Schema.Literals(["udp", "tcp", "turn", "unknown"])),
+              freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
+              freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+              gap: Schema.optional(Schema.Literals(["offline", "hidden", "poll_failed", "dropped"])),
+              local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+              recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+              recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
+              recv_hidden_videos: Schema.optional(Schema.NullOr(Schema.Number)),
+              recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+              recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+              recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),
+              relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
+              remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+              rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+              send_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+              send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+              send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
+              send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+              tracks: Schema.optional(
+                Schema.Array(
+                  Schema.Struct({
+                    audio_energy: Schema.optional(Schema.NullOr(Schema.Number)),
+                    kind: Schema.Literals(["audio", "video"]),
+                    lost: Schema.optional(Schema.NullOr(Schema.Number)),
+                    mid: Schema.String.check(Schema.isMinLength(1), Schema.isPattern(new RegExp("^[0-9A-Za-z_-]{1,16}$"))),
+                    packets: Schema.optional(Schema.NullOr(Schema.Number)),
+                    playout: Schema.optional(Schema.Literals(["playing", "paused", "no_element", "unknown"])),
+                  }),
+                ).check(Schema.isMaxLength(32)),
+              ),
+              window_ms: Schema.Number,
+            }),
+          ),
+        ),
+        step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
+        track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
+        type: Schema.Literals([
+          "access_refresh_failed",
+          "access_refreshed",
+          "access_retry",
+          "audio_receive_stuck",
+          "audio_receive_summary",
+          "call_ended",
+          "call_stats",
+          "chat_upload_failed",
+          "cleanup_completed",
+          "cleanup_unconfirmed",
+          "connection_failed",
+          "device_failed",
+          "media_http_error",
+          "media_intent",
+          "media_projection_mismatch",
+          "media_result",
+          "media_state",
+          "platform_changed",
+          "problem_reported",
+          "receivers_closed",
+          "recovery_attempt",
+          "recovery_exhausted",
+          "recovery_succeeded",
+          "render_crashed",
+          "space_join_span",
+          "state_changed",
+          "sync_connect_failed",
+          "sync_dial_timeout",
+          "sync_heartbeat_gap",
+          "sync_socket_close",
+          "sync_socket_open",
+          "telemetry_dropped",
+        ]),
+        upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
+      }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+    version: Schema.Literal(1),
+  }))();
+export type TelemetryRequest = typeof TelemetryRequestSchema.Type;
+
+export const TelemetryResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    accepted: Schema.Number,
+    rejected: Schema.Number,
+  }))();
+export type TelemetryResponse = typeof TelemetryResponseSchema.Type;
 
 export const TenantSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4187,6 +4355,26 @@ export const UploadCallStats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type UploadCallStats429ResponseHeaders = typeof UploadCallStats429ResponseHeadersSchema.Type;
+
+export const UploadTelemetryPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type UploadTelemetryPathParams = typeof UploadTelemetryPathParamsSchema.Type;
+
+export const UploadTelemetryRequestBodySchema = /* @__PURE__ */ (() => TelemetryRequestSchema)();
+export type UploadTelemetryRequestBody = typeof UploadTelemetryRequestBodySchema.Type;
+
+export const UploadTelemetryResponseSchema = /* @__PURE__ */ (() => TelemetryResponseSchema)();
+export type UploadTelemetryResponse = typeof UploadTelemetryResponseSchema.Type;
+
+export const UploadTelemetry429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type UploadTelemetry429ResponseHeaders = typeof UploadTelemetry429ResponseHeadersSchema.Type;
 
 export class AccessForbiddenError extends Schema.TaggedErrorClass<AccessForbiddenError>()("AccessForbiddenError", {
   error: Schema.Struct({
@@ -7803,6 +7991,9 @@ export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema
 export const UploadCallStatsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type UploadCallStatsError = typeof UploadCallStatsErrorSchema.Type;
 
+export const UploadTelemetryErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
+
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7877,5 +8068,6 @@ export const ChalkOperationPolicies = {
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   uploadCallStats: { maxBodyBytes: 32768, rateLimit: { limit: 30, policy: "call_stats.participant", windowSeconds: 600 } },
+  uploadTelemetry: { maxBodyBytes: 65536, rateLimit: { limit: 4194304, policy: "v1.telemetry.intake", windowSeconds: 8100 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];

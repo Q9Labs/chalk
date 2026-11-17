@@ -11101,6 +11101,152 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/telemetry": {
+      "post": {
+        "operationId": "uploadTelemetry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelemetryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Upload telemetry",
+        "x-chalk-max-body-bytes": 65536,
+        "x-chalk-rate-limit": {
+          "limit": 4194304,
+          "name": "v1.telemetry.intake",
+          "window_seconds": 8100
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/transcripts": {
       "get": {
         "operationId": "listTranscripts",
@@ -15300,7 +15446,7 @@
                   "type": ["integer", "null"]
                 },
                 "source": {
-                  "enum": ["microphone", "camera", "screen_audio"],
+                  "enum": ["microphone", "camera", "screen_audio", "screen_video"],
                   "type": "string"
                 },
                 "state": {
@@ -17623,6 +17769,449 @@
           }
         },
         "required": ["expires_at", "sync_token"],
+        "type": "object"
+      },
+      "TelemetryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "client_session_id": {
+            "$ref": "#/components/schemas/UUID"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "enum": ["mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"],
+                  "type": "string"
+                },
+                "attempt": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "bundle_tag_held": {
+                  "type": ["boolean", "null"]
+                },
+                "close_code": {
+                  "maximum": 4999,
+                  "minimum": 1000,
+                  "type": ["integer", "null"]
+                },
+                "code": {
+                  "enum": [
+                    "invalid_state",
+                    "invalid_access",
+                    "access_unavailable",
+                    "permission_denied",
+                    "device_not_found",
+                    "device_busy",
+                    "device_constraint_invalid",
+                    "media_capture_failed",
+                    "sync_start_failed",
+                    "state_digest_recovery_failed",
+                    "sync_hello_timeout",
+                    "media_start_failed",
+                    "join_cleanup_unconfirmed",
+                    "sync_recovery_exhausted",
+                    "media_recovery_exhausted",
+                    "command_rejected",
+                    "leave_unconfirmed",
+                    "episode_ended",
+                    "unsupported_environment",
+                    "internal_error",
+                    "collaboration_unavailable",
+                    "chat_cursor_reset_required",
+                    "rate_limited",
+                    "invalid_payload"
+                  ],
+                  "type": "string"
+                },
+                "device_kind": {
+                  "enum": ["microphone", "camera", "speaker", "screen"],
+                  "type": "string"
+                },
+                "dropped": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "duration_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "elapsed_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "element_state": {
+                  "enum": ["paused", "playing"],
+                  "type": "string"
+                },
+                "end_reason": {
+                  "enum": ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"],
+                  "type": "string"
+                },
+                "error_name": {
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
+                  "type": "string"
+                },
+                "granted_audio": {
+                  "enum": ["granted", "not_granted", "unknown"],
+                  "type": "string"
+                },
+                "granted_video": {
+                  "enum": ["granted", "not_granted", "unknown"],
+                  "type": "string"
+                },
+                "heartbeat_gap_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "http_status": {
+                  "maximum": 599,
+                  "minimum": 400,
+                  "type": ["integer", "null"]
+                },
+                "mechanism": {
+                  "enum": ["ice_restart", "media_reconnect", "sync_reconnect", "sync_digest", "access_refresh"],
+                  "type": "string"
+                },
+                "media_error_kind": {
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"],
+                  "type": "string"
+                },
+                "media_error_step": {
+                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"],
+                  "type": "string"
+                },
+                "op_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "outage_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "outcome": {
+                  "enum": ["started", "succeeded", "failed", "cancelled"],
+                  "type": "string"
+                },
+                "permission_state": {
+                  "enum": ["granted", "denied", "prompt", "unknown"],
+                  "type": "string"
+                },
+                "phase": {
+                  "enum": ["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"],
+                  "type": "string"
+                },
+                "platform_state": {
+                  "enum": ["online", "offline", "hidden", "visible", "background", "foreground"],
+                  "type": "string"
+                },
+                "play_result": {
+                  "enum": ["ok", "NotAllowedError", "AbortError", "unknown"],
+                  "type": "string"
+                },
+                "projection_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "publication_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "receive_counts": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "announced": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "bytes_flowing": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "element_bound": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "playing": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "projection_off": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_failed": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_requested": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_succeeded": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "track_received": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    }
+                  },
+                  "type": ["object", "null"]
+                },
+                "receive_state": {
+                  "enum": ["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"],
+                  "type": "string"
+                },
+                "receivers_stopped": {
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "render_cause": {
+                  "enum": ["render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"],
+                  "type": "string"
+                },
+                "seq": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "source": {
+                  "enum": ["microphone", "camera", "screen_audio", "screen_video"],
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"],
+                  "type": "string"
+                },
+                "stats": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "connection_type": {
+                      "enum": ["udp", "tcp", "turn", "unknown"],
+                      "type": "string"
+                    },
+                    "freeze_count": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "freeze_ms": {
+                      "maximum": 600000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "gap": {
+                      "enum": ["offline", "hidden", "poll_failed", "dropped"],
+                      "type": "string"
+                    },
+                    "local_candidate_type": {
+                      "enum": ["host", "srflx", "prflx", "relay"],
+                      "type": "string"
+                    },
+                    "recv_bitrate_kbps": {
+                      "maximum": 100000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "recv_height": {
+                      "maximum": 4320,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "recv_hidden_videos": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "recv_jitter_ms": {
+                      "maximum": 60000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "recv_loss_pct": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": ["number", "null"]
+                    },
+                    "recv_paused_videos": {
+                      "maximum": 64,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "relay_protocol": {
+                      "enum": ["udp", "tcp", "tls"],
+                      "type": "string"
+                    },
+                    "remote_candidate_type": {
+                      "enum": ["host", "srflx", "prflx", "relay"],
+                      "type": "string"
+                    },
+                    "rtt_ms": {
+                      "maximum": 60000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "send_bitrate_kbps": {
+                      "maximum": 100000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "send_jitter_ms": {
+                      "maximum": 60000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "send_layer": {
+                      "enum": ["h", "m", "l"],
+                      "type": "string"
+                    },
+                    "send_loss_pct": {
+                      "maximum": 100,
+                      "minimum": 0,
+                      "type": ["number", "null"]
+                    },
+                    "tracks": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "audio_energy": {
+                            "maximum": 2147483647,
+                            "minimum": 0,
+                            "type": ["integer", "null"]
+                          },
+                          "kind": {
+                            "enum": ["audio", "video"],
+                            "type": "string"
+                          },
+                          "lost": {
+                            "maximum": 10000000,
+                            "minimum": 0,
+                            "type": ["integer", "null"]
+                          },
+                          "mid": {
+                            "minLength": 1,
+                            "pattern": "^[0-9A-Za-z_-]{1,16}$",
+                            "type": "string"
+                          },
+                          "packets": {
+                            "maximum": 10000000,
+                            "minimum": 0,
+                            "type": ["integer", "null"]
+                          },
+                          "playout": {
+                            "enum": ["playing", "paused", "no_element", "unknown"],
+                            "type": "string"
+                          }
+                        },
+                        "required": ["kind", "mid"],
+                        "type": "object"
+                      },
+                      "maxItems": 32,
+                      "type": "array"
+                    },
+                    "window_ms": {
+                      "maximum": 2147483647,
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["window_ms"],
+                  "type": ["object", "null"]
+                },
+                "step": {
+                  "enum": ["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"],
+                  "type": "string"
+                },
+                "track_state": {
+                  "enum": ["live", "muted", "ended"],
+                  "type": "string"
+                },
+                "type": {
+                  "enum": [
+                    "access_refresh_failed",
+                    "access_refreshed",
+                    "access_retry",
+                    "audio_receive_stuck",
+                    "audio_receive_summary",
+                    "call_ended",
+                    "call_stats",
+                    "chat_upload_failed",
+                    "cleanup_completed",
+                    "cleanup_unconfirmed",
+                    "connection_failed",
+                    "device_failed",
+                    "media_http_error",
+                    "media_intent",
+                    "media_projection_mismatch",
+                    "media_result",
+                    "media_state",
+                    "platform_changed",
+                    "problem_reported",
+                    "receivers_closed",
+                    "recovery_attempt",
+                    "recovery_exhausted",
+                    "recovery_succeeded",
+                    "render_crashed",
+                    "space_join_span",
+                    "state_changed",
+                    "sync_connect_failed",
+                    "sync_dial_timeout",
+                    "sync_heartbeat_gap",
+                    "sync_socket_close",
+                    "sync_socket_open",
+                    "telemetry_dropped"
+                  ],
+                  "type": "string"
+                },
+                "upload_failure": {
+                  "enum": ["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"],
+                  "type": "string"
+                }
+              },
+              "required": ["elapsed_ms", "seq", "type"],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "version": {
+            "enum": [1],
+            "type": "integer"
+          }
+        },
+        "required": ["client_session_id", "events", "version"],
+        "type": "object"
+      },
+      "TelemetryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "integer"
+          },
+          "rejected": {
+            "type": "integer"
+          }
+        },
+        "required": ["accepted", "rejected"],
         "type": "object"
       },
       "Tenant": {

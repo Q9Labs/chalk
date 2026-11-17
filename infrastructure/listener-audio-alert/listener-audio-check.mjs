@@ -11,11 +11,11 @@ export const PROVIDERS = ["cloudflare_sfu", "chalk_sfu"];
 // Reports without a participant hash never count as a participant.
 export const SIGNALS = [
   { name: "api_unpulled", event: "media.listener_publication_unpulled" },
-  { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck", minParticipants: 2 },
+  { name: "client_audio_stuck", event: "sdk.telemetry", type: "audio_receive_stuck", minParticipants: 2 },
 ];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
-const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.trigger ? ` and ['attributes.trigger'] == ${literal(signal.trigger)}` : ""})`;
+const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.type ? ` and ['attributes.type'] == ${literal(signal.type)}` : ""})`;
 
 export function query(dataset) {
   return `[${literal(dataset)}]

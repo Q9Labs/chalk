@@ -12,6 +12,14 @@ type Policy struct {
 	Name   string
 	Limit  int
 	Window time.Duration
+	// Cost is how many of the Limit units one charge takes, such as the bytes of
+	// one request. Zero means one unit, and a Cost above Limit takes all of it.
+	Cost int
+}
+
+// Units returns the units one charge takes, between one and Limit.
+func (p Policy) Units() int {
+	return min(max(p.Cost, 1), max(p.Limit, 1))
 }
 
 type Limiter interface {
@@ -73,7 +81,8 @@ func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now
 	bucket.Tokens = refillBucket(bucket, policy, now)
 	bucket.ObservedAt = now
 
-	if bucket.Tokens < 1 {
+	units := float64(policy.Units())
+	if bucket.Tokens < units {
 		l.buckets[mapKey] = bucket
 		return Decision{
 			State:      Exhausted,
@@ -82,7 +91,7 @@ func (l *LocalLimiter) Allow(ctx context.Context, key string, policy Policy, now
 		}
 	}
 
-	bucket.Tokens--
+	bucket.Tokens -= units
 	l.buckets[mapKey] = bucket
 
 	return Decision{
@@ -117,7 +126,7 @@ func refillBucket(bucket localBucket, policy Policy, now time.Time) float64 {
 }
 
 func RetryAfter(tokens float64, policy Policy) time.Duration {
-	missingTokens := 1 - tokens
+	missingTokens := float64(policy.Units()) - tokens
 	if missingTokens <= 0 {
 		return 0
 	}

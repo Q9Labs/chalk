@@ -270,6 +270,12 @@ func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelim
 	}
 
 	w.Header().Set(ratelimit.HeaderRetryAfter, strconv.Itoa(retryAfter))
+	if policy.Cost > 0 {
+		// A weighted budget is one the client spends by its own choice of what to send, so a
+		// refusal is evidence of data it lost, unlike a plain request quota.
+		observability.RequestLogger(ctx).WarnContext(ctx, "rate limit exhausted", "event", "rate_limit.exhausted",
+			"policy", policy.Name, "cost", policy.Units(), "retry_after_seconds", retryAfter)
+	}
 	return apiErrorRateLimited
 }
 

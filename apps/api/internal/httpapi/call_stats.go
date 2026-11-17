@@ -2,29 +2,21 @@ package httpapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"regexp"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
-	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+// This route serves SDKs from before client telemetry. See connection_reports.go: it is
+// deleted with that route, and until then it logs each sample as a call_stats event.
+
 const CallStatsBodyLimit = 32768
 const CallStatsSampleLimit = 30
-const CallStatsMinWindowMS = 1000
-const CallStatsMaxWindowMS = 60000
-const CallStatsMaxElapsedMS = 2147483647
 
 var callStatsParticipantLimit = ratelimit.Policy{Name: "call_stats.participant", Limit: 30, Window: 10 * time.Minute}
 
@@ -32,6 +24,8 @@ type callStatsRequest struct {
 	TenantID utilities.ID
 	Stats    callStats
 	Origin   []any
+	// Frame is why the request was refused before its samples were read, or empty.
+	Frame string
 }
 
 type callStats struct {
@@ -59,187 +53,50 @@ type callStatsSample struct {
 	RecvHeight          *int64   `json:"recv_height,omitempty"`
 	FreezeCount         *int64   `json:"freeze_count,omitempty"`
 	FreezeMS            *int64   `json:"freeze_ms,omitempty"`
-	// RecvPausedVideos counts remote videos the SFU had paused for network at the
-	// end of the window. Only an SDK on a plane that reports subscription state sends it.
-	RecvPausedVideos *int64 `json:"recv_paused_videos,omitempty"`
-	// RecvHiddenVideos counts remote videos the viewer chose not to receive at the end of
-	// the window because their tiles were hidden or off screen. They send nothing on purpose.
-	RecvHiddenVideos *int64 `json:"recv_hidden_videos,omitempty"`
+	RecvPausedVideos    *int64   `json:"recv_paused_videos,omitempty"`
+	RecvHiddenVideos    *int64   `json:"recv_hidden_videos,omitempty"`
 }
 
-// These are also the OpenAPI enums, so no free text can enter the log through a
-// caller that bypasses the SDK.
-func CallStatsFieldEnum(field string) []string {
-	switch field {
-	case "connection_type":
-		return []string{"udp", "tcp", "turn", "unknown"}
-	case "local_candidate_type", "remote_candidate_type":
-		return []string{"host", "srflx", "prflx", "relay"}
-	case "relay_protocol":
-		return []string{"udp", "tcp", "tls"}
-	case "send_layer":
-		return []string{captureplane.TrackLayerHigh.RID(), captureplane.TrackLayerMedium.RID(), captureplane.TrackLayerLow.RID()}
-	default:
-		return nil
+func decodeCallStats(r *http.Request) (callStatsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return callStatsRequest{}, err
 	}
+	request := callStatsRequest{TenantID: tenantID, Origin: telemetryOrigin(r)}
+	request.Frame = sdktelemetry.DecodeStrict(http.MaxBytesReader(nil, r.Body, CallStatsBodyLimit), &request.Stats)
+	return request, nil
 }
 
-// CallStatsMaximum is the inclusive upper bound of a numeric sample field.
-func CallStatsMaximum(field string) int64 {
-	switch field {
-	case "send_loss_pct", "recv_loss_pct":
-		return 100
-	case "send_bitrate_kbps", "recv_bitrate_kbps":
-		return 100000
-	case "rtt_ms", "send_jitter_ms", "recv_jitter_ms":
-		return 60000
-	case "recv_height":
-		return 4320
-	case "freeze_count":
-		return 10000
-	case "freeze_ms":
-		return 600000
-	case "recv_paused_videos", "recv_hidden_videos":
-		return 64
-	default:
-		return 0
-	}
-}
-
-func decodeCallStats(r *http.Request) (callStats, error) {
-	r.Body = http.MaxBytesReader(nil, r.Body, CallStatsBodyLimit)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var stats callStats
-	if err := decoder.Decode(&stats); err != nil {
-		var oversized *http.MaxBytesError
-		if errors.As(err, &oversized) {
-			return stats, rejectCallStats(r, "body_too_large")
-		}
-		return stats, rejectCallStats(r, "schema")
-	}
-	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
-		return stats, rejectCallStats(r, "trailing_json")
-	}
-	if stats.Version != 1 {
-		return stats, rejectCallStats(r, "version")
-	}
-	if len(stats.Samples) == 0 || len(stats.Samples) > CallStatsSampleLimit {
-		return stats, rejectCallStats(r, "sample_count")
-	}
-	for _, sample := range stats.Samples {
-		if reason := validateCallStatsSample(sample); reason != "" {
-			return stats, rejectCallStats(r, reason)
-		}
-	}
-	return stats, nil
-}
-
-func validateCallStatsSample(sample callStatsSample) string {
-	if sample.ElapsedMS < 0 || sample.ElapsedMS > CallStatsMaxElapsedMS {
-		return "elapsed_range"
-	}
-	if sample.WindowMS < CallStatsMinWindowMS || sample.WindowMS > CallStatsMaxWindowMS {
-		return "window_range"
-	}
-	for field, value := range map[string]string{"connection_type": sample.ConnectionType, "local_candidate_type": sample.LocalCandidateType, "remote_candidate_type": sample.RemoteCandidateType, "relay_protocol": sample.RelayProtocol, "send_layer": sample.SendLayer} {
-		if (value != "" || field == "connection_type") && !slices.Contains(CallStatsFieldEnum(field), value) {
-			return field + "_label"
-		}
-	}
-	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos, "recv_hidden_videos": sample.RecvHiddenVideos} {
-		if value != nil && (*value < 0 || *value > CallStatsMaximum(field)) {
-			return field + "_range"
-		}
-	}
-	for field, value := range map[string]*float64{"send_loss_pct": sample.SendLossPct, "recv_loss_pct": sample.RecvLossPct} {
-		if value != nil && (*value < 0 || *value > float64(CallStatsMaximum(field))) {
-			return field + "_range"
-		}
-	}
-	return ""
-}
-
-// Reasons are fixed labels from the checks above, never decoder errors or input.
-func rejectCallStats(r *http.Request, reason string) error {
-	ctx := r.Context()
-	observability.RequestLogger(ctx).WarnContext(ctx, "Rejected SDK call stats", "event", "sdk.call_stats.rejected", "reason", reason)
-	if reason == "body_too_large" {
-		return apiErrorPayloadTooLarge
-	}
-	return apiErrorInvalidRequest
-}
-
-var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)
-
-// callStatsOrigin names where the call came from without an address: the edge's
-// country code and coarse browser and OS families from the User-Agent.
-func callStatsOrigin(r *http.Request) []any {
-	country := r.Header.Get("CF-IPCountry")
-	if !countryCode.MatchString(country) {
-		country = "unknown"
-	}
-	family, system := clientFamilies(r.UserAgent())
-	return []any{"country", country, "client_family", family, "client_os", system}
-}
-
-func clientFamilies(userAgent string) (family, system string) {
-	has := func(parts ...string) bool {
-		for _, part := range parts {
-			if strings.Contains(userAgent, part) {
-				return true
-			}
-		}
-		return false
-	}
+// telemetry translates the samples into call_stats events, numbered in the order listed.
+func (stats callStats) telemetry(clientSessionID string) (sdktelemetry.Request, string) {
 	switch {
-	case has("Edg/", "EdgA/", "EdgiOS/"):
-		family = "edge"
-	case has("OPR/"):
-		family = "opera"
-	case has("SamsungBrowser/"):
-		family = "samsung"
-	case has("Firefox/", "FxiOS/"):
-		family = "firefox"
-	case has("Chrome/", "CriOS/"):
-		family = "chrome"
-	case has("Safari/"):
-		family = "safari"
-	case has("CFNetwork", "okhttp", "ReactNative", "Hermes"):
-		family = "native"
-	default:
-		family = "other"
+	case stats.Version != sdktelemetry.Version:
+		return sdktelemetry.Request{}, "version"
+	case len(stats.Samples) == 0 || len(stats.Samples) > CallStatsSampleLimit:
+		return sdktelemetry.Request{}, "sample_count"
 	}
-	switch {
-	case has("Android", "okhttp"):
-		system = "android"
-	case has("iPhone", "iPad", "iPod", "CFNetwork"):
-		system = "ios"
-	case has("Windows"):
-		system = "windows"
-	case has("CrOS"):
-		system = "chromeos"
-	case has("Mac OS X", "Macintosh"):
-		system = "macos"
-	case has("Linux", "X11"):
-		system = "linux"
-	default:
-		system = "other"
+	batch := sdktelemetry.Request{Version: sdktelemetry.Version, ClientSessionID: clientSessionID}
+	for index, sample := range stats.Samples {
+		event := sdktelemetry.Event{Type: "call_stats", Seq: int64(index), ElapsedMS: sample.ElapsedMS, Stats: &sdktelemetry.StatsWindow{
+			WindowMS: sample.WindowMS, ConnectionType: sample.ConnectionType,
+			LocalCandidateType: sample.LocalCandidateType, RemoteCandidateType: sample.RemoteCandidateType, RelayProtocol: sample.RelayProtocol,
+			RTTMS: sample.RTTMS, SendBitrateKbps: sample.SendBitrateKbps, SendLossPct: sample.SendLossPct, SendJitterMS: sample.SendJitterMS,
+			SendLayer: sample.SendLayer, RecvBitrateKbps: sample.RecvBitrateKbps, RecvLossPct: sample.RecvLossPct, RecvJitterMS: sample.RecvJitterMS,
+			RecvHeight: sample.RecvHeight, FreezeCount: sample.FreezeCount, FreezeMS: sample.FreezeMS,
+			RecvPausedVideos: sample.RecvPausedVideos, RecvHiddenVideos: sample.RecvHiddenVideos,
+		}}
+		if reason := event.Check(); reason != "" {
+			return sdktelemetry.Request{}, reason
+		}
+		batch.Events = append(batch.Events, event)
 	}
-	return family, system
+	return batch, ""
 }
 
 // A still-valid signed credential is enough: the last summary is sent as the
 // participant leaves, after active presence may already be gone.
 func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequest, struct{}] {
-	return Post("/v1/tenants/{tenant_id}/call-stats", "uploadCallStats", func(r *http.Request) (callStatsRequest, error) {
-		tenantID, err := tenantIDRequest(r)
-		if err != nil {
-			return callStatsRequest{}, err
-		}
-		stats, err := decodeCallStats(r)
-		return callStatsRequest{TenantID: tenantID, Stats: stats, Origin: callStatsOrigin(r)}, err
-	},
+	return Post("/v1/tenants/{tenant_id}/call-stats", "uploadCallStats", decodeCallStats,
 		func(ctx context.Context, request callStatsRequest) (struct{}, error) {
 			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
@@ -248,40 +105,20 @@ func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequ
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
-			// provider and provider_session_id join a summary to the media plane's own
-			// logs for the same connection, which the API's SFU adapters log under these keys.
-			logger := observability.RequestLogger(ctx).With(request.Origin...).With(
-				"event", "sdk.call_stats",
-				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-				"provider", subject.Provider, "provider_session_id", subject.ConnectionID,
-				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))))
-			for _, sample := range request.Stats.Samples {
-				logger.InfoContext(ctx, "SDK call stats", sample.logAttributes()...)
+			legacy := []any{"legacy_route", "call-stats"}
+			if request.Frame != "" {
+				return struct{}{}, rejectTelemetry(ctx, subject, request.Frame, legacy...)
 			}
+			sessionID, _ := observability.SessionIDFromContext(ctx)
+			batch, reason := request.Stats.telemetry(sessionID)
+			if reason != "" {
+				return struct{}{}, rejectTelemetry(ctx, subject, reason, legacy...)
+			}
+			logTelemetry(ctx, subject, batch, request.Origin, legacy...)
 			return struct{}{}, nil
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(callStatsParticipantLimit).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("CallStatsRequest", callStats{}, CallStatsBodyLimit).
 		RespondsNoBody(http.StatusNoContent).
 		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
-}
-
-func (s callStatsSample) logAttributes() []any {
-	attributes := []any{"elapsed_ms", s.ElapsedMS, "window_ms", s.WindowMS, "connection_type", s.ConnectionType}
-	for key, value := range map[string]string{"local_candidate_type": s.LocalCandidateType, "remote_candidate_type": s.RemoteCandidateType, "relay_protocol": s.RelayProtocol, "send_layer": s.SendLayer} {
-		if value != "" {
-			attributes = append(attributes, key, value)
-		}
-	}
-	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos, "recv_hidden_videos": s.RecvHiddenVideos} {
-		if value != nil {
-			attributes = append(attributes, key, *value)
-		}
-	}
-	for key, value := range map[string]*float64{"send_loss_pct": s.SendLossPct, "recv_loss_pct": s.RecvLossPct} {
-		if value != nil {
-			attributes = append(attributes, key, *value)
-		}
-	}
-	return attributes
 }

@@ -21,6 +21,7 @@ local key = KEYS[1]
 local limit = tonumber(ARGV[1])
 local window_ms = tonumber(ARGV[2])
 local now_ms = tonumber(ARGV[3])
+local cost = tonumber(ARGV[4])
 local ttl_ms = window_ms * 2
 
 local bucket = redis.call("HMGET", key, "tokens", "observed_ms")
@@ -39,11 +40,11 @@ end
 
 local allowed = 0
 local retry_ms = 0
-if tokens >= 1 then
+if tokens >= cost then
   allowed = 1
-  tokens = tokens - 1
+  tokens = tokens - cost
 else
-  retry_ms = math.ceil((1 - tokens) * window_ms / limit)
+  retry_ms = math.ceil((cost - tokens) * window_ms / limit)
 end
 
 redis.call("HSET", key, "tokens", tokens, "observed_ms", now_ms)
@@ -85,6 +86,7 @@ func (l RateLimiter) Allow(ctx context.Context, key string, policy ratelimit.Pol
 		policy.Limit,
 		policy.Window.Milliseconds(),
 		now.UnixMilli(),
+		policy.Units(),
 	).Result()
 	if err != nil {
 		span.RecordError(errors.New("redis rate limit request failed"))

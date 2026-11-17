@@ -45,15 +45,36 @@ When a lifecycle boundary changes, update the ledger and the executable proof in
 
 A source it cannot read is a gap, never a silent omission. When no rule finds a failure and a source is missing, the verdict says "Not enough evidence" and names the source. `--strict` exits 3 when it finds a bad call and 2 when it found none but evidence is missing. The thresholds are in `infrastructure/observability/production-alerts/call-verdict.json`. A new event needs a rule in `scripts/diagnose-call/rules.mjs` and, to read well, a line in `scripts/diagnose-call/timeline.mjs`. CI runs the checker's tests when those files, or the code that writes the rows it reads, change.
 
-## Reading call quality
+## Client telemetry
 
-The SDK uploads a WebRTC summary about every minute while a call is open, and the API logs each one as `sdk.call_stats` with the session ID, a hashed participant ID, the connection type (`udp`, `tcp`, `turn`), loss, jitter, RTT, freezes and the provider. `provider_session_id` is the connection ID the Chalk SFU logs and returns from `/inspect`, so a device joins to the SFU's view of the same connection.
+Every SDK client reports what it saw of its own calls to one route, `POST /v1/tenants/{tenant_id}/telemetry`, and the API logs one Axiom row per event with `event = "sdk.telemetry"`. The body is `{ version: 1, client_session_id, events: [...] }`, at most 100 events and 64 KiB. A client session is one run of the SDK on a device, and its events carry a `seq` that counts up from 0 and `elapsed_ms` since the session began, so a gap in `seq` is loss that the server can see. Started events (a join started, the device went offline, the page was hidden) are sent at once, so the server learns of an abandoned join or a lost connection even when the client never sends its end.
 
-To compare providers after a cutover step, or when a connection report points at one provider:
+The credential is the participant's media credential, the earliest one the join holds. The API accepts it until it expires, including after the participant leaves, because it only stamps rows and the byte budget bounds it, so no new token type or scope exists. The tenant, Space, Episode, participant, provider and `provider_session_id` on a row come from the credential, never from the body. The body carries only closed labels and bounded numbers: an event with an unknown field, a label outside its list, a number outside its range or a field its type does not allow is rejected alone, logged as `sdk.telemetry.rejected` with a fixed `reason`, the `type` and the `seq`, and counted in the response (`{ accepted, rejected }`). The rest of the batch is kept. Tokens, SDP, device labels, addresses, free text and audio content cannot pass.
+
+Each participant has one budget of 4 MiB of request bytes, which refills over 135 minutes. It holds a 135-minute, six-person call with room to spare, and sibling paths share it: a batch costs its bytes whether its events are valid or not. A refused batch gets 429 with `Retry-After` and is logged as `rate_limit.exhausted` with the policy `v1.telemetry.intake`.
+
+| Row field | Meaning |
+| --- | --- |
+| `type` | The event type. The closed list is `sdktelemetry.EventTypes()`. |
+| `seq`, `elapsed_ms` | Order and client monotonic time. |
+| `client_session_id`, `received_at` | The client session, and the server's receive time of the batch. |
+| `state`, `step`, `outcome`, `code`, `phase`, `mechanism`, `attempt`, `duration_ms`, `outage_ms`, `heartbeat_gap_ms`, `close_code`, `http_status` | Join, state and recovery steps. `mechanism` is `ice_restart`, `media_reconnect`, `sync_reconnect`, `sync_digest` or `access_refresh`, and `outage_ms` is how long the media or Sync was down. A join is `space_join_span` with `outcome` `started`, `succeeded`, `failed` or `cancelled`. |
+| `media_error_kind`, `media_error_step`, `granted_audio`, `granted_video`, `source`, `publication_state`, `projection_state`, `receive_state`, `track_state`, `element_state`, `play_result`, `receive_counts`, `receivers_stopped`, `bundle_tag_held`, `upload_failure` | Media paths and chat uploads. |
+| `end_reason` | On `call_ended`: `left`, `episode_ended`, `time_limit`, `removed`, `connection_lost`, `join_failed` or `page_closed`. |
+| `platform_state` | On `platform_changed`: `online`, `offline`, `hidden`, `visible`, `background` or `foreground`. |
+| `action`, `op_id` | On `media_intent` and `media_result`: `mute`, `unmute`, `publish`, `unpublish`, `subscribe`, `unsubscribe`, `share_start` or `share_stop`. The result's `duration_ms` is the click to the acknowledgment, and `op_id` is the id the SFU logs for the same operation. |
+| `error_name`, `device_kind`, `permission_state` | On `device_failed`: the DOMException name, the kind of device and the permission state. |
+| `render_cause` | On `render_crashed`. |
+| `dropped` | On `telemetry_dropped`: how many events the client's outbox lost to its byte bound. |
+| `window_ms`, `gap`, `connection_type`, `rtt_ms`, `send_*`, `recv_*`, `freeze_*`, `tracks` | On `call_stats`: one window of stats. A window with `gap` (`offline`, `hidden`, `poll_failed` or `dropped`) measured nothing and has no other stat, and its `window_ms` is how long it lasted. It is never zero-filled. `tracks` holds, for each remote track, the `mid` the SFU logs, `kind`, `packets`, `lost`, `audio_energy` in thousandths of the browser's unit and `playout`. |
+
+A window with `window_ms` between 1 s and 60 s is measured. Check `samples` before you trust a percentile, because each window covers about 30 seconds. `recv_paused_videos` rising with low receive bitrate means the Chalk SFU is protecting audio on a slow link, not a receive stall. `recv_hidden_videos` rising with low receive bitrate means the viewer's own tab or tile hid the video, which sends nothing on purpose: the SDK pauses or closes a hidden video after 5 s (15 s for a hidden page) and brings it back when the tile shows again.
+
+To compare providers after a cutover step, or when a failure points at one provider:
 
 ```apl
 ['<api-log-dataset>']
-| where ['attributes.event'] == "sdk.call_stats"
+| where ['attributes.event'] == "sdk.telemetry" and ['attributes.type'] == "call_stats" and isnull(['attributes.gap'])
 | extend provider = iff(tostring(['attributes.provider']) in ("cloudflare_sfu", "chalk_sfu"), tostring(['attributes.provider']), "unknown")
 | summarize
     samples = count(),
@@ -64,11 +85,13 @@ To compare providers after a cutover step, or when a connection report points at
   by provider
 ```
 
-Check `samples` before you trust a percentile, because each sample covers about ten seconds. Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Nothing pages on this query.
+Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Nothing pages on this query.
 
-A rising `recv_paused_videos` with low receive bitrate means the Chalk SFU is protecting audio on a slow link. It is not a receive stall. A rising `recv_hidden_videos` with low receive bitrate means the viewer's own tab or tile hid the video, which sends nothing on purpose: the SDK pauses or closes a hidden video after 5 s (15 s for a hidden page) and brings it back when the tile shows again.
+**Completeness of one client session.** Group the rows by `client_session_id`. The first `seq` should be 0 (a later first `seq` lost the start), the `seq` values should have no gap (each gap is loss: a refused batch, a `telemetry_dropped` count, or a client that died before it sent), and the last event of a clean session is `call_ended`. A session with `join` `started` and no later join event is an abandoned join. After a leave, the client may still send until its credential expires, so wait five minutes before you call a session cut short.
 
-A failed chat file upload is reported as `chat_upload_failed` (trigger `upload_failed`) on the connection-report endpoint, with `upload_failure` naming where it broke: `initiate_failed` or `finalize_failed` (an API error), `storage_rejected` (storage answered with `http_status`), or `storage_unreachable` (the browser got no HTTP answer from storage: a network failure or a CORS block). `storage_unreachable` from a browser that otherwise works means the bucket CORS rule is wrong. The report needs an open call connection, so a chat outside a call does not report.
+A failed chat file upload is `chat_upload_failed`, with `upload_failure` naming where it broke: `initiate_failed` or `finalize_failed` (an API error), `storage_rejected` (storage answered with `http_status`), or `storage_unreachable` (the browser got no HTTP answer from storage: a network failure or a CORS block). `storage_unreachable` from a browser that otherwise works means the bucket CORS rule is wrong.
+
+SDKs from before client telemetry (mobile 3.0.6 and older embedders) still post to `/connection-reports` and `/call-stats`. The API translates their reports into the same rows, numbers their events in the order listed, and marks each row `legacy_route`. Both routes and their translators are deleted when those SDKs are gone.
 
 ## Follow one Participant through the Chalk SFU
 
