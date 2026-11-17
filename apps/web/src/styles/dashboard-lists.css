@@ -633,7 +633,7 @@
   inset-block-start: 0;
   inset-block-end: 22px;
   width: 2px;
-  margin-inline-start: -1px;
+  transform: translateX(-50%);
   background: var(--chalk-text);
   pointer-events: none;
 }
