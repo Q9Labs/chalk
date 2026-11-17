@@ -73,7 +73,7 @@ function sessionsSql(episodeId, since) {
   const { row, join } = scoped(episodeId, since);
   return join([
     row(
-      "'db:media_session:' || left(s.connection_id, 12)",
+      "'db:media_session:' || s.connection_id",
       "s.ended_at",
       "db.media_session",
       "'participant_id', s.participant_id, 'generation', s.generation, 'connection_id', s.connection_id, 'cause', s.cause, 'outcome', s.outcome, 'connected', s.connected, 'lifetime_ms', s.lifetime_ms, 'connect_ms', s.connect_ms, 'disconnects', s.disconnects, 'outage_ms', s.outage_ms",

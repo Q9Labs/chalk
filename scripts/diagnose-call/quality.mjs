@@ -79,7 +79,7 @@ function egressInterval(a, b, transport) {
     low: number(b, "low_layer"),
     paused: number(b, "paused_subscriptions"),
     transport: after !== undefined && before !== undefined,
-    dropped: before && after ? growth(before, after, "dropped") : undefined,
+    dropped: before && after ? (attr(a, "media_kind") === "video" ? growth(before, after, "dropped") : 0) : undefined,
     repairsCut: before && after ? growth(before, after, "repairs_cut") : undefined,
     estimateBps: after ? number(after, "estimate_bps") : undefined,
     queuedBytes: after ? number(after, "queued_bytes") : undefined,
@@ -270,7 +270,7 @@ export function viewerLinkClean(call, run, thresholds) {
 
 /** The node's account of a publisher's uplink during a run: undefined when the node logged no ingress for the senders or they were clean. */
 export function senderUplinkCause(call, run, senders, thresholds) {
-  const tracks = mediaOf(call).ingress.filter((track) => senders.has(track.participant));
+  const tracks = mediaOf(call).ingress.filter((track) => senders.has(track.participant) && track.kind === "video");
   for (const track of tracks) {
     const bad = runsOf(
       track.intervals.filter((interval) => interval.to > run.from && interval.from < run.to),

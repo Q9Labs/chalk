@@ -45,7 +45,7 @@ export function unmutesOf(call) {
   const unmutes = heldRows
     .filter((row) => flag(row, "held") === false)
     .map((held) => {
-      const same = (row) => row.participant === held.participant && number(row, "generation") === number(held, "generation") && attr(row, "source") === attr(held, "source") && number(row, "unmute_seq") === number(held, "unmute_seq");
+      const same = (row) => row.participant === held.participant && row.connection === held.connection && number(row, "generation") === number(held, "generation") && attr(row, "source") === attr(held, "source") && number(row, "unmute_seq") === number(held, "unmute_seq");
       return { publisher: held.participant, generation: number(held, "generation"), source: attr(held, "source"), seq: number(held, "unmute_seq"), at: held.time, held, voiced: rows.find((row) => row.event === "sfu.unmute.first_voiced" && same(row) && row.time >= held.time), forwards: [] };
     });
   for (const row of rows.filter((candidate) => candidate.event === "sfu.unmute.first_forwarded")) {

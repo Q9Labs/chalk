@@ -51,6 +51,11 @@ test("a failed control call to the node is the node's fault on a 5xx and the req
   const failure = (status) => diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "subscribe", status, code: "problem" })]);
   assert.equal(kind(failure(503), "control_failed").side, "SFU");
   assert.equal(kind(failure(409), "control_failed").side, "API");
+  const gone = diagnose([...scenarios["clean call"](), f.node(50, "sfu.control.failed", "viewer", "conn-view", { operation: "unsubscribe", status: 404, code: "session_gone" })]);
+  assert.equal(
+    gone.findings.some((one) => one.kind === "control_failed"),
+    false,
+  );
 });
 
 test("the durable outcome of a call Axiom no longer holds is read: a session that ended while down, and a recovery known by its total", () => {
@@ -61,7 +66,7 @@ test("the durable outcome of a call Axiom no longer holds is read: a session tha
   assert.match(dropped.notes.join("\n"), /down 41 s in 1 drop/u);
   const recovered = kind(result, "recovered_drop");
   assert.ok(recovered.benign);
-  assert.match(recovered.experience, /2 times \(14 s in all, longest 7 s\)/u);
+  assert.match(recovered.experience, /2 times \(14 s in all\)/u);
   assert.match(recovered.cause, /only the durable total is kept/u);
   assert.ok(result.gaps.some((gap) => gap.source === "sfu" && gap.blocks && /durable outcome of its media sessions was read/u.test(gap.what)));
   assert.equal(strictCode(result), 3);

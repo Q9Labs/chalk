@@ -77,7 +77,7 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
 
   const [logRows, statRows, syncRows] = await Promise.all([
     tolerate("The log dataset", "axiom", async () => note("The query by Episode id", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)} and not (${MEDIA_STATS})`)), []),
-    tolerate("The node's media stats", "axiom", async () => note("The query for the node's media stats", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)} and ${MEDIA_STATS}`)), []),
+    tolerate("The node's media stats", "sfu", async () => note("The query for the node's media stats", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)} and ${MEDIA_STATS}`)), []),
     tolerate("The trace dataset", "sync", async () => note("The Sync span query", await ask(traces)(`search ${JSON.stringify(episodeId)}`)), []),
   ]);
 

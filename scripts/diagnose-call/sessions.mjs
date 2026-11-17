@@ -134,11 +134,10 @@ function recoveredDrops(call) {
     const first = timed ? Math.min(...timed.map((drop) => drop.from)) : (recovery.rows[0]?.time ?? 0);
     const last = timed ? Math.max(...timed.map((drop) => drop.to)) : first;
     const lengths = recovery.drops.map((drop) => drop.ms);
-    const longest = Math.max(...lengths);
     const total = lengths.reduce((sum, ms) => sum + ms, 0);
-    const rejoined = timed ? rejoinsDuring(call, recovery.participant, first, last) : [];
+    const rejoined = timed ? [...new Set(timed.flatMap((drop) => rejoinsDuring(call, recovery.participant, drop.from, drop.to)))] : [];
     const once = `${seconds(total)} s`;
-    const lengthText = lengths.length === 1 ? once : `${lengths.length} times (${once} in all, longest ${seconds(longest)} s)`;
+    const lengthText = lengths.length === 1 ? once : `${lengths.length} times (${once} in all)`;
     const experience = `lost its media path for ${lengthText}${timed ? ` at ${clock(first)} UTC` : ""} and ${rejoined.length > 0 ? "recovered, but other Participants had to rejoin meanwhile" : "recovered without rejoining"}`;
     const rejoinNote = rejoined.length > 0 ? [`${new Set(rejoined.map((row) => row.participant)).size} other Participants started a new session while it was down, so the recovery was not on its own`] : [];
     const why = cause(
@@ -156,7 +155,7 @@ function recoveredDrops(call) {
 /** `sfu.control.failed`: a control call to the node that failed, with the HTTP status and problem code. A 5xx is the node's, a 4xx is the request's. */
 function controlFailures(call) {
   return call.rows
-    .filter((row) => row.event === "sfu.control.failed")
+    .filter((row) => row.event === "sfu.control.failed" && attr(row, "code") !== "session_gone")
     .map((row) => {
       const status = number(row, "status");
       const side = status >= 500 ? "SFU" : "API";
