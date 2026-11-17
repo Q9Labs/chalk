@@ -19,6 +19,13 @@ func operatorContext(t *testing.T, actor, reason string) context.Context {
 	return mediaplane.WithChangeOrigin(t.Context(), mediaplane.ChangeOrigin{Actor: actor, Reason: reason, TraceID: proofTraceID})
 }
 
+// seedArtifactPolicy gives the Tenant the policy row every real Tenant has, which UpdateTenant joins.
+func seedArtifactPolicy(t *testing.T, pool *pgxpool.Pool, tenant utilities.ID) {
+	t.Helper()
+	mustExec(t, pool, `insert into tenant_artifact_policies (tenant_id) values ($1) on conflict do nothing`, tenant.Bytes())
+	t.Cleanup(func() { mustExec(t, pool, `delete from tenant_artifact_policies where tenant_id=$1`, tenant.Bytes()) })
+}
+
 type trailRow struct {
 	Scope, Old, New, Actor, Reason, Trace string
 }
@@ -68,6 +75,7 @@ func TestEveryPlaneWriterLeavesARow(t *testing.T) {
 		t.Fatalf("seeding a Tenant and Space on no plane left rows: %+v", got)
 	}
 	chalk, cloudflare := "chalk_sfu", "cf_sfu"
+	seedArtifactPolicy(t, pool, tenant)
 
 	// The operator command sets the Tenant default and says why.
 	if _, err := NewTenantOperator(pool).SetDefaultMediaPlane(operatorContext(t, "hasan", "pilot"), tenant, &chalk); err != nil {
@@ -112,6 +120,7 @@ func TestChangeLedgerAnnouncesEachChangeOnce(t *testing.T) {
 	pool := settingsPool(t)
 	tenant, _ := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
 	chalk := "chalk_sfu"
+	seedArtifactPolicy(t, pool, tenant)
 	if _, err := NewTenantOperator(pool).SetDefaultMediaPlane(operatorContext(t, "hasan", "pilot"), tenant, &chalk); err != nil {
 		t.Fatal(err)
 	}

@@ -238,7 +238,9 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 		rows = append(rows, strings.Join([]string{scope, before, after, actor, reason}, " "))
 	}
 	trail.Close()
-	want := []string{"tenant inherit chalk_sfu test proof", "space chalk_sfu inherit test proof", "tenant chalk_sfu inherit test proof"}
+	// The first two rows are the two Spaces the test inserted already stored on chalk_sfu, by a
+	// writer that names nobody.
+	want := []string{"space inherit chalk_sfu unattributed unattributed", "space inherit chalk_sfu unattributed unattributed", "tenant inherit chalk_sfu test proof", "space chalk_sfu inherit test proof", "tenant chalk_sfu inherit test proof"}
 	if strings.Join(rows, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("trail = %q, want %q", rows, want)
 	}
