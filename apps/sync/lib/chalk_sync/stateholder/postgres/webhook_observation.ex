@@ -59,7 +59,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
               "external_operation"
             )
 
-            if OperationTable.is_episode_end_name(name), do: observe_episode_end(episode)
+            observe_episode_end(episode, name)
 
           _ ->
             :ok
@@ -90,7 +90,11 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
 
   # The Episode row is the one record of why a call ended, whichever operation
   # ended it. Only the finalizing call finds the row ended.
-  defp observe_episode_end(episode) do
+  defp observe_episode_end(episode, name) do
+    if OperationTable.is_episode_end_name(name), do: observe_ended_row(episode), else: :ok
+  end
+
+  defp observe_ended_row(episode) do
     Database.guard(
       fn ->
         case Postgrex.query(

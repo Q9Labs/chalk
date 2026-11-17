@@ -11,6 +11,8 @@ import { runJourney } from "./journey.mjs";
 
 const minute = 60_000;
 const wait = 60_000;
+// The server ends a call at its deadline on its own schedule, and a deadline cannot sit within a minute of the start.
+const endWait = 120_000;
 
 await runJourney("call-length", async ({ step, person, shot, system, seed, web }) => {
   const ada = await person("Ada Fixture", 1);
@@ -95,7 +97,7 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
     const episode = await episodeOf(nav);
     // A deadline may not fall within a minute of the start, so a fast run waits for it.
     await setDeadline(nav, episode.id, Math.max(Date.now() + 15_000, Date.parse(episode.created_at) + 62_000));
-    await page.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor({ timeout: wait });
+    await page.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor({ timeout: endWait });
     const ended = await untilEpisode(nav, (item) => item.status === "ended", "the call did not end");
     if (ended.end_reason !== "maximum_duration") throw new Error(`end_reason was ${ended.end_reason}`);
     await shot(ada, "time-limit-ended");

@@ -1,4 +1,4 @@
-import type { ClientFailure, PublicSpaceArrival, SessionExit } from "@q9labsai/chalk-client";
+import type { CallEndReason, ClientFailure, PublicSpaceArrival, SessionExit } from "@q9labsai/chalk-client";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
 import type { ReportProblem } from "../../lib/problem-reports";
 import type { EntryFailure } from "./entry-failure";
@@ -21,7 +21,7 @@ export type ExitPhase = "left" | SessionExit;
 /** What the leave screen shows once a call is over. `release` gives the arrival back and can be called again after it fails. */
 export type EndedCall = {
   readonly phase: ExitPhase;
-  readonly endReason?: string;
+  readonly endReason?: CallEndReason;
   /** Whether the call limit screen offers sign-up, because an account would allow a longer call. */
   readonly offerSignUp: boolean;
   readonly tenantId: string | undefined;
