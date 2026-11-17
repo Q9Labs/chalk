@@ -4,8 +4,13 @@
   "starved_ms": 30000,
   "healthy_loss_pct": 2,
   "healthy_rtt_ms": 300,
+  "healthy_jitter_ms": 30,
+  "quality_ms": 20000,
+  "unmute_audible_p95_ms": 2250,
+  "unmute_visible_p95_ms": 1250,
   "early_replacement_ms": 20000,
   "available_floor_kbps": 400,
   "leave_slack_ms": 5000,
-  "window_days": 14
+  "database_window_days": 365,
+  "axiom_retention_days": 30
 }

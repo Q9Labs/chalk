@@ -14,7 +14,7 @@ export function verdictLine(findings, gaps, call) {
   const absent = missing.length > 0 ? ` Missing sources: ${missing.join(", ")}.` : "";
   if (call.rows.length === 0) return `Not enough evidence: no row reached this Episode.${absent}`;
   if (bad.length === 0) {
-    const noted = note ? ` Participant ${short(note.participant)} ${note.experience} (stage: ${note.stage}, side: ${note.side}, by choice).` : "";
+    const noted = note ? ` Participant ${short(note.participant)} ${note.experience} (stage: ${note.stage}, side: ${note.side}, ${note.kind === "recovered_drop" ? "recovered on its own" : "by choice"}).` : "";
     if (missing.length > 0) return `Not enough evidence: the rules found no failure in the rows that were read.${noted}${absent}`;
     return `No bad call found by the rules in the rows of every source.${noted}`;
   }

@@ -1,8 +1,11 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { short } from "./call.mjs";
-import { attr, number } from "./rows.mjs";
+import { attr, flag, number } from "./rows.mjs";
+import { unmuteGaps, unmutesOf } from "./unmute.mjs";
 
 const SOURCE_NAMES = { client: "client (sdk.* rows)", api: "API", sfu: "SFU node", db: "database", sync: "Sync", recorder: "recorder" };
+/** The node writes media stats every 10 s for a connected session, so a session that stayed up for three periods and has none lost them. */
+const STATS_SPAN_MS = 30_000;
 const SOURCE_ORDER = ["client", "api", "sfu", "sync", "recorder", "db"];
 
 /**
@@ -22,7 +25,7 @@ export function gapsOf(call, sourceGaps, unjoined) {
   absent("client", "no client rows reached the Episode, so what each Participant sent and received is unknown");
   absent("api", "no API rows reached the Episode, so joins, refreshes and replacements are unknown");
   if (call.provider === "cloudflare_sfu") add("sfu", false, "the Episode used the Cloudflare media plane, whose own logs this command does not read, so no node evidence exists for it");
-  else absent("sfu", "no SFU node rows reached the Episode, so the node's side of every media problem is unproved");
+  else absent("sfu", `no SFU node rows reached the Episode${call.ends.some((end) => end.durable) ? " (the durable outcome of its media sessions was read, but not the node's events or media stats)" : ""}, so the node's side of every media problem is unproved`);
   absent("db", "no database rows were read, so who joined, when they left and why is unknown");
   absent("sync", "no Sync rows reached the Episode, so socket and admission problems are unknown");
   if (call.rows.some((row) => row.event === "db.recording") && !has("recorder")) add("recorder", false, "the Episode has a recording row but no recorder rows reached it, so the recorder's side is unknown");
@@ -42,7 +45,30 @@ export function gapsOf(call, sourceGaps, unjoined) {
       if (connection && !call.nodeEvents(connection).length) add("sfu", false, `no SFU rows name the connection of Participant ${short(participant)}, so the node's side of their media is unproved`);
     }
   }
+  if (has("sfu")) gaps.push(...telemetryGaps(call));
+  gaps.push(...unmuteGaps(unmutesOf(call)));
   if (unjoined > 0) add("api", false, `${unjoined} call-event rows named no Episode, connection or journey id, so they were not used`);
+  return gaps;
+}
+
+/**
+ * Telemetry the node should have exported and the rows do not hold: a durable outcome with no closing line, and a connected session with no media stats.
+ * Both mean the export dropped rows (the `chalk.sfu.telemetry.dropped` counter says how many, and the `logs_export` gauge says whether the exporter was healthy),
+ * so they are not read as a call that had no quality problem.
+ */
+function telemetryGaps(call) {
+  const gaps = [];
+  const unlogged = call.ends.filter((end) => end.durable && !end.logged);
+  if (unlogged.length > 0)
+    gaps.push({
+      source: "sfu",
+      blocks: false,
+      what: `${unlogged.length} media sessions have a durable outcome but no sfu.session.closed line in the log dataset (${unlogged.map((end) => short(end.participant)).join(", ")}): the node's own closing line was lost, so check chalk.sfu.telemetry.dropped and the logs_export gauge for the node and time`,
+    });
+  const measured = new Set(call.rows.filter((row) => row.event.startsWith("sfu.media.")).map((row) => row.connection));
+  const bare = call.ends.filter((end) => flag(end.row, "connected") !== false && number(end.row, "connect_ms") !== undefined && (number(end.row, "lifetime_ms") ?? 0) >= STATS_SPAN_MS && !measured.has(end.connection));
+  if (bare.length > 0)
+    gaps.push({ source: "sfu", blocks: false, what: `${bare.length} connected sessions have no sfu.media.* stats rows (${bare.map((end) => short(end.participant)).join(", ")}), so their loss, jitter and bitrate are unknown: the stats were not exported, check chalk.sfu.telemetry.dropped` });
   return gaps;
 }
 

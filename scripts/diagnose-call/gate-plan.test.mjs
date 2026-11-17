@@ -11,6 +11,11 @@ test("the call diagnosis runs when the code that writes the rows it reads change
   for (const file of [
     "features/media/sfu/internal/media/trail.go",
     "features/media/sfu/internal/telemetry/export.go",
+    "features/media/sfu/internal/media/stats.go",
+    "features/media/sfu/internal/media/unmute.go",
+    "features/media/sfu/internal/media/outcome.go",
+    "apps/api/internal/adapters/postgres/session_outcomes.go",
+    "apps/api/internal/adapters/postgres/plane_audit.go",
     "apps/api/internal/httpapi/call_stats.go",
     "apps/api/internal/observability/media_replacement.go",
     "sdks/typescript/client/src/connection/report.ts",
