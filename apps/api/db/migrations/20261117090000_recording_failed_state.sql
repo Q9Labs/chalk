@@ -84,6 +84,10 @@ from recording_pipelines pipelines
 where pipelines.recording_id = recordings.id and pipelines.state = 'terminal_failure'
   and recordings.status in ('pending', 'processing');
 
+-- A failed Recording that predates the code (a seed or hand-edited row) gets the generic one.
+update recordings set failure_code = 'recording_failed', failed_at = coalesce(failed_at, updated_at)
+where status = 'failed' and failure_code is null;
+
 alter table recordings validate constraint recordings_failure_state_check;
 
 -- +goose Down

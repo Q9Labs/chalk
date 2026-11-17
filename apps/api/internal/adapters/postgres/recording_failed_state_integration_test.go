@@ -11,13 +11,12 @@ import (
 )
 
 type recordingFacts struct {
-	status         string
-	failureCode    *string
-	hasFailedAt    bool
-	pipelineState  string
-	mediaBundles   *int
-	gapBundles     *int
-	capturedRender bool
+	status        string
+	failureCode   *string
+	hasFailedAt   bool
+	pipelineState string
+	mediaBundles  *int
+	gapBundles    *int
 }
 
 func readRecordingFacts(t *testing.T, tx pgx.Tx, recordingID utilities.ID) recordingFacts {
