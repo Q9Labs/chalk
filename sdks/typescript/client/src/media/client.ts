@@ -32,7 +32,7 @@ import { createCallStatsCollector, type CallStatsCollector } from "./call-stats"
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
-import { classifyMediaFailure, mediaResultFailure } from "./failure-diagnostics";
+import { classifyMediaFailure, pullShortfall, subscribeFailure } from "./failure-diagnostics";
 import { observeOperation } from "../telemetry/operation";
 import type {
   CloudflareSFUBootstrap,
@@ -117,7 +117,6 @@ const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
 // resume operation rather than trusting Chalk's registry as provider liveness.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
-const subscribeFailure = (error: unknown) => mediaResultFailure(error, "sfu_subscriptions");
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
@@ -1881,7 +1880,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     if (publications.length === 0) return [];
-    return observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullTracks(publications, generation), subscribeFailure);
+    return observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullTracks(publications, generation), subscribeFailure, pullShortfall(publications.length));
   }
   async #pullTracks(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     this.#receiveHealth.pullRequested(publications.map((publication) => publication.publicationId));

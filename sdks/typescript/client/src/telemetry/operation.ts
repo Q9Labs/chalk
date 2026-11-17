@@ -19,7 +19,7 @@ export function startOperation(record: (draft: TelemetryDraft) => void, clock: {
  * Runs one media operation and tells the sink how it started and how it ended. `failure` says in closed words why a rejection happened,
  * and the rejection itself goes on to the caller unchanged.
  */
-export function observeOperation<T>(sink: TelemetrySink | undefined, start: MediaOperationStart, run: () => Promise<T>, failure: (error: unknown) => Omit<MediaOperationResult, "outcome">): Promise<T> {
+export function observeOperation<T>(sink: TelemetrySink | undefined, start: MediaOperationStart, run: () => Promise<T>, failure: (error: unknown) => Omit<MediaOperationResult, "outcome">, shortfall?: (result: T) => Omit<MediaOperationResult, "outcome"> | undefined): Promise<T> {
   const done = sink?.operation(start);
   if (!done) return run();
   let pending: Promise<T>;
@@ -31,7 +31,8 @@ export function observeOperation<T>(sink: TelemetrySink | undefined, start: Medi
   }
   return pending.then(
     (result) => {
-      done({ outcome: "succeeded" });
+      const partial = shortfall?.(result);
+      done(partial ? { outcome: "failed", ...partial } : { outcome: "succeeded" });
       return result;
     },
     (error: unknown) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMediaFailure, markMediaFailure, markMediaFetchFailure, mediaResultFailure } from "./failure-diagnostics";
+import { classifyMediaFailure, markMediaFailure, markMediaFetchFailure, mediaResultFailure, pullShortfall } from "./failure-diagnostics";
 import { CloudflareSFUError, type CloudflareSFUSignalingTransport } from "./types";
 import { createCloudflareSFUHTTPTransport } from "./transport";
 
@@ -8,6 +8,11 @@ describe("media failure diagnostics", () => {
     const failure = mediaResultFailure(new CloudflareSFUError("The SFU refused", "signaling_failed", { status: 503 }), "sfu_subscriptions");
     expect(failure).toEqual({ media_error_kind: "CloudflareSFUError", http_status: 503 });
     expect(Object.keys(mediaResultFailure(new TypeError("x"), "sfu_subscriptions"))).not.toContain("media_error_step");
+  });
+
+  it("calls a pull that returned fewer tracks than it asked for a failure", () => {
+    expect(pullShortfall(2)([{}])).toEqual({ media_error_kind: "CloudflareSFUError" });
+    expect(pullShortfall(2)([{}, {}])).toBeUndefined();
   });
 
   it("preserves a marked fetch failure that has its own transport cause", async () => {

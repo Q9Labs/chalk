@@ -115,7 +115,12 @@ export function LocalSpace({
   useEffect(() => onPageFailure((cause) => client.telemetry.renderCrashed(cause)), [client]);
   return (
     <main className="h-full min-h-0 w-full overflow-hidden">
-      <CallErrorBoundary onCrash={() => client.telemetry.renderCrashed("render_error")}>
+      <CallErrorBoundary
+        onCrash={() => {
+          client.telemetry.renderCrashed("render_error");
+          void release().catch(() => undefined);
+        }}
+      >
         {homeError ? <p role="alert">{homeError}</p> : null}
         <Chalk
           timeLimit={{

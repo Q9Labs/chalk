@@ -11,13 +11,16 @@ const TARGETS: Record<LiveTargetName, { readonly source: MediaOperationStart["so
   set_screen_share_enabled: { source: "screen_video", actions: ["share_stop", "share_start"] },
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Tells the outbox what a live target asked for and how it ended. The operation id is the one on the Sync frame, so the
- * client's two events and Sync's `sync.media.intent` line for the same click share one id.
+ * client's two events and Sync's `sync.media.intent` line for the same click share one id. A custom request id that is
+ * not a UUID is not a valid telemetry id, so that click gets a fresh one and the join to Sync is lost.
  */
 export function reportLiveTarget<T>(sink: TelemetrySink | undefined, name: LiveTargetName, enabled: boolean, requestId: string, send: () => Promise<T>): Promise<T> {
   const target = TARGETS[name];
-  return observeOperation(sink, { action: target.actions[enabled ? 1 : 0], source: target.source, op_id: requestId }, send, (error) => ({ code: failureCode(error) }));
+  return observeOperation(sink, { action: target.actions[enabled ? 1 : 0], source: target.source, ...(UUID.test(requestId) ? { op_id: requestId } : {}) }, send, (error) => ({ code: failureCode(error) }));
 }
 
 function failureCode(error: unknown): MediaOperationResult["code"] {

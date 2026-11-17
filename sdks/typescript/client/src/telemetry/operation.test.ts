@@ -4,10 +4,10 @@ import { createTestOutbox } from "./outbox.test.helpers";
 
 const failure = () => ({ code: "command_rejected" as const });
 
-async function results(run: () => Promise<unknown>) {
+async function results(run: () => Promise<unknown>, shortfall?: (result: unknown) => { readonly code: "command_rejected" } | undefined) {
   const test = createTestOutbox();
   try {
-    await observeOperation(test.outbox, { action: "mute", source: "microphone" }, run, failure);
+    await observeOperation(test.outbox, { action: "mute", source: "microphone" }, run, failure, shortfall);
   } catch {
     // The caller sees the failure unchanged; this test reads what the outbox got.
   }
@@ -29,5 +29,14 @@ describe("observeOperation", () => {
       throw new Error("too many in flight");
     };
     expect(await results(throwing)).toEqual([{ type: "media_intent" }, { type: "media_result", outcome: "failed", code: "command_rejected" }]);
+  });
+
+  it("records a failed result when the run resolves but the caller reports a shortfall", async () => {
+    expect(
+      await results(
+        async () => [],
+        () => ({ code: "command_rejected" }),
+      ),
+    ).toEqual([{ type: "media_intent" }, { type: "media_result", outcome: "failed", code: "command_rejected" }]);
   });
 });

@@ -21,6 +21,13 @@ describe("reportLiveTarget", () => {
     ]);
   });
 
+  it("gives a request id that is not a UUID a fresh telemetry id, so the server accepts both events", async () => {
+    const events = await eventsOf((outbox) => reportLiveTarget(outbox, "set_microphone_enabled", true, "custom-request-id", async () => "done"));
+    expect(events).toHaveLength(2);
+    expect(events[0]?.op_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(events[1]?.op_id).toBe(events[0]?.op_id);
+  });
+
   it.each([
     ["set_microphone_enabled", true, "unmute", "microphone"],
     ["set_camera_enabled", true, "publish", "camera"],

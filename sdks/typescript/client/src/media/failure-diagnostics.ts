@@ -55,6 +55,11 @@ export function mediaResultFailure(cause: unknown, fallbackStep: MediaFailureSte
   return typeof http_status === "number" ? { media_error_kind, http_status } : { media_error_kind };
 }
 
+export const subscribeFailure = (cause: unknown) => mediaResultFailure(cause, "sfu_subscriptions");
+
+/** A pull that returns fewer tracks than it asked for failed in part: the SFU reports each refused track in `trackErrors` and still answers. */
+export const pullShortfall = (requested: number) => (pulled: readonly unknown[]) => (pulled.length < requested ? subscribeFailure(new CloudflareSFUError("Cloudflare SFU returned fewer tracks than requested", "media_failed")) : undefined);
+
 export function classifyMediaFailure(cause: unknown, fallbackStep: MediaFailureStep): MediaFailureDiagnostic {
   const { error, step } = unwrapMediaFailure(cause, fallbackStep);
   if (error instanceof CloudflareSFUError) {
