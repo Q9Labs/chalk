@@ -48,7 +48,12 @@ defmodule ChalkSync.Transport.SocketLiveRequestsTest do
       observability: context
     }
 
-    target = %{operation_id: "op-2", name: "set_microphone_enabled", enabled: false}
+    target = %{
+      operation_id: "7f9c24e8-3b1a-4c55-9d2e-1a2b3c4d5e6f",
+      name: "set_microphone_enabled",
+      enabled: false
+    }
+
     before_ms = System.system_time(:millisecond)
 
     assert {:push, {:text, _frame}, next} = LiveRequests.live_target(target, state)
@@ -60,7 +65,7 @@ defmodule ChalkSync.Transport.SocketLiveRequestsTest do
     assert next.observability.journey_id == context.journey_id
 
     assert %{
-             operation_id: "op-2",
+             operation_id: "7f9c24e8-3b1a-4c55-9d2e-1a2b3c4d5e6f",
              participant_id: "p1",
              source: "microphone",
              enabled: false,
