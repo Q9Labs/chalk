@@ -31,6 +31,9 @@ func TestEventsAreCheckedEachOnItsOwn(t *testing.T) {
 		{"receiver count on another event", `{"type":"access_retry","seq":1,"elapsed_ms":5,"receivers_stopped":1}`, "receivers_stopped_not_allowed"},
 		{"bundle flag on another event", `{"type":"media_state","seq":1,"elapsed_ms":5,"bundle_tag_held":false}`, "bundle_tag_held_not_allowed"},
 		{"unknown type", `{"type":"receivers_dropped","seq":1,"elapsed_ms":5}`, "type"},
+		{"event without a sequence", `{"type":"call_ended","elapsed_ms":5,"end_reason":"left"}`, "seq_missing"},
+		{"null sequence", `{"type":"call_ended","seq":null,"elapsed_ms":5,"end_reason":"left"}`, "seq_missing"},
+		{"event without a time", `{"type":"call_ended","seq":1,"end_reason":"left"}`, "elapsed_ms_missing"},
 		{"storage block", `{"type":"chat_upload_failed","seq":1,"elapsed_ms":5,"upload_failure":"storage_unreachable"}`, ""},
 		{"unknown upload failure", `{"type":"chat_upload_failed","seq":1,"elapsed_ms":5,"upload_failure":"cors"}`, "upload_failure_label"},
 		{"upload failure on another event", `{"type":"access_retry","seq":1,"elapsed_ms":5,"upload_failure":"initiate_failed"}`, "upload_failure_not_allowed"},
@@ -93,9 +96,13 @@ func TestARejectedEventStillSaysWhichOneItWas(t *testing.T) {
 	if eventType, seq := event.Seen(); eventType != "recovery_attempt" || seq != 41 {
 		t.Fatalf("seen = %q %d, want recovery_attempt 41", eventType, seq)
 	}
-	forged := decodeEvent(t, `{"type":"the user typed this","seq":2,"elapsed_ms":1,"message":"x"}`)
-	if eventType, _ := forged.Seen(); eventType != "" {
-		t.Fatalf("a type outside the closed list reached a log row: %q", eventType)
+	for _, raw := range []string{
+		`{"type":"the user typed this","seq":2,"elapsed_ms":1,"message":"x"}`,
+		`{"type":"private@example.test","seq":2,"elapsed_ms":1}`,
+	} {
+		if eventType, _ := decodeEvent(t, raw).Seen(); eventType != "" {
+			t.Fatalf("a type outside the closed list reached a log row: %q", eventType)
+		}
 	}
 }
 

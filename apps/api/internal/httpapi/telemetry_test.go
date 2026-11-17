@@ -180,6 +180,9 @@ func TestOldRoutesWriteTelemetryRows(t *testing.T) {
 	if call["type"] != "call_stats" || call["connection_type"] != "turn" || call["window_ms"] != float64(30000) || call["legacy_route"] != "call-stats" {
 		t.Errorf("call stats row = %v", call)
 	}
+	if code := f.post("/connection-reports", `{"version":1,"trigger":"private@example.test","events":[]}`).Code; code != http.StatusBadRequest || strings.Contains(f.logs.String(), "private@example.test") {
+		t.Errorf("report with a free-text trigger: status = %d, want 400 and nothing of it in the log", code)
+	}
 	if code := f.post("/connection-reports", `{"version":1,"trigger":"join_failed","events":[{"event":"access_retry","elapsed_ms":5,"receivers_stopped":1}]}`).Code; code != http.StatusBadRequest {
 		t.Errorf("event with a field of another type: status = %d, want 400", code)
 	}

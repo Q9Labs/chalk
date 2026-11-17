@@ -134,17 +134,43 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := decoder.Decode(&decoded); err != nil {
 		*e = Event{rejection: "schema"}
 		_ = json.Unmarshal(data, &e.seen)
-		if !slices.Contains(EventTypes(), e.seen.Type) {
-			e.seen.Type = ""
-		}
+		e.seen = e.seen.known()
 		return nil
 	}
 	*e = Event(decoded)
-	e.rejection = e.Check()
+	e.rejection = orderingMissing(data)
+	if e.rejection == "" {
+		e.rejection = e.Check()
+	}
 	if e.rejection != "" {
-		e.seen = seenEvent{Type: e.Type, Seq: e.Seq}
+		e.seen = seenEvent{Type: e.Type, Seq: e.Seq}.known()
 	}
 	return nil
+}
+
+// known drops a type outside the closed list, so a rejected event cannot put its own text in a log row.
+func (s seenEvent) known() seenEvent {
+	if _, ok := specs[s.Type]; !ok {
+		s.Type = ""
+	}
+	return s
+}
+
+// orderingMissing names the sequence field an event left out or set to null. Without it a zero
+// would stand in for an order the client never gave, and hide a gap in the session.
+func orderingMissing(data []byte) string {
+	var given struct {
+		Seq       *int64 `json:"seq"`
+		ElapsedMS *int64 `json:"elapsed_ms"`
+	}
+	_ = json.Unmarshal(data, &given)
+	switch {
+	case given.Seq == nil:
+		return "seq_missing"
+	case given.ElapsedMS == nil:
+		return "elapsed_ms_missing"
+	}
+	return ""
 }
 
 // Check returns the reason the event is invalid, or an empty string. The reason is

@@ -178,6 +178,22 @@ test("a connection that was lost or ran out of recovery attempts is a finding th
   assert.match(finding.cause, /timeout at sfu_subscriptions/u);
 });
 
+test("client telemetry rows give the same findings as the old connection reports", () => {
+  const f = fixture();
+  const row = (type, fields) => f.api(40, "sdk.telemetry", "viewer", { type, connection_id: "conn-view", ...fields });
+  const stuck = diagnose([row("audio_receive_stuck", { source: "microphone", receive_state: "pull_succeeded", duration_ms: 20_000 })]).findings.find((finding) => finding.kind === "audio_stuck");
+  assert.match(stuck.cause, /pulled but never arrived/u);
+  assert.equal(stuck.side, "SFU");
+  const join = diagnose([row("space_join_span", { step: "join", outcome: "failed" }), row("space_join_span", { step: "start_media", outcome: "failed", code: "media_start_failed" })]).findings.filter((finding) => finding.kind === "failed_join");
+  assert.equal(join.length, 1, "the outer join span adds no second finding");
+  assert.match(join[0].cause, /failed at start_media/u);
+  const lost = diagnose([row("recovery_exhausted", { code: "media_recovery_exhausted", media_error_step: "sfu_subscriptions" })]).findings[0];
+  assert.equal(lost.kind, "connection_lost");
+  assert.match(lost.experience, /ran out of attempts/u);
+  const replay = row("audio_receive_stuck", { source: "microphone", receive_state: "pull_succeeded", legacy_route: "connection-reports", trigger: "audio_receive_summary" });
+  assert.equal(diagnose([replay]).findings.filter((finding) => finding.kind === "audio_stuck").length, 0);
+});
+
 test("a connection replaced as dormant that the node never resumed is named as the cause of the silence, and the Participant comes from the connection", () => {
   const silence = diagnose(dormantReplacementCall()).findings.find((finding) => finding.kind === "media_silence");
   assert.equal(silence.participant, hashOf.viewer);

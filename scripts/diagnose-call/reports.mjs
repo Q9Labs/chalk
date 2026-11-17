@@ -65,7 +65,7 @@ function lostConnection(_call, report, events) {
   const failed = events.findLast((event) => event.outcome === "failed" || event.code || event.media_error_step);
   const side = MEDIA_STEP_SIDES[failed?.media_error_step] ?? "client";
   const last = `the client's last failure was ${failed?.code ?? failed?.media_error_kind ?? "not logged"}${failed?.media_error_step ? ` at ${failed.media_error_step}` : ""}`;
-  const experience = reportOf(report).trigger === "recovery_exhausted" ? "ran out of attempts to recover its connection" : "lost its connection";
+  const experience = reportOf(report).trigger === "recovery_exhausted" || attr(report, "type") === "recovery_exhausted" ? "ran out of attempts to recover its connection" : "lost its connection";
   return [finding("connection_lost", report.participant, report.time, report.time, experience, cause(last, "reconnecting", side), [report])];
 }
 
@@ -74,10 +74,39 @@ const REPORT_RULES = { join_failed: failedJoin, audio_receive_stuck: stuckAudio,
 
 /** What the client itself reported: join failures, lost connections, audio it could not hear. */
 export function clientReports(call) {
+  return [...connectionReports(call), ...telemetryReports(call)];
+}
+
+/** Rows of an API from before client telemetry: one row holds a whole report. */
+function connectionReports(call) {
   return call.rows
     .filter((row) => row.event === "sdk.connection_report")
     .flatMap((report) => {
       const { trigger, events } = reportOf(report);
       return (REPORT_RULES[trigger] ?? (() => []))(call, report, events);
+    });
+}
+
+const EVENT_FIELDS = ["outcome", "step", "code", "state", "source", "receive_state", "duration_ms", "media_error_kind", "media_error_step"];
+
+/** One telemetry row is one client event, and the rules read it as a report of that one event. */
+const EVENT_RULES = {
+  // The outer `join` span fails with its inner step, which names the cause, so only the inner step is a finding.
+  space_join_span: (call, row, [event]) => (event.outcome === "failed" && event.step in JOIN_STEP_SIDES ? failedJoin(call, row, [event]) : []),
+  connection_failed: (call, row, [event]) => (event.state === "joining" ? failedJoin(call, row, [event]) : lostConnection(call, row, [event])),
+  recovery_exhausted: lostConnection,
+  audio_receive_stuck: stuckAudio,
+  media_projection_mismatch: projectionMismatch,
+};
+
+function telemetryReports(call) {
+  return call.rows
+    .filter((row) => row.event === "sdk.telemetry")
+    .flatMap((row) => {
+      const type = attr(row, "type");
+      // An SDK from before client telemetry replays earlier events in its periodic summary; the event's own report is the one that counts.
+      if (attr(row, "legacy_route") && attr(row, "trigger") === "audio_receive_summary") return [];
+      const event = { event: type, ...Object.fromEntries(EVENT_FIELDS.map((name) => [name, attr(row, name)]).filter(([, value]) => value !== undefined)) };
+      return (EVENT_RULES[type] ?? (() => []))(call, row, [event]);
     });
 }

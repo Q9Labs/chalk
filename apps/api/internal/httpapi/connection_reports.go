@@ -85,6 +85,14 @@ func ConnectionReportFieldEnum(field string) []string {
 	}
 }
 
+// loggableTrigger keeps a trigger out of a log row unless it is one the old SDKs send.
+func loggableTrigger(trigger string) string {
+	if slices.Contains(connectionReportTriggers, trigger) {
+		return trigger
+	}
+	return "unknown"
+}
+
 func decodeConnectionReport(r *http.Request) (connectionReportRequest, error) {
 	tenantID, err := tenantIDRequest(r)
 	if err != nil {
@@ -144,7 +152,7 @@ func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connec
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
-			legacy := []any{"legacy_route", "connection-reports", "trigger", request.Report.Trigger}
+			legacy := []any{"legacy_route", "connection-reports", "trigger", loggableTrigger(request.Report.Trigger)}
 			if request.Frame != "" {
 				return struct{}{}, rejectTelemetry(ctx, subject, request.Frame, legacy...)
 			}

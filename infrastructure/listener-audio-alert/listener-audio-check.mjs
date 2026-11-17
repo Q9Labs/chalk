@@ -15,7 +15,10 @@ export const SIGNALS = [
 ];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
-const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.type ? ` and ['attributes.type'] == ${literal(signal.type)}` : ""})`;
+// An SDK from before client telemetry replays its earlier events in every report, so a row from the old route counts only
+// when its report was sent for this type. A current SDK sends each event once.
+const typeClause = (type) => ` and ['attributes.type'] == ${literal(type)} and (isempty(['attributes.legacy_route']) or ['attributes.trigger'] == ${literal(type)})`;
+const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.type ? typeClause(signal.type) : ""})`;
 
 export function query(dataset) {
   return `[${literal(dataset)}]
