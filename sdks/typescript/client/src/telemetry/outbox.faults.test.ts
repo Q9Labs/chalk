@@ -57,7 +57,10 @@ describe("faults at the boundaries of a credential and of a request", () => {
 
   it("does not refresh the credential of another call when an old call's events are rejected, and counts them lost", async () => {
     const test = createTestOutbox({ bound: false });
-    const refresh = vi.fn(async () => undefined);
+    let refreshes = 0;
+    const refresh = async () => {
+      refreshes += 1;
+    };
     let grant = credential();
     test.outbox.bind({ current: () => grant, refresh });
     test.outbox.record(failed);
@@ -67,7 +70,7 @@ describe("faults at the boundaries of a credential and of a request", () => {
     await test.outbox.flush();
     test.outbox.record(failed);
     await test.outbox.flush();
-    expect(refresh).not.toHaveBeenCalled();
+    expect(refreshes).toBe(0);
     expect(test.requests.map((request) => request.send.token)).toEqual(["token", "token-2", "token-2"]);
     expect(test.accepted.map((event) => [event.seq, event.dropped])).toEqual([
       [1, undefined],

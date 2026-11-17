@@ -123,15 +123,18 @@ describe("faults", () => {
 
   it("refreshes once for a credential the server keeps rejecting, then backs off and keeps the events", async () => {
     const test = createTestOutbox({ random: () => 0.5 });
-    const refresh = vi.fn(async () => undefined);
+    let refreshes = 0;
+    const refresh = async () => {
+      refreshes += 1;
+    };
     test.outbox.bind({ current: () => credential(), refresh });
     test.answer(...Array.from({ length: 4 }, () => ({ status: 401, retryAfterMs: 0 })));
     test.outbox.record({ type: "connection_failed", code: "media_start_failed" });
     await seconds(2);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refreshes).toBe(1);
     expect(test.requests).toHaveLength(2);
     await seconds(60);
-    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(refreshes).toBe(1);
     expect(test.requests).toHaveLength(5);
     expect(test.accepted.map((event) => event.seq)).toEqual([0]);
     expectUnbrokenSequence(test.accepted);
