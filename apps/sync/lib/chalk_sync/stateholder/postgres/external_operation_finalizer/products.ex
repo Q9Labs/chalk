@@ -13,6 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: SQL
   alias ChalkSync.Stateholder.Postgres.SQL.Lifecycle, as: LifecycleSQL
+  alias ChalkSync.Stateholder.Postgres.SQL.RecordingReservation, as: RecordingReservationSQL
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.UUID
   require OperationTable
@@ -245,7 +246,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
       [[_id]] ->
         Postgrex.query!(
           connection,
-          SQL.move_recording_reservations(),
+          RecordingReservationSQL.move(),
           Scope.episode(episode) ++
             [external.payload["deadlineAtMs"], RecordingPlane.maximum_duration_seconds()]
         )

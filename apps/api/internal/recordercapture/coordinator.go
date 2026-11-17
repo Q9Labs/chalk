@@ -137,10 +137,9 @@ func (c *Coordinator) Bootstrap(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.checkDeadlineLocked(); err != nil {
 		return Snapshot{}, err
 	}
-	if err := c.authority.validatePlan(plan); err != nil {
+	if err := c.authority.adoptPlan(plan); err != nil {
 		return Snapshot{}, err
 	}
-	c.authority.FollowPlan(plan)
 	if c.bootstrapped {
 		if c.plan.Revision() == plan.Revision() && stringFingerprint(c.plan) == stringFingerprint(plan) {
 			return c.snapshotLocked(), nil
@@ -210,10 +209,9 @@ func (c *Coordinator) Reconcile(ctx context.Context, plan captureplan.Plan) (Sna
 	if err := c.checkDeadlineLocked(); err != nil {
 		return Snapshot{}, err
 	}
-	if err := c.authority.validatePlan(plan); err != nil {
+	if err := c.authority.adoptPlan(plan); err != nil {
 		return Snapshot{}, err
 	}
-	c.authority.FollowPlan(plan)
 	if !c.bootstrapped {
 		return Snapshot{}, ErrNotBootstrapped
 	}

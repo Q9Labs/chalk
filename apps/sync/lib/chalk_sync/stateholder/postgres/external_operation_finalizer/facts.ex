@@ -111,11 +111,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Facts do
   defp expected_fact(%{name: name} = external, _state)
        when name in [:tenant_set_deadline, :extend_episode],
        do:
-      {:deadline_changed,
-       %{
-         "deadline_at_ms" => external.payload["deadlineAtMs"],
-         "deadline_generation" => external.deadline_generation
-       }}
+         {:deadline_changed,
+          %{
+            "deadline_at_ms" => external.payload["deadlineAtMs"],
+            "deadline_generation" => external.deadline_generation
+          }}
 
   defp expected_fact(_external, _state), do: :invalid
 

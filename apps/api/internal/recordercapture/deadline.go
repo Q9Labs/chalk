@@ -50,6 +50,15 @@ func (a AttemptAuthority) DeadlineMoved() <-chan struct{} {
 	return a.Deadline.moved
 }
 
+// adoptPlan checks a capture plan against the authority and, when it is valid, follows it.
+func (a AttemptAuthority) adoptPlan(plan captureplan.Plan) error {
+	if err := a.validatePlan(plan); err != nil {
+		return err
+	}
+	a.FollowPlan(plan)
+	return nil
+}
+
 // FollowPlan moves the end to the plan's when that is later. A plan never shortens a capture:
 // an earlier end for the call stops the Recording through the Episode's own end.
 func (a AttemptAuthority) FollowPlan(plan captureplan.Plan) {

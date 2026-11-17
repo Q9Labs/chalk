@@ -199,25 +199,6 @@ func (a *PionCaptureAttempt) Close(ctx context.Context) error {
 	return a.closeLocal(closeCtx, nil, recordingbundle.CloseReasonExplicit)
 }
 
-// watchDeadline calls expire when the capture's end passes. A later capture plan moves the end,
-// so the wait starts over each time it does.
-func watchDeadline(ctx context.Context, authority recordercapture.AttemptAuthority, after func(time.Duration) <-chan time.Time, now func() time.Time, expire func()) {
-	for {
-		armed := authority.EndsAt()
-		select {
-		case <-after(armed.Sub(now().UTC())):
-			if authority.EndsAt().After(armed) {
-				continue
-			}
-			expire()
-			return
-		case <-authority.DeadlineMoved():
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	if a == nil || a.peer == nil || a.coordinator == nil || a.plans == nil || a.keys == nil || a.objects == nil || a.bundles == nil || a.lifecycle == nil {
 		return ErrInvalidCaptureAttempt
