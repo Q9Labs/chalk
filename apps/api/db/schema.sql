@@ -471,7 +471,8 @@ begin
             and jsonb_typeof(old_binding) = 'object'
             and jsonb_typeof(new_binding) = 'object'
             and old_binding ->> 'provider' = 'chalk_sfu'
-            and (new_binding - placement) = (old_binding - placement)
+            and ((new_binding - placement) = (old_binding - placement)
+                 or (new_binding - placement) = (old_binding - placement - 'selected_by'))
             and coalesce((new_binding ->> 'generation')::bigint, 0) = coalesce((old_binding ->> 'generation')::bigint, 0) + 1,
             false
         ) then

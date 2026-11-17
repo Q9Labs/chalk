@@ -41,7 +41,8 @@ insert into media_plane_changes (changed_at, scope, old_plane, new_plane, actor,
 select changed_at, 'kill_switch',
        case when paused_before then 'cf_sfu' else 'inherit' end,
        case when paused_after then 'cf_sfu' else 'inherit' end,
-       operator, reason, now()
+       left(coalesce(nullif(btrim(operator), ''), 'unattributed'), 200),
+       left(coalesce(nullif(btrim(reason), ''), 'unattributed'), 500), now()
 from media_plane_kill_switch_changes
 order by id;
 
@@ -177,9 +178,52 @@ create trigger media_plane_kill_switch_audit
     for each row
     execute function audit_media_plane_kill_switch();
 
+-- The release before this one moves a live Episode by rewriting its binding through a struct that does
+-- not know selected_by, so the rewritten binding has lost it. The fence accepts that one difference
+-- (selected_by dropped, never changed or added) so a rollback cannot strand an Episode born on this release.
+-- +goose StatementBegin
+create or replace function protect_immutable_episode_policy()
+returns trigger
+language plpgsql
+as $$
+declare
+    old_binding jsonb := old.config_snapshot -> 'media_plane_binding';
+    new_binding jsonb := new.config_snapshot -> 'media_plane_binding';
+    placement constant text[] := array['node', 'node_incarnation', 'placement_reason', 'generation', 'previous_allocations'];
+begin
+    if new.config_snapshot is distinct from old.config_snapshot then
+        if not coalesce(
+            (new.config_snapshot - 'media_plane_binding') = (old.config_snapshot - 'media_plane_binding')
+            and jsonb_typeof(old_binding) = 'object'
+            and jsonb_typeof(new_binding) = 'object'
+            and old_binding ->> 'provider' = 'chalk_sfu'
+            and ((new_binding - placement) = (old_binding - placement)
+                 or (new_binding - placement) = (old_binding - placement - 'selected_by'))
+            and coalesce((new_binding ->> 'generation')::bigint, 0) = coalesce((old_binding ->> 'generation')::bigint, 0) + 1,
+            false
+        ) then
+            raise exception 'Episode config_snapshot is immutable';
+        end if;
+    end if;
+
+    if new.deadline_at is distinct from old.deadline_at
+        then
+        if new.deadline_generation <> old.deadline_generation + 1 then
+            raise exception 'Episode deadline mutation must advance generation exactly once';
+        end if;
+    elsif new.deadline_generation is distinct from old.deadline_generation then
+            raise exception 'Episode deadline generation cannot change without a deadline mutation';
+    end if;
+
+    return new;
+end;
+$$;
+-- +goose StatementEnd
+
 -- +goose Down
 -- The changes recorded while this migration was applied go with the table. The kill switch history
 -- from before it is still in media_plane_kill_switch_changes, which this migration leaves in place.
+-- The relaxed fence stays: it only accepts a binding without selected_by, so the previous release runs on it.
 drop trigger media_plane_kill_switch_audit on media_plane_kill_switch;
 drop trigger tenants_audit_media_plane_update on tenants;
 drop trigger tenants_audit_media_plane_insert on tenants;
