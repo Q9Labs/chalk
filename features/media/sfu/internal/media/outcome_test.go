@@ -238,11 +238,10 @@ func TestEndEpisodeWaitsForClosesAlreadyUnderWay(t *testing.T) {
 	leaving := node.newTestSession(t, testScope("alice", 1))
 	node.remove(leaving)
 	node.closing.Add(1)
-	go func() {
-		time.Sleep(50 * time.Millisecond)
+	time.AfterFunc(50*time.Millisecond, func() {
 		node.recordOutcome(leaving, ClosePeerClosed, OutcomeLeft, connectivity{Connected: true}, time.Now())
 		node.closing.Add(-1)
-	}()
+	})
 	if response := node.EndEpisode("tenant-1", "episode-1", Trace{}); len(response.Sessions) != 1 {
 		t.Fatalf("the end reported %d outcomes, want the one that was closing", len(response.Sessions))
 	}
