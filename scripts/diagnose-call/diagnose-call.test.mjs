@@ -17,6 +17,14 @@ test("the real row shape keeps the node's service and event: a flat null never o
   assert.equal(node.connection, "conn-view");
 });
 
+test("a client telemetry stats row reads as a call stats sample, and its other events stay client rows", () => {
+  const row = (type) => normalizeRow({ _time: "2026-11-17T10:00:00Z", attributes: { event: "sdk.telemetry", type, provider_session_id: "conn-view", window_ms: 30_000 } });
+  assert.equal(row("call_stats").event, "sdk.call_stats");
+  assert.equal(row("call_stats").connection, "conn-view");
+  assert.equal(row("call_ended").event, "sdk.telemetry");
+  assert.equal(row("call_ended").source, "client");
+});
+
 test("a never_connected session is named with what the node saw, the side it cannot prove, and the rows that prove it", () => {
   const result = diagnose(neverConnectedCall());
   const finding = result.findings.find((candidate) => candidate.kind === "never_connected");

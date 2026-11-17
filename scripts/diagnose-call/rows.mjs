@@ -55,7 +55,9 @@ const LEGACY_EVENTS = {
 };
 
 function eventOf(flat) {
-  return String(field(flat, "event") ?? LEGACY_EVENTS[flat.body] ?? flat.name ?? flat.body ?? "");
+  const event = String(field(flat, "event") ?? LEGACY_EVENTS[flat.body] ?? flat.name ?? flat.body ?? "");
+  // Client telemetry logs one row per event; its stats rows are the samples this checker has always read as `sdk.call_stats`.
+  return event === "sdk.telemetry" && field(flat, "type") === "call_stats" ? "sdk.call_stats" : event;
 }
 
 /** The service that wrote the row: where the API and the node report it, and where a span's resource carries it. */
