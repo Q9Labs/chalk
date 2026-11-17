@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { capturedClient, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { stream, track } from "./capture.test.helpers";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
@@ -24,6 +25,47 @@ describe("device_failed telemetry", () => {
       const failed = platform.outbox.accepted.filter((event) => event.type === "device_failed");
       expect(failed.map(({ error_name, device_kind, permission_state }) => ({ error_name, device_kind, permission_state }))).toEqual(expected);
       expect(JSON.stringify(platform.outbox.accepted)).not.toContain("Private message");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("a refused screen share reports the device that would not open", async () => {
+    const platform = createCoreTestPlatform();
+    const client = capturedClient(platform, mediaTrack(), {
+      mediaDevices: {
+        releaseTrack: (stopped) => stopped.stop(),
+        getDisplayMedia: async () => {
+          throw new DOMException("Private message for the person", "NotAllowedError");
+        },
+      },
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setScreenShareEnabled(true).catch(() => undefined);
+      await platform.outbox.outbox.flush();
+      const failed = platform.outbox.accepted.filter((event) => event.type === "device_failed");
+      expect(failed.map(({ error_name, device_kind, permission_state }) => ({ error_name, device_kind, permission_state }))).toEqual([{ error_name: "NotAllowedError", device_kind: "screen", permission_state: "denied" }]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("a Sync refusal after the device opened is not a device failure", async () => {
+    const platform = createCoreTestPlatform();
+    const client = capturedClient(platform, mediaTrack(), {
+      mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getDisplayMedia: async () => mediaStream(mediaTrack()) },
+      sync: {
+        setScreenShareEnabled: async () => {
+          throw new Error("refused");
+        },
+      },
+    });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await client.media.setScreenShareEnabled(true).catch(() => undefined);
+      await platform.outbox.outbox.flush();
+      expect(platform.outbox.accepted.filter((event) => event.type === "device_failed")).toEqual([]);
     } finally {
       client.dispose();
     }

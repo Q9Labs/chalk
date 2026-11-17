@@ -22,7 +22,14 @@ export function startOperation(record: (draft: TelemetryDraft) => void, clock: {
 export function observeOperation<T>(sink: TelemetrySink | undefined, start: MediaOperationStart, run: () => Promise<T>, failure: (error: unknown) => Omit<MediaOperationResult, "outcome">): Promise<T> {
   const done = sink?.operation(start);
   if (!done) return run();
-  return run().then(
+  let pending: Promise<T>;
+  try {
+    pending = run();
+  } catch (error) {
+    done({ outcome: "failed", ...failure(error) });
+    throw error;
+  }
+  return pending.then(
     (result) => {
       done({ outcome: "succeeded" });
       return result;

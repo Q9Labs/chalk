@@ -49,6 +49,12 @@ function unwrapMediaFailure(error: unknown, step: MediaFailureStep) {
   return { error, step };
 }
 
+/** The part of a classified failure that a `media_result` event may carry. The step belongs to other events. */
+export function mediaResultFailure(cause: unknown, fallbackStep: MediaFailureStep): { readonly media_error_kind: MediaFailureDiagnostic["media_error_kind"]; readonly http_status?: number } {
+  const { media_error_kind, http_status } = classifyMediaFailure(cause, fallbackStep);
+  return typeof http_status === "number" ? { media_error_kind, http_status } : { media_error_kind };
+}
+
 export function classifyMediaFailure(cause: unknown, fallbackStep: MediaFailureStep): MediaFailureDiagnostic {
   const { error, step } = unwrapMediaFailure(cause, fallbackStep);
   if (error instanceof CloudflareSFUError) {

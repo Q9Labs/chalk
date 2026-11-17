@@ -1,4 +1,4 @@
-import type { TelemetryDraft, TelemetryEvent } from "../telemetry/types";
+import type { TelemetryDraft, TelemetryEvent, TelemetrySink } from "../telemetry/types";
 /** Capture failures describe the recovery, without exposing device labels. */
 export function describeMediaCaptureError(cause: unknown) {
   const name = typeof cause === "object" && cause !== null && "name" in cause ? cause.name : undefined;
@@ -40,6 +40,12 @@ const ERROR_ALIASES: Readonly<Record<string, ErrorName>> = { PermissionDeniedErr
 export function deviceFailedEvent(cause: unknown, deviceKind: NonNullable<TelemetryEvent["device_kind"]>): TelemetryDraft {
   const errorName = errorNameOf(cause);
   return { type: "device_failed", error_name: errorName, device_kind: deviceKind, permission_state: errorName === "NotAllowedError" ? "denied" : "unknown" };
+}
+
+/** Records a device that would not open, then rethrows the cause unchanged. */
+export function failCapture(telemetry: Pick<TelemetrySink, "record"> | undefined, cause: unknown, device: NonNullable<TelemetryEvent["device_kind"]>): never {
+  telemetry?.record(deviceFailedEvent(cause, device));
+  throw cause;
 }
 
 function errorNameOf(cause: unknown): ErrorName {

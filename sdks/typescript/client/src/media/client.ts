@@ -32,7 +32,7 @@ import { createCallStatsCollector, type CallStatsCollector } from "./call-stats"
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
-import { classifyMediaFailure } from "./failure-diagnostics";
+import { classifyMediaFailure, mediaResultFailure } from "./failure-diagnostics";
 import { observeOperation } from "../telemetry/operation";
 import type {
   CloudflareSFUBootstrap,
@@ -117,7 +117,7 @@ const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
 // resume operation rather than trusting Chalk's registry as provider liveness.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
-const subscribeFailure = (error: unknown) => classifyMediaFailure(error, "sfu_subscriptions");
+const subscribeFailure = (error: unknown) => mediaResultFailure(error, "sfu_subscriptions");
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
@@ -402,7 +402,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#pullPublishedTried = true;
     try {
-      return await this.#pullPublishedAudio(pull, generation);
+      return await observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullPublishedAudio(pull, generation), subscribeFailure);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       // The combined request is an optimisation. After a failure, list and pull the old way, so the reconcile

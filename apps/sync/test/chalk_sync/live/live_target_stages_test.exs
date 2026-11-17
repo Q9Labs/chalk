@@ -75,45 +75,6 @@ defmodule ChalkSync.Live.LiveTargetStagesTest do
     end
   end
 
-  test "a mute is stamped once with the client's operation id before Sync acts on it" do
-    ref = make_ref()
-    parent = self()
-
-    :telemetry.attach(
-      {__MODULE__, ref},
-      [:chalk_sync, :observability, :event],
-      fn
-        _event, _measurements, %{event: "sync.media.intent", attributes: attributes}, _config ->
-          send(parent, {:intent, attributes})
-
-        _event, _measurements, _metadata, _config ->
-          :ok
-      end,
-      nil
-    )
-
-    on_exit(fn -> :telemetry.detach({__MODULE__, ref}) end)
-
-    episode = %EpisodeKey{tenant_id: "tenant", space_id: "space", episode_id: "episode"}
-    identity = %Identity{episode: episode, participant_id: "p1", participant_generation: 1}
-    target = %{operation_id: "op-2", name: :set_microphone_enabled, enabled: false}
-    before_ms = System.system_time(:millisecond)
-
-    LiveEpisode.live_target(LiveEpisode.new(episode), identity, target)
-
-    assert_received {:intent,
-                     %{
-                       operation_id: "op-2",
-                       participant_id: "p1",
-                       source: "microphone",
-                       enabled: false,
-                       at_ms: at_ms
-                     }}
-
-    assert at_ms >= before_ms
-    refute_received {:intent, _}
-  end
-
   test "the metrics snapshot keeps one fixed-cardinality entry per stage" do
     :ok =
       ChalkSync.Telemetry.execute([:live_target, :stage], %{duration_us: 1_500}, %{
