@@ -1,64 +1,12 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { participantHash, normalizeRow } from "./rows.mjs";
+import { axiom, chunks, quote, withFields } from "./axiom.mjs";
+import { readDatabase } from "./database.mjs";
+import { normalizeRow } from "./rows.mjs";
 
-const run = promisify(execFile);
-const ROW_CAP = 5000;
 const DEADLINE_MS = 40_000;
-const ID = /^[\w.:-]{1,128}$/u;
+const DAY_MS = 86_400_000;
 const CALL_EVENTS = ["http.failure"];
-const CALL_EVENT_PREFIXES = ["sdk.", "media.", "sfu.", "sync."];
-
-const quote = (id) => {
-  if (!ID.test(id)) throw new Error(`refusing to put "${id.slice(0, 20)}" in a query: it is not an id`);
-  return `'${id}'`;
-};
-
-async function axiom({ token, org, dataset, apl, start, end, signal }, fetchImpl) {
-  const response = await fetchImpl("https://api.axiom.co/v1/datasets/_apl?format=legacy", {
-    method: "POST",
-    signal,
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(org ? { "x-axiom-org-id": org } : {}) },
-    body: JSON.stringify({ apl: `['${dataset}'] | ${apl} | take ${ROW_CAP}`, startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString() }),
-  });
-  if (!response.ok) throw new Error(`Axiom answered HTTP ${response.status} for dataset ${dataset}: ${(await response.text()).slice(0, 300)}`);
-  const body = await response.json();
-  return (body.matches ?? []).map((match) => ({ _time: match._time, _rowId: match._rowId, ...match.data }));
-}
-
-/**
- * Runs a query that names optional fields. Axiom refuses a field the dataset has never seen, which is what a dataset
- * looks like before the build that logs the field is deployed; drop that field, say so, and ask again.
- */
-async function withFields(fields, build, run, missing) {
-  const present = new Set(fields);
-  for (let attempt = 0; attempt <= fields.length; attempt += 1) {
-    try {
-      return await run(build(present));
-    } catch (error) {
-      const absent = /invalid field: \\?"attributes\.(\w+)\\?"/u.exec(error.message)?.[1];
-      if (!absent || !present.delete(absent)) throw error;
-      missing.push(`the dataset has no ${absent} field yet, so rows could not be reached through it`);
-    }
-  }
-  return [];
-}
-
-async function database(url, episodeId, signal) {
-  if (!url) return { rows: [], missing: "CHALK_DATABASE_URL is not set, so the Episode and Participant rows were not read" };
-  const sql = `select p.id, p.media_connection_id, coalesce(p.joined_at, e.created_at), e.ended_at, e.id from participants p join episodes e on e.id = p.episode_id where e.id = ${quote(episodeId)}::uuid`;
-  const { stdout } = await run("psql", [url, "-X", "-A", "-t", "-F", "\t", "-c", sql], { signal });
-  const rows = stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [id, connection, joinedAt, , episode] = line.split("\t");
-      return { source: "db", event: "db.participant", time: Date.parse(joinedAt), episode, participant: participantHash(id), connection: connection || undefined, attrs: {} };
-    });
-  return { rows, missing: rows.length === 0 ? `the database has no Participants for Episode ${episodeId}` : undefined };
-}
+const CALL_EVENT_PREFIXES = ["sdk.", "media.", "sfu.", "sync.", "participant."];
 
 function callEventFilter() {
   const prefixes = CALL_EVENT_PREFIXES.map((prefix) => `['attributes.event'] startswith '${prefix}'`);
@@ -67,19 +15,31 @@ function callEventFilter() {
 }
 
 /**
- * Reads every source for one Episode in three passes: by the Episode id, then by the connection, journey and trace ids
- * those rows name, then a probe for call events that name no id at all. The probe only counts rows that cannot be joined;
- * it never joins by time. `start` and `end` only bound how much of the dataset a query scans. One deadline covers every
- * request and the database read; a source that fails or runs past it is listed in `missing` and the verdict reads the rest.
+ * The span of time that holds the Episode. Axiom is asked only for this span, so a query scans an hour or two of the dataset
+ * and not two weeks of it. Without the database there is no Episode time, so the whole read window is scanned.
  */
-export async function readSources({ episodeId, env, fetchImpl = fetch, now = Date.now(), deadlineMs = DEADLINE_MS }) {
-  const missing = [];
+function episodeWindow(dbRows, read) {
+  const episode = dbRows.find((row) => row.event === "db.episode");
+  if (!episode) return read;
+  const started = Date.parse(episode._time);
+  const ended = episode.ended_at ? Date.parse(episode.ended_at) : read.end;
+  return { start: Math.max(read.start, started - 10 * 60_000), end: Math.min(read.end, ended + 60 * 60_000) };
+}
+
+/**
+ * Reads every source for one Episode: the database first (it names the Episode's span and each Participant's connection id), then
+ * Axiom by the Episode id, then by the connection, journey and trace ids those rows name, then a probe for call events that
+ * name no id at all. The probe only counts rows that cannot be joined; it never joins by time. One deadline covers every request
+ * and the database read. A source that fails, is not configured, or is cut off by a cap is a gap in `gaps`, never a silent omission.
+ */
+export async function readSources({ episodeId, env, fetchImpl = fetch, now = Date.now(), deadlineMs = DEADLINE_MS, windowDays, readDb = readDatabase }) {
+  const gaps = [];
   const signal = AbortSignal.timeout(deadlineMs);
-  const tolerate = async (label, work, empty) => {
+  const tolerate = async (label, source, work, empty) => {
     try {
       return await work();
     } catch (error) {
-      missing.push(`${label} could not be read (${signal.aborted ? `the ${deadlineMs / 1000} s deadline passed` : error.message.slice(0, 200)}), so the verdict leaves it out`);
+      gaps.push({ source, blocks: true, what: `${label} could not be read (${signal.aborted ? `the ${deadlineMs / 1000} s deadline passed` : error.message.slice(0, 200)}), so the diagnosis leaves it out` });
       return empty;
     }
   };
@@ -87,56 +47,105 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
   const logs = env.CHALK_LOG_DATASET;
   const traces = env.CHALK_TRACE_DATASET;
   if (!token || !logs) throw new Error("AXIOM_TOKEN and CHALK_LOG_DATASET are required");
-  const start = now - 14 * 86_400_000;
-  const scope = { token, org: env.AXIOM_ORG_ID, start, end: now, signal };
+  const read = { start: now - windowDays * DAY_MS, end: now };
 
-  const [logRows, syncRows, db] = await Promise.all([
-    tolerate("The log dataset", () => axiom({ ...scope, dataset: logs, apl: `where ['attributes.episode_id'] == ${quote(episodeId)}` }, fetchImpl), []),
-    traces ? tolerate("The trace dataset", () => axiom({ ...scope, dataset: traces, apl: `search ${JSON.stringify(episodeId)}` }, fetchImpl), []) : Promise.resolve([]),
-    tolerate("The database", () => database(env.CHALK_DATABASE_URL, episodeId, signal), { rows: [] }),
-  ]);
-  if (!traces) missing.push("CHALK_TRACE_DATASET is not set, so Sync spans were not read");
-  if (db.missing) missing.push(db.missing);
+  const db = await tolerate("The database", "db", () => readDb({ url: env.CHALK_DATABASE_URL, episodeId, since: read.start, signal }), { rows: [], gaps: [] });
+  gaps.push(...db.gaps);
+  const dbRows = db.rows.map((row) => normalizeRow(row, "db"));
+  const span = episodeWindow(db.rows, read);
 
-  const first = [...logRows.map((row) => normalizeRow(row)), ...syncRows.map((row) => normalizeRow(row, "sync")), ...db.rows];
-  const connections = [...new Set(first.map((row) => row.connection).filter(Boolean))].slice(0, 200);
-  const links = [...new Set(first.flatMap((row) => [row.journey, row.trace]).filter(Boolean))].slice(0, 200);
-
+  const scope = { token, org: env.AXIOM_ORG_ID, signal, ...span };
   const ask =
     (dataset, window = {}) =>
     (apl) =>
       axiom({ ...scope, ...window, dataset, apl }, fetchImpl);
+  const note = (label, result) => {
+    if (result.truncated) gaps.push({ source: "axiom", blocks: true, what: `${label} returned its row cap, so older rows may be missing` });
+    return result.rows;
+  };
+
+  const [logRows, syncRows] = await Promise.all([
+    tolerate("The log dataset", "axiom", async () => note("The query by Episode id", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)}`)), []),
+    traces ? tolerate("The trace dataset", "sync", async () => note("The Sync span query", await ask(traces)(`search ${JSON.stringify(episodeId)}`)), []) : Promise.resolve([]),
+  ]);
+  if (!traces) gaps.push({ source: "sync", blocks: true, what: "CHALK_TRACE_DATASET is not set, so Sync spans (socket up and down, admission, media control) were not read" });
+
+  const first = [...logRows.map((row) => normalizeRow(row)), ...syncRows.map((row) => normalizeRow(row, "sync")), ...dbRows];
+  const ids = (pick) => [...new Set(first.flatMap(pick).filter(Boolean))];
+  const connections = ids((row) => [row.connection]);
+  const links = ids((row) => [row.journey, row.trace]);
+
   const second = [];
-  if (connections.length > 0 || links.length > 0) {
-    const clauses = (present) => [
-      ...(connections.length > 0 && present.has("connection_id") ? [`['attributes.connection_id'] in (${connections.map(quote).join(", ")})`] : []),
-      ...(links.length > 0 && present.has("journey_id") ? [`['attributes.journey_id'] in (${links.map(quote).join(", ")})`] : []),
-    ];
-    const reached = await tolerate("The rows named by the connection and journey ids", () => withFields(["connection_id", "journey_id"], (present) => (clauses(present).length > 0 ? `where ${clauses(present).join(" or ")}` : "where false"), ask(logs), missing), []);
-    second.push(...reached.map((row) => normalizeRow(row)));
-    if (traces && links.length > 0) {
-      const spans = await tolerate("The spans named by the trace ids", () => axiom({ ...scope, dataset: traces, apl: `where ['trace_id'] in (${links.map(quote).join(", ")})` }, fetchImpl), []);
-      second.push(...spans.map((row) => normalizeRow(row, "sync")));
-    }
+  const reachedBy = (label, fields, list) =>
+    tolerate(
+      label,
+      "axiom",
+      async () => {
+        const found = [];
+        for (const part of chunks(list)) {
+          const clauses = (present) => fields.filter(([name]) => present.has(name)).map(([name]) => `['attributes.${name}'] in (${part.map(quote).join(", ")})`);
+          const result = await withFields(
+            fields.map(([name]) => name),
+            (present) => (clauses(present).length > 0 ? `where ${clauses(present).join(" or ")}` : "where false"),
+            ask(logs),
+            (absent) => gaps.push({ source: "axiom", blocks: false, what: `the dataset has no ${absent} field yet, so rows could not be reached through it` }),
+          );
+          found.push(...note(label, result));
+        }
+        return found;
+      },
+      [],
+    );
+  second.push(...(await reachedBy("The rows named by connection ids", [["connection_id"], ["provider_session_id"]], connections)).map((row) => normalizeRow(row)));
+  second.push(...(await reachedBy("The rows named by journey ids", [["journey_id"]], links)).map((row) => normalizeRow(row)));
+  if (traces && links.length > 0) {
+    const spans = await tolerate(
+      "The spans named by the trace ids",
+      "sync",
+      async () => {
+        const found = [];
+        for (const part of chunks(links)) found.push(...note("The Sync span query by trace id", await ask(traces)(`where ['trace_id'] in (${part.map(quote).join(", ")})`)));
+        return found;
+      },
+      [],
+    );
+    second.push(...spans.map((row) => normalizeRow(row, "sync")));
   }
 
   const times = [...first, ...second].map((row) => row.time).filter(Number.isFinite);
   const window = { start: Math.min(...times) - 60_000, end: Math.max(...times) + 60_000 };
   const noIds = (present) =>
-    ["episode_id", "connection_id", "journey_id"]
+    ["episode_id", "connection_id", "provider_session_id", "journey_id"]
       .filter((name) => present.has(name))
       .map((name) => ` and isempty(tostring(['attributes.${name}']))`)
       .join("");
-  const probe = times.length === 0 ? [] : await tolerate("The probe for call events that name no id", () => withFields(["episode_id", "connection_id", "journey_id"], (present) => `where (${callEventFilter()})${noIds(present)}`, ask(logs, window), missing), []);
-  return { rows: dedupe([...first, ...second, ...probe.map((row) => normalizeRow(row))]), missing, truncated: [logRows, syncRows].some((rows) => rows.length >= ROW_CAP) };
+  const probe =
+    times.length === 0
+      ? []
+      : await tolerate(
+          "The probe for call events that name no id",
+          "axiom",
+          async () =>
+            note(
+              "The probe for call events that name no id",
+              await withFields(
+                ["episode_id", "connection_id", "provider_session_id", "journey_id"],
+                (present) => `where (${callEventFilter()})${noIds(present)}`,
+                ask(logs, window),
+                () => {},
+              ),
+            ),
+          [],
+        );
+
+  return { rows: dedupe([...first, ...second, ...probe.map((row) => normalizeRow(row))]), gaps };
 }
 
 function dedupe(rows) {
   const seen = new Set();
   return rows.filter((row) => {
-    const key = row.attrs._rowId ?? JSON.stringify([row.source, row.time, row.event, row.connection, row.participant, row.attrs]);
-    if (seen.has(key)) return false;
-    seen.add(key);
+    if (seen.has(row.id)) return false;
+    seen.add(row.id);
     return true;
   });
 }

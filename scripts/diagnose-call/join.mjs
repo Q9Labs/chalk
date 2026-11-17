@@ -1,5 +1,5 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
-export const SOURCES = ["client", "api", "sync", "sfu", "db"];
+export const SOURCES = ["client", "api", "sync", "sfu", "recorder", "db"];
 
 /**
  * Reaches every row of a call by id and by nothing else. A row belongs to the Episode when it names the Episode, or
@@ -43,7 +43,30 @@ export function joinByIds(episodeId, rows) {
     // A row that names another Episode, connection or journey is another call's row, not a missing link.
   }
   joined.sort((a, b) => a.time - b.time);
+  inferParticipants(joined);
   return { joined, unjoined, stats };
+}
+
+/**
+ * A row that names a connection or a journey but no Participant (a media replacement, a lease line) takes the Participant
+ * that other rows of the same connection or journey name, when exactly one Participant does. This is an id join, not a time join.
+ */
+function inferParticipants(rows) {
+  const owners = (key) => {
+    const found = new Map();
+    for (const row of rows) {
+      if (row.participant && row[key]) found.set(row[key], new Set([...(found.get(row[key]) ?? []), row.participant]));
+    }
+    return found;
+  };
+  const byKey = { connection: owners("connection"), journey: owners("journey") };
+  for (const row of rows) {
+    if (row.participant) continue;
+    for (const key of ["connection", "journey"]) {
+      const candidates = row[key] ? byKey[key].get(row[key]) : undefined;
+      if (candidates?.size === 1) row.participant = [...candidates][0];
+    }
+  }
 }
 
 /** Share of a source's rows that were reached by id, 1 when the source has none. */

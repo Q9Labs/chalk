@@ -39,6 +39,12 @@ Do not add a ledger event for transient delivery that the client observes, such 
 
 When a lifecycle boundary changes, update the ledger and the executable proof in the same change. The proof is a test that drives the real journey and checks the ledger rows, the trace correlation and the redaction. A success path alone is not enough: check that a rejected or failed report emits no success evidence.
 
+## Diagnose one call
+
+`pnpm diagnose:call <episode-id>` reads the database, the API, client and SFU log dataset, and the Sync trace dataset for one Episode, and joins every row by id (Episode, connection, journey, trace). It prints a verdict, a summary, a timeline for each Participant and a list of missing data. Each timeline step names its stage, the side that owns it (client, API, Sync, SFU or recorder, or unknown when the rows do not say) and the ids of the rows that prove it. It needs `AXIOM_TOKEN`, `AXIOM_ORG_ID`, `CHALK_LOG_DATASET`, `CHALK_TRACE_DATASET` and a read-only `CHALK_DATABASE_URL`.
+
+A source it cannot read is a gap, never a silent omission. When no rule finds a failure and a source is missing, the verdict says "Not enough evidence" and names the source. `--strict` exits 3 when it finds a bad call and 2 when it found none but evidence is missing. The thresholds are in `infrastructure/observability/production-alerts/call-verdict.json`. A new event needs a rule in `scripts/diagnose-call/rules.mjs` and, to read well, a line in `scripts/diagnose-call/timeline.mjs`. CI runs the checker's tests when those files, or the code that writes the rows it reads, change.
+
 ## Reading call quality
 
 The SDK uploads a WebRTC summary about every minute while a call is open, and the API logs each one as `sdk.call_stats` with the session ID, a hashed participant ID, the connection type (`udp`, `tcp`, `turn`), loss, jitter, RTT, freezes and the provider. `provider_session_id` is the connection ID the Chalk SFU logs and returns from `/inspect`, so a device joins to the SFU's view of the same connection.
