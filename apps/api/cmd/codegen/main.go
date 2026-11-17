@@ -18,6 +18,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
+	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -657,7 +658,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 			schema["maxItems"] = httpapi.ConnectionReportEventLimit
 		case "elapsed_ms", "attempt", "duration_ms", "heartbeat_gap_ms":
 			schema["minimum"] = 0
-			schema["maximum"] = httpapi.ConnectionReportMaxMilliseconds
+			schema["maximum"] = sdktelemetry.MaxMilliseconds
 		case "close_code":
 			schema["minimum"] = 1000
 			schema["maximum"] = 4999
@@ -666,29 +667,10 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 			schema["maximum"] = 599
 		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off", "receivers_stopped":
 			schema["minimum"] = 0
-			schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
+			schema["maximum"] = sdktelemetry.MaxReceiveCount
 		}
 	}
-	if schemaName == "CallStatsRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{1}
-		case "samples":
-			schema["minItems"] = 1
-			schema["maxItems"] = httpapi.CallStatsSampleLimit
-		case "elapsed_ms":
-			schema["minimum"] = 0
-			schema["maximum"] = httpapi.CallStatsMaxElapsedMS
-		case "window_ms":
-			schema["minimum"] = httpapi.CallStatsMinWindowMS
-			schema["maximum"] = httpapi.CallStatsMaxWindowMS
-		default:
-			if maximum := httpapi.CallStatsMaximum(fieldName); maximum > 0 {
-				schema["minimum"] = 0
-				schema["maximum"] = maximum
-			}
-		}
-	}
+	applyTelemetryConstraints(schema, schemaName, fieldName)
 	if schemaName == "ProblemReportRequest" {
 		switch fieldName {
 		case "description":
@@ -759,8 +741,8 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "ConnectionReportRequest" {
 		return httpapi.ConnectionReportFieldEnum(fieldName)
 	}
-	if schemaName == "CallStatsRequest" {
-		return httpapi.CallStatsFieldEnum(fieldName)
+	if values := telemetryFieldEnum(schemaName, fieldName); values != nil {
+		return values
 	}
 	if schemaName == "CloudflareSFUSignalRequest" {
 		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {

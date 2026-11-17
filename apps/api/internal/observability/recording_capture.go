@@ -9,9 +9,8 @@ import (
 )
 
 // LogCaptureAttemptFailure logs input as given, so the caller passes the detail it
-// sanitized with recordingpipeline.SanitizeCaptureFailure. It is emitted by the API when it records a Capture
-// attempt failure. The disposable recorder worker has no log exporter, so this
-// copy is what lets a job that failed once and then succeeded explain itself.
+// sanitized with recordingpipeline.SanitizeCaptureFailure. The API emits it when it records a
+// Capture attempt failure, so the row exists even when the worker died before it could log.
 func LogCaptureAttemptFailure(ctx context.Context, logger *slog.Logger, job recordingpipeline.Job, input recordingpipeline.FailureInput) {
 	span := trace.SpanContextFromContext(ctx)
 	logger.WarnContext(ctx, "recording capture attempt failed",

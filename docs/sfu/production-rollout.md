@@ -30,7 +30,7 @@ Order matters, because the release that ran in production before the kill switch
 3. Confirm it worked, in this order:
    - `/readyz` is healthy and the node reports no cleanup debt.
    - `media-settings get` on a throwaway Space reports `chalk_sfu`.
-   - One new Episode from a current client binds to the Chalk SFU: its `sdk.call_stats` provider is `chalk_sfu`, and the API log has no request to Cloudflare's SFU API for it.
+   - One new Episode from a current client binds to the Chalk SFU: its `sdk.telemetry` rows have provider `chalk_sfu`, and the API log has no request to Cloudflare's SFU API for it.
    - A recorded Episode finalizes its Recording.
    - A Space created with no plane, and a public invite, both report `chalk_sfu`.
    - Overflow is off: `POST /v1/drain` on every node, wait 10 seconds, then create a fresh Episode from a current client. It must be refused with a retryable `503 media.unavailable`, and the API log must have no request to Cloudflare's SFU API for it. Then `POST /v1/undrain` on every node, confirm `/readyz` reports `draining: false`, and wait 10 seconds again before the next step. The wait matters because the API reads each node's readiness every 2 seconds and places Episodes from what it last read, so an Episode created at once can still land on a node that has just drained, or be refused by one that has just reopened. The checks above pass with overflow on too, because a healthy node never reaches the overflow branch.

@@ -206,7 +206,7 @@ class DeployBranchesTest(unittest.TestCase):
         self.assertTrue(downloaded)
 
     def deploy_with_everything_on(self, environment):
-        self.operator_files(environment, 'otlp-headers', 'otlp-log-headers', capture=True)
+        self.operator_files(environment, 'otlp-headers', 'otlp-log-headers', 'otlp-trace-headers', capture=True)
         extra = {'SFU_PACKET_BUDGET': '1000', 'SFU_MAX_EPISODE_PARTICIPANTS': '8'} if environment == 'bench' else {}
         result = self.run_deploy(environment, **extra)
         self.assert_reached_restart(result)
@@ -224,6 +224,10 @@ class DeployBranchesTest(unittest.TestCase):
         capture_env = installed['.config/chalk-sfu/capture.env']
         self.assertIn('CHALK_RECORDER_CAPTURE_SLOTS=3', capture_env)
         self.assertIn('CHALK_RECORDER_CONTROL_PLANE_URL=https://api.example.test', capture_env)
+        self.assertIn('CHALK_RECORDER_OTLP_ENDPOINT=https://api.axiom.co', capture_env)
+        unit = installed['.config/containers/systemd/chalk-recorder-capture.container']
+        for secret, variable in (('otlp-headers', 'METRICS'), ('otlp-log-headers', 'LOGS'), ('otlp-trace-headers', 'TRACES')):
+            self.assertIn(f'Secret=chalk-sfu-{secret},type=env,target=OTEL_EXPORTER_OTLP_{variable}_HEADERS', unit)
         self.assertIn('Image=sha256:mock', installed['.config/containers/systemd/chalk-recorder-capture.container'])
         certs = self.read('certs-calls')
         self.assertIn(f'{environment} capture-worker sfu-1', certs)
@@ -250,6 +254,15 @@ class DeployBranchesTest(unittest.TestCase):
         self.assert_images_build(builds[0])
         self.assertIn('exports no metrics', result.stderr)
         self.assertEqual(self.read('certs-calls'), '')
+
+    def test_the_capture_worker_exports_telemetry_only_with_all_three_header_files(self):
+        self.operator_files('staging', 'otlp-headers', 'otlp-log-headers', capture=True)
+        result = self.run_deploy('staging')
+        self.assert_reached_restart(result)
+        installed = self.installed()
+        self.assertIn('CHALK_RECORDER_OTLP_ENDPOINT=\n', installed['.config/chalk-sfu/capture.env'])
+        self.assertIn('# Trace export is off', installed['.config/containers/systemd/chalk-recorder-capture.container'])
+        self.assertIn('the capture worker exports no telemetry', result.stderr)
 
     def test_firewall_only_stops_before_any_build(self):
         self.operator_files('staging')

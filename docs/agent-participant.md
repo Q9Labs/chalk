@@ -67,7 +67,7 @@ role that excludes recording and moderation are also unmeasured.
 
 ## Diagnostics are write-only
 
-The problem-report, call-stats and connection-report routes need a participant
+The problem-report and telemetry routes (and the older call-stats and connection-report routes) need a participant
 media token and are not stored per tenant, so an MCP tool has nothing to read. A
 read surface needs a storage decision first (a tenant-keyed Postgres table with
 short retention gives isolation; logs give none), then redaction, a derived

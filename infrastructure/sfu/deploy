@@ -21,6 +21,7 @@
 # (NODE_ID, CONTROL_PLANE_URL, SERVER_NAME), capture-ca.crt (certs capture-ca) and bridge-ca.crt.
 # Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
 # Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
+# The worker exports its telemetry when the directory also holds otlp-log-headers and otlp-trace-headers.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
@@ -245,10 +246,21 @@ if $capture_on; then
   capture_memory="$(node_table --arg size "$node_size" '.sizes[$size].capture.memory')"
   capture_gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].capture.goMemLimit')"
   capture_cpus="$(node_table --arg size "$node_size" '.sizes[$size].capture.cpus')"
+  # The worker exports logs, traces and metrics together, and an exporter without its header is
+  # rejected on every batch, so telemetry turns on only when the operator directory holds all three
+  # header files. Traces use the API's trace dataset, with their own token and dataset header.
+  capture_otlp_endpoint="" otlp_trace_secret="# Trace export is off: the deploy found no otlp-trace-headers."
+  if [[ -f "${dir}/otlp-trace-headers" ]]; then
+    put_secret chalk-sfu-otlp-trace-headers "${dir}/otlp-trace-headers"
+    otlp_trace_secret="Secret=chalk-sfu-otlp-trace-headers,type=env,target=OTEL_EXPORTER_OTLP_TRACES_HEADERS"
+    [[ "$otlp_log_secret" == Secret=* ]] && capture_otlp_endpoint="$otlp_endpoint"
+  fi
+  [[ -n "$capture_otlp_endpoint" ]] || echo "warning: the capture worker exports no telemetry; it needs otlp-headers, otlp-log-headers and otlp-trace-headers in ${dir}" >&2
   sed -e "s|__ENVIRONMENT__|${spiffe_environment}|" -e "s|__CONTROL_PLANE_URL__|${control_plane_url}|" -e "s|__SERVER_NAME__|${server_name}|" \
-    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${node_dir}/capture.env.in" |
+    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" -e "s|__OTLP_ENDPOINT__|${capture_otlp_endpoint}|" "${node_dir}/capture.env.in" |
     as_sfu sh -c "'umask 077 && cat > .config/chalk-sfu/capture.env'"
   sed -e "s|__IMAGE__|${capture_image_id}|" -e "s|__MEMORY_LIMIT__|${capture_memory}|" -e "s|__CPU_LIMIT__|${capture_cpus}|" \
+    -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" -e "s|^__OTLP_TRACE_HEADERS_SECRET__$|${otlp_trace_secret}|" \
     "${node_dir}/chalk-recorder-capture.container.in" |
     as_sfu sh -c "'cat > .config/containers/systemd/chalk-recorder-capture.container'"
 else

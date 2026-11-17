@@ -41,7 +41,7 @@ update api_keys set last_used_at='2026-10-18T00:00:00Z' where id='${keyId}'`);
   // Provider artifacts are seeded, not mocked. Every read/authorization uses the
   // production HTTP server and PostgreSQL repositories; no vendor is contacted.
   sql(`insert into episodes(id,tenant_id,space_id,status,started_at,ended_at,config_snapshot) values('${foreign.episodeId}','${firstTenant}','${spaceId}','ended',now()-interval '1 hour',now(),(select config_snapshot from episodes where id='${sourceEpisodeId}'));
-insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${foreign.recordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
+insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,failure_code,failed_at) values('${foreign.recordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2','recording_failed',now());
 insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${foreign.transcriptId}','${firstTenant}','${spaceId}','${foreign.episodeId}','${foreign.recordingId}','terminal_failure','{en}');
 insert into participants(id,tenant_id,space_id,episode_id,name,capabilities,generation,status,role,joined_at,first_joined_at) select gen_random_uuid(),'${firstTenant}','${spaceId}','${foreign.episodeId}','Same name',array['subscribe'],1,'active','owner',now()-interval '1 hour',now()-interval '1 hour' from generate_series(1,2);`);
   const past = await ada.request(`/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`);
@@ -143,7 +143,7 @@ export async function transcriptChecks(h, s) {
   assert.match(textDownload.headers.get("content-disposition"), /attachment; filename="[^"]+-2026-11-01\.txt"/);
   assert.equal(await textDownload.text(), `${sql(`select name from spaces where id='${spaceId}'`)} · 1 Nov 2026 · 42 min\nLanguages: English\n\n[00:00:00] Speaker name: Hello\n`);
   const freshRecordingId = crypto.randomUUID();
-  sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${freshRecordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
+  sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,failure_code,failed_at) values('${freshRecordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2','recording_failed',now());
 insert into recording_transcription_sources(recording_id,tenant_id,manifest_key,manifest_sha256,manifest_size,manifest_content_type,schema_version,committed_at,generation,commit_digest,presentation_sha256,status,expires_at)
 values('${freshRecordingId}','${firstTenant}','transcription/source/${freshRecordingId}/manifest.json',decode(repeat('00',32),'hex'),1,'application/json',1,now(),1,decode(repeat('00',32),'hex'),decode(repeat('00',32),'hex'),'ready',now()+interval '1 hour');
 insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,participant_ref,participant_generation,track_id,track_epoch,identity_kind,track_class,display_name_snapshot,overlap,storage_key,checksum,size,content_type)

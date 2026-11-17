@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -39,66 +40,6 @@ var (
 	ErrNoWork                     = errors.New("recorder control plane has no work")
 	ErrNoChange                   = errors.New("recorder control plane has no plan change")
 )
-
-// HTTPError classifies an HTTP response without retaining its body. The
-// control plane uses 409/412 as fences, other 4xx responses as terminal, and
-// 429/5xx responses as retryable.
-type HTTPError struct {
-	Status int
-	// Code is the API error code from the response body, empty when absent or not a bounded identifier.
-	Code      string
-	Retryable bool
-	Fenced    bool
-	Terminal  bool
-}
-
-func (e HTTPError) Error() string {
-	if e.Code != "" {
-		return fmt.Sprintf("recorder control-plane request failed with HTTP status %d code %s", e.Status, e.Code)
-	}
-	return fmt.Sprintf("recorder control-plane request failed with HTTP status %d", e.Status)
-}
-
-func (e HTTPError) Is(target error) bool {
-	switch target {
-	case ErrControlPlaneRetryable:
-		return e.Retryable
-	case ErrControlPlaneFenced:
-		return e.Fenced
-	case ErrControlPlaneTerminal:
-		return e.Terminal
-	default:
-		return false
-	}
-}
-
-// TransportError intentionally does not include the underlying error in its
-// text. It can still be inspected with errors.Is and is always retryable.
-type TransportError struct{ Err error }
-
-func (e TransportError) Error() string { return "recorder control-plane transport failed" }
-
-func (e TransportError) Unwrap() error { return e.Err }
-
-func (e TransportError) Is(target error) bool { return target == ErrControlPlaneRetryable }
-
-type ProtocolError struct{ Err error }
-
-func (e ProtocolError) Error() string { return ErrControlPlaneProtocol.Error() }
-
-func (e ProtocolError) Unwrap() error { return errors.Join(ErrControlPlaneProtocol, e.Err) }
-
-type NoWorkError struct{}
-
-func (NoWorkError) Error() string { return ErrNoWork.Error() }
-
-func (NoWorkError) Is(target error) bool { return target == ErrNoWork }
-
-type NoChangeError struct{}
-
-func (NoChangeError) Error() string { return ErrNoChange.Error() }
-
-func (NoChangeError) Is(target error) bool { return target == ErrNoChange }
 
 // ControlPlaneClient is the private recorder worker client. The HTTP client
 // is supplied by the caller so mTLS and its transport policy remain outside
@@ -149,6 +90,10 @@ type ClaimResult struct {
 	LeaseToken     string
 	LeaseOwner     string
 	LeaseExpiresAt time.Time
+	// JourneyID and TraceID are the Episode journey and trace the Recording started in. Empty
+	// when the API predates them.
+	JourneyID utilities.ID
+	TraceID   string
 }
 
 type ProgressInput struct {
@@ -174,12 +119,16 @@ func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.
 	if err != nil || input.ClaimRequestID.IsZero() {
 		return ClaimResult{}, fmt.Errorf("%w: claim input", ErrInvalidControlPlaneRequest)
 	}
-	payload := recorderprotocol.ClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true}
+	payload := recorderprotocol.ClaimRequest{ClaimRequestID: input.ClaimRequestID.String(), LeaseForSeconds: leaseSeconds, SupportsCompletionOnly: true, SupportsClaimCorrelation: true}
 	body, status, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	var httpErr HTTPError
+	// An older API rejects a field it does not know. Drop the newest capability first, so an API
+	// that knows completion-only work but not claim correlation still hands out completion-only work.
 	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
-		// Older APIs reject the new field; the same claim may still take
-		// ordinary Capture work, but cannot receive completion-only work.
+		payload.SupportsClaimCorrelation = false
+		body, status, err = c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
+	}
+	if errors.As(err, &httpErr) && httpErr.Status == http.StatusBadRequest {
 		payload.SupportsCompletionOnly = false
 		body, status, err = c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsClaim.Path(), payload, ControlPlaneResponseLimit)
 	}
@@ -305,7 +254,11 @@ func (c *ControlPlaneClient) Complete(ctx context.Context, input recordingpipeli
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
-	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsComplete.Path(), payload, ControlPlaneResponseLimit)
+	request := recorderprotocol.CompleteRequest{LeaseRequest: payload}
+	if input.Observed != nil {
+		request.Observed = &recorderprotocol.CaptureObserved{Tracks: input.Observed.Tracks, Packets: input.Observed.Packets}
+	}
+	body, _, err := c.do(ctx, http.MethodPost, recorderprotocol.RouteJobsComplete.Path(), request, ControlPlaneResponseLimit)
 	if err != nil {
 		return recordingpipeline.Job{}, err
 	}
@@ -373,6 +326,10 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	if err != nil {
 		var responseError HTTPError
 		if errors.As(err, &responseError) && responseError.Status == http.StatusConflict && responseError.Code == recorderprotocol.CodeCaptureMediaStopped {
+			// The SFU ended the session. The attempt finishes as a normal stop, so this row is the
+			// only record that the media ended on its side and not on ours.
+			slog.WarnContext(ctx, "recording capture media was stopped by the SFU",
+				"event", "recording.capture_media_stopped", "operation", string(operation))
 			return capturesignaling.Execution{}, capturesignaling.ErrMediaStopped
 		}
 		return capturesignaling.Execution{}, err
@@ -392,6 +349,11 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	result, err := capturesignaling.DecodeResult(resultBytes, operation, metadata)
 	if err != nil {
 		return capturesignaling.Execution{}, ProtocolError{Err: err}
+	}
+	if created := result.CreateCaptureConnection; created != nil && !response.Replayed {
+		slog.InfoContext(ctx, "recording capture connection created",
+			"event", "recording.capture_connection_created", "capture_connection", created.Connection.ConnectionReference.String(),
+			"plan_revision", int64(command.Identity.PlanRevision))
 	}
 	return capturesignaling.Execution{
 		Key:    capturesignaling.CommandKey{SignalingHandle: command.SignalingHandle, Operation: operation, PlanRevision: command.Identity.PlanRevision, IdempotencyKey: command.Identity.IdempotencyKey},
@@ -497,7 +459,13 @@ func decodeClaimResult(requestID utilities.ID, response recorderprotocol.ClaimRe
 	if err != nil {
 		return ClaimResult{}, ProtocolError{Err: err}
 	}
-	return ClaimResult{ClaimRequestID: claimID, Envelope: envelope, EnvelopeDigest: digest, LeaseToken: response.LeaseToken, LeaseOwner: response.LeaseOwner, LeaseExpiresAt: leaseExpiresAt}, nil
+	var journeyID utilities.ID
+	if response.JourneyID != "" {
+		if journeyID, err = utilities.ParseID(response.JourneyID); err != nil {
+			return ClaimResult{}, ProtocolError{Err: errors.New("claim response journey")}
+		}
+	}
+	return ClaimResult{ClaimRequestID: claimID, Envelope: envelope, EnvelopeDigest: digest, LeaseToken: response.LeaseToken, LeaseOwner: response.LeaseOwner, LeaseExpiresAt: leaseExpiresAt, JourneyID: journeyID, TraceID: response.TraceID}, nil
 }
 
 func decodeJob(response recorderprotocol.JobResponse) (recordingpipeline.Job, error) {
@@ -682,8 +650,9 @@ func decodeBoundedJSON(data []byte, destination any, limit int) error {
 	if len(data) > limit {
 		return errors.New("response payload is too large")
 	}
+	// Unknown fields are ignored: a newer API may add fields, and a worker that rejects them
+	// would lease a job it can never start.
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
 		return err
 	}

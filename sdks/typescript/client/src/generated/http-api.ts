@@ -793,6 +793,23 @@ const defaultGroup = HttpApiGroup.make("default")
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
+  )
+  .add(
+    HttpApiEndpoint.post("uploadTelemetry", "/v1/tenants/:tenant_id/telemetry", {
+      params: S.UploadTelemetryPathParamsSchema,
+      payload: S.UploadTelemetryRequestBodySchema,
+      success: S.UploadTelemetryResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
   );
 
 const episodesGroup = HttpApiGroup.make("episodes")

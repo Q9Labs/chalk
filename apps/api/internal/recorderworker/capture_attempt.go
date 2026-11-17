@@ -132,6 +132,7 @@ func (f *PionCaptureAttemptFactory) NewCaptureAttempt(ctx context.Context, claim
 		lifecycle:   f.lifecycle,
 		config:      f.config,
 		ready:       authority.CaptureReadyAt != nil,
+		observer:    captureObserver{enabled: !claim.JourneyID.IsZero()},
 	}
 	return attempt, nil
 }
@@ -159,6 +160,7 @@ type PionCaptureAttempt struct {
 	closeErr   error
 	ready      bool
 	readyEvent CaptureReadyEvent
+	observer   captureObserver
 }
 
 type captureCoordinator interface {
@@ -234,22 +236,10 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	finish := func(err error, writer *captureBundleWriter) error {
-		// Only the deadline and its cancellation are normal stops. Storage,
-		// lease and provider failures must still fail even at the limit.
-		cause := err
-		// Follow a single causal chain only. A joined storage/provider failure
-		// plus cancellation is still a failure, not a successful limit stop.
-		for errors.Unwrap(cause) != nil {
-			cause = errors.Unwrap(cause)
-		}
-		if cause == capturesignaling.ErrMediaStopped {
-			return a.finishSuccess(writer)
-		}
-		if cause == recordercapture.ErrDeadlineExpired ||
-			(cause == context.Canceled && errors.Is(context.Cause(runCtx), recordercapture.ErrDeadlineExpired)) {
-			return a.finishStopped(writer, a.authority.EndsAt(), recordingbundle.CloseReasonMaxDuration)
-		}
-		return a.finishFailure(err, writer)
+		result := a.finishByCause(runCtx, err, writer)
+		logCaptureSummary(ctx, writer, err, result)
+		a.observer.record(writer)
+		return result
 	}
 
 	if !a.authority.EndsAt().IsZero() {
@@ -299,7 +289,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 	writer := newCaptureBundleWriter(a)
 	if plan.StopState() != captureplan.StopStateRunning {
-		return a.finishSuccess(writer)
+		return finish(capturesignaling.ErrMediaStopped, writer)
 	}
 	readers := make(map[string]CaptureMediaTrack)
 	if len(snapshot.Tracks) == 0 {
@@ -322,7 +312,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		if stopped {
 			cancel(nil)
-			return a.finishSuccess(writer)
+			return finish(capturesignaling.ErrMediaStopped, writer)
 		}
 	}
 	if len(readers) == 0 && len(snapshot.Tracks) > 0 {
@@ -426,7 +416,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if event.plan.StopState() != captureplan.StopStateRunning {
 				cancel(nil)
-				return a.finishSuccess(writer)
+				return finish(capturesignaling.ErrMediaStopped, writer)
 			}
 			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers, late)
 			if err != nil {
@@ -435,7 +425,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			}
 			if stopped {
 				cancel(nil)
-				return a.finishSuccess(writer)
+				return finish(capturesignaling.ErrMediaStopped, writer)
 			}
 			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, updatedReaders, readers)); err != nil {
 				cancel(nil)

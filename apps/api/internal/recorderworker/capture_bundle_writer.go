@@ -39,6 +39,7 @@ type captureBundleWriter struct {
 	earliestAnchor time.Time
 	lastMedia      int64
 	terminalGap    bool
+	packets        uint64
 }
 
 type pendingCaptureObject struct {

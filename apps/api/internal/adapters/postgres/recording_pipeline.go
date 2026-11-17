@@ -22,7 +22,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type recordingPipelineQuerier interface {
@@ -39,6 +38,8 @@ type recordingPipelineQuerier interface {
 	AuthorizeRecordingArtifactReplay(context.Context, sqlc.AuthorizeRecordingArtifactReplayParams) (bool, error)
 	CommitRecordingArtifact(context.Context, sqlc.CommitRecordingArtifactParams) (sqlc.CommitRecordingArtifactRow, error)
 	CompleteCaptureRecordingJob(context.Context, sqlc.CompleteCaptureRecordingJobParams) (sqlc.CompleteCaptureRecordingJobRow, error)
+	CountCommittedCaptureBundles(context.Context, pgtype.UUID) (sqlc.CountCommittedCaptureBundlesRow, error)
+	GetRecordingStartCorrelation(context.Context, pgtype.UUID) (sqlc.GetRecordingStartCorrelationRow, error)
 	GetCompletedCaptureRecordingJob(context.Context, sqlc.GetCompletedCaptureRecordingJobParams) (sqlc.RecordingJob, error)
 	CompleteRecordingJob(context.Context, sqlc.CompleteRecordingJobParams) (sqlc.RecordingJob, error)
 	CreateRecordingReservation(context.Context, sqlc.CreateRecordingReservationParams) (sqlc.CreateRecordingReservationRow, error)
@@ -498,6 +499,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 		return recordingpipeline.Job{}, errors.New("recording claim transaction is unavailable")
 	}
 	var claimed recordingpipeline.Job
+	freshClaim := false
 	issuedAt := r.now().UTC()
 	leaseExpiresAt := issuedAt.Add(input.LeaseFor)
 	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
@@ -612,18 +614,17 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 				return fmt.Errorf("persist recording render input authority: %w", err)
 			}
 		}
-		if claimed.Kind == recordingpipeline.JobKindCapture {
-			traceID, spanID, _, _ := lifecycleTraceContext(ctx)
-			if err := queries.InsertRecordingClaimedEvent(ctx, sqlc.InsertRecordingClaimedEventParams{
-				JobID: uuid(claimed.ID), LeaseOwner: input.Owner, TraceID: optionalText(traceID), SpanID: optionalText(spanID),
-			}); err != nil {
-				return fmt.Errorf("record recording claim: %w", err)
-			}
+		if err := recordFreshClaim(ctx, queries, claimed, input.Owner, &authority); err != nil {
+			return err
 		}
 		claimed.Authority = &authority
+		freshClaim = true
 		return nil
 	})
 	if err == nil {
+		if freshClaim {
+			observability.Recorder.RecordJobClaim(ctx, string(claimed.Kind))
+		}
 		return claimed, nil
 	}
 	if r.queries != nil && (uniqueConstraintViolation(err, "recording_job_attempt_authorities_claim_request_id_key") || errors.Is(err, recordingpipeline.ErrJobNotFound)) {
@@ -644,7 +645,14 @@ func getClaimReplay(ctx context.Context, queries recordingPipelineQuerier, input
 	if row.Kind != string(input.Kind) || row.LeaseOwner != input.Owner {
 		return recordingpipeline.Job{}, recordingpipeline.ErrClaimConflict
 	}
-	return mapAuthorityJob(row)
+	job, err := mapAuthorityJob(row)
+	if err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	if err := attachStartCorrelation(ctx, queries, job.ID, job.Authority); err != nil {
+		return recordingpipeline.Job{}, err
+	}
+	return job, nil
 }
 
 func (r RecordingPipelineRepository) Heartbeat(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
@@ -727,7 +735,16 @@ func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input 
 		}
 		return completed, err
 	}
-	completed, err := r.completeCapture(ctx, input, renderJobID)
+	counts, err := r.captureBundleCounts(ctx, input.JobID)
+	if err != nil {
+		span.SetStatus(codes.Error, "capture bundle count failed")
+		return recordingpipeline.Job{}, err
+	}
+	if counts.MediaBundles == 0 {
+		span.SetAttributes(attribute.String("chalk.capture.completion.outcome", "empty"))
+		return r.failEmptyCapture(ctx, input, counts)
+	}
+	completed, err := r.completeCapture(ctx, input, renderJobID, counts)
 	if err == nil {
 		span.SetAttributes(attribute.String("chalk.capture.recording_id", completed.RecordingID.String()),
 			attribute.String("chalk.capture.completion.outcome", "ok"))
@@ -778,91 +795,6 @@ func (r RecordingPipelineRepository) completedCaptureReplay(ctx context.Context,
 	return job, nil
 }
 
-func (r RecordingPipelineRepository) completeCapture(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
-	if r.presentationProfile != nil {
-		if r.presentationFreezer == nil || r.transactor == nil {
-			return recordingpipeline.Job{}, errors.New("recording presentation freezer is not configured")
-		}
-		prepared, err := r.presentationFreezer.Prepare(ctx, recordingpresentation.CompletionAuthority{
-			JobID: input.JobID, AttemptCount: input.AttemptCount,
-			FencingGeneration: input.FencingGeneration, CaptureEpoch: input.CaptureEpoch,
-			EnvelopeDigest: input.EnvelopeDigest, LeaseToken: input.LeaseToken, LeaseOwner: input.LeaseOwner,
-		})
-		if err != nil {
-			return recordingpipeline.Job{}, fmt.Errorf("prepare recording presentation: %w", err)
-		}
-		ctx, commitSpan := otel.Tracer("chalk/recordingpipeline").Start(ctx, "recording.capture.complete.db_commit")
-		commitSpan.SetAttributes(attribute.String("chalk.capture.job_id", input.JobID.String()),
-			attribute.String("chalk.capture.recording_id", prepared.RecordingID.String()),
-			attribute.String("chalk.capture.worker_id", input.LeaseOwner),
-			attribute.String("chalk.capture.completion.stage", "db_commit"))
-		var completed recordingpipeline.Job
-		err = r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
-			if err := insertPreparedRecordingPresentation(ctx, queries, prepared); err != nil {
-				return err
-			}
-			row, err := queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(ctx, input, renderJobID, r.transcriptionEnabled))
-			if errors.Is(err, pgx.ErrNoRows) {
-				return recordingpipeline.ErrJobNotFound
-			}
-			if err != nil {
-				return fmt.Errorf("complete capture recording job: %w", err)
-			}
-			completed = mapRecordingJob(sqlc.RecordingJob(row))
-			completed.CaptureEpoch = input.CaptureEpoch
-			return nil
-		})
-		if err != nil {
-			commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
-			commitSpan.SetStatus(codes.Error, "database commit failed")
-		} else {
-			commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "ok"))
-		}
-		commitSpan.End()
-		return completed, err
-	}
-
-	ctx, commitSpan := otel.Tracer("chalk/recordingpipeline").Start(ctx, "recording.capture.complete.db_commit")
-	commitSpan.SetAttributes(attribute.String("chalk.capture.job_id", input.JobID.String()),
-		attribute.String("chalk.capture.worker_id", input.LeaseOwner),
-		attribute.String("chalk.capture.completion.stage", "db_commit"))
-	defer commitSpan.End()
-	row, err := r.queries.CompleteCaptureRecordingJob(ctx, completeCaptureParams(ctx, input, renderJobID, r.transcriptionEnabled))
-	if errors.Is(err, pgx.ErrNoRows) {
-		commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
-		commitSpan.SetStatus(codes.Error, "database commit failed")
-		return recordingpipeline.Job{}, recordingpipeline.ErrJobNotFound
-	}
-	if err != nil {
-		commitSpan.SetAttributes(attribute.String("chalk.capture.completion.outcome", "error"))
-		commitSpan.SetStatus(codes.Error, "database commit failed")
-		return recordingpipeline.Job{}, fmt.Errorf("complete capture recording job: %w", err)
-	}
-	job := mapRecordingJob(sqlc.RecordingJob(row))
-	job.CaptureEpoch = input.CaptureEpoch
-	commitSpan.SetAttributes(attribute.String("chalk.capture.recording_id", job.RecordingID.String()),
-		attribute.String("chalk.capture.completion.outcome", "ok"))
-	return job, nil
-}
-
-func completeCaptureParams(ctx context.Context, input recordingpipeline.LeaseInput, renderJobID utilities.ID, transcriptionEnabled bool) sqlc.CompleteCaptureRecordingJobParams {
-	journeyID, _ := observability.JourneyIDFromContext(ctx)
-	params := sqlc.CompleteCaptureRecordingJobParams{
-		JourneyID: uuid(journeyID),
-		ID:        uuid(input.JobID), AttemptCount: int32(input.AttemptCount),
-		FencingGeneration: input.FencingGeneration,
-		LeaseToken:        requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.LeaseOwner),
-		CaptureEpoch: input.CaptureEpoch, EnvelopeDigest: input.EnvelopeDigest,
-		RenderJobID: uuid(renderJobID), PayloadSchemaVersion: recordingpipeline.DefaultPayloadSchemaVersion,
-		Priority: 0, AttemptLimit: recordingpipeline.DefaultRenderAttemptLimit, TranscriptionEnabled: transcriptionEnabled,
-	}
-	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
-		params.TraceID = optionalText(span.TraceID().String())
-		params.SpanID = optionalText(span.SpanID().String())
-	}
-	return params
-}
-
 func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
 	var row sqlc.FailRecordingJobRow
 	var metric webhookCommitMetric
@@ -879,6 +811,7 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 			LeaseOwner:        requiredTextValue(input.LeaseOwner),
 			CaptureEpoch:      input.CaptureEpoch,
 			EnvelopeDigest:    input.EnvelopeDigest,
+			Terminal:          input.Terminal,
 		})
 		if err != nil {
 			return err
@@ -897,6 +830,9 @@ func (r RecordingPipelineRepository) Fail(ctx context.Context, input recordingpi
 	metric.Record(ctx)
 	job := mapFailJob(row)
 	job.CaptureEpoch = input.CaptureEpoch
+	if job.State == recordingpipeline.JobStateTerminalFailure {
+		observability.Recorder.RecordTerminalFailure(ctx, string(job.Kind), row.ErrorCode.String)
+	}
 	return job, nil
 }
 

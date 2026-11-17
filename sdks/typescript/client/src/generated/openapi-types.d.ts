@@ -1088,6 +1088,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/telemetry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Upload telemetry */
+    post: operations["uploadTelemetry"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/transcripts": {
     parameters: {
       query?: never;
@@ -1762,7 +1779,7 @@ export interface components {
         receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
         receivers_stopped?: number | null;
         /** @enum {string} */
-        source?: "microphone" | "camera" | "screen_audio";
+        source?: "microphone" | "camera" | "screen_audio" | "screen_video";
         /** @enum {string} */
         state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
         /** @enum {string} */
@@ -2283,6 +2300,7 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       episode_id: components["schemas"]["EpisodeId"];
       export: components["schemas"]["RecordingExport"];
+      failure_code: string | null;
       id: components["schemas"]["RecordingId"];
       metadata:
         | {
@@ -2645,6 +2663,185 @@ export interface components {
     SyncToken: {
       expires_at: components["schemas"]["DateTimeString"];
       sync_token: string;
+    };
+    TelemetryRequest: {
+      client_session_id: components["schemas"]["UUID"];
+      events: {
+        /** @enum {string} */
+        action?: "mute" | "unmute" | "publish" | "unpublish" | "subscribe" | "unsubscribe" | "share_start" | "share_stop";
+        attempt?: number | null;
+        bundle_tag_held?: boolean | null;
+        close_code?: number | null;
+        /** @enum {string} */
+        code?:
+          | "invalid_state"
+          | "invalid_access"
+          | "access_unavailable"
+          | "permission_denied"
+          | "device_not_found"
+          | "device_busy"
+          | "device_constraint_invalid"
+          | "media_capture_failed"
+          | "sync_start_failed"
+          | "state_digest_recovery_failed"
+          | "sync_hello_timeout"
+          | "media_start_failed"
+          | "join_cleanup_unconfirmed"
+          | "sync_recovery_exhausted"
+          | "media_recovery_exhausted"
+          | "command_rejected"
+          | "leave_unconfirmed"
+          | "episode_ended"
+          | "unsupported_environment"
+          | "internal_error"
+          | "collaboration_unavailable"
+          | "chat_cursor_reset_required"
+          | "rate_limited"
+          | "invalid_payload";
+        /** @enum {string} */
+        device_kind?: "microphone" | "camera" | "speaker" | "screen";
+        dropped?: number | null;
+        duration_ms?: number | null;
+        elapsed_ms: number;
+        /** @enum {string} */
+        element_state?: "paused" | "playing";
+        /** @enum {string} */
+        end_reason?: "left" | "episode_ended" | "time_limit" | "removed" | "connection_lost" | "join_failed" | "page_closed";
+        /** @enum {string} */
+        error_name?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "TypeError" | "unknown";
+        /** @enum {string} */
+        granted_audio?: "granted" | "not_granted" | "unknown";
+        /** @enum {string} */
+        granted_video?: "granted" | "not_granted" | "unknown";
+        heartbeat_gap_ms?: number | null;
+        http_status?: number | null;
+        /** @enum {string} */
+        mechanism?: "ice_restart" | "media_reconnect" | "sync_reconnect" | "sync_digest" | "access_refresh";
+        /** @enum {string} */
+        media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
+        /** @enum {string} */
+        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications" | "sfu_subscriptions";
+        op_id?: components["schemas"]["UUID"];
+        outage_ms?: number | null;
+        /** @enum {string} */
+        outcome?: "started" | "succeeded" | "failed" | "cancelled";
+        /** @enum {string} */
+        permission_state?: "granted" | "denied" | "prompt" | "unknown";
+        /** @enum {string} */
+        phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
+        /** @enum {string} */
+        platform_state?: "online" | "offline" | "hidden" | "visible" | "background" | "foreground";
+        /** @enum {string} */
+        play_result?: "ok" | "NotAllowedError" | "AbortError" | "unknown";
+        /** @enum {string} */
+        projection_state?: "on" | "off";
+        /** @enum {string} */
+        publication_state?: "on" | "off";
+        receive_counts?: {
+          announced?: number | null;
+          bytes_flowing?: number | null;
+          element_bound?: number | null;
+          playing?: number | null;
+          projection_off?: number | null;
+          pull_failed?: number | null;
+          pull_requested?: number | null;
+          pull_succeeded?: number | null;
+          track_received?: number | null;
+        } | null;
+        /** @enum {string} */
+        receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
+        receivers_stopped?: number | null;
+        /** @enum {string} */
+        render_cause?: "render_error" | "chunk_reload" | "unhandled_error" | "unhandled_rejection";
+        seq: number;
+        /** @enum {string} */
+        source?: "microphone" | "camera" | "screen_audio" | "screen_video";
+        /** @enum {string} */
+        state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
+        stats?: {
+          /** @enum {string} */
+          connection_type?: "udp" | "tcp" | "turn" | "unknown";
+          freeze_count?: number | null;
+          freeze_ms?: number | null;
+          /** @enum {string} */
+          gap?: "offline" | "hidden" | "poll_failed" | "dropped";
+          /** @enum {string} */
+          local_candidate_type?: "host" | "srflx" | "prflx" | "relay";
+          recv_bitrate_kbps?: number | null;
+          recv_height?: number | null;
+          recv_hidden_videos?: number | null;
+          recv_jitter_ms?: number | null;
+          recv_loss_pct?: number | null;
+          recv_paused_videos?: number | null;
+          /** @enum {string} */
+          relay_protocol?: "udp" | "tcp" | "tls";
+          /** @enum {string} */
+          remote_candidate_type?: "host" | "srflx" | "prflx" | "relay";
+          rtt_ms?: number | null;
+          send_bitrate_kbps?: number | null;
+          send_jitter_ms?: number | null;
+          /** @enum {string} */
+          send_layer?: "h" | "m" | "l";
+          send_loss_pct?: number | null;
+          tracks?: {
+            audio_energy?: number | null;
+            /** @enum {string} */
+            kind: "audio" | "video";
+            lost?: number | null;
+            mid: string;
+            packets?: number | null;
+            /** @enum {string} */
+            playout?: "playing" | "paused" | "no_element" | "unknown";
+          }[];
+          window_ms: number;
+        } | null;
+        /** @enum {string} */
+        step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
+        /** @enum {string} */
+        track_state?: "live" | "muted" | "ended";
+        /** @enum {string} */
+        type:
+          | "access_refresh_failed"
+          | "access_refreshed"
+          | "access_retry"
+          | "audio_receive_stuck"
+          | "audio_receive_summary"
+          | "call_ended"
+          | "call_stats"
+          | "chat_upload_failed"
+          | "cleanup_completed"
+          | "cleanup_unconfirmed"
+          | "connection_failed"
+          | "device_failed"
+          | "media_http_error"
+          | "media_intent"
+          | "media_projection_mismatch"
+          | "media_result"
+          | "media_state"
+          | "platform_changed"
+          | "problem_reported"
+          | "receivers_closed"
+          | "recovery_attempt"
+          | "recovery_exhausted"
+          | "recovery_succeeded"
+          | "render_crashed"
+          | "space_join_span"
+          | "state_changed"
+          | "sync_connect_failed"
+          | "sync_dial_timeout"
+          | "sync_heartbeat_gap"
+          | "sync_socket_close"
+          | "sync_socket_open"
+          | "telemetry_dropped";
+        /** @enum {string} */
+        upload_failure?: "initiate_failed" | "storage_unreachable" | "storage_rejected" | "finalize_failed";
+      }[];
+      /** @enum {integer} */
+      version: 1;
+    };
+    TelemetryResponse: {
+      accepted: number;
+      rejected: number;
     };
     Tenant: {
       cors_allowed_origins: string[];
@@ -10225,6 +10422,98 @@ export interface operations {
       };
       /** @description Not Found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  uploadTelemetry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TelemetryRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TelemetryResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
         headers: {
           [name: string]: unknown;
         };

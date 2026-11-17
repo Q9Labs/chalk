@@ -66,6 +66,7 @@ const recording = (n: number, episodeN: number, spaceN: number, agoStart: number
   metadata: {},
   storage_key: null,
   storage_provider: "r2",
+  failure_code: extra.status === "failed" ? "recording_failed" : null,
   transcription_policy: "off",
   created_at: hours(agoStart),
   updated_at: hours(agoStart),

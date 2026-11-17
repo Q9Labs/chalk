@@ -14,6 +14,9 @@ EnvironmentFile=%h/.config/chalk-sfu/capture.env
 Secret=chalk-capture-worker-cert,type=mount,target=/run/chalk-capture/worker.crt,uid=65532,gid=65532,mode=0400
 Secret=chalk-capture-worker-key,type=mount,target=/run/chalk-capture/worker.key,uid=65532,gid=65532,mode=0400
 Secret=chalk-capture-server-ca,type=mount,target=/run/chalk-capture/server-ca.crt,uid=65532,gid=65532,mode=0400
+__OTLP_HEADERS_SECRET__
+__OTLP_LOG_HEADERS_SECRET__
+__OTLP_TRACE_HEADERS_SECRET__
 User=65532
 Group=65532
 ReadOnly=true

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mtls"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderworker"
 )
 
@@ -69,15 +70,10 @@ func runWorker(config renderWorkerConfig) error {
 	if err != nil {
 		return err
 	}
-	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
-	if encoder != recorderworker.EncoderLibX264 && encoder != recorderworker.EncoderVideoToolbox && encoder != recorderworker.EncoderNVENC {
-		return errors.New("native Export renderer requires libx264, h264_videotoolbox, or h264_nvenc")
-	}
-	composeScript, err := existingRenderFile(config.RendererScript, "recording compositor script")
+	encoder, compose, err := renderComposer(config, nodePath, ffmpegPath, threads)
 	if err != nil {
 		return err
 	}
-	compose := recorderworker.NodeComposeProducer{NodePath: nodePath, ScriptPath: composeScript, FFmpegPath: ffmpegPath, Encoder: encoder, Threads: threads}
 
 	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
 	objectHTTP := &http.Client{Transport: &http.Transport{
@@ -91,6 +87,11 @@ func runWorker(config renderWorkerConfig) error {
 	commands := renderMediaCommands{ffmpeg: ffmpegPath, ffprobe: ffprobePath}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	telemetry, err := observability.StartWorker(ctx, "chalk-recorder-render", os.Getenv, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer telemetry.Close("recorder-render", os.Stderr)
 	if err := recorderworker.ProbeVideoEncoder(ctx, commands, encoder); err != nil {
 		return err
 	}
@@ -206,3 +207,17 @@ func renderExecutable(raw, fallback string) (string, error) {
 }
 
 var _ recorderworker.CommandRunner = renderMediaCommands{}
+
+// renderComposer checks the encoder and the compositor script the Export renderer needs.
+func renderComposer(config renderWorkerConfig, nodePath, ffmpegPath string, threads int) (recorderworker.VideoEncoder, recorderworker.NodeComposeProducer, error) {
+	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
+	if encoder != recorderworker.EncoderLibX264 && encoder != recorderworker.EncoderVideoToolbox && encoder != recorderworker.EncoderNVENC {
+		return "", recorderworker.NodeComposeProducer{}, errors.New("native Export renderer requires libx264, h264_videotoolbox, or h264_nvenc")
+	}
+	composeScript, err := existingRenderFile(config.RendererScript, "recording compositor script")
+	if err != nil {
+		return "", recorderworker.NodeComposeProducer{}, err
+	}
+	compose := recorderworker.NodeComposeProducer{NodePath: nodePath, ScriptPath: composeScript, FFmpegPath: ffmpegPath, Encoder: encoder, Threads: threads}
+	return encoder, compose, nil
+}

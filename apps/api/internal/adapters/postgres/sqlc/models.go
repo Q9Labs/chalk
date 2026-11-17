@@ -411,6 +411,8 @@ type Recording struct {
 	DurationMillis     pgtype.Int8        `json:"duration_millis"`
 	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
 	Metadata           []byte             `json:"metadata"`
+	FailureCode        pgtype.Text        `json:"failure_code"`
+	FailedAt           pgtype.Timestamptz `json:"failed_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 }
@@ -739,17 +741,22 @@ type RecordingJobFailureHistory struct {
 }
 
 type RecordingPipeline struct {
-	RecordingID        pgtype.UUID        `json:"recording_id"`
-	TenantID           pgtype.UUID        `json:"tenant_id"`
-	ReservationID      pgtype.UUID        `json:"reservation_id"`
-	CaptureEpoch       int64              `json:"capture_epoch"`
-	State              string             `json:"state"`
-	StopOperationID    pgtype.UUID        `json:"stop_operation_id"`
-	StopRequestedAt    pgtype.Timestamptz `json:"stop_requested_at"`
-	CaptureCompletedAt pgtype.Timestamptz `json:"capture_completed_at"`
-	CommittedAt        pgtype.Timestamptz `json:"committed_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	RecordingID             pgtype.UUID        `json:"recording_id"`
+	TenantID                pgtype.UUID        `json:"tenant_id"`
+	ReservationID           pgtype.UUID        `json:"reservation_id"`
+	CaptureEpoch            int64              `json:"capture_epoch"`
+	State                   string             `json:"state"`
+	StopOperationID         pgtype.UUID        `json:"stop_operation_id"`
+	StopRequestedAt         pgtype.Timestamptz `json:"stop_requested_at"`
+	CaptureCompletedAt      pgtype.Timestamptz `json:"capture_completed_at"`
+	CommittedAt             pgtype.Timestamptz `json:"committed_at"`
+	CaptureMediaBundleCount pgtype.Int4        `json:"capture_media_bundle_count"`
+	CaptureGapBundleCount   pgtype.Int4        `json:"capture_gap_bundle_count"`
+	CaptureTrackCount       pgtype.Int4        `json:"capture_track_count"`
+	CapturePacketCount      pgtype.Int8        `json:"capture_packet_count"`
+	CaptureCompleteness     pgtype.Text        `json:"capture_completeness"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
 	// Immutable recording clock origin established by the first authoritative capture-ready callback.
 	CaptureReadyAt pgtype.Timestamptz `json:"capture_ready_at"`
 }

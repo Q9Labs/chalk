@@ -47,8 +47,6 @@ type Config struct {
 type Diagnostics struct {
 	config Config
 	logger *slog.Logger
-
-	recorderMetrics RecorderMetrics
 }
 
 func New(config Config, output io.Writer) Diagnostics {
@@ -81,9 +79,8 @@ func New(config Config, output io.Writer) Diagnostics {
 	)
 
 	return Diagnostics{
-		config:          config,
-		logger:          logger,
-		recorderMetrics: NewRecorderMetrics(),
+		config: config,
+		logger: logger,
 	}
 }
 
@@ -129,10 +126,6 @@ func (h fanoutHandler) WithGroup(name string) slog.Handler {
 
 func (d Diagnostics) Logger() *slog.Logger {
 	return d.logger
-}
-
-func (d Diagnostics) RecorderMetrics() RecorderMetrics {
-	return d.recorderMetrics
 }
 
 func (d Diagnostics) Queries(next sqlc.Querier) sqlc.Querier {
