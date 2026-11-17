@@ -52,10 +52,18 @@ type Outcome interface{ outcome() }
 // Available carries the measurements.
 type Available struct {
 	Report Report
-	// RecordingsTotal counts the Episode's Recordings; RecordingsTranscribed
-	// counts those with a complete transcript, which are the ones measured.
-	RecordingsTotal       int
-	RecordingsTranscribed int
+	// Recordings are the Episode's Recordings, oldest first, with where each
+	// one's timeline sits on the Episode's.
+	Recordings []Placement
+}
+
+// Placement is one Recording on the Episode timeline.
+type Placement struct {
+	RecordingID utilities.ID
+	// OffsetMS is how far into the Episode the Recording's timeline begins.
+	OffsetMS int64
+	// Transcribed is true when the Recording's transcript was measured.
+	Transcribed bool
 }
 
 // NoTranscript means no Recording has a transcript and none is on the way.
@@ -100,9 +108,11 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 		start = episode.CreatedAt
 	}
 	var cues []Cue
+	placements := make([]Placement, 0, len(recordings))
 	transcribed := 0
 	pending := false
 	for _, recording := range recordings {
+		placement := Placement{RecordingID: recording.ID, OffsetMS: recordingOffsetMS(start, recording.StartedAt)}
 		switch {
 		case recording.Transcript != nil && recording.Transcript.DocumentReady():
 			document, err := s.readDocument(ctx, *recording.Transcript)
@@ -110,10 +120,12 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 				return nil, err
 			}
 			transcribed++
-			cues = append(cues, episodeCues(document, recordingOffsetMS(start, recording.StartedAt))...)
+			placement.Transcribed = true
+			cues = append(cues, episodeCues(document, placement.OffsetMS)...)
 		case transcriptInProgress(recording):
 			pending = true
 		}
+		placements = append(placements, placement)
 	}
 
 	if transcribed == 0 {
@@ -135,7 +147,7 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 		end = episode.UpdatedAt
 	}
 	report := Compute(Input{DurationMS: end.Sub(start).Milliseconds(), Participants: participants, Cues: cues})
-	return Available{Report: report, RecordingsTotal: len(recordings), RecordingsTranscribed: transcribed}, nil
+	return Available{Report: report, Recordings: placements}, nil
 }
 
 func (s Service) readDocument(ctx context.Context, transcript transcripts.Transcript) (transcripts.Document, error) {

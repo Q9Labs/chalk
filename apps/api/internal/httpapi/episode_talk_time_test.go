@@ -49,8 +49,9 @@ func serveTalkTime(t *testing.T, service EpisodeTalkTimeService, authorizer Tena
 
 func TestEpisodeTalkTimeAvailableCarriesTheMeasurements(t *testing.T) {
 	participant := "11111111-1111-4111-8111-111111111111"
+	recordingID, _ := utilities.NewID()
 	outcome := talktime.Available{
-		RecordingsTotal: 2, RecordingsTranscribed: 1,
+		Recordings: []talktime.Placement{{RecordingID: recordingID, OffsetMS: 30_000, Transcribed: true}, {OffsetMS: 90_000}},
 		Report: talktime.Report{
 			EpisodeDurationMS: 60_000, TotalTalkMS: 10_000, OverlapMS: 0, SilenceMS: 50_000, BucketMS: 1_000,
 			Speakers: []talktime.Speaker{
@@ -67,9 +68,12 @@ func TestEpisodeTalkTimeAvailableCarriesTheMeasurements(t *testing.T) {
 		Source   string `json:"source"`
 		Status   string `json:"status"`
 		TalkTime struct {
-			EpisodeDurationMS     int64 `json:"episode_duration_ms"`
-			RecordingsTranscribed int   `json:"recordings_transcribed"`
-			Speakers              []struct {
+			EpisodeDurationMS int64 `json:"episode_duration_ms"`
+			Recordings        []struct {
+				OffsetMS    int64 `json:"offset_ms"`
+				Transcribed bool  `json:"transcribed"`
+			} `json:"recordings"`
+			Speakers []struct {
 				SpeakerID     string  `json:"speaker_id"`
 				ParticipantID *string `json:"participant_id"`
 				TalkMS        int64   `json:"talk_ms"`
@@ -84,7 +88,7 @@ func TestEpisodeTalkTimeAvailableCarriesTheMeasurements(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Source != "transcript" || body.Status != "available" || body.TalkTime.EpisodeDurationMS != 60_000 || body.TalkTime.RecordingsTranscribed != 1 || len(body.TalkTime.Speakers) != 2 {
+	if body.Source != "transcript" || body.Status != "available" || body.TalkTime.EpisodeDurationMS != 60_000 || len(body.TalkTime.Recordings) != 2 || body.TalkTime.Recordings[0].OffsetMS != 30_000 || !body.TalkTime.Recordings[0].Transcribed || body.TalkTime.Recordings[1].Transcribed || len(body.TalkTime.Speakers) != 2 {
 		t.Fatalf("body = %s", response.Body.String())
 	}
 	alice, dana := body.TalkTime.Speakers[0], body.TalkTime.Speakers[1]

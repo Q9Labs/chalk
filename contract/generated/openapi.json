@@ -9493,6 +9493,158 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/talk-time": {
+      "get": {
+        "description": "Who spoke in an ended Episode and for how long, measured from its complete transcripts: talk time and share per Participant, speech runs, overlap and silence, and a fixed-bucket timeline. status says whether a measurement exists; talk_time is set only when it is \"available\". Speech runs are capped, and intervals_truncated says when they were left out. Requires episodes:read.",
+        "operationId": "getEpisodeTalkTime",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpisodeTalkTime"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get episode talk time",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests": {
       "get": {
         "operationId": "listSpacePublicAdmissionRequests",
@@ -16104,6 +16256,110 @@
           }
         },
         "required": ["episodes", "pagination"],
+        "type": "object"
+      },
+      "EpisodeTalkTime": {
+        "additionalProperties": false,
+        "properties": {
+          "episode_id": {
+            "$ref": "#/components/schemas/EpisodeId"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "talk_time": {
+            "additionalProperties": false,
+            "properties": {
+              "bucket_ms": {
+                "type": "integer"
+              },
+              "episode_duration_ms": {
+                "type": "integer"
+              },
+              "intervals_truncated": {
+                "type": "boolean"
+              },
+              "overlap_ms": {
+                "type": "integer"
+              },
+              "recordings_total": {
+                "type": "integer"
+              },
+              "recordings_transcribed": {
+                "type": "integer"
+              },
+              "silence_ms": {
+                "type": "integer"
+              },
+              "speakers": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bucket_talk_ms": {
+                      "items": {
+                        "type": "integer"
+                      },
+                      "type": "array"
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "intervals": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "end_ms": {
+                            "type": "integer"
+                          },
+                          "start_ms": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": ["end_ms", "start_ms"],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "participant_id": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/ParticipantId"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "share": {
+                      "type": "number"
+                    },
+                    "speaker_id": {
+                      "$ref": "#/components/schemas/UUID"
+                    },
+                    "talk_ms": {
+                      "type": "integer"
+                    },
+                    "turns": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["bucket_talk_ms", "display_name", "intervals", "participant_id", "share", "speaker_id", "talk_ms", "turns"],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "total_talk_ms": {
+                "type": "integer"
+              }
+            },
+            "required": ["bucket_ms", "episode_duration_ms", "intervals_truncated", "overlap_ms", "recordings_total", "recordings_transcribed", "silence_ms", "speakers", "total_talk_ms"],
+            "type": ["object", "null"]
+          }
+        },
+        "required": ["episode_id", "source", "status", "talk_time"],
         "type": "object"
       },
       "ErrorResponse": {

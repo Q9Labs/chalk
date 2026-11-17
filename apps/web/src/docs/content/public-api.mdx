@@ -19,6 +19,21 @@ For Home activity across up to 300 Spaces, use `listSpaceActivity` (`GET /v1/ten
 
 Use `getEpisodeAttendance` (`GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance`) with `episodes:read` for live or ended Episode attendance. Each admitted Participant seat appears once, ordered by `first_joined_at`, with its display name, identity kind (`user`, `agent`, or `guest`), nullable external ID, first join, and latest leave. Rejoins keep the first join; this is not a list of presence intervals. `last_left_at` and `left_reason` are null while the seat is present. An ended Episode closes seats that never explicitly left at its end time with `left_reason: "episode_ended"`; explicit departures use `"left"`. Attendance remains available after the Episode event journal is cleaned up.
 
+### Read Episode talk time
+
+Use `getEpisodeTalkTime` (`GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/talk-time`) with `episodes:read` to see who spoke in an ended Episode and for how long. Chalk keeps no voice-activity record, so the measurement comes from the Episode's complete transcripts: every transcript cue is a span in which its speaker was talking. `source` is always `"transcript"`.
+
+`status` says whether a measurement exists, and `talk_time` is set only when it is `"available"`:
+
+- `available`: at least one Recording has a complete transcript.
+- `no_transcript`: the Episode has ended and no Recording has a transcript or is getting one. Transcription was not requested, was disabled, or failed.
+- `transcript_pending`: a transcript is still being made.
+- `live`: the Episode has not ended, so there is nothing to measure yet.
+
+When available, `talk_time` carries `episode_duration_ms`, `total_talk_ms` (the sum of every speaker's talk time, so time two people talk at once counts for both), `overlap_ms` (two or more people talking at once), `silence_ms` (nobody talking), and `recordings_transcribed` out of `recordings_total`. When only some Recordings have a transcript, only those are measured. Each Recording's cues are placed on the Episode timeline by when the Recording's capture became ready, relative to the Episode start; a Recording that starts before the Episode is placed at its start.
+
+`speakers` lists every Participant who attended plus any transcript speaker who matched no attendee, largest `talk_ms` first. A speaker who matched an attendee has that Participant's ID in `participant_id` and `speaker_id`; any other speaker has a null `participant_id` and keeps the display name from the transcript. `talk_ms` is the union of the speaker's cue spans, so overlapping cues never count twice, and `share` is `talk_ms` over `total_talk_ms`. `intervals` are the speaker's speech runs as `start_ms` and `end_ms` since the Episode started: cues are joined across pauses of up to one second, and `turns` is the number of runs. The response carries at most 5000 runs in total; past that, `intervals_truncated` is true and every `intervals` list is empty. `bucket_talk_ms` is each speaker's talk time in consecutive buckets of `bucket_ms` from the Episode start, and it always covers the whole Episode. Chalk picks the smallest bucket that gives at most 120 buckets.
+
 ### Download transcript text
 
 Use `GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text` with `transcriptions:read` to download a completed transcript as `text/plain; charset=utf-8`. The attachment filename contains the sanitized Space title and UTC recording date; non-ASCII titles also have an RFC 5987 `filename*`. The dashboard's **Transcript (text)** download uses this route through its authenticated backend. It does not offer a JSON download.

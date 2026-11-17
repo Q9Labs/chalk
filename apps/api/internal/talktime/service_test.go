@@ -109,7 +109,7 @@ func TestGetPlacesEachRecordingOnTheEpisodeTimeline(t *testing.T) {
 	if !ok {
 		t.Fatalf("outcome = %#v", outcome)
 	}
-	if available.RecordingsTotal != 2 || available.RecordingsTranscribed != 2 || available.Report.EpisodeDurationMS != 600_000 {
+	if len(available.Recordings) != 2 || available.Recordings[0].OffsetMS != 60_000 || available.Recordings[1].OffsetMS != 300_000 || transcribedCount(available) != 2 || available.Report.EpisodeDurationMS != 600_000 {
 		t.Fatalf("available = %+v", available)
 	}
 	// Alice: 70s-80s in the first Recording, 300s-305s in the second.
@@ -142,7 +142,7 @@ func TestGetMeasuresOnlyCompleteTranscriptsAndSaysHowManyThatIs(t *testing.T) {
 		{Status: "completed", StartedAt: episodeStart.Add(2 * time.Minute)},
 	}, fakeObjects{"a": body})
 	available := outcome.(Available)
-	if available.RecordingsTotal != 3 || available.RecordingsTranscribed != 1 {
+	if len(available.Recordings) != 3 || transcribedCount(available) != 1 {
 		t.Fatalf("available = %+v", available)
 	}
 }
@@ -192,7 +192,7 @@ func TestGetMeasuresWhatIsDoneEvenWhenAnotherRecordingIsPending(t *testing.T) {
 		{Status: "completed", Transcript: completeTranscript("a", body)},
 		{Status: "completed", Transcript: &transcripts.Transcript{Status: transcripts.StatusTranscribing}},
 	}, fakeObjects{"a": body})
-	if available, ok := outcome.(Available); !ok || available.RecordingsTotal != 2 || available.RecordingsTranscribed != 1 {
+	if available, ok := outcome.(Available); !ok || len(available.Recordings) != 2 || transcribedCount(available) != 1 {
 		t.Fatalf("outcome = %#v", outcome)
 	}
 }
@@ -216,4 +216,14 @@ func TestGetPassesEpisodeErrorsThrough(t *testing.T) {
 	if !errors.Is(err, episodes.ErrEpisodeNotFound) {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+func transcribedCount(available Available) int {
+	count := 0
+	for _, recording := range available.Recordings {
+		if recording.Transcribed {
+			count++
+		}
+	}
+	return count
 }

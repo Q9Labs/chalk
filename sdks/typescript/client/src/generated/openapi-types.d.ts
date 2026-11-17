@@ -950,6 +950,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/talk-time": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get episode talk time
+     * @description Who spoke in an ended Episode and for how long, measured from its complete transcripts: talk time and share per Participant, speech runs, overlap and silence, and a fixed-bucket timeline. status says whether a measurement exists; talk_time is set only when it is "available". Speech runs are capped, and intervals_truncated says when they were left out. Requires episodes:read.
+     */
+    get: operations["getEpisodeTalkTime"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests": {
     parameters: {
       query?: never;
@@ -2087,6 +2107,34 @@ export interface components {
     EpisodeList: {
       episodes: components["schemas"]["Episode"][];
       pagination: components["schemas"]["Pagination"];
+    };
+    EpisodeTalkTime: {
+      episode_id: components["schemas"]["EpisodeId"];
+      source: string;
+      status: string;
+      talk_time: {
+        bucket_ms: number;
+        episode_duration_ms: number;
+        intervals_truncated: boolean;
+        overlap_ms: number;
+        recordings_total: number;
+        recordings_transcribed: number;
+        silence_ms: number;
+        speakers: {
+          bucket_talk_ms: number[];
+          display_name: string;
+          intervals: {
+            end_ms: number;
+            start_ms: number;
+          }[];
+          participant_id: components["schemas"]["ParticipantId"] | null;
+          share: number;
+          speaker_id: components["schemas"]["UUID"];
+          talk_ms: number;
+          turns: number;
+        }[];
+        total_talk_ms: number;
+      } | null;
     };
     ErrorResponse: {
       error: {
@@ -9392,6 +9440,96 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SyncToken"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getEpisodeTalkTime: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EpisodeTalkTime"];
         };
       };
       /** @description Bad Request */

@@ -32,15 +32,20 @@ type episodeTalkTimeResponse struct {
 }
 
 type talkTimeResponse struct {
-	EpisodeDurationMS     int64                 `json:"episode_duration_ms"`
-	TotalTalkMS           int64                 `json:"total_talk_ms"`
-	OverlapMS             int64                 `json:"overlap_ms"`
-	SilenceMS             int64                 `json:"silence_ms"`
-	BucketMS              int64                 `json:"bucket_ms"`
-	IntervalsTruncated    bool                  `json:"intervals_truncated"`
-	RecordingsTotal       int                   `json:"recordings_total"`
-	RecordingsTranscribed int                   `json:"recordings_transcribed"`
-	Speakers              []talkTimeSpeakerBody `json:"speakers"`
+	EpisodeDurationMS  int64                   `json:"episode_duration_ms"`
+	TotalTalkMS        int64                   `json:"total_talk_ms"`
+	OverlapMS          int64                   `json:"overlap_ms"`
+	SilenceMS          int64                   `json:"silence_ms"`
+	BucketMS           int64                   `json:"bucket_ms"`
+	IntervalsTruncated bool                    `json:"intervals_truncated"`
+	Recordings         []talkTimeRecordingBody `json:"recordings"`
+	Speakers           []talkTimeSpeakerBody   `json:"speakers"`
+}
+
+type talkTimeRecordingBody struct {
+	RecordingID string `json:"recording_id"`
+	OffsetMS    int64  `json:"offset_ms"`
+	Transcribed bool   `json:"transcribed"`
 }
 
 type talkTimeSpeakerBody struct {
@@ -95,8 +100,11 @@ func newTalkTimeResponse(available talktime.Available) *talkTimeResponse {
 	response := &talkTimeResponse{
 		EpisodeDurationMS: report.EpisodeDurationMS, TotalTalkMS: report.TotalTalkMS, OverlapMS: report.OverlapMS, SilenceMS: report.SilenceMS,
 		BucketMS: report.BucketMS, IntervalsTruncated: report.IntervalsTruncated,
-		RecordingsTotal: available.RecordingsTotal, RecordingsTranscribed: available.RecordingsTranscribed,
-		Speakers: make([]talkTimeSpeakerBody, 0, len(report.Speakers)),
+		Recordings: make([]talkTimeRecordingBody, 0, len(available.Recordings)),
+		Speakers:   make([]talkTimeSpeakerBody, 0, len(report.Speakers)),
+	}
+	for _, recording := range available.Recordings {
+		response.Recordings = append(response.Recordings, talkTimeRecordingBody{RecordingID: recording.RecordingID.String(), OffsetMS: recording.OffsetMS, Transcribed: recording.Transcribed})
 	}
 	for _, speaker := range report.Speakers {
 		body := talkTimeSpeakerBody{
