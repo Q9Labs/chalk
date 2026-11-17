@@ -80,6 +80,22 @@ describe("faults at the boundaries of a credential and of a request", () => {
     expectUnbrokenSequence(test.accepted);
   });
 
+  it("lets a later call refresh its credential after an earlier call's refresh did not help", async () => {
+    const test = createTestOutbox({ bound: false, random: () => 0.5 });
+    const refreshed: string[] = [];
+    let grant = credential();
+    test.outbox.bind({ current: () => grant, refresh: async () => void refreshed.push(grant.subject) });
+    test.answer(...Array.from({ length: 2 }, () => ({ status: 401, retryAfterMs: 0 })));
+    test.outbox.record(failed);
+    await seconds(2);
+    expect(refreshed).toEqual(["tenant/episode/participant"]);
+    grant = credential("tenant/episode-2/participant", "token-2");
+    test.answer({ status: 401, retryAfterMs: 0 }, { status: 401, retryAfterMs: 0 });
+    test.outbox.record(failed);
+    await seconds(60);
+    expect(refreshed).toEqual(["tenant/episode/participant", "tenant/episode-2/participant"]);
+  });
+
   it("keeps the wake-up of a backoff when a new event comes in", async () => {
     const test = createTestOutbox();
     test.answer({ status: 429, retryAfterMs: 20_000 });

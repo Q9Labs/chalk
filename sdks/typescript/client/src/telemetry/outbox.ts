@@ -47,7 +47,8 @@ export class TelemetryOutbox implements TelemetrySink {
   #timer: ReturnType<typeof globalThis.setTimeout> | null = null;
   #timerDue = 0;
   #running: Promise<void> | null = null;
-  #refreshTried = false;
+  /** The subject whose credential was refreshed and has not been accepted since. One call's rejection never stops a later call from refreshing. */
+  #refreshedSubject: string | null = null;
   #disposed = false;
 
   constructor(options: TelemetryOutboxOptions) {
@@ -200,18 +201,18 @@ export class TelemetryOutbox implements TelemetrySink {
 
   /** Decides what the answer to one batch means for the queue and for the next batch. */
   async #settle(subject: string, batch: readonly TelemetryEvent[], result: TelemetrySendResult | null): Promise<"continue" | "stop"> {
-    const verdict = judge(result, !this.#refreshTried, subject === this.#source?.current()?.subject);
+    const verdict = judge(result, subject !== this.#refreshedSubject, subject === this.#source?.current()?.subject);
     if (verdict === "retry") {
       this.#backoff(subject, batch, result?.retryAfterMs ?? 0);
       return "stop";
     }
     if (verdict === "accepted") {
       this.#failures = 0;
-      this.#refreshTried = false;
+      if (this.#refreshedSubject === subject) this.#refreshedSubject = null;
     }
     if (verdict === "lost") this.#dropped += lostBy(batch);
     if (verdict === "refresh") {
-      this.#refreshTried = true;
+      this.#refreshedSubject = subject;
       this.#restore(subject, batch);
       await this.#source?.refresh().catch(() => undefined);
     }
