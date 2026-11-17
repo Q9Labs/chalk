@@ -247,13 +247,13 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	}
 
 	// Before the first probe round no node is verified, so the Episode is not bound to one.
-	if before := resolve(); before.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || before.Node != "" || before.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
+	if before := resolve(); before.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || before.Node != "" || before.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable || before.Selector != mediaplane.SelectedByOverflow {
 		t.Fatalf("before a probe: %+v, want Cloudflare overflow_node_unavailable", before)
 	}
 
 	fleet.Probe(ctx)
 	onPrimary := resolve()
-	if onPrimary.Provider != mediaplane.ProviderChalkSFU.SettingName() || onPrimary.Node != "sfu-primary" || onPrimary.PlacementReason != mediaplane.PlacementPrimary || onPrimary.NodeIncarnation == "" {
+	if onPrimary.Provider != mediaplane.ProviderChalkSFU.SettingName() || onPrimary.Node != "sfu-primary" || onPrimary.PlacementReason != mediaplane.PlacementPrimary || onPrimary.NodeIncarnation == "" || onPrimary.Selector != mediaplane.SelectedBySpace {
 		t.Fatalf("pool with room: %+v, want the primary with its incarnation", onPrimary)
 	}
 
@@ -264,7 +264,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first), scopeOf("ep-1", "alice"))
 	fleet.Probe(ctx)
 	onStandby := resolve()
-	if onStandby.Node != "sfu-standby" || onStandby.PlacementReason != mediaplane.PlacementStandby || onStandby.NodeIncarnation == "" || onStandby.NodeIncarnation == onPrimary.NodeIncarnation {
+	if onStandby.Node != "sfu-standby" || onStandby.PlacementReason != mediaplane.PlacementStandby || onStandby.NodeIncarnation == "" || onStandby.NodeIncarnation == onPrimary.NodeIncarnation || onStandby.Selector != mediaplane.SelectedBySpace {
 		t.Fatalf("full primary: %+v, want the standby with its own incarnation", onStandby)
 	}
 
@@ -275,7 +275,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, second), scopeOf("ep-2", "bob"))
 	fleet.Probe(ctx)
 	full := resolve()
-	if full.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || full.Node != "" || full.NodeIncarnation != "" || full.PlacementReason != mediaplane.PlacementOverflowNoRoom {
+	if full.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || full.Node != "" || full.NodeIncarnation != "" || full.PlacementReason != mediaplane.PlacementOverflowNoRoom || full.Selector != mediaplane.SelectedByOverflow {
 		t.Fatalf("both nodes full: %+v, want Cloudflare overflow_no_room", full)
 	}
 
@@ -284,7 +284,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	stranger.Probe(ctx)
 	unavailable := registryOn(stranger, withCloudflare, nil, telemetry)
 	down, err := unavailable.ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, chalkSFUClients)
-	if err != nil || down.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || down.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
+	if err != nil || down.Provider != mediaplane.ProviderCloudflareSFU.SettingName() || down.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable || down.Selector != mediaplane.SelectedByOverflow {
 		t.Fatalf("no node answers: %+v, %v, want Cloudflare overflow_node_unavailable", down, err)
 	}
 

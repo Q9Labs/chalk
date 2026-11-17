@@ -11,6 +11,28 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
+// pinnedPlane is the plane that overrides a Chalk SFU choice, and the rule behind the final plane.
+// It is empty while the choice stands.
+func (r Registry) pinnedPlane(ctx context.Context, tenant tenants.Tenant, space spaces.Space, choice spaces.PlaneChoice, clients mediaplane.ClientProviders) (mediaplane.Provider, mediaplane.Selector, error) {
+	if choice.Plane != mediaplane.ProviderChalkSFU {
+		return "", choice.By, nil
+	}
+	if err := r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients); err != nil {
+		return "", "", err
+	}
+	refusal, err := r.rollout.Refusal(ctx, space)
+	if err != nil {
+		return "", "", fmt.Errorf("read the new-Episode switch: %w", err)
+	}
+	switch {
+	case refusal != "":
+		return mediaplane.ProviderCloudflareSFU, refusal, nil
+	case !clients.Runs(mediaplane.ProviderChalkSFU):
+		return mediaplane.ProviderCloudflareSFU, mediaplane.SelectedByClient, nil
+	}
+	return "", choice.By, nil
+}
+
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
 // A Space outside the Chalk SFU allowlist gets Cloudflare, so only allowlisted
@@ -19,22 +41,13 @@ import (
 // fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
 // Cloudflare for good.
 func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	selected, err := r.selectedProvider(tenant, space)
+	choice, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
-	var pin mediaplane.Provider
-	if selected == mediaplane.ProviderChalkSFU {
-		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
-			return nil, err
-		}
-		admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
-		if err != nil {
-			return nil, fmt.Errorf("read the new-Episode switch: %w", err)
-		}
-		if !admits || !clients.Runs(mediaplane.ProviderChalkSFU) {
-			pin = mediaplane.ProviderCloudflareSFU
-		}
+	pin, selectedBy, err := r.pinnedPlane(ctx, tenant, space, choice, clients)
+	if err != nil {
+		return nil, err
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
 	if err != nil {
@@ -75,10 +88,14 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 			}
 			resolved, resolution = fallback, fallbackResolution
 			placement.Node, placement.Incarnation = "", ""
+			selectedBy = mediaplane.SelectedByOverflow
 		}
 	}
 	binding, err := mediaplane.NewBinding(resolution.Provider, resolution.ConfigurationSource, r.applicationID(resolved))
 	if err != nil {
+		return nil, err
+	}
+	if binding, err = binding.SelectedBy(selectedBy); err != nil {
 		return nil, err
 	}
 	if placement.Reason != "" {
@@ -123,11 +140,11 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 // that must refuse before it writes anything. A Space that does not exist yet
 // has the zero ID, so only the allowlist entry * covers it.
 func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) error {
-	selected, err := r.selectedProvider(tenant, space)
+	choice, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return err
 	}
-	return r.refuseAfterSunset(ctx, tenant, space, selected, clients)
+	return r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients)
 }
 
 // refuseAfterSunset refuses a client that cannot run the Chalk SFU once the client
@@ -137,11 +154,11 @@ func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, 
 	if selected != mediaplane.ProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || !r.rollout.SunsetPassed() {
 		return nil
 	}
-	admits, err := r.rollout.AdmitsNewChalkSFUEpisode(ctx, space)
+	refusal, err := r.rollout.Refusal(ctx, space)
 	if err != nil {
 		return fmt.Errorf("read the new-Episode switch: %w", err)
 	}
-	if !admits {
+	if refusal != "" {
 		return nil
 	}
 	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: mediaplane.ModeUnknown}

@@ -62,11 +62,11 @@ The operator command runs from `apps/api` with the API's own database and plane 
 
 ```sh
 CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
-CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane chalk_sfu
+CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane chalk_sfu --operator <name> --reason <text>
 CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings backfill --dry-run
 ```
 
-Leave out `--space` to act on the Tenant's default. Each change prints one JSON line with the stored before and after values. `backfill` moves Spaces that stored `chalk_sfu` before the setting existed, and are on the allowlist, onto the setting; Tenants with their own credentials or media disabled are skipped, and the write is conditional so a Space whose owner pinned Cloudflare after the listing is left alone. A setting-only change sends no `space.updated` webhook, because the Space's `media_plane` payload does not change.
+Leave out `--space` to act on the Tenant's default. `set` and `new-episodes --state` refuse to run without `--operator` and `--reason`; `get` and `backfill` take neither. Each change prints one JSON line with the stored before and after values and a `change_trace_id`, and the database writes one `media_plane_changes` row (actor, reason, scope, old and new plane, trace) in the same transaction. The API announces it as the `media_plane.changed` event within about 10 seconds (see `docs/observability.md`). A change to the plane it already has prints "unchanged: no audit row" and writes nothing. An undo is just another `set` with its own reason, and so is a Space the public API changed: its row names the credential (`api_key:<id>`). `backfill` moves Spaces that stored `chalk_sfu` before the setting existed, and are on the allowlist, onto the setting; Tenants with their own credentials or media disabled are skipped, and the write is conditional so a Space whose owner pinned Cloudflare after the listing is left alone. A setting-only change sends no `space.updated` webhook, because the Space's `media_plane` payload does not change.
 
 ### Send one Space back to Cloudflare, and return it
 
@@ -76,8 +76,8 @@ The Space setting is the kill switch for one Space. It moves the Space's next Ep
 
 **The rule that shapes the steps.** The flip changes only Episodes that start after it. An Episode keeps the plane its binding pinned, so guests who reload and rejoin a live Episode land on the same plane. Moving a live call means ending the Episode and starting a new one.
 
-1. Run `get` and confirm the IDs. `effective_plane` is what the next Episode gets; `kill_switch_on` and `on_allowlist` explain it when it is not what you expect.
-2. Run `set ... --plane cf_sfu` and keep the printed `before`/`after` line in the incident log beside your name, since it records the Space and planes, not the operator. Use `cf_sfu`, not `inherit`, because `inherit` hands the choice to the Tenant and deployment defaults, which may be `chalk_sfu`.
+1. Run `get` and confirm the IDs. `effective_plane` is what the next Episode gets and `selected_by` is the rule that picks it; `kill_switch_on` and `on_allowlist` explain it when it is not what you expect.
+2. Run `set ... --plane cf_sfu --operator <name> --reason <incident>`. The audit row keeps who, why and the before and after planes, so the printed line needs no copy; note its `change_trace_id` in the incident log. Use `cf_sfu`, not `inherit`, because `inherit` hands the choice to the Tenant and deployment defaults, which may be `chalk_sfu`.
 3. If a call is live and must move, end its Episode through the owner API (`POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end`) or the host's End button, then start a new one. Guests in the ended Episode see the call end (`left` with `episodeEnded: true`); a guest who opens the invite link joins the new Episode on Cloudflare. With no live call, skip this step.
 4. Verify: `get` shows `cf_sfu`, and a new Episode's join grant reports `media.provider` as `cloudflare_sfu` with audio and video. `media-provider-inventory` counts live Episodes by provider.
 5. To return, run `set ... --plane chalk_sfu` and repeat step 3. The new Episode binds the Chalk SFU only when the Space is on the allowlist, the SDK declares `chalk_sfu` and a node has room; otherwise it starts on Cloudflare (overflow on) or the create fails. Treat the return as done when the new join grant reports `media.provider` as `chalk_sfu`, not when `get` says so.

@@ -25,6 +25,8 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 	}
 	var result publicinvites.AdmissionRequest
 	var commitMetric webhookCommitMetric
+	var born episodes.Episode
+	var bornNow bool
 	err = r.lifecycle.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 		if r.lifecycle.tenantLimits.AppliesTo(arrival.TenantID) && r.lifecycle.tenantLimits.MaxLiveEpisodes > 0 {
 			if _, err := queries.LockTenantMediaLimits(ctx, uuid(arrival.TenantID)); err != nil {
@@ -55,11 +57,12 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		episode, _, metric, err := r.lifecycle.ensurePublicLiveEpisode(ctx, queries, tx, arrival.TenantID, arrival.SpaceID, space, clients)
+		episode, created, metric, err := r.lifecycle.ensurePublicLiveEpisode(ctx, queries, tx, arrival.TenantID, arrival.SpaceID, space, clients)
 		if err != nil {
 			return err
 		}
 		commitMetric = metric
+		born, bornNow = mapLifecycleEpisode(episode), created
 		if episode.Status != episodes.EpisodeStatusActive {
 			return episodes.ErrEpisodeNotActive
 		}
@@ -118,6 +121,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 	})
 	if err == nil {
 		commitMetric.Record(ctx)
+		announceEpisodeBinding(ctx, born, bornNow)
 	}
 	return result, err
 }

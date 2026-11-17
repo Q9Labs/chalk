@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -22,9 +24,9 @@ func TestLiveKillSwitchSendsTheNextEpisodeToCloudflare(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		mustExec(t, pool, `update media_plane_kill_switch set paused=$1`, original)
-		mustExec(t, pool, `delete from media_plane_kill_switch_changes where operator='kill-switch-proof'`)
+		mustExec(t, pool, `delete from media_plane_changes where actor='kill-switch-proof'`)
 	})
-	if _, err := killSwitch.SetNewEpisodesPaused(t.Context(), false, "kill-switch-proof", "start from on"); err != nil {
+	if _, err := killSwitch.SetNewEpisodesPaused(operatorContext(t, "kill-switch-proof", "start from on"), false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -61,45 +63,48 @@ func TestLiveKillSwitchSendsTheNextEpisodeToCloudflare(t *testing.T) {
 	if got := boundProvider(); got != "chalk_sfu" {
 		t.Fatalf("switch on: provider = %s, want chalk_sfu", got)
 	}
-	before, err := killSwitch.SetNewEpisodesPaused(t.Context(), true, "kill-switch-proof", "drill")
+	before, err := killSwitch.SetNewEpisodesPaused(operatorContext(t, "kill-switch-proof", "drill"), true)
 	if err != nil || before {
 		t.Fatalf("flip off: before = %v, err = %v", before, err)
 	}
 	if got := boundProvider(); got != "cf_sfu" {
 		t.Fatalf("switch off: provider = %s, want cf_sfu", got)
 	}
-	if _, err := killSwitch.SetNewEpisodesPaused(t.Context(), false, "kill-switch-proof", "drill over"); err != nil {
+	if _, err := killSwitch.SetNewEpisodesPaused(operatorContext(t, "kill-switch-proof", "drill over"), false); err != nil {
 		t.Fatal(err)
 	}
 	if got := boundProvider(); got != "chalk_sfu" {
 		t.Fatalf("switch back on: provider = %s, want chalk_sfu", got)
 	}
 
-	rows, err := pool.Query(t.Context(), `select paused_before, paused_after, reason from media_plane_kill_switch_changes where operator='kill-switch-proof' order by id`)
+	rows, err := pool.Query(t.Context(), `select old_plane, new_plane, reason from media_plane_changes where scope='kill_switch' and actor='kill-switch-proof' order by id`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
 	var trail []string
 	for rows.Next() {
-		var from, to bool
-		var reason string
+		var from, to, reason string
 		if err := rows.Scan(&from, &to, &reason); err != nil {
 			t.Fatal(err)
 		}
-		trail = append(trail, reason)
+		_ = from
+		trail = append(trail, to+" "+reason)
 	}
-	if got := strings.Join(trail, "|"); got != "start from on|drill|drill over" {
+	if got := strings.Join(trail, "|"); got != "inherit start from on|cf_sfu drill|inherit drill over" {
 		t.Fatalf("audit trail = %q, want one row per flip", got)
 	}
 }
 
 func TestKillSwitchFlipNeedsAnOperatorAndAReason(t *testing.T) {
 	killSwitch := NewKillSwitch(settingsPool(t))
-	if _, err := killSwitch.SetNewEpisodesPaused(t.Context(), true, " ", "why"); err == nil {
-		t.Fatal("a flip without an operator was accepted")
-	}
-	if _, err := killSwitch.SetNewEpisodesPaused(t.Context(), true, "kill-switch-proof", ""); err == nil {
-		t.Fatal("a flip without a reason was accepted")
+	for name, ctx := range map[string]context.Context{
+		"no origin":   t.Context(),
+		"no operator": operatorContext(t, " ", "why"),
+		"no reason":   operatorContext(t, "kill-switch-proof", ""),
+	} {
+		if _, err := killSwitch.SetNewEpisodesPaused(ctx, true); !errors.Is(err, mediaplane.ErrChangeOriginMissing) {
+			t.Fatalf("a flip with %s: err = %v", name, err)
+		}
 	}
 }
