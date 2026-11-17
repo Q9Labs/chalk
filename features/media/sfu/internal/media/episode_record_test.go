@@ -13,7 +13,7 @@ func TestAnEpisodeRecordExistsOnlyWhileItHoldsSomething(t *testing.T) {
 	if records != 1 {
 		t.Fatalf("records with one session = %d, want 1", records)
 	}
-	f.node.EndEpisode("tenant", "one")
+	f.node.EndEpisode("tenant", "one", Trace{})
 	f.node.mu.Lock()
 	records = len(f.node.episodes)
 	f.node.mu.Unlock()

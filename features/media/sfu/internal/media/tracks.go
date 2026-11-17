@@ -62,6 +62,9 @@ type publication struct {
 	// Owned by the node's control loop.
 	order uint64
 	plan  uint8 // the Episode plan level of a camera
+	// statsPackets and statsIdle are the media event's last count and whether it was flat (see due).
+	statsPackets uint64
+	statsIdle    bool
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
@@ -141,6 +144,7 @@ func (p *publication) read(layer *ingressLayer) {
 func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, header *rtp.Header, writer *packetWriter) {
 	layer.meter.add(len(raw))
 	if p.held.Load() {
+		layer.holding = true
 		return
 	}
 	packet, ok := parseRTP(header, raw, p.video())
@@ -153,6 +157,7 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 	newest := layer.newest()
 	packet.extSeq = layer.extend(header.SequenceNumber)
 	packet.arrival = monotonic()
+	layer.arrived(packet.extSeq, header.Timestamp, packet.arrival, repaired)
 	if layer.nack != nil {
 		layer.nack.observe(packet.extSeq, newest, packet.arrival)
 	}
@@ -418,6 +423,7 @@ func (p *publication) requestKeyframe(index int) {
 	if (last != 0 && now-last < int64(keyframeInterval)) || !layer.lastAsked.CompareAndSwap(last, now) {
 		return
 	}
+	layer.keyframeRequests.Add(1)
 	_ = p.session.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: layer.ssrc}})
 }
 

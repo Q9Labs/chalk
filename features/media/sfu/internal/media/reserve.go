@@ -147,7 +147,7 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.stopped || n.draining {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedDraining, ErrDraining)
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedDraining, ErrDraining)
 	}
 	if err := n.refuseRetired(key, request.AllocationGeneration); err != nil {
 		return protocol.ReserveEpisodeResponse{}, err
@@ -174,23 +174,23 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		shape.Participants = max(shape.Participants, existing.participants)
 	}
 	if existing == nil && n.heldEpisodes() >= maxHolds {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedHolds, fmt.Errorf("%w: the node holds the most reserved Episodes", ErrCapacityExceeded))
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedHolds, fmt.Errorf("%w: the node holds the most reserved Episodes", ErrCapacityExceeded))
 	}
 	rec := n.episodes[key]
 	live := rec.count(true, nil, 0)
 	if shape.Participants > n.cfg.MaxEpisodeParticipants {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedEpisodeFull, errEpisodeFull)
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedEpisodeFull, errEpisodeFull)
 	}
 	if shape.CamerasPerParticipant > n.cfg.CamerasPerParticipant {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedCameras, fmt.Errorf("%w: the node reserves at most %d cameras per Participant", ErrCapacityExceeded, n.cfg.CamerasPerParticipant))
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedCameras, fmt.Errorf("%w: the node reserves at most %d cameras per Participant", ErrCapacityExceeded, n.cfg.CamerasPerParticipant))
 	}
 	if shape.CaptureSlots > n.cfg.MaxCapturesPerEpisode {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedCaptureLimit, errCaptureLimit)
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedCaptureLimit, errCaptureLimit)
 	}
 	// An Episode the node already hosts or holds is not new, as in admit.
 	if live == 0 && existing == nil {
 		if reason := n.guard.closedReason(); reason != "" {
-			return protocol.ReserveEpisodeResponse{}, n.refuse(reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
+			return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
 	}
 	participants := max(live, shape.Participants)
@@ -199,12 +199,12 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	screen := shape.ScreenShare || n.screenOf(key) != nil
 	for count := live + 1; count <= participants; count++ {
 		if n.mandatoryPackets(count, screen) > n.episodeCeiling(count) {
-			return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
+			return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedMandatoryMedia, errMandatoryMedia)
 		}
 	}
 	slots := len(n.sessions) + max(0, shape.Participants-live) + max(0, shape.CaptureSlots-rec.count(false, nil, 0)) + n.promisedSlots(key)
 	if slots > n.cfg.MaxSessions {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedSessions, ErrCapacityExceeded)
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedSessions, ErrCapacityExceeded)
 	}
 	// The new hold replaces the Episode's current reservation, its old hold included.
 	// Live capture subscriptions already reserve part of the shape's capture bound, so the new
@@ -221,11 +221,11 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		budget = min(budget, request.PacketCeiling)
 	}
 	if total-current+reserved > budget {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
+		return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedNodeFull, errNodeFull)
 	}
 	if request.AllocationGeneration != nil {
 		if _, recorded := n.raiseRetirement(key, *request.AllocationGeneration); !recorded {
-			return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedRetirements, errRetirementsFull)
+			return protocol.ReserveEpisodeResponse{}, n.refuseEpisode(key, RefusedRetirements, errRetirementsFull)
 		}
 	}
 	expires := n.now().Add(ttl)

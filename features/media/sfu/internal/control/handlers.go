@@ -26,25 +26,25 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET "+protocol.RouteHealth, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	// Readiness names the node incarnation and its load, so it needs the same identity as /v1.
-	mux.Handle("GET "+protocol.RouteReady, s.v1(s.ready))
+	mux.Handle("GET "+protocol.RouteReady, s.v1("ready", s.ready))
 	// Profiles hold heap contents and stacks, so they need the same identity. The index serves
 	// heap, goroutine and allocs. A CPU profile samples for ?seconds= (default and limit 15, the request deadline).
-	mux.Handle("GET /debug/pprof/", s.v1(servePprof(pprof.Index)))
-	mux.Handle("GET /debug/pprof/profile", s.v1(s.profile))
+	mux.Handle("GET /debug/pprof/", s.v1("pprof", servePprof(pprof.Index)))
+	mux.Handle("GET /debug/pprof/profile", s.v1("profile", s.profile))
 
-	mux.Handle("POST "+protocol.RouteSessions, s.v1(s.createSession))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionTracks), s.v1(s.addTracks))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRenegotiate), s.v1(s.renegotiate))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionCloseTracks), s.v1(s.closeTracks))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionUpdateTrack), s.v1(s.updateTracks))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionInspect), s.v1(s.inspect))
-	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRemove), s.v1(s.removeSession))
-	mux.Handle("POST "+protocol.RouteEpisodesEnd, s.v1(s.endEpisode))
-	mux.Handle("POST "+protocol.RouteEpisodesReserve, s.v1(s.reserveEpisode))
-	mux.Handle("POST "+protocol.RouteEpisodesRetire, s.v1(s.retireEpisode))
-	mux.Handle("POST "+protocol.RouteEpisodesSources, s.v1(s.controlSources))
-	mux.Handle("POST "+protocol.RouteDrain, s.v1(s.drain))
-	mux.Handle("POST "+protocol.RouteUndrain, s.v1(s.undrain))
+	mux.Handle("POST "+protocol.RouteSessions, s.v1("create_session", s.createSession))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionTracks), s.v1("add_tracks", s.addTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRenegotiate), s.v1("renegotiate", s.renegotiate))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionCloseTracks), s.v1("close_tracks", s.closeTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionUpdateTrack), s.v1("update_tracks", s.updateTracks))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionInspect), s.v1("inspect", s.inspect))
+	mux.Handle("POST "+protocol.SessionActionPattern(protocol.ActionRemove), s.v1("remove_session", s.removeSession))
+	mux.Handle("POST "+protocol.RouteEpisodesEnd, s.v1("end_episode", s.endEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesReserve, s.v1("reserve_episode", s.reserveEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesRetire, s.v1("retire_episode", s.retireEpisode))
+	mux.Handle("POST "+protocol.RouteEpisodesSources, s.v1("control_sources", s.controlSources))
+	mux.Handle("POST "+protocol.RouteDrain, s.v1("drain", s.drain))
+	mux.Handle("POST "+protocol.RouteUndrain, s.v1("undrain", s.undrain))
 	return s.logged(mux)
 }
 
@@ -105,19 +105,38 @@ func profileSeconds(query url.Values) (int, error) {
 	return seconds, nil
 }
 
-// v1 guards an operation: the caller must hold the expected service identity.
-func (s *Server) v1(handle func(http.ResponseWriter, *http.Request) error) http.Handler {
+// v1 guards an operation: the caller must hold the expected service identity. A failure is
+// answered and then logged on the trail under the operation's name, with the scope the handler
+// noted and the request's trace.
+func (s *Server) v1(operation string, handle func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !hasIdentity(r.TLS, s.cfg.ClientIdentity) {
-			writeProblem(w, errForbidden)
+		who := &attribution{}
+		ctx, cancel := context.WithTimeout(context.WithValue(r.Context(), attributionKey{}, who), requestDeadline)
+		defer cancel()
+		r = r.WithContext(ctx)
+		err := errForbidden
+		if hasIdentity(r.TLS, s.cfg.ClientIdentity) {
+			err = handle(w, r)
+		}
+		if err == nil {
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), requestDeadline)
-		defer cancel()
-		if err := handle(w, r.WithContext(ctx)); err != nil {
-			writeProblem(w, err)
-		}
+		found := writeProblem(w, err)
+		s.node.ControlFailed(who.scope, r.PathValue(protocol.SessionConnectionWildcard), operation, found.status, found.code, traceOf(r), err)
 	})
+}
+
+// attribution is the scope a request named, which the handler notes once it has decoded the body,
+// so a failure after that point carries the ids.
+type attribution struct{ scope protocol.Scope }
+
+type attributionKey struct{}
+
+// noteScope tells v1 whose request this is.
+func noteScope(r *http.Request, scope protocol.Scope) {
+	if who, ok := r.Context().Value(attributionKey{}).(*attribution); ok {
+		who.scope = scope
+	}
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
@@ -129,6 +148,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	noteScope(r, request.Scope)
 	trace := traceOf(r)
 	response, err := s.node.Create(request.OperationID, request.Scope, kind, request.AllocationGeneration)
 	if err != nil {
@@ -212,11 +232,12 @@ func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
+	noteScope(r, protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID})
 	scope := protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: 1}
 	if err := media.ValidateScope(scope); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID)})
+	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID, traceOf(r))})
 	return nil
 }
 
@@ -225,7 +246,8 @@ func (s *Server) retireEpisode(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
-	response, err := s.node.RetireEpisode(request)
+	noteScope(r, protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID})
+	response, err := s.node.RetireEpisode(request, traceOf(r))
 	if err != nil {
 		return err
 	}
@@ -238,6 +260,7 @@ func (s *Server) reserveEpisode(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
+	noteScope(r, protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID})
 	response, err := s.node.ReserveEpisode(request)
 	if err != nil {
 		return err
@@ -251,6 +274,7 @@ func (s *Server) controlSources(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
+	noteScope(r, protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID})
 	response, err := s.node.ControlSources(request)
 	if err != nil {
 		return err
@@ -264,6 +288,7 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
+	noteScope(r, request.Scope)
 	find := s.node.Session
 	if request.Peer {
 		find = s.node.PeerSession
@@ -285,6 +310,7 @@ func (s *Server) sessionFor(w http.ResponseWriter, r *http.Request, body any, sc
 	if err := s.decode(w, r, body); err != nil {
 		return nil, err
 	}
+	noteScope(r, scope())
 	session, err := s.node.Session(r.PathValue(protocol.SessionConnectionWildcard), scope())
 	if err == nil {
 		session.Note(traceOf(r))

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,43 +23,42 @@ func main() {
 	}
 }
 
-// exportShutdown bounds the final export, inside the container's stop timeout.
-const exportShutdown = 3 * time.Second
+// The container stops the node with SIGKILL 20 s after SIGTERM (--stop-timeout in
+// infrastructure/sfu/chalk-sfu.container.in). The stop gets a budget that leaves the last export
+// room to finish before that, so the final session-closed lines reach the store.
+const (
+	stopTimeout    = 20 * time.Second
+	exportShutdown = 3 * time.Second
+	stopBudget     = stopTimeout - exportShutdown - time.Second
+)
 
 func run() error {
 	cfg, err := config.Load(os.LookupEnv)
 	if err != nil {
 		return err
 	}
-	log, closeLogs, err := telemetry.NewLogger(context.Background(), cfg.Telemetry, slog.NewJSONHandler(os.Stderr, nil))
+	log, diag, closeLogs, err := telemetry.NewLogger(context.Background(), cfg.Telemetry, cfg.Incarnation, slog.NewJSONHandler(os.Stderr, nil))
 	if err != nil {
 		return err
 	}
-	// Closing last sends the final records, including the shutdown ones.
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), exportShutdown)
-		defer cancel()
-		if err := closeLogs(ctx); err != nil {
-			slog.Warn("log shutdown failed", "error", err)
-		}
-	}()
+	// Closing last sends the final records, including the shutdown ones. The exporters flush
+	// together, so the two share one export budget.
+	flushes := []func(context.Context) error{closeLogs}
+	defer func() { flush(log, flushes) }()
+	if cfg.Telemetry.OTLPEndpoint != "" && !diag.LogsExport() {
+		log.Warn("log export is off: OTEL_EXPORTER_OTLP_LOGS_HEADERS is empty, so the diagnosis trail stays in the journal and never reaches the store; the chalk.sfu.telemetry.logs_export gauge reads 0")
+	}
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		return err
 	}
 	log.Info("sfu listening", "control", server.Addr().String(), "udpPort", server.UDPPort())
-	exporter, err := telemetry.Start(context.Background(), cfg.Telemetry, server.Incarnation(), server.Telemetry, log)
+	exporter, err := telemetry.Start(context.Background(), cfg.Telemetry, server.Incarnation(), server.Telemetry, diag, log)
 	if err != nil {
-		return errors.Join(err, server.Stop(context.Background()))
+		return errors.Join(err, stopServer(server))
 	}
 	// Stopping last sends a final export that shows the node's sessions gone.
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), exportShutdown)
-		defer cancel()
-		if err := exporter.Shutdown(ctx); err != nil {
-			log.Warn("telemetry shutdown failed", "error", err)
-		}
-	}()
+	flushes = append(flushes, exporter.Shutdown)
 
 	signals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -73,7 +73,7 @@ func run() error {
 		select {
 		case <-signals.Done():
 			log.Info("sfu stopping")
-			return server.Stop(context.Background())
+			return stopServer(server)
 		case <-drain:
 			// SIGUSR1 drains without stopping, so an operator can wait for live
 			// calls to end before a restart. "sfu drained" marks the last one.
@@ -94,4 +94,26 @@ func run() error {
 			}
 		}
 	}
+}
+
+// stopServer drains the server inside the stop budget.
+func stopServer(server *control.Server) error {
+	ctx, cancel := context.WithTimeout(context.Background(), stopBudget)
+	defer cancel()
+	return server.Stop(ctx)
+}
+
+// flush runs the final exports together under one deadline, so two slow stores cost one wait.
+func flush(log *slog.Logger, exports []func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), exportShutdown)
+	defer cancel()
+	var wg sync.WaitGroup
+	for _, export := range exports {
+		wg.Go(func() {
+			if err := export(ctx); err != nil {
+				log.Warn("telemetry shutdown failed", "error", err)
+			}
+		})
+	}
+	wg.Wait()
 }

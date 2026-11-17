@@ -63,6 +63,12 @@ type Session struct {
 	started  time.Time
 	watching atomic.Bool
 	cause    atomic.Pointer[string]
+	// link is what the peer connection did, for the closed event (see outcome.go).
+	link link
+	// statsSent and statsIdle are the downlink events' last count and whether it was flat. Only
+	// the control loop touches them (see due).
+	statsSent uint64
+	statsIdle bool
 }
 
 // newSession builds a session and starts its pacer. The caller holds n.mu.
@@ -89,7 +95,6 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind *Se
 	n.wg.Go(s.transport.drain)
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
-			n.log.Warn("session never connected", "connection_id", id)
 			s.CloseFor(CloseNeverConnected)
 		}
 	})
@@ -103,7 +108,8 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind *Se
 func (s *Session) key() participantKey { return s.kind.key(s.scope) }
 
 func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
-	s.traceConnectionState(state)
+	connectMs, outageMs, first, recovered := s.link.peerChanged(state, s.started, time.Now())
+	s.traceConnectionState(state, connectMs, outageMs, first, recovered)
 	switch state {
 	case webrtc.PeerConnectionStateConnected:
 		// The timer only guards a session that never connects. Later drops are ICE's to report.
@@ -186,6 +192,8 @@ func (s *Session) CloseFor(cause string) {
 	s.connectTimer.Stop()
 	s.mu.Unlock()
 
+	// The last counters, before the tracks close, hold the seconds that explain how the call ended.
+	s.traceMedia(true)
 	for _, pub := range published {
 		pub.close()
 	}

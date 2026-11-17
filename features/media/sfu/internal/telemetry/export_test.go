@@ -46,7 +46,7 @@ func (s *exportSink) exported() string {
 
 func newExportLogger(t *testing.T, sink *exportSink, local slog.Handler) (*slog.Logger, func()) {
 	t.Helper()
-	log, shutdown, err := NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.server.URL, OTLPInsecure: true, Version: "test", Environment: "test"}, local)
+	log, _, shutdown, err := NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.server.URL, OTLPInsecure: true, Version: "test", Environment: "test"}, "instance-1", local)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestResourceAttributesFromTheEnvironmentStayOnTheNode(t *testing.T) {
 
 	metrics := newExportSink(t)
 	exporter, err := Start(context.Background(), config.Telemetry{OTLPEndpoint: metrics.server.URL, OTLPInsecure: true, Version: "test", Environment: "test", Interval: 20 * time.Millisecond},
-		"instance-1", func() media.Telemetry { return media.Telemetry{Sessions: 1} }, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+		"instance-1", func() media.Telemetry { return media.Telemetry{Sessions: 1} }, &Diagnostics{}, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

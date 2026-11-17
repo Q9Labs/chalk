@@ -14,7 +14,7 @@ import (
 )
 
 // allowedKeys are the only attribute keys a metric may carry: closed sets, never an identity.
-var allowedKeys = map[string]bool{keyDirection: true, keyKind: true, keyReason: true, keyAdmission: true}
+var allowedKeys = map[string]bool{keyDirection: true, keyKind: true, keyReason: true, keyAdmission: true, keyDrop: true}
 
 type point struct {
 	value float64
@@ -26,7 +26,7 @@ func collect(t *testing.T, read Read) map[string][]point {
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
-	if err := Register(provider.Meter(scope), read); err != nil {
+	if err := Register(provider.Meter(scope), read, &Diagnostics{}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	var data metricdata.ResourceMetrics

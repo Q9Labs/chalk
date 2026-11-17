@@ -2,7 +2,9 @@
 package config
 
 import (
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,8 +15,21 @@ import (
 	"time"
 )
 
+// newIncarnation is 4 random bytes in hex.
+func newIncarnation() string {
+	buffer := make([]byte, 4)
+	if _, err := rand.Read(buffer); err != nil {
+		panic(fmt.Sprintf("crypto/rand failed: %v", err))
+	}
+	return hex.EncodeToString(buffer)
+}
+
 // Config holds every tunable of the service. Load enforces the bounds.
 type Config struct {
+	// Incarnation names this process boot. Load makes it, so the log and metric exports can carry
+	// it as the instance id before the node starts. A zero Config leaves it empty and the node
+	// makes its own.
+	Incarnation string
 	// ControlAddr is the mutual-TLS control listener. It defaults to all
 	// interfaces: the listener is public, and mutual TLS plus a firewall guard it.
 	ControlAddr string
@@ -202,6 +217,7 @@ func Load(lookup Lookup) (Config, error) {
 		stealPercent = nodes.StealPercent.Production
 	}
 	cfg := Config{
+		Incarnation:                newIncarnation(),
 		ControlAddr:                r.text("SFU_CONTROL_ADDR", fmt.Sprintf(":%d", nodes.Ports.Control)),
 		UDPAddr:                    r.text("SFU_UDP_ADDR", fmt.Sprintf(":%d", nodes.Ports.Media)),
 		TCPAddr:                    r.text("SFU_TCP_ADDR", ""),

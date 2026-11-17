@@ -32,7 +32,7 @@ func TestMalformedSDPStaysOnTheNode(t *testing.T) {
 	defer sink.Close()
 	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS", "Authorization=Bearer test-token")
 	var journal bytes.Buffer
-	logger, shutdown, err := telemetry.NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.URL, OTLPInsecure: true}, slog.NewJSONHandler(&journal, nil))
+	logger, _, shutdown, err := telemetry.NewLogger(context.Background(), config.Telemetry{OTLPEndpoint: sink.URL, OTLPInsecure: true}, "instance-1", slog.NewJSONHandler(&journal, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

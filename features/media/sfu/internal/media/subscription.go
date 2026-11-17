@@ -67,6 +67,9 @@ type subscription struct {
 	// limit is how far the node holds this subscription below its request.
 	limit serverLimit
 
+	// feedback is what the receiver reported about the stream.
+	feedback feedbackStats
+
 	// Owned by the node's control loop.
 	order uint64
 	alloc allocation
@@ -387,20 +390,24 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 		switch packet := packet.(type) {
 		case *rtcp.PictureLossIndication:
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
+				s.feedback.pli.Add(1)
 				s.requestKeyframe()
 			}
 		case *rtcp.FullIntraRequest:
 			if binding != nil && slices.ContainsFunc(packet.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == binding.ssrc }) {
+				s.feedback.fir.Add(1)
 				s.requestKeyframe()
 			}
 		case *rtcp.TransportLayerNack:
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
+				s.feedback.nack.Add(nacked(packet))
 				budget = s.retransmit(packet, budget, writer)
 			}
 		case *rtcp.ReceiverReport:
 			for _, report := range packet.Reports {
 				if binding != nil && report.SSRC == binding.ssrc {
 					s.transport.onReceiverReport(float64(report.FractionLost) / 256)
+					s.feedback.report(report, time.Now())
 				}
 			}
 		case *rtcp.ReceiverEstimatedMaximumBitrate:

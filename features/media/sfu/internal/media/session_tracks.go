@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -66,7 +67,7 @@ func (s *Session) Renegotiate(_ context.Context, request protocol.RenegotiateReq
 			return struct{}{}, ErrNoPendingOffer
 		}
 		if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: description.SDP}); err != nil {
-			return struct{}{}, s.failNegotiation("apply the answer", err)
+			return struct{}{}, s.failNegotiation(stepApplyAnswer, err)
 		}
 		pending.timer.Stop()
 		s.mu.Lock()
@@ -135,7 +136,7 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 		}
 	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepApplyCloseOffer, err)
 	}
 	var response protocol.CloseTracksResponse
 	for _, track := range request.Tracks {
@@ -146,11 +147,11 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 		err = s.pc.SetLocalDescription(answer)
 	}
 	if err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("answer the close offer", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepAnswerCloseOffer, err)
 	}
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
-		return protocol.CloseTracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+		return protocol.CloseTracksResponse{}, s.failNegotiation(stepGatherICE, err)
 	}
 	response.SessionDescription = description
 	return response, nil
@@ -258,7 +259,7 @@ func (s *Session) completeLocalDescription(ctx context.Context) (*protocol.Sessi
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(gatherTimeout):
-		return nil, errors.New("ICE gathering timed out")
+		return nil, errGatherTimeout
 	}
 	local := s.pc.LocalDescription()
 	if local == nil {
@@ -267,10 +268,39 @@ func (s *Session) completeLocalDescription(ctx context.Context) (*protocol.Sessi
 	return &protocol.SessionDescription{SDP: local.SDP, Type: local.Type.String()}, nil
 }
 
+// negotiationStep is one step of an offer and answer exchange. The slug is what the trail exports;
+// the text is for the error the API reads.
+type negotiationStep struct{ slug, text string }
+
+var (
+	stepOfferTracks      = negotiationStep{"offer_tracks", "offer the tracks"}
+	stepGatherICE        = negotiationStep{"gather_ice", "gather ICE candidates"}
+	stepReadOffer        = negotiationStep{"read_offer", "read the offer"}
+	stepApplyOffer       = negotiationStep{"apply_offer", "apply the offer"}
+	stepAnswerOffer      = negotiationStep{"answer_offer", "answer the offer"}
+	stepApplyAnswer      = negotiationStep{"apply_answer", "apply the answer"}
+	stepApplyCloseOffer  = negotiationStep{"apply_close_offer", "apply the close offer"}
+	stepAnswerCloseOffer = negotiationStep{"answer_close_offer", "answer the close offer"}
+)
+
+var errGatherTimeout = errors.New("ICE gathering timed out")
+
 // failNegotiation closes the session: after a failed step its peer connection
-// cannot return to a stable state, and the client replaces the connection.
-func (s *Session) failNegotiation(step string, cause error) error {
-	s.node.log.Warn("negotiation failed", "connection_id", s.id, "step", step, "error", cause)
+// cannot return to a stable state, and the client replaces the connection. The journal keeps the
+// error text. The trail carries the step and a reason from a closed set, with the request's trace.
+func (s *Session) failNegotiation(step negotiationStep, cause error) error {
+	s.node.log.Warn("negotiation failed", "connection_id", s.id, "step", step.text, "error", cause)
+	s.trail(slog.LevelWarn, EventNegotiationFailed, "step", step.slug, "reason", negotiationReason(cause))
 	s.CloseFor(CloseNegotiationFailed)
-	return fmt.Errorf("%w: %s: %w", ErrNegotiationFailed, step, cause)
+	return fmt.Errorf("%w: %s: %w", ErrNegotiationFailed, step.text, cause)
+}
+
+func negotiationReason(cause error) string {
+	switch {
+	case errors.Is(cause, context.DeadlineExceeded), errors.Is(cause, errGatherTimeout):
+		return "timeout"
+	case errors.Is(cause, context.Canceled):
+		return "canceled"
+	}
+	return "rejected"
 }
