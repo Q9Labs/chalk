@@ -79,7 +79,7 @@ func TestEndEpisodeRetriesWhenTheOutcomesCannotBeSaved(t *testing.T) {
 
 	result := endExecutor(t, node, recorder).Dispatch(t.Context(), testEndOperation(t))
 
-	if result.Outcome != provideroperations.OutcomeRetryableFailure || result.Reason != "session_outcomes_unavailable" {
+	if result.Outcome != provideroperations.OutcomeRetryableFailure || result.Reason != "provider_unavailable" {
 		t.Fatalf("end = %+v, want a retryable failure", result)
 	}
 }

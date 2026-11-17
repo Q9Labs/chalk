@@ -93,11 +93,14 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind *Se
 		return nil, ErrDraining
 	}
 	n.wg.Go(s.transport.drain)
-	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
+	timer := time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 			s.CloseFor(CloseNeverConnected)
 		}
 	})
+	s.mu.Lock()
+	s.connectTimer = timer
+	s.mu.Unlock()
 	pc.OnTrack(s.onTrack)
 	pc.OnConnectionStateChange(s.onConnectionState)
 	pc.OnICEConnectionStateChange(s.onICEState)

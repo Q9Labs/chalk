@@ -309,23 +309,7 @@ func TestConformanceSignaling(t *testing.T) {
 	})
 
 	t.Run("ending the Episode removes its sessions and usage stays empty", func(t *testing.T) {
-		ended, err := box.adapter(t, box.ca, clientIdentity).EndEpisodeSessions(ctx, mediaplane.EndEpisodeInput{Provider: mediaplane.ProviderChalkSFU, TenantID: "tenant-1", EpisodeRef: "ep-signal"})
-		if err != nil {
-			t.Fatalf("end Episode: %v", err)
-		}
-		if len(ended) < 2 {
-			t.Fatalf("the end reported %d session outcomes, want one per Participant: %+v", len(ended), ended)
-		}
-		byConnection := map[string]mediaplane.SessionOutcome{}
-		for _, outcome := range ended {
-			byConnection[outcome.ConnectionID] = outcome
-		}
-		for _, connection := range []struct{ id, participant string }{{aliceConn, "alice"}, {bobConn, "bob"}} {
-			outcome, ok := byConnection[connection.id]
-			if !ok || outcome.ParticipantRef != connection.participant || outcome.Cause != "episode_ended" || outcome.Outcome == "" || outcome.EndedAt.IsZero() {
-				t.Fatalf("outcome of %s = %+v (found %v)", connection.participant, outcome, ok)
-			}
-		}
+		requireEpisodeEndReportsSessions(ctx, t, box, "ep-signal", map[string]string{aliceConn: "alice", bobConn: "bob"})
 		for _, connection := range []struct {
 			id    string
 			scope mediaplane.Scope
