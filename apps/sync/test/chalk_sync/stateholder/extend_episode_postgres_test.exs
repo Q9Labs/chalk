@@ -44,15 +44,16 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
         %{
           default_episode_duration_seconds: 3_600,
           maximum_episode_duration_seconds: 7_200,
-          deadline_at_ms: created_ms + @hour_ms
+          deadline_at_ms: created_ms + @hour_ms,
+          deadline_generation: 2
         },
         %{}
       )
 
     Postgrex.query!(
       connection,
-      "update episodes set created_at = to_timestamp($2::double precision / 1000.0) where id = $1",
-      [UUID.dump!(fixture.episode.episode_id), created_ms]
+      "update episodes set created_at = to_timestamp($2::double precision / 1000.0), deadline_at = to_timestamp($3::double precision / 1000.0), deadline_generation = 2 where id = $1",
+      [UUID.dump!(fixture.episode.episode_id), created_ms, created_ms + @hour_ms]
     )
 
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
@@ -65,7 +66,7 @@ defmodule ChalkSync.Stateholder.ExtendEpisodePostgresTest do
     assert {:ok, %{result: :committed, event: event}} = extend(host, 1_800)
 
     assert event.name == "deadline_changed"
-    assert event.payload["deadline_generation"] == 2
+    assert event.payload["deadline_generation"] == 3
     assert event.payload["deadline_at_ms"] == ctx.created_ms + @hour_ms + 1_800_000
     assert episode_deadline_ms(ctx) == event.payload["deadline_at_ms"]
   end
