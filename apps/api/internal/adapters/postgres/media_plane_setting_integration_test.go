@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -55,24 +54,6 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 	})
 	mustExec(t, pool, `insert into spaces (id,tenant_id,name,slug,media_plane,media_plane_setting_written,media_plane_setting_against) values ($1,$2,'Plane setting proof','plane-setting-proof',$3,$4,case when $4::text is null then null else $3::text end)`, space.Bytes(), tenant.Bytes(), stored, setting)
 	return tenant, space
-}
-
-// policyResolver binds an Episode to the plane the policy picks. The provider-specific
-// guards (client capability, node room) are the Registry's and have their own tests.
-type policyResolver struct{ policy spaces.PlanePolicy }
-
-func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	live, _ := spaces.NewEpisodesPausedFrom(ctx)
-	choice, err := r.policy.Paused(live).Effective(tenant, space)
-	if err != nil {
-		return nil, err
-	}
-	binding, err := mediaplane.NewBinding(choice.Plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
-	if err != nil {
-		return nil, err
-	}
-	binding, err = binding.SelectedBy(choice.By)
-	return &binding, err
 }
 
 // The Episode creation transaction reads the locked Space row and the Tenant policy, then

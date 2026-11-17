@@ -19,14 +19,11 @@ import (
 )
 
 func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input spaces.CreateSpaceInput) (spaces.Space, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPlaneWrite(ctx, r.pool)
 	if err != nil {
 		return spaces.Space{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err := tagPlaneChange(ctx, tx); err != nil {
-		return spaces.Space{}, err
-	}
 	// CreateSpace locks the Tenant row; take the later journey write intent first,
 	// matching delivery and purge even when a purge fence is already queued.
 	if _, err := tx.Exec(ctx, `lock table observability_journey_events in row exclusive mode`); err != nil {
@@ -102,14 +99,11 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 }
 
 func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, spaceID utilities.ID, input spaces.UpdateSpaceInput) (spaces.Space, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := beginPlaneWrite(ctx, r.pool)
 	if err != nil {
 		return spaces.Space{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err := tagPlaneChange(ctx, tx); err != nil {
-		return spaces.Space{}, err
-	}
 	queries := sqlc.New(tx)
 	if _, err = tx.Exec(ctx, `select id from spaces where tenant_id=$1 and id=$2 for update`, uuid(tenantID), uuid(spaceID)); err != nil {
 		return spaces.Space{}, err

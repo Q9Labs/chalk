@@ -79,9 +79,13 @@ const (
 // Plane values of a Change. Inherit is no choice of its own. The kill switch is
 // PlaneCloudflare while it holds every new Episode on Cloudflare and Inherit otherwise.
 const (
-	PlaneInherit    = "inherit"
-	PlaneCloudflare = "cf_sfu"
-	PlaneChalk      = "chalk_sfu"
+	PlaneInherit = "inherit"
+)
+
+// PlaneCloudflare and PlaneChalk are the providers' setting names, the spelling the audit records.
+var (
+	PlaneCloudflare = ProviderCloudflareSFU.SettingName()
+	PlaneChalk      = ProviderChalkSFU.SettingName()
 )
 
 // Change is one row of the audit trail of plane changes. The database writes it in the

@@ -23,8 +23,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,7 +30,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -106,11 +103,8 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()
-	if parsed.origin.Actor != "" {
-		if parsed.origin.TraceID, err = newTraceID(); err != nil {
-			return err
-		}
-		ctx = mediaplane.WithChangeOrigin(ctx, parsed.origin)
+	if ctx, err = parsed.withOrigin(ctx); err != nil {
+		return err
 	}
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
@@ -133,49 +127,6 @@ type request struct {
 	origin mediaplane.ChangeOrigin
 }
 
-// newTraceID names this run, so the change rows it writes and the event the API announces
-// for them share one trace ID that an operator can search for.
-func newTraceID() (string, error) {
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return "", fmt.Errorf("make a trace ID: %w", err)
-	}
-	return hex.EncodeToString(id[:]), nil
-}
-
-func parseOrigin(operator, reason string) (mediaplane.ChangeOrigin, error) {
-	origin := mediaplane.ChangeOrigin{Actor: strings.TrimSpace(operator), Reason: strings.TrimSpace(reason)}
-	if origin.Actor == "" || origin.Reason == "" {
-		return mediaplane.ChangeOrigin{}, errors.New("a change needs --operator and --reason")
-	}
-	return origin, nil
-}
-
-func parseSwitchRequest(tenant, space, plane string, dryRun bool, state, operator, reason string) (request, error) {
-	if tenant != "" || space != "" || plane != "" || dryRun {
-		return request{}, errors.New("new-episodes takes only --state, --operator and --reason")
-	}
-	r := request{command: "new-episodes"}
-	switch state {
-	case "":
-		if operator != "" || reason != "" {
-			return request{}, errors.New("--operator and --reason apply to --state")
-		}
-		return r, nil
-	case "on":
-	case "off":
-		r.paused = true
-	default:
-		return request{}, errors.New("--state must be on or off")
-	}
-	origin, err := parseOrigin(operator, reason)
-	if err != nil {
-		return request{}, err
-	}
-	r.flip, r.origin = true, origin
-	return r, nil
-}
-
 func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool, operator, reason string) (request, error) {
 	r := request{command: command, dryRun: dryRun}
 	switch command {
@@ -195,14 +146,8 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool,
 	if dryRun {
 		return request{}, errors.New("--dry-run applies to backfill only")
 	}
-	var err error
-	if r.tenant, err = utilities.ParseID(tenantText); err != nil {
-		return request{}, errors.New("--tenant must be a Tenant ID")
-	}
-	if spaceText != "" {
-		if r.space, err = utilities.ParseID(spaceText); err != nil {
-			return request{}, errors.New("--space must be a Space ID")
-		}
+	if err := r.parseTarget(tenantText, spaceText); err != nil {
+		return request{}, err
 	}
 	if command == "get" {
 		if planeText != "" {
@@ -210,16 +155,9 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool,
 		}
 		return r, nil
 	}
-	switch planeText {
-	case "inherit":
-	case "":
-		return request{}, errors.New("set needs --plane cf_sfu, chalk_sfu or inherit")
-	default:
-		plane, err := mediaplane.ParseSettingName(planeText)
-		if err != nil {
-			return request{}, errors.New("--plane must be cf_sfu, chalk_sfu or inherit")
-		}
-		r.plane = &plane
+	var err error
+	if r.plane, err = parsePlane(planeText); err != nil {
+		return request{}, err
 	}
 	r.origin, err = parseOrigin(operator, reason)
 	return r, err
@@ -336,15 +274,6 @@ func (s settings) set(ctx context.Context, r request) error {
 	}
 	s.log.Info(changeMessage(change), "scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After), "change_trace_id", r.origin.TraceID)
 	return nil
-}
-
-// changeMessage says whether the write changed anything. A write of the value a setting
-// already has leaves no audit row.
-func changeMessage(change spaces.PlaneChange) string {
-	if valueOrInherit(change.Before) == valueOrInherit(change.After) {
-		return "media plane setting unchanged: no audit row"
-	}
-	return "media plane setting changed"
 }
 
 // backfill moves the Spaces the allowlist selected before the setting existed onto the

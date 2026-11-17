@@ -18,6 +18,19 @@ import (
 // which has an actor and no free-text reason.
 const publicChangeReason = "public API request"
 
+// beginPlaneWrite starts the transaction of a write that may change a plane, and names its writer.
+func beginPlaneWrite(ctx context.Context, pool *pgxpool.Pool) (pgx.Tx, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := tagPlaneChange(ctx, tx); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, err
+	}
+	return tx, nil
+}
+
 // tagPlaneChange tells the plane audit triggers who is writing and why, for the rest of
 // the transaction. The triggers write the row (see migration media_plane_changes), so
 // every writer is audited, and this call only names the writer. A caller with an operator
@@ -117,10 +130,14 @@ func (l ChangeLedger) AnnounceChanges(ctx context.Context, limit int, announce f
 	return len(rows), nil
 }
 
-// announceEpisodeBinding emits the plane decision of an Episode that just committed. Its
-// three birth flows call it after their transaction, so a rolled-back creation announces
-// nothing. An Episode without a binding has no plane to announce.
-func announceEpisodeBinding(ctx context.Context, episode episodes.Episode) {
+// announceEpisodeBinding emits the plane decision of an Episode that just committed. The
+// three flows that can create an Episode call it after their transaction with whether this
+// call created it, so a rolled-back creation and a replay announce nothing. An Episode
+// without a binding has no plane to announce.
+func announceEpisodeBinding(ctx context.Context, episode episodes.Episode, created bool) {
+	if !created {
+		return
+	}
 	binding, _, err := episode.MediaPlaneBinding()
 	if err != nil || binding == nil {
 		return

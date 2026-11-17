@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -195,9 +194,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 		return episodes.PublicJoinResult{}, err
 	}
 	commitMetric.Record(ctx)
-	if episodeCreated {
-		announceEpisodeBinding(ctx, result.Episode)
-	}
+	announceEpisodeBinding(ctx, result.Episode, episodeCreated)
 	return result, nil
 }
 
@@ -289,57 +286,23 @@ func (r EpisodeLifecycleRepository) WaitPublicParticipantReady(ctx context.Conte
 	return result, err
 }
 
-func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episodes.PublicLeaveInput) (episodes.PublicLeaveResult, error) {
-	var result episodes.PublicLeaveResult
-	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		_, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return episodes.ErrSpaceNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock public leave Space: %w", err)
-		}
-		// Sync locks the control row before the Episode; lock in that order so the two cannot wait on each other.
-		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
-			return err
-		}
-		episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
-		if err != nil {
-			return err
-		}
-		participant, err := lockLifecycleParticipant(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, input.ParticipantID)
-		if err != nil {
-			return err
-		}
-		if participant.Generation != input.ParticipantGeneration {
-			return episodes.ErrParticipantGenerationMismatch
-		}
-		result = episodes.PublicLeaveResult{Episode: mapLifecycleEpisode(episode), Participant: mapLifecycleParticipant(participant)}
-		if participant.Status == episodes.ParticipantStatusLeft || participant.Status == episodes.ParticipantStatusLeaving {
-			return nil
-		}
-		if episode.Status != episodes.EpisodeStatusActive {
-			return episodes.ErrEpisodeNotActive
-		}
-		operation, updated, err := createParticipantRemovalOperation(ctx, queries, tx, tenantExternalOperationInput{
-			TenantID: input.TenantID, SpaceID: input.SpaceID, EpisodeID: input.EpisodeID, OperationName: episodes.OperationRemoveParticipant,
-			Request: input.Request, TargetParticipantID: input.ParticipantID, TargetParticipantGeneration: input.ParticipantGeneration,
-			JourneyName: "participant.public_leave_requested", Payload: input.Request.Payload(),
-		}, participant)
-		if err != nil {
-			return err
-		}
-		result.Participant = mapLifecycleParticipant(updated)
-		result.Intent = mapExternalOperationIntent(operation)
-		result.Removed = true
-		return nil
-	})
-	var postgresError *pgconn.PgError
-	if errors.As(err, &postgresError) && postgresError.Code == "55P03" {
-		return result, fmt.Errorf("%w: %w", publicinvites.ErrAccessUnavailable, err)
+// requireClientRunsBinding returns mediaplane.ErrClientUnsupported when the
+// Episode is bound to the Chalk SFU and the caller's SDK cannot run it. Bindings
+// name providers in the Space vocabulary, and every SDK runs Cloudflare, so only
+// a Chalk SFU binding can refuse. An Episode with no binding, or one that predates
+// bindings, is Cloudflare or has no media.
+func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
+	binding, _, err := episode.MediaPlaneBinding()
+	if err != nil {
+		return err
 	}
-	return result, err
+	if binding != nil && mediaplane.Provider(binding.Provider) == mediaplane.ProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+		return mediaplane.ErrClientUnsupported
+	}
+	return nil
 }
+
+var _ episodes.PublicJoinRepository = EpisodeLifecycleRepository{}
 
 func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space, clients mediaplane.ClientProviders) (sqlc.Episode, bool, webhookCommitMetric, error) {
 	// Read the ID without locking the Episode, then follow Sync's order:
@@ -403,21 +366,3 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 	}
 	return episode, true, metric, nil
 }
-
-// requireClientRunsBinding returns mediaplane.ErrClientUnsupported when the
-// Episode is bound to the Chalk SFU and the caller's SDK cannot run it. Bindings
-// name providers in the Space vocabulary, and every SDK runs Cloudflare, so only
-// a Chalk SFU binding can refuse. An Episode with no binding, or one that predates
-// bindings, is Cloudflare or has no media.
-func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
-	binding, _, err := episode.MediaPlaneBinding()
-	if err != nil {
-		return err
-	}
-	if binding != nil && mediaplane.Provider(binding.Provider) == mediaplane.ProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
-		return mediaplane.ErrClientUnsupported
-	}
-	return nil
-}
-
-var _ episodes.PublicJoinRepository = EpisodeLifecycleRepository{}

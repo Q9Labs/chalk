@@ -54,16 +54,16 @@ func TestMediaPlaneChangeEventCarriesTheWholeChange(t *testing.T) {
 	changedAt := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
 	LogMediaPlaneChange(context.Background(), mediaplane.Change{
 		ID: 7, ChangedAt: changedAt, Scope: mediaplane.ChangeScopeSpace, TenantID: tenant, SpaceID: space,
-		OldPlane: "chalk_sfu", NewPlane: "cf_sfu", Actor: "hasan", Reason: "undo pilot", TraceID: strings.Repeat("a", 32),
+		OldPlane: mediaplane.PlaneChalk, NewPlane: mediaplane.PlaneCloudflare, Actor: "hasan", Reason: "undo pilot", TraceID: strings.Repeat("a", 32),
 	})
-	LogMediaPlaneChange(context.Background(), mediaplane.Change{ID: 8, ChangedAt: changedAt, Scope: mediaplane.ChangeScopeKillSwitch, OldPlane: "inherit", NewPlane: "cf_sfu", Actor: "hasan", Reason: "drill"})
+	LogMediaPlaneChange(context.Background(), mediaplane.Change{ID: 8, ChangedAt: changedAt, Scope: mediaplane.ChangeScopeKillSwitch, OldPlane: "inherit", NewPlane: mediaplane.PlaneCloudflare, Actor: "hasan", Reason: "drill"})
 	lines := jsonLines(t, out)
 	if len(lines) != 2 {
 		t.Fatalf("lines = %v", lines)
 	}
 	want := map[string]any{
 		"event": "media_plane.changed", "change_id": float64(7), "scope": "space", "tenant_id": tenant.String(), "space_id": space.String(),
-		"old_plane": "chalk_sfu", "new_plane": "cf_sfu", "actor": "hasan", "reason": "undo pilot", "changed_at": "2026-11-17T09:00:00Z", "change_trace_id": strings.Repeat("a", 32),
+		"old_plane": mediaplane.PlaneChalk, "new_plane": mediaplane.PlaneCloudflare, "actor": "hasan", "reason": "undo pilot", "changed_at": "2026-11-17T09:00:00Z", "change_trace_id": strings.Repeat("a", 32),
 	}
 	for key, value := range want {
 		if lines[0][key] != value {
@@ -89,14 +89,14 @@ func TestMediaPlaneSelectedEventNamesTheEpisodeAndTheRule(t *testing.T) {
 		t.Fatal(err)
 	}
 	LogMediaPlaneSelected(context.Background(), tenant, space, episode, binding)
-	LogMediaPlaneSelected(context.Background(), tenant, space, episode, mediaplane.Binding{Provider: "cf_sfu", ConfigurationSource: mediaplane.BindingSourceDeploymentDefault})
+	LogMediaPlaneSelected(context.Background(), tenant, space, episode, mediaplane.Binding{Provider: mediaplane.PlaneCloudflare, ConfigurationSource: mediaplane.BindingSourceDeploymentDefault})
 	lines := jsonLines(t, out)
 	if len(lines) != 2 {
 		t.Fatalf("lines = %v", lines)
 	}
 	for key, value := range map[string]any{
 		"event": "media_plane.selected", "episode_id": episode.String(), "tenant_id": tenant.String(), "space_id": space.String(),
-		"provider": "cf_sfu", "selected_by": "kill_switch", "configuration_source": "deployment_default",
+		"provider": mediaplane.PlaneCloudflare, "selected_by": "kill_switch", "configuration_source": "deployment_default",
 	} {
 		if lines[0][key] != value {
 			t.Errorf("%s = %v, want %v", key, lines[0][key], value)
@@ -131,7 +131,7 @@ func TestRelayDrainsTheLedgerAndSurvivesAFailure(t *testing.T) {
 	out := captureDefaultLogger(t)
 	ledger := &fakeLedger{}
 	for i := range mediaPlaneChangeBatch + 5 {
-		ledger.pending = append(ledger.pending, mediaplane.Change{ID: int64(i + 1), Scope: mediaplane.ChangeScopeKillSwitch, OldPlane: "inherit", NewPlane: "cf_sfu", Actor: "a", Reason: "r"})
+		ledger.pending = append(ledger.pending, mediaplane.Change{ID: int64(i + 1), Scope: mediaplane.ChangeScopeKillSwitch, OldPlane: "inherit", NewPlane: mediaplane.PlaneCloudflare, Actor: "a", Reason: "r"})
 	}
 	relayMediaPlaneChanges(t.Context(), ledger)
 	if got := len(jsonLines(t, out)); got != mediaPlaneChangeBatch+5 || len(ledger.pending) != 0 || ledger.calls != 2 {

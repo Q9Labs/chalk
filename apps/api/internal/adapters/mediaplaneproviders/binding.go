@@ -11,6 +11,28 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 )
 
+// pinnedPlane is the plane that overrides a Chalk SFU choice, and the rule behind the final plane.
+// It is empty while the choice stands.
+func (r Registry) pinnedPlane(ctx context.Context, tenant tenants.Tenant, space spaces.Space, choice spaces.PlaneChoice, clients mediaplane.ClientProviders) (mediaplane.Provider, mediaplane.Selector, error) {
+	if choice.Plane != mediaplane.ProviderChalkSFU {
+		return "", choice.By, nil
+	}
+	if err := r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients); err != nil {
+		return "", "", err
+	}
+	refusal, err := r.rollout.Refusal(ctx, space)
+	if err != nil {
+		return "", "", fmt.Errorf("read the new-Episode switch: %w", err)
+	}
+	switch {
+	case refusal != "":
+		return mediaplane.ProviderCloudflareSFU, refusal, nil
+	case !clients.Runs(mediaplane.ProviderChalkSFU):
+		return mediaplane.ProviderCloudflareSFU, mediaplane.SelectedByClient, nil
+	}
+	return "", choice.By, nil
+}
+
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
 // A Space outside the Chalk SFU allowlist gets Cloudflare, so only allowlisted
@@ -23,22 +45,9 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 	if err != nil {
 		return nil, err
 	}
-	selectedBy := choice.By
-	var pin mediaplane.Provider
-	if choice.Plane == mediaplane.ProviderChalkSFU {
-		if err := r.refuseAfterSunset(ctx, tenant, space, choice.Plane, clients); err != nil {
-			return nil, err
-		}
-		refusal, err := r.rollout.Refusal(ctx, space)
-		if err != nil {
-			return nil, fmt.Errorf("read the new-Episode switch: %w", err)
-		}
-		switch {
-		case refusal != "":
-			pin, selectedBy = mediaplane.ProviderCloudflareSFU, refusal
-		case !clients.Runs(mediaplane.ProviderChalkSFU):
-			pin, selectedBy = mediaplane.ProviderCloudflareSFU, mediaplane.SelectedByClient
-		}
+	pin, selectedBy, err := r.pinnedPlane(ctx, tenant, space, choice, clients)
+	if err != nil {
+		return nil, err
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
 	if err != nil {

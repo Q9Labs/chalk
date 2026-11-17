@@ -71,11 +71,11 @@ func expectTrail(t *testing.T, got, want []trailRow) {
 // more row, and a write that changes no plane leaves none.
 func TestEveryPlaneWriterLeavesARow(t *testing.T) {
 	pool := settingsPool(t)
-	tenant, space := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	tenant, space := seedSettingsSpace(t, pool, nil, nil, mediaplane.PlaneCloudflare)
 	if got := trailOf(t, pool, tenant); len(got) != 0 {
 		t.Fatalf("seeding a Tenant and Space on no plane left rows: %+v", got)
 	}
-	chalk, cloudflare := "chalk_sfu", "cf_sfu"
+	chalk, cloudflare := mediaplane.PlaneChalk, mediaplane.PlaneCloudflare
 	seedArtifactPolicy(t, pool, tenant)
 
 	// The operator command sets the Tenant default and says why.
@@ -119,19 +119,19 @@ func TestEveryPlaneWriterLeavesARow(t *testing.T) {
 	}
 
 	expectTrail(t, trailOf(t, pool, tenant), []trailRow{
-		{"tenant", "inherit", "chalk_sfu", "hasan", "pilot", proofTraceID},
-		{"space", "inherit", "cf_sfu", "api_key:" + key.String(), "public API request", ""},
-		{"space", "cf_sfu", "chalk_sfu", "unattributed", "unattributed", ""},
-		{"tenant", "chalk_sfu", "inherit", "hasan", "pilot over", proofTraceID},
-		{"tenant", "inherit", "cf_sfu", "api_key:" + key.String(), "public API request", ""},
+		{"tenant", "inherit", mediaplane.PlaneChalk, "hasan", "pilot", proofTraceID},
+		{"space", "inherit", mediaplane.PlaneCloudflare, "api_key:" + key.String(), "public API request", ""},
+		{"space", mediaplane.PlaneCloudflare, mediaplane.PlaneChalk, "unattributed", "unattributed", ""},
+		{"tenant", mediaplane.PlaneChalk, "inherit", "hasan", "pilot over", proofTraceID},
+		{"tenant", "inherit", mediaplane.PlaneCloudflare, "api_key:" + key.String(), "public API request", ""},
 	})
 }
 
 // The relay announces each change once, however often it runs.
 func TestChangeLedgerAnnouncesEachChangeOnce(t *testing.T) {
 	pool := settingsPool(t)
-	tenant, _ := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
-	chalk := "chalk_sfu"
+	tenant, _ := seedSettingsSpace(t, pool, nil, nil, mediaplane.PlaneCloudflare)
+	chalk := mediaplane.PlaneChalk
 	seedArtifactPolicy(t, pool, tenant)
 	if _, err := NewTenantOperator(pool).SetDefaultMediaPlane(operatorContext(t, "hasan", "pilot"), tenant, &chalk); err != nil {
 		t.Fatal(err)
@@ -160,10 +160,28 @@ func TestChangeLedgerAnnouncesEachChangeOnce(t *testing.T) {
 		t.Fatalf("first pass announced %+v, want the one change", first)
 	}
 	change := first[0]
-	if change.Scope != mediaplane.ChangeScopeTenant || change.OldPlane != "inherit" || change.NewPlane != "chalk_sfu" || change.Actor != "hasan" || change.Reason != "pilot" || change.TraceID != proofTraceID || !change.SpaceID.IsZero() || change.ChangedAt.IsZero() {
+	if change.Scope != mediaplane.ChangeScopeTenant || change.OldPlane != "inherit" || change.NewPlane != mediaplane.PlaneChalk || change.Actor != "hasan" || change.Reason != "pilot" || change.TraceID != proofTraceID || !change.SpaceID.IsZero() || change.ChangedAt.IsZero() {
 		t.Fatalf("announced change = %+v", change)
 	}
 	if again := announced(); len(again) != 0 {
 		t.Fatalf("second pass announced %+v, want nothing", again)
 	}
+}
+
+// policyResolver binds an Episode to the plane the policy picks. The provider-specific
+// guards (client capability, node room) are the Registry's and have their own tests.
+type policyResolver struct{ policy spaces.PlanePolicy }
+
+func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	live, _ := spaces.NewEpisodesPausedFrom(ctx)
+	choice, err := r.policy.Paused(live).Effective(tenant, space)
+	if err != nil {
+		return nil, err
+	}
+	binding, err := mediaplane.NewBinding(choice.Plane, mediaplane.BindingSourceDeploymentDefault, "proof-app")
+	if err != nil {
+		return nil, err
+	}
+	binding, err = binding.SelectedBy(choice.By)
+	return &binding, err
 }

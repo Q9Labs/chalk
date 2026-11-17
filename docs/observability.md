@@ -126,4 +126,3 @@ Two events say where Episodes go and why. Both carry bounded values only, never 
 - `overflow`: the Chalk SFU was chosen but no node had room, so Cloudflare took the Episode.
 
 The field is additive and checked by shape (lowercase letters and underscores, at most 32 characters), not against this list, so a later release can add a value and a rollback still reads every binding. A binding written before this field existed has none, and its event says `unknown`. A live Episode keeps its binding, so a later change never rewrites `selected_by`.
-
