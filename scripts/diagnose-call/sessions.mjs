@@ -141,7 +141,7 @@ function recoveredDrops(call) {
     const once = `${seconds(total)} s`;
     const lengthText = lengths.length === 1 ? once : `${lengths.length} times (${once} in all)`;
     const unproven = recovery.outcome === "ended";
-    const outcomeText = unproven ? "the session then ended with the Episode, and the node's totals do not say whether it had recovered" : rejoined.length > 0 ? "recovered, but other Participants had to rejoin meanwhile" : "recovered without rejoining";
+    const outcomeText = unproven ? "the session then closed by the API or the Episode, and the node's totals do not say whether it had recovered" : rejoined.length > 0 ? "recovered, but other Participants had to rejoin meanwhile" : "recovered without rejoining";
     const experience = `lost its media path for ${lengthText}${timed ? ` at ${clock(first)} UTC` : ""} and ${outcomeText}`;
     const rejoinNote = rejoined.length > 0 ? [`${new Set(rejoined.map((row) => row.participant)).size} other Participants started a new session while it was down, so the recovery was not on its own`] : [];
     const why = cause(
