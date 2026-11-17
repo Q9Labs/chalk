@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"go.opentelemetry.io/otel/baggage"
 )
 
 type subjectVerifier struct{ subject accessgrants.Subject }
@@ -180,11 +181,26 @@ func TestOldRoutesWriteTelemetryRows(t *testing.T) {
 	if call["type"] != "call_stats" || call["connection_type"] != "turn" || call["window_ms"] != float64(30000) || call["legacy_route"] != "call-stats" {
 		t.Errorf("call stats row = %v", call)
 	}
-	badSession := httptest.NewRequest(http.MethodPost, f.path+"/connection-reports", strings.NewReader(report))
-	badSession.Header.Set("Authorization", "Bearer credential")
-	badSession.Header.Set("Content-Type", "application/json")
-	badSession.Header.Set("baggage", "session.id=private@example.test")
-	f.router.ServeHTTP(httptest.NewRecorder(), badSession)
+	// The session comes from the request's baggage; a value that is not an id must not reach a log row.
+	withSession := func(value string) {
+		member, err := baggage.NewMemberRaw(observability.SessionIDKey, value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bag, err := baggage.New(member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, f.path+"/connection-reports", strings.NewReader(report)).WithContext(baggage.ContextWithBaggage(context.Background(), bag))
+		request.Header.Set("Authorization", "Bearer credential")
+		request.Header.Set("Content-Type", "application/json")
+		f.router.ServeHTTP(httptest.NewRecorder(), request)
+	}
+	withSession(telemetrySession)
+	if !strings.Contains(f.logs.String(), `"client_session_id":"`+telemetrySession+`"`) {
+		t.Fatalf("a valid session id from the baggage is not in the log, so this test proves nothing:\n%s", f.logs.String())
+	}
+	withSession("private@example.test")
 	if strings.Contains(f.logs.String(), "private@example.test") {
 		t.Errorf("a session id that is not an id reached a log row:\n%s", f.logs.String())
 	}
