@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 )
 
 const (
@@ -38,10 +40,10 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	if policy.MaximumDurationCeilingSeconds == 0 {
 		policy.MaximumDurationCeilingSeconds = config.MaximumEpisodeDurationSeconds
 	}
-	if policy.MaximumDurationSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationSeconds > MaximumEpisodeDurationSeconds {
+	if policy.MaximumDurationSeconds < calllength.MinimumSeconds || policy.MaximumDurationSeconds > calllength.MaximumSeconds {
 		return InitialControlState{}, ErrInvalidMaximumDuration
 	}
-	if policy.MaximumDurationCeilingSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationCeilingSeconds > MaximumEpisodeDurationSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds {
+	if policy.MaximumDurationCeilingSeconds < calllength.MinimumSeconds || policy.MaximumDurationCeilingSeconds > calllength.MaximumSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds {
 		return InitialControlState{}, ErrInvalidMaximumDurationCeiling
 	}
 	if policy.DeadlineAt.IsZero() || policy.DeadlineAt.UnixMilli() < 1 || policy.DeadlineAt.UnixMilli() != policy.DeadlineAt.UTC().Truncate(time.Millisecond).UnixMilli() {

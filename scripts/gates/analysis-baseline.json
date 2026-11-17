@@ -346,7 +346,7 @@
     "scripts/ui-check/page-checks.mjs": [112],
     "sdks/typescript/react/src/components/composite/MessageBubble.tsx": [52],
     "infrastructure/listener-audio-alert/listener-audio-check.mjs": [25],
-    "sdks/typescript/client/src/generated/sync.ts": [48, 36, 27, 24],
+    "sdks/typescript/client/src/generated/sync.ts": [48, 37, 27, 24],
     "sdks/typescript/react/src/components/control-bar/control-bar-button.tsx": [33],
     "sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts": [21],
     "sdks/typescript/react/src/internal/sound-cues.ts": [25],

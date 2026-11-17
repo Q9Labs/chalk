@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/calllength"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -70,7 +71,7 @@ func (r EpisodeLifecycleRepository) SetDeadline(ctx context.Context, input episo
 		}
 
 		createdAt := timestamp(episode.CreatedAt)
-		minimum := createdAt.Add(time.Duration(episodes.MinimumEpisodeDurationSeconds) * time.Second)
+		minimum := createdAt.Add(time.Duration(calllength.MinimumSeconds) * time.Second)
 		config, err := episodeConfig(episode.ConfigSnapshot)
 		if err != nil {
 			return err

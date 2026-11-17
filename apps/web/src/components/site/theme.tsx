@@ -33,11 +33,7 @@ export function useSiteTheme(): { readonly theme: ThemePreference; readonly setT
 
 /** True when this browser holds the session hint. False while hydrating, where the inline script has already marked the page. */
 function useSignedInHint(): boolean {
-  return useSyncExternalStore(
-    noSubscription,
-    hasSignedInHint,
-    () => false,
-  );
+  return useSyncExternalStore(noSubscription, hasSignedInHint, () => false);
 }
 
 /** Opens the call's token scope for a site, docs or dashboard page. */

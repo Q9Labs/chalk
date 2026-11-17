@@ -43,20 +43,6 @@ var (
 	ErrIdempotencyConflict        = errors.New("space request key conflicts with original request")
 )
 
-const (
-	MinimumEpisodeDurationSeconds = calllength.MinimumSeconds
-	MaximumEpisodeDurationSeconds = calllength.MaximumSeconds
-)
-
-// These defaults keep a newly created Space usable when callers omit optional
-// policy values. The database carries the same defaults for direct inserts,
-// while the service validates values before crossing the boundary.
-var (
-	DefaultEpisodeDurationSeconds        = calllength.API.DefaultSeconds
-	DefaultMaximumEpisodeDurationSeconds = calllength.API.MaximumSeconds
-	DefaultLingerWindowSeconds           = calllength.API.LingerSeconds
-)
-
 var DefaultAdmissionPolicy = json.RawMessage(`{"mode":"open"}`)
 
 var allCapabilities = []string{
@@ -666,21 +652,21 @@ func validAdmissionMode(mode string) bool {
 
 func applySpaceDefaults(input *CreateSpaceInput) {
 	if input.DefaultEpisodeDurationSeconds == 0 {
-		input.DefaultEpisodeDurationSeconds = DefaultEpisodeDurationSeconds
+		input.DefaultEpisodeDurationSeconds = calllength.API.DefaultSeconds
 	}
 	if input.MaximumEpisodeDurationSeconds == 0 {
-		input.MaximumEpisodeDurationSeconds = DefaultMaximumEpisodeDurationSeconds
+		input.MaximumEpisodeDurationSeconds = calllength.API.MaximumSeconds
 	}
 	if input.LingerWindowSeconds == 0 {
-		input.LingerWindowSeconds = DefaultLingerWindowSeconds
+		input.LingerWindowSeconds = calllength.API.LingerSeconds
 	}
 }
 
 func validateEpisodeDurations(defaultDuration, maximumDuration int32) error {
-	if defaultDuration < MinimumEpisodeDurationSeconds || defaultDuration > MaximumEpisodeDurationSeconds {
+	if defaultDuration < calllength.MinimumSeconds || defaultDuration > calllength.MaximumSeconds {
 		return ErrInvalidEpisodeDuration
 	}
-	if maximumDuration < MinimumEpisodeDurationSeconds || maximumDuration > MaximumEpisodeDurationSeconds || defaultDuration > maximumDuration {
+	if maximumDuration < calllength.MinimumSeconds || maximumDuration > calllength.MaximumSeconds || defaultDuration > maximumDuration {
 		return ErrInvalidEpisodeCeiling
 	}
 	return nil
@@ -690,14 +676,14 @@ func validateOptionalDuration(value OptionalInt32, invalid error) error {
 	if !value.Set || value.Value == nil {
 		return nil
 	}
-	if *value.Value < MinimumEpisodeDurationSeconds || *value.Value > MaximumEpisodeDurationSeconds {
+	if *value.Value < calllength.MinimumSeconds || *value.Value > calllength.MaximumSeconds {
 		return invalid
 	}
 	return nil
 }
 
 func validateLingerWindow(value int32) error {
-	if value < 0 || value > MaximumEpisodeDurationSeconds {
+	if value < 0 || value > calllength.MaximumSeconds {
 		return ErrInvalidLingerWindow
 	}
 	return nil

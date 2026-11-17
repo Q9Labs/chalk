@@ -10,7 +10,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 export function useCallLimitWarning(): void {
   const deadline = useConnection().episode?.deadline;
   const toasts = useToasts();
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Check the call limit each second and say each threshold once; clear the interval when the deadline changes.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [timer] Check the call limit each second and say each threshold once; clear the interval when the deadline changes.
   useEffect(() => {
     if (!deadline) return;
     let previous: number | null = null;
