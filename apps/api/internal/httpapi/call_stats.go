@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -109,7 +108,7 @@ func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequ
 			if request.Frame != "" {
 				return struct{}{}, rejectTelemetry(ctx, subject, request.Frame, legacy...)
 			}
-			sessionID, _ := observability.SessionIDFromContext(ctx)
+			sessionID := legacySessionID(ctx)
 			batch, reason := request.Stats.telemetry(sessionID)
 			if reason != "" {
 				return struct{}{}, rejectTelemetry(ctx, subject, reason, legacy...)

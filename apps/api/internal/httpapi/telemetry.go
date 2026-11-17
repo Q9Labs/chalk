@@ -162,3 +162,13 @@ func firstMarker(userAgent string, markers []userAgentMarker) string {
 	}
 	return "other"
 }
+
+// legacySessionID is the session the old routes' baggage names, or empty when it is not a valid id,
+// so the free text of an old client's header cannot reach a log row.
+func legacySessionID(ctx context.Context) string {
+	id, valid := observability.SessionIDFromContext(ctx)
+	if !valid {
+		return ""
+	}
+	return id
+}
