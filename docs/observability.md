@@ -107,3 +107,23 @@ The API emits `recording.job_recovered` for each job that committed recovery ret
 ## Recorder fleet conflicts
 
 Expected recorder fleet 409 responses emit `recorder_fleet.operation_failed` at info level with `operation`, `error_code` and `http_status`. The codes distinguish inventory that is not ready, pending bootstrap and closed admission. A pending bootstrap with a validated diagnostic also carries its allowlisted `stage`; invalid or missing diagnostics omit it. These events carry no error text, request fields or node IDs. A conflict records a refusal or retry, not proof that a recording failed.
+
+## Media plane changes and decisions
+
+Two events say where Episodes go and why. Both carry bounded values only, never credentials or free text from a request.
+
+**`media_plane.changed`** is one event for each change to a Space's plane, a Tenant's default plane or the Chalk SFU kill switch. A database trigger writes the durable row (`media_plane_changes`) in the same transaction as the change, so the operator command, the public API and the previous release all leave one, and a change cannot happen without it. The API reads the unannounced rows every 10 seconds, logs each once and stamps `emitted_at`, so the event arrives up to about 10 seconds after the change and may repeat after a crash. Fields: `change_id` (dedupe key), `scope` (`space`, `tenant` or `kill_switch`), `tenant_id` and `space_id` when the scope has them, `old_plane` and `new_plane` (`cf_sfu`, `chalk_sfu` or `inherit`; the kill switch is `cf_sfu` while it holds new Episodes on Cloudflare and `inherit` while the settings decide), `actor`, `reason`, `changed_at` and `change_trace_id`. The `trace_id` of the log line is the relay's, so join a change to the command that made it by `change_trace_id`. A writer that names nobody is recorded as `unattributed`; today that is the previous release and the public `UpdateTenant` repository call. An undo is another change with its own reason, and a write that changes no plane leaves no row. If the relay cannot read the table it logs `media_plane.changes_unannounced`; the rows stay and go out when it recovers.
+
+**`media_plane.selected`** is one event for each Episode that gets a binding, after its transaction commits, with `episode_id`, `tenant_id`, `space_id`, `provider`, `selected_by`, `configuration_source`, `placement_reason` and `node`. The same `selected_by` is stored in the Episode's binding (`episodes.config_snapshot`, `media_plane_binding.selected_by`), so a checker can read it from the row and need not wait for the event. Values:
+
+- `kill_switch`: the kill switch held new Episodes on Cloudflare.
+- `allowlist`: the Space is not on the Chalk SFU allowlist.
+- `client`: the SDK does not declare `chalk_sfu`.
+- `space`: the Space's own setting chose the plane.
+- `tenant`: the Tenant's approved default chose it.
+- `tenant_config`: the Tenant runs its own Cloudflare credentials.
+- `default`: `CHALK_DEFAULT_MEDIA_PLANE` chose it.
+- `overflow`: the Chalk SFU was chosen but no node had room, so Cloudflare took the Episode.
+
+The field is additive and checked by shape (lowercase letters and underscores, at most 32 characters), not against this list, so a later release can add a value and a rollback still reads every binding. A binding written before this field existed has none, and its event says `unknown`. A live Episode keeps its binding, so a later change never rewrites `selected_by`.
+
