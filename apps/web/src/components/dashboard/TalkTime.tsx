@@ -1,8 +1,8 @@
-import { useId, type MouseEvent } from "react";
+import { useId, useState, type MouseEvent } from "react";
 
 import type { TalkSpeakerDTO, TalkTimeDTO } from "../../lib/dashboard/contracts";
 import { playbackTime } from "../../lib/dashboard/format";
-import { playheadFraction, recordingSeconds, sharePercent, talkLength, type MeasuredTalk } from "../../lib/dashboard/talk-time";
+import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength, type MeasuredTalk } from "../../lib/dashboard/talk-time";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import type { Playback } from "./SessionViewer";
@@ -17,7 +17,7 @@ const EMPTY: Record<Exclude<TalkTimeDTO["kind"], "available">, { readonly title:
 /** Who talked and when, as the API measured it. Seeking needs the recording's player, so without one the timeline only reads. */
 export function TalkTime({ talk, playback }: { readonly talk: TalkTimeDTO; readonly playback: Playback | null }) {
   return (
-    <section className="card tt" aria-labelledby="talk-title">
+    <section className="card talk" aria-labelledby="talk-title">
       <div className="ph">
         <Icon name="mic" size={18} />
         <div>
@@ -93,10 +93,11 @@ function Timeline({ talk, speakers, playback }: { readonly talk: MeasuredTalk; r
   };
   const click = (event: MouseEvent<HTMLDivElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
-    if (box.width > 0) jump(Math.min(Math.max((event.clientX - box.left) / box.width, 0), 1) * talk.durationMs);
+    jump(sessionMsAt(event.clientX - box.left, box.width, talk.durationMs));
   };
   const head = playback ? playheadFraction(talk, playback.recordingId, playback.time) : null;
   const sliderId = useId();
+  const [picked, setPicked] = useState(0);
   const stepMs = Math.max(talk.bucketMs, 1000);
   return (
     <div className="ttl">
@@ -128,16 +129,18 @@ function Timeline({ talk, speakers, playback }: { readonly talk: MeasuredTalk; r
       </div>
       {seekable ? (
         <div className="ttj">
-          <label htmlFor={sliderId}>Play from</label>
+          <label htmlFor={sliderId}>Play from {playbackTime(picked / 1000)}</label>
           <input
             id={sliderId}
             type="range"
             min={0}
             max={talk.durationMs}
             step={stepMs}
-            defaultValue={0}
-            aria-valuetext="Pick a time in the session"
-            onChange={(event) => jump(Number(event.currentTarget.value))}
+            value={picked}
+            onChange={(event) => {
+              setPicked(Number(event.currentTarget.value));
+              jump(Number(event.currentTarget.value));
+            }}
           />
         </div>
       ) : null}

@@ -18,6 +18,12 @@ export function sharePercent(share: number): string {
   return `${Math.round(share * 100)}%`;
 }
 
+/** The session time under a pointer that is `offset` pixels along a timeline `width` pixels wide, from the session's start to its end. */
+export function sessionMsAt(offset: number, width: number, durationMs: number): number {
+  if (width <= 0) return 0;
+  return Math.min(Math.max(offset / width, 0), 1) * durationMs;
+}
+
 const offsetOf = (talk: MeasuredTalk, recordingId: string) => talk.recordings.find((recording) => recording.id === recordingId)?.offsetMs;
 
 /** Where a point of the session sits in the playing recording, in seconds. Null when the recording isn't part of the measurement. */

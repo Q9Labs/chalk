@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MeasuredTalk } from "./talk-time";
-import { playheadFraction, recordingSeconds, sharePercent, talkLength } from "./talk-time";
+import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength } from "./talk-time";
 
 const talk: MeasuredTalk = {
   kind: "available",
@@ -23,6 +23,22 @@ describe("talk time words", () => {
   });
   it("rounds shares but never shows a speaker as zero", () => {
     expect([0, 0.003, 0.616, 1].map(sharePercent)).toEqual(["0%", "<1%", "62%", "100%"]);
+  });
+});
+
+describe("a click on the timeline", () => {
+  it("maps the pointer's distance along the lanes to a point of the session", () => {
+    expect(sessionMsAt(0, 906, 1_920_000)).toBe(0);
+    expect(sessionMsAt(453, 906, 1_920_000)).toBe(960_000);
+    expect(sessionMsAt(906, 906, 1_920_000)).toBe(1_920_000);
+  });
+  it("keeps a pointer outside the lanes on their ends and an empty box at the start", () => {
+    expect(sessionMsAt(-20, 906, 1_920_000)).toBe(0);
+    expect(sessionMsAt(950, 906, 1_920_000)).toBe(1_920_000);
+    expect(sessionMsAt(10, 0, 1_920_000)).toBe(0);
+  });
+  it("lands in the recording where the session point falls, after the recording's own offset", () => {
+    expect(recordingSeconds(talk, "late", sessionMsAt(300, 600, talk.durationMs))).toBe(180);
   });
 });
 
