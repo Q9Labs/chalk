@@ -99,7 +99,7 @@ To tell which side a bad call is on, compare the same minute on both: ingress `l
 | sort by _time asc
 ```
 
-Drop the `service.name` filter to see the API's and the SFU's lines together. Deploy installs the export when `~/.config/chalk-sfu/<env>/otlp-log-headers` exists (see the [SFU README](../features/media/sfu/README.md)); without it the node logs to its journal only.
+`TestExportedRowsShowWhatHappenedToEachSession` in `features/media/sfu/tests` is the proof of the export: it runs a real node against a local OTLP sink, with one session that never answers and one connected publisher, ends the Episode, and checks the rows the store would receive (`never_connected`, the final media counters, `service.instance.id`, no dropped record). Run it with `-v` to read the rows. Drop the `service.name` filter to see the API's and the SFU's lines together. Deploy installs the export when `~/.config/chalk-sfu/<env>/otlp-log-headers` exists (see the [SFU README](../features/media/sfu/README.md)); without it the node logs to its journal only.
 
 ## What an alert means
 
