@@ -1,7 +1,8 @@
-import { reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
+import { canExtendCall, reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PublicSpaceAdmission } from "../../lib/chalk-access";
+import { accountWouldAllowLonger, signUpOffer } from "../../lib/call-policy";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
 import { useTheme } from "../../lib/theme-context";
@@ -33,8 +34,10 @@ export function LocalSpace({
 }) {
   const { mode, setPreference } = useTheme();
   const { session, credential, arrival } = admission;
-  const hostCanExtend = (arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600;
+  const maximumSeconds = arrival.space?.maximum_episode_duration_seconds;
+  const offerSignUp = accountWouldAllowLonger(maximumSeconds);
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess: session.getAccess, connectionAccess: session.connectionAccess }), [credential, session]);
+  const signUp = { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") };
   const release = useCallback(async () => {
     await client.close();
     await session.leave();
@@ -61,7 +64,7 @@ export function LocalSpace({
         phase,
         failure,
         release,
-        hostCanExtend,
+        offerSignUp,
         tenantId,
         callName: spaceName,
         endReason: client.getSnapshot().connection.episodeEndReason,
@@ -69,7 +72,7 @@ export function LocalSpace({
         reportExpiresAt: session.mediaExpiresAt(),
       });
     },
-    [client, onEnded, release, credential.apiBaseURL, tenantId, session, hostCanExtend, spaceName],
+    [client, onEnded, release, credential.apiBaseURL, tenantId, session, offerSignUp, spaceName],
   );
   useEffect(() => {
     const exit = sessionExit(connection);
@@ -112,9 +115,9 @@ export function LocalSpace({
       {homeError ? <p role="alert">{homeError}</p> : null}
       <Chalk
         timeLimit={{
-          message: hostCanExtend ? "The host can extend this call." : "Sign up free for calls up to 24 hours.",
-          action: hostCanExtend ? undefined : { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") },
-          endAction: hostCanExtend ? undefined : { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") },
+          message: offerSignUp ? signUpOffer() : canExtendCall(connection.episode, maximumSeconds) ? "The host can extend this call." : "This is the longest this call can run.",
+          action: offerSignUp ? signUp : undefined,
+          endAction: offerSignUp ? signUp : undefined,
         }}
         theme={{ colorScheme: mode }}
         onColorSchemeChange={setPreference}

@@ -3,7 +3,8 @@ import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { live, liveDTO, run } from "./engine";
 import { callDTO } from "./dto";
-import { CALL_DEFAULT_SECONDS, CALL_LINGER_SECONDS, CALL_MAX_SECONDS, DEFAULT_CALL_NAME } from "../src/lib/dashboard/contracts";
+import { ACCOUNT_CALL_POLICY } from "../src/lib/call-policy";
+import { DEFAULT_CALL_NAME } from "../src/lib/dashboard/contracts";
 import type { ActionResult, HomeAction, HomeDTO, HomeStatusDTO, HomeStatusQuery, LiveDTO } from "../src/lib/dashboard/contracts";
 type Activity = { live: LiveDTO; call: HomeStatusDTO["calls"][number] };
 /** What a Home row shows for each Space: one tenant read for up to 300 Spaces. */
@@ -59,9 +60,7 @@ export async function homeMutation(engine: Engine, action: HomeAction): Promise<
           name: action.name ?? DEFAULT_CALL_NAME,
           slug: `call-${action.idempotencyKey}`,
           admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" },
-          default_episode_duration_seconds: CALL_DEFAULT_SECONDS,
-          maximum_episode_duration_seconds: CALL_MAX_SECONDS,
-          linger_window_seconds: CALL_LINGER_SECONDS,
+          ...ACCOUNT_CALL_POLICY,
         },
       }),
     );

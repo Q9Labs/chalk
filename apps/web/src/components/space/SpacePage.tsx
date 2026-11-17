@@ -286,7 +286,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           <StatusSurface
             phase={call.phase}
             episodeEndReason={call.endReason}
-            endAction={!call.hostCanExtend ? { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") } : undefined}
+            endAction={call.offerSignUp ? { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") } : undefined}
             callName={call.callName}
             errorCode={call.failure?.code}
             sync={call.failure?.sync}

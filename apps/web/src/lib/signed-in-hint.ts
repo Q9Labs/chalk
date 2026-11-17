@@ -9,3 +9,8 @@ export const SIGNED_IN_COOKIE = "chalk_signed_in";
 export function clearSignedInHint(): void {
   document.cookie = `${SIGNED_IN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
+
+/** True when this browser started a session. The server still decides whether it is valid. */
+export function hasSignedInHint(): boolean {
+  return new RegExp(`(?:^|;\\s*)${SIGNED_IN_COOKIE}=1(?:;|$)`).test(document.cookie);
+}

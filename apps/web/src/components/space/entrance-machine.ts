@@ -22,7 +22,8 @@ export type ExitPhase = "left" | SessionExit;
 export type EndedCall = {
   readonly phase: ExitPhase;
   readonly endReason?: string;
-  readonly hostCanExtend: boolean;
+  /** Whether the call limit screen offers sign-up, because an account would allow a longer call. */
+  readonly offerSignUp: boolean;
   readonly tenantId: string | undefined;
   readonly callName: string | undefined;
   readonly failure: ClientFailure | null | undefined;
