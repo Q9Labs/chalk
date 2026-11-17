@@ -200,3 +200,48 @@ func TestControlFailureNamesTheOperationAndKeepsBadIdsOut(t *testing.T) {
 		t.Fatalf("an invalid scope was logged as ids: %v", failed[1])
 	}
 }
+
+// The end of an Episode reports how each Participant session ended, the ones that ended earlier
+// too, and a repeat reports the same.
+func TestEndEpisodeReportsEachParticipantSessionOutcome(t *testing.T) {
+	node := newLoggedTestNode(t, nil, &trailLog{})
+	left := node.newTestSession(t, testScope("alice", 1))
+	left.onConnectionState(webrtc.PeerConnectionStateConnected)
+	left.CloseFor(ClosePeerClosed)
+	node.newTestSession(t, testScope("bob", 2)) // still open, never connected
+	other := node.newTestSession(t, protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-2", ParticipantID: "carol", Generation: 1})
+	other.CloseFor(CloseRemoved)
+
+	response := node.EndEpisode("tenant-1", "episode-1", Trace{})
+	if response.Closed != 1 || len(response.Sessions) != 2 {
+		t.Fatalf("end = closed %d, %d outcomes; want 1 and 2", response.Closed, len(response.Sessions))
+	}
+	alice, bob := response.Sessions[0], response.Sessions[1]
+	if alice.ParticipantID != "alice" || alice.Generation != 1 || alice.Outcome != OutcomeLeft || alice.Cause != ClosePeerClosed || !alice.Connected || alice.SessionID != left.id {
+		t.Fatalf("alice = %+v", alice)
+	}
+	if bob.ParticipantID != "bob" || bob.Generation != 2 || bob.Outcome != OutcomeNeverConnected || bob.Cause != CloseEpisodeEnded || bob.Connected {
+		t.Fatalf("bob = %+v", bob)
+	}
+	if again := node.EndEpisode("tenant-1", "episode-1", Trace{}); again.Closed != 0 || len(again.Sessions) != 2 {
+		t.Fatalf("a repeated end = closed %d, %d outcomes; want 0 and 2", again.Closed, len(again.Sessions))
+	}
+	if unrelated := node.EndEpisode("tenant-1", "episode-9", Trace{}); len(unrelated.Sessions) != 0 {
+		t.Fatalf("an Episode with no sessions reported %v", unrelated.Sessions)
+	}
+}
+
+func TestOutcomesAreBoundedAndExpire(t *testing.T) {
+	node := newLoggedTestNode(t, nil, &trailLog{})
+	for generation := int64(1); generation <= outcomeSessionLimit+10; generation++ {
+		node.newTestSession(t, testScope("alice", generation)).CloseFor(CloseRemoved)
+	}
+	if got := len(node.EndEpisode("tenant-1", "episode-1", Trace{}).Sessions); got != outcomeSessionLimit {
+		t.Fatalf("held %d outcomes, want the limit %d", got, outcomeSessionLimit)
+	}
+	node.now = func() time.Time { return time.Now().Add(outcomeTTL + time.Minute) }
+	node.newTestSession(t, protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-2", ParticipantID: "bob", Generation: 1}).CloseFor(CloseRemoved)
+	if got := len(node.EndEpisode("tenant-1", "episode-1", Trace{}).Sessions); got != 0 {
+		t.Fatalf("an Episode idle past the TTL still holds %d outcomes", got)
+	}
+}

@@ -1,10 +1,13 @@
 package media
 
 import (
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/pion/webrtc/v4"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // Outcomes say how a session's call went, in terms a reader of the trail does not have to derive
@@ -109,4 +112,67 @@ func outcomeOf(cause string, c connectivity) string {
 		return OutcomeInterrupted
 	}
 	return OutcomeEnded
+}
+
+const (
+	// outcomeEpisodeLimit bounds the Episodes whose session outcomes the node holds, and
+	// outcomeSessionLimit the outcomes it holds for one Episode. Past either the oldest goes.
+	outcomeEpisodeLimit = 1 << 12
+	outcomeSessionLimit = 256
+	// outcomeTTL is how long an outcome waits for EndEpisode, counted from the Episode's latest one.
+	outcomeTTL = 24 * time.Hour
+)
+
+// outcomeLog is the outcomes of one Episode's Participant sessions, oldest first.
+type outcomeLog struct {
+	at       time.Time
+	sessions []protocol.SessionOutcome
+}
+
+// recordOutcome keeps how a Participant session ended for the API's end of the Episode. The trail's closed event says the same to a reader with 30 days of memory; this is the copy
+// that the API can store with the Participant for as long as the Episode lives. A node that stops
+// loses it, and the closed event stays.
+func (n *Node) recordOutcome(s *Session, cause, outcome string, c connectivity, ended time.Time) {
+	if !s.kind.participant {
+		return
+	}
+	entry := protocol.SessionOutcome{
+		SessionID: s.id, ParticipantID: s.scope.ParticipantID, Generation: s.scope.Generation,
+		Cause: cause, Outcome: outcome, Connected: c.Connected, EndedAt: ended.UTC(),
+		LifetimeMs: ended.Sub(s.started).Milliseconds(), Disconnects: c.Downs, OutageMs: c.OutageMs,
+	}
+	if c.Connected {
+		entry.ConnectMs = c.ConnectMs
+	}
+	key := episodeOf(s.scope)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.pruneOutcomes()
+	held, _ := n.outcomes.Get(key)
+	held.at = n.now()
+	held.sessions = append(held.sessions, entry)
+	if over := len(held.sessions) - outcomeSessionLimit; over > 0 {
+		held.sessions = append([]protocol.SessionOutcome(nil), held.sessions[over:]...)
+	}
+	n.outcomes.Remember(key, held)
+}
+
+// outcomesOf lists the Episode's outcomes. It leaves them in place until they expire, so an end
+// the API repeats after a lost answer reports the same outcomes, and the API stores each once.
+func (n *Node) outcomesOf(key episodeKey) []protocol.SessionOutcome {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	held, _ := n.outcomes.Get(key)
+	return slices.Clone(held.sessions)
+}
+
+// pruneOutcomes drops the Episodes whose latest outcome is older than outcomeTTL. The caller holds n.mu.
+func (n *Node) pruneOutcomes() {
+	now := n.now()
+	for key, held := range n.outcomes.All() {
+		if now.Sub(held.at) <= outcomeTTL {
+			return
+		}
+		n.outcomes.Delete(key)
+	}
 }

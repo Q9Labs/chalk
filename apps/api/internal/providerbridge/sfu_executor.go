@@ -45,7 +45,7 @@ type EpisodeProviders interface {
 // closes tracks and ends the Episode's sessions and reservations.
 type ChalkNode interface {
 	TrackCloser
-	EndEpisode(context.Context, mediaplane.EndEpisodeInput) error
+	EndEpisodeSessions(context.Context, mediaplane.EndEpisodeInput) ([]mediaplane.SessionOutcome, error)
 	ControlSources(context.Context, mediaplane.ControlSourcesInput) ([]mediaplane.SourceControlResult, error)
 }
 
@@ -73,6 +73,8 @@ type SFUExecutor struct {
 	episodes     EpisodeProviders
 	chalk        ChalkNodes
 	closeBudget  time.Duration
+	// outcomes keeps how the node's sessions ended, which the node reports when the Episode ends.
+	outcomes SessionOutcomes
 	// retired ends an Episode on the allocations it moved away from.
 	retired func(ctx context.Context, tenantID, episodeID utilities.ID) error
 }
@@ -81,6 +83,18 @@ type SFUExecutor struct {
 // whole-Episode recovery left, which the Episode's current binding no longer names.
 func (e SFUExecutor) WithRetiredAllocations(retired func(ctx context.Context, tenantID, episodeID utilities.ID) error) SFUExecutor {
 	e.retired = retired
+	return e
+}
+
+// SessionOutcomes stores how an Episode's Participant sessions ended on the media node, with the
+// Participants, for as long as the Participants are kept. Recording the same outcome again changes nothing.
+type SessionOutcomes interface {
+	Record(ctx context.Context, tenantID, episodeID utilities.ID, outcomes []mediaplane.SessionOutcome) error
+}
+
+// WithSessionOutcomes makes the end of an Episode store how its sessions ended.
+func (e SFUExecutor) WithSessionOutcomes(outcomes SessionOutcomes) SFUExecutor {
+	e.outcomes = outcomes
 	return e
 }
 
@@ -154,8 +168,14 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	}
 	if chalk != nil && input.Effect == provideroperations.EffectEndEpisode {
 		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
-		if err := chalk.EndEpisode(ctx, ended); err != nil {
+		outcomes, err := chalk.EndEpisodeSessions(ctx, ended)
+		if err != nil {
 			return providerExecutionFailure(err)
+		}
+		if e.outcomes != nil && len(outcomes) > 0 {
+			if err := e.outcomes.Record(ctx, input.TenantID, input.EpisodeID, outcomes); err != nil {
+				return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "session_outcomes_unavailable"}
+			}
 		}
 		if e.retired != nil {
 			if err := e.retired(ctx, input.TenantID, input.EpisodeID); err != nil {

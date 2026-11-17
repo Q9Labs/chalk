@@ -678,7 +678,7 @@ func run() error {
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
-		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations).WithSessionOutcomes(postgres.NewSessionOutcomes(pool))
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := spiffe.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {

@@ -87,6 +87,13 @@ func (s *service) grantSourcesAt(t *testing.T, revision int64, scopes ...protoco
 
 func startService(t *testing.T, ca *authority, configure ...func(*config.Config)) *service {
 	t.Helper()
+	return startServiceLogging(t, ca, func(local slog.Handler) *slog.Logger { return slog.New(local) }, configure...)
+}
+
+// startServiceLogging starts a service whose logger is built from the handler that collects its
+// log output, so a test can send the same records elsewhere, as the node does when it exports.
+func startServiceLogging(t *testing.T, ca *authority, logger func(local slog.Handler) *slog.Logger, configure ...func(*config.Config)) *service {
+	t.Helper()
 	dir := t.TempDir()
 	_, serverCert, serverKey := ca.issue("localhost", x509.ExtKeyUsageServerAuth)
 	cfg := config.Config{
@@ -128,7 +135,7 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		apply(&cfg)
 	}
 	logs := &logBuffer{}
-	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	log := logger(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		t.Fatalf("start service: %v", err)

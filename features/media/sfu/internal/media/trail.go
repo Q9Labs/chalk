@@ -198,6 +198,7 @@ func (s *Session) traceClosed(cause string, publications, subscriptions int) {
 		attrs = append(attrs, "last_peer_state", link.Peer)
 	}
 	s.trail(level, EventSessionClosed, attrs...)
+	s.node.recordOutcome(s, cause, outcome, link, now)
 }
 
 func (s *Session) tracePublicationStarted(source string, kind webrtc.RTPCodecType) {

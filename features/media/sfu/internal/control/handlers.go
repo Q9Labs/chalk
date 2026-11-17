@@ -237,7 +237,7 @@ func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
 	if err := media.ValidateScope(scope); err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID, traceOf(r))})
+	writeJSON(w, http.StatusOK, s.node.EndEpisode(request.TenantID, request.EpisodeID, traceOf(r)))
 	return nil
 }
 

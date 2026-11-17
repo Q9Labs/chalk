@@ -81,6 +81,7 @@ type Node struct {
 	closedCreates *orderedTable[string, struct{}]            // create operation IDs whose session closed; bounded
 	fences        *orderedTable[participantKey, int64]       // highest generation seen per Participant; outlives sessions
 	retired       *orderedTable[episodeKey, retirement]      // Episodes retired at an allocation generation (see RetireEpisode)
+	outcomes      *orderedTable[episodeKey, outcomeLog]      // how Participant sessions ended, for EndEpisode to report; bounded
 	sources       *orderedTable[sourceKey, *sourceAuthority] // newest grant or revoke per source; outlives sessions; its limit also bounds sourceFloors
 	sourceFloors  map[episodeKey]int64                       // highest revision of a source evicted per Episode
 
@@ -167,6 +168,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		plans:         map[episodeKey]int64{},
 		refusals:      map[string]uint64{},
 		retired:       newOrderedTable[episodeKey, retirement](retiredLimit),
+		outcomes:      newOrderedTable[episodeKey, outcomeLog](outcomeEpisodeLimit),
 	}
 	n.wg.Go(n.run)
 	return n, nil
@@ -246,7 +248,7 @@ func (n *Node) SessionCount() int {
 
 // EndEpisode closes every session of the Tenant's Episode and reports how many it closed. The
 // close lines carry the trace of the request that ended it.
-func (n *Node) EndEpisode(tenantID, episodeID string, trace Trace) int {
+func (n *Node) EndEpisode(tenantID, episodeID string, trace Trace) protocol.EndEpisodeResponse {
 	n.mu.Lock()
 	key := episodeKey{tenantID, episodeID}
 	ended := n.episodes[key].list()
@@ -256,7 +258,7 @@ func (n *Node) EndEpisode(tenantID, episodeID string, trace Trace) int {
 		session.Note(trace)
 		session.CloseFor(CloseEpisodeEnded)
 	}
-	return len(ended)
+	return protocol.EndEpisodeResponse{Closed: len(ended), Sessions: n.outcomesOf(key)}
 }
 
 // Session finds a live session. A session outside the scope reads as gone,
