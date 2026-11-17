@@ -67,6 +67,9 @@ type subscription struct {
 	// limit is how far the node holds this subscription below its request.
 	limit serverLimit
 
+	// feedback is what the receiver reported about the stream.
+	feedback feedbackStats
+
 	// Owned by the node's control loop.
 	order uint64
 	alloc allocation
@@ -250,6 +253,9 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 		}
 		return
 	}
+	if p.unmute != nil {
+		s.owner.traceFirstForwarded(s, p.unmute)
+	}
 	if switched && int64(layer.highest-p.extSeq) > 0 {
 		s.flush(layer, p.extSeq, w)
 	}
@@ -387,20 +393,24 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 		switch packet := packet.(type) {
 		case *rtcp.PictureLossIndication:
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
+				s.feedback.pli.Add(1)
 				s.requestKeyframe()
 			}
 		case *rtcp.FullIntraRequest:
 			if binding != nil && slices.ContainsFunc(packet.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == binding.ssrc }) {
+				s.feedback.fir.Add(1)
 				s.requestKeyframe()
 			}
 		case *rtcp.TransportLayerNack:
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
+				s.feedback.nack.Add(nacked(packet))
 				budget = s.retransmit(packet, budget, writer)
 			}
 		case *rtcp.ReceiverReport:
 			for _, report := range packet.Reports {
 				if binding != nil && report.SSRC == binding.ssrc {
 					s.transport.onReceiverReport(float64(report.FractionLost) / 256)
+					s.feedback.report(report, time.Now())
 				}
 			}
 		case *rtcp.ReceiverEstimatedMaximumBitrate:
@@ -417,86 +427,6 @@ func (s *subscription) requestKeyframe() {
 	}
 	s.mu.Unlock()
 	s.pub.requestKeyframe(layer)
-}
-
-// retransmit resends the reported packets it still holds, each with the
-// sequence number, timestamp and picture ID this subscriber first saw. It
-// returns the budget left.
-func (s *subscription) retransmit(nack *rtcp.TransportLayerNack, budget int, w *packetWriter) int {
-	now := monotonic()
-	for _, pair := range nack.Nacks {
-		pair.Range(func(seq uint16) bool {
-			if budget <= 0 {
-				return false
-			}
-			budget--
-			s.resend(seq, now, w)
-			return true
-		})
-	}
-	return budget
-}
-
-// resend repeats one packet. A paused subscription sends nothing, and a video
-// packet no longer held asks for a keyframe instead, because the frame it
-// belonged to may be a reference the viewer can't decode without.
-func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
-	s.mu.Lock()
-	if s.reason != "" || s.closed.Load() || s.recentlyResent(seq, now) {
-		s.mu.Unlock()
-		return
-	}
-	seg, ext, ok := s.translator.lookup(seq)
-	s.mu.Unlock()
-	if !s.pub.video() {
-		return
-	}
-	var history *history
-	if layer := s.pub.layer(seg.layer); ok && layer != nil {
-		history = layer.history.Load()
-	}
-	if history == nil {
-		s.requestKeyframe()
-		return
-	}
-	stored, ok := history.load(ext, now, w.stored[:])
-	if ok && !s.pub.authority.allows(stored.arrival, now) {
-		// A packet from before the source's current window is never sent: a viewer
-		// that missed it decodes again from a keyframe of the new window.
-		if s.pub.authority.allows(now, now) {
-			s.requestKeyframe()
-		}
-		return
-	}
-	if !ok {
-		s.requestKeyframe()
-		return
-	}
-	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
-	s.send(&stored, seg.translate(&stored), classRepair, true, w)
-}
-
-// recentlyResent reports whether seq went out again within resendSpacing, and
-// records it otherwise. A record is reused only once it expires, so a table
-// full of recent resends refuses the resend. The caller holds s.mu.
-func (s *subscription) recentlyResent(seq uint16, now int64) bool {
-	free := -1
-	for index, entry := range s.resent {
-		if entry.at == 0 || now-entry.at >= int64(resendSpacing) {
-			if free < 0 {
-				free = index
-			}
-			continue
-		}
-		if entry.seq == seq {
-			return true
-		}
-	}
-	if free < 0 {
-		return true
-	}
-	s.resent[free] = resentPacket{seq: seq, at: now}
-	return false
 }
 
 // state reports the subscription's delivery for inspection. The source's lease is

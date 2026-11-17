@@ -118,7 +118,12 @@ func (s *Server) DrainState() protocol.DrainState { return s.node.DrainState() }
 // every session closes and the sockets are released.
 func (s *Server) Stop(ctx context.Context) error {
 	s.node.Drain()
-	shutdownCtx, cancel := context.WithTimeout(ctx, s.cfg.ShutdownTimeout)
+	// The drain leaves the node's own close what it needs of the caller's deadline.
+	drain := s.cfg.ShutdownTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		drain = min(drain, max(0, time.Until(deadline)-media.CloseWait))
+	}
+	shutdownCtx, cancel := context.WithTimeout(ctx, drain)
 	defer cancel()
 	err := s.http.Shutdown(shutdownCtx)
 	if err != nil {

@@ -332,6 +332,23 @@ type ParticipantMediaRefresh struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type ParticipantMediaSession struct {
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	SpaceID       pgtype.UUID        `json:"space_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ParticipantID pgtype.UUID        `json:"participant_id"`
+	Generation    int64              `json:"generation"`
+	ConnectionID  string             `json:"connection_id"`
+	Cause         string             `json:"cause"`
+	Outcome       string             `json:"outcome"`
+	Connected     bool               `json:"connected"`
+	EndedAt       pgtype.Timestamptz `json:"ended_at"`
+	LifetimeMs    int64              `json:"lifetime_ms"`
+	ConnectMs     pgtype.Int8        `json:"connect_ms"`
+	Disconnects   int32              `json:"disconnects"`
+	OutageMs      int64              `json:"outage_ms"`
+}
+
 type ParticipantPresenceLease struct {
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	SpaceID       pgtype.UUID        `json:"space_id"`

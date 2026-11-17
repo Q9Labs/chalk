@@ -41,7 +41,7 @@ type retirement struct {
 // When the table of floors is full and the Episode has none, the call still ends what is below
 // its generation but cannot record the floor, so it fails with a capacity error and the API
 // asks again.
-func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.RetireEpisodeResponse, error) {
+func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest, trace Trace) (protocol.RetireEpisodeResponse, error) {
 	scope := protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: 1}
 	if err := ValidateScope(scope); err != nil {
 		return protocol.RetireEpisodeResponse{}, err
@@ -53,7 +53,7 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	n.mu.Lock()
 	floor, recorded := n.raiseRetirement(key, request.Generation)
 	if !recorded {
-		_ = n.refuse(RefusedRetirements, nil)
+		_ = n.refuseEpisode(key, RefusedRetirements, nil)
 	}
 	// Source authority granted under an older allocation ends too: its lease lapses and the
 	// revision stays, so only a grant under a current allocation forwards again.
@@ -70,6 +70,7 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	}
 	n.mu.Unlock()
 	for _, session := range ended {
+		session.Note(trace)
 		session.CloseFor(CloseRetired)
 	}
 	if !recorded {
@@ -147,5 +148,5 @@ func (n *Node) refuseUnrecorded(key episodeKey, allocation *int64) error {
 	if _, floored := n.retired.Get(key); floored || allocation != nil && n.hostsEpisode(key) {
 		return nil
 	}
-	return n.refuse(RefusedRetirements, errRetirementsFull)
+	return n.refuseEpisode(key, RefusedRetirements, errRetirementsFull)
 }

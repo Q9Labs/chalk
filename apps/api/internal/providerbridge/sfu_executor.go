@@ -45,7 +45,7 @@ type EpisodeProviders interface {
 // closes tracks and ends the Episode's sessions and reservations.
 type ChalkNode interface {
 	TrackCloser
-	EndEpisode(context.Context, mediaplane.EndEpisodeInput) error
+	EndEpisodeSessions(context.Context, mediaplane.EndEpisodeInput) ([]mediaplane.SessionOutcome, error)
 	ControlSources(context.Context, mediaplane.ControlSourcesInput) ([]mediaplane.SourceControlResult, error)
 }
 
@@ -154,7 +154,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	}
 	if chalk != nil && input.Effect == provideroperations.EffectEndEpisode {
 		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
-		if err := chalk.EndEpisode(ctx, ended); err != nil {
+		if _, err := chalk.EndEpisodeSessions(ctx, ended); err != nil {
 			return providerExecutionFailure(err)
 		}
 		if e.retired != nil {

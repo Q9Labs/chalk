@@ -109,10 +109,10 @@ func (c *counted) take(total uint64) uint64 {
 	return grown
 }
 
-// refuse counts a refusal that no one Participant owns, logs why and returns its error. The
-// caller holds n.mu.
-func (n *Node) refuse(reason string, err error) error {
-	return n.refuseFor(protocol.Scope{}, reason, err)
+// refuseEpisode counts a refusal of an Episode's reserve or retirement, which no one Participant
+// owns, logs why with the Episode's ids and returns its error. The caller holds n.mu.
+func (n *Node) refuseEpisode(key episodeKey, reason string, err error) error {
+	return n.refuseFor(protocol.Scope{TenantID: key.tenant, EpisodeID: key.episode}, reason, err)
 }
 
 // refuseFor counts a refused join or screen share of the scope's Participant, logs why with the

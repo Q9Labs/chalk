@@ -175,10 +175,6 @@ type EndEpisodeRequest struct {
 	EpisodeID string `json:"episodeId"`
 }
 
-type EndEpisodeResponse struct {
-	Closed int `json:"closed"`
-}
-
 // RetireEpisodeRequest retires every allocation of one Tenant's Episode below a binding
 // generation. The node closes the sessions created under a lower generation (a session that named
 // none counts as generation 0) and refuses any later create, source control or capture below it
