@@ -28,9 +28,23 @@ function reloadLatest(): void {
   window.location.replace(url.toString());
 }
 
+export type PageFailure = "chunk_reload" | "unhandled_error" | "unhandled_rejection";
+const failureListeners = new Set<(cause: PageFailure) => void>();
+
+/** Tells `listener` about each failure that loses the page's work, before the page reloads. Returns the way to stop. */
+export function onPageFailure(listener: (cause: PageFailure) => void): () => void {
+  failureListeners.add(listener);
+  return () => failureListeners.delete(listener);
+}
+
+function announce(cause: PageFailure): void {
+  for (const listener of failureListeners) listener(cause);
+}
+
 /** Reloads once for a handled chunk-load failure. Returns whether the page is reloading. */
 export function reloadAfterChunkLoadFailure(reason: unknown): boolean {
   if (typeof window === "undefined" || !matchesChunkLoadFailure(reasonMessage(reason)) || !shouldReloadOnce()) return false;
+  announce("chunk_reload");
   reloadLatest();
   return true;
 }
@@ -39,10 +53,10 @@ export function installChunkLoadAutoReload() {
   if (typeof window === "undefined") return;
 
   window.addEventListener("unhandledrejection", (event) => {
-    reloadAfterChunkLoadFailure(event.reason);
+    if (!reloadAfterChunkLoadFailure(event.reason)) announce("unhandled_rejection");
   });
 
   window.addEventListener("error", (event) => {
-    reloadAfterChunkLoadFailure(typeof event.message === "string" ? event.message : "");
+    if (!reloadAfterChunkLoadFailure(typeof event.message === "string" ? event.message : "")) announce("unhandled_error");
   });
 }

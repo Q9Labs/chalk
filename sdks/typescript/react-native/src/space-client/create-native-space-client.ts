@@ -174,6 +174,7 @@ function createSyncClient(syncURL: string, input: SyncFactoryInput, lifecycle: R
     url: syncURL,
     token: input.token,
     mediaPlane: input.media,
+    telemetry: input.telemetry,
     lifecycle,
     webSocket,
     dialTimeoutMs,

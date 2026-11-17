@@ -11,6 +11,7 @@ class PromiseSpaceClient implements SpaceClient {
   readonly reactions;
   readonly recording;
   readonly whiteboard;
+  readonly telemetry;
   readonly #core: SpaceClientCore;
   readonly #runtime: ManagedRuntime.ManagedRuntime<SpaceClientCoreService, never>;
   readonly #logger: SpaceClientOptions["logger"];
@@ -22,6 +23,7 @@ class PromiseSpaceClient implements SpaceClient {
     this.#runtime = ManagedRuntime.make(makeSpaceClientCoreLayer(options, platform));
     this.#core = this.#runtime.runSync(Effect.service(SpaceClientCoreService));
     const controllers = this.#core.controllers;
+    this.telemetry = this.#core.telemetry;
     this.media = toPromiseController(this.#runtime, controllers.media);
     const chat = toPromiseController(this.#runtime, controllers.chat);
     const { upload, url, resolveUrl, ...chatCommands } = chat;

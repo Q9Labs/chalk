@@ -15,7 +15,9 @@ import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, mediaCredential } from "./telemetry";
+import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
+import { deviceFailedEvent } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -54,6 +56,8 @@ export type ConnectionLifecycleCapability = {
   readonly subscribeScreenEnded: (listener: () => void) => () => void;
   readonly getDiagnostics: () => readonly ConnectionDiagnostic[];
   readonly getJoinTrace: () => readonly ConnectionJoinTraceEvent[];
+  /** Where controllers say what happened to the call. Absent when the platform has no outbox. */
+  readonly telemetry?: TelemetrySink;
   readonly setInitialMedia: (
     provider: InitialMedia,
     intent?: () => Readonly<{
@@ -488,7 +492,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
         return media;
       };
-      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: telemetry?.traceparent });
+      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: telemetry?.traceparent, telemetry });
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
         const confirmEntered = sync.confirmEntered?.bind(sync);
         return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
@@ -560,7 +564,10 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
-            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices));
+            const captured = yield* trace(
+              "acquire_initial_media",
+              acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, (source, cause) => telemetry?.record(deviceFailedEvent(cause, source))),
+            );
             const capturedStream = captured.stream;
             stream = capturedStream;
             grantedMedia = grantedMediaFromStream(capturedStream);
@@ -1216,6 +1223,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         },
         getDiagnostics: () => diagnostics.snapshot(),
         getJoinTrace: () => diagnostics.joinTrace(),
+        telemetry,
         setInitialMedia: (provider, intent, start) =>
           Effect.sync(() => {
             model.initialMedia = provider;

@@ -146,7 +146,7 @@ function OwnerCallSurface({
   const tenantId = access?.subject.tenant_id;
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
-  const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
+  const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection, telemetry: client.telemetry }), [baseURL, tenantId, owner, client]);
   if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
     return (
       <SiteRoot>

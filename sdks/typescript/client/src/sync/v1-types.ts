@@ -1,3 +1,4 @@
+import type { TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
@@ -242,6 +243,7 @@ export type V1CollaborationClient = {
 };
 export type V1SyncClientOptions = {
   readonly traceparent?: string;
+  readonly telemetry?: TelemetrySink;
   readonly onDiagnostic?: (event: TransportDiagnostic) => void;
   readonly url: string;
   readonly token: () => Promise<string>;

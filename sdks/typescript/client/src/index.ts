@@ -5,6 +5,7 @@ export * from "./space-client";
 export * from "./sync";
 export * from "./whiteboard";
 export * from "./public-invites";
+export type { AppTelemetry } from "./telemetry/app";
 export { TelemetryOutbox } from "./telemetry/outbox";
 export { postTelemetry } from "./telemetry/send";
 export type { PlatformChange, TelemetryPlatform } from "./telemetry/types";

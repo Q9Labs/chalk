@@ -32,7 +32,8 @@ import { createCallStatsCollector, type CallStatsCollector } from "./call-stats"
 import { SubscriptionDelivery, type DeliveredVideo } from "./subscription-delivery";
 import { CloudflareSFUError } from "./types";
 import { iceServersFor } from "./ice-servers";
-import { classifyMediaFailure } from "./failure-diagnostics";
+import { classifyMediaFailure, pullShortfall, subscribeFailure } from "./failure-diagnostics";
+import { observeOperation } from "../telemetry/operation";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -119,6 +120,7 @@ const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
+  readonly #telemetry: CloudflareSFUClientOptions["telemetry"];
   readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
   readonly #onReceiveHealth: CloudflareSFUClientOptions["onReceiveHealth"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
@@ -219,6 +221,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now(), options.unreportedVideoTileWaitMs ?? UNREPORTED_TILE_WAIT_MS);
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
+    this.#telemetry = options.telemetry;
     this.#onDiagnostic = options.onDiagnostic;
     this.#onReceiveHealth = options.onReceiveHealth;
     this.#callStats = createCallStatsCollector({ record: (draft) => options.telemetry?.record(draft), interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null });
@@ -398,7 +401,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#pullPublishedTried = true;
     try {
-      return await this.#pullPublishedAudio(pull, generation);
+      return await observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullPublishedAudio(pull, generation), subscribeFailure);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       // The combined request is an optimisation. After a failure, list and pull the old way, so the reconcile
@@ -1877,6 +1880,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     if (publications.length === 0) return [];
+    return observeOperation(this.#telemetry, { action: "subscribe" }, () => this.#pullTracks(publications, generation), subscribeFailure, pullShortfall(publications.length));
+  }
+  async #pullTracks(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     this.#receiveHealth.pullRequested(publications.map((publication) => publication.publicationId));
     return this.#serializeSDP(() =>
       this.#negotiateRemotePull(publications, generation, async (connectionId) => {

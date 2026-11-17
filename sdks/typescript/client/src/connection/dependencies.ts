@@ -104,6 +104,7 @@ export type ConnectionSyncFactoryInput = {
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
+  readonly telemetry?: TelemetrySink;
   readonly onTransportDiagnostic?: (event: TransportDiagnostic) => void;
   readonly onTransportPath?: (path: TransportPath) => void;
 };

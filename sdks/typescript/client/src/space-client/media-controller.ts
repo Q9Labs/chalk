@@ -4,7 +4,7 @@ import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
 import { cameraEffectFailure } from "../media/camera-effects";
-import { describeMediaCaptureError } from "../media/capture-error";
+import { describeMediaCaptureError, failCapture } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
 import { displayMediaConstraints, releaseTracks, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
@@ -705,7 +705,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         let track: MediaStreamTrack | null = null;
         let prepared = false;
         return this.#captureStream(
-          () => this.#selection.getDisplayMedia(displayMediaConstraints(intent.options)),
+          () => this.#selection.getDisplayMedia(displayMediaConstraints(intent.options)).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, "screen")),
           (stream) =>
             Effect.gen({ self: this }, function* () {
               this.#assertActivePorts(ports, "startScreenShare");
@@ -1144,9 +1144,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
-      if (source === "microphone") {
-        this.#watchMicrophone(null);
-      }
+      if (source === "microphone") this.#watchMicrophone(null);
       this.#tracks.delete(source);
       return;
     }
@@ -1332,7 +1330,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
-      (captureSignal) => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }, captureSignal),
+      (captureSignal) => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }, captureSignal).catch((cause: unknown) => failCapture(this.#connection.telemetry, cause, source)),
       (stream) =>
         this.#refreshDevices().pipe(
           Effect.ignore,

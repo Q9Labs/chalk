@@ -6,6 +6,7 @@ import { ConnectionPlatformService, makeConnectionPlatformLayer, type Connection
 import type { ConnectionDiagnostic } from "../connection/diagnostics";
 import { createDefaultConnectionDependencies } from "../connection/production";
 import * as apiUrls from "../api-urls";
+import { appTelemetry, type AppTelemetry } from "../telemetry/app";
 import { TelemetryOutbox } from "../telemetry/outbox";
 import { createWebTelemetryPlatform } from "../telemetry/web-platform";
 import { callEvents } from "./call-events";
@@ -85,13 +86,16 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
         fetch: platform.fetch,
       });
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers)),
+        Effect.sync(() => new SpaceClientCore(lifecycle, store, controllers, dependencies.telemetry ? appTelemetry(dependencies.telemetry) : silentTelemetry)),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
   );
+/** Stands in when the platform gave no outbox, so an app can always call `telemetry`. */
+const silentTelemetry: AppTelemetry = { sessionId: "", problemReported: () => undefined, renderCrashed: () => undefined };
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
+  readonly telemetry: AppTelemetry;
   readonly #connection: ConnectionLifecycleCapability;
   readonly #store: SpaceStore;
   readonly #handlers: {
@@ -102,7 +106,8 @@ export class SpaceClientCore {
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects) {
+  constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, controllers: ControllerEffects, telemetry: AppTelemetry) {
+    this.telemetry = telemetry;
     this.#connection = connection;
     this.#store = store;
     this.controllers = controllers;
