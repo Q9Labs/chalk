@@ -52,6 +52,24 @@ export function runsOf(samples, match) {
   return runs;
 }
 
+/** What a close without an outcome meant, for lines written before the node named outcomes. */
+const OUTCOME_OF_CAUSE = { never_connected: "never_connected", peer_failed: "dropped", negotiation_failed: "failed", node_shutdown: "interrupted" };
+
+/**
+ * How each session ended: the node's `sfu.session.closed` line while the store keeps it, and the durable row saved with the
+ * Participant, which stays. Both say the same, so a session with both is one end that cites the line.
+ */
+function endsOf(rows) {
+  const byConnection = new Map();
+  for (const row of rows.filter((candidate) => (candidate.event === "sfu.session.closed" || candidate.event === "db.media_session") && candidate.connection)) {
+    byConnection.set(row.connection, { ...byConnection.get(row.connection), [row.event === "db.media_session" ? "durable" : "logged"]: row });
+  }
+  return [...byConnection].map(([connection, { logged, durable }]) => {
+    const row = logged ?? durable;
+    return { connection, logged, durable, row, participant: row.participant, cause: attr(row, "cause"), outcome: attr(row, "outcome") ?? OUTCOME_OF_CAUSE[attr(row, "cause")] };
+  });
+}
+
 /** What the rows of one Episode say, in the shape the rules and the timeline both read. */
 export function buildCall(rows) {
   const samples = samplesOf(rows);
@@ -65,6 +83,7 @@ export function buildCall(rows) {
     samples,
     participants: [...byParticipant.keys()],
     episode: rows.find((row) => row.event === "db.episode"),
+    ends: endsOf(rows),
     rowsOf: (participant) => byParticipant.get(participant) ?? [],
     database,
     /** SFU node events of one connection id. */
@@ -82,14 +101,17 @@ export function buildCall(rows) {
 
 /**
  * Which media plane the Episode got and who chose it: the database's stored binding (`selected_by`) and the API's
- * `media_plane.selected` event. Both are absent on an Episode that predates them, so an absent plane is not a gap.
+ * `media_plane.selected` event, both absent on an Episode that predates them, so an absent plane is not a gap. With them, the changes
+ * to a plane setting (the Space's, the Tenant's or the kill switch) made while the Episode lasted, from the durable
+ * `media_plane_changes` rows. A live Episode keeps its binding, so a change names what later Episodes got.
  */
 export function mediaPlane(call) {
   const selected = call.rows.filter((row) => row.event === "media_plane.selected");
   const proof = [call.episode, ...selected].filter((row) => row && (attr(row, "selected_by") ?? attr(row, "media_plane_selected_by")));
+  const changes = call.rows.filter((row) => row.event === "db.media_plane_change");
   const first = proof[0];
-  if (!first) return undefined;
-  return { selectedBy: attr(first, "selected_by") ?? attr(first, "media_plane_selected_by"), provider: attr(first, "provider") ?? attr(first, "media_plane_provider"), proof };
+  if (!first && changes.length === 0) return undefined;
+  return { selectedBy: first && (attr(first, "selected_by") ?? attr(first, "media_plane_selected_by")), provider: first && (attr(first, "provider") ?? attr(first, "media_plane_provider")), proof, changes };
 }
 
 export const hiddenByViewer = (row) => number(row, "recv_hidden_videos") > 0;

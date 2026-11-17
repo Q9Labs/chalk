@@ -1,9 +1,11 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { hiddenByViewer, runsOf, seconds, short } from "./call.mjs";
 import { cause, finding } from "./finding.mjs";
+import { qualityFindings, senderUplinkCause, viewerLinkClean, viewerLinkCause } from "./quality.mjs";
 import { clientReports } from "./reports.mjs";
 import { attr, number, participantHash } from "./rows.mjs";
 import { sessions } from "./sessions.mjs";
+import { unmuteFindings } from "./unmute.mjs";
 
 /** Participants other than `run`'s whose samples overlap it with a sender above zero. */
 function sendersDuring(call, run) {
@@ -145,18 +147,30 @@ function layerCause(events, run, sending) {
   return { why: cause(`the node forwarded layer ${attr(layer, "layer")}${held ? ", below the highest" : ""}; ${sending}`, "forwarding", held ? "SFU" : "unknown"), rows: [layer] };
 }
 
-/** The node's own account of why a viewer's video was held down: its bandwidth estimate, then a pause, then a weak publisher, then the layer it forwarded. */
+/** The node's own rows for the viewer's downlink and the senders' uplink, which say which leg lost the packets. */
+function measuredLegCause(call, run, sending, thresholds) {
+  const link = viewerLinkCause(call, run, thresholds);
+  if (link) return { why: { ...link.why, text: `${link.why.text}; ${sending}` }, rows: link.rows };
+  const uplink = senderUplinkCause(call, run, sendersDuring(call, run), thresholds);
+  return uplink && { why: { ...uplink.why, text: `${uplink.why.text}; ${sending}` }, rows: uplink.rows };
+}
+
+/**
+ * The node's own account of why a viewer's video was held down: its bandwidth estimate, then a pause, then the leg its media rows show
+ * lost the packets (the node's pacer, the viewer's downlink or the publisher's uplink), then a weak publisher, then the layer it forwarded.
+ */
 function starvedCause(call, run, thresholds) {
   const events = call.nodeEvents(run.connection);
   const sender = senderDuring(call, run);
   const sending = sender ? `${short(sender.participant)} was sending ${sender.kbps} kbps${sender.layer ? ` at layer ${sender.layer}` : ""} meanwhile` : "no sender's bitrate was logged";
-  const named = estimateCause(events, run, sending) ?? pausedCause(events, run, sendersDuring(call, run), sending);
+  const named = estimateCause(events, run, sending) ?? pausedCause(events, run, sendersDuring(call, run), sending) ?? measuredLegCause(call, run, sending, thresholds);
   if (named) return { ...named, rows: [...named.rows, ...(sender?.rows ?? [])] };
   if (sender && sender.kbps < thresholds.starved_floor_kbps) return { why: cause(`the publisher itself sent only ${sender.kbps} kbps`, "publishing", "client"), rows: sender.rows };
   const layer = layerCause(events, run, sending);
   if (layer) return { ...layer, rows: [...layer.rows, ...(sender?.rows ?? [])] };
   const nothing = events.length === 0 ? "the SFU node logged no event for this connection" : "the node events for this connection name no layer, pause or bandwidth estimate";
-  return { why: cause(`unknown: ${nothing}; ${sending}, so the loss is on the way from the node to the viewer, either the node or the viewer's downlink`, "forwarding", "unknown"), rows: sender?.rows ?? [] };
+  const where = viewerLinkClean(call, run, thresholds) ? "the node's own downlink rows for the viewer show no loss or drops, so the node-to-viewer leg is not proved to be the cause" : "so the loss is on the way from the node to the viewer, either the node or the viewer's downlink";
+  return { why: cause(`unknown: ${nothing}; ${sending}, ${where}`, "forwarding", "unknown"), rows: sender?.rows ?? [] };
 }
 
 /** Video that arrived at a trickle: on a measured-clear link it is starvation, on a faulty link it is the viewer's network. */
@@ -241,8 +255,11 @@ const KINDS = [
   "session_refused",
   "admission_refused",
   "never_connected",
+  "dropped",
   "peer_failed",
   "negotiation_failed",
+  "control_failed",
+  "drop_needed_rejoin",
   "node_shutdown",
   "retired",
   "connection_lost",
@@ -251,13 +268,29 @@ const KINDS = [
   "media_silence",
   "publisher_silent",
   "starved_viewer",
+  "uplink_degraded",
+  "node_dropping",
+  "downlink_degraded",
   "congested_viewer",
+  "unmute_slow",
   "early_replacement",
   "connection_expired",
+  "recovered_drop",
   "viewer_hid_video",
 ];
 
 export function findingsOf(call, thresholds) {
-  const found = [...clientReports(call), ...sessions(call), ...mediaSilence(call, thresholds), ...publisherSilent(call, thresholds), ...lowBitrate(call, thresholds), ...replacements(call, thresholds), ...hiddenVideo(call, thresholds), ...expiries(call)];
+  const found = [
+    ...clientReports(call),
+    ...sessions(call),
+    ...mediaSilence(call, thresholds),
+    ...publisherSilent(call, thresholds),
+    ...lowBitrate(call, thresholds),
+    ...qualityFindings(call, thresholds),
+    ...unmuteFindings(call, thresholds),
+    ...replacements(call, thresholds),
+    ...hiddenVideo(call, thresholds),
+    ...expiries(call),
+  ];
   return found.sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || a.from - b.from);
 }

@@ -1,12 +1,13 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { SOURCES } from "./join.mjs";
 import { clock, short } from "./call.mjs";
+import { attr } from "./rows.mjs";
 
 const proofOf = ({ ids, total }) => `[${ids.join(", ")}${total > ids.length ? `, ... ${total} rows in all` : ""}]`;
 
 function stepLine(step) {
   const mark = step.finding === "problem" ? "▶" : step.finding === "note" ? "·" : " ";
-  return `  ${mark} ${clock(step.time)}  ${step.stage.padEnd(12)}${step.side.padEnd(9)}${step.text}  ${proofOf(step.proof)}`;
+  return `  ${mark} ${clock(step.time)}  ${step.stage.padEnd(13)}${step.side.padEnd(9)}${step.text}  ${proofOf(step.proof)}`;
 }
 
 function header(timeline) {
@@ -15,14 +16,29 @@ function header(timeline) {
   return `Participant ${short(timeline.participant)}${role}: ${joined}`;
 }
 
+/** The plane the Episode got and who chose it, then each change to a plane setting made while it lasted. */
+function planeLines({ provider, selectedBy, proof, changes }) {
+  const chosen = selectedBy ? `chosen by ${selectedBy} ${proofOf({ ids: proof.map((row) => row.id), total: proof.length })}` : "the choice was not logged";
+  const lines = [`  Media plane: ${provider ?? "provider not logged"}, ${chosen}`];
+  if (changes.length === 0) return lines;
+  lines.push(
+    ...changes.map(
+      (change) =>
+        `  Plane change during the Episode: at ${clock(change.time)} UTC the ${attr(change, "scope")} setting went from ${attr(change, "old_plane")} to ${attr(change, "new_plane")} (${attr(change, "actor")}: ${attr(change, "reason")}) [${change.id}]; a running Episode keeps its binding, so this decides later Episodes`,
+    ),
+  );
+  return lines;
+}
+
 /** The summary, one timeline per Participant, and the list of what the diagnosis could not see. */
-export function render({ episodeId, plane, verdict, findings, gaps, stats, timeline, elapsedMs }) {
+export function render({ episodeId, plane, unmuteSummary, verdict, findings, gaps, stats, timeline, elapsedMs }) {
   const out = [`Episode ${episodeId}`, "", `VERDICT: ${verdict}`, ""];
   const bad = findings.filter((finding) => !finding.benign);
   out.push("Summary");
   out.push("  Timeline columns: time UTC, stage, side, what happened, ids of the rows that prove it. ▶ marks a finding, · a note.");
   out.push(`  Rows by source: ${SOURCES.map((source) => `${source} ${stats[source].rows}`).join(", ")}`);
-  if (plane) out.push(`  Media plane: ${plane.provider ?? "provider not logged"}, chosen by ${plane.selectedBy} ${proofOf({ ids: plane.proof.map((row) => row.id), total: plane.proof.length })}`);
+  if (plane) out.push(...planeLines(plane));
+  out.push(...unmuteSummary.map((line) => `  ${line}`));
   if (bad.length === 0) out.push("  Findings: none that fail the call");
   for (const finding of bad) {
     out.push(`  Finding: Participant ${short(finding.participant)} ${finding.experience} at ${clock(finding.from)} UTC [${finding.stage}/${finding.side}] ${finding.cause} ${proofOf(finding.proof)}`);

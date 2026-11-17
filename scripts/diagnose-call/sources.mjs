@@ -5,6 +5,10 @@ import { normalizeRow } from "./rows.mjs";
 
 const DEADLINE_MS = 40_000;
 const DAY_MS = 86_400_000;
+/** Sync's spans are in the production trace dataset; `CHALK_TRACE_DATASET` names another one. */
+const DEFAULT_TRACE_DATASET = "chalk-prod-traces";
+/** The node's media stats: ten-second rows for every track, so they are asked for apart from the call events and cannot crowd them out of a query's row cap. */
+const MEDIA_STATS = `['attributes.event'] startswith 'sfu.media.'`;
 const CALL_EVENTS = ["http.failure"];
 const CALL_EVENT_PREFIXES = ["sdk.", "media.", "sfu.", "sync.", "participant."];
 
@@ -27,12 +31,12 @@ function episodeWindow(dbRows, read) {
 }
 
 /**
- * Reads every source for one Episode: the database first (it names the Episode's span and each Participant's connection id), then
- * Axiom by the Episode id, then by the connection, journey and trace ids those rows name, then a probe for call events that
- * name no id at all. The probe only counts rows that cannot be joined; it never joins by time. One deadline covers every request
+ * Reads every source for one Episode: the database first (it names the Episode's span and each Participant's connection id, and its
+ * durable tables outlive Axiom), then Axiom by the Episode id, then by the connection, journey and trace ids those rows name, then a probe
+ * for call events that name no id at all. An Episode older than Axiom's retention is read from the database alone, and says so. The probe only counts rows that cannot be joined; it never joins by time. One deadline covers every request
  * and the database read. A source that fails, is not configured, or is cut off by a cap is a gap in `gaps`, never a silent omission.
  */
-export async function readSources({ episodeId, env, fetchImpl = fetch, now = Date.now(), deadlineMs = DEADLINE_MS, windowDays, readDb = readDatabase }) {
+export async function readSources({ episodeId, env, fetchImpl = fetch, now = Date.now(), deadlineMs = DEADLINE_MS, databaseDays, axiomDays, readDb = readDatabase }) {
   const gaps = [];
   const signal = AbortSignal.timeout(deadlineMs);
   const tolerate = async (label, source, work, empty) => {
@@ -45,14 +49,21 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
   };
   const token = env.AXIOM_TOKEN;
   const logs = env.CHALK_LOG_DATASET;
-  const traces = env.CHALK_TRACE_DATASET;
+  const traces = env.CHALK_TRACE_DATASET || DEFAULT_TRACE_DATASET;
   if (!token || !logs) throw new Error("AXIOM_TOKEN and CHALK_LOG_DATASET are required");
-  const read = { start: now - windowDays * DAY_MS, end: now };
+  const read = { start: now - databaseDays * DAY_MS, end: now };
+  const axiomStart = now - axiomDays * DAY_MS;
 
   const db = await tolerate("The database", "db", () => readDb({ url: env.CHALK_DATABASE_URL, episodeId, since: read.start, signal }), { rows: [], gaps: [] });
   gaps.push(...db.gaps);
   const dbRows = db.rows.map((row) => normalizeRow(row, "db"));
-  const span = episodeWindow(db.rows, read);
+  const whole = episodeWindow(db.rows, read);
+  if (whole.end < axiomStart) {
+    gaps.push({ source: "axiom", blocks: false, what: `the Episode ended before ${new Date(axiomStart).toISOString().slice(0, 10)}, past the ${axiomDays} days Axiom keeps, so only the database was read: the client, API, node, Sync and recorder rows are gone` });
+    return { rows: dedupe(dbRows), gaps };
+  }
+  const span = { start: Math.max(whole.start, axiomStart), end: whole.end };
+  if (span.start > whole.start && db.rows.some((row) => row.event === "db.episode")) gaps.push({ source: "axiom", blocks: false, what: `the Episode began before ${new Date(axiomStart).toISOString().slice(0, 10)}, past the ${axiomDays} days Axiom keeps, so its first part was not read from Axiom` });
 
   const scope = { token, org: env.AXIOM_ORG_ID, signal, ...span };
   const ask =
@@ -64,19 +75,24 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
     return result.rows;
   };
 
-  const [logRows, syncRows] = await Promise.all([
-    tolerate("The log dataset", "axiom", async () => note("The query by Episode id", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)}`)), []),
-    traces ? tolerate("The trace dataset", "sync", async () => note("The Sync span query", await ask(traces)(`search ${JSON.stringify(episodeId)}`)), []) : Promise.resolve([]),
+  const [logRows, statRows, syncRows] = await Promise.all([
+    tolerate("The log dataset", "axiom", async () => note("The query by Episode id", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)} and not (${MEDIA_STATS})`)), []),
+    tolerate("The node's media stats", "axiom", async () => note("The query for the node's media stats", await ask(logs)(`where ['attributes.episode_id'] == ${quote(episodeId)} and ${MEDIA_STATS}`)), []),
+    tolerate("The trace dataset", "sync", async () => note("The Sync span query", await ask(traces)(`search ${JSON.stringify(episodeId)}`)), []),
   ]);
-  if (!traces) gaps.push({ source: "sync", blocks: true, what: "CHALK_TRACE_DATASET is not set, so Sync spans (socket up and down, admission, media control) were not read" });
 
-  const first = [...logRows.map((row) => normalizeRow(row)), ...syncRows.map((row) => normalizeRow(row, "sync")), ...dbRows];
+  const first = [...logRows, ...statRows]
+    .map((row) => normalizeRow(row))
+    .concat(
+      syncRows.map((row) => normalizeRow(row, "sync")),
+      dbRows,
+    );
   const ids = (pick) => [...new Set(first.flatMap(pick).filter(Boolean))];
   const connections = ids((row) => [row.connection]);
   const links = ids((row) => [row.journey, row.trace]);
 
   const second = [];
-  const reachedBy = (label, fields, list) =>
+  const reachedBy = (label, fields, list, only = `not (${MEDIA_STATS})`) =>
     tolerate(
       label,
       "axiom",
@@ -86,7 +102,7 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
           const clauses = (present) => fields.filter(([name]) => present.has(name)).map(([name]) => `['attributes.${name}'] in (${part.map(quote).join(", ")})`);
           const result = await withFields(
             fields.map(([name]) => name),
-            (present) => (clauses(present).length > 0 ? `where ${clauses(present).join(" or ")}` : "where false"),
+            (present) => (clauses(present).length > 0 ? `where (${clauses(present).join(" or ")}) and ${only}` : "where false"),
             ask(logs),
             (absent) => gaps.push({ source: "axiom", blocks: false, what: `the dataset has no ${absent} field yet, so rows could not be reached through it` }),
           );
@@ -98,7 +114,8 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
     );
   second.push(...(await reachedBy("The rows named by connection ids", [["connection_id"], ["provider_session_id"]], connections)).map((row) => normalizeRow(row)));
   second.push(...(await reachedBy("The rows named by journey ids", [["journey_id"]], links)).map((row) => normalizeRow(row)));
-  if (traces && links.length > 0) {
+  second.push(...(await reachedBy("The node's media stats named by connection ids", [["connection_id"]], connections, MEDIA_STATS)).map((row) => normalizeRow(row)));
+  if (links.length > 0) {
     const spans = await tolerate(
       "The spans named by the trace ids",
       "sync",

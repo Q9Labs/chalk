@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 // pnpm diagnose:call <episode id> [--fixture rows.json] [--strict]
-// Reads the database, Axiom (API, client, SFU node, recorder) and the Sync traces for one Episode, joins every row by id, and prints what
-// happened to each Participant, what went wrong, on whose side, and which rows prove it.
+// Reads the database (including the durable media session and plane change tables, which outlive Axiom), Axiom (API, client, SFU node,
+// recorder) and the Sync traces for one Episode, joins every row by id, and prints what happened to each Participant, what went wrong,
+// on whose side, and which rows prove it.
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { buildCall, mediaPlane } from "./call.mjs";
@@ -13,6 +14,7 @@ import { normalizeRow } from "./rows.mjs";
 import { findingsOf } from "./rules.mjs";
 import { readSources } from "./sources.mjs";
 import { timelines } from "./timeline.mjs";
+import { unmuteLines, unmutesOf } from "./unmute.mjs";
 import { verdictLine } from "./verdict.mjs";
 
 export const thresholds = JSON.parse(readFileSync(new URL("../../infrastructure/observability/production-alerts/call-verdict.json", import.meta.url), "utf8"));
@@ -22,8 +24,8 @@ environment:
   AXIOM_TOKEN            Axiom query token (required)
   AXIOM_ORG_ID           Axiom organisation id (required by personal tokens)
   CHALK_LOG_DATASET      the log dataset (required)
-  CHALK_TRACE_DATASET    the trace dataset with Sync spans; without it Sync is a missing source
-  CHALK_DATABASE_URL     a read-only database URL; without it Participants, leave reasons and leases are a missing source
+  CHALK_TRACE_DATASET    the trace dataset with Sync spans (default chalk-prod-traces); a token that cannot read it makes Sync a missing source
+  CHALK_DATABASE_URL     a read-only database URL; without it Participants, leave reasons, leases and the durable media session outcomes are a missing source
 --strict exits 3 when a bad call is found, 2 when evidence is missing and nothing bad was found, and 0 otherwise.`;
 
 /** Diagnoses one Episode from already-read rows; the command and the tests share it. */
@@ -32,7 +34,8 @@ export function diagnoseRows(episodeId, rows, sourceGaps = []) {
   const call = buildCall(joined);
   const findings = findingsOf(call, thresholds);
   const gaps = gapsOf(call, sourceGaps, unjoined.length);
-  return { episodeId, plane: mediaPlane(call), verdict: verdictLine(findings, gaps, call), findings, gaps, stats, timeline: timelines(call, findings), unjoined };
+  const unmutes = unmutesOf(call);
+  return { episodeId, plane: mediaPlane(call), unmutes, unmuteSummary: unmuteLines(unmutes, thresholds), verdict: verdictLine(findings, gaps, call), findings, gaps, stats, timeline: timelines(call, findings), unjoined };
 }
 
 /** 3 when a bad call was found, 2 when something that could hide one is missing, else 0. */
@@ -49,7 +52,7 @@ async function main(argv, env = process.env) {
     console.error(USAGE);
     return 64;
   }
-  const source = fixtureAt >= 0 ? { rows: JSON.parse(await readFile(argv[fixtureAt + 1], "utf8")).map((row) => normalizeRow(row)), gaps: [] } : await readSources({ episodeId, env, windowDays: thresholds.window_days });
+  const source = fixtureAt >= 0 ? { rows: JSON.parse(await readFile(argv[fixtureAt + 1], "utf8")).map((row) => normalizeRow(row)), gaps: [] } : await readSources({ episodeId, env, databaseDays: thresholds.database_window_days, axiomDays: thresholds.axiom_retention_days });
   const result = diagnoseRows(episodeId, source.rows, source.gaps);
   console.log(render({ ...result, elapsedMs: Date.now() - started }));
   return argv.includes("--strict") ? strictCode(result) : 0;

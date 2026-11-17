@@ -43,7 +43,7 @@ test("a Participant whose presence expired is named as having left without leavi
 
 test("a session the node closed for a failed peer or a failed negotiation is a finding with its own cause", () => {
   const closed = (cause) => neverConnectedCall().map((row) => (row.attributes?.event === "sfu.session.closed" ? { ...row, attributes: { ...row.attributes, cause } } : row));
-  assert.match(diagnose(closed("peer_failed")).findings.find((candidate) => candidate.kind === "peer_failed").cause, /ICE or DTLS failed/u);
+  assert.match(diagnose(closed("peer_failed")).findings.find((candidate) => candidate.kind === "dropped").cause, /ICE or DTLS failed/u);
   assert.match(diagnose(closed("negotiation_failed")).findings.find((candidate) => candidate.kind === "negotiation_failed").cause, /could not apply an offer or answer/u);
   assert.deepEqual(kinds(diagnose(closed("removed"))), ["connection_expired"]);
 });

@@ -9,6 +9,7 @@ import { ROW_CAP } from "./axiom.mjs";
 import { connectionEnv, episodeSql, readDatabase } from "./database.mjs";
 import { diagnoseRows, strictCode, thresholds } from "./index.mjs";
 import { assertEveryRowJoined, joinByIds, joinedShare, SOURCES } from "./join.mjs";
+import { missingSources } from "./gaps.mjs";
 import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
 import { EPISODE, T0, at, fixture, neverConnectedCall, scenarios } from "./scenarios.mjs";
@@ -50,7 +51,7 @@ test("the report shows a summary, a timeline per Participant with stage, side an
   const text = render({ ...diagnose(neverConnectedCall()), elapsedMs: 0 });
   const order = ["VERDICT:", "Summary", "Participant 153be25c (publisher)", "Participant 3c7e85ea (viewer)", "Missing data"].map((heading) => text.indexOf(heading));
   assert.ok(order.every((at) => at >= 0) && order.toSorted((a, b) => a - b).join() === order.join(), text);
-  assert.match(text, /▶ 10:00:02 {2}connecting {2}unknown {2}had no media path.*\[fx-\d{4}, fx-\d{4}/u);
+  assert.match(text, /▶ 10:00:02 {2}connecting {3}unknown {2}had no media path.*\[fx-\d{4}, fx-\d{4}/u);
   assert.match(text, /\[blocks the verdict\] no API rows|no sdk\.call_stats rows/u);
 });
 
@@ -66,7 +67,7 @@ function fakeAxiom(answer) {
 }
 const env = { AXIOM_TOKEN: "token", CHALK_LOG_DATASET: "logs", CHALK_TRACE_DATASET: "traces", AXIOM_ORG_ID: "org" };
 const noDatabase = async () => ({ rows: [], gaps: [] });
-const read = (overrides) => readSources({ episodeId: EPISODE, env, windowDays: 14, readDb: noDatabase, ...overrides });
+const read = (overrides) => readSources({ episodeId: EPISODE, env, databaseDays: 365, axiomDays: 30, readDb: noDatabase, ...overrides });
 const matchOf = (row) => ({ _time: row._time, _rowId: row._rowId, data: row });
 
 test("a source that runs past the deadline is a blocking gap and the others are still read", async () => {
@@ -93,14 +94,41 @@ test("rows named by a connection id are looked up by connection_id and by provid
   assert.ok(byConnection.every((apl) => apl.includes("connection_id") && (apl.match(/'conn-/gu) ?? []).length <= 100));
 });
 
-test("Sync is a visible blocking gap when the trace dataset is not set, and the database window is the one the thresholds name", async () => {
-  const { fetchImpl } = fakeAxiom(() => []);
-  const { gaps } = await read({ fetchImpl, env: { ...env, CHALK_TRACE_DATASET: undefined } });
-  assert.ok(gaps.some((gap) => gap.source === "sync" && gap.blocks && /CHALK_TRACE_DATASET is not set/u.test(gap.what)));
+test("the Sync dataset defaults to chalk-prod-traces, and a token that cannot read it leaves Sync a visible blocking gap", async () => {
+  const datasets = [];
+  const refused = async (_url, { body }) => {
+    const { apl } = JSON.parse(body);
+    datasets.push(/^\['([^']+)'\]/u.exec(apl)[1]);
+    return datasets.at(-1) === "chalk-prod-traces" ? { ok: false, status: 403, text: async () => "forbidden" } : { ok: true, status: 200, json: async () => ({ matches: [] }), text: async () => "" };
+  };
+  const { gaps } = await read({ fetchImpl: refused, env: { ...env, CHALK_TRACE_DATASET: undefined } });
+  assert.ok(datasets.includes("chalk-prod-traces"));
+  assert.ok(gaps.some((gap) => gap.source === "sync" && gap.blocks && /trace dataset could not be read.*HTTP 403/u.test(gap.what)));
+  assert.deepEqual(missingSources(gaps), ["Sync"]);
+});
+
+test("the database is read for a year and Axiom for what it keeps: older Episodes are read from the database alone, and say so", async () => {
+  const { fetchImpl, queries } = fakeAxiom(() => []);
   const windows = [];
-  await read({ fetchImpl, now: T0, readDb: async ({ since }) => (windows.push(since), { rows: [], gaps: [] }) });
-  assert.deepEqual(windows, [T0 - 14 * 86_400_000]);
+  const old = [{ _rowId: "db:episodes:9feb0ff6", _time: new Date(T0 - 100 * 86_400_000).toISOString(), event: "db.episode", episode_id: EPISODE, ended_at: new Date(T0 - 100 * 86_400_000 + 3_600_000).toISOString() }];
+  const result = await read({ fetchImpl, now: T0, readDb: async ({ since }) => (windows.push(since), { rows: old, gaps: [] }) });
+  assert.deepEqual(windows, [T0 - 365 * 86_400_000]);
+  assert.equal(queries.length, 0, "Axiom was asked for an Episode it no longer holds");
+  assert.deepEqual(
+    result.rows.map((row) => row.event),
+    ["db.episode"],
+  );
+  assert.ok(result.gaps.some((gap) => gap.source === "axiom" && !gap.blocks && /past the 30 days Axiom keeps/u.test(gap.what)));
   assert.match(episodeSql(EPISODE, T0 - 14 * 86_400_000), /created_at >= '2026-10-28T10:00:00\.000Z'::timestamptz/u);
+});
+
+test("the node's media stats are asked for apart from the call events, so ten-second rows cannot crowd the events out of the row cap", async () => {
+  const { fetchImpl, queries } = fakeAxiom(() => []);
+  await read({ fetchImpl });
+  const stats = queries.filter((apl) => apl.includes("startswith 'sfu.media.'") && !apl.includes("not (['attributes.event'] startswith 'sfu.media.')"));
+  assert.ok(stats.length >= 1);
+  assert.ok(queries.filter((apl) => apl.includes("['attributes.episode_id'] ==")).every((apl) => apl.includes("startswith 'sfu.media.'")));
+  assert.ok(queries.filter((apl) => apl.includes("provider_session_id")).every((apl) => apl.includes("not (['attributes.event'] startswith 'sfu.media.')")));
 });
 
 test("the database URL reaches psql through its environment and never its arguments, and the session is read-only", async () => {
@@ -111,13 +139,20 @@ test("the database URL reaches psql through its environment and never its argume
   assert.match(settings.PGOPTIONS, /default_transaction_read_only=on/u);
 
   const directory = await mkdtemp(join(tmpdir(), "diagnose-call-"));
-  await writeFile(join(directory, "psql"), `#!/bin/sh\nprintf '%s\\n' "$@" > "${directory}/argv"\nprintf '%s\\n' '{"_rowId":"db:episodes:9feb0ff6","_time":"${at(0)}","event":"db.episode","episode_id":"${EPISODE}"}'\n`);
+  await writeFile(
+    join(directory, "psql"),
+    `#!/bin/sh\nprintf '%s\\n' "$@" >> "${directory}/argv"\ncase "$*" in\n  *participant_media_sessions*) echo 'ERROR: relation "participant_media_sessions" does not exist' >&2; exit 1;;\n  *'db.episode'*) printf '%s\\n' '{"_rowId":"db:episodes:9feb0ff6","_time":"${at(0)}","event":"db.episode","episode_id":"${EPISODE}"}';;\n  *media_plane_change*) printf '%s\\n' '{"_rowId":"db:media_plane_change:7","_time":"${at(5)}","event":"db.media_plane_change","episode_id":"${EPISODE}","scope":"space"}';;\nesac\n`,
+  );
   await chmod(join(directory, "psql"), 0o755);
   const path = process.env.PATH;
   process.env.PATH = `${directory}:${path}`;
   try {
     const result = await readDatabase({ url, episodeId: EPISODE, since: T0 - 86_400_000, signal: AbortSignal.timeout(10_000) });
-    assert.equal(result.rows.length, 1);
+    assert.deepEqual(
+      result.rows.map((row) => row.event),
+      ["db.episode", "db.media_plane_change"],
+    );
+    assert.ok(result.gaps.length === 1 && !result.gaps[0].blocks && /participant_media_sessions could not be read.*does not exist/u.test(result.gaps[0].what), "a table the database lacks is a gap that does not block");
   } finally {
     process.env.PATH = path;
   }
@@ -154,5 +189,20 @@ test("the fixtures hold no production identifier: every id is invented", () => {
 });
 
 test("the checker reads the same thresholds the file names, with no dead setting", () => {
-  assert.deepEqual(Object.keys(thresholds).toSorted(), ["available_floor_kbps", "early_replacement_ms", "healthy_loss_pct", "healthy_rtt_ms", "leave_slack_ms", "silence_ms", "starved_floor_kbps", "starved_ms", "window_days"]);
+  assert.deepEqual(Object.keys(thresholds).toSorted(), [
+    "available_floor_kbps",
+    "axiom_retention_days",
+    "database_window_days",
+    "early_replacement_ms",
+    "healthy_jitter_ms",
+    "healthy_loss_pct",
+    "healthy_rtt_ms",
+    "leave_slack_ms",
+    "quality_ms",
+    "silence_ms",
+    "starved_floor_kbps",
+    "starved_ms",
+    "unmute_audible_p95_ms",
+    "unmute_visible_p95_ms",
+  ]);
 });
