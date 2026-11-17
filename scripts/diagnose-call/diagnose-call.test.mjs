@@ -17,6 +17,14 @@ test("the real row shape keeps the node's service and event: a flat null never o
   assert.equal(node.connection, "conn-view");
 });
 
+test("a client telemetry stats row reads as a call stats sample, and its other events stay client rows", () => {
+  const row = (type) => normalizeRow({ _time: "2026-11-17T10:00:00Z", attributes: { event: "sdk.telemetry", type, provider_session_id: "conn-view", window_ms: 30_000 } });
+  assert.equal(row("call_stats").event, "sdk.call_stats");
+  assert.equal(row("call_stats").connection, "conn-view");
+  assert.equal(row("call_ended").event, "sdk.telemetry");
+  assert.equal(row("call_ended").source, "client");
+});
+
 test("a never_connected session is named with what the node saw, the side it cannot prove, and the rows that prove it", () => {
   const result = diagnose(neverConnectedCall());
   const finding = result.findings.find((candidate) => candidate.kind === "never_connected");
@@ -168,6 +176,43 @@ test("a connection that was lost or ran out of recovery attempts is a finding th
   assert.equal(finding.kind, "connection_lost");
   assert.equal(finding.side, "SFU");
   assert.match(finding.cause, /timeout at sfu_subscriptions/u);
+});
+
+test("client telemetry rows give the same findings as the old connection reports", () => {
+  const f = fixture();
+  const row = (second, type, fields) => f.api(second, "sdk.telemetry", "viewer", { type, client_session_id: "s1", elapsed_ms: second * 1000, connection_id: "conn-view", ...fields });
+  const stuck = diagnose([row(40, "audio_receive_stuck", { source: "microphone", receive_state: "pull_succeeded", duration_ms: 20_000 })]).findings.find((finding) => finding.kind === "audio_stuck");
+  assert.match(stuck.cause, /pulled but never arrived/u);
+  assert.equal(stuck.side, "SFU");
+  const lost = diagnose([row(40, "recovery_exhausted", { code: "media_recovery_exhausted", media_error_step: "sfu_subscriptions" })]).findings[0];
+  assert.equal(lost.kind, "connection_lost");
+  assert.match(lost.experience, /ran out of attempts/u);
+});
+
+test("a failed join is one finding from its terminal row, named by the latest failed step, and a recovered attempt is none", () => {
+  const f = fixture();
+  const row = (second, type, fields) => f.api(second, "sdk.telemetry", "viewer", { type, client_session_id: "s1", elapsed_ms: second * 1000, ...fields });
+  const join = diagnose([
+    row(1, "space_join_span", { step: "access_initialize", outcome: "failed", code: "invalid_access" }),
+    row(10, "space_join_span", { step: "start_media", outcome: "failed", code: "media_start_failed" }),
+    row(10, "space_join_span", { step: "join", outcome: "failed" }),
+    row(10, "connection_failed", { state: "joining", code: "media_start_failed" }),
+  ]).findings.filter((finding) => finding.kind === "failed_join");
+  assert.equal(join.length, 1);
+  assert.match(join[0].cause, /failed at start_media/u);
+  const recovered = [row(1, "space_join_span", { step: "access_initialize", outcome: "failed", code: "invalid_access" }), row(5, "space_join_span", { step: "join", outcome: "succeeded" })];
+  assert.equal(diagnose(recovered).findings.filter((finding) => finding.kind === "failed_join").length, 0);
+});
+
+test("rows an SDK from before client telemetry replays are no new findings, and a gap window is no measured sample", () => {
+  const f = fixture();
+  const legacy = (trigger) => f.api(40, "sdk.telemetry", "viewer", { type: "audio_receive_stuck", source: "microphone", receive_state: "pull_succeeded", legacy_route: "connection-reports", trigger });
+  assert.equal(diagnose([legacy("audio_receive_summary")]).findings.filter((finding) => finding.kind === "audio_stuck").length, 0);
+  assert.equal(diagnose([legacy("media_projection_mismatch")]).findings.filter((finding) => finding.kind === "audio_stuck").length, 0);
+  assert.equal(diagnose([legacy("audio_receive_stuck")]).findings.filter((finding) => finding.kind === "audio_stuck").length, 1);
+  const stats = (fields) => normalizeRow({ _time: "2026-11-17T10:00:00Z", attributes: { event: "sdk.telemetry", type: "call_stats", provider_session_id: "conn-view", window_ms: 30_000, ...fields } });
+  assert.equal(stats({}).event, "sdk.call_stats");
+  assert.equal(stats({ gap: "offline" }).event, "sdk.telemetry");
 });
 
 test("a connection replaced as dormant that the node never resumed is named as the cause of the silence, and the Participant comes from the connection", () => {
