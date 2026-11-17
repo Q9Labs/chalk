@@ -180,6 +180,20 @@ export type TranscriptDTO = { id: string; status: string; languages: readonly st
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
 export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; isYou: boolean; firstJoinedAt: string; lastLeftAt: string | null }[] };
+/** Who talked in a session, measured by the API from its transcripts. Times are milliseconds since the session started. */
+export type TalkSpeakerDTO = { key: string; name: string; talkMs: number; share: number; turns: number; buckets: readonly number[] };
+export type TalkTimeDTO =
+  | {
+      kind: "available";
+      durationMs: number;
+      totalTalkMs: number;
+      overlapMs: number;
+      silenceMs: number;
+      bucketMs: number;
+      recordings: readonly { id: string; offsetMs: number; transcribed: boolean }[];
+      speakers: readonly TalkSpeakerDTO[];
+    }
+  | { kind: "no-transcript" | "pending" | "live" | "unavailable" };
 export type HomeCallDTO = CallDTO & { inviteUrl: string | null; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
 export type CueDTO = { startMs: number; endMs: number; text: string; speaker: { name: string | null; participantRef: string } | null };
 export type DeliveryDTO = { id: string; state: string; createdAt: string; eventType: string; attempts: number; status: number | null };
@@ -192,7 +206,7 @@ export type CallPageDTO = {
   nextCursor: string | null;
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
-export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; talkTime: TalkTimeDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 /** One past session of one call, with what it kept. `recording` is the session's newest completed recording, else its newest. */
 export type SessionRowDTO = {
   spaceId: string;

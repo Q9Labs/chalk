@@ -16349,8 +16349,8 @@
                     "share": {
                       "type": "number"
                     },
-                    "speaker_id": {
-                      "$ref": "#/components/schemas/UUID"
+                    "speaker_key": {
+                      "type": "string"
                     },
                     "talk_ms": {
                       "type": "integer"
@@ -16359,7 +16359,7 @@
                       "type": "integer"
                     }
                   },
-                  "required": ["bucket_talk_ms", "display_name", "intervals", "participant_id", "share", "speaker_id", "talk_ms", "turns"],
+                  "required": ["bucket_talk_ms", "display_name", "intervals", "participant_id", "share", "speaker_key", "talk_ms", "turns"],
                   "type": "object"
                 },
                 "type": "array"

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { SITE_ORIGIN } from "../src/lib/site-origin";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
-import type { AttendanceDTO, LiveDTO, RecordingDTO } from "../src/lib/dashboard/contracts";
+import type { AttendanceDTO, LiveDTO, RecordingDTO, TalkTimeDTO } from "../src/lib/dashboard/contracts";
 import { recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import { readCookie, seal, unseal, writeCookie } from "./cookies";
@@ -120,6 +120,39 @@ export async function live(engine: Engine, spaceIds: readonly string[]): Promise
 export async function attendance(engine: Engine, params: Parameters<Engine["api"]["episodes"]["getEpisodeAttendance"]>[0]["params"]): Promise<AttendanceDTO> {
   const result = await run(engine.api.episodes.getEpisodeAttendance({ params }));
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
+}
+
+/** Talk time is an extra on the page, so a failed read leaves the section saying it is unavailable instead of failing the page. */
+export async function talkTime(engine: Engine, params: Parameters<Engine["api"]["episodes"]["getEpisodeTalkTime"]>[0]["params"]): Promise<TalkTimeDTO> {
+  try {
+    const result = await run(engine.api.episodes.getEpisodeTalkTime({ params }));
+    const measured = result.talk_time;
+    if (result.status === "available" && measured) {
+      return {
+        kind: "available",
+        durationMs: measured.episode_duration_ms,
+        totalTalkMs: measured.total_talk_ms,
+        overlapMs: measured.overlap_ms,
+        silenceMs: measured.silence_ms,
+        bucketMs: measured.bucket_ms,
+        recordings: measured.recordings.map((recording) => ({ id: recording.recording_id, offsetMs: recording.offset_ms, transcribed: recording.transcribed })),
+        speakers: measured.speakers.map((speaker) => ({ key: speaker.speaker_key, name: speaker.display_name, talkMs: speaker.talk_ms, share: speaker.share, turns: speaker.turns, buckets: speaker.bucket_talk_ms })),
+      };
+    }
+    switch (result.status) {
+      case "no_transcript":
+        return { kind: "no-transcript" };
+      case "transcript_pending":
+        return { kind: "pending" };
+      case "live":
+        return { kind: "live" };
+      default:
+        return { kind: "unavailable" };
+    }
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "dashboard.talk_time_unavailable", error_type: error instanceof Error ? error.name : typeof error }));
+    return { kind: "unavailable" };
+  }
 }
 
 /** The most rows the API returns for one page of any list. */

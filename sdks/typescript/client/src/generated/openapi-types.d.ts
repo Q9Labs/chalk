@@ -2132,7 +2132,7 @@ export interface components {
           }[];
           participant_id: components["schemas"]["ParticipantId"] | null;
           share: number;
-          speaker_id: components["schemas"]["UUID"];
+          speaker_key: string;
           talk_ms: number;
           turns: number;
         }[];

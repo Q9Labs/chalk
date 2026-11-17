@@ -979,7 +979,7 @@ export const EpisodeTalkTimeSchema = /* @__PURE__ */ (() =>
             ),
             participant_id: Schema.NullOr(ParticipantIdSchema),
             share: Schema.Number,
-            speaker_id: UUIDSchema,
+            speaker_key: Schema.String,
             talk_ms: Schema.Number,
             turns: Schema.Number,
           }),
