@@ -122,9 +122,35 @@ func Compute(input Input) Report {
 	}
 
 	bucketMS := bucketSize(duration)
-	bucketCount := int(ceilDiv(duration, bucketMS))
-	unions := make([][]Interval, len(accumulators))
-	runCount := 0
+	unions, runCount := measureSpeakers(accumulators, bucketMS, int(ceilDiv(duration, bucketMS)))
+
+	report := Report{EpisodeDurationMS: duration, BucketMS: bucketMS, IntervalsTruncated: runCount > MaxIntervals}
+	for _, accumulator := range accumulators {
+		report.TotalTalkMS += accumulator.speaker.TalkMS
+	}
+	covered, overlap := coverage(unions)
+	report.OverlapMS = overlap
+	report.SilenceMS = duration - covered
+	report.Speakers = make([]Speaker, 0, len(accumulators))
+	for _, accumulator := range accumulators {
+		report.Speakers = append(report.Speakers, finishSpeaker(accumulator.speaker, report))
+	}
+	slices.SortStableFunc(report.Speakers, func(a, b Speaker) int {
+		if byTalk := cmp.Compare(b.TalkMS, a.TalkMS); byTalk != 0 {
+			return byTalk
+		}
+		if byName := strings.Compare(a.DisplayName, b.DisplayName); byName != 0 {
+			return byName
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return report
+}
+
+// measureSpeakers fills each speaker's talk time, runs and buckets. It returns
+// every speaker's disjoint spans and the number of speech runs over all of them.
+func measureSpeakers(accumulators []speakerAccumulator, bucketMS int64, bucketCount int) (unions [][]Interval, runCount int) {
+	unions = make([][]Interval, len(accumulators))
 	for index := range accumulators {
 		accumulator := &accumulators[index]
 		unions[index] = union(accumulator.spans, 0)
@@ -137,40 +163,24 @@ func Compute(input Input) Report {
 		}
 		runCount += len(runs)
 	}
+	return unions, runCount
+}
 
-	report := Report{EpisodeDurationMS: duration, BucketMS: bucketMS, IntervalsTruncated: runCount > MaxIntervals}
-	for _, accumulator := range accumulators {
-		report.TotalTalkMS += accumulator.speaker.TalkMS
+// finishSpeaker names the speaker, sets its share, and drops its runs when the
+// report is truncated.
+func finishSpeaker(speaker Speaker, report Report) Speaker {
+	if speaker.DisplayName == "" && speaker.ParticipantID != "" {
+		speaker.DisplayName = "Unnamed participant"
+	} else if speaker.DisplayName == "" {
+		speaker.DisplayName = "Unknown speaker"
 	}
-	covered, overlap := coverage(unions)
-	report.OverlapMS = overlap
-	report.SilenceMS = duration - covered
-	report.Speakers = make([]Speaker, 0, len(accumulators))
-	for _, accumulator := range accumulators {
-		speaker := accumulator.speaker
-		if speaker.DisplayName == "" && speaker.ParticipantID != "" {
-			speaker.DisplayName = "Unnamed participant"
-		} else if speaker.DisplayName == "" {
-			speaker.DisplayName = "Unknown speaker"
-		}
-		if report.TotalTalkMS > 0 {
-			speaker.Share = float64(speaker.TalkMS) / float64(report.TotalTalkMS)
-		}
-		if report.IntervalsTruncated {
-			speaker.Intervals = []Interval{}
-		}
-		report.Speakers = append(report.Speakers, speaker)
+	if report.TotalTalkMS > 0 {
+		speaker.Share = float64(speaker.TalkMS) / float64(report.TotalTalkMS)
 	}
-	slices.SortStableFunc(report.Speakers, func(a, b Speaker) int {
-		if byTalk := cmp.Compare(b.TalkMS, a.TalkMS); byTalk != 0 {
-			return byTalk
-		}
-		if byName := strings.Compare(a.DisplayName, b.DisplayName); byName != 0 {
-			return byName
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
-	return report
+	if report.IntervalsTruncated {
+		speaker.Intervals = []Interval{}
+	}
+	return speaker
 }
 
 func attendeeAccumulators(participants []Participant) ([]speakerAccumulator, map[string]int) {

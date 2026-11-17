@@ -1,8 +1,7 @@
 import { useId, useState, type MouseEvent } from "react";
 
-import type { TalkSpeakerDTO, TalkTimeDTO } from "../../lib/dashboard/contracts";
 import { playbackTime } from "../../lib/dashboard/format";
-import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength, type MeasuredTalk } from "../../lib/dashboard/talk-time";
+import { playheadFraction, recordingSeconds, sessionMsAt, sharePercent, talkLength, type MeasuredTalk, type TalkSpeakerDTO, type TalkTimeDTO } from "../../lib/dashboard/talk-time";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import type { Playback } from "./SessionViewer";
@@ -113,8 +112,7 @@ function Timeline({ talk, speakers, playback }: { readonly talk: MeasuredTalk; r
             </span>
           ))}
         </div>
-        {/* The slider below is the keyboard and screen reader way to do what a click here does. */}
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- the slider below is the keyboard and screen reader way to do what a click here does */}
         <div className={seekable ? "ttp seek" : "ttp"} onClick={seekable ? click : undefined}>
           {speakers.map((speaker) => (
             <Lane key={speaker.key} speaker={speaker} bucketMs={talk.bucketMs} />

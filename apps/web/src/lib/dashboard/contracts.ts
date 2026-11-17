@@ -5,6 +5,7 @@ import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
+import type { TalkTimeDTO } from "./talk-time";
 
 const id = z.uuid();
 export const spaceNameMaxCodePoints = ChalkCodePointLimits["CreateSpaceRequest.name"];
@@ -180,20 +181,6 @@ export type TranscriptDTO = { id: string; status: string; languages: readonly st
 export type KeyDTO = { id: string; name: string; prefix: string; scopes: readonly string[]; expiresAt: string; revokedAt: string | null; lastUsedAt: string | null };
 export type WebhookDTO = { id: string; name: string; url: string; enabled: boolean; revision: number; eventTypes: readonly string[]; lastDelivery?: DeliveryDTO | null };
 export type AttendanceDTO = { kind: "available"; participants: { id: string; name: string; kind: "user" | "agent" | "guest"; externalId: string | null; isYou: boolean; firstJoinedAt: string; lastLeftAt: string | null }[] };
-/** Who talked in a session, measured by the API from its transcripts. Times are milliseconds since the session started. */
-export type TalkSpeakerDTO = { key: string; name: string; talkMs: number; share: number; turns: number; buckets: readonly number[] };
-export type TalkTimeDTO =
-  | {
-      kind: "available";
-      durationMs: number;
-      totalTalkMs: number;
-      overlapMs: number;
-      silenceMs: number;
-      bucketMs: number;
-      recordings: readonly { id: string; offsetMs: number; transcribed: boolean }[];
-      speakers: readonly TalkSpeakerDTO[];
-    }
-  | { kind: "no-transcript" | "pending" | "live" | "unavailable" };
 export type HomeCallDTO = CallDTO & { inviteUrl: string | null; lastActiveAt: string | null; recentPeople: { id: string; name: string }[] };
 export type CueDTO = { startMs: number; endMs: number; text: string; speaker: { name: string | null; participantRef: string } | null };
 export type DeliveryDTO = { id: string; state: string; createdAt: string; eventType: string; attempts: number; status: number | null };

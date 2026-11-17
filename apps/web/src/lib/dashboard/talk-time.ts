@@ -1,4 +1,17 @@
-import type { TalkTimeDTO } from "./contracts";
+/** Who talked in a session, measured by the API from its transcripts. Times are milliseconds since the session started. */
+export type TalkSpeakerDTO = { key: string; name: string; talkMs: number; share: number; turns: number; buckets: readonly number[] };
+export type TalkTimeDTO =
+  | {
+      kind: "available";
+      durationMs: number;
+      totalTalkMs: number;
+      overlapMs: number;
+      silenceMs: number;
+      bucketMs: number;
+      recordings: readonly { id: string; offsetMs: number; transcribed: boolean }[];
+      speakers: readonly TalkSpeakerDTO[];
+    }
+  | { kind: "no-transcript" | "pending" | "live" | "unavailable" };
 
 export type MeasuredTalk = Extract<TalkTimeDTO, { kind: "available" }>;
 
