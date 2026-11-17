@@ -72,11 +72,14 @@ func StartWorker(ctx context.Context, service string, getenv func(string) string
 	return WorkerTelemetry{runtime: runtime, diagnostics: diagnostics}, nil
 }
 
-// Shutdown flushes pending exports. Call it before the process exits.
-func (t WorkerTelemetry) Shutdown() error {
+// Close flushes pending exports. Call it before the process exits; a failed flush is reported on
+// stderr, because the process is already ending.
+func (t WorkerTelemetry) Close(program string, stderr io.Writer) {
 	ctx, cancel := TelemetryShutdownContext()
 	defer cancel()
-	return t.runtime.Shutdown(ctx)
+	if err := t.runtime.Shutdown(ctx); err != nil {
+		fmt.Fprintf(stderr, "%s: shutdown telemetry: %v\n", program, err)
+	}
 }
 
 func parseOptionalBool(value string) (bool, error) {

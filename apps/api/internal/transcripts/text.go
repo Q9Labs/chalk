@@ -20,6 +20,13 @@ type TextMetadata struct {
 	SourceMissing bool
 }
 
+func emptyTranscriptNote(metadata TextMetadata) string {
+	if metadata.SourceMissing {
+		return "No audio source was available for this recording, so nothing was transcribed.\n"
+	}
+	return "No speech was transcribed.\n"
+}
+
 // FormatText renders the validated reader projection, never provider metadata.
 // Equal start times retain artifact order; a five-second gap still merges.
 func FormatText(document Document, metadata TextMetadata) string {
@@ -48,11 +55,7 @@ func FormatText(document Document, metadata TextMetadata) string {
 	}
 	output.WriteByte('\n')
 	if len(document.Cues) == 0 {
-		if metadata.SourceMissing {
-			output.WriteString("No audio source was available for this recording, so nothing was transcribed.\n")
-		} else {
-			output.WriteString("No speech was transcribed.\n")
-		}
+		output.WriteString(emptyTranscriptNote(metadata))
 		return output.String()
 	}
 	cues := slices.Clone(document.Cues)

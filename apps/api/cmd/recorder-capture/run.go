@@ -82,11 +82,7 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := telemetry.Shutdown(); err != nil {
-			fmt.Fprintln(os.Stderr, "recorder-capture: shutdown telemetry:", err)
-		}
-	}()
+	defer telemetry.Close("recorder-capture", os.Stderr)
 	stopResources := recorderworker.StartProcessResourceLogs(ctx, "capture")
 	defer stopResources()
 	return reporter.Run(ctx, daemon)

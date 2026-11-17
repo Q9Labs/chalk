@@ -16,11 +16,7 @@ func TestStartWorkerWithoutAnEndpointLogsLocallyWithRecordingFields(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
-		if err := telemetry.Shutdown(); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer telemetry.Close("test", &output)
 
 	ctx := ContextWithRecordingFields(context.Background(), RecordingFields{RecordingID: "recording-9", JobID: "job-9", Attempt: 1})
 	slog.InfoContext(ctx, "worker row")
