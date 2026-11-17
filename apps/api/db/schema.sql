@@ -471,7 +471,8 @@ begin
             and jsonb_typeof(old_binding) = 'object'
             and jsonb_typeof(new_binding) = 'object'
             and old_binding ->> 'provider' = 'chalk_sfu'
-            and (new_binding - placement) = (old_binding - placement)
+            and ((new_binding - placement) = (old_binding - placement)
+                 or (new_binding - placement) = (old_binding - placement - 'selected_by'))
             and coalesce((new_binding ->> 'generation')::bigint, 0) = coalesce((old_binding ->> 'generation')::bigint, 0) + 1,
             false
         ) then
@@ -5136,3 +5137,25 @@ create table media_plane_kill_switch_changes (
     operator text not null check (btrim(operator) <> ''),
     reason text not null check (btrim(reason) <> '')
 );
+
+create table media_plane_changes (
+    id bigint generated always as identity primary key,
+    changed_at timestamptz not null default now(),
+    scope text not null check (scope in ('space', 'tenant', 'kill_switch')),
+    tenant_id uuid,
+    space_id uuid,
+    old_plane text not null check (btrim(old_plane) <> ''),
+    new_plane text not null check (btrim(new_plane) <> ''),
+    actor text not null check (btrim(actor) <> '' and char_length(actor) <= 200),
+    reason text not null check (btrim(reason) <> '' and char_length(reason) <= 500),
+    trace_id text check (trace_id ~ '^[0-9a-f]{32}$'),
+    emitted_at timestamptz,
+    constraint media_plane_changes_scope_keys check (
+        (scope = 'space' and tenant_id is not null and space_id is not null)
+        or (scope = 'tenant' and tenant_id is not null and space_id is null)
+        or (scope = 'kill_switch' and tenant_id is null and space_id is null)
+    )
+);
+
+create index media_plane_changes_unemitted_idx on media_plane_changes (id) where emitted_at is null;
+create index media_plane_changes_scope_idx on media_plane_changes (tenant_id, space_id, id desc);

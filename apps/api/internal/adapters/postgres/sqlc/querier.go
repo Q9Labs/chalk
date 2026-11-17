@@ -47,6 +47,7 @@ type Querier interface {
 	ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error)
 	ClaimTranscriptionCleanupJob(ctx context.Context, arg ClaimTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	ClaimTranscriptionFinalizerJob(ctx context.Context, arg ClaimTranscriptionFinalizerJobParams) (ArtifactJob, error)
+	ClaimUnemittedMediaPlaneChanges(ctx context.Context, limit int32) ([]ClaimUnemittedMediaPlaneChangesRow, error)
 	ClaimWebhookDeliveries(ctx context.Context, arg ClaimWebhookDeliveriesParams) ([]WebhookDelivery, error)
 	ClaimWhiteboardFileCleanup(ctx context.Context, arg ClaimWhiteboardFileCleanupParams) ([]ClaimWhiteboardFileCleanupRow, error)
 	CleanupDeletedWebhookEndpoints(ctx context.Context) (int64, error)
@@ -366,6 +367,7 @@ type Querier interface {
 	MarkDueRecordingTranscriptionSourcesForCleanup(ctx context.Context, now pgtype.Timestamptz) ([]MarkDueRecordingTranscriptionSourcesForCleanupRow, error)
 	MarkLifecycleEpisodeEnding(ctx context.Context, arg MarkLifecycleEpisodeEndingParams) (Episode, error)
 	MarkLifecycleParticipantLeaving(ctx context.Context, arg MarkLifecycleParticipantLeavingParams) (Participant, error)
+	MarkMediaPlaneChangesEmitted(ctx context.Context, dollar_1 []int64) error
 	MarkRecordingCaptureCommandAmbiguous(ctx context.Context, commandID int64) (RecordingCaptureCommand, error)
 	MarkRecordingTranscriptionSourceDeletedIfClean(ctx context.Context, arg MarkRecordingTranscriptionSourceDeletedIfCleanParams) (RecordingTranscriptionSource, error)
 	MarkRecordingTranscriptionSourceExpired(ctx context.Context, arg MarkRecordingTranscriptionSourceExpiredParams) (RecordingTranscriptionSource, error)
@@ -378,7 +380,6 @@ type Querier interface {
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
 	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
-	RecordMediaPlaneKillSwitchChange(ctx context.Context, arg RecordMediaPlaneKillSwitchChangeParams) error
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingColocatedWorkerObservation(ctx context.Context, arg RecordRecordingColocatedWorkerObservationParams) (RecordRecordingColocatedWorkerObservationRow, error)

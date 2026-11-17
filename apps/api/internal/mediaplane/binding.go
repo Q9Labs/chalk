@@ -34,6 +34,9 @@ type Binding struct {
 	// the binding and a binding written before they existed stays valid.
 	NodeIncarnation string          `json:"node_incarnation,omitempty"`
 	PlacementReason PlacementReason `json:"placement_reason,omitempty"`
+	// Selector is the rule that chose the provider (selected_by). It is additive like the two
+	// above, and it is not an enum: see Selector.valid.
+	Selector Selector `json:"selected_by,omitempty"`
 	// Generation counts the moves of a live Episode between allocations (recovery). It is
 	// absent until the first move. A move commits only against the generation it read, and
 	// the database refuses any other step, so two writers never both win.
@@ -227,20 +230,32 @@ func (binding Binding) Validate() error {
 	if binding.NodeIncarnation != "" && (binding.Node == "" || !ValidIncarnation(binding.NodeIncarnation)) {
 		return ErrInvalidBinding
 	}
-	if binding.Generation < 0 || len(binding.PreviousAllocations) > maxPreviousAllocations || binding.Generation == 0 && len(binding.PreviousAllocations) > 0 {
-		return ErrInvalidBinding
-	}
-	for _, previous := range binding.PreviousAllocations {
-		if !ValidNodeID(previous.Node) || previous.Incarnation != "" && !ValidIncarnation(previous.Incarnation) {
-			return ErrInvalidBinding
-		}
-	}
-	switch binding.PlacementReason {
-	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowHostGuard, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
-	default:
+	if !binding.validHistory() || !binding.Selector.valid() || !binding.PlacementReason.valid() {
 		return ErrInvalidBinding
 	}
 	return nil
+}
+
+// validHistory checks the generation and the allocations the Episode moved away from.
+func (binding Binding) validHistory() bool {
+	if binding.Generation < 0 || len(binding.PreviousAllocations) > maxPreviousAllocations || binding.Generation == 0 && len(binding.PreviousAllocations) > 0 {
+		return false
+	}
+	for _, previous := range binding.PreviousAllocations {
+		if !ValidNodeID(previous.Node) || previous.Incarnation != "" && !ValidIncarnation(previous.Incarnation) {
+			return false
+		}
+	}
+	return true
+}
+
+// valid is true for the empty reason and the reasons a binding may store.
+func (reason PlacementReason) valid() bool {
+	switch reason {
+	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowHostGuard, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
+		return true
+	}
+	return false
 }
 
 // ValidIncarnation reports whether a node incarnation is 1 to 64 lowercase letters, digits or '-'.
