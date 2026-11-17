@@ -478,15 +478,11 @@ func TestCaptureAttemptStopCancelsInitialTrackBindAndCompletesRecovery(t *testin
 	}}}
 	lifecycle := &captureTestLifecycle{}
 	attempt := capturePlanWatchAttempt(t, authority, &origin, peer, coordinator, plans, storage, lifecycle, clock.Now, 200*time.Millisecond, 200*time.Millisecond)
-	attempt.observer.enabled = true
 
 	runCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := attempt.Run(runCtx); err != nil {
 		t.Fatalf("run stopped recovery while initial track is absent: %v", err)
-	}
-	if attempt.Observed() == nil {
-		t.Fatal("a planned stop must record what the capture saw")
 	}
 	select {
 	case <-bindCanceled:

@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/captureplan"
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
@@ -51,5 +54,24 @@ func TestCaptureAttemptReportsNothingToAnOlderAPI(t *testing.T) {
 	attempt.observer.enabled = true
 	if got := attempt.Observed(); got == nil || got.Packets != 3 {
 		t.Fatalf("observed %+v", got)
+	}
+}
+
+// A planned stop is the common way a capture ends, so it must report what it saw like any other.
+func TestPlannedStopRecordsWhatTheCaptureSaw(t *testing.T) {
+	now := time.Unix(5_000, 0).UTC()
+	authority := captureTestPlanAtEpoch(t, 1, 1, now).Authority()
+	stopped := capturePlanWatchPlan(t, authority, 1, now, captureplan.StopStateRequested)
+	coordinator := newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{1: {PlanRevision: 1}})
+	plans := &capturePlanWatchSource{steps: []capturePlanWatchStep{
+		func(context.Context) (captureplan.Plan, error) { return stopped, nil },
+	}}
+	attempt := capturePlanWatchAttempt(t, authority, nil, &capturePlanWatchPeer{}, coordinator, plans, &captureTestStorage{key: bytesOf(0x41)}, &captureTestLifecycle{}, func() time.Time { return now }, 20*time.Millisecond, 100*time.Millisecond)
+	attempt.observer.enabled = true
+	if err := attempt.Run(context.Background()); err != nil {
+		t.Fatalf("run planned stop: %v", err)
+	}
+	if attempt.Observed() == nil {
+		t.Fatal("a planned stop must record what the capture saw")
 	}
 }
