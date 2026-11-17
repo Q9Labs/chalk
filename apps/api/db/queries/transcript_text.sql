@@ -1,7 +1,11 @@
 -- name: GetTranscriptTextMetadata :one
 select spaces.name as space_title,
     coalesce(sources.capture_ready_at, recordings.created_at)::timestamptz as started_at,
-    coalesce(presentations.duration_millis, recordings.duration_millis, 0)::bigint as duration_millis
+    coalesce(presentations.duration_millis, recordings.duration_millis, 0)::bigint as duration_millis,
+    (transcriptions.source_manifest_key is null and not exists (
+        select 1 from recording_transcription_source_chunks chunks
+        where chunks.tenant_id = transcriptions.tenant_id and chunks.recording_id = transcriptions.recording_id
+    ))::boolean as source_missing
 from transcriptions
 join recordings on recordings.tenant_id = transcriptions.tenant_id
     and recordings.id = transcriptions.recording_id

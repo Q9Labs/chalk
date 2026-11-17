@@ -253,6 +253,7 @@ export type Recording = {
   readonly created_at: string;
   readonly episode_id: string;
   readonly export: RecordingExport;
+  readonly failure_code: string | null;
   readonly id: string;
   readonly metadata: unknown;
   readonly source: RecordingSource;

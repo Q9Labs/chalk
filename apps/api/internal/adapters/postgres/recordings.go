@@ -126,6 +126,7 @@ func mapRecording(recording sqlc.Recording) recordings.Recording {
 		StorageChecksum:    append([]byte(nil), recording.StorageChecksum...),
 		Duration:           time.Duration(nullableInt64(recording.DurationMillis)) * time.Millisecond,
 		CompletedAt:        nullableTimestamp(recording.CompletedAt),
+		FailureCode:        nullableText(recording.FailureCode),
 		Metadata:           jsonRaw(recording.Metadata),
 		UpdatedAt:          timestamp(recording.UpdatedAt),
 		CreatedAt:          timestamp(recording.CreatedAt),

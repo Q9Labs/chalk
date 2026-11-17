@@ -1,7 +1,5 @@
 package recorderworker
 
-import "time"
-
 type RenderAttemptStage string
 
 const (
@@ -17,18 +15,4 @@ const (
 	RenderAttemptStagePersistVideo          RenderAttemptStage = "persist_video"
 	RenderAttemptStagePersistTranscription  RenderAttemptStage = "persist_transcription"
 	RenderAttemptStageCommit                RenderAttemptStage = "commit"
-	RenderAttemptStageCleanup               RenderAttemptStage = "cleanup"
 )
-
-type RenderAttemptStageMeasurement struct {
-	Stage        RenderAttemptStage
-	WallDuration time.Duration
-	Succeeded    bool
-}
-
-// RenderAttemptObserver is optional instrumentation for a render attempt.
-// Production workers leave it nil; a bounded profiler supplies it to retain
-// stage walls without changing the work.
-type RenderAttemptObserver interface {
-	ObserveRenderAttemptStage(RenderAttemptStageMeasurement)
-}

@@ -4,21 +4,33 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// LogRenderAttemptFailure is shared by the worker and the API receiving its
-// fenced failure report. The API copy reaches the managed log exporter even
-// when the disposable worker has no log exporter of its own.
+// LogRenderAttemptFailure is the API's record of a render attempt failure, written when it
+// accepts the worker's fenced report. The input carries the stage code the worker chose.
 func LogRenderAttemptFailure(ctx context.Context, logger *slog.Logger, input recordingpipeline.FailureInput) {
 	span := trace.SpanContextFromContext(ctx)
 	logger.WarnContext(ctx, "recording render attempt failed",
 		"event", "recording.render_attempt_failed", "job_id", input.JobID.String(),
 		"attempt_count", input.AttemptCount, "fencing_generation", input.FencingGeneration,
-		"error_code", "render_attempt_failed", "error_detail", renderFailureDetail(input.ErrorDetail),
+		"error_code", input.ErrorCode, "error_detail", renderFailureDetail(input.ErrorDetail),
 		"trace_id", span.TraceID().String(), "span_id", span.SpanID().String())
+}
+
+// LogRenderStage records one stage of a render attempt: its name, outcome and wall time.
+// Recording and job ids come from the attempt context.
+func LogRenderStage(ctx context.Context, stage string, succeeded bool, duration time.Duration) {
+	Recorder.RecordRenderStage(ctx, stage, succeeded, duration)
+	level, outcome := slog.LevelInfo, "succeeded"
+	if !succeeded {
+		level, outcome = slog.LevelWarn, "failed"
+	}
+	slog.Log(ctx, level, "recording render stage finished",
+		"event", "recording.render_stage", "stage", stage, "outcome", outcome, "duration_ms", duration.Milliseconds())
 }
 
 func renderFailureDetail(detail string) string {

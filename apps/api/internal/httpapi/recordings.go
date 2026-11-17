@@ -53,6 +53,7 @@ type recordingResponse struct {
 	SpaceID                  string                                    `json:"space_id"`
 	EpisodeID                string                                    `json:"episode_id"`
 	Status                   string                                    `json:"status"`
+	FailureCode              *string                                   `json:"failure_code"`
 	StorageProvider          string                                    `json:"storage_provider"`
 	StorageKey               *string                                   `json:"storage_key"`
 	Metadata                 any                                       `json:"metadata"`
@@ -389,6 +390,7 @@ func newRecordingResponse(recording recordings.Recording, state recordingpipelin
 		SpaceID:                  recording.SpaceID.String(),
 		EpisodeID:                recording.EpisodeID.String(),
 		Status:                   recording.Status,
+		FailureCode:              recording.FailureCode,
 		StorageProvider:          recording.StorageProvider,
 		StorageKey:               recording.StorageKey,
 		Metadata:                 rawJSONValue(recording.Metadata),

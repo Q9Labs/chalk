@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -214,7 +215,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 
 	runCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
-	finish := func(err error, writer *captureBundleWriter) error {
+	finishAttempt := func(err error, writer *captureBundleWriter) error {
 		// Only the deadline and its cancellation are normal stops. Storage,
 		// lease and provider failures must still fail even at the limit.
 		cause := err
@@ -231,6 +232,11 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 			return a.finishStopped(writer, a.authority.HardDeadline, recordingbundle.CloseReasonMaxDuration)
 		}
 		return a.finishFailure(err, writer)
+	}
+	finish := func(err error, writer *captureBundleWriter) error {
+		result := finishAttempt(err, writer)
+		logCaptureSummary(ctx, writer, err, result)
+		return result
 	}
 
 	if !a.authority.HardDeadline.IsZero() {
@@ -909,6 +915,39 @@ func sameCaptureBinding(left, right CaptureMediaTrack) bool {
 		return false
 	}
 	return left.CaptureTrack() == right.CaptureTrack()
+}
+
+// logCaptureSummary is the recorder's own account of what a capture saw. A capture that ends
+// with no packets is the early sign of an empty Recording, before the API counts bundles.
+func logCaptureSummary(ctx context.Context, writer *captureBundleWriter, stop error, result error) {
+	if writer == nil {
+		return
+	}
+	level, outcome := slog.LevelInfo, "stopped"
+	switch {
+	case result != nil:
+		level, outcome = slog.LevelWarn, "failed"
+	case writer.packets == 0:
+		level, outcome = slog.LevelWarn, "stopped_without_media"
+	}
+	slog.Log(ctx, level, "recording capture finished",
+		"event", "recording.capture_finished", "outcome", outcome,
+		"track_count", len(writer.clocks), "packet_count", writer.packets,
+		"stop_cause", captureStopCause(stop))
+}
+
+// captureStopCause names the stop in words that carry no peer or storage text.
+func captureStopCause(stop error) string {
+	switch {
+	case errors.Is(stop, capturesignaling.ErrMediaStopped):
+		return "media_stopped"
+	case errors.Is(stop, recordercapture.ErrDeadlineExpired):
+		return "deadline"
+	case errors.Is(stop, context.Canceled):
+		return "canceled"
+	default:
+		return "error"
+	}
 }
 
 func (a *PionCaptureAttempt) finishSuccess(writer *captureBundleWriter) error {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -149,6 +150,10 @@ type ClaimResult struct {
 	LeaseToken     string
 	LeaseOwner     string
 	LeaseExpiresAt time.Time
+	// JourneyID and TraceID are the Episode journey and trace the Recording started in. Empty
+	// when the API predates them.
+	JourneyID utilities.ID
+	TraceID   string
 }
 
 type ProgressInput struct {
@@ -373,6 +378,10 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	if err != nil {
 		var responseError HTTPError
 		if errors.As(err, &responseError) && responseError.Status == http.StatusConflict && responseError.Code == recorderprotocol.CodeCaptureMediaStopped {
+			// The SFU ended the session. The attempt finishes as a normal stop, so this row is the
+			// only record that the media ended on its side and not on ours.
+			slog.WarnContext(ctx, "recording capture media was stopped by the SFU",
+				"event", "recording.capture_media_stopped", "operation", string(operation))
 			return capturesignaling.Execution{}, capturesignaling.ErrMediaStopped
 		}
 		return capturesignaling.Execution{}, err
@@ -392,6 +401,11 @@ func (c *ControlPlaneClient) ExecuteCapture(ctx context.Context, command capture
 	result, err := capturesignaling.DecodeResult(resultBytes, operation, metadata)
 	if err != nil {
 		return capturesignaling.Execution{}, ProtocolError{Err: err}
+	}
+	if created := result.CreateCaptureConnection; created != nil && !response.Replayed {
+		slog.InfoContext(ctx, "recording capture connection created",
+			"event", "recording.capture_connection_created", "capture_connection", created.Connection.ConnectionReference.String(),
+			"plan_revision", int64(command.Identity.PlanRevision))
 	}
 	return capturesignaling.Execution{
 		Key:    capturesignaling.CommandKey{SignalingHandle: command.SignalingHandle, Operation: operation, PlanRevision: command.Identity.PlanRevision, IdempotencyKey: command.Identity.IdempotencyKey},
@@ -497,7 +511,13 @@ func decodeClaimResult(requestID utilities.ID, response recorderprotocol.ClaimRe
 	if err != nil {
 		return ClaimResult{}, ProtocolError{Err: err}
 	}
-	return ClaimResult{ClaimRequestID: claimID, Envelope: envelope, EnvelopeDigest: digest, LeaseToken: response.LeaseToken, LeaseOwner: response.LeaseOwner, LeaseExpiresAt: leaseExpiresAt}, nil
+	var journeyID utilities.ID
+	if response.JourneyID != "" {
+		if journeyID, err = utilities.ParseID(response.JourneyID); err != nil {
+			return ClaimResult{}, ProtocolError{Err: errors.New("claim response journey")}
+		}
+	}
+	return ClaimResult{ClaimRequestID: claimID, Envelope: envelope, EnvelopeDigest: digest, LeaseToken: response.LeaseToken, LeaseOwner: response.LeaseOwner, LeaseExpiresAt: leaseExpiresAt, JourneyID: journeyID, TraceID: response.TraceID}, nil
 }
 
 func decodeJob(response recorderprotocol.JobResponse) (recordingpipeline.Job, error) {

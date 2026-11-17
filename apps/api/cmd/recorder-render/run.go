@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mtls"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderworker"
 )
 
@@ -91,6 +92,15 @@ func runWorker(config renderWorkerConfig) error {
 	commands := renderMediaCommands{ffmpeg: ffmpegPath, ffprobe: ffprobePath}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	telemetry, err := observability.StartWorker(ctx, "chalk-recorder-render", os.Getenv, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := telemetry.Shutdown(); err != nil {
+			fmt.Fprintln(os.Stderr, "recorder-render: shutdown telemetry:", err)
+		}
+	}()
 	if err := recorderworker.ProbeVideoEncoder(ctx, commands, encoder); err != nil {
 		return err
 	}

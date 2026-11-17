@@ -32,5 +32,5 @@ func (r TranscriptTextRepository) GetTextMetadata(ctx context.Context, tenantID,
 	if err != nil {
 		return transcripts.TextMetadata{}, fmt.Errorf("read transcript text metadata: %w", err)
 	}
-	return transcripts.TextMetadata{SpaceTitle: row.SpaceTitle, StartedAt: timestamp(row.StartedAt), Duration: time.Duration(row.DurationMillis) * time.Millisecond}, nil
+	return transcripts.TextMetadata{SpaceTitle: row.SpaceTitle, StartedAt: timestamp(row.StartedAt), Duration: time.Duration(row.DurationMillis) * time.Millisecond, SourceMissing: row.SourceMissing}, nil
 }

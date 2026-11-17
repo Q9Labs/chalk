@@ -2283,6 +2283,7 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       episode_id: components["schemas"]["EpisodeId"];
       export: components["schemas"]["RecordingExport"];
+      failure_code: string | null;
       id: components["schemas"]["RecordingId"];
       metadata:
         | {

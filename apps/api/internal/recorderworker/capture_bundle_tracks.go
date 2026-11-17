@@ -130,6 +130,7 @@ func (w *captureBundleWriter) addPacket(ctx context.Context, track CaptureMediaT
 		}
 		err = w.assembler.AddPacket(input)
 		if err == nil {
+			w.packets++
 			if w.assembler.Closed() {
 				return w.persist(ctx)
 			}

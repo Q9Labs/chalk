@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
@@ -33,6 +34,10 @@ func logRecoveredRecordingJob(ctx context.Context, job recordingpipeline.Job) {
 		attrs = append(attrs, "capture_outcome", "stopped_before_claim")
 	}
 	slog.InfoContext(ctx, "recording job recovery committed", attrs...)
+	observability.Recorder.RecordLeaseRecovery(ctx, string(job.Kind))
+	if job.State == recordingpipeline.JobStateTerminalFailure {
+		observability.Recorder.RecordTerminalFailure(ctx, string(job.Kind), reason)
+	}
 }
 
 func logExpiredRecordingReservation(ctx context.Context, reservation recordingpipeline.Reservation) {

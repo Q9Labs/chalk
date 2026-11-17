@@ -21,6 +21,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingdecode"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
@@ -61,7 +62,6 @@ type ProductionRenderAttemptConfig struct {
 	Compose     ComposeProducer
 	Commands    CommandRunner
 	Decode      RecordingDecodeWriter
-	Observer    RenderAttemptObserver
 	Now         func() time.Time
 	RetryWait   func(context.Context, time.Duration) error
 }
@@ -171,9 +171,7 @@ func (attempt *ProductionRenderAttempt) Close() error {
 	attempt.closed = true
 	workspace := attempt.workspace
 	attempt.mu.Unlock()
-	return attempt.measure(RenderAttemptStageCleanup, func() error {
-		return os.RemoveAll(workspace)
-	})
+	return os.RemoveAll(workspace)
 }
 
 func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
@@ -202,7 +200,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	}
 
 	var resolved recordingrender.ResolvedInput
-	err = attempt.measure(RenderAttemptStageResolveInput, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageResolveInput, func() error {
 		var resolveErr error
 		resolved, resolveErr = withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
 			return attempt.config.Control.ResolveRenderInput(ctx, authority)
@@ -231,12 +229,12 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	if err := os.Mkdir(assetDirectory, 0o700); err != nil {
 		return fmt.Errorf("create recording asset directory: %w", err)
 	}
-	if err := attempt.measure(RenderAttemptStageDownloadPresentation, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageDownloadPresentation, func() error {
 		return downloads.download(ctx, resolved.Presentation, presentationPath)
 	}); err != nil {
 		return fmt.Errorf("download recording presentation: %w", err)
 	}
-	if err := attempt.measure(RenderAttemptStageDownloadAssetManifest, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageDownloadAssetManifest, func() error {
 		return downloads.download(ctx, resolved.AssetManifest, assetManifestPath)
 	}); err != nil {
 		return fmt.Errorf("download recording asset manifest: %w", err)
@@ -252,14 +250,14 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	if err := attempt.validateTimeline(resolved, timeline); err != nil {
 		return err
 	}
-	if err := attempt.measure(RenderAttemptStageStageAssets, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageStageAssets, func() error {
 		return attempt.stageAssets(ctx, downloads, resolved, timeline, assetManifestPath, assetDirectory)
 	}); err != nil {
 		return err
 	}
 	var bundles []recordingdecode.BundleFile
 	var inputBytes int64
-	err = attempt.measure(RenderAttemptStageDownloadCapture, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageDownloadCapture, func() error {
 		var downloadErr error
 		bundles, inputBytes, downloadErr = attempt.downloadCapture(ctx, downloads, resolved, bundleDirectory)
 		return downloadErr
@@ -269,7 +267,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	}
 
 	var dataKeys []recordingdecode.DataKey
-	err = attempt.measure(RenderAttemptStageAccessCaptureKeys, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageAccessCaptureKeys, func() error {
 		var accessErr error
 		dataKeys, accessErr = attempt.accessCaptureKeys(ctx, resolved.Capture)
 		return accessErr
@@ -280,7 +278,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	defer clearDecodeDataKeys(dataKeys)
 	decodedDirectory := filepath.Join(attempt.workspace, "decoded")
 	var decoded recordingdecode.Result
-	err = attempt.measure(RenderAttemptStageSourcePreparation, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageSourcePreparation, func() error {
 		var decodeErr error
 		decoded, decodeErr = attempt.config.Decode(ctx, recordingdecode.Request{
 			RecordingID: timeline.RecordingID, EpisodeID: timeline.EpisodeID, TenantID: resolved.TenantID.String(),
@@ -312,7 +310,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		return err
 	}
 	var mediaFacts MediaFacts
-	err = attempt.measure(RenderAttemptStageProbe, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageProbe, func() error {
 		var probeErr error
 		mediaFacts, probeErr = VerifyRecordingMedia(ctx, attempt.config.Commands, videoPath, expected)
 		return probeErr
@@ -327,7 +325,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 	factsDigest := sha256.Sum256(factsBytes)
 	videoDuration := resolved.DurationMillis
 	var video recordingrender.CommitObjectReference
-	err = attempt.measure(RenderAttemptStagePersistVideo, func() error {
+	err = attempt.measure(ctx, RenderAttemptStagePersistVideo, func() error {
 		var persistErr error
 		video, persistErr = attempt.persistFile(ctx, recordingrender.PurposeRecordingVideo, "video", videoPath, &videoDuration)
 		return persistErr
@@ -341,7 +339,7 @@ func (attempt *ProductionRenderAttempt) Run(ctx context.Context) error {
 		VideoDegradation:   decoded.VideoDegradation,
 		DurationMillis:     resolved.DurationMillis, Video: video, FFprobeFactsDigest: append([]byte(nil), factsDigest[:]...),
 	}
-	if err := attempt.measure(RenderAttemptStageCommit, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageCommit, func() error {
 		_, commitErr := withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.CommitResult, error) {
 			// Keep heartbeats out until an ambiguous final commit is confirmed.
 			return retryRenderCall(ctx, attempt, "commit_render", func(ctx context.Context) (recordingrender.CommitResult, error) {
@@ -374,7 +372,7 @@ func (attempt *ProductionRenderAttempt) renderVideo(ctx context.Context, request
 	if err != nil {
 		return RecordingMediaExpectation{}, fmt.Errorf("build recording media expectation: %w", err)
 	}
-	if err := attempt.measure(RenderAttemptStageCompositionEncoding, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageCompositionEncoding, func() error {
 		_, composeErr := attempt.config.Compose.Compose(ctx, request, videoPath)
 		return composeErr
 	}); err != nil {
@@ -385,7 +383,7 @@ func (attempt *ProductionRenderAttempt) renderVideo(ctx context.Context, request
 
 func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) error {
 	var resolved recordingrender.ResolvedInput
-	err := attempt.measure(RenderAttemptStageResolveInput, func() error {
+	err := attempt.measure(ctx, RenderAttemptStageResolveInput, func() error {
 		var resolveErr error
 		resolved, resolveErr = withRenderAuthority(attempt, func(authority recordingrender.Authority) (recordingrender.ResolvedInput, error) {
 			return attempt.config.Control.ResolveRenderInput(ctx, authority)
@@ -411,7 +409,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 	if err := os.Mkdir(bundleDirectory, 0o700); err != nil {
 		return fmt.Errorf("create recording transcription bundle directory: %w", err)
 	}
-	if err := attempt.measure(RenderAttemptStageDownloadPresentation, func() error {
+	if err := attempt.measure(ctx, RenderAttemptStageDownloadPresentation, func() error {
 		return downloads.download(ctx, resolved.Presentation, presentationPath)
 	}); err != nil {
 		return fmt.Errorf("download recording transcription presentation: %w", err)
@@ -428,7 +426,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 		return err
 	}
 	var bundles []recordingdecode.BundleFile
-	err = attempt.measure(RenderAttemptStageDownloadCapture, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageDownloadCapture, func() error {
 		var downloadErr error
 		bundles, _, downloadErr = attempt.downloadCapture(ctx, downloads, resolved, bundleDirectory)
 		return downloadErr
@@ -437,7 +435,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 		return err
 	}
 	var dataKeys []recordingdecode.DataKey
-	err = attempt.measure(RenderAttemptStageAccessCaptureKeys, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageAccessCaptureKeys, func() error {
 		var accessErr error
 		dataKeys, accessErr = attempt.accessCaptureKeys(ctx, resolved.Capture)
 		return accessErr
@@ -448,7 +446,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 	defer clearDecodeDataKeys(dataKeys)
 	decodedDirectory := filepath.Join(attempt.workspace, "decoded")
 	var decoded recordingdecode.Result
-	err = attempt.measure(RenderAttemptStageSourcePreparation, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageSourcePreparation, func() error {
 		var decodeErr error
 		decoded, decodeErr = attempt.config.Decode(ctx, recordingdecode.Request{
 			RecordingID: timeline.RecordingID, EpisodeID: timeline.EpisodeID, TenantID: resolved.TenantID.String(),
@@ -464,7 +462,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 		return fmt.Errorf("decode authenticated recording microphone media: %w", err)
 	}
 	var source *recordingrender.TranscriptionSource
-	err = attempt.measure(RenderAttemptStagePersistTranscription, func() error {
+	err = attempt.measure(ctx, RenderAttemptStagePersistTranscription, func() error {
 		var persistErr error
 		source, persistErr = attempt.persistTranscription(ctx, resolved, timeline, decodedDirectory, decoded.Index)
 		return persistErr
@@ -472,7 +470,7 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-	err = attempt.measure(RenderAttemptStageCommit, func() error {
+	err = attempt.measure(ctx, RenderAttemptStageCommit, func() error {
 		_, commitErr := withRenderAuthority(attempt, func(authority recordingrender.Authority) (*recordingrender.TranscriptionResult, error) {
 			input := recordingrender.TranscriptionPreparationInput{
 				Authority: authority, PresentationSHA256: append([]byte(nil), resolved.PresentationSHA256...),
@@ -499,13 +497,33 @@ func (attempt *ProductionRenderAttempt) runTranscription(ctx context.Context) er
 	return nil
 }
 
-func (attempt *ProductionRenderAttempt) measure(stage RenderAttemptStage, action func() error) error {
+func (attempt *ProductionRenderAttempt) measure(ctx context.Context, stage RenderAttemptStage, action func() error) error {
 	started := time.Now()
 	err := action()
-	if attempt.config.Observer != nil {
-		attempt.config.Observer.ObserveRenderAttemptStage(RenderAttemptStageMeasurement{Stage: stage, WallDuration: time.Since(started), Succeeded: err == nil})
+	observability.LogRenderStage(ctx, string(stage), err == nil, time.Since(started))
+	if err != nil {
+		return renderStageError{stage: stage, err: err}
 	}
-	return err
+	return nil
+}
+
+// renderStageError names the stage a render failed in. Its text is the cause's text, so the
+// bounded diagnostics built from it do not change.
+type renderStageError struct {
+	stage RenderAttemptStage
+	err   error
+}
+
+func (e renderStageError) Error() string { return e.err.Error() }
+func (e renderStageError) Unwrap() error { return e.err }
+
+// renderFailureCode reports the stage that failed, such as render_download_capture_failed.
+func renderFailureCode(cause error) string {
+	var stageErr renderStageError
+	if errors.As(cause, &stageErr) {
+		return recordingpipeline.SanitizeRenderFailureCode("render_" + string(stageErr.stage) + "_failed")
+	}
+	return recordingpipeline.DefaultRenderFailureCode
 }
 
 func (attempt *ProductionRenderAttempt) currentAuthority() recordingrender.Authority {

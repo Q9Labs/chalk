@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mtls"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderworker"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
@@ -77,6 +78,15 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	telemetry, err := observability.StartWorker(ctx, "chalk-recorder-capture", os.Getenv, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := telemetry.Shutdown(); err != nil {
+			fmt.Fprintln(os.Stderr, "recorder-capture: shutdown telemetry:", err)
+		}
+	}()
 	stopResources := recorderworker.StartProcessResourceLogs(ctx, "capture")
 	defer stopResources()
 	return reporter.Run(ctx, daemon)

@@ -41,6 +41,7 @@ type Recording struct {
 	StorageChecksum    []byte
 	Duration           time.Duration
 	CompletedAt        *time.Time
+	FailureCode        *string
 	Metadata           json.RawMessage
 	UpdatedAt          time.Time
 	CreatedAt          time.Time

@@ -760,6 +760,27 @@ where jobs.id = sqlc.arg(id)
   and authority.lease_token = sqlc.arg(lease_token)
   and authority.lease_owner = sqlc.arg(lease_owner);
 
+-- name: CountCommittedCaptureBundles :one
+-- A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
+select (count(*) filter (where bundles.codec <> 'gap'))::integer as media_bundle_count,
+    (count(*) filter (where bundles.codec = 'gap'))::integer as gap_bundle_count
+from recording_jobs jobs
+left join recording_bundles bundles on bundles.recording_id = jobs.recording_id
+where jobs.id = sqlc.arg(job_id);
+
+-- name: GetRecordingStartCorrelation :one
+-- The Episode journey and trace the Recording's start belongs to. Recorder work joins them
+-- instead of opening a journey of its own. A Recording without a start operation uses its own id,
+-- as the journey ledger does.
+select coalesce(start_operation.journey_id, jobs.recording_id)::uuid as journey_id,
+    start_operation.producing_trace_id as trace_id
+from recording_jobs jobs
+left join sync_recordings recording on recording.recording_id = jobs.recording_id and recording.tenant_id = jobs.tenant_id
+left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
+    and start_operation.tenant_id = jobs.tenant_id and start_operation.episode_id = jobs.episode_id
+    and start_operation.recording_id = jobs.recording_id and start_operation.operation_name = 'start_recording'
+where jobs.id = sqlc.arg(job_id);
+
 -- name: CompleteCaptureRecordingJob :one
 with completion_eligibility as materialized (
     select jobs.id,
@@ -797,7 +818,8 @@ with completion_eligibility as materialized (
 ), pipeline as (
     update recording_pipelines
     set state = case when tenants.recording_render_mode = 'automatic' then 'render_queued' else 'capture_complete' end,
-        capture_completed_at = now(), updated_at = now()
+        capture_completed_at = now(), updated_at = now(),
+        capture_media_bundle_count = sqlc.arg(media_bundle_count), capture_gap_bundle_count = sqlc.arg(gap_bundle_count)
     from completed
     join tenants on tenants.id = completed.tenant_id
     where recording_pipelines.recording_id = completed.recording_id
@@ -936,19 +958,20 @@ with failure_policy as (
         (jobs.kind = 'capture' and ((sqlc.narg(error_code)::text in ('capture_completion_failed', 'capture_stop_publication_failed')
          and pipelines.stop_requested_at is not null)
          or recording_capture_completion_available(jobs.recording_id)))::boolean as completion_failure,
-        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts
+        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts,
+        sqlc.arg(terminal)::boolean as forced_terminal
     from recording_jobs jobs
     left join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
     where jobs.id = sqlc.arg(id)
 ), failed as (
     update recording_jobs
-    set state = case when failure_policy.completion_failure then
+    set state = case when failure_policy.forced_terminal then 'terminal_failure' when failure_policy.completion_failure then
             case when failure_policy.completion_attempts >= 3 and sqlc.narg(error_code)::text is distinct from 'capture_stop_publication_failed' then 'terminal_failure' else 'pending' end
         when attempt_count >= attempt_limit then 'terminal_failure' else 'pending' end,
         available_at = sqlc.arg(available_at),
         lease_token = null, lease_owner = null, lease_expires_at = null,
         error_code = sqlc.arg(error_code), error_detail = sqlc.arg(error_detail),
-        terminal_at = case when failure_policy.completion_failure then
+        terminal_at = case when failure_policy.forced_terminal then now() when failure_policy.completion_failure then
             case when failure_policy.completion_attempts >= 3 and sqlc.narg(error_code)::text is distinct from 'capture_stop_publication_failed' then now() else null end
             when attempt_count >= attempt_limit then now() else null end,
         updated_at = now()
@@ -1178,7 +1201,7 @@ with completed_captures as materialized (
     from completed_captures
     on conflict (recording_id) do nothing
 ), expired as (
-    select jobs.id, jobs.state as prior_state, ((jobs.kind in ('render', 'transcription') and
+    select jobs.id, jobs.state as prior_state, jobs.lease_owner as prior_lease_owner, ((jobs.kind in ('render', 'transcription') and
         pipelines.capture_completed_at +
             ((case when jobs.kind = 'transcription'
                 then recording_transcription_source_window_seconds(episodes.config_snapshot)
@@ -1239,6 +1262,19 @@ with completed_captures as materialized (
         payload_schema_version, state, priority, available_at, attempt_count,
         attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation,
         error_code, error_detail, terminal_at, updated_at, created_at, result_metadata
+), expired_attempt_failure as (
+    -- A lease that ran out never reached Fail, so the attempt would leave no failure row.
+    insert into recording_job_attempt_failures (
+        job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
+    )
+    select recovered.id, recovered.attempt_count, recovered.fencing_generation, recovered.kind,
+        left(coalesce(recovered.error_code, 'lease_expired'), 128), left(coalesce(recovered.error_detail, ''), 2048),
+        left(expired.prior_lease_owner, 256)
+    from recovered
+    join expired on expired.id = recovered.id
+    where expired.prior_state = 'leased' and recovered.attempt_count > 0 and recovered.fencing_generation > 0
+      and expired.prior_lease_owner is not null and expired.prior_lease_owner <> ''
+    on conflict do nothing
 ), pipeline as (
     update recording_pipelines
     set state = case when recovered.state = 'terminal_failure' then 'terminal_failure' else 'retryable_failure' end,

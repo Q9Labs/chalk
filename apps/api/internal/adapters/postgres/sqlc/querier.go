@@ -74,6 +74,8 @@ type Querier interface {
 	CompleteWhiteboardFileCleanup(ctx context.Context, arg CompleteWhiteboardFileCleanupParams) (int64, error)
 	ConsumeMCPOAuthCode(ctx context.Context, arg ConsumeMCPOAuthCodeParams) (ConsumeMCPOAuthCodeRow, error)
 	ConsumeMCPOAuthRefreshToken(ctx context.Context, arg ConsumeMCPOAuthRefreshTokenParams) (ConsumeMCPOAuthRefreshTokenRow, error)
+	// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
+	CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
 	CountTenantLiveEpisodes(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountWebhookEndpoints(ctx context.Context, tenantID pgtype.UUID) (int32, error)
@@ -204,6 +206,10 @@ type Querier interface {
 	GetRecordingReservation(ctx context.Context, arg GetRecordingReservationParams) (GetRecordingReservationRow, error)
 	GetRecordingReservationByKey(ctx context.Context, arg GetRecordingReservationByKeyParams) (GetRecordingReservationByKeyRow, error)
 	GetRecordingReservationFingerprint(ctx context.Context, arg GetRecordingReservationFingerprintParams) ([]byte, error)
+	// The Episode journey and trace the Recording's start belongs to. Recorder work joins them
+	// instead of opening a journey of its own. A Recording without a start operation uses its own id,
+	// as the journey ledger does.
+	GetRecordingStartCorrelation(ctx context.Context, jobID pgtype.UUID) (GetRecordingStartCorrelationRow, error)
 	GetRecordingTranscriptLanguage(ctx context.Context, arg GetRecordingTranscriptLanguageParams) (GetRecordingTranscriptLanguageRow, error)
 	GetRecordingTranscriptionMode(ctx context.Context, arg GetRecordingTranscriptionModeParams) (string, error)
 	GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error)

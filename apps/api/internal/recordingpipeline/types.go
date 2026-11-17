@@ -294,6 +294,10 @@ type JobAuthority struct {
 	LeaseToken     string
 	LeaseExpiresAt time.Time
 	IssuedAt       time.Time
+	// JourneyID and TraceID tie the worker's logs to the Episode journey the Recording started in.
+	// They travel beside the envelope: the digest binds authority, not correlation.
+	JourneyID utilities.ID
+	TraceID   string
 }
 
 type Bundle struct {
@@ -365,6 +369,18 @@ type FailureInput struct {
 	AvailableAt time.Time
 	ErrorCode   string
 	ErrorDetail string
+	// Terminal ends the job now, without spending its remaining attempts. A retry cannot
+	// change an outcome such as a capture that recorded nothing.
+	Terminal bool
+}
+
+// ErrorCodeCaptureEmpty marks a capture that committed no media bundle: nothing was heard or seen.
+const ErrorCodeCaptureEmpty = "capture_empty"
+
+// CaptureBundleCounts are the committed bundles of one capture. A gap bundle covers time with no media.
+type CaptureBundleCounts struct {
+	MediaBundles int
+	GapBundles   int
 }
 
 type ArtifactInput struct {

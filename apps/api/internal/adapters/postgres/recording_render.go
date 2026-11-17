@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
@@ -293,7 +294,7 @@ func (r RecordingRenderRepository) Commit(ctx context.Context, input recordingre
 				}
 			}
 		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(input, committedAt))
+		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, renderTranscriptionAdmission(ctx, input, committedAt))
 		if err != nil {
 			return mapRenderTranscriptionError(err)
 		}
@@ -381,7 +382,7 @@ func (r RecordingRenderRepository) CommitTranscriptionPreparation(ctx context.Co
 				}
 			}
 		}
-		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(input, committedAt))
+		admission, err := commitRecordingTranscriptionAdmission(ctx, queries, transcriptionPreparationAdmission(ctx, input, committedAt))
 		if err != nil {
 			return mapRenderTranscriptionError(err)
 		}
@@ -561,8 +562,13 @@ func verifyRenderCommitObject(ctx context.Context, queries sqlc.Querier, authori
 	return nil
 }
 
-func renderTranscriptionAdmission(input recordingrender.CommitInput, committedAt time.Time) transcripts.RenderAdmissionInput {
+func renderTranscriptionAdmission(ctx context.Context, input recordingrender.CommitInput, committedAt time.Time) transcripts.RenderAdmissionInput {
+	// The render request already rides the Episode journey and trace; the transcription jobs it
+	// admits keep them, so a transcript with no source is traceable from the Episode.
+	journeyID, _ := observability.JourneyIDFromContext(ctx)
+	_, _, traceparent, tracestate := lifecycleTraceContext(ctx)
 	admission := transcripts.RenderAdmissionInput{
+		JourneyID: journeyID, Traceparent: traceparent, Tracestate: tracestate,
 		TenantID: input.Authority.TenantID, SpaceID: input.Authority.SpaceID, EpisodeID: input.Authority.EpisodeID,
 		RecordingID: input.Authority.RecordingID, RenderJobID: input.Authority.JobID, Attempt: input.Authority.AttemptCount,
 		FencingGeneration: input.Authority.FencingGeneration, CaptureEpoch: input.Authority.CaptureEpoch,
@@ -590,8 +596,8 @@ func renderTranscriptionAdmission(input recordingrender.CommitInput, committedAt
 	return admission
 }
 
-func transcriptionPreparationAdmission(input recordingrender.TranscriptionPreparationInput, committedAt time.Time) transcripts.RenderAdmissionInput {
-	return renderTranscriptionAdmission(recordingrender.CommitInput{
+func transcriptionPreparationAdmission(ctx context.Context, input recordingrender.TranscriptionPreparationInput, committedAt time.Time) transcripts.RenderAdmissionInput {
+	return renderTranscriptionAdmission(ctx, recordingrender.CommitInput{
 		Authority: input.Authority, CommitDigest: input.CommitDigest,
 		PresentationSHA256: input.PresentationSHA256, DurationMillis: input.DurationMillis,
 		TranscriptionSource: input.TranscriptionSource,

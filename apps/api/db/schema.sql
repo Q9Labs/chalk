@@ -2267,8 +2267,11 @@ create table recordings (
     duration_millis bigint check (duration_millis is null or duration_millis >= 0),
     completed_at timestamptz,
     metadata jsonb,
+    failure_code text check (failure_code is null or octet_length(failure_code) between 1 and 128),
+    failed_at timestamptz,
     updated_at timestamptz not null default now(),
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    constraint recordings_failure_state_check check ((status = 'failed') = (failure_code is not null) and (failure_code is null) = (failed_at is null))
 );
 create index recordings_tenant_created_at_id_idx on recordings(tenant_id, created_at desc, id desc);
 create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id, episode_id, created_at desc, id desc);
@@ -2601,6 +2604,8 @@ create table recording_pipelines (
     stop_requested_at timestamptz,
     capture_completed_at timestamptz,
     committed_at timestamptz,
+    capture_media_bundle_count integer check (capture_media_bundle_count is null or capture_media_bundle_count >= 0),
+    capture_gap_bundle_count integer check (capture_gap_bundle_count is null or capture_gap_bundle_count >= 0),
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
     constraint recording_pipelines_stop_pair_check check ((stop_operation_id is null) = (stop_requested_at is null))
@@ -2610,6 +2615,60 @@ create index recording_pipelines_tenant_state_idx
 create unique index recording_pipelines_stop_operation_id_idx
     on recording_pipelines(stop_operation_id)
     where stop_operation_id is not null;
+
+create function recording_sync_failed_status() returns trigger language plpgsql as $$
+declare
+    failed_code text;
+begin
+    if new.state = 'terminal_failure' then
+        update recordings
+        set status = 'failed', failed_at = now(), updated_at = now(),
+            failure_code = coalesce(
+                (select jobs.error_code from recording_jobs jobs
+                 where jobs.recording_id = new.recording_id and jobs.state = 'terminal_failure'
+                   and jobs.kind <> 'transcription' and jobs.error_code is not null
+                 order by jobs.terminal_at desc nulls last, jobs.updated_at desc limit 1),
+                case when old.state in ('requested', 'reserved') then 'capture_reservation_expired' end,
+                'recording_failed')
+        where id = new.recording_id and status in ('pending', 'processing')
+        returning failure_code into failed_code;
+        if failed_code is not null then
+            -- The Episode's own timeline shows the failure next to the claim that started the work.
+            insert into observability_journey_events (
+                event_id, journey_id, sequence, occurred_at, name, phase, state,
+                origin_kind, first_observed_layer, upstream_visibility, parent_event_id, attributes
+            )
+            select gen_random_uuid(), journey.journey_id,
+                coalesce((select max(events.sequence) + 1 from observability_journey_events events
+                          where events.journey_id = journey.journey_id), 0),
+                now(), 'recording.failed', 'recording_failure', 'failed', 'server', 'api', 'visible',
+                journey.parent_event_id,
+                jsonb_build_object('recording_id', new.recording_id, 'failure_code', failed_code)
+            from (
+                select coalesce(start_operation.journey_id, new.recording_id) as journey_id,
+                    start_operation.parent_journey_event_id as parent_event_id
+                from recordings
+                left join sync_recordings recording on recording.recording_id = recordings.id
+                left join sync_external_operations start_operation
+                    on start_operation.external_operation_id = recording.start_external_operation_id
+                    and start_operation.recording_id = recordings.id and start_operation.operation_name = 'start_recording'
+                where recordings.id = new.recording_id
+            ) journey;
+        end if;
+    elsif old.state = 'terminal_failure' then
+        -- A retry reopened the pipeline: the Recording is in flight again, not failed.
+        update recordings
+        set status = 'pending', failed_at = null, failure_code = null, updated_at = now()
+        where id = new.recording_id and status = 'failed';
+    end if;
+    return null;
+end;
+$$;
+
+create trigger recording_pipelines_sync_failed_status
+    after update of state on recording_pipelines
+    for each row when (old.state is distinct from new.state)
+    execute function recording_sync_failed_status();
 
 create table recording_jobs (
     id uuid primary key,

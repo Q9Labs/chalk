@@ -162,6 +162,7 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			EnvelopeDigest: recordingpipeline.EnvelopeDigestHex(job.Authority.EnvelopeDigest),
 			LeaseToken:     job.Authority.LeaseToken, LeaseOwner: job.Authority.LeaseOwner,
 			LeaseExpiresAt: leaseExpiresAt,
+			JourneyID:      job.Authority.JourneyID.String(), TraceID: job.Authority.TraceID,
 		})
 	}
 }
@@ -319,13 +320,15 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 		if identity.Role == workeridentity.RoleCapture {
 			// The one place worker text enters storage and logs: keep only a fail-closed diagnostic.
 			input.ErrorCode, input.ErrorDetail = recordingpipeline.SanitizeCaptureFailure(body.ErrorCode, body.ErrorDetail)
+		} else {
+			input.ErrorCode = recordingpipeline.SanitizeRenderFailureCode(body.ErrorCode)
 		}
 		job, err := service.Fail(request.Context(), input)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
 			return
 		}
-		if (job.Kind == recordingpipeline.JobKindRender || job.Kind == recordingpipeline.JobKindTranscription) && body.ErrorCode == "render_attempt_failed" {
+		if job.Kind == recordingpipeline.JobKindRender || job.Kind == recordingpipeline.JobKindTranscription {
 			observability.LogRenderAttemptFailure(request.Context(), logger, input)
 		}
 		if job.Kind == recordingpipeline.JobKindCapture {

@@ -101,6 +101,10 @@ type ClaimResponse struct {
 	LeaseToken     string                                `json:"lease_token"`
 	LeaseOwner     string                                `json:"lease_owner"`
 	LeaseExpiresAt string                                `json:"lease_expires_at"`
+	// JourneyID and TraceID place the worker on the Episode's journey and trace. They sit beside
+	// the envelope because its digest binds authority, not correlation.
+	JourneyID string `json:"journey_id,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
 }
 
 type CapturePlanResponse struct {

@@ -78,3 +78,46 @@ func TestCaptureFailureDetailIsSanitizedBeforeStorageAndLog(t *testing.T) {
 		t.Fatalf("log line lost the safe diagnostic: %s", logs.String())
 	}
 }
+
+// The render worker names the stage that failed. The API keeps that shape and nothing else, so
+// worker text cannot reach the stored code or the log row.
+func TestRenderFailureCodeKeepsOnlyTheStageShape(t *testing.T) {
+	for code, want := range map[string]string{
+		"render_download_capture_failed":           "render_download_capture_failed",
+		"render_attempt_failed":                    "render_attempt_failed",
+		"download https://host/key?X-Amz=deadbeef": "render_attempt_failed",
+	} {
+		jobID, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		workerID, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := json.Marshal(recorderprotocol.FailRequest{
+			LeaseRequest: recorderprotocol.LeaseRequest{
+				JobID: jobID.String(), AttemptCount: 1, FencingGeneration: 1, LeaseToken: "lease-token-AbCdEf0123456789", CaptureEpoch: 1,
+				EnvelopeDigest: hex.EncodeToString(bytes.Repeat([]byte{7}, 32)),
+			},
+			ErrorCode: code, ErrorDetail: "render stage failed",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var logs bytes.Buffer
+		service := &failRecordingService{}
+		request := httptest.NewRequest(http.MethodPost, "/recorder/jobs/fail", bytes.NewReader(body))
+		request = request.WithContext(context.WithValue(request.Context(), recorderWorkerIdentityContextKey{},
+			workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleRender}))
+		response := httptest.NewRecorder()
+		recorderWorkerFailHandler(service, slog.New(slog.NewJSONHandler(&logs, nil)))(response, request)
+
+		if response.Code != http.StatusOK || service.got.ErrorCode != want {
+			t.Errorf("code %q: status %d stored %q, want %q", code, response.Code, service.got.ErrorCode, want)
+		}
+		if strings.Contains(logs.String(), "X-Amz") {
+			t.Errorf("code %q leaked worker text into the log: %s", code, logs.String())
+		}
+	}
+}

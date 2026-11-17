@@ -15,6 +15,9 @@ type TextMetadata struct {
 	StartedAt  time.Time
 	Duration   time.Duration
 	Languages  []string
+	// SourceMissing means the transcript never had an audio source, so an empty
+	// document says nothing about speech.
+	SourceMissing bool
 }
 
 // FormatText renders the validated reader projection, never provider metadata.
@@ -45,7 +48,11 @@ func FormatText(document Document, metadata TextMetadata) string {
 	}
 	output.WriteByte('\n')
 	if len(document.Cues) == 0 {
-		output.WriteString("No speech was transcribed.\n")
+		if metadata.SourceMissing {
+			output.WriteString("No audio source was available for this recording, so nothing was transcribed.\n")
+		} else {
+			output.WriteString("No speech was transcribed.\n")
+		}
 		return output.String()
 	}
 	cues := slices.Clone(document.Cues)
