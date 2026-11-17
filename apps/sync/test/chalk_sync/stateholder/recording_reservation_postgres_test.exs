@@ -112,6 +112,25 @@ defmodule ChalkSync.Stateholder.RecordingReservationPostgresTest do
     assert reservation_seconds(ctx, capped) <= @four_hours_s
   end
 
+  test "a start accepted before an extension follows it once its reservation exists", ctx do
+    [host] = ctx.fixture.identities
+
+    {:ok, start} =
+      Operation.new("reservation_start_02", :start_recording, %{"recordingId" => UUID.generate()})
+
+    assert {:ok, %{result: :pending, external_operation_id: id}} =
+             Postgres.begin_operation(host, start)
+
+    assert {:ok, %{result: :applied}} = extend(host, 1_800)
+    reservation = insert_reservation(ctx, @hour_ms)
+    assert reservation_ends_ms(ctx, reservation) == ctx.now_ms + @hour_ms
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(ctx.fixture.episode, id, {:confirmed, :recording})
+
+    assert reservation_ends_ms(ctx, reservation) == ctx.now_ms + @hour_ms + 1_800_000
+  end
+
   defp extend(identity, seconds) do
     {:ok, operation} =
       Operation.new(UUID.generate(), :extend_episode, %{"extensionSeconds" => seconds})

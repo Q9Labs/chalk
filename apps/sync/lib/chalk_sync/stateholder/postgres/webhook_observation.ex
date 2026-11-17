@@ -59,7 +59,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
               "external_operation"
             )
 
-            observe_episode_end(episode, name)
+            observe_episode_end(episode, name, operation.external_operation_id)
 
           _ ->
             :ok
@@ -90,28 +90,51 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
 
   # The Episode row is the one record of why a call ended, whichever operation
   # ended it. Only the finalizing call finds the row ended.
-  defp observe_episode_end(episode, name) do
-    if OperationTable.is_episode_end_name(name), do: observe_ended_row(episode), else: :ok
+  defp observe_episode_end(episode, name, external_operation_id) do
+    if OperationTable.is_episode_end_name(name),
+      do: observe_ended_row(episode, external_operation_id),
+      else: :ok
   end
 
-  defp observe_ended_row(episode) do
+  defp ended_context(nil, _trace_id, _span_id), do: nil
+
+  defp ended_context(journey_id, trace_id, span_id),
+    do: Observability.persisted_context(UUID.load!(journey_id), trace_id, span_id)
+
+  defp observe_ended_row(episode, external_operation_id) do
     Database.guard(
       fn ->
         case Postgrex.query(
                Database.alternate_connection(episode),
-               "select end_reason from episodes where tenant_id = $1 and space_id = $2 and id = $3 and status = 'ended'",
+               """
+               select episodes.end_reason, operations.journey_id, operations.producing_trace_id,
+                      operations.producing_span_id
+               from episodes
+               join sync_external_operations operations
+                 on operations.tenant_id = episodes.tenant_id
+                and operations.episode_id = episodes.id
+                and operations.external_operation_id = $4
+               where episodes.tenant_id = $1 and episodes.space_id = $2 and episodes.id = $3
+                 and episodes.status = 'ended'
+               """,
                [
                  Scope.uuid(episode.tenant_id),
                  Scope.uuid(episode.space_id),
-                 Scope.uuid(episode.episode_id)
+                 Scope.uuid(episode.episode_id),
+                 Scope.uuid(external_operation_id)
                ],
                timeout: 1_000
              ) do
-          {:ok, %{rows: [[end_reason]]}} when is_binary(end_reason) ->
-            Observability.linked_phase(nil, "sync.episode.ended", %{
-              episode_id: episode.episode_id,
-              end_reason: end_reason
-            })
+          {:ok, %{rows: [[end_reason, journey_id, trace_id, span_id]]}}
+          when is_binary(end_reason) ->
+            Observability.linked_phase(
+              ended_context(journey_id, trace_id, span_id),
+              "sync.episode.ended",
+              %{
+                episode_id: episode.episode_id,
+                end_reason: end_reason
+              }
+            )
 
           _ ->
             :ok

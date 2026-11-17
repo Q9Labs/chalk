@@ -247,8 +247,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
         Postgrex.query!(
           connection,
           RecordingReservationSQL.move(),
-          Scope.episode(episode) ++
-            [external.payload["deadlineAtMs"], RecordingPlane.maximum_duration_seconds()]
+          Scope.episode(episode) ++ [RecordingPlane.maximum_duration_seconds()]
         )
 
         :ok
