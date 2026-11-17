@@ -670,35 +670,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 			schema["maximum"] = sdktelemetry.MaxReceiveCount
 		}
 	}
-	if schemaName == "CallStatsRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{1}
-		case "samples":
-			schema["minItems"] = 1
-			schema["maxItems"] = httpapi.CallStatsSampleLimit
-		case "window_ms":
-			schema["minimum"] = sdktelemetry.MinWindowMS
-			schema["maximum"] = sdktelemetry.MaxWindowMS
-		default:
-			applyTelemetryRange(schema, fieldName)
-		}
-	}
-	if schemaName == "TelemetryRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{sdktelemetry.Version}
-		case "events":
-			schema["minItems"] = 1
-			schema["maxItems"] = sdktelemetry.EventLimit
-		case "tracks":
-			schema["maxItems"] = sdktelemetry.MaxTracks
-		case "mid":
-			schema["pattern"] = sdktelemetry.MIDPattern
-		default:
-			applyTelemetryRange(schema, fieldName)
-		}
-	}
+	applyTelemetryConstraints(schema, schemaName, fieldName)
 	if schemaName == "ProblemReportRequest" {
 		switch fieldName {
 		case "description":
@@ -760,13 +732,6 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 	return schema
 }
 
-func applyTelemetryRange(schema map[string]any, fieldName string) {
-	if low, high, numeric := sdktelemetry.FieldRange(fieldName); numeric {
-		schema["minimum"] = low
-		schema["maximum"] = high
-	}
-}
-
 func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 	return (schemaName == "RequestTranscriptRequest" && fieldName == "language") ||
 		(schemaName == "ProblemReportRequest" && fieldName == "diagnostics")
@@ -776,8 +741,8 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "ConnectionReportRequest" {
 		return httpapi.ConnectionReportFieldEnum(fieldName)
 	}
-	if schemaName == "CallStatsRequest" || schemaName == "TelemetryRequest" {
-		return sdktelemetry.FieldEnum(fieldName)
+	if values := telemetryFieldEnum(schemaName, fieldName); values != nil {
+		return values
 	}
 	if schemaName == "CloudflareSFUSignalRequest" {
 		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {

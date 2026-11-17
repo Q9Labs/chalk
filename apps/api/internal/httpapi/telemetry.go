@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -124,48 +125,40 @@ func telemetryOrigin(r *http.Request) []any {
 	return []any{"country", country, "client_family", family, "client_os", system}
 }
 
+type userAgentMarker struct {
+	label string
+	parts []string
+}
+
+// The first marker found in the User-Agent wins, so order matters: Edge and Opera also say Chrome.
+var browserMarkers = []userAgentMarker{
+	{"edge", []string{"Edg/", "EdgA/", "EdgiOS/"}},
+	{"opera", []string{"OPR/"}},
+	{"samsung", []string{"SamsungBrowser/"}},
+	{"firefox", []string{"Firefox/", "FxiOS/"}},
+	{"chrome", []string{"Chrome/", "CriOS/"}},
+	{"safari", []string{"Safari/"}},
+	{"native", []string{"CFNetwork", "okhttp", "ReactNative", "Hermes"}},
+}
+
+var systemMarkers = []userAgentMarker{
+	{"android", []string{"Android", "okhttp"}},
+	{"ios", []string{"iPhone", "iPad", "iPod", "CFNetwork"}},
+	{"windows", []string{"Windows"}},
+	{"chromeos", []string{"CrOS"}},
+	{"macos", []string{"Mac OS X", "Macintosh"}},
+	{"linux", []string{"Linux", "X11"}},
+}
+
 func clientFamilies(userAgent string) (family, system string) {
-	has := func(parts ...string) bool {
-		for _, part := range parts {
-			if strings.Contains(userAgent, part) {
-				return true
-			}
+	return firstMarker(userAgent, browserMarkers), firstMarker(userAgent, systemMarkers)
+}
+
+func firstMarker(userAgent string, markers []userAgentMarker) string {
+	for _, marker := range markers {
+		if slices.ContainsFunc(marker.parts, func(part string) bool { return strings.Contains(userAgent, part) }) {
+			return marker.label
 		}
-		return false
 	}
-	switch {
-	case has("Edg/", "EdgA/", "EdgiOS/"):
-		family = "edge"
-	case has("OPR/"):
-		family = "opera"
-	case has("SamsungBrowser/"):
-		family = "samsung"
-	case has("Firefox/", "FxiOS/"):
-		family = "firefox"
-	case has("Chrome/", "CriOS/"):
-		family = "chrome"
-	case has("Safari/"):
-		family = "safari"
-	case has("CFNetwork", "okhttp", "ReactNative", "Hermes"):
-		family = "native"
-	default:
-		family = "other"
-	}
-	switch {
-	case has("Android", "okhttp"):
-		system = "android"
-	case has("iPhone", "iPad", "iPod", "CFNetwork"):
-		system = "ios"
-	case has("Windows"):
-		system = "windows"
-	case has("CrOS"):
-		system = "chromeos"
-	case has("Mac OS X", "Macintosh"):
-		system = "macos"
-	case has("Linux", "X11"):
-		system = "linux"
-	default:
-		system = "other"
-	}
-	return family, system
+	return "other"
 }

@@ -79,76 +79,50 @@ func EventTypes() []string {
 	return slices.Sorted(maps.Keys(specs))
 }
 
+var fieldEnums = map[string][]string{
+	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
+	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
+	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
+	"granted_audio":         {"granted", "not_granted", "unknown"},
+	"granted_video":         {"granted", "not_granted", "unknown"},
+	"upload_failure":        {"initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"},
+	"source":                {"microphone", "camera", "screen_audio", "screen_video"},
+	"receive_state":         {"announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"},
+	"track_state":           {"live", "muted", "ended"},
+	"element_state":         {"paused", "playing"},
+	"play_result":           {"ok", "NotAllowedError", "AbortError", "unknown"},
+	"publication_state":     {"on", "off"},
+	"projection_state":      {"on", "off"},
+	"state":                 {"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"},
+	"step":                  {"join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"},
+	"outcome":               {"started", "succeeded", "failed", "cancelled"},
+	"phase":                 {"idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"},
+	"mechanism":             {"ice_restart", "media_reconnect", "sync_reconnect", "sync_digest", "access_refresh"},
+	"code":                  {"invalid_state", "invalid_access", "access_unavailable", "permission_denied", "device_not_found", "device_busy", "device_constraint_invalid", "media_capture_failed", "sync_start_failed", "state_digest_recovery_failed", "sync_hello_timeout", "media_start_failed", "join_cleanup_unconfirmed", "sync_recovery_exhausted", "media_recovery_exhausted", "command_rejected", "leave_unconfirmed", "episode_ended", "unsupported_environment", "internal_error", "collaboration_unavailable", "chat_cursor_reset_required", "rate_limited", "invalid_payload"},
+	"action":                {"mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"},
+	"device_kind":           {"microphone", "camera", "speaker", "screen"},
+	"permission_state":      {"granted", "denied", "prompt", "unknown"},
+	"render_cause":          {"render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"},
+	"end_reason":            {"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"},
+	"platform_state":        {"online", "offline", "hidden", "visible", "background", "foreground"},
+	"gap":                   {"offline", "hidden", "poll_failed", "dropped"},
+	"connection_type":       {"udp", "tcp", "turn", "unknown"},
+	"local_candidate_type":  {"host", "srflx", "prflx", "relay"},
+	"remote_candidate_type": {"host", "srflx", "prflx", "relay"},
+	"relay_protocol":        {"udp", "tcp", "tls"},
+	"send_layer":            {captureplane.TrackLayerHigh.RID(), captureplane.TrackLayerMedium.RID(), captureplane.TrackLayerLow.RID()},
+	"kind":                  {"audio", "video"},
+	"playout":               {"playing", "paused", "no_element", "unknown"},
+}
+
 // FieldEnum is the closed list of labels a field may carry, or nil if it carries none.
 // These are also the OpenAPI enums, so no free text can enter a log row through a
 // caller that bypasses the SDK.
 func FieldEnum(field string) []string {
-	switch field {
-	case "type":
+	if field == "type" {
 		return EventTypes()
-	case "media_error_kind":
-		return []string{"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"}
-	case "error_name":
-		return []string{"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"}
-	case "media_error_step":
-		return []string{"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"}
-	case "granted_audio", "granted_video":
-		return []string{"granted", "not_granted", "unknown"}
-	case "upload_failure":
-		return []string{"initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"}
-	case "source":
-		return []string{"microphone", "camera", "screen_audio", "screen_video"}
-	case "receive_state":
-		return []string{"announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"}
-	case "track_state":
-		return []string{"live", "muted", "ended"}
-	case "element_state":
-		return []string{"paused", "playing"}
-	case "play_result":
-		return []string{"ok", "NotAllowedError", "AbortError", "unknown"}
-	case "publication_state", "projection_state":
-		return []string{"on", "off"}
-	case "state":
-		return []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}
-	case "step":
-		return []string{"join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"}
-	case "outcome":
-		return []string{"started", "succeeded", "failed", "cancelled"}
-	case "phase":
-		return []string{"idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"}
-	case "mechanism":
-		return []string{"ice_restart", "media_reconnect", "sync_reconnect", "sync_digest", "access_refresh"}
-	case "code":
-		return []string{"invalid_state", "invalid_access", "access_unavailable", "permission_denied", "device_not_found", "device_busy", "device_constraint_invalid", "media_capture_failed", "sync_start_failed", "state_digest_recovery_failed", "sync_hello_timeout", "media_start_failed", "join_cleanup_unconfirmed", "sync_recovery_exhausted", "media_recovery_exhausted", "command_rejected", "leave_unconfirmed", "episode_ended", "unsupported_environment", "internal_error", "collaboration_unavailable", "chat_cursor_reset_required", "rate_limited", "invalid_payload"}
-	case "action":
-		return []string{"mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"}
-	case "device_kind":
-		return []string{"microphone", "camera", "speaker", "screen"}
-	case "permission_state":
-		return []string{"granted", "denied", "prompt", "unknown"}
-	case "render_cause":
-		return []string{"render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"}
-	case "end_reason":
-		return []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}
-	case "platform_state":
-		return []string{"online", "offline", "hidden", "visible", "background", "foreground"}
-	case "gap":
-		return []string{"offline", "hidden", "poll_failed", "dropped"}
-	case "connection_type":
-		return []string{"udp", "tcp", "turn", "unknown"}
-	case "local_candidate_type", "remote_candidate_type":
-		return []string{"host", "srflx", "prflx", "relay"}
-	case "relay_protocol":
-		return []string{"udp", "tcp", "tls"}
-	case "send_layer":
-		return []string{captureplane.TrackLayerHigh.RID(), captureplane.TrackLayerMedium.RID(), captureplane.TrackLayerLow.RID()}
-	case "kind":
-		return []string{"audio", "video"}
-	case "playout":
-		return []string{"playing", "paused", "no_element", "unknown"}
-	default:
-		return nil
 	}
+	return fieldEnums[field]
 }
 
 // FieldRange is the inclusive range of a numeric field, and whether the field is a number
