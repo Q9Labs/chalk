@@ -200,7 +200,7 @@ func TestRecordingFailureEventCarriesTheStartTrace(t *testing.T) {
 	}
 	const traceID, spanID = "0af7651916cd43dd8448eb211c80319c", "00f067aa0ba902b7"
 	startEmptyCapture(t, tx, f.recordingID, `delete from recording_bundles where recording_id = $1`)
-	execCleanupFixture(t, tx, `update sync_external_operations set journey_id = $2, producing_trace_id = $3, producing_span_id = $4
+	execCleanupFixture(t, tx, `update sync_external_operations set journey_id = $2, parent_journey_event_id = gen_random_uuid(), producing_trace_id = $3, producing_span_id = $4
 		where recording_id = $1 and operation_name = 'start_recording'`, f.recordingID.Bytes(), journeyID.Bytes(), traceID, spanID)
 	if _, err := transactionalPipelineRepository(tx).CompleteCapture(ctx, lease, f.recordingID); err != nil {
 		t.Fatalf("complete empty capture: %v", err)
