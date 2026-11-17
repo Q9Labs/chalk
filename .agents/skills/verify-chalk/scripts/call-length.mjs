@@ -25,6 +25,7 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
     await page.getByRole("region", { name: "Space stage", exact: true }).waitFor({ timeout: wait });
     return callId();
   };
+  const tenMinuteWarning = () => page.locator('[data-part="toast-message"]', { hasText: "10 minutes left." });
   const episodeOf = async (spaceId) => {
     const { episodes } = await system("GET", `/v1/tenants/${tenantId}/spaces/${spaceId}/episodes`);
     const episode = episodes.at(0);
@@ -37,7 +38,7 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
       headers: { Authorization: `Bearer ${seed.systemToken}`, "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
       body: JSON.stringify({ deadline_at: new Date(at).toISOString() }),
     });
-    if (!response.ok) throw new Error(`set deadline answered HTTP ${response.status}`);
+    if (!response.ok) throw new Error(`set deadline answered HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
   };
   const untilEpisode = async (spaceId, ok, what) => {
     const until = Date.now() + wait;
@@ -67,7 +68,7 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
 
   await step("the site's Start a call opens an account call, not the anonymous entrance", async () => {
     await page.goto(new URL("/", web).href);
-    await page.locator("nav a.btn.pri", { hasText: "Start a call" }).first().click();
+    await page.locator("header.nav a.btn.pri", { hasText: "Start a call" }).first().click();
     nav = await inCall();
     await hasAccountPolicy(nav);
     await shot(ada, "nav-call");
@@ -76,7 +77,7 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
   await step("the call warns ten minutes before its limit and offers more time", async () => {
     const episode = await episodeOf(nav);
     await setDeadline(nav, episode.id, Date.now() + 9 * minute);
-    await page.getByText("10 minutes left.", { exact: false }).waitFor({ timeout: wait });
+    await tenMinuteWarning().waitFor({ timeout: wait });
     await page.getByRole("button", { name: "Add 30 min", exact: true }).waitFor({ timeout: wait });
     await shot(ada, "ten-minute-warning");
   });
@@ -85,14 +86,15 @@ await runJourney("call-length", async ({ step, person, shot, system, seed, web }
     const before = Date.parse((await episodeOf(nav)).deadline_at);
     await page.getByRole("button", { name: "Add 30 min", exact: true }).click();
     const moved = await untilEpisode(nav, (episode) => Date.parse(episode.deadline_at) >= before + 29 * minute, "the deadline did not move");
-    await page.getByText("10 minutes left.", { exact: false }).waitFor({ state: "hidden", timeout: wait });
+    await tenMinuteWarning().waitFor({ state: "hidden", timeout: wait });
     await shot(ada, "extended");
     return { before: new Date(before).toISOString(), after: moved.deadline_at };
   });
 
   await step("the call that reaches its limit ends and says why", async () => {
     const episode = await episodeOf(nav);
-    await setDeadline(nav, episode.id, Date.now() + 15_000);
+    // A deadline may not fall within a minute of the start, so a fast run waits for it.
+    await setDeadline(nav, episode.id, Math.max(Date.now() + 15_000, Date.parse(episode.created_at) + 62_000));
     await page.getByRole("heading", { name: "The call reached its time limit", exact: true }).waitFor({ timeout: wait });
     const ended = await untilEpisode(nav, (item) => item.status === "ended", "the call did not end");
     if (ended.end_reason !== "maximum_duration") throw new Error(`end_reason was ${ended.end_reason}`);
