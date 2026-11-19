@@ -13,20 +13,19 @@ change does not set the variable, create a role or change IAM. Its dedicated
 repository's default-branch workflow (`aud=sts.amazonaws.com`). Do not reuse a
 deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The current active cutover list is empty; retired Nightly is excluded:
 
-| Boundary                                   | Actions                                                                                                                                                                                                                                                                |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Caller identity                            | `sts:GetCallerIdentity`                                                                                                                                                                                                                                                |
-| Existing `alchemy-state` table             | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query`                                                                                                                                                                                                         |
-| Stage leases on that table                 | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row                                                                                       |
-| Existing state overflow bucket             | `s3:ListBucket` (the state backend checks existence with HeadBucket)                                                                                                                                                                                                   |
-| Existing state overflow objects            | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket                                                                                                                                                                          |
-| Archive CDN                                | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource`, `cloudfront:GetPublicKeyConfig`, `cloudfront:GetKeyGroupConfig`, `cloudfront:GetOriginAccessControlConfig`; `s3:GetBucketPolicy` for the existing artifacts bucket |
-| Dispatcher IAM roles                       | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags`                                                                                                                                                         |
-| Dispatcher queues                          | `sqs:GetQueueAttributes`, `sqs:ListQueueTags`                                                                                                                                                                                                                          |
-| Dispatcher logs                            | `logs:DescribeLogGroups`, `logs:ListTagsForResource`                                                                                                                                                                                                                   |
-| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy`                                                                                                                                                                                        |
-| Dispatcher schedule                        | `scheduler:GetSchedule`                                                                                                                                                                                                                                                |
-| Dispatcher alarms                          | `cloudwatch:DescribeAlarms`, `cloudwatch:ListTagsForResource`                                                                                                                                                                                                          |
+| Boundary                                   | Actions                                                                                                                                                                          |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caller identity                            | `sts:GetCallerIdentity`                                                                                                                                                          |
+| Existing `alchemy-state` table             | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query`                                                                                                                   |
+| Stage leases on that table                 | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row |
+| Existing state overflow bucket             | `s3:ListBucket` (the state backend checks existence with HeadBucket)                                                                                                             |
+| Existing state overflow objects            | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket                                                                                    |
+| Dispatcher IAM roles                       | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags`                                                                   |
+| Dispatcher queues                          | `sqs:GetQueueAttributes`, `sqs:ListQueueTags`                                                                                                                                    |
+| Dispatcher logs                            | `logs:DescribeLogGroups`, `logs:ListTagsForResource`                                                                                                                             |
+| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy`                                                                                                  |
+| Dispatcher schedule                        | `scheduler:GetSchedule`                                                                                                                                                          |
+| Dispatcher alarms                          | `cloudwatch:DescribeAlarms`, `cloudwatch:ListTagsForResource`                                                                                                                    |
 
 Provider state reads use existing recorded identities, not account-wide adoption
 or list/inventory operations. No workload mutation, state bootstrap, state
@@ -50,3 +49,11 @@ attributes without evaluating stack declarations. Thus it does not need the
 retired download public key file or dispatcher runtime input files. Confirm role access
 and one clean manual run before enabling the schedule. No live access test was
 performed in the structure lane.
+
+Future SFU/recorder/media-relay cutovers also need their protected read-capable
+DigitalOcean/Cloudflare token secrets on the check step. SFU uses DigitalOcean
+resource reads and Cloudflare DNS reads; recorder uses its separate pool-token
+resource reads and Cloudflare R2 bucket/CORS/lifecycle reads; media relay uses
+Calls TURN key reads. Retired recorder runtime downloads need no drift role or
+CloudFront permission. Do not grant every future provider in advance: configure
+only the registered production cutovers before enabling their checks.
