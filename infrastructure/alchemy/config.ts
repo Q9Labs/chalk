@@ -20,23 +20,26 @@ export const nightly = Effect.gen(function* () {
   return stage;
 });
 
-const region = "ap-southeast-1";
-const credentials = Credentials.fromNodeProviderChain().pipe(Layer.orDie);
-// STS must not inherit an endpoint derived from AWSEnvironment while resolving that environment.
-const client = Layer.mergeAll(credentials, Layer.succeed(Region, Effect.succeed(region)), Layer.succeed(Endpoint, Effect.undefined), FetchHttpClient.layer);
-const awsEnvironment = Layer.effect(
-  AWSEnvironment,
-  Effect.gen(function* () {
-    const resolveCredentials = yield* Credentials.Credentials;
-    return yield* Effect.cached(
-      Effect.gen(function* () {
-        const identity = yield* sts.getCallerIdentity({}).pipe(Effect.orDie);
-        if (!identity.Account) return yield* Effect.die("AWS STS returned no account.");
-        return { accountId: identity.Account, region, credentials: resolveCredentials.pipe(Effect.orDie) };
-      }).pipe(Effect.provide(client)),
-    );
-  }),
-).pipe(Layer.provide(client));
+const defaultRegion = "ap-southeast-1";
+const awsEnvironmentForRegion = (region: string) => {
+  const credentials = Credentials.fromNodeProviderChain().pipe(Layer.orDie);
+  // STS must not inherit an endpoint derived from AWSEnvironment while resolving that environment.
+  const client = Layer.mergeAll(credentials, Layer.succeed(Region, Effect.succeed(region)), Layer.succeed(Endpoint, Effect.undefined), FetchHttpClient.layer);
+  return Layer.effect(
+    AWSEnvironment,
+    Effect.gen(function* () {
+      const resolveCredentials = yield* Credentials.Credentials;
+      return yield* Effect.cached(
+        Effect.gen(function* () {
+          const identity = yield* sts.getCallerIdentity({}).pipe(Effect.orDie);
+          if (!identity.Account) return yield* Effect.die("AWS STS returned no account.");
+          return { accountId: identity.Account, region, credentials: resolveCredentials.pipe(Effect.orDie) };
+        }).pipe(Effect.provide(client)),
+      );
+    }),
+  ).pipe(Layer.provide(client));
+};
 
-export const providers = AWS.providers().pipe(Layer.provide(awsEnvironment));
-export const state = AWS.state({ migrateFrom: false }).pipe(Layer.provide(awsEnvironment));
+export const awsProviders = (region: string) => AWS.providers().pipe(Layer.provide(awsEnvironmentForRegion(region)));
+export const providers = awsProviders(defaultRegion);
+export const state = AWS.state({ migrateFrom: false }).pipe(Layer.provide(awsEnvironmentForRegion(defaultRegion)));

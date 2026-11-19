@@ -191,11 +191,14 @@ CloudFront caller references cannot be recovered from physical names alone.
 6. Only after successful cutover, remove that root's `.tf` and
    `.terraform.lock.hcl` files. Keep the original state objects and dated backups.
 
-The seed script covers these roots and the dispatcher's explicit module mapping,
+The seed script covers these roots, direct Sync, and the dispatcher's explicit module mapping,
 not a generic Terraform provider schema. Follow the [dispatcher cutover runbook](../docs/transcription-production-release.md)
 for its private inputs, production gate and release rollback. Extend explicit
 mappings when another root migrates. The script rejects unexpected modules,
 duplicate or deposed instances and unknown resources.
+Direct Sync validates its complete saved resource set, including optional IPv6,
+and refuses a missing interface or attachment before writing state. See its
+[guide](managed-episode/direct-sync/README.md) for its separate state key and inputs.
 Do not run Alchemy and OpenTofu as concurrent owners.
 
 ### Undo a cutover

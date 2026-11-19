@@ -20,13 +20,16 @@ import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
-import { providers, state, environmentName } from "./config.ts";
+import { awsProviders, state, environmentName } from "./config.ts";
 import { seedDispatcher } from "./dispatcher/seed.ts";
 import { dispatcherProviders } from "./dispatcher/stack.ts";
 import { EipAssociation, readAssociation } from "./eip-association.ts";
 import { BucketPolicy, canonicalPolicy, readPolicy } from "./bucket-policy.ts";
 
+import { directSyncRows } from "./direct-sync-state.ts";
 import { tofuState, decode, lookup, row } from "./tofu-state.ts";
+
+const providers = awsProviders(process.argv[2] === "direct-sync" ? (process.env.CHALK_DIRECT_SYNC_AWS_REGION ?? "ap-southeast-1") : "ap-southeast-1");
 
 const tags = Schema.Record(Schema.String, Schema.String);
 
@@ -39,16 +42,16 @@ const main = Effect.gen(function* () {
   }
   const isSfu = stack === "sfu" || stack === "sfu-standby";
   const isRecorder = stack === "recorder";
-  if ((!isSfu && !isRecorder && stack !== "recording-control-address" && stack !== "archive-cdn") || (!isSfu && !isRecorder && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
-    return yield* Effect.die("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder> <nightly|production> <tofu-state.json> [--dry-run]");
-
+  const isDirectSync = stack === "direct-sync";
+  if ((!isSfu && !isRecorder && !isDirectSync && stack !== "recording-control-address" && stack !== "archive-cdn") || (!isSfu && !isRecorder && !isDirectSync && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
+    return yield* Effect.die("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder|direct-sync|transcription-dispatcher> <nightly|production> <tofu-state.json> [--dry-run]");
   }
   if (stage === "production" && mode !== "--dry-run" && process.env.CHALK_ALCHEMY_PRODUCTION_SEED !== "approved") return yield* Effect.die("Production seed writes require explicit CHALK_ALCHEMY_PRODUCTION_SEED=approved; this lane uses --dry-run only.");
   const source = decode(tofuState, yield* Effect.tryPromise(() => readFile(stateFile, "utf8")), "tofu state");
   const managed = source.resources.filter((resource) => resource.mode === "managed");
   const expected =
     stack === "recording-control-address" ? ["aws_eip.control", "aws_eip_association.control"] : ["aws_cloudfront_origin_access_control.archive", "aws_cloudfront_public_key.archive", "aws_cloudfront_key_group.archive", "aws_cloudfront_distribution.archive", "aws_s3_bucket_policy.artifacts"];
-  if (!isSfu && !isRecorder && (managed.length !== expected.length || managed.some((resource) => resource.module || !expected.includes(`${resource.type}.${resource.name}`)))) {
+  if (!isSfu && !isRecorder && !isDirectSync && (managed.length !== expected.length || managed.some((resource) => resource.module || !expected.includes(`${resource.type}.${resource.name}`)))) {
     return yield* Effect.die("Unexpected managed resources in tofu state; refusing partial migration.");
   }
   const get = <A>(type: string, name: string, schema: Schema.Codec<A>): A => {
@@ -61,7 +64,9 @@ const main = Effect.gen(function* () {
     return decode(schema, instance.attributes, `${type}.${name} attributes`);
   };
   const rows: CreatedResourceState[] = [];
-  if (isRecorder) {
+  if (isDirectSync) {
+    rows.push(...(yield* directSyncRows(source.resources)));
+  } else if (isRecorder) {
     rows.push(...(yield* seedRecorder(source, stage)));
   } else if (isSfu) {
     rows.push(...(yield* seedSfu(source, stage, stack)));
@@ -202,7 +207,6 @@ await Effect.runPromise(
   Effect.gen(function* () {
     const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: process.argv[2] === "transcription-dispatcher" ? dispatcherProviders : Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
     yield* main.pipe(Effect.provide(sfuClient), Effect.provideContext(context));
-
   }).pipe(
     Effect.provideService(Stage, process.argv[3] ?? ""),
     Effect.provide(AlchemyContextLive),

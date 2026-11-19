@@ -259,7 +259,7 @@
         "apps/transcription-dispatcher",
         "infrastructure/nightly/transcription",
         "infrastructure/alchemy/dispatcher",
-        "infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle",
+        "infrastructure/cloudflare-r2-transcription-lifecycle",
         "packages/transcript-language",
         "scripts/transcription-dispatcher"
       ]
