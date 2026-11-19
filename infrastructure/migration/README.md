@@ -39,7 +39,15 @@ missing concurrency/invoke settings after interrupted creation, so cleanup can
 finish; production still requires the complete configuration. Native-engine
 tests with a fake AWS HTTP boundary prove exact versioned creation, cleanup
 after both partial-creation failures, and repeated deletion. Production and
-cross-run names are refused. The former Nightly-only security
+cross-run names are refused. Ownership of a run-created function is a persisted
+fact: creation stamps the engine's instance ID as a tag, a function without it
+reads as unowned (so plan and create refuse), and delete verifies it first.
+Tests reproduce the cleanup that used to delete a same-named function it never
+created. The same proof guards the run-owned log group (stack/stage/id tags) and
+schedule (instance ID in its description) through `providers/aws-run-owned.ts`,
+which is excluded from parity like the other ownership checks; roles, queues and
+alarms already carry it upstream. Production's seeded resources are not held to
+it. The former Nightly-only security
 conditions now apply to any nonproduction stage; production conditions are
 unchanged. Input schemas otherwise remain compared. These exclusions are not
 claimed as a whole-program no-op: stage behavior deliberately changed, and

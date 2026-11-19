@@ -41,8 +41,10 @@ function normalizeRunFunction(source: string) {
       "eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination }",
     )
     .replace(/^  if \(!runOwned\) Schema.decodeUnknownSync[^\n]+\n/m, "")
-    .replace(/^    if \(!olds\) return yield\* createRunFunction\(news\);\n/m, "")
-    .replace(/  delete: Effect.fn\(function\* \({ output }\) {[\s\S]*?\n  }\),/, '  delete: () => Effect.die("Dispatcher deletion is forbidden; use the documented state-only rollback."),');
+    .replace(/^    if \(!olds\) return yield\* createRunFunction\(news, instanceId\);\n/m, "")
+    .replace("read: ({ olds, output, instanceId }) => (output ? readOwned(output.functionName, instanceId) : isResolved(olds) && olds ? readOwned(olds.functionName, instanceId) : Effect.undefined),", "read: ({ olds, output }) => (output ? readFunction(output.functionName) : isResolved(olds) && olds ? readFunction(olds.functionName) : Effect.undefined),")
+    .replace("reconcile: Effect.fn(function* ({ news, olds, instanceId }) {", "reconcile: Effect.fn(function* ({ news, olds }) {")
+    .replace(/  delete: Effect.fn\(function\* \({ output, instanceId }\) {[\s\S]*?\n  }\),/, '  delete: () => Effect.die("Dispatcher deletion is forbidden; use the documented state-only rollback."),');
 }
 function normalizeStageBoundaries(identity: string, source: string, before: boolean) {
   if (identity.endsWith("alchemy/dispatcher/stack.ts")) {
@@ -57,6 +59,7 @@ function normalizeStageBoundaries(identity: string, source: string, before: bool
   if (identity.endsWith("managed-episode/direct-sync/config.ts")) source = source.replace("export const directSyncConfig", "const directSyncConfig");
   if (!before && identity.endsWith("alchemy/dispatcher/inputs.ts")) source = source.replace(/  const stage = parseStage\(input.environment_name\);[\s\S]*?(?=  return input;)/, "");
   if (!before && identity.endsWith("alchemy/dispatcher/function.ts")) source = normalizeRunFunction(source);
+  if (!before && identity.endsWith("alchemy/dispatcher/stack.ts")) source = source.replace(", logGroupProvider(providers), scheduleProvider(providers))", ")");
   return source;
 }
 function normalizedSource(path: string, source: string, before: boolean) {
@@ -86,10 +89,11 @@ const inputModules = new Set([
   "infrastructure/platform/inputs.ts",
   "infrastructure/platform/credentials.ts",
   "infrastructure/platform/stages.ts",
+  "infrastructure/providers/aws-run-owned.ts",
 ]);
 const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/sfu/alchemy.run.ts", ["effect/Schema"]],
-  ["infrastructure/alchemy/dispatcher/function.ts", ["alchemy/Stage"]],
+  ["infrastructure/alchemy/dispatcher/function.ts", ["alchemy/Stage", "alchemy/AdoptPolicy"]],
   ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
   ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],
   ["infrastructure/managed-episode/direct-sync/alchemy.run.ts", ["effect/Schema"]],
@@ -99,10 +103,11 @@ const boundaryImports = new Map<string, readonly string[]>([
 ]);
 function isInputLoader(node: ts.Statement, identity: string) {
   if (identity.endsWith("alchemy/dispatcher/function.ts") && ts.isFunctionDeclaration(node) && node.name?.text === "requireRunOwnedFunction") return true;
+  const runOwnership = identity.endsWith("alchemy/dispatcher/function.ts") ? ["ownerTagKey", "isOwnedBy", "readOwned"] : [];
   return (
     ts.isVariableStatement(node) &&
     node.declarationList.declarations.every((declaration) =>
-      ["loadConfig", "loadRecorderConfig", "sfuClient", "client", "createRunFunction", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()),
+      ["loadConfig", "loadRecorderConfig", "sfuClient", "client", "createRunFunction", ...runOwnership, ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()),
     )
   );
 }
