@@ -6,16 +6,22 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 // Canonicalize only at the AWS JSON boundary; policy text order has no IAM meaning.
-const sortJson = (value: Schema.Json): Schema.Json => {
+const sortJson = (value: Schema.Json, unorderedArrays = false): Schema.Json => {
   if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(sortJson);
+  if (Array.isArray(value)) {
+    const items = value.map((item) => sortJson(item, unorderedArrays));
+    return unorderedArrays ? items.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))) : items;
+  }
   return Object.fromEntries(
     Object.entries(value)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => [key, sortJson(child)]),
+      .map(([key, child]) => [key, sortJson(child, unorderedArrays)]),
   );
 };
 export const canonicalPolicy = (policy: string): string => JSON.stringify(sortJson(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(policy)));
+
+// IAM action/context lists and firewall/CORS/lifecycle lists are unordered.
+export const canonicalSetJson = (value: object | string): string => JSON.stringify(sortJson(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(typeof value === "string" ? value : JSON.stringify(value)), true));
 
 export interface BucketPolicy extends Resource<"Chalk.S3.BucketPolicy", { bucket: string; policy: string }, { bucket: string; policy: string }> {}
 export const BucketPolicy = Resource<BucketPolicy>("Chalk.S3.BucketPolicy");

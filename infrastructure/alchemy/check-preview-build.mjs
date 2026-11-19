@@ -10,7 +10,10 @@ assert.match(build.commit, /^[a-f0-9]{40}$/, "Preview must identify one full ups
 for (const [name, url] of Object.entries(build.packages)) {
   assert.match(url, /^https:\/\/pkg\.alchemy\.run\/[^\s]+\/-\/[a-f0-9]{64}\.tgz$/, `${name}: immutable tarball required`);
   assert.ok(workspace.split("\n").includes(`  "${name}": ${url}`), `${name}: override must match the preview build`);
-  assert.ok(lockfile.split("\n").some((line) => line.includes(`tarball: ${url}`) && /integrity: sha512-[A-Za-z0-9+/=]+/.test(line)), `${name}: lockfile must authenticate the tarball`);
+  assert.ok(
+    lockfile.split("\n").some((line) => line.includes(`tarball: ${url}`) && /integrity: sha512-[A-Za-z0-9+/=]+/.test(line)),
+    `${name}: lockfile must authenticate the tarball`,
+  );
 }
 for (const [name, version] of Object.entries(manifest.dependencies)) {
   if (name === "alchemy" || name.startsWith("@alchemy.run/") || name.startsWith("@distilled.cloud/")) {

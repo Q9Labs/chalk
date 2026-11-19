@@ -627,6 +627,9 @@ importers:
       '@distilled.cloud/aws':
         specifier: https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz
         version: https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz(effect@4.1.4)
+      '@distilled.cloud/cloudflare':
+        specifier: https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz
+        version: https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz(effect@4.1.4)
       '@distilled.cloud/digitalocean':
         specifier: https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz
         version: https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz(effect@4.1.4)
