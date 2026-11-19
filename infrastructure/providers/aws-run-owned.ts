@@ -5,7 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Stage } from "alchemy/Stage";
 import { hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
-import type { providers } from "../platform/config.ts";
+import type * as Layer from "effect/Layer";
 
 // An ephemeral stage creates its resources under names derived from the function name. The
 // pinned engine treats whatever a provider's `read` returns as owned unless it is branded
@@ -18,7 +18,7 @@ const isRunOwnedStage = Effect.map(Stage, (stage) => stage.startsWith("nightly-"
 
 const refuseDelete = (kind: string) => Effect.die(`Refusing to delete a ${kind} that this run did not create; its ownership proof is missing or belongs to another run`);
 
-export const logGroupProvider = (upstream: typeof providers) =>
+export const logGroupProvider = (upstream: Layer.Layer<unknown>) =>
   Provider.effect(
     LogGroup,
     Effect.gen(function* () {
@@ -26,7 +26,7 @@ export const logGroupProvider = (upstream: typeof providers) =>
       const baseRead = base.read;
       if (!baseRead) return yield* Effect.die("Pinned Log Group provider has no read method");
       // Log groups carry tags, so the stack/stage/id tags the provider writes at creation are the proof.
-      const read: typeof baseRead = Effect.fn(function* (input) {
+      const read = Effect.fn(function* (input: Parameters<typeof baseRead>[0]) {
         const attr = yield* baseRead(input);
         if (attr === undefined || !(yield* isRunOwnedStage)) return attr;
         return (yield* hasAlchemyTags(input.id, attr.tags)) ? attr : Unowned(attr);
@@ -34,8 +34,12 @@ export const logGroupProvider = (upstream: typeof providers) =>
       return {
         ...base,
         read,
-        delete: (input) => read(input).pipe(Effect.flatMap((attr) => (attr !== undefined && Unowned.is(attr) ? refuseDelete("log group") : base.delete(input)))),
-      } satisfies typeof base;
+        delete: Effect.fn(function* (input: Parameters<typeof base.delete>[0]) {
+          const attr = yield* read(input);
+          if (attr !== undefined && Unowned.is(attr)) return yield* refuseDelete("log group");
+          return yield* base.delete(input);
+        }),
+      };
     }).pipe(Effect.provide(upstream)),
   );
 
@@ -46,38 +50,44 @@ const ownerMarker = (instanceId: string) => `[chalk-owner:${instanceId}]`;
 const ownerSuffix = /\s?\[chalk-owner:[^\]]*\]$/;
 const withMarker = (description: string | undefined, instanceId: string) => (description ? `${description} ${ownerMarker(instanceId)}` : ownerMarker(instanceId));
 const hideMarker = (attr: Schedule["Attributes"]): Schedule["Attributes"] => {
+  if (!attr.configuration) return attr;
   const { description, ...rest } = attr.configuration;
   const visible = description?.replace(ownerSuffix, "");
   return { ...attr, configuration: visible ? { ...rest, description: visible } : rest };
 };
 
-export const scheduleProvider = (upstream: typeof providers) =>
+export const scheduleProvider = (upstream: Layer.Layer<unknown>) =>
   Provider.effect(
     Schedule,
     Effect.gen(function* () {
       const base = yield* Provider.findProvider(Schedule);
       const baseRead = base.read;
       if (!baseRead) return yield* Effect.die("Pinned Schedule provider has no read method");
-      const read: typeof baseRead = Effect.fn(function* (input) {
+      const read = Effect.fn(function* (input: Parameters<typeof baseRead>[0]) {
         const attr = yield* baseRead(input);
         if (attr === undefined || !(yield* isRunOwnedStage)) return attr;
-        return attr.configuration.description?.endsWith(ownerMarker(input.instanceId)) ? hideMarker(attr) : Unowned(hideMarker(attr));
+        return attr.configuration?.description?.endsWith(ownerMarker(input.instanceId)) ? hideMarker(attr) : Unowned(hideMarker(attr));
       });
       return {
         ...base,
         read,
-        reconcile: (input) =>
-          Effect.gen(function* () {
-            const runOwned = yield* isRunOwnedStage;
-            if (!runOwned) return yield* base.reconcile(input);
-            if (!input.output) {
-              const existing = yield* read(input);
-              if (existing !== undefined) return yield* Effect.die("Refusing to take over a schedule that this run did not create");
-            }
-            const reconciled = yield* base.reconcile({ ...input, news: { ...input.news, description: withMarker(input.news.description, input.instanceId) } });
-            return hideMarker(reconciled);
-          }),
-        delete: (input) => read(input).pipe(Effect.flatMap((attr) => (attr !== undefined && Unowned.is(attr) ? refuseDelete("schedule") : base.delete(input)))),
-      } satisfies typeof base;
+        reconcile: Effect.fn(function* (input: Parameters<typeof base.reconcile>[0]) {
+          if (!(yield* isRunOwnedStage)) return yield* base.reconcile(input);
+          if (!input.output) {
+            // The schedule provider swallows a name conflict and overwrites, so the check must come first.
+            const { id, fqn, instanceId, output } = input;
+            const existing = yield* read({ id, fqn, instanceId, olds: input.olds ?? input.news, output });
+            if (existing !== undefined) return yield* Effect.die("Refusing to take over a schedule that this run did not create");
+          }
+          return hideMarker(yield* base.reconcile({ ...input, news: { ...input.news, description: withMarker(input.news.description, input.instanceId) } }));
+        }),
+        delete: Effect.fn(function* (input: Parameters<typeof base.delete>[0]) {
+          const { id, fqn, instanceId, olds, output } = input;
+          if (!olds) return yield* Effect.die("Cannot verify ownership of a schedule recorded without its properties; refusing to delete it");
+          const attr = yield* read({ id, fqn, instanceId, olds, output });
+          if (attr !== undefined && Unowned.is(attr)) return yield* refuseDelete("schedule");
+          return yield* base.delete(input);
+        }),
+      };
     }).pipe(Effect.provide(upstream)),
   );

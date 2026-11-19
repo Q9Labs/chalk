@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { LogGroupProvider } from "@alchemy.run/aws/Logs/LogGroup";
+import { ScheduleProvider } from "@alchemy.run/aws/Scheduler/Schedule";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import { Endpoint } from "@distilled.cloud/aws/Endpoint";
 import { Region } from "@distilled.cloud/aws/Region";
@@ -16,7 +18,6 @@ import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Schema from "effect/Schema";
-import type { providers } from "../platform/config.ts";
 import { clearStage } from "../releases/cleanup.ts";
 import { logGroupProvider, scheduleProvider } from "./aws-run-owned.ts";
 
@@ -106,9 +107,10 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
     Layer.succeed(Region, Effect.succeed("ap-southeast-1")),
     Layer.succeed(Endpoint, Effect.undefined),
     credentials,
-    Layer.succeed(AWSEnvironment, Effect.succeed({ accountId: "000000000000", region: "ap-southeast-1", credentials: Effect.succeed({ accessKeyId: Redacted.make("test"), secretAccessKey: Redacted.make("test") }) })),
+    Layer.succeed(AWSEnvironment, Effect.succeed({ accountId: "000000000000", region: "ap-southeast-1", credentials: Effect.succeed({ accessKeyId: Redacted.make("test"), secretAccessKey: Redacted.make("test"), sessionToken: undefined, region: "ap-southeast-1" }) })),
   );
-  const upstream: typeof providers = AWS.providers().pipe(Layer.provide(clients));
+  // The real upstream providers over the fake HTTP boundary, not the full AWS registry, which brings its own HTTP client.
+  const upstream = Layer.mergeAll(LogGroupProvider(), ScheduleProvider()).pipe(Layer.provide(clients));
   return { upstream, calls, logGroups, schedules, count: (operation: string) => calls.filter((call) => call === operation).length };
 }
 
@@ -132,7 +134,6 @@ const stackFor = (fake: ReturnType<typeof fakeAws>, resource: "log-group" | "sch
       return { ready: true };
     }),
   );
-const run = <A, E>(effect: Effect.Effect<A, E, Alchemist.Alchemist>) => Effect.runPromise(effect.pipe(Effect.provide(Alchemist.layer()), Effect.scoped));
 const destroyTwice = (stack: ReturnType<typeof stackFor>, stage: string) =>
   Effect.gen(function* () {
     for (let attempt = 0; attempt < 2; attempt++) yield* clearStage(yield* Alchemist.plan({ stack, stage, operation: "destroy" }));
@@ -146,12 +147,12 @@ for (const resource of ["log-group", "schedule"] as const) {
   test(`a run creates and cleans up its own ${resource}`, async () => {
     const fake = fakeAws({});
     const stack = stackFor(fake, resource);
-    await run(
+    await Effect.runPromise(
       Effect.gen(function* () {
         yield* Alchemist.apply(yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" }));
         assert.equal(present(fake), true);
         yield* destroyTwice(stack, "nightly-test");
-      }),
+      }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
     assert.equal(present(fake), false);
     assert.equal(fake.count(resource === "log-group" ? "DeleteLogGroup" : "DELETE Schedule"), 1);
@@ -161,12 +162,12 @@ for (const resource of ["log-group", "schedule"] as const) {
     const fake = fakeAws(foreign);
     const state: Parameters<typeof inMemoryState>[0] = {};
     const stack = stackFor(fake, resource, inMemoryState(state));
-    await run(
+    await Effect.runPromise(
       Effect.gen(function* () {
         const applied = yield* Effect.exit(Alchemist.apply(yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" })));
         assert.equal(applied._tag, "Failure");
         yield* destroyTwice(stack, "nightly-test");
-      }),
+      }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
     for (const mutation of mutations) assert.equal(fake.count(mutation), 0, mutation);
     assert.equal(present(fake), true);
@@ -176,12 +177,12 @@ for (const resource of ["log-group", "schedule"] as const) {
   test(`production's seeded ${resource}, created outside Alchemy, is not held to the run proof`, async () => {
     const fake = fakeAws(foreign);
     const stack = stackFor(fake, resource);
-    await run(
+    await Effect.runPromise(
       Effect.gen(function* () {
         const applied = yield* Effect.exit(Alchemist.apply(yield* Alchemist.plan({ stack, stage: "production", operation: "deploy" })));
         // Without a seeded row the engine adopts it silently; the point is that it is not branded Unowned.
         assert.equal(applied._tag, "Success");
-      }),
+      }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
     assert.equal(fake.count(resource === "log-group" ? "CreateLogGroup" : "POST Schedule"), 0);
   });
