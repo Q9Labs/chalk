@@ -38,5 +38,5 @@ export const bucketPolicyProvider = Provider.succeed(BucketPolicy, {
     if (current?.policy !== policy) yield* s3.putBucketPolicy({ Bucket: news.bucket, Policy: policy });
     return { bucket: news.bucket, policy };
   }),
-  delete: ({ output }) => s3.deleteBucketPolicy({ Bucket: output.bucket }),
+  delete: ({ output }) => s3.deleteBucketPolicy({ Bucket: output.bucket }).pipe(Effect.catchTag("NoSuchBucket", () => Effect.void)),
 });

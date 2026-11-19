@@ -1455,7 +1455,7 @@
     {
       "id": "workflow:release-contracts.yml#contracts",
       "owner": "Release chain",
-      "catches": "Release workflow lint, dispatcher and recorder image checks and OpenTofu validation breaking.",
+      "catches": "Release workflow lint, dispatcher and recorder image checks, OpenTofu validation or Nightly Alchemy stack typechecking breaking.",
       "runs": ["pull_request"],
       "blocks": "advisory",
       "minutes": 4.0,

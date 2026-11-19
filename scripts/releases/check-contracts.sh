@@ -36,10 +36,7 @@ check dispatcher-contract scripts/transcription-dispatcher/validate-contract.sh
 check image-shell bash -c 'for path in infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
 check dispatcher-init tofu -chdir=infrastructure/nightly/transcription init -backend=false -input=false -upgrade=false
 check dispatcher-validate tofu -chdir=infrastructure/nightly/transcription validate -no-color
-check recorder-address-init tofu -chdir=infrastructure/nightly/recording-control-address init -backend=false -input=false -upgrade=false
-check recorder-address-validate tofu -chdir=infrastructure/nightly/recording-control-address validate -no-color
-check archive-cdn-init tofu -chdir=infrastructure/nightly/archive-cdn init -backend=false -input=false -upgrade=false
-check archive-cdn-validate tofu -chdir=infrastructure/nightly/archive-cdn validate -no-color
+check infrastructure-types pnpm --dir infrastructure check-types
 check workflow-lint actionlint
 printf 'Release contract logs: %s\n' "$logs"
 exit "$failed"

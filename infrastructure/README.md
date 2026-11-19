@@ -58,3 +58,94 @@ The bucket is `chalk-assets`, with public paths under `ui/`. Hashed media files 
 If replacing immutable assets, delete stale R2 objects and purge exact old URLs
 from Cloudflare edge cache when a cache-purge-capable token is available. The
 manifest should never point at stale assets.
+
+## Alchemy stacks
+
+`@chalk/infrastructure` pins Alchemy and its AWS provider to `2.0.0-beta.87`.
+The Nightly [recorder address](nightly/recording-control-address/README.md) and
+[archive CDN](nightly/archive-cdn/README.md) have Alchemy definitions. Their live
+cutover is not complete. Keep their OpenTofu configurations until both migrations
+pass the checks below. Other roots still use OpenTofu.
+
+Run commands from the repository root. Install with `pnpm install`, then run the
+credential-free check:
+
+```sh
+pnpm --dir infrastructure check-types
+```
+
+Both stacks share the AWS credential chain, including `AWS_PROFILE`, and pin
+`ap-southeast-1` independently of the profile's default region. Use Chalk's
+`nightly` and `production` stage names. These two entrypoints reject every stage
+except `nightly`. State uses `AWS.state()`: the on-demand `alchemy-state` DynamoDB
+table and its S3 overflow bucket in the same account and region. First use needs
+permission to provision both, or an operator must bootstrap the store ahead of
+time. The store holds a lease for each stack and stage.
+
+### Migrate an existing root
+
+Do not deploy against an empty Alchemy state store. EIP allocation IDs and
+CloudFront caller references cannot be recovered from physical names alone.
+`--adopt` does not replace the seed step.
+
+1. Stop infrastructure writers for the root. Save the current Git commit as the
+   undo, and capture live IDs, configuration, tags, and outputs privately.
+2. Back up both original state objects without changing their keys:
+
+   ```sh
+   export AWS_PROFILE=q9labs
+   account_id=$(aws sts get-caller-identity --query Account --output text)
+   state_bucket="chalk-nightly-state-$account_id"
+   backup_prefix="alchemy-migration-backup/$(date -u +%Y-%m-%dT%H%M%SZ)"
+   migration_dir=$(mktemp -d)
+   chmod 700 "$migration_dir"
+   for stack in recording-control-address archive-cdn; do
+     aws s3api copy-object --bucket "$state_bucket" --copy-source "$state_bucket/$stack/terraform.tfstate" --key "$backup_prefix/$stack/terraform.tfstate" >/dev/null
+     aws s3 cp "s3://$state_bucket/$stack/terraform.tfstate" "$migration_dir/$stack.json" --only-show-errors
+   done
+   ```
+
+3. Run the shared seed script for each root. It validates the managed resource
+   set, reads the existing resources from AWS, and writes completed Alchemy
+   records through `State`. It never writes OpenTofu state or product resources.
+   The first state-store use can provision the table and overflow bucket.
+   Add `--dry-run` to validate live mappings without provisioning or writing state.
+   A retry skips matching destination records and refuses conflicting records.
+   A missing live resource fails before any records are written.
+   CDN ETags and the bucket policy must still match the original state.
+
+   ```sh
+   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts recording-control-address nightly "$migration_dir/recording-control-address.json"
+   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts archive-cdn nightly "$migration_dir/archive-cdn.json"
+   ```
+
+4. Follow each stack's plan instructions. Before deploying, require only no-ops
+   or in-place ownership-tag changes with no observable product effect. Stop on
+   any create, replacement, or delete. Never use a deploy to fix a rejected plan.
+5. Deploy, then require an all-no-op second plan and a read-only `alchemy drift`
+   exit code of zero. Compare all captured live facts, including the full bucket
+   policy document. Do not use `drift --repair` or `drift --yes` as proof.
+6. Only after successful cutover, remove that root's `.tf` and
+   `.terraform.lock.hcl` files. Keep the original state objects and dated backups.
+
+The seed script covers only these two roots, not a generic Terraform provider
+schema. Extend its explicit mappings when another root migrates. It deliberately
+rejects modules, duplicate instances, deposed instances, and unknown resources.
+Do not run Alchemy and OpenTofu as concurrent owners.
+
+### Undo a cutover
+
+Delete only the Alchemy records for the affected stack and stage, using its
+entrypoint, before restoring the previous commit's OpenTofu configuration:
+
+```sh
+pnpm --dir infrastructure exec alchemy state delete recording-control-address/nightly --config nightly/recording-control-address/alchemy.run.ts --yes
+pnpm --dir infrastructure exec alchemy state delete archive-cdn/nightly --config nightly/archive-cdn/alchemy.run.ts --yes
+```
+
+Run only the command for the stack being rolled back. `state delete` forgets
+records and outputs, not AWS resources. Restore the saved commit's `.tf` files,
+initialize OpenTofu with the original backend, and inspect its plan against the
+untouched original state. An ownership-tag difference is expected if Alchemy
+added tags. Never run `tofu destroy`, `alchemy destroy`, or `alchemy nuke` for this
+migration. Do not redeploy Alchemy after deleting its records without reseeding.

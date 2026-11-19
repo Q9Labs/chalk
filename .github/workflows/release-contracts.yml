@@ -2,7 +2,7 @@ name: Release contracts
 
 # Release CI repeats the plan checks (check-contracts.sh --plan) before every deploy, so a change to the code those checks
 # inspect needs no run here. This run adds what release CI does not: the workflow lint, the dispatcher and recorder image
-# checks, the OpenTofu validation and the Podman cleanup contract. It runs when their inputs change.
+# checks, the infrastructure validation and the Podman cleanup contract. It runs when their inputs change.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -17,6 +17,9 @@ on:
       - scripts/transcription-dispatcher/**
       - infrastructure/managed-episode/**
       - infrastructure/recorder/**
+      - infrastructure/alchemy/**
+      - infrastructure/package.json
+      - infrastructure/tsconfig.json
       - infrastructure/nightly/**
       - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
       - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**

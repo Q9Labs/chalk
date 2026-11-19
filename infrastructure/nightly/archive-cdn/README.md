@@ -4,15 +4,48 @@ CloudFront in front of `recorder/*` in the `chalk-nightly-artifacts-<account>` b
 
 Access is by signed link only (key group). The bucket policy lets only this distribution read `recorder/*` and keeps the TLS-only deny statement. The installer still checks the archive SHA256.
 
-## Apply
+The Alchemy definition is ready for migration, but live cutover is not complete.
+The OpenTofu configuration remains for recovery. Follow the
+[shared migration procedure](../../README.md#migrate-an-existing-root) before the
+first plan. Keep the existing public key. Do not generate or rotate a key during
+cutover.
+
+## Plan and deploy
+
+Set `CHALK_ARCHIVE_CDN_PUBLIC_KEY_FILE` to an absolute path containing the existing
+RSA public key PEM. It replaces OpenTofu's `public_key_pem` input. The private key
+stays in the controller's private configuration and never enters this stack.
+From the repository root:
 
 ```sh
-openssl genrsa -out archive-cdn.pem 2048
-openssl rsa -in archive-cdn.pem -pubout -out archive-cdn.pub.pem
-cp backend.hcl.example backend.hcl   # set the nightly state bucket
-tofu init -backend-config=backend.hcl
-tofu apply -var="public_key_pem=$(cat archive-cdn.pub.pem)"
+export AWS_PROFILE=q9labs
+export CHALK_ARCHIVE_CDN_PUBLIC_KEY_FILE=/absolute/path/to/archive-cdn.pub.pem
+pnpm --dir infrastructure check-types
+pnpm --dir infrastructure exec alchemy plan --config nightly/archive-cdn/alchemy.run.ts --stage nightly --detailed
+pnpm --dir infrastructure exec alchemy deploy --config nightly/archive-cdn/alchemy.run.ts --stage nightly
+pnpm --dir infrastructure exec alchemy plan --config nightly/archive-cdn/alchemy.run.ts --stage nightly --detailed
+pnpm --dir infrastructure exec alchemy drift --config nightly/archive-cdn/alchemy.run.ts --stage nightly
 ```
+
+Deploy only after the first plan satisfies the shared migration rules. The
+second plan must contain only no-ops, and drift must exit zero without repair.
+The stack looks up the existing artifacts bucket without taking ownership of it.
+It manages only the bucket policy, preserving the TLS deny and the distribution's
+read access to `recorder/*`. The distribution retains HTTPS-only access, the
+managed CachingOptimized cache policy, HTTP/2, IPv6, both GET and HEAD, disabled
+compression, unrestricted geography, and the default CloudFront certificate.
+
+Outputs keep the names `distribution_url` and `key_pair_id`. Read them without
+a deployment:
+
+```sh
+pnpm --dir infrastructure exec alchemy state read archive-cdn/nightly/output --config nightly/archive-cdn/alchemy.run.ts
+```
+
+Capture the distribution ID and domain, public key ID, key group ID, origin
+access control ID, and complete bucket policy before and after cutover. Keep the
+values private. `--detailed` plans and state reads contain identifiers and public
+key material, so do not commit their output.
 
 ## Enable on the controller
 
@@ -27,5 +60,11 @@ CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64=<base64 of the private key P
 The values exceed the 4096-character Standard tier limit, so the parameters use the Advanced tier (USD 0.05 a month each). `scripts/releases/media.py pin_archives` keeps unknown keys and the tier, so the next release preserves these.
 
 ## Roll back
+
+To undo the infrastructure migration, [delete this stack's Alchemy state records
+and restore the previous commit's OpenTofu configuration](../../README.md#undo-a-cutover),
+using the untouched original state. That operation does not delete live resources.
+
+To disable CDN downloads independently of infrastructure ownership:
 
 Remove the three keys from both parameters; the controller then presigns S3 links as before. Nothing else changes.

@@ -114,14 +114,15 @@ const main = Effect.gen(function* () {
       ),
     );
   } else {
-    const access = get("aws_cloudfront_origin_access_control", "archive", Schema.Struct({ id: Schema.String, name: Schema.String, origin_access_control_origin_type: Schema.Literal("s3"), signing_behavior: Schema.Literal("always"), signing_protocol: Schema.Literal("sigv4") }));
-    const key = get("aws_cloudfront_public_key", "archive", Schema.Struct({ id: Schema.String, name: Schema.String, encoded_key: Schema.String, caller_reference: Schema.String }));
-    const group = get("aws_cloudfront_key_group", "archive", Schema.Struct({ id: Schema.String, name: Schema.String, items: Schema.Array(Schema.String) }));
+    const access = get("aws_cloudfront_origin_access_control", "archive", Schema.Struct({ id: Schema.String, etag: Schema.String, name: Schema.String, origin_access_control_origin_type: Schema.Literal("s3"), signing_behavior: Schema.Literal("always"), signing_protocol: Schema.Literal("sigv4") }));
+    const key = get("aws_cloudfront_public_key", "archive", Schema.Struct({ id: Schema.String, etag: Schema.String, name: Schema.String, encoded_key: Schema.String, caller_reference: Schema.String }));
+    const group = get("aws_cloudfront_key_group", "archive", Schema.Struct({ id: Schema.String, etag: Schema.String, name: Schema.String, items: Schema.Array(Schema.String) }));
     const distribution = get(
       "aws_cloudfront_distribution",
       "archive",
       Schema.Struct({
         id: Schema.String,
+        etag: Schema.String,
         caller_reference: Schema.String,
         enabled: Schema.Boolean,
         comment: Schema.String,
@@ -152,6 +153,9 @@ const main = Effect.gen(function* () {
     const distributionAttrs = yield* lookup(AWS.CloudFront.Distribution, { distributionId: distribution.id });
     const policyAttrs = yield* readPolicy(policy.bucket);
     if (!policyAttrs) return yield* Effect.die("Existing artifacts bucket policy was not found.");
+    if (accessAttrs.etag !== access.etag || keyAttrs.etag !== key.etag || groupAttrs.etag !== group.etag || distributionAttrs.etag !== distribution.etag || policyAttrs.policy !== canonicalPolicy(policy.policy)) {
+      return yield* Effect.die("Live CDN configuration differs from tofu state; resolve the drift before seeding.");
+    }
     rows.push(
       row(
         AWS.CloudFront.OriginAccessControl.Type,
