@@ -1,5 +1,7 @@
 # Nightly direct Sync trial (DNS-only path)
 
+**Retired experiment:** the persistent Nightly host was removed on 2026-11-15 (PR #1432). Do not run the historical setup below; use the [retirement instructions](../migration/README.md).
+
 This runbook opens a second, temporary path to the nightly Sync origin that skips the Cloudflare
 Tunnel, so you can measure what the Tunnel costs a given client link. It is for nightly only and
 is never a production configuration. The trial exposes nothing to the internet: the host's

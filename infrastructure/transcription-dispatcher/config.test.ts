@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseInputs } from "./config.ts";
+import { resourceProps } from "./resources.ts";
 import { buildEnvironment } from "./environment.ts";
 
 const valid = {
@@ -93,3 +94,16 @@ const invalid = [
 for (const update of invalid) {
   test(`invalid input is rejected before planning: ${Object.keys(update).join(",")}`, () => assert.throws(() => parseInputs({ ...valid, ...update })));
 }
+
+test("ephemeral names isolate concurrent runs and reject persistent Nightly", () => {
+  const inputs = ["nightly-one", "nightly-two"].map((stage) => parseInputs({ ...valid, environment_name: stage, function_name: `chalk-${stage}-transcription-dispatcher`, scheduler_name: `chalk-${stage}-transcription-reconcile` }));
+  const names = inputs.map((input) => {
+    const props = resourceProps(input, "000000000000", "ap-southeast-1");
+    return [props.log.logGroupName, props.asyncFailure.queueName, props.schedulerDlq.queueName, props.executionRole.roleName, props.schedulerRole.roleName, props.fn.functionName, props.schedule.name, ...Object.values(props.alarms).map((alarm) => alarm.name)];
+  });
+  assert.equal(names[0]?.length, 12);
+  for (const name of names[0] ?? []) assert.ok(name && !names[1]?.includes(name));
+  assert.throws(() => parseInputs({ ...valid, environment_name: "nightly" }));
+  assert.throws(() => parseInputs({ ...valid, function_name: "chalk-other-transcription-dispatcher" }));
+  assert.throws(() => parseInputs({ ...valid, scheduler_state: "ENABLED" }));
+});

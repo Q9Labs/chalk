@@ -71,5 +71,4 @@ makes no product changes. Python pin retention reads the pinned DynamoDB output
 encoding directly, including its S3 overflow form, without installing Node,
 bootstrapping state or acquiring a lease. Do not run it against unseeded production as a probe.
 Use the seed dry-run for production preparation. After seeding, expect all 13
-(or 14) resources to plan as no-ops. Nightly's no-op cutover and dry-run are not a
-substitute for a real Nightly release before production cutover.
+(or 14) resources to plan as no-ops. A successful run-owned deploy/release/no-op/destroy proof is required before production cutover; see [the proof command](../migration/README.md#ephemeral-release-gate-for-production-cutover).

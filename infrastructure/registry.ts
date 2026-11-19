@@ -24,7 +24,7 @@ const targets = [
   { stackName: "recorder", directory: "recorder", stageKind: "production", provisioner: "opentofu", seeded: false, reason: "Ported; reconcile CORS/pool firewall drift before cutover" },
   { stackName: "media-relay-access", directory: "media-relay-access", stageKind: "production", provisioner: "none", seeded: false, reason: "Ported, deliberately not deployed; TURN key creation/adoption not authorized" },
 ] as const satisfies readonly RegisteredTarget[];
-export type Target = typeof targets[number];
+export type Target = (typeof targets)[number];
 export type RetiredTarget = Extract<Target, { stageKind: "retired" }>;
 export const stacks = targets.filter((target, index) => targets.findIndex((candidate) => candidate.stackName === target.stackName) === index);
 export const entryFile = (stack: Target) => `${stack.directory}/alchemy.run.ts`;
@@ -48,12 +48,20 @@ export function retiredTarget(name: string | undefined): RetiredTarget {
   return target;
 }
 export function registryTable() {
-  return ["| Stack | Stage kind | Provisioner | Status | Entry |", "| --- | --- | --- | --- | --- |", ...targets.map((target) => `| ${target.stackName} | ${target.stageKind === "retired" ? "retired legacy Nightly (not deployable)" : target.stageKind === "ephemeral" ? "nightly-<run-id> (ephemeral)" : "production (persistent)"} | ${target.stageKind === "retired" ? "cleanup inventory" : target.provisioner} | ${target.reason} | [${entryFile(target)}](${entryFile(target)}) |`)].join("\n");
+  return [
+    "| Stack | Stage kind | Provisioner | Status | Entry |",
+    "| --- | --- | --- | --- | --- |",
+    ...targets.map(
+      (target) =>
+        `| ${target.stackName} | ${target.stageKind === "retired" ? "retired legacy Nightly (not deployable)" : target.stageKind === "ephemeral" ? "nightly-<run-id> (ephemeral)" : "production (persistent)"} | ${target.stageKind === "retired" ? "cleanup inventory" : target.provisioner} | ${target.reason} | [${entryFile(target)}](${entryFile(target)}) |`,
+    ),
+  ].join("\n");
 }
 export function checkRegistry() {
-  for (const stack of stacks) for (const file of [entryFile(stack), `${stack.directory}/config.ts`, `${stack.directory}/README.md`]) {
-    if (!existsSync(new URL(file, import.meta.url))) throw new Error(`Registry file missing: ${file}`);
-  }
+  for (const stack of stacks)
+    for (const file of [entryFile(stack), `${stack.directory}/config.ts`, `${stack.directory}/README.md`]) {
+      if (!existsSync(new URL(file, import.meta.url))) throw new Error(`Registry file missing: ${file}`);
+    }
   const readme = readFileSync(new URL("README.md", import.meta.url), "utf8");
   if (!readme.includes(`<!-- stacks:start -->\n${registryTable()}\n<!-- stacks:end -->`)) throw new Error("Registry table is stale: pnpm infra table");
 }

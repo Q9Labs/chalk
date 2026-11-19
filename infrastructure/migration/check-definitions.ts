@@ -19,7 +19,9 @@ const moves = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schem
 const originalPath = (path: string) => Object.entries(moves).find(([, current]) => current === path)?.[0] ?? path;
 function ast(node: ts.Node): Schema.Json {
   const children: Schema.Json[] = [];
-  ts.forEachChild(node, (child) => { children.push(ast(child)); });
+  ts.forEachChild(node, (child) => {
+    children.push(ast(child));
+  });
   const text = ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) || ts.isRegularExpressionLiteral(node) || ts.isBigIntLiteral(node) ? node.text : null;
   const flags = ts.isVariableDeclarationList(node) ? node.flags & ts.NodeFlags.BlockScoped : 0;
   return [node.kind, flags, text, children];
@@ -29,11 +31,14 @@ const oldSource = (path: string) => execFileSync("git", ["show", `${base}:${path
 const newSource = (path: string) => readFileSync(resolve(root, path), "utf8");
 function normalizeStageBoundaries(identity: string, source: string, before: boolean) {
   if (identity.endsWith("alchemy/dispatcher/stack.ts")) {
-    source = source.replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS").replace('previous !== undefined || stage !== "production"', 'previous !== undefined').replace(/^    requireInput\(previous !== undefined \|\| file !== undefined[^\n]+\n/m, "");
+    source = source
+      .replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS")
+      .replace('previous !== undefined || stage !== "production"', "previous !== undefined")
+      .replace(/^    requireInput\(previous !== undefined \|\| file !== undefined[^\n]+\n/m, "");
   }
   if (!before && identity.endsWith("alchemy/dispatcher/resources.ts")) source = source.replaceAll('input.environment_name !== "production"', 'input.environment_name === "nightly"');
   if (!before && identity === "infrastructure/cloudflare-turn/alchemy.run.ts") source = source.replace('"media-relay-access"', '"cloudflare-turn"');
-  if (!before && identity.includes("nightly/") || !before && identity.includes("managed-episode/direct-sync/alchemy.run.ts")) source = source.replaceAll("retiredStage", "nightly");
+  if ((!before && identity.includes("nightly/")) || (!before && identity.includes("managed-episode/direct-sync/alchemy.run.ts"))) source = source.replaceAll("retiredStage", "nightly");
   if (identity.endsWith("managed-episode/direct-sync/config.ts")) source = source.replace("export const directSyncConfig", "const directSyncConfig");
   if (!before && identity.endsWith("alchemy/dispatcher/inputs.ts")) source = source.replace(/  const stage = parseStage\(input.environment_name\);[\s\S]*?(?=  return input;)/, "");
   return source;
@@ -57,7 +62,14 @@ function normalizedSource(path: string, source: string, before: boolean) {
   if (!before && path === "infrastructure/platform/config.ts") source = source.replace(/^      yield\* resolveCredentials.pipe[^\n]+\n/m, "");
   return source;
 }
-const inputModules = new Set(["infrastructure/recorder-runtime-downloads/config.ts", "infrastructure/recorder-control-endpoint/config.ts", "infrastructure/media-relay-access/config.ts", "infrastructure/platform/inputs.ts", "infrastructure/platform/credentials.ts", "infrastructure/platform/stages.ts"]);
+const inputModules = new Set([
+  "infrastructure/recorder-runtime-downloads/config.ts",
+  "infrastructure/recorder-control-endpoint/config.ts",
+  "infrastructure/media-relay-access/config.ts",
+  "infrastructure/platform/inputs.ts",
+  "infrastructure/platform/credentials.ts",
+  "infrastructure/platform/stages.ts",
+]);
 const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
   ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],
@@ -67,7 +79,10 @@ const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/alchemy/recorder-pools.ts", ["@distilled.cloud/digitalocean/Credentials", "effect/http/FetchHttpClient", "effect/Redacted"]],
 ]);
 function isInputLoader(node: ts.Statement, identity: string) {
-  return ts.isVariableStatement(node) && node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()));
+  return (
+    ts.isVariableStatement(node) &&
+    node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()))
+  );
 }
 function graph(entry: string, before: boolean) {
   const modules = new Map<string, { code: string; edges: string[]; declarations: string[] }>();
@@ -76,21 +91,25 @@ function graph(entry: string, before: boolean) {
     if (modules.has(identity)) return;
     const raw = before ? oldSource(path) : newSource(path);
     const file = parse(path, normalizedSource(path, raw, before));
-    const edges: string[] = [], dependencies: string[] = [], declarations: string[] = [];
+    const edges: string[] = [],
+      dependencies: string[] = [],
+      declarations: string[] = [];
     const runtime: ts.Statement[] = [];
+    function addImport(statement: ts.ImportDeclaration, specifier: string) {
+      if (specifier.startsWith(".")) {
+        const dependency = posix.normalize(posix.join(dirname(path), specifier));
+        if (!before && inputModules.has(dependency)) {
+          if (dependency.endsWith("media-relay-access/config.ts")) edges.push('import * as Schema from "effect/Schema";');
+          return;
+        }
+        dependencies.push(dependency);
+        const clause = identity.endsWith("managed-episode/direct-sync/alchemy.run.ts") && dependency.endsWith("/config.ts") ? "stack-inputs" : (statement.importClause?.getText(file) ?? "side-effect");
+        edges.push(`${before ? dependency : originalPath(dependency)}:${clause}`);
+      } else if (!(boundaryImports.get(identity) ?? []).includes(specifier)) edges.push(statement.getText(file));
+    }
     for (const statement of file.statements) {
       if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
-        const specifier = statement.moduleSpecifier.text;
-        if (specifier.startsWith(".")) {
-          const dependency = posix.normalize(posix.join(dirname(path), specifier));
-          if (!before && inputModules.has(dependency)) {
-            if (dependency.endsWith("media-relay-access/config.ts")) edges.push('import * as Schema from "effect/Schema";');
-            continue;
-          }
-          dependencies.push(dependency);
-          const clause = identity.endsWith("managed-episode/direct-sync/alchemy.run.ts") && dependency.endsWith("/config.ts") ? "stack-inputs" : statement.importClause?.getText(file) ?? "side-effect";
-          edges.push(`${before ? dependency : originalPath(dependency)}:${clause}`);
-        } else if (!(boundaryImports.get(identity) ?? []).includes(specifier)) edges.push(statement.getText(file));
+        addImport(statement, statement.moduleSpecifier.text);
       } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
         const dependency = posix.normalize(posix.join(dirname(path), statement.moduleSpecifier.text));
         dependencies.push(dependency);
@@ -100,7 +119,8 @@ function graph(entry: string, before: boolean) {
     function calls(node: ts.Node) {
       if (ts.isCallExpression(node)) {
         const id = node.arguments[0];
-        if (id && ts.isStringLiteral(id) && /^(?:AWS\.|DigitalOcean\.|Cloudflare\.|SfuDroplet$|VersionedFunction$|BucketPolicy$|EipAssociation$|NetworkInterfaceSecurityGroup$|RecordingBucket$|CaptureTag$|RenderTag$|CaptureFirewall$|RenderFirewall$|R2Lifecycle$)/.test(node.expression.getText(file))) declarations.push(`${node.expression.getText(file)}:${id.text}`);
+        if (id && ts.isStringLiteral(id) && /^(?:AWS\.|DigitalOcean\.|Cloudflare\.|SfuDroplet$|VersionedFunction$|BucketPolicy$|EipAssociation$|NetworkInterfaceSecurityGroup$|RecordingBucket$|CaptureTag$|RenderTag$|CaptureFirewall$|RenderFirewall$|R2Lifecycle$)/.test(node.expression.getText(file)))
+          declarations.push(`${node.expression.getText(file)}:${id.text}`);
       }
       ts.forEachChild(node, calls);
     }
@@ -114,7 +134,8 @@ function graph(entry: string, before: boolean) {
 }
 for (const stack of [...stacks.map((stack) => ({ name: stack.stackName, entry: `infrastructure/${entryFile(stack)}` })), { name: "r2-transcription-lifecycle", entry: "infrastructure/transcription-storage/temporary-object-cleanup.ts" }]) {
   const entry = stack.entry;
-  const before = graph(originalPath(entry), true), after = graph(entry, false);
+  const before = graph(originalPath(entry), true),
+    after = graph(entry, false);
   const differences = before.filter(([path, value]) => !isDeepStrictEqual(after.find(([name]) => name === path)?.[1], value)).map(([path]) => path);
   assert.ok(isDeepStrictEqual(after, before), `${stack.name}: changed declaration/dependencies in ${differences.join(", ")}`);
   const hash = createHash("sha256").update(JSON.stringify(before)).digest("hex");

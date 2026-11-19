@@ -21,7 +21,7 @@ Nightly state. Original state and dated backups remain untouched.
 ## Offline declaration comparison
 
 ```sh
-pnpm --dir infrastructure exec tsx migration/check-definitions.ts aae2d06c4a
+pnpm --dir infrastructure exec tsx migration/check-definitions.ts 06cc8e4d90
 ```
 
 `structure-moves.json` records source relocations. The comparison walks every
@@ -58,11 +58,11 @@ AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint
 AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint --apply
 ```
 
-| Retired component | Deletes | Keeps |
-| --- | --- | --- |
-| Recorder runtime downloads (`archive-cdn/nightly`) | Distribution, public key, key group, origin access control, its state/output, and only `AllowRecorderArchiveCloudFront` from the shared bucket policy. | Looked-up artifacts bucket, every object/version, TLS deny and unrelated bucket-policy statements. |
-| Transcription dispatcher | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output. | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
-| Recorder control endpoint | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent. | Refuses retained resources instead of silently forgetting an unexpected protected allocation. |
+| Retired component                                  | Deletes                                                                                                                                                | Keeps                                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Recorder runtime downloads (`archive-cdn/nightly`) | Distribution, public key, key group, origin access control, its state/output, and only `AllowRecorderArchiveCloudFront` from the shared bucket policy. | Looked-up artifacts bucket, every object/version, TLS deny and unrelated bucket-policy statements.    |
+| Transcription dispatcher                           | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output.                                    | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
+| Recorder control endpoint                          | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent.                                                                 | Refuses retained resources instead of silently forgetting an unexpected protected allocation.         |
 
 The bucket-policy retirement provider reads the current policy and removes only
 its grant; retry preserves all unrelated statements. Destroy reads saved state

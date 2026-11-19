@@ -12,7 +12,11 @@ import { planView } from "./plan-view.ts";
 interface ExternalResource extends Resource<"Test.Dispatcher.External", { value: number }, { value: number }> {}
 const ExternalResource = Resource<ExternalResource>("Test.Dispatcher.External");
 
-for (const { apply, allowed } of [{ apply: true, allowed: 2 }, { apply: false, allowed: 2 }, { apply: true, allowed: 3 }]) {
+for (const { apply, allowed } of [
+  { apply: true, allowed: 2 },
+  { apply: false, allowed: 2 },
+  { apply: true, allowed: 3 },
+]) {
   test(`apply=${apply}, allowed=${allowed}: only a checked in-memory plan can apply`, async () => {
     let desired = 2;
     let observed = 1;
@@ -69,7 +73,8 @@ for (const { apply, allowed } of [{ apply: true, allowed: 2 }, { apply: false, a
         assert.equal(applied, apply);
       }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
-    if (allowed === 2) await run; else await assert.rejects(run, /outside the allowlist/);
+    if (allowed === 2) await run;
+    else await assert.rejects(run, /outside the allowlist/);
     assert.equal(observed, apply && allowed === 2 ? 2 : 1);
     assert.equal(evaluations, 1);
   });

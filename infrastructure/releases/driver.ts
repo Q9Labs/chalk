@@ -6,6 +6,7 @@ import { State } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { readFileSync, writeFileSync } from "node:fs";
+import { requireDeployable, selectStack } from "../registry.ts";
 import { environmentName } from "../platform/config.ts";
 import stack, { stackName } from "../transcription-dispatcher/alchemy.run.ts";
 import { parseInputs } from "../transcription-dispatcher/config.ts";
@@ -17,8 +18,9 @@ import { planView } from "./plan-view.ts";
 const [commandArg, stageArg, ...args] = process.argv.slice(2);
 const command = Schema.decodeUnknownSync(Schema.Literals(["plan", "noop", "binding", "release", "mai"]))(commandArg);
 const stage = Schema.decodeUnknownSync(environmentName)(stageArg);
-if (args.some((arg) => arg !== "--apply")) throw new Error("Usage: driver.ts <plan|noop|binding|release|mai> <nightly|production> [--apply]");
+if (args.some((arg) => arg !== "--apply")) throw new Error("Usage: driver.ts <plan|noop|binding|release|mai> <production|nightly-run-id> [--apply]");
 if (args.includes("--apply") && (command === "plan" || command === "noop")) throw new Error("Read-only operations cannot apply");
+if (args.includes("--apply")) requireDeployable(selectStack("transcription-dispatcher", stage).target);
 const program = Effect.gen(function* () {
   const plan = yield* Alchemist.plan({ stack, stage, operation: "deploy" });
   const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));

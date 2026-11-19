@@ -15,5 +15,11 @@ export function requireCloudflareCredentials() {
   credential("CLOUDFLARE_API_TOKEN");
   credential("CLOUDFLARE_ACCOUNT_ID");
 }
-export const digitalOceanClient = (scope: "sfu" | "CAPTURE" | "RENDER") => Layer.merge(FetchHttpClient.layer, Layer.succeed(DigitalOceanCredentials,
-  Effect.sync(() => ({ apiKey: Redacted.make(credential(scope === "sfu" ? "DIGITALOCEAN_TOKEN" : scope === "CAPTURE" ? "CHALK_CAPTURE_DIGITALOCEAN_TOKEN" : "CHALK_RENDER_DIGITALOCEAN_TOKEN")), apiBaseUrl: "https://api.digitalocean.com" }))));
+export const digitalOceanClient = (scope: "sfu" | "CAPTURE" | "RENDER") =>
+  Layer.merge(
+    FetchHttpClient.layer,
+    Layer.succeed(
+      DigitalOceanCredentials,
+      Effect.sync(() => ({ apiKey: Redacted.make(credential(scope === "sfu" ? "DIGITALOCEAN_TOKEN" : scope === "CAPTURE" ? "CHALK_CAPTURE_DIGITALOCEAN_TOKEN" : "CHALK_RENDER_DIGITALOCEAN_TOKEN")), apiBaseUrl: "https://api.digitalocean.com" })),
+    ),
+  );

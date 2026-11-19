@@ -16,12 +16,14 @@ const proof = await loadInputs("dispatcher release proof", (value) => {
 if ([proof.initial, proof.release].some((input) => input.environment_name !== stage.name)) throw new Error("Both proof inputs must name this ephemeral stage");
 if (proof.initial.release_id === proof.release.release_id || proof.initial.artifact_sha256 === proof.release.artifact_sha256) throw new Error("A real release proof requires different release identities and different versioned ZIP bytes");
 const directory = await mkdtemp(join(tmpdir(), "chalk-release-proof-"));
-const initial = join(directory, "initial.json"), release = join(directory, "release.json");
+const initial = join(directory, "initial.json"),
+  release = join(directory, "release.json");
 await writeFile(initial, JSON.stringify(proof.initial), { mode: 0o600 });
 await writeFile(release, JSON.stringify(proof.release), { mode: 0o600 });
 function run(args: string[], file?: string) {
   const environment = { ...process.env };
-  if (file) environment.CHALK_INFRA_INPUTS = file; else delete environment.CHALK_INFRA_INPUTS;
+  if (file) environment.CHALK_INFRA_INPUTS = file;
+  else delete environment.CHALK_INFRA_INPUTS;
   const result = spawnSync("pnpm", ["exec", "tsx", ...args], { stdio: "inherit", env: environment });
   if (result.error || result.status !== 0) throw new Error("Ephemeral release proof operation failed; inspect private diagnostics");
 }

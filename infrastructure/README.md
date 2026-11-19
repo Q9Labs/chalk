@@ -1,21 +1,21 @@
 # Infrastructure
 
 Stacks describe product capabilities, not environments. Each registered stack has
-`<component>/alchemy.run.ts`, `config.ts` and `README.md`. SFU variants share one
+`<component>/alchemy.run.ts`, `<component>/config.ts` and `README.md`. SFU variants share one
 component. Runtime assets under `sfu`, `recorder` and `managed-episode` stay put.
 
 ## Vocabulary
 
-| Name | What it is for |
-| --- | --- |
-| `recorder-runtime-downloads` | Delivers signed recorder software bundles to recorder hosts, **not finished user recordings**. |
-| `recorder-control-endpoint` | Gives a recorder controller a stable public network endpoint. |
-| `sync-direct-access` | Connects clients directly to a Sync host without its tunnel. |
-| `media-relay-access` | Supplies credentials for relaying media when direct connectivity fails. |
-| `sfu` / `sfu-standby` | Runs the primary / standby media forwarding server. |
-| `recorder` | Provisions capture and render workers and recording storage. |
-| `transcription-dispatcher` | Dispatches transcription work and reconciles stalled jobs. |
-| `transcription-storage` | Defines temporary transcription-object cleanup; it is an unused reusable declaration, not an eighth stack. |
+| Name                         | What it is for                                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `recorder-runtime-downloads` | Delivers signed recorder software bundles to recorder hosts, **not finished user recordings**.             |
+| `recorder-control-endpoint`  | Gives a recorder controller a stable public network endpoint.                                              |
+| `sync-direct-access`         | Connects clients directly to a Sync host without its tunnel.                                               |
+| `media-relay-access`         | Supplies credentials for relaying media when direct connectivity fails.                                    |
+| `sfu` / `sfu-standby`        | Runs the primary / standby media forwarding server.                                                        |
+| `recorder`                   | Provisions capture and render workers and recording storage.                                               |
+| `transcription-dispatcher`   | Dispatches transcription work and reconciles stalled jobs.                                                 |
+| `transcription-storage`      | Defines temporary transcription-object cleanup; it is an unused reusable declaration, not an eighth stack. |
 
 The download name follows [recorder release keys](../scripts/recorder/README.md)
 (`recorder/<role>/<sha256>.tar.gz`) and the recorder fleet's signed-bundle adapter.
@@ -37,20 +37,22 @@ There is no framework, base class or environment-specific stack entrypoint.
 this checked table. Run `pnpm infra table` after changing it.
 
 <!-- stacks:start -->
-| Stack | Stage kind | Provisioner | Status | Entry |
-| --- | --- | --- | --- | --- |
-| recorder-runtime-downloads | retired legacy Nightly (not deployable) | cleanup inventory | Retire: Nightly proofs do not consume recorder runtime CDN downloads | [recorder-runtime-downloads/alchemy.run.ts](recorder-runtime-downloads/alchemy.run.ts) |
-| recorder-control-endpoint | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host | [recorder-control-endpoint/alchemy.run.ts](recorder-control-endpoint/alchemy.run.ts) |
-| sync-direct-access | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host | [sync-direct-access/alchemy.run.ts](sync-direct-access/alchemy.run.ts) |
-| sfu | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| transcription-dispatcher | retired legacy Nightly (not deployable) | cleanup inventory | Retire: no between-run control API or reconciliation schedule; per-run proof replaces the old release gate | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| transcription-dispatcher | nightly-<run-id> (ephemeral) | alchemy | Run-owned deploy/release/convergence/cleanup proof; no seed or always-on Nightly | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| transcription-dispatcher | production (persistent) | opentofu | Ported; production cutover waits for an ephemeral release proof | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| sfu | production (persistent) | opentofu | Primary variant: ported; live firewall drift blocks cutover | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | production (persistent) | opentofu | Standby variant: ported; dry-run is not cutover authorization | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| recorder | production (persistent) | opentofu | Ported; reconcile CORS/pool firewall drift before cutover | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
-| media-relay-access | production (persistent) | none | Ported, deliberately not deployed; TURN key creation/adoption not authorized | [media-relay-access/alchemy.run.ts](media-relay-access/alchemy.run.ts) |
+
+| Stack                      | Stage kind                              | Provisioner       | Status                                                                                                     | Entry                                                                                  |
+| -------------------------- | --------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| recorder-runtime-downloads | retired legacy Nightly (not deployable) | cleanup inventory | Retire: Nightly proofs do not consume recorder runtime CDN downloads                                       | [recorder-runtime-downloads/alchemy.run.ts](recorder-runtime-downloads/alchemy.run.ts) |
+| recorder-control-endpoint  | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host     | [recorder-control-endpoint/alchemy.run.ts](recorder-control-endpoint/alchemy.run.ts)   |
+| sync-direct-access         | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host     | [sync-direct-access/alchemy.run.ts](sync-direct-access/alchemy.run.ts)                 |
+| sfu                        | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances      | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
+| sfu-standby                | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances      | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
+| transcription-dispatcher   | retired legacy Nightly (not deployable) | cleanup inventory | Retire: no between-run control API or reconciliation schedule; per-run proof replaces the old release gate | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts)     |
+| transcription-dispatcher   | nightly-<run-id> (ephemeral)            | alchemy           | Run-owned deploy/release/convergence/cleanup proof; no seed or always-on Nightly                           | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts)     |
+| transcription-dispatcher   | production (persistent)                 | opentofu          | Ported; production cutover waits for an ephemeral release proof                                            | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts)     |
+| sfu                        | production (persistent)                 | opentofu          | Primary variant: ported; live firewall drift blocks cutover                                                | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
+| sfu-standby                | production (persistent)                 | opentofu          | Standby variant: ported; dry-run is not cutover authorization                                              | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
+| recorder                   | production (persistent)                 | opentofu          | Ported; reconcile CORS/pool firewall drift before cutover                                                  | [recorder/alchemy.run.ts](recorder/alchemy.run.ts)                                     |
+| media-relay-access         | production (persistent)                 | none              | Ported, deliberately not deployed; TURN key creation/adoption not authorized                               | [media-relay-access/alchemy.run.ts](media-relay-access/alchemy.run.ts)                 |
+
 <!-- stacks:end -->
 
 `production` is persistent. `nightly-<run-id>` is ephemeral: a lowercase
@@ -86,7 +88,7 @@ See [proof and retirement instructions](migration/README.md).
 
 ## One input boundary
 
-Set `CHALK_INFRA_INPUTS` to a protected JSON file. Each component's `config.ts`
+Set `CHALK_INFRA_INPUTS` to a protected JSON file. Each component's `<component>/config.ts`
 parses a typed schema with excess-property rejection before resource work.
 Input keys use `snake_case`; never commit private input files. Schema failures
 name the component/source without printing values. SFU and recorder retain their
@@ -106,14 +108,14 @@ with explicit validated inputs. Production always fails loudly when unseeded.
 
 ## One credential boundary
 
-Credentials are not stack inputs. `platform/credentials.ts` and `config.ts`
+Credentials are not stack inputs. `platform/credentials.ts` and `<component>/config.ts`
 resolve them from the protected operator/CI environment and never print values:
 
-| Provider | Source |
-| --- | --- |
-| AWS | Standard credential chain: operator `AWS_PROFILE` or CI/instance role; state is in `ap-southeast-1`. |
-| Cloudflare | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. |
-| DigitalOcean SFU | `DIGITALOCEAN_TOKEN`. |
+| Provider                    | Source                                                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| AWS                         | Standard credential chain: operator `AWS_PROFILE` or CI/instance role; state is in `ap-southeast-1`.            |
+| Cloudflare                  | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.                                                             |
+| DigitalOcean SFU            | `DIGITALOCEAN_TOKEN`.                                                                                           |
 | DigitalOcean recorder pools | `CHALK_CAPTURE_DIGITALOCEAN_TOKEN`, `CHALK_RENDER_DIGITALOCEAN_TOKEN`; separate pool authorities stay separate. |
 
 Missing credentials name the missing source, never its value. State uses the

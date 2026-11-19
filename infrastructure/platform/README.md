@@ -13,20 +13,20 @@ change does not set the variable, create a role or change IAM. Its dedicated
 repository's default-branch workflow (`aud=sts.amazonaws.com`). Do not reuse a
 deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The current active cutover list is empty; retired Nightly is excluded:
 
-| Boundary | Actions |
-| --- | --- |
-| Caller identity | `sts:GetCallerIdentity` |
-| Existing `alchemy-state` table | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query` |
-| Stage leases on that table | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row |
-| Existing state overflow bucket | `s3:ListBucket` (the state backend checks existence with HeadBucket) |
-| Existing state overflow objects | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket |
-| Archive CDN | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource`, `cloudfront:GetPublicKeyConfig`, `cloudfront:GetKeyGroupConfig`, `cloudfront:GetOriginAccessControlConfig`; `s3:GetBucketPolicy` for the existing artifacts bucket |
-| Dispatcher IAM roles | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags` |
-| Dispatcher queues | `sqs:GetQueueAttributes`, `sqs:ListQueueTags` |
-| Dispatcher logs | `logs:DescribeLogGroups`, `logs:ListTagsForResource` |
-| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy` |
-| Dispatcher schedule | `scheduler:GetSchedule` |
-| Dispatcher alarms | `cloudwatch:DescribeAlarms`, `cloudwatch:ListTagsForResource` |
+| Boundary                                   | Actions                                                                                                                                                                                                                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caller identity                            | `sts:GetCallerIdentity`                                                                                                                                                                                                                                                |
+| Existing `alchemy-state` table             | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query`                                                                                                                                                                                                         |
+| Stage leases on that table                 | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row                                                                                       |
+| Existing state overflow bucket             | `s3:ListBucket` (the state backend checks existence with HeadBucket)                                                                                                                                                                                                   |
+| Existing state overflow objects            | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket                                                                                                                                                                          |
+| Archive CDN                                | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource`, `cloudfront:GetPublicKeyConfig`, `cloudfront:GetKeyGroupConfig`, `cloudfront:GetOriginAccessControlConfig`; `s3:GetBucketPolicy` for the existing artifacts bucket |
+| Dispatcher IAM roles                       | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags`                                                                                                                                                         |
+| Dispatcher queues                          | `sqs:GetQueueAttributes`, `sqs:ListQueueTags`                                                                                                                                                                                                                          |
+| Dispatcher logs                            | `logs:DescribeLogGroups`, `logs:ListTagsForResource`                                                                                                                                                                                                                   |
+| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy`                                                                                                                                                                                        |
+| Dispatcher schedule                        | `scheduler:GetSchedule`                                                                                                                                                                                                                                                |
+| Dispatcher alarms                          | `cloudwatch:DescribeAlarms`, `cloudwatch:ListTagsForResource`                                                                                                                                                                                                          |
 
 Provider state reads use existing recorded identities, not account-wide adoption
 or list/inventory operations. No workload mutation, state bootstrap, state

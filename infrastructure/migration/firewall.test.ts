@@ -15,4 +15,3 @@ test("state import accepts legacy null ICMP ports but never unspecified TCP port
   const tcp = Schema.decodeUnknownSync(tofuFirewall)(fixture("tcp"));
   assert.throws(() => firewallProps(tcp), /Invalid firewall port range/);
 });
-

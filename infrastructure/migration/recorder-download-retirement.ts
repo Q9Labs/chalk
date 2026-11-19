@@ -20,15 +20,21 @@ export function removeDownloadGrant(document: Schema.MutableJson): Schema.Mutabl
 }
 export function retirementStack(stack: ConfiguredStack<unknown, never>) {
   if (stack.stackName !== "archive-cdn") return stack;
-  const policy = Provider.effect(BucketPolicy, Effect.gen(function* () {
-    const original = yield* Provider.findProvider(BucketPolicy);
-    return { ...original, delete: Effect.fn(function* ({ output }: Parameters<typeof original.delete>[0]) {
-      const current = yield* readPolicy(output.bucket);
-      if (!current) return yield* Effect.die("Artifacts bucket policy missing; retirement refused");
-      const before = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(current.policy);
-      const after = removeDownloadGrant(before);
-      if (JSON.stringify(before) !== JSON.stringify(after)) yield* s3.putBucketPolicy({ Bucket: output.bucket, Policy: JSON.stringify(after) });
-    }) };
-  }).pipe(Effect.provide(stack.providers)));
+  const policy = Provider.effect(
+    BucketPolicy,
+    Effect.gen(function* () {
+      const original = yield* Provider.findProvider(BucketPolicy);
+      return {
+        ...original,
+        delete: Effect.fn(function* ({ output }: Parameters<typeof original.delete>[0]) {
+          const current = yield* readPolicy(output.bucket);
+          if (!current) return yield* Effect.die("Artifacts bucket policy missing; retirement refused");
+          const before = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(current.policy);
+          const after = removeDownloadGrant(before);
+          if (JSON.stringify(before) !== JSON.stringify(after)) yield* s3.putBucketPolicy({ Bucket: output.bucket, Policy: JSON.stringify(after) });
+        }),
+      };
+    }).pipe(Effect.provide(stack.providers)),
+  );
   return Alchemy.Stack(stack.stackName, { state: stack.state, providers: Layer.merge(stack.providers, policy.pipe(Layer.provide(providers))) }, Effect.void);
 }

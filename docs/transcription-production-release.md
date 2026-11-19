@@ -30,7 +30,7 @@ A missing corpus qualification, private secret comparison, invoke-role policy or
 
 ## Cut production over to Alchemy
 
-Do this only after a real Nightly release has passed through the new path. Stop
+Do this only after the [ephemeral dispatcher release proof](../infrastructure/migration/README.md#ephemeral-release-gate-for-production-cutover) passes through deploy, release, no-op re-plan and complete teardown. There is no persistent Nightly stage. Stop
 concurrent infrastructure writers. Keep the pre-cutover commit and all evidence
 in the protected workspace. Read and back up the original state without changing
 it. Run from the repository root:

@@ -29,7 +29,8 @@ test("one input file boundary validates without disclosing private values", asyn
     await writeFile(file, '{"count":"PRIVATE_SENTINEL"}');
     await assert.rejects(loadInputs("test", parse), { message: "Invalid or unreadable test inputs from CHALK_INFRA_INPUTS; contents are not printed" });
   } finally {
-    if (previous === undefined) delete process.env.CHALK_INFRA_INPUTS; else process.env.CHALK_INFRA_INPUTS = previous;
+    if (previous === undefined) delete process.env.CHALK_INFRA_INPUTS;
+    else process.env.CHALK_INFRA_INPUTS = previous;
     await rm(directory, { recursive: true });
   }
 });

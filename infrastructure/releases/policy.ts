@@ -42,7 +42,8 @@ function patch(value: Schema.MutableJson, edit: Patch) {
   object(at(value, keys))[key] = structuredClone(edit.value);
 }
 function equalExcept(before: Schema.MutableJson, after: Schema.MutableJson, allowed: readonly string[], label: string) {
-  const left = object(before), right = object(after);
+  const left = object(before),
+    right = object(after);
   if (!isDeepStrictEqual(Object.keys(left).sort(), Object.keys(right).sort())) throw new Error(`${label} names changed`);
   for (const key of Object.keys(left)) {
     if (!allowed.includes(key) && !isDeepStrictEqual(left[key], right[key])) throw new Error(`${label} changes unrelated values`);
@@ -55,7 +56,8 @@ export function checkPlan(plan: Plan, policy: Policy): void {
     if (!rule || seen.has(row.id) || row.type !== rule.type) throw new Error("Plan contains an unexpected resource");
     seen.add(row.id);
     if (row.action !== "noop" && row.action !== "update") throw new Error("Plan must not create, adopt, delete or replace resources");
-    object(row.before); object(row.after);
+    object(row.before);
+    object(row.after);
     const expected = structuredClone(row.before);
     if (row.action === "update") {
       if (!rule.patches.length) throw new Error("Plan exceeds resource allowlist");

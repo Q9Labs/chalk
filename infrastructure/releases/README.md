@@ -26,15 +26,15 @@ TypeScript tests over real dispatcher input/resource-property fixtures. The
 three state pin-retention tests remain in Python because retention intentionally
 needs only AWS CLI and must not require Node, stack evaluation or a lease.
 
-| Previous Python test | Current proof in `../transcription-dispatcher/policy.test.ts` |
-| --- | --- |
-| `test_complete_noop_is_safe` | `complete_noop_is_safe` |
-| `test_rejects_dangerous_actions_even_for_allowlisted_resources` | `rejects_dangerous_actions_even_for_allowlisted_resources` |
-| `test_rejects_partial_plan_and_resource_type_swap` | `rejects_partial_plan_and_resource_type_swap` |
-| `test_binding_changes_only_release_identity` | `binding_changes_only_release_identity` |
-| `test_media_release_changes_only_exact_artifact_and_metadata` | `media_release_changes_only_exact_artifact_and_metadata` |
-| `test_mai_does_not_expand_other_permissions_or_change_code` | `mai_does_not_expand_other_permissions_or_change_code` |
-| `test_unrelated_outputs_and_noop_prop_changes_are_rejected` | `unrelated_outputs_and_noop_prop_changes_are_rejected` |
+| Previous Python test                                            | Current proof in `../transcription-dispatcher/policy.test.ts` |
+| --------------------------------------------------------------- | ------------------------------------------------------------- |
+| `test_complete_noop_is_safe`                                    | `complete_noop_is_safe`                                       |
+| `test_rejects_dangerous_actions_even_for_allowlisted_resources` | `rejects_dangerous_actions_even_for_allowlisted_resources`    |
+| `test_rejects_partial_plan_and_resource_type_swap`              | `rejects_partial_plan_and_resource_type_swap`                 |
+| `test_binding_changes_only_release_identity`                    | `binding_changes_only_release_identity`                       |
+| `test_media_release_changes_only_exact_artifact_and_metadata`   | `media_release_changes_only_exact_artifact_and_metadata`      |
+| `test_mai_does_not_expand_other_permissions_or_change_code`     | `mai_does_not_expand_other_permissions_or_change_code`        |
+| `test_unrelated_outputs_and_noop_prop_changes_are_rejected`     | `unrelated_outputs_and_noop_prop_changes_are_rejected`        |
 
 Additional tests cover exact requested-input matching, inactive input changes,
 MAI removal (including the KMS context), unseeded outputs, unknown desired props,

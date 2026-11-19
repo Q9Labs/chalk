@@ -92,7 +92,7 @@ the moving `main` branch. The checked-out source is outside the public repositor
 
 SFU: set `CHALK_INFRA_INPUTS` to private JSON with `environment`,
 `control_addresses`, and optional `size`, `region`, `ssh_key_name`, and
-`ssh_addresses`. `nightly` maps to legacy `staging`. Set `CHALK_SFU_STACK` to
+`ssh_addresses`. Historical `nightly` mapped to legacy `staging`; both are retired, never deployable. Set `CHALK_SFU_STACK` to
 `sfu` or `sfu-standby`; the default is `sfu`. Keep the same credential source as
 the old root: `DIGITALOCEAN_TOKEN` from `doctl auth token`.
 
@@ -121,7 +121,7 @@ exposes the node module's `droplet_id`.
 ## Remaining OpenTofu consumers
 
 The dispatcher lane already has `scripts/recorder/alchemy_dispatcher.py` and its
-engine driver under `alchemy/dispatcher/`. They implement a dispatcher-specific
+engine driver under `releases/`. They implement a dispatcher-specific
 closed release policy, not a second SFU/recorder release workflow. No new driver
 was added here. This lane leaves dispatcher-owned files untouched.
 
