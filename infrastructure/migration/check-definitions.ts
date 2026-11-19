@@ -72,6 +72,7 @@ function normalizedSource(path: string, source: string, before: boolean) {
   }
   if (!before && path === "infrastructure/media-relay-access/alchemy.run.ts") source = source.replace("turnStage(yield* Stage)", "Schema.decodeUnknownSync(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z][a-z0-9-]{1,31}$/))))(yield* Stage)");
   source = normalizeStageBoundaries(identity, source, before);
+  if (!before && identity === "infrastructure/sfu/alchemy.run.ts") source = source.replace(/^    Schema.decodeUnknownSync\(productionStageName\)\(stage\);\n/m, "");
   // These are fail-closed credential guards, not declaration inputs/props.
   source = source.replace(/^    (?:requireCloudflareCredentials\(\)|credential\("[A-Z_]+"\));\n/gm, "");
   if (identity === "infrastructure/recorder/alchemy.run.ts") source = source.replace(/^    requireInput\(!!process.env.CHALK_CAPTURE[^\n]+\n/m, "");
@@ -87,6 +88,7 @@ const inputModules = new Set([
   "infrastructure/platform/stages.ts",
 ]);
 const boundaryImports = new Map<string, readonly string[]>([
+  ["infrastructure/sfu/alchemy.run.ts", ["effect/Schema"]],
   ["infrastructure/alchemy/dispatcher/function.ts", ["alchemy/Stage"]],
   ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
   ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],

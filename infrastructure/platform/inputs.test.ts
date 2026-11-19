@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import * as Schema from "effect/Schema";
+import { productionStageName } from "./stages.ts";
 import { loadInputs } from "./inputs.ts";
 import { credential } from "./credentials.ts";
 import { requireDeployable, selectStack } from "../registry.ts";
@@ -44,4 +45,11 @@ test("missing provider credentials name their protected source without values", 
       if (previous !== undefined) process.env[key] = previous;
     }
   }
+});
+
+test("production-only entry boundary refuses legacy and ephemeral Nightly before reading private inputs", () => {
+  const production = Schema.decodeUnknownSync(productionStageName);
+  assert.equal(production("production"), "production");
+  for (const stage of ["nightly", "nightly-test"]) assert.throws(() => production(stage));
+  for (const stack of ["sfu", "sfu-standby", "recorder"]) assert.throws(() => selectStack(stack, "nightly-test"));
 });

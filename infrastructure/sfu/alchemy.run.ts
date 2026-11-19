@@ -4,6 +4,8 @@ import * as Alchemy from "alchemy";
 import * as Output from "alchemy/Output";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { productionStageName } from "../platform/stages.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -23,6 +25,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const stage = yield* environment;
+    Schema.decodeUnknownSync(productionStageName)(stage);
     const config = yield* Effect.tryPromise(loadConfig);
     if (config.environment !== (stage === "nightly" ? "staging" : "production")) return yield* Effect.die("SFU environment must match the Alchemy stage (nightly maps to staging).");
     credential("DIGITALOCEAN_TOKEN");
