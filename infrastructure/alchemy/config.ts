@@ -39,4 +39,4 @@ const awsEnvironment = Layer.effect(
 ).pipe(Layer.provide(client));
 
 export const providers = AWS.providers().pipe(Layer.provide(awsEnvironment));
-export const state = AWS.state().pipe(Layer.provide(awsEnvironment));
+export const state = AWS.state({ migrateFrom: false }).pipe(Layer.provide(awsEnvironment));
