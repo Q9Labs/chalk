@@ -7,6 +7,7 @@ packages:
   - apps/recording-renderer
   - apps/mobile
   - apps/web
+  - infrastructure
   - infrastructure/uptime-worker
 
 auditConfig:
