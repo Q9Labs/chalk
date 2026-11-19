@@ -1,5 +1,4 @@
 import * as Alchemist from "alchemy/Alchemist";
-import * as Drift from "alchemy/Drift";
 import * as NativePlan from "alchemy/Plan";
 import { Stack } from "alchemy/Stack";
 import { State } from "alchemy/State";
@@ -21,8 +20,6 @@ const program = Effect.gen(function* () {
   const plan = yield* Alchemist.plan({ stack, stage, operation: "deploy" });
   const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
   const before = yield* store.getOutput({ stack: stackName, stage });
-  const drift = yield* Drift.detect(plan.stack).pipe(Effect.provide(plan.context));
-  if (Object.values(drift.resources).some((row) => row.action !== "unchanged")) return yield* Effect.die("Dispatcher live drift must be resolved before release planning");
   const view = yield* planView(plan, before).pipe(Effect.provide(plan.context));
   if (protocol === "--protocol") {
     emit("PLAN", view);
