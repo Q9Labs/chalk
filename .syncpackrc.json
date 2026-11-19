@@ -2,6 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/JamieMason/syncpack/main/schema.json",
   "versionGroups": [
     {
+      "label": "Alchemy infrastructure requires Effect 4.1.x; web and SDK retain their Effect 4.0 beta compatibility window.",
+      "packages": ["@chalk/infrastructure"],
+      "dependencies": ["effect"],
+      "pinVersion": "4.1.4"
+    },
+    {
       "label": "Ignore release-archive overrides until npm publication (Q9Labs/q9stack#4); remove this group then.",
       "isIgnored": true,
       "dependencies": ["@q9labsai/cli", "@q9labsai/config-depcruise", "@q9labsai/diagnostics", "@q9labsai/gates"]

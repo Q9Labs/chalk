@@ -42,10 +42,10 @@ test("the Gate's own README is documentation and selects no gate definition on a
   assert.equal(createGatePlan(["scripts/gates/README.md"], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
 });
 
-test("a path no lane reads is classified on a pull request and fails closed elsewhere", () => {
+test("an infrastructure workspace path is classified on both pull requests and the merge queue", () => {
   const file = "infrastructure/observability/production-alerts/collector.go";
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
-  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, false);
 });
 
 test("the feature map is read only by the always-on feature-map lane, so editing it selects no more than that on every event", () => {
@@ -61,10 +61,10 @@ test("the feature map is read only by the always-on feature-map lane, so editing
   }
 });
 
-test("a host-change-alert edit is classified on a pull request and fails closed elsewhere", () => {
+test("a host-change-alert edit belongs to the infrastructure workspace on both events", () => {
   const file = "infrastructure/host-change-alert/host-change-check.mjs";
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
-  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, false);
 });
 
 test("a test-only change skips the dashboard engine and the call lanes on a pull request, and the queue still runs them", () => {

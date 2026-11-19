@@ -105,19 +105,31 @@ on the preview; no deploy was run for this compatibility proof.
 
 ### Current cutovers
 
-The Nightly [archive CDN](nightly/archive-cdn/README.md) uses Alchemy after a
-verified no-change cutover on 2026-11-19.
-The [recorder address](nightly/recording-control-address/README.md) has an Alchemy
-definition but is currently unallocated and has not been deployed. Its historical
-OpenTofu state is stale: do not seed it or allocate a replacement without
-separate cost approval. The [transcription dispatcher](alchemy/dispatcher/README.md)
-has completed its Nightly no-op cutover and uses one Alchemy release path for
-both environments. Production must be explicitly seeded before that path runs
-there. Other roots still use OpenTofu.
+| Stack / stage                         | Owner now                        | Port and cutover status                                                                                               |
+| ------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Archive CDN / Nightly                 | Alchemy                          | Cut over with unchanged live resources.                                                                               |
+| Transcription dispatcher / Nightly    | Alchemy                          | Cut over; guarded plan/check/apply release driver.                                                                    |
+| Transcription dispatcher / production | Legacy state, migration pending  | Alchemy release path is ready but refuses unseeded environments; production was not cut over.                         |
+| Recording control address / Nightly   | No live allocation               | Port retained, deliberately not deployed; persistent host was retired.                                                |
+| Direct Sync / Nightly                 | Retained OpenTofu root and state | Port retained, deliberately not deployed; saved host and interface no longer exist.                                   |
+| SFU / Nightly                         | Retained OpenTofu root and state | Port retained, deliberately not deployed; saved Droplets and firewalls return 404.                                    |
+| SFU / production                      | OpenTofu                         | Port prepared; primary live firewall differs from state/definition. Standby dry-run alone does not authorize cutover. |
+| Recorder / all stages                 | OpenTofu                         | Port prepared; production CORS and pool-firewall differences must be reconciled before adoption.                      |
+| TURN key                              | Existing external owner, if any  | Port only; creation/adoption was not authorized or performed.                                                         |
+| R2 transcription lifecycle            | No callers                       | Rules-only reusable Alchemy port; not deployed.                                                                       |
 
-The [DigitalOcean SFU and recorder definitions](alchemy/digitalocean-migration.md)
-are prepared, but are not cut over. Their migration blockers and exact lead-only
-production commands are documented in the migration reference.
+The persistent Nightly host and shared staging SFU were deliberately removed on
+2026-11-15 (PRs #1432 and #1453, commit `011fc3f34`). Nightly cuts use
+`deploy_managed: false` and prove on throwaway stacks. The address, direct Sync,
+and Nightly SFU ports remain reachable through manually dispatched managed
+Nightly deployment only. Retiring that path and `media.py` address reconciliation
+is a follow-up, not part of this migration. Do not seed stale state to recreate
+the retired resources. Production is untouched.
+
+Shared OpenTofu CI actions, caches and tool pins remain because SFU, recorder and
+direct Sync still have runnable legacy roots. Dispatcher release tooling no
+longer invokes OpenTofu. See the [DigitalOcean migration reference](alchemy/digitalocean-migration.md)
+for remaining validation consumers and the production handoff.
 
 Run commands from the repository root. Install with `pnpm install`, then run the
 credential-free check:
@@ -126,8 +138,8 @@ credential-free check:
 pnpm --dir infrastructure check-types
 ```
 
-All stacks share the AWS credential chain, including `AWS_PROFILE`, and pin
-`ap-southeast-1` independently of the profile's default region. Use Chalk's
+AWS stacks share the credential chain, including `AWS_PROFILE`. State always
+uses `ap-southeast-1`; direct Sync can select a different host region. Use Chalk's
 `nightly` and `production` stage names. The address and CDN entrypoints reject every stage
 except `nightly`; the dispatcher accepts both stages. State uses `AWS.state({ migrateFrom: false })`: the on-demand `alchemy-state` DynamoDB
 table and its S3 overflow bucket in the same account and region. First use needs

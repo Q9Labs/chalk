@@ -1,7 +1,7 @@
 # Transcription dispatcher
 
 This stack replaces the dispatcher OpenTofu module for Nightly and production.
-`@chalk/infrastructure` pins Alchemy and its AWS provider to `2.0.0-beta.87`.
+`@chalk/infrastructure` uses the unified [pinned preview build](../../README.md#alchemy-stacks), including its AWS provider.
 The entrypoint is `infrastructure/nightly/transcription/alchemy.run.ts`; the stage
 selects the environment, not a different implementation.
 
