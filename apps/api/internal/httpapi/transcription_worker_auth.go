@@ -40,6 +40,31 @@ const (
 	workloadTracestateHeader    = "tracestate"
 )
 
+// The reasons AuthorizeWorkload gives for a refusal. The 401 log names one of
+// these and nothing else, so a reason never carries request or driver text.
+var (
+	errWorkloadUnavailable   = errors.New("workload authorization unavailable")
+	errWorkloadTimestamp     = errors.New("invalid workload timestamp")
+	errWorkloadExpired       = errors.New("expired workload signature")
+	errWorkloadNonce         = errors.New("invalid workload nonce")
+	errWorkloadEnvironment   = errors.New("workload environment mismatch")
+	errWorkloadRelease       = errors.New("workload release mismatch")
+	errWorkloadRole          = errors.New("workload role mismatch")
+	errWorkloadAudience      = errors.New("workload audience mismatch")
+	errWorkloadBody          = errors.New("read workload body")
+	errWorkloadChecksum      = errors.New("workload body checksum mismatch")
+	errWorkloadSignature     = errors.New("invalid workload signature")
+	errWorkloadNonceStore    = errors.New("workload nonce store unavailable")
+	errWorkloadNonceReplay   = errors.New("workload nonce replay")
+	errWorkloadAuthorization = errors.New("invalid workload authorization")
+)
+
+var workloadRejectionReasons = []error{
+	errWorkloadUnavailable, errWorkloadTimestamp, errWorkloadExpired, errWorkloadNonce, errWorkloadEnvironment, errWorkloadRelease,
+	errWorkloadRole, errWorkloadAudience, errWorkloadBody, errWorkloadChecksum, errWorkloadSignature, errWorkloadNonceStore,
+	errWorkloadNonceReplay, errWorkloadAuthorization,
+}
+
 func NewHMACWorkloadAuthorizer(config HMACWorkloadAuthorizerConfig) HMACWorkloadAuthorizer {
 	if config.Clock == nil {
 		config.Clock = time.Now
@@ -52,34 +77,41 @@ func NewHMACWorkloadAuthorizer(config HMACWorkloadAuthorizerConfig) HMACWorkload
 
 func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *http.Request, role string) error {
 	if len(a.config.Secret) == 0 || a.config.Nonces == nil || request == nil || role == "" {
-		return errors.New("workload authorization unavailable")
+		return errWorkloadUnavailable
 	}
 	timestamp, err := strconv.ParseInt(request.Header.Get(workloadTimestampHeader), 10, 64)
 	if err != nil {
-		return errors.New("invalid workload timestamp")
+		return errWorkloadTimestamp
 	}
 	now := a.config.Clock()
 	observed := time.Unix(timestamp, 0)
 	if observed.Before(now.Add(-a.config.Window)) || observed.After(now.Add(a.config.Window)) {
-		return errors.New("expired workload signature")
+		return errWorkloadExpired
 	}
 	nonce := request.Header.Get(workloadNonceHeader)
 	if len(nonce) < 16 || len(nonce) > 128 {
-		return errors.New("invalid workload nonce")
+		return errWorkloadNonce
 	}
-	if request.Header.Get(workloadEnvironmentHeader) != a.config.Environment || request.Header.Get(workloadReleaseHeader) != a.config.ReleaseID || request.Header.Get(workloadRoleHeader) != role || request.Header.Get(workloadAudienceHeader) != a.config.Audience {
-		return errors.New("workload audience mismatch")
+	switch {
+	case request.Header.Get(workloadEnvironmentHeader) != a.config.Environment:
+		return errWorkloadEnvironment
+	case request.Header.Get(workloadReleaseHeader) != a.config.ReleaseID:
+		return errWorkloadRelease
+	case request.Header.Get(workloadRoleHeader) != role:
+		return errWorkloadRole
+	case request.Header.Get(workloadAudienceHeader) != a.config.Audience:
+		return errWorkloadAudience
 	}
 	body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
 	if err != nil {
-		return errors.New("read workload body")
+		return errWorkloadBody
 	}
 	request.Body.Close()
 	request.Body = io.NopCloser(bytes.NewReader(body))
 	bodyDigest := sha256.Sum256(body)
 	bodySHA := hex.EncodeToString(bodyDigest[:])
 	if !strings.EqualFold(strings.TrimSpace(request.Header.Get(workloadBodySHAHeader)), bodySHA) {
-		return errors.New("workload body checksum mismatch")
+		return errWorkloadChecksum
 	}
 	canonical := strings.Join([]string{strings.ToUpper(request.Method), request.URL.EscapedPath(), bodySHA, strconv.FormatInt(timestamp, 10), nonce, a.config.Environment, a.config.ReleaseID, role, request.Header.Get(workloadJourneyHeader), request.Header.Get(workloadTraceparentHeader), request.Header.Get(workloadTracestateHeader), a.config.Audience}, "\n")
 	mac := hmac.New(sha256.New, a.config.Secret)
@@ -87,14 +119,14 @@ func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *
 	expected := mac.Sum(nil)
 	supplied, err := decodeAuthorization(request.Header.Get(workloadAuthorizationHeader))
 	if err != nil || !hmac.Equal(expected, supplied) {
-		return errors.New("invalid workload signature")
+		return errWorkloadSignature
 	}
 	consumed, err := a.config.Nonces.Consume(ctx, nonce, a.config.Window)
 	if err != nil {
-		return errors.New("workload nonce store unavailable")
+		return errWorkloadNonceStore
 	}
 	if !consumed {
-		return errors.New("workload nonce replay")
+		return errWorkloadNonceReplay
 	}
 	return nil
 }
@@ -107,7 +139,7 @@ func decodeSignature(value string) ([]byte, error) {
 func decodeAuthorization(value string) ([]byte, error) {
 	const prefix = "Chalk-Workload-HMAC "
 	if !strings.HasPrefix(value, prefix) {
-		return nil, errors.New("invalid workload authorization")
+		return nil, errWorkloadAuthorization
 	}
 	return decodeSignature(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
 }

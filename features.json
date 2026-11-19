@@ -254,6 +254,8 @@
         "apps/api/internal/httpapi/transcription_worker.go",
         "apps/api/internal/httpapi/transcription_worker_auth.go",
         "apps/api/internal/httpapi/transcription_worker_claim.go",
+        "apps/api/internal/httpapi/transcription_worker_diagnostics_test.go",
+        "apps/api/internal/httpapi/transcription_worker_outage_test.go",
         "apps/api/internal/httpapi/transcription_worker_types.go",
         "apps/api/internal/transcripts",
         "apps/transcription-dispatcher",

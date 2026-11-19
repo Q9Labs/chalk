@@ -73,7 +73,7 @@ type workerManifestAssignment struct {
 func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer, chunks ChunkAuthority, manifests ManifestAuthority, results ResultAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body workerClaimBody
@@ -93,7 +93,7 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				break
 			}
 			if err != nil {
-				writeWorkerError(w, err)
+				writeWorkerError(w, r, err)
 				return
 			}
 			if assignment.Chunk == nil || assignment.Source == nil || assignment.Job.LeaseExpiresAt == nil || assignment.Transcript.SourceManifestKey == nil {

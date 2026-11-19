@@ -33,7 +33,12 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 
 	detail := err.Error()
 	var requestErr *url.Error
-	if errors.As(err, &requestErr) {
+	driverFacts := driverFailureAttrs(err)
+	if driverFacts != nil {
+		// Driver and socket errors echo database hosts, addresses and connection
+		// parameters, so only the allowlisted facts below leave the process.
+		detail = driverFailureDetail
+	} else if errors.As(err, &requestErr) {
 		// Transport errors can include credential-bearing URLs.
 		detail = requestErr.Err.Error()
 	}
@@ -49,6 +54,7 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 		detail = detail[:256]
 	}
 	attrs := []any{"event", "http.failure", "method", method, "route", route, "code", code, "error", detail}
+	attrs = append(attrs, driverFacts...)
 	attrs = append(attrs, UpstreamAttrs(err)...)
 	logger.ErrorContext(ctx, "http endpoint failed", attrs...)
 }

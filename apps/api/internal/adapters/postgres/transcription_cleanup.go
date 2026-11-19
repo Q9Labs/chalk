@@ -43,7 +43,8 @@ func (r TranscriptRepository) EnqueueCleanup(ctx context.Context, input transcri
 	return mapCleanupJob(row), nil
 }
 
-func (r TranscriptRepository) ClaimCleanup(ctx context.Context, input transcripts.CleanupClaimInput) (transcripts.CleanupJob, string, error) {
+func (r TranscriptRepository) ClaimCleanup(ctx context.Context, input transcripts.CleanupClaimInput) (_ transcripts.CleanupJob, _ string, err error) {
+	defer func() { err = artifactRepositoryFailure(err) }()
 	if r.transactor == nil {
 		return transcripts.CleanupJob{}, "", transcripts.ErrArtifactRepository
 	}
