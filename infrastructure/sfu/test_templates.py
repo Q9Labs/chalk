@@ -23,6 +23,21 @@ BENCH = SFU / 'scripts/bench/bench'
 EIGHT_MIB = 8 * 1024 * 1024
 STOPPED = 77  # what the mocked ssh exits with at daemon-reload
 
+
+class CloudInitParity(unittest.TestCase):
+    def test_alchemy_user_data_is_byte_identical_to_tofu(self):
+        for control, ssh in [(['192.0.2.10/32'], ['0.0.0.0/0', '::/0']), (['192.0.2.1/32', '2001:db8::1/128'], [])]:
+            with self.subTest(control=control, ssh=ssh), tempfile.TemporaryDirectory() as directory:
+                config = {'environment': 'staging', 'control_addresses': control, 'ssh_addresses': ssh}
+                path = Path(directory, 'config.json')
+                path.write_text(json.dumps(config))
+                values = {'control_addresses': control, 'ssh_addresses': ssh, 'control_port': TABLE['ports']['control'], 'media_port': TABLE['ports']['media'], 'udp_buffer': TABLE['udpBufferBytes']}
+                expression = 'jsonencode(templatefile(' + json.dumps(str(INFRA / 'node/cloud-init.yaml.tftpl')) + ', ' + json.dumps(values) + '))'
+                original = subprocess.check_output(['tofu', '-chdir=' + directory, 'console', '-no-color'], input=expression.encode())
+                expected = json.loads(json.loads(original))
+                actual = subprocess.check_output(['pnpm', '--silent', '--dir', str(REPO / 'infrastructure'), 'exec', 'tsx', 'sfu/render-cloud-init.ts'], env={**os.environ, 'CHALK_INFRA_INPUTS': str(path)})
+                self.assertEqual(actual, expected.encode(), 'Changed cloud-init replaces the Droplet')
+
 MOCK = r'''#!/usr/bin/env python3
 import json, os, re, sys
 from pathlib import Path

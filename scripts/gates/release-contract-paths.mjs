@@ -1,0 +1,20 @@
+// What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
+// the transcription configuration that check_configuration fingerprints, the two workflows that GateCheckedTests read, and the API module files and migrations that the manifest and component planning read.
+export const releaseContractRoots = [
+  "scripts/releases",
+  "scripts/recorder/release.py",
+  "scripts/recorder/archive.py",
+  "scripts/recorder/release_core.py",
+  "scripts/recorder/release_io.py",
+  "scripts/recorder/dispatcher_binding.py",
+  "scripts/recorder/alchemy_dispatcher.py",
+  "scripts/recorder/test_dispatcher_alchemy.py",
+  "infrastructure",
+  "features/scorecard",
+  "perf/budgets.json",
+  ".github/workflows/ci.yml",
+  ".github/workflows/nightly.yml",
+  "apps/api/go.mod",
+  "apps/api/go.sum",
+  "apps/api/db/migrations",
+];

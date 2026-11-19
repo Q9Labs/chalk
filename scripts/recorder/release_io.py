@@ -11,7 +11,7 @@ from release_core import require
 AWS_READS = {("ssm", "get-parameter"), ("ssm", "describe-parameters"), ("ssm", "get-document"),
              ("ec2", "describe-instances"), ("ec2", "describe-addresses"), ("scheduler", "get-schedule"),
              ("lambda", "get-function-configuration"), ("s3api", "get-object"), ("s3api", "head-object"),
-             ("sts", "get-caller-identity")}
+             ("sts", "get-caller-identity"), ("dynamodb", "get-item")}
 DO_READS = {("compute", "image", "get"), ("compute", "size", "list"),
             ("compute", "region", "list"), ("compute", "droplet", "get")}
 
@@ -25,11 +25,11 @@ def private_json(path, value):
     temporary.replace(path)
 
 
-def tofu_error_class(stderr):
+def infrastructure_error_class(stderr):
     # Only fixed labels leave this boundary; diagnostics can contain credentials and IDs.
     text = stderr.lower()
     for label, markers in (
-        ("state-lock", ("error acquiring the state lock", "error releasing the state lock")),
+        ("state-lock", ("error acquiring the state lock", "error releasing the state lock", "lease is held", "conditionalcheckfailedexception")),
         ("authentication", ("no valid credential sources", "expiredtoken", "invalidclienttokenid")),
         ("authorization", ("accessdenied", "access denied", "not authorized")),
         ("configuration", ("unsupported argument", "missing required argument", "invalid value for")),
@@ -56,7 +56,7 @@ class Provider:
                                 env={**os.environ, "AWS_PAGER": "", "AWS_CLI_AUTO_PROMPT": "off", **(environment or {})})
         if result.returncode:
             # Provider errors can quote secret payloads. Never echo stdout/stderr here.
-            error_class = f"; error class: {tofu_error_class(result.stderr)}" if arguments[0] == "tofu" else ""
+            error_class = f"; error class: {infrastructure_error_class(result.stderr)}" if arguments[0] in ("tofu", "pnpm") else ""
             raise RuntimeError(f"{arguments[0]} operation failed (exit {result.returncode}){error_class}; no payload logged")
         return result.stdout
 
@@ -66,7 +66,8 @@ class Provider:
         if read_only:
             self.reads.append(service + ":" + operation)
         if payload is None:
-            return json.loads(self.command(command + ["--output", "json"], timeout=timeout, read_only=read_only))
+            # AWS prints nothing for an empty result, such as a missing DynamoDB item.
+            return json.loads(self.command(command + ["--output", "json"], timeout=timeout, read_only=read_only) or "{}")
         with tempfile.TemporaryDirectory(prefix="chalk-release-payload-") as directory:
             path = Path(directory, "payload.json")
             private_json(path, payload)
@@ -83,10 +84,3 @@ class Provider:
 
     def parameter(self, name):
         return self.aws("ssm", "get-parameter", "--name", name, "--with-decryption")["Parameter"]
-
-    def state(self, config):
-        with tempfile.TemporaryDirectory(prefix="chalk-release-state-") as directory:
-            path = Path(directory, "state.json")
-            self.aws("s3api", "get-object", "--bucket", config["state_bucket"], "--key", config["state_key"], path)
-            path.chmod(0o600)
-            return json.loads(path.read_text())

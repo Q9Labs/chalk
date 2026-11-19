@@ -304,9 +304,10 @@ jobs:
         with:
           packages: default-jre-headless gnupg
 
-      # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
+      # The recorder lane runs scripts/recorder/gate.sh, which needs tofu. The sfu lane needs it for the test that
+      # compares the Alchemy cloud-init with the OpenTofu template, which stays until the production SFU moves.
       - name: Set up OpenTofu
-        if: matrix.group == 'checks'
+        if: matrix.group == 'checks' || matrix.group == 'sfu'
         uses: ./.github/actions/setup-opentofu
 
       # Providers come from the cache that cache-warm.yml saves on master, so a flaky github.com download cannot fail

@@ -42,10 +42,10 @@ test("the Gate's own README is documentation and selects no gate definition on a
   assert.equal(createGatePlan(["scripts/gates/README.md"], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
 });
 
-test("a path no lane reads is classified on a pull request and fails closed elsewhere", () => {
+test("an infrastructure workspace path is classified on both pull requests and the merge queue", () => {
   const file = "infrastructure/observability/production-alerts/collector.go";
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
-  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, false);
 });
 
 test("the feature map is read only by the always-on feature-map lane, so editing it selects no more than that on every event", () => {
@@ -61,10 +61,10 @@ test("the feature map is read only by the always-on feature-map lane, so editing
   }
 });
 
-test("a host-change-alert edit is classified on a pull request and fails closed elsewhere", () => {
+test("a host-change-alert edit belongs to the infrastructure workspace on both events", () => {
   const file = "infrastructure/host-change-alert/host-change-check.mjs";
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
-  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, false);
 });
 
 test("a test-only change skips the dashboard engine and the call lanes on a pull request, and the queue still runs them", () => {
@@ -118,33 +118,6 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(selected(["features/scorecard/budgets.mjs"], "pull_request").includes("workflow-graph"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "workflow-graph").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
-});
-
-test("a change to the release scripts, the managed-host controller or the scorecard runs the release contracts in the checks group", () => {
-  for (const file of [
-    "scripts/releases/test_release.py",
-    "scripts/releases/release.py",
-    "infrastructure/managed-episode/controller/chalk-deployment-controller",
-    "features/scorecard/evaluate.mjs",
-    "perf/budgets.json",
-    ".github/workflows/ci.yml",
-    ".github/workflows/nightly.yml",
-    "scripts/recorder/release.py",
-    "infrastructure/nightly/transcription/main.tf",
-    "apps/api/go.mod",
-    "apps/api/db/migrations/20261101000000_example.sql",
-    "apps/api/internal/httpapi/router.go",
-    "apps/api/cmd/recorder-render/main.go",
-  ]) {
-    assert.ok(selected([file], "pull_request").includes("release-contracts"), file);
-    assert.ok(selected([file], "merge_group").includes("release-contracts"), file);
-  }
-  assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "release-contracts").selected);
-  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("release-contracts"));
-  assert.ok(!selected(["apps/web/src/App.tsx"], "pull_request").includes("release-contracts"));
-  assert.ok(!selected(["scripts/recorder/compare-frames.mjs"], "pull_request").includes("release-contracts"));
-  assert.ok(!selected(["apps/api/internal/httpapi/router_test.go"], "pull_request").includes("release-contracts"));
-  assert.equal(laneGroup("release-contracts"), "checks");
 });
 
 test("a pull request that edits only a workflow skips the SFU lane and still runs the workflow-graph tests", () => {

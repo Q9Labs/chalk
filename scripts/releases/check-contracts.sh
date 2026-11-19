@@ -23,6 +23,7 @@ if [[ "$mode" == --all ]]; then
   export TARGET_SHA="${TARGET_SHA-$(git rev-parse HEAD)}"
 fi
 check release-source scripts/releases/check-source.sh
+check dispatcher-release-tests python3 -m unittest discover -s scripts/recorder -p 'test_dispatcher*.py'
 check chalk-sfu-promotion-tests python3 -m unittest discover -s scripts/releases -p 'test_*.py'
 if [[ "${MANAGED_ENVIRONMENT:-nightly}" == nightly ]]; then
   check dispatcher-configuration python3 scripts/releases/media.py check_configuration --environment nightly
@@ -34,12 +35,9 @@ check workspace-dependencies env CI=true pnpm install --frozen-lockfile
 check dispatcher-tests pnpm --dir apps/transcription-dispatcher test
 check dispatcher-contract scripts/transcription-dispatcher/validate-contract.sh
 check image-shell bash -c 'for path in infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
-check dispatcher-init tofu -chdir=infrastructure/nightly/transcription init -backend=false -input=false -upgrade=false
-check dispatcher-validate tofu -chdir=infrastructure/nightly/transcription validate -no-color
-check recorder-address-init tofu -chdir=infrastructure/nightly/recording-control-address init -backend=false -input=false -upgrade=false
-check recorder-address-validate tofu -chdir=infrastructure/nightly/recording-control-address validate -no-color
-check archive-cdn-init tofu -chdir=infrastructure/nightly/archive-cdn init -backend=false -input=false -upgrade=false
-check archive-cdn-validate tofu -chdir=infrastructure/nightly/archive-cdn validate -no-color
+check infrastructure-registry pnpm infra check
+check infrastructure-tests pnpm --dir infrastructure test
+check infrastructure-types pnpm --dir infrastructure check-types
 check workflow-lint actionlint
 printf 'Release contract logs: %s\n' "$logs"
 exit "$failed"

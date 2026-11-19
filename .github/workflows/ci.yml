@@ -910,13 +910,11 @@ jobs:
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
 
-      - name: Set up OpenTofu for dispatcher binding
+      - name: Install pinned Alchemy dispatcher tooling
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: ./.github/actions/setup-opentofu
-
-      - name: Restore the OpenTofu provider cache
-        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: ./.github/actions/cache-tofu-providers
+        uses: ./.github/actions/setup-js
+        with:
+          install-args: --filter @chalk/infrastructure...
 
       - name: Install doctl for read-only snapshot validation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')

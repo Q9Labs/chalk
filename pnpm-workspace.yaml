@@ -7,6 +7,7 @@ packages:
   - apps/recording-renderer
   - apps/mobile
   - apps/web
+  - infrastructure
   - infrastructure/uptime-worker
 
 auditConfig:
@@ -15,6 +16,28 @@ auditConfig:
     - CVE-2025-71329
 
 overrides:
+  # One preview dependency graph; see infrastructure/platform/preview-build.json.
+  "@alchemy.run/acme": https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz
+  "@alchemy.run/aws": https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz
+  "@alchemy.run/cloudflare": https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz
+  "@alchemy.run/cloudflare-runtime": https://pkg.alchemy.run/@alchemy.run/cloudflare-runtime/-/13d7120dea464f44350d99be5e9b012af483c5644e58cfddff630cc34693b6e3.tgz
+  "@alchemy.run/digitalocean": https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz
+  "@alchemy.run/docker": https://pkg.alchemy.run/@alchemy.run/docker/-/50b56e5f88640507142177b2930ca5e7ff32b6189832a4731c7956bb808d66e2.tgz
+  "@alchemy.run/frontend-frameworks": https://pkg.alchemy.run/@alchemy.run/frontend-frameworks/-/d31f841759c53fd95dccb0e225212993576727f7ea11c3e7c4522c45a784afee.tgz
+  "@alchemy.run/kubernetes": https://pkg.alchemy.run/@alchemy.run/kubernetes/-/93ed077f9e4d2e32ef41369d200999b7be285da0b08a165d6cdbe7b614a4dea8.tgz
+  "@alchemy.run/node-utils": https://pkg.alchemy.run/@alchemy.run/node-utils/-/1cd515fe8fa6c02e8ff33fdd14e9147eb327e41ed41edd5cb1f1e3d15a45ad24.tgz
+  "@alchemy.run/redis": https://pkg.alchemy.run/@alchemy.run/redis/-/b9b84f5c04c0c3abf3adeebfb6c33f09b892074d72fa0cd7d9cbb137c3753df3.tgz
+  "@alchemy.run/sql": https://pkg.alchemy.run/@alchemy.run/sql/-/06c20bf8e83a5f1b703c99bd81e2321b09db63ef31f2a219eaa56148262747ad.tgz
+  "@distilled.cloud/acme": https://pkg.alchemy.run/@distilled.cloud/acme/-/a5bdc43d3bb364e412398746523dd91fa86e71c2385b77298d58c6fcf405e73e.tgz
+  "@distilled.cloud/aws": https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz
+  "@distilled.cloud/aws4signer": https://pkg.alchemy.run/@distilled.cloud/aws4signer/-/e7e83ea46e0182f81f524adf5a9b5445242703d1d7f51f13781006fb473054ac.tgz
+  "@distilled.cloud/cloudflare": https://pkg.alchemy.run/@distilled.cloud/cloudflare/-/370bac4b59419be26db7b46d7a15e7cd575b964388c39ac4416984aa4c950adf.tgz
+  "@distilled.cloud/core": https://pkg.alchemy.run/@distilled.cloud/core/-/1b58fb30ca7264b97d2cbdeac4136715f79d3c83c83e1e3a50c0ae64c770ce25.tgz
+  "@distilled.cloud/digitalocean": https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz
+  "@distilled.cloud/iceberg": https://pkg.alchemy.run/@distilled.cloud/iceberg/-/7032d62c336189731e649c1a9db61fc3db2fea8df1e47ce1a3aa8f63cdaa48f8.tgz
+  "@distilled.cloud/s3": https://pkg.alchemy.run/@distilled.cloud/s3/-/6776d0f1773cae9673d597398ea9cfa55a1a8d1f67e402f0a3b68be179a90f9a.tgz
+  "alchemy": https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz
+  "effect@^4.1.4": 4.1.4
   "@q9labsai/config-depcruise": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   "@q9labsai/gates": "0.4.1"
   "@babel/core": ^7.29.7

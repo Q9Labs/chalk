@@ -1,5 +1,16 @@
 # Recorder infrastructure contract
 
+## Prepared Alchemy definition
+
+`alchemy.run.ts` retains the pool policies, KMS context restrictions, R2 CORS and
+lifecycle rules, capacity bounds and fail-closed production inputs. Runtime
+Droplets remain externally owned. This definition is not deployed: read-only
+production import validation refuses live R2 CORS origins that differ from the
+legacy state. Both pool firewalls also have a changed control-plane destination.
+The original root stays runnable. See the
+[migration reference](../migration/digitalocean.md) and
+[cutover commands](../migration/cutover-digitalocean.md).
+
 This OpenTofu root is policy-only for the recorder compute pools. It owns immutable pool tags, unattached outbound-only firewalls, release and image contracts, the private temporary R2 bucket lifecycle and the Singapore recording KEK. It never creates or replaces runtime Droplets: the external recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity, fencing and replacement. Pool sizes, regions, caps and the `desired_capture_nodes` formula are in `variables.tf` and `locals.tf`; capture and render both default to zero desired nodes.
 
 Direct control TLS egress on ports 8443/8444 requires the exact managed-host `control_addresses` (/32 or /128); workers accept no inbound traffic. Admission targets and caps are capacity inputs, not a claim of regional load qualification. A smaller capture or render maximum lowers the supported concurrency, so operators must lower the admission ceiling with it before launch. Render-phase pipelines do not occupy capture admission. CPU and GPU artifacts are never mixed: a GPU pool needs `render_gpu = true` with an independently qualified GPU image, region and size. Confirm current regional size availability before applying.
@@ -44,7 +55,7 @@ Production planning is fail-closed and requires exactly one state: an externally
 
 Production plans require `capture_capacity_inputs_migrated = true` after `reserved_capture_meetings` and `capture_meetings_per_node` were renamed to `reserved_capture_episodes` and `capture_episodes_per_node`. The acknowledgment is required even when a reservation is intentionally zero, so an omitted legacy input cannot silently produce a zero-capacity plan.
 
-Production R2 adoption is fail-closed: a plan must name the existing bucket, give its private inventory import ID and carry the digest of the approved no-delete, no-replacement plan. Nightly can use its generated name. Backend configuration and credentials live outside this tree, and `scripts/recorder/gate.sh` initializes with the backend disabled and never applies a provider.
+Production R2 adoption is fail-closed: a plan must name the existing bucket, give its private inventory import ID and carry the digest of the approved no-delete, no-replacement plan. The retired legacy Nightly root used a generated name; it is cleanup inventory, not a deployable environment. Backend configuration and credentials live outside this tree, and `scripts/recorder/gate.sh` initializes with the backend disabled and never applies a provider.
 
 The private bucket also serves whiteboard and chat-upload files through short-lived presigned URLs. The managed CORS rule allows any origin for `GET` and `PUT` with the fixed headers in `whiteboard_cors_allowed_headers` (`locals.tf`). There is no origin list to maintain: the API authenticates the participant before it issues a URL, and the URL's signature is the access control, so an origin list adds nothing against a caller who holds the URL. A new tenant or portal origin needs no bucket change. The rule does not make the bucket public; keep its r2.dev and custom domains off.
 

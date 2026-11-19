@@ -1,10 +1,8 @@
 """Pure contracts for recorder releases. No credentials or provider calls here."""
 
-import base64
 import hashlib
 import json
 import re
-from pathlib import Path
 
 PIN_KEYS = {"CHALK_RECORDER_FLEET_" + key for key in ("IMAGE_ID", "RELEASE_ID", "IMAGE_DIGEST")}
 
@@ -100,78 +98,3 @@ def check_qualification(receipt, state):
         require(receipt.get(key) == state.get(key), "qualification identity mismatch: " + key)
     require(receipt.get("result") == "PASS" and receipt.get("fleet_equivalent_signed_boot") is True,
             "BOOTDIAG signed-boot qualification is required before publishing")
-
-
-def rebuild_dispatcher(state, module, backend, region, profile):
-    resources = {}
-    for resource in state["resources"]:
-        if resource.get("mode", "managed") == "managed":
-            key = resource["type"] + "." + resource["name"]
-            require(key not in resources, "ambiguous dispatcher resource: " + key)
-            require(len(resource["instances"]) == 1, "ambiguous dispatcher instance")
-            resources[key] = resource["instances"][0]["attributes"]
-    function = resources["aws_lambda_function.dispatcher"]
-    environment = function["environment"][0]["variables"]
-    main = Path(module, "main.tf").read_text()
-    variables = Path(module, "variables.tf").read_text()
-    inputs = {}
-    for key, name in re.findall(r"^\s*([A-Z_]+)\s*=\s*(?:tostring\()?var\.([a-z_]+)", main, re.M):
-        if key not in environment:
-            continue
-        value = environment[key]
-        section = variables.split('variable "' + name + '" {', 1)[1].split("\nvariable ", 1)[0]
-        if re.search(r"type\s*=\s*bool", section):
-            require(value in ("true", "false"), "invalid dispatcher boolean")
-            value = value == "true"
-        elif re.search(r"type\s*=\s*number", section):
-            value = int(value)
-        inputs[name] = value
-    schedule = resources["aws_scheduler_schedule.reconcile"]
-    target = schedule["target"][0]
-    retry = target["retry_policy"][0]
-    invoke = resources["aws_lambda_function_event_invoke_config.dispatcher"]
-    inputs.update(function_name=function["function_name"], artifact_s3_bucket=function["s3_bucket"],
-                  artifact_s3_key=function["s3_key"], artifact_s3_object_version=function["s3_object_version"],
-                  artifact_sha256=base64.b64decode(function["source_code_hash"]).hex(),
-                  artifact_sha256_base64=function["source_code_hash"], handler=function["handler"],
-                  timeout_seconds=function["timeout"], memory_size=function["memory_size"],
-                  ephemeral_storage_size=function["ephemeral_storage"][0]["size"],
-                  reserved_concurrency=function["reserved_concurrent_executions"], scheduler_name=schedule["name"],
-                  scheduler_group_name=schedule["group_name"], scheduler_state=schedule["state"], scheduler_input_json=target["input"],
-                  scheduler_max_event_age_seconds=retry["maximum_event_age_in_seconds"],
-                  scheduler_maximum_retry_attempts=retry["maximum_retry_attempts"],
-                  async_max_event_age_seconds=invoke["maximum_event_age_in_seconds"],
-                  async_maximum_retry_attempts=invoke["maximum_retry_attempts"],
-                  log_retention_days=resources["aws_cloudwatch_log_group.dispatcher"]["retention_in_days"],
-                  log_kms_key_arn=resources["aws_cloudwatch_log_group.dispatcher"]["kms_key_id"] or None,
-                  failure_queue_kms_key_arn=resources["aws_sqs_queue.async_failure"]["kms_master_key_id"] or None,
-                  alarm_actions=resources["aws_cloudwatch_metric_alarm.errors"]["alarm_actions"])
-    policy = json.loads(resources["aws_iam_role_policy.dispatcher"]["policy"])
-    inputs["ssm_kms_key_arns"] = sorted({arn for statement in policy["Statement"]
-                                         for arn in ([statement["Resource"]] if isinstance(statement["Resource"], str) else statement["Resource"])
-                                         if ":kms:" in arn})
-    permission = resources.get("aws_lambda_permission.control_api")
-    if permission:
-        inputs["control_api_invoker_principal"] = permission["principal"]
-        inputs["control_api_invoke_source_arn"] = permission["source_arn"]
-    root = {"terraform": {"required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
-                          "backend": {"s3": {"bucket": backend["state_bucket"], "key": backend["state_key"],
-                                             "region": region, "profile": profile, "encrypt": True, "use_lockfile": True}}},
-            "provider": {"aws": {"region": region, "profile": profile}},
-            "module": {"dispatcher": {"source": str(module), **inputs}},
-            "output": {key: {"value": "${module.dispatcher." + key + "}", "sensitive": value.get("sensitive", False)}
-                       for key, value in state["outputs"].items()}}
-    if not root["output"]:
-        del root["output"]
-    return root
-
-
-def scheduler_changes(plan, desired):
-    changes = [item for item in plan.get("resource_changes", []) if item["change"]["actions"] not in (["no-op"], ["read"])]
-    require(len(changes) == 1, "scheduler plan must change exactly one resource")
-    change = changes[0]
-    require(change["address"] == "module.dispatcher.aws_scheduler_schedule.reconcile"
-            and change["change"]["actions"] == ["update"], "scheduler plan exceeds allowlist")
-    before, after = change["change"]["before"], change["change"]["after"]
-    require(after["state"] == desired and {k: v for k, v in before.items() if k != "state"}
-            == {k: v for k, v in after.items() if k != "state"}, "scheduler plan changes more than state")

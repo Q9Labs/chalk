@@ -223,7 +223,7 @@
     {
       "id": "gate:types",
       "owner": "TypeScript",
-      "catches": "A type error in an affected workspace, including API and SDK incompatibilities.",
+      "catches": "A type error in an affected workspace, including API and SDK incompatibilities and the pinned Alchemy infrastructure stacks.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
@@ -273,7 +273,7 @@
     {
       "id": "gate:tests",
       "owner": "Runtime",
-      "catches": "A failing unit or regression test in an affected workspace.",
+      "catches": "A failing unit or regression test in an affected workspace, including security-group membership preservation and R2 lifecycle safety.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
@@ -800,7 +800,7 @@
     {
       "id": "workflow:cache-warm.yml#tofu",
       "owner": "Gate",
-      "catches": "Queue groups downloading the tofu toolchain from a flaky host because master saved no cache.",
+      "catches": "Recorder jobs downloading OpenTofu providers from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
       "minutes": 0.2,
@@ -1455,7 +1455,7 @@
     {
       "id": "workflow:release-contracts.yml#contracts",
       "owner": "Release chain",
-      "catches": "Release workflow lint, dispatcher and recorder image checks and OpenTofu validation breaking.",
+      "catches": "Release workflow lint, dispatcher release allowlists, exact-plan driver checks, recorder image contracts or Alchemy stack typechecking breaking.",
       "runs": ["pull_request"],
       "blocks": "advisory",
       "minutes": 4.0,
@@ -1618,6 +1618,17 @@
       "record": "unmeasured",
       "sample": "No failure history recorded in the register yet.",
       "reason": "It runs only when a covered file or the model changes, so it stays out of the required contexts; the author runs it with the change."
+    },
+    {
+      "id": "workflow:infrastructure-drift.yml#drift",
+      "owner": "Infrastructure",
+      "catches": "Read-only drift or inability to check cut-over stack/stage pairs from the infrastructure registry.",
+      "runs": ["daily", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Gated by CHALK_ALCHEMY_DRIFT_ENABLED until the dedicated state-lease and cloud-read role is configured.",
+      "reason": "Uses the same registry as the CLI and README; alerts Oncall without repair or raw provider artifacts."
     }
   ]
 }

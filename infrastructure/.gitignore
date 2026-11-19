@@ -31,3 +31,6 @@ Thumbs.db
 *.pem
 *.key
 *.tfvars.secret
+
+# Alchemy runtime metadata and state (never commit live identifiers).
+.alchemy/

@@ -347,7 +347,7 @@ if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE:-}" && "$*" == *"${FAKE_SYSTEMCTL_FAIL_ONCE
   exit 1
 fi
 if [[ "$*" == '--user is-active --quiet chalk-cloudflared.service' ]]; then
-  [[ -e "${FAKE_CONNECTOR_ACTIVE:-/nonexistent}" ]]
+  [[ -e "${FAKE_CONNECTOR_ACTIVE:-${FAKE_COMMAND_LOG}.no-active-connector}" ]]
   exit
 fi
 case "${1:-}" in
