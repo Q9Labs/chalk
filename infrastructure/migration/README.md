@@ -21,7 +21,7 @@ Nightly state. Original state and dated backups remain untouched.
 ## Offline declaration comparison
 
 ```sh
-pnpm --dir infrastructure exec tsx migration/check-definitions.ts 06cc8e4d90
+pnpm --dir infrastructure exec tsx migration/check-definitions.ts ab6e458b8f
 ```
 
 `structure-moves.json` records source relocations. The comparison walks every
