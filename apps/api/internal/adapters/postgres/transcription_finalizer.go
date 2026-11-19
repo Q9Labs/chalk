@@ -11,7 +11,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcripts.FinalizerClaimInput) (transcripts.FinalizerAssignment, error) {
+func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcripts.FinalizerClaimInput) (_ transcripts.FinalizerAssignment, err error) {
+	defer func() { err = artifactRepositoryFailure(err) }()
 	if r.transactor == nil {
 		return transcripts.FinalizerAssignment{}, transcripts.ErrArtifactRepository
 	}

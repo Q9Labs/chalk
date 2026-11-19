@@ -13,7 +13,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.ClaimInput) (transcripts.Assignment, error) {
+func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.ClaimInput) (_ transcripts.Assignment, err error) {
+	defer func() { err = artifactRepositoryFailure(err) }()
 	if r.transactor == nil {
 		return transcripts.Assignment{}, transcripts.ErrArtifactRepository
 	}

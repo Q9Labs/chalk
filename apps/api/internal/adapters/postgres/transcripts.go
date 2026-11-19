@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -76,6 +79,22 @@ func NewTranscriptRepository(queries transcriptQuerier) TranscriptRepository {
 
 func NewTranscriptRepositoryWithPool(queries transcriptQuerier, transactor transcriptTransactor) TranscriptRepository {
 	return TranscriptRepository{queries: queries, transactor: transactor}
+}
+
+// artifactRepositoryFailure reports a database that cannot be reached, such as a
+// branch with no primary (SQLSTATE class 08), as ErrArtifactRepository so the
+// HTTP boundary answers 503 instead of an unexplained 500. The cause stays in
+// the chain for the log. Every other error passes through unchanged.
+func artifactRepositoryFailure(err error) error {
+	var pgError *pgconn.PgError
+	var network net.Error
+	switch {
+	case err == nil, errors.Is(err, transcripts.ErrArtifactRepository):
+		return err
+	case errors.As(err, &pgError) && strings.HasPrefix(pgError.Code, "08"), errors.As(err, &network):
+		return fmt.Errorf("%w: %w", transcripts.ErrArtifactRepository, err)
+	}
+	return err
 }
 
 func (r TranscriptRepository) Create(ctx context.Context, input transcripts.CreateInput) (transcripts.Transcript, error) {
