@@ -54,6 +54,14 @@ not run them. First save private state/output snapshots and complete the other
 lane's current no-op proof. All commands below are **future operator writes**.
 No active operation accepts bare `nightly`; only retirement can address it.
 
+Before deleting recorder runtime downloads, inspect protected fleet/release
+settings for the three `CHALK_RECORDER_FLEET_ARCHIVE_CDN_*` variables. The Go
+fleet and boot-probe adapters can optionally use this CDN; current Nightly
+orchestration does not require it. Confirm no remaining consumer points at the
+retired distribution. Where a consumer must switch to existing S3 presigning,
+remove all three settings together (`OptionalCDN` rejects a partial set). No
+private deployment settings or live consumer inventory were read in this lane.
+
 For the two seeded Alchemy stages, preview first, then apply sequentially:
 
 ```sh
