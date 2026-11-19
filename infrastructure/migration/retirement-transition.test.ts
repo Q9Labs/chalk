@@ -51,14 +51,20 @@ const seeded = (): CreatedResourceState[] => [
 ];
 const rowsOf = (list: readonly ResourceState[]): Rows => Object.fromEntries(list.map((row) => [row.fqn, row]));
 
-interface Fake extends Resource<string, { readonly marker?: string }, { readonly marker: string; readonly state?: string }> {}
+interface LiveAttr {
+  readonly marker: string;
+  readonly state?: string;
+  readonly scheduleName?: string;
+  readonly groupName?: string;
+}
+interface Fake extends Resource<string, { readonly marker?: string }, LiveAttr> {}
 // The cloud boundary: one counting provider per legacy resource type. The planner, the state store,
 // cleanup and the transition are the real code.
 function fakeCloud(types: readonly string[]) {
   const deleted: string[] = [];
   const failOnce = new Set<string>();
   const missing = new Set<string>();
-  const live = new Map<string, { readonly marker: string; readonly state?: string }>();
+  const live = new Map<string, LiveAttr>();
   const providers = types.map((type) =>
     Provider.succeed(Resource<Fake>(type), {
       read: ({ fqn }) => Effect.succeed(missing.has(fqn) ? undefined : (live.get(fqn) ?? { marker: fqn })),
@@ -208,7 +214,7 @@ test("an updating record fails closed in preview and apply, naming the recovery 
 
 test("settle records the live resource as created, deletes nothing, and unblocks retirement", async () => {
   const { run, settleRun, cloud, remaining } = setup(interrupted(seeded()));
-  cloud.live.set("Reconcile", { marker: "live", state: "DISABLED" });
+  cloud.live.set("Reconcile", { marker: "live", state: "DISABLED", scheduleName: "chalk-nightly-transcription-reconcile", groupName: "chalk-nightly" });
   const settled = await settleRun();
   assert.ok(Exit.isSuccess(settled), failureText(settled));
   assert.deepEqual(settled.value, ["Reconcile"]);
