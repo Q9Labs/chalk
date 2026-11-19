@@ -59,7 +59,7 @@ type cleanupAssignment struct {
 func cleanupClaimHandler(service CleanupWorkerService, auth WorkloadAuthorizer, authority CleanupDeleteAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body cleanupClaimBody
@@ -75,7 +75,7 @@ func cleanupClaimHandler(service CleanupWorkerService, auth WorkloadAuthorizer, 
 				break
 			}
 			if err != nil {
-				writeWorkerError(w, err)
+				writeWorkerError(w, r, err)
 				return
 			}
 			const ttl = 5 * time.Minute
@@ -111,7 +111,7 @@ func decodeCleanupLease(r *http.Request) (transcripts.CleanupLeaseInput, error) 
 func cleanupCompleteHandler(service CleanupWorkerService, auth WorkloadAuthorizer, authority CleanupDeleteAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		lease, err := decodeCleanupLease(r)
@@ -121,7 +121,7 @@ func cleanupCompleteHandler(service CleanupWorkerService, auth WorkloadAuthorize
 		}
 		key, err := service.CleanupKey(r.Context(), lease)
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		if err := authority.VerifyAbsent(r.Context(), key); err != nil {
@@ -130,7 +130,7 @@ func cleanupCompleteHandler(service CleanupWorkerService, auth WorkloadAuthorize
 		}
 		job, err := service.CompleteCleanup(r.Context(), lease)
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponseBody{JobID: job.ID.String(), State: job.State, Attempt: job.Attempt, AttemptLimit: job.AttemptLimit})
@@ -147,7 +147,7 @@ type cleanupRetryBody struct {
 func cleanupRetryHandler(service CleanupWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body cleanupRetryBody
@@ -170,7 +170,7 @@ func cleanupRetryHandler(service CleanupWorkerService, auth WorkloadAuthorizer) 
 		}
 		job, err := service.RetryCleanup(r.Context(), transcripts.CleanupRetryInput{CleanupLeaseInput: transcripts.CleanupLeaseInput{JobID: id, Attempt: body.Attempt, LeaseOwner: "transcription-cleanup", LeaseToken: body.LeaseToken, Now: time.Now()}, DueAt: dueAt, ErrorCode: body.ErrorCode, ErrorDetail: "cleanup retry", Terminal: body.Terminal})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponseBody{JobID: job.ID.String(), State: job.State, Attempt: job.Attempt, AttemptLimit: job.AttemptLimit})

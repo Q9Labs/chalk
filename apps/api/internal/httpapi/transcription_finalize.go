@@ -91,7 +91,7 @@ type finalizerChunkResponse struct {
 func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer, authority FinalizerAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body finalizerClaimBody
@@ -107,7 +107,7 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 				break
 			}
 			if err != nil {
-				writeWorkerError(w, err)
+				writeWorkerError(w, r, err)
 				return
 			}
 			const ttl = transcriptionWorkLeaseDuration
@@ -123,7 +123,7 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 			lease := transcripts.LeaseInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: assignment.LeaseToken, Now: now}
 			key, keyErr := service.FinalizerKey(r.Context(), lease)
 			if keyErr != nil {
-				writeWorkerError(w, keyErr)
+				writeWorkerError(w, r, keyErr)
 				return
 			}
 			outputURL, err := authority.CreateFinalArtifactPUTURL(r.Context(), FinalizerPUTURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
@@ -160,7 +160,7 @@ type finalizerCompleteBody struct {
 func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer, authority FinalizerAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body finalizerCompleteBody
@@ -181,7 +181,7 @@ func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth Wor
 		lease := transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}
 		key, err := service.FinalizerKey(r.Context(), lease)
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		if err := authority.VerifyFinalArtifact(r.Context(), FinalizerObjectVerification{JobID: jobID, Attempt: body.Attempt, Key: key, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
@@ -190,7 +190,7 @@ func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth Wor
 		}
 		transcript, err := service.CompleteFinalizer(r.Context(), transcripts.FinalizerCompleteInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Provider: body.Provider, Model: body.Model, VersionContract: body.VersionContract, ExecutionIdentity: body.ExecutionIdentity, ProviderRequestID: body.ProviderRequestID, Languages: body.Languages, ArtifactSHA256: checksum, ArtifactSize: body.ResultSizeBytes, ArtifactContentType: body.ContentType, Quality: body.Quality, Now: time.Now()})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, newTranscriptArtifactResponse(transcript))
@@ -209,7 +209,7 @@ type finalizerRetryBody struct {
 func finalizerRetryHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body finalizerRetryBody
@@ -232,7 +232,7 @@ func finalizerRetryHandler(service TranscriptFinalizerWorkerService, auth Worklo
 		}
 		job, err := service.RetryFinalizer(r.Context(), transcripts.RetryInput{LeaseInput: transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, AvailableAt: dueAt, ErrorCode: body.ErrorCode, ErrorDetail: "finalizer retry", Terminal: body.Terminal})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponse(job))

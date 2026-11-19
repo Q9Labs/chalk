@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -48,7 +49,7 @@ func decodeWorkerLease(r *http.Request) (utilities.ID, workerLeaseBody, error) {
 func workerHeartbeatHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		jobID, body, err := decodeWorkerLease(r)
@@ -58,7 +59,7 @@ func workerHeartbeatHandler(service TranscriptWorkerService, auth WorkloadAuthor
 		}
 		job, err := service.Heartbeat(r.Context(), transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, time.Now().Add(transcriptionWorkLeaseDuration))
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponse(job))
@@ -75,7 +76,7 @@ type workerRetryBody struct {
 func workerRetryHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		id, body, err := workerRetryInput(r)
@@ -94,7 +95,7 @@ func workerRetryHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 		terminal := body.Terminal != nil && *body.Terminal
 		job, err := service.Retry(r.Context(), transcripts.RetryInput{LeaseInput: transcripts.LeaseInput{JobID: id, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, AvailableAt: available, ErrorCode: body.ErrorCode, ErrorDetail: "dispatcher retry", Terminal: terminal})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponse(job))
@@ -133,7 +134,7 @@ type workerCompleteBody struct {
 func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthorizer, results ResultAuthority) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		var body workerCompleteBody
@@ -161,7 +162,7 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 		lease := transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}
 		resultKey, err := resolver.ResultKey(r.Context(), lease)
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		if err := results.VerifyResult(r.Context(), ResultVerification{JobID: jobID, Attempt: body.Attempt, Key: resultKey, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
@@ -175,7 +176,7 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 		}
 		result, err := service.AcceptResult(r.Context(), transcripts.ResultInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Provider: body.Provider, Model: body.Model, ProviderVersion: body.VersionContract, ProviderRequestID: body.ProviderRequestID, ExecutionIdentity: body.ExecutionIdentity, MeasuredAudioMS: body.MeasuredAudioMS, ProviderObservedDurationMS: observedDurationMS, ResultSHA256: checksum, ResultSize: body.ResultSizeBytes, ResultContentType: body.ContentType, Language: body.Language, Quality: body.Quality, Now: time.Now()})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
@@ -185,7 +186,7 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 func workerCancelHandler(service TranscriptWorkerService, auth WorkloadAuthorizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
-			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+			writeWorkloadUnauthorized(w, r, err)
 			return
 		}
 		jobID, body, err := decodeWorkerLease(r)
@@ -195,7 +196,7 @@ func workerCancelHandler(service TranscriptWorkerService, auth WorkloadAuthorize
 		}
 		job, err := service.Cancel(r.Context(), transcripts.CancelInput{LeaseInput: transcripts.LeaseInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Now: time.Now()}, ErrorCode: "worker.cancelled", ErrorDetail: "worker cancelled"})
 		if err != nil {
-			writeWorkerError(w, err)
+			writeWorkerError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, workerJobResponse(job))
@@ -212,13 +213,35 @@ type workerJobResponseBody struct {
 func workerJobResponse(job transcripts.Job) workerJobResponseBody {
 	return workerJobResponseBody{JobID: job.ID.String(), State: job.State, Attempt: job.Attempt, AttemptLimit: job.AttemptLimit}
 }
-func writeWorkerError(w http.ResponseWriter, err error) {
+
+// writeWorkloadUnauthorized answers 401 and logs why the workload was refused.
+// The reasons come from the authorizer and name no secret; the headers logged
+// are the ones a mismatch is read from, never the signature or nonce.
+func writeWorkloadUnauthorized(w http.ResponseWriter, r *http.Request, reason error) {
+	observability.RequestLogger(r.Context()).WarnContext(r.Context(), "workload authorization rejected", "event", "workload.unauthorized",
+		"method", r.Method, "route", r.URL.Path, "reason", clipLogValue(reason.Error()),
+		"role", clipLogValue(r.Header.Get(workloadRoleHeader)), "environment", clipLogValue(r.Header.Get(workloadEnvironmentHeader)),
+		"release", clipLogValue(r.Header.Get(workloadReleaseHeader)), "audience", clipLogValue(r.Header.Get(workloadAudienceHeader)),
+		"timestamp", clipLogValue(r.Header.Get(workloadTimestampHeader)))
+	writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
+}
+
+func clipLogValue(value string) string {
+	const limit = 128
+	if len(value) > limit {
+		return value[:limit]
+	}
+	return value
+}
+
+func writeWorkerError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, transcripts.ErrInvalidLease), errors.Is(err, transcripts.ErrInvalidArtifact):
 		writeError(w, http.StatusBadRequest, "request.invalid", "Invalid artifact worker request")
 	case errors.Is(err, transcripts.ErrJobNotFound):
 		writeError(w, http.StatusNotFound, "job.not_found", "Artifact job was not found")
 	case errors.Is(err, transcripts.ErrArtifactRepository):
+		observability.LogHTTPError(r.Context(), r.Method, r.URL.Path, "service.unavailable", err)
 		writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Artifact worker is unavailable")
 	case errors.Is(err, transcripts.ErrStaleLease):
 		writeError(w, http.StatusConflict, "lease.stale", "Lease is stale or expired")
@@ -227,6 +250,7 @@ func writeWorkerError(w http.ResponseWriter, err error) {
 	case errors.Is(err, transcripts.ErrDuplicateResult):
 		writeError(w, http.StatusConflict, "result.duplicate", "A result was already accepted")
 	default:
+		observability.LogHTTPError(r.Context(), r.Method, r.URL.Path, "internal.error", err)
 		writeError(w, http.StatusInternalServerError, "internal.error", "Artifact worker operation failed")
 	}
 }
