@@ -36,6 +36,11 @@ if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null || ! command -v 
   sudo apt-get update -qq
   sudo apt-get install -y -qq ruby lsof default-jre-headless gnupg
 fi
+if ! command -v actionlint >/dev/null; then
+  mkdir -p "$scratch/bin"
+  GOBIN="$scratch/bin" go install "github.com/rhysd/actionlint/cmd/actionlint@v$(scripts/lib/tool-version.sh actionlint)"
+  export PATH="$scratch/bin:$PATH"
+fi
 pnpm install --frozen-lockfile
 if ((browser)); then
   pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium
