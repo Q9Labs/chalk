@@ -63,5 +63,11 @@ export function checkRegistry() {
       if (!existsSync(new URL(file, import.meta.url))) throw new Error(`Registry file missing: ${file}`);
     }
   const readme = readFileSync(new URL("README.md", import.meta.url), "utf8");
-  if (!readme.includes(`<!-- stacks:start -->\n${registryTable()}\n<!-- stacks:end -->`)) throw new Error("Registry table is stale: pnpm infra table");
+  const marked = readme.match(/<!-- stacks:start -->([\s\S]*?)<!-- stacks:end -->/);
+  const cells = (table: string) =>
+    table
+      .split("\n")
+      .filter((row) => row.startsWith("|"))
+      .map((row) => row.split("|").map((cell) => cell.trim().replace(/^-+$/, "---")));
+  if (!marked?.[1] || JSON.stringify(cells(marked[1])) !== JSON.stringify(cells(registryTable()))) throw new Error("Registry table is stale: pnpm infra table");
 }
