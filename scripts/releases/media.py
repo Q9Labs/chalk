@@ -30,7 +30,7 @@ INPUTS = {
     'dispatcher_configuration': ('infrastructure/transcription-dispatcher/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.
-SUPPORTED_DISPATCHER_CONFIGURATION = 'ab548f18824fc1cb63dd0690e8401a45e8d63cde043b0b8ee78ec7b04de7e735'
+SUPPORTED_DISPATCHER_CONFIGURATION = 'ed279672cded837422cda2fba13c9fee0797ad275f703a0dd765f6e95acfd0a8'
 
 
 def fingerprint(member):
