@@ -4,6 +4,8 @@ import type * as DigitalOcean from "@alchemy.run/digitalocean";
 import { canonicalSetJson } from "../alchemy/bucket-policy.ts";
 import { contextKeys, type RecorderConfig } from "./config.ts";
 
+export const recorderControlPorts = "8443-8444";
+
 export const kmsPolicy = (config: Pick<RecorderConfig, "environment" | "control_plane_role_arn" | "legacy_kms_context_key">, accountId: string): string => {
   const condition = (keys: string[]) => ({
     StringEquals: { "kms:EncryptionContext:chalk.environment": config.environment },
@@ -68,7 +70,7 @@ export const keyProps = (config: RecorderConfig, accountId: string): AWS.KMS.Key
 export const poolFirewallProps = (config: Pick<RecorderConfig, "environment" | "control_addresses">, role: "capture" | "render"): DigitalOcean.FirewallProps => {
   const all = ["0.0.0.0/0", "::/0"];
   const outboundRules: DigitalOcean.FirewallRule[] = [
-    ...(config.control_addresses.length ? [{ protocol: "tcp", ports: "8443-8444", addresses: [...config.control_addresses] } satisfies DigitalOcean.FirewallRule] : []),
+    ...(config.control_addresses.length ? [{ protocol: "tcp", ports: recorderControlPorts, addresses: [...config.control_addresses] } satisfies DigitalOcean.FirewallRule] : []),
     { protocol: "tcp", ports: "443", addresses: all },
     { protocol: "udp", ports: "123", addresses: all },
     { protocol: "udp", ports: "53", addresses: all },

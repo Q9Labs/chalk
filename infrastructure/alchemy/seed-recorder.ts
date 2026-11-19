@@ -4,7 +4,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { canonicalBucketProps, poolFirewallProps } from "../recorder/resources.ts";
+import { canonicalBucketProps, poolFirewallProps, recorderControlPorts } from "../recorder/resources.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag } from "./recorder-pools.ts";
 import { RecordingBucket } from "./recording-bucket.ts";
 import { checkFirewall, firewallProps, tofuFirewall } from "./seed-sfu.ts";
@@ -150,7 +150,7 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     const fw = getResource(source, `module.${role}.digitalocean_firewall.${role}`, tofuFirewall);
     if (tag.name !== contract.pool || tag.id !== tag.name || fw.name !== `chalk-recorder-${role}-${stage}` || fw.droplet_ids.length || fw.inbound_rule.length || fw.tags?.length) return yield* Effect.die("Recorder policies must remain outbound-only, unattached and correctly named.");
     const sourceProps = firewallProps(fw);
-    const props = poolFirewallProps({ environment: Schema.decodeUnknownSync(Schema.Literals(["nightly", "production"]))(stage), control_addresses: fw.outbound_rule.find((rule) => rule.protocol === "tcp" && rule.port_range === "8443-8444")?.destination_addresses ?? [] }, role);
+    const props = poolFirewallProps({ environment: Schema.decodeUnknownSync(Schema.Literals(["nightly", "production"]))(stage), control_addresses: fw.outbound_rule.find((rule) => rule.protocol === "tcp" && rule.port_range === recorderControlPorts)?.destination_addresses ?? [] }, role);
     const fwResource = role === "capture" ? CaptureFirewall : RenderFirewall;
     const tagResource = role === "capture" ? CaptureTag : RenderTag;
     const fwAttr = yield* role === "capture" ? observe(CaptureFirewall, props, "CaptureFirewall") : observe(RenderFirewall, props, "RenderFirewall");

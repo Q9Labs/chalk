@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { releaseContractRoots } from "./release-contract-paths.mjs";
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -54,29 +55,6 @@ const proofTestRoots = [
   "sdks/typescript/client/package.json",
   "sdks/typescript/client/tsconfig.json",
   "pnpm-lock.yaml",
-];
-// What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
-// the transcription configuration that check_configuration fingerprints, the two workflows that GateCheckedTests read, and the API module files and migrations that the manifest and component planning read.
-const releaseContractRoots = [
-  "scripts/releases",
-  "scripts/recorder/release.py",
-  "scripts/recorder/archive.py",
-  "scripts/recorder/release_core.py",
-  "scripts/recorder/release_io.py",
-  "scripts/recorder/dispatcher_binding.py",
-  "scripts/recorder/alchemy_dispatcher.py",
-  "scripts/recorder/dispatcher_state.py",
-  "scripts/recorder/test_dispatcher_alchemy.py",
-  "infrastructure/alchemy/dispatcher",
-  "infrastructure/managed-episode",
-  "infrastructure/nightly/transcription",
-  "features/scorecard",
-  "perf/budgets.json",
-  ".github/workflows/ci.yml",
-  ".github/workflows/nightly.yml",
-  "apps/api/go.mod",
-  "apps/api/go.sum",
-  "apps/api/db/migrations",
 ];
 // plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
 const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
@@ -523,6 +501,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/test/no-network.test.mjs",
       "scripts/lib/platform.test.mjs",
       "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/chalk-gate-plan-release.test.mjs",
       "scripts/gates/feature-map.test.mjs",
       "scripts/gates/ready-cap.test.mjs",
       "scripts/gates/references.test.mjs",
