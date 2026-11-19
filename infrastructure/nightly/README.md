@@ -14,11 +14,11 @@ The 2 GiB host fits only because nightly caps are smaller than production's. The
 
 ### Stable recorder address
 
-The Nightly recorder host requires the Elastic IP owned by [`recording-control-address`](recording-control-address/README.md). An automatic public IP changes after a Spot stop and start, leaving the recorder's direct TLS hostname pointing at the old address, and the API tunnel does not replace that listener.
+The Nightly recorder host requires the Elastic IP owned by [`recording-control-address`](../recording-control-address/README.md). An automatic public IP changes after a Spot stop and start, leaving the recorder's direct TLS hostname pointing at the old address, and the API tunnel does not replace that listener.
 
 Only after separate cost approval, deploy this root once to install a new retained allocation. On later host replacements, update the nightly release configuration's `runtime.instance_id` and the nightly managed deployment target together. Release calls `scripts/releases/media.py qualify` after deployment and before either recorder cold boot; that moves the tagged allocation to the SSM target and waits for AWS to confirm. A retry after a lost response observes the completed move. Missing or ambiguous allocations fail closed, and Release never allocates, releases or changes DNS. The root has its own state so the allocation survives host replacement; only the association moves. Never destroy or recreate the allocation during replacement.
 
-Use the [recorder address stack guide](recording-control-address/README.md) for
+Use the [recorder address stack guide](../recording-control-address/README.md) for
 Alchemy planning, deployment, outputs, and rollback. The address is currently **not allocated**; the historical OpenTofu state is
 stale. Do not seed it or deploy a replacement under the no-change migration
 approval. A first deployment creates a new recurring-cost Elastic IP and its
@@ -33,7 +33,7 @@ After an approved installation, save the `allocation_id` output durably with the
 aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
 ```
 
-The release needs [release-policy.json](recording-control-address/release-policy.json), which allows address and instance reads and association of only the allocation with both nightly recorder tags, and nothing else (no allocate, release, disassociate, DNS or IAM-write). Account-specific installation and undo are in the private **Nightly recorder address permissions** runbook in the ignored `.private/` workspace.
+The release needs [release-policy.json](../recording-control-address/release-policy.json), which allows address and instance reads and association of only the allocation with both nightly recorder tags, and nothing else (no allocate, release, disassociate, DNS or IAM-write). Account-specific installation and undo are in the private **Nightly recorder address permissions** runbook in the ignored `.private/` workspace.
 
 On the first install only, save the full Cloudflare record as the undo and set only the DNS-only A record `nightly-recording-control.chalkmeet.com` to the output, keeping its TTL. Append `/32` to the output for the capture and render recorder policies' `control_addresses` and apply both firewalls before the cold-boot check. Confirm the public DNS answer matches before the signed recorder cold-boot check, and keep the record unchanged across host replacements.
 
@@ -45,6 +45,6 @@ Create an empty database, not a branch or restore of production, and verify empt
 
 ## Transcription caller
 
-Release builds and qualifies a dispatcher ZIP when its inputs change. The [dispatcher Alchemy stack](../alchemy/dispatcher/README.md) serves both environments through one guarded driver. Each environment must be explicitly seeded before releases; there is no automatic import or fallback to OpenTofu. Inputs are retained in the environment's redacted Alchemy stack output. Release selects the exact versioned ZIP, checks the full in-memory plan, applies that same plan and requires an all-no-op second plan. Promote copies the same bytes without rebuilding. Normal updates permit only code, release metadata and scheduler activation. The dispatcher OpenTofu module and Nightly caller have been retired; their original state and dated backups remain untouched.
+Release builds and qualifies a dispatcher ZIP when its inputs change. The [dispatcher Alchemy stack](../transcription-dispatcher/README.md) serves both environments through one guarded driver. Each environment must be explicitly seeded before releases; there is no automatic import or fallback to OpenTofu. Inputs are retained in the environment's redacted Alchemy stack output. Release selects the exact versioned ZIP, checks the full in-memory plan, applies that same plan and requires an all-no-op second plan. Promote copies the same bytes without rebuilding. Normal updates permit only code, release metadata and scheduler activation. The dispatcher OpenTofu module and Nightly caller have been retired; their original state and dated backups remain untouched.
 
 Recorder policy inputs for nightly are `environment=nightly`, `staging_evidence_digest`, `ready_spare=0`, zero capture reservations and `render_desired_nodes=0`, plus the nightly control role, control addresses, R2 account and image evidence. The policy root never creates runtime Droplets; its API reconciler does.

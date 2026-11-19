@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as Schema from "effect/Schema";
 import { parseConfig } from "./config.ts";
 import { canonicalBucketProps, kmsPolicy, poolFirewallProps } from "./resources.ts";
-import { firewallProps, tofuFirewall } from "../alchemy/seed-sfu.ts";
+import { firewallProps, tofuFirewall } from "../migration/sfu.ts";
 
 test("recorder defaults remain zero-idle and do not authorize mutations", () => {
   const config = parseConfig({});

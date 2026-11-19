@@ -7,8 +7,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { environment, providers, state } from "../alchemy/config.ts";
-import { SfuDroplet, sfuClient, sfuDropletProvider } from "../alchemy/sfu-droplet.ts";
+import { environment, providers, state } from "../platform/config.ts";
+import { SfuDroplet, sfuClient, sfuDropletProvider } from "../providers/digitalocean-sfu-droplet.ts";
 import { loadConfig, firewallConfig, renderCloudInit } from "./config.ts";
 
 const digitalocean = DigitalOcean.providers();

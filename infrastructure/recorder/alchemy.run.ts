@@ -8,9 +8,9 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { environment, providers, state } from "../alchemy/config.ts";
-import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag, recorderPoolProviders } from "../alchemy/recorder-pools.ts";
-import { RecordingBucket, recordingBucketProvider } from "../alchemy/recording-bucket.ts";
+import { environment, providers, state } from "../platform/config.ts";
+import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag, recorderPoolProviders } from "../providers/digitalocean-recorder-pools.ts";
+import { RecordingBucket, recordingBucketProvider } from "../providers/cloudflare-recording-bucket.ts";
 import { loadConfig, requireInput } from "./config.ts";
 import { bucketProps, keyProps, poolFirewallProps } from "./resources.ts";
 

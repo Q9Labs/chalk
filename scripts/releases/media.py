@@ -20,14 +20,14 @@ _recorder_spec = importlib.util.spec_from_file_location("recorder_archive_releas
 recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
 from dispatcher_binding import dispatcher_inputs, binding_target, verify_dispatcher
-from alchemy_dispatcher import run_plan, check_plan as check_alchemy_plan
+from alchemy_dispatcher import run_plan
 from github_release import GitHub, payload, retain, retained
 
 INPUTS = {
     'capture': ('apps/api/', 'features/media/sfu/protocol/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
     'render': ('apps/api/', 'features/media/sfu/protocol/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'dispatcher': ('infrastructure/alchemy/dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
-    'dispatcher_configuration': ('infrastructure/nightly/transcription/',),
+    'dispatcher': ('infrastructure/transcription-dispatcher/', 'infrastructure/transcription-dispatcher/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'dispatcher_configuration': ('infrastructure/transcription-dispatcher/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.
 SUPPORTED_DISPATCHER_CONFIGURATION = 'f9d96320e4881034f12366696dfa83957788b4d9b9ad697c5272ea6d0c940d94'
@@ -251,20 +251,6 @@ def pin_archives(args):
         write_parameter(provider, parameter, value)
 
 
-def check_dispatcher_update(plan, release, archive, key, version, manifest_digest, config_digest):
-    def logs(before):
-        before['tags']['chalk_release_id'] = release
-    def function(before):
-        logs(before)
-        before['code'].update(key=key, version=version, sha256=base64.b64encode(bytes.fromhex(archive['sha256'])).decode())
-        before['description'] = f'Track-aware transcription dispatcher ({release})'
-        before['environment'].update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=manifest_digest, CHALK_CONFIG_DIGEST=config_digest, DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
-        before['tags'].update(chalk_release_manifest_digest=manifest_digest, chalk_config_digest=config_digest)
-    def schedule(before):
-        before['state'] = 'ENABLED'
-    check_alchemy_plan(plan, {'Function': function, 'Logs': logs, 'Reconcile': schedule}, {'artifact_identity', 'release_identity'})
-
-
 def deploy_dispatcher(args):
     check_configuration(args)
     provider, config = settings(args)
@@ -296,7 +282,7 @@ def deploy_dispatcher(args):
             # The destination object version does not exist until an upload. A
             # dry run verifies the candidate bytes and rejects an in-memory
             # current-state preflight plan; it never invents an S3 version.
-            run_plan(provider, current_inputs, lambda plan: check_alchemy_plan(plan, {}, set()))
+            run_plan(provider, current_inputs)
             print(json.dumps({'action': 'deploy-exact-media-zip', 'sha256': archive['sha256'], 'version_id': archive['version_id'],
                               'artifact_verified': True, 'state_plan_verified': True, 'preflight_only': True, 'verified': False}))
             return
@@ -308,8 +294,7 @@ def deploy_dispatcher(args):
         environment.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
         environment.pop('CHALK_CONFIG_DIGEST', None)
         inputs['config_digest'] = 'sha256:' + digest(json.dumps(environment, sort_keys=True, separators=(',', ':')))
-        run_plan(provider, inputs, lambda plan: check_dispatcher_update(plan, release, archive, key, version, inputs['release_manifest_digest'], inputs['config_digest']), apply=True,
-                 allowed_inputs={'release_id', 'release_manifest_digest', 'artifact_s3_bucket', 'artifact_s3_key', 'artifact_s3_object_version', 'artifact_sha256', 'artifact_sha256_base64', 'scheduler_state', 'deepinfra_corpus_digest', 'config_digest'})
+        run_plan(provider, inputs, 'release', apply=True)
         proof = verify_dispatcher(provider, config['dispatcher'], release)
         schedule = provider.aws('scheduler', 'get-schedule', '--name', config['dispatcher']['scheduler_name'], '--group-name', config['dispatcher']['scheduler_group'])
         require(schedule['State'] == 'ENABLED', 'dispatcher scheduler is not enabled')

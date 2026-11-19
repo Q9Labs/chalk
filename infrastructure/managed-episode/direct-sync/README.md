@@ -49,9 +49,9 @@ reviewed resolution and successful no-change cutover; do not run both owners.
 2. Once the stale-state blocker is resolved, seed with the original state:
 
    ```sh
-   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly "$direct_sync_state_file" --dry-run
-   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly "$direct_sync_state_file"
-   pnpm --dir infrastructure exec alchemy plan --config managed-episode/direct-sync/alchemy.run.ts --stage nightly --detailed
+   pnpm --dir infrastructure exec tsx migration/seed.ts direct-sync nightly "$direct_sync_state_file" --dry-run
+   pnpm --dir infrastructure exec tsx migration/seed.ts direct-sync nightly "$direct_sync_state_file"
+   pnpm --dir infrastructure exec alchemy plan --config direct-sync/alchemy.run.ts --stage nightly --detailed
    ```
 
 3. Require only no-ops or in-place ownership-tag additions with no product
@@ -60,9 +60,9 @@ reviewed resolution and successful no-change cutover; do not run both owners.
 4. Only after that plan passes:
 
    ```sh
-   pnpm --dir infrastructure exec alchemy deploy --config managed-episode/direct-sync/alchemy.run.ts --stage nightly --yes
-   pnpm --dir infrastructure exec alchemy plan --config managed-episode/direct-sync/alchemy.run.ts --stage nightly --detailed
-   pnpm --dir infrastructure exec alchemy drift --config managed-episode/direct-sync/alchemy.run.ts --stage nightly
+   pnpm --dir infrastructure exec alchemy deploy --config direct-sync/alchemy.run.ts --stage nightly --yes
+   pnpm --dir infrastructure exec alchemy plan --config direct-sync/alchemy.run.ts --stage nightly --detailed
+   pnpm --dir infrastructure exec alchemy drift --config direct-sync/alchemy.run.ts --stage nightly
    bash infrastructure/managed-episode/direct-sync/test-direct-sync-proxy
    ```
 
@@ -75,7 +75,7 @@ reviewed resolution and successful no-change cutover; do not run both owners.
 After a successful cutover, forget only this stack's Alchemy records:
 
 ```sh
-pnpm --dir infrastructure exec alchemy state delete direct-sync/nightly --recursive --config managed-episode/direct-sync/alchemy.run.ts --no-input
+pnpm --dir infrastructure exec alchemy state delete direct-sync/nightly --recursive --config direct-sync/alchemy.run.ts --no-input
 ```
 
 Restore the pre-cutover commit's OpenTofu configuration, initialize its original

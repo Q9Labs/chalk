@@ -16,7 +16,7 @@ auditConfig:
     - CVE-2025-71329
 
 overrides:
-  # One preview dependency graph; see infrastructure/alchemy/preview-build.json.
+  # One preview dependency graph; see infrastructure/platform/preview-build.json.
   "@alchemy.run/acme": https://pkg.alchemy.run/@alchemy.run/acme/-/22f5f86e43b8d7eaacd10e56712efd348665830420538a903daa1d6a2749bf11.tgz
   "@alchemy.run/aws": https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz
   "@alchemy.run/cloudflare": https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz

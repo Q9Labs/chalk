@@ -1,7 +1,7 @@
 import type * as AWS from "@alchemy.run/aws";
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import type * as DigitalOcean from "@alchemy.run/digitalocean";
-import { canonicalSetJson } from "../alchemy/bucket-policy.ts";
+import { canonicalSetJson } from "../providers/aws-bucket-policy.ts";
 import { contextKeys, type RecorderConfig } from "./config.ts";
 
 export const recorderControlPorts = "8443-8444";

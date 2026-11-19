@@ -14,13 +14,7 @@ on:
       - scripts/releases/**
       - scripts/deploy/**
       - scripts/transcription-dispatcher/**
-      - infrastructure/managed-episode/**
-      - infrastructure/recorder/**
-      - infrastructure/alchemy/**
-      - infrastructure/package.json
-      - infrastructure/tsconfig.json
-      - infrastructure/nightly/**
-      - infrastructure/cloudflare-r2-transcription-lifecycle/**
+      - infrastructure/**
       - apps/transcription-dispatcher/**
       - .tool-versions
   workflow_dispatch:

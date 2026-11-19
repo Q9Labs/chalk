@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MODULE_DIR="$ROOT_DIR/infrastructure/alchemy/dispatcher"
+MODULE_DIR="$ROOT_DIR/infrastructure/transcription-dispatcher"
 fail() { echo "transcription dispatcher contract: $*" >&2; exit 1; }
 require() { grep -qE -- "$1" "$2" || fail "missing '$1' in $2"; }
 # Scans the files git does not ignore. A scan that cannot run fails the contract.

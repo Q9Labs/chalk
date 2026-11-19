@@ -10,8 +10,8 @@ states currently name missing resources, so their create plans must not run.
 Production standby passes seed dry-run. Primary refuses a missing TCP media rule
 relative to the current definition; its state and live rules agree. No production
 state was written. See the
-[migration reference](../alchemy/digitalocean-migration.md) and
-[cutover commands](../alchemy/cutover-digitalocean.md).
+[migration reference](../migration/digitalocean.md) and
+[cutover commands](../migration/cutover-digitalocean.md).
 
 The original root below remains runnable until a verified cutover. The new
 cloud-init renderer is checked byte-for-byte against its OpenTofu rendering.

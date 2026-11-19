@@ -77,7 +77,7 @@ Production keeps running on the Tunnel until someone does all of this, each step
 needing the owner's go-ahead because DNS and the production security group
 change:
 
-1. Widen the `environment` validation in `infrastructure/alchemy/config.ts` and the direct-sync stack (it accepts only `nightly`) in a reviewed change, plan and deploy the stack for production and install the proxy.
+1. Widen the `environment` validation in `infrastructure/platform/config.ts` and the direct-sync stack (it accepts only `nightly`) in a reviewed change, plan and deploy the stack for production and install the proxy.
 2. Check from outside the VPC that 443 answers, a Sync upgrade and an SFU
    preflight succeed, and every other path returns 404.
 3. Pass a nightly trial first: at least 30 joins per arm from at least 2 Pakistani

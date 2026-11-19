@@ -4,7 +4,7 @@ This runbook keeps the rules for releasing transcript-first transcription to pro
 
 ## Constraints
 
-- The dispatcher is a Node.js arm64 Lambda with no VPC attachment, NAT gateway, database access or reusable object-storage permission. It reads credentials only from exact SSM SecureString ARNs, calls the control API over public authenticated HTTPS, and receives only job-scoped presigned R2 authorities. Its [Alchemy stack](../infrastructure/alchemy/dispatcher/README.md) is `infrastructure/alchemy/dispatcher/stack.ts`, pinned at `2.0.0-beta.87`.
+- The dispatcher is a Node.js arm64 Lambda with no VPC attachment, NAT gateway, database access or reusable object-storage permission. It reads credentials only from exact SSM SecureString ARNs, calls the control API over public authenticated HTTPS, and receives only job-scoped presigned R2 authorities. Its [Alchemy stack](../infrastructure/transcription-dispatcher/README.md) is `infrastructure/transcription-dispatcher/alchemy.run.ts`, pinned at `2.0.0-beta.87`.
 - The provider is direct DeepInfra with an adapter contract version. Set `deepinfra_enabled = true` and `cloudflare_enabled = false`. Do not substitute Cloudflare, a VPC/NAT design or a rendered MP4 path to get around a blocker.
 - The provider corpus digest is mandatory when DeepInfra is enabled. It must be the digest of the retained, passing qualification corpus for this adapter and model. A short request or a made-up digest does not qualify. Optional execution-identity and model-version pins stay absent until the provider returns a stable value to assert. They are not qualification evidence.
 - The release owner confirms outside this repo that the provider account is active, funded as intended and has automatic top-ups disabled.
@@ -41,21 +41,21 @@ export CHALK_PRODUCTION_TOFU_STATE="$(mktemp)"
 chmod 600 "$CHALK_PRODUCTION_TOFU_STATE"
 aws --profile q9labs s3api get-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key production/transcription-dispatcher/terraform.tfstate "$CHALK_PRODUCTION_TOFU_STATE" >/dev/null
 aws --profile q9labs s3api copy-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key "production/transcription-dispatcher/backups/$(date -u +%Y-%m-%dT%H-%M-%SZ)/terraform.tfstate" --copy-source "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1/production/transcription-dispatcher/terraform.tfstate" >/dev/null
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE" --dry-run
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx migration/seed.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE" --dry-run
 ```
 
 Capture live facts before the seed. This command records environment variable
 names, never values:
 
 ```sh
-AWS_PROFILE=q9labs python3 scripts/transcription-dispatcher/cutover-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-before.json"
+AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
 Seed in one command, then plan in one command:
 
 ```sh
-AWS_PROFILE=q9labs CHALK_ALLOW_PRODUCTION_SEED=1 pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE"
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx alchemy/dispatcher/driver.ts plan production
+AWS_PROFILE=q9labs CHALK_ALLOW_PRODUCTION_SEED=1 pnpm --dir infrastructure exec tsx migration/seed.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE"
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx releases/driver.ts plan production
 ```
 
 Expect only `noop` for `Logs`, `AsyncFailure`, `SchedulerDlq`, `ExecutionRole`,
@@ -70,7 +70,7 @@ After seed and plan, require read-only drift detection and unchanged live facts:
 
 ```sh
 AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy drift --config nightly/transcription/alchemy.run.ts --stage production
-AWS_PROFILE=q9labs python3 scripts/transcription-dispatcher/cutover-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
+AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
 Never run `tofu destroy`, `alchemy destroy` or `alchemy nuke`. The original

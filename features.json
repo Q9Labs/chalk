@@ -231,8 +231,8 @@
         "apps/sync/test/chalk_sync/recording_foundation_test.exs",
         "apps/web/src/routes/dashboard._app.recordings.tsx",
         "docs/recording",
-        "infrastructure/nightly/archive-cdn",
-        "infrastructure/nightly/recording-control-address",
+        "infrastructure/archive-cdn",
+        "infrastructure/recording-control-address",
         "infrastructure/recorder",
         "packages/recording-presentation",
         "scripts/recorder",
@@ -257,9 +257,8 @@
         "apps/api/internal/httpapi/transcription_worker_types.go",
         "apps/api/internal/transcripts",
         "apps/transcription-dispatcher",
-        "infrastructure/nightly/transcription",
-        "infrastructure/alchemy/dispatcher",
-        "infrastructure/cloudflare-r2-transcription-lifecycle",
+        "infrastructure/transcription-dispatcher",
+        "infrastructure/components",
         "packages/transcript-language",
         "scripts/transcription-dispatcher"
       ]

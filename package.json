@@ -79,7 +79,8 @@
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
     "web:proof": "node scripts/web-proof/run.mjs",
     "test:e2e": "e2e run",
-    "test:mutations": "bash scripts/gates/with-postgres.sh -- node scripts/test/mutations.mjs"
+    "test:mutations": "bash scripts/gates/with-postgres.sh -- node scripts/test/mutations.mjs",
+    "infra": "pnpm --dir infrastructure infra"
   },
   "dependencies": {
     "react": "19.2.7"

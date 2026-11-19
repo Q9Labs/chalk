@@ -35,7 +35,8 @@ check workspace-dependencies env CI=true pnpm install --frozen-lockfile
 check dispatcher-tests pnpm --dir apps/transcription-dispatcher test
 check dispatcher-contract scripts/transcription-dispatcher/validate-contract.sh
 check image-shell bash -c 'for path in infrastructure/recorder/images/{cpu,capture}/*.sh; do bash -n "$path" || exit; done'
-check dispatcher-driver-tests pnpm --dir infrastructure test:dispatcher
+check infrastructure-registry pnpm infra check
+check infrastructure-tests pnpm --dir infrastructure test
 check infrastructure-types pnpm --dir infrastructure check-types
 check workflow-lint actionlint
 printf 'Release contract logs: %s\n' "$logs"

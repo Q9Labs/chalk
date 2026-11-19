@@ -8,8 +8,8 @@ Droplets remain externally owned. This definition is not deployed: read-only
 production import validation refuses live R2 CORS origins that differ from the
 legacy state. Both pool firewalls also have a changed control-plane destination.
 The original root stays runnable. See the
-[migration reference](../alchemy/digitalocean-migration.md) and
-[cutover commands](../alchemy/cutover-digitalocean.md).
+[migration reference](../migration/digitalocean.md) and
+[cutover commands](../migration/cutover-digitalocean.md).
 
 This OpenTofu root is policy-only for the recorder compute pools. It owns immutable pool tags, unattached outbound-only firewalls, release and image contracts, the private temporary R2 bucket lifecycle and the Singapore recording KEK. It never creates or replaces runtime Droplets: the external recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity, fencing and replacement. Pool sizes, regions, caps and the `desired_capture_nodes` formula are in `variables.tf` and `locals.tf`; capture and render both default to zero desired nodes.
 

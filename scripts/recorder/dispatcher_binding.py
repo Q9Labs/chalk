@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from release_core import digest, require, validate_config
-from alchemy_dispatcher import read_inputs, run_plan, check_plan as check_alchemy_plan
+from alchemy_dispatcher import read_inputs, run_plan
 from release_io import Provider
 
 
@@ -24,20 +24,6 @@ def check_binding(function, release, code_hash):
     require(function["State"] == "Active" and function["LastUpdateStatus"] == "Successful", "dispatcher update is not healthy")
     require(function["Environment"]["Variables"]["CHALK_RELEASE_ID"] == release, "dispatcher runtime release binding mismatch")
     require(function["CodeSha256"] == code_hash, "dispatcher ZIP digest changed")
-
-
-def check_binding_plan(plan, release, key, version, config_digest=None):
-    def logs(before):
-        before['tags']['chalk_release_id'] = release
-    def function(before):
-        logs(before)
-        before['environment']['CHALK_RELEASE_ID'] = release
-        if config_digest:
-            before['environment']['CHALK_CONFIG_DIGEST'] = config_digest
-            before['tags']['chalk_config_digest'] = config_digest
-        before['code'].update(key=key, version=version)
-        before['description'] = f'Track-aware transcription dispatcher ({release})'
-    check_alchemy_plan(plan, {'Function': function, 'Logs': logs}, {'artifact_identity', 'release_identity'})
 
 
 def dispatcher_inputs(provider, config):
@@ -71,7 +57,7 @@ def bind(provider, config, manifest, dry_run):
              "artifact_action": "retain current versioned ZIP" if inputs["release_id"] == release else "copy unchanged ZIP to versioned release key",
              "verified": False}
     if dry_run:
-        run_plan(provider, inputs, lambda plan: check_binding_plan(plan, inputs['release_id'], inputs['artifact_s3_key'], inputs['artifact_s3_object_version']))
+        run_plan(provider, inputs)
         return proof
     with tempfile.TemporaryDirectory(prefix="chalk-dispatcher-binding-") as directory:
         directory = Path(directory)
@@ -91,8 +77,7 @@ def bind(provider, config, manifest, dry_run):
             environment.pop("CHALK_CONFIG_DIGEST", None)
             config_digest = "sha256:" + digest(json.dumps(environment, sort_keys=True, separators=(",", ":")))
             inputs.update(release_id=release, artifact_s3_key=key, artifact_s3_object_version=version, config_digest=config_digest)
-            run_plan(provider, inputs, lambda plan: check_binding_plan(plan, release, key, version, config_digest), apply=True,
-                     allowed_inputs={'release_id', 'artifact_s3_key', 'artifact_s3_object_version', 'config_digest'})
+            run_plan(provider, inputs, 'binding', apply=True)
         proof.update(verify_dispatcher(provider, config, release))
     return proof
 
