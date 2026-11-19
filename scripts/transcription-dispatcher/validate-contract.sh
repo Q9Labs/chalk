@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODULE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/aws-transcription-dispatcher"
-LIFECYCLE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle"
 fail() { echo "transcription dispatcher contract: $*" >&2; exit 1; }
 require() { grep -qE -- "$1" "$2" || fail "missing '$1' in $2"; }
 # Scans the files git does not ignore. A scan that cannot run fails the contract.
@@ -47,11 +46,8 @@ require 'ALLOW_DIRTY_SOURCE' "$ROOT_DIR/scripts/transcription-dispatcher/build-r
 require 'dirty-local-proof' "$ROOT_DIR/scripts/transcription-dispatcher/verify-artifact.sh"
 require 'source_tree_digest' "$ROOT_DIR/scripts/transcription-dispatcher/emit-manifest.mjs"
 require 'pnpm-lock\.yaml' "$ROOT_DIR/scripts/transcription-dispatcher/build-release.sh"
-require 'transcription/chunks/' "$LIFECYCLE_DIR/variables.tf"
-require 'transcription/orphans/' "$LIFECYCLE_DIR/variables.tf"
-require 'temporary_expiration_hours == 24' "$LIFECYCLE_DIR/variables.tf"
-require 'committed_cleanup_deadline_hours.*<= 1' "$LIFECYCLE_DIR/variables.tf"
-require 'finalized_transcript_prefix' "$LIFECYCLE_DIR/main.tf"
+pnpm --dir "$ROOT_DIR/infrastructure" check-types
+pnpm --dir "$ROOT_DIR/infrastructure" test
 
 APP_CONFIG="$ROOT_DIR/apps/transcription-dispatcher/src/config.ts"
 if [[ -f "$APP_CONFIG" ]]; then

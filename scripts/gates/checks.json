@@ -223,7 +223,7 @@
     {
       "id": "gate:types",
       "owner": "TypeScript",
-      "catches": "A type error in an affected workspace, including API and SDK incompatibilities.",
+      "catches": "A type error in an affected workspace, including API and SDK incompatibilities and the pinned Alchemy infrastructure stacks.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,
@@ -273,7 +273,7 @@
     {
       "id": "gate:tests",
       "owner": "Runtime",
-      "catches": "A failing unit or regression test in an affected workspace.",
+      "catches": "A failing unit or regression test in an affected workspace, including security-group membership preservation and R2 lifecycle safety.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,

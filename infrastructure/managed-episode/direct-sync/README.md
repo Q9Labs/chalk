@@ -29,7 +29,7 @@ Provide private values through the environment, never tracked files:
 
 The shell's Wrangler wrapper loads the existing 1Password-backed Cloudflare
 token. Call `_load_cloudflare_api_token` in that shell before Alchemy; calling
-Alchemy itself does not invoke the wrapper. State always uses `AWS.state()` in
+Alchemy itself does not invoke the wrapper. State always uses `AWS.state({ migrateFrom: false })` in
 `ap-southeast-1`, independently of the host region.
 
 ## Cutover status and procedure
@@ -49,8 +49,8 @@ reviewed resolution and successful no-change cutover; do not run both owners.
 2. Once the stale-state blocker is resolved, seed with the original state:
 
    ```sh
-   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly <private-state-file> --dry-run
-   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly <private-state-file>
+   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly "$direct_sync_state_file" --dry-run
+   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts direct-sync nightly "$direct_sync_state_file"
    pnpm --dir infrastructure exec alchemy plan --config managed-episode/direct-sync/alchemy.run.ts --stage nightly --detailed
    ```
 
@@ -75,7 +75,7 @@ reviewed resolution and successful no-change cutover; do not run both owners.
 After a successful cutover, forget only this stack's Alchemy records:
 
 ```sh
-pnpm --dir infrastructure exec alchemy state delete direct-sync/nightly --config managed-episode/direct-sync/alchemy.run.ts --yes
+pnpm --dir infrastructure exec alchemy state delete direct-sync/nightly --recursive --config managed-episode/direct-sync/alchemy.run.ts --no-input
 ```
 
 Restore the pre-cutover commit's OpenTofu configuration, initialize its original

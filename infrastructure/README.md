@@ -61,13 +61,18 @@ manifest should never point at stale assets.
 
 ## Alchemy stacks
 
-`@chalk/infrastructure` pins Alchemy and its AWS provider to `2.0.0-beta.87`.
+`@chalk/infrastructure` pins Alchemy and its AWS and Cloudflare providers to `2.0.0-beta.87`.
 The Nightly [archive CDN](nightly/archive-cdn/README.md) uses Alchemy after a
 verified no-change cutover on 2026-11-19.
 The [recorder address](nightly/recording-control-address/README.md) has an Alchemy
 definition but is currently unallocated and has not been deployed. Its historical
 OpenTofu state is stale: do not seed it or allocate a replacement without
-separate cost approval. Other roots still use OpenTofu.
+separate cost approval. The [direct Sync network](managed-episode/direct-sync/README.md)
+also has an Alchemy definition; its cutover is blocked by a missing saved
+interface. The [TURN key](cloudflare-turn/README.md) is ported but must not be
+deployed without the owner's decision and a successful existing-key inventory.
+The unused [R2 transcription lifecycle module](cloudflare-r2-transcription-lifecycle/README.md)
+manages only rules, never the bucket. Other roots still use OpenTofu.
 
 Run commands from the repository root. Install with `pnpm install`, then run the
 credential-free check:
@@ -141,8 +146,10 @@ CloudFront caller references cannot be recovered from physical names alone.
 6. Only after successful cutover, remove that root's `.tf` and
    `.terraform.lock.hcl` files. Keep the original state objects and dated backups.
 
-The seed script covers only these two roots, not a generic Terraform provider
-schema. Extend its explicit mappings when another root migrates. It deliberately
+The seed script covers these two roots and direct-sync, not a generic Terraform
+provider schema. Direct-sync validates every live saved mapping, including
+optional IPv6 resources, and fails before writing when the saved interface or
+attachment is missing. See its README for the separate state key and commands. Extend its explicit mappings when another root migrates. It deliberately
 rejects modules, duplicate instances, deposed instances, and unknown resources.
 Do not run Alchemy and OpenTofu as concurrent owners.
 
