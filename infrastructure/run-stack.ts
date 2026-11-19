@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { checkRegistry, cutoverStages, entryFile, registryTable, requireDeployable, requireStateMoved, retiredTarget, selectStack, stateMoveTarget } from "./registry.ts";
+import { checkRegistry, cutoverStages, entryFile, registryTable, requireDeployable, retiredTarget, selectStack } from "./registry.ts";
 
 const [operation, name, stageName, ...args] = process.argv.slice(2);
 const cwd = fileURLToPath(new URL(".", import.meta.url));
@@ -16,13 +16,8 @@ else if (operation === "table") {
   retiredTarget(name);
   if ((stageName !== undefined && stageName !== "--apply" && stageName !== "--settle") || args.length) throw new Error("Usage: pnpm infra retire <stack> [--apply|--settle]");
   command = ["tsx", "migration/retire-nightly.ts", name ?? "", ...(stageName ? [stageName] : [])];
-} else if (operation === "move-state") {
-  stateMoveTarget(name);
-  if ((stageName !== undefined && stageName !== "--dry-run") || args.length) throw new Error("Usage: pnpm infra move-state <stack> [--dry-run]");
-  command = ["tsx", "migration/move-state.ts", name ?? "", ...(stageName ? [stageName] : [])];
 } else {
   const { target, stage } = selectStack(name, stageName);
-  requireStateMoved(target);
   if (!["plan", "deploy", "destroy", "drift", "seed", "prove"].includes(operation ?? "")) throw new Error("Usage: pnpm infra <plan|deploy|destroy|drift|seed|prove> <stack> <stage>");
   if (operation === "deploy") requireDeployable(target);
   if ((operation === "destroy" || operation === "prove") && stage.kind !== "ephemeral") throw new Error("Only run-owned ephemeral stages can be destroyed or proved");

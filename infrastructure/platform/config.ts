@@ -38,4 +38,6 @@ const awsEnvironmentForRegion = (region: string) => {
 
 export const awsProviders = (region: string) => AWS.providers().pipe(Layer.provide(awsEnvironmentForRegion(region)));
 export const providers = awsProviders(defaultRegion);
+// The account and region of this run, resolved from the operator credentials.
+export const awsEnvironment = awsEnvironmentForRegion(defaultRegion);
 export const state = AWS.state({ migrateFrom: false }).pipe(Layer.provide(awsEnvironmentForRegion(defaultRegion)));

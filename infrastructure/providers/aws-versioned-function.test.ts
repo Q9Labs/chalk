@@ -4,7 +4,7 @@ import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import type { CreatedResourceState } from "alchemy/State/ResourceState";
+import type { CreatedResourceState, CreatingResourceState } from "alchemy/State/ResourceState";
 import { inMemoryState } from "alchemy/State";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
@@ -19,6 +19,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Schema from "effect/Schema";
 import { VersionedFunction, functionProvider, requireRunOwnedFunction, type FunctionProps } from "./aws-versioned-function.ts";
 import { clearStage } from "../releases/cleanup.ts";
+import { refusalMessages } from "../releases/failure.ts";
 
 const name = "chalk-nightly-test-transcription-dispatcher";
 const props: FunctionProps = {
@@ -59,8 +60,12 @@ const functionConfig = {
 };
 const invokeConfig = { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0, DestinationConfig: { OnFailure: { Destination: "arn:queue" } } };
 
-// The fake AWS HTTP boundary. `existing` is a complete function another run left behind.
-function fakeLambda(options: { readonly existing?: Record<string, string>; readonly crashAt?: string | undefined }) {
+// The fake AWS HTTP boundary. `existing` is a complete function another run left behind. `tagsFrom` is
+// where tags can be read: GetFunction, only ListTags (GetFunction answers with `TagsError`, as AWS
+// documents), or nowhere.
+type TagsFrom = "get" | "list" | "nowhere";
+function fakeLambda(options: { readonly existing?: Record<string, string>; readonly crashAt?: string | undefined; readonly tagsFrom?: TagsFrom }) {
+  let tagsFrom: TagsFrom = options.tagsFrom ?? "get";
   let live = options.existing !== undefined;
   let tags: Record<string, string> = { ...options.existing };
   let invokeConfigured = live;
@@ -88,6 +93,7 @@ function fakeLambda(options: { readonly existing?: Record<string, string>; reado
         return json(request, {});
       }
       if (!live) return json(request, { __type: "ResourceNotFoundException", message: "Missing test function" }, 404, "ResourceNotFoundException");
+      if (url.pathname.startsWith("/2017-03-31/tags/")) return tagsFrom === "nowhere" ? json(request, { __type: "AccessDeniedException", message: "no lambda:ListTags" }, 403, "AccessDeniedException") : json(request, { Tags: tags });
       if (url.pathname.endsWith("/configuration")) return json(request, functionConfig);
       if (url.pathname.endsWith("/event-invoke-config")) {
         if (request.method === "PUT") invokeConfigured = true;
@@ -98,7 +104,8 @@ function fakeLambda(options: { readonly existing?: Record<string, string>; reado
         concurrencyConfigured = true;
         return json(request, { ReservedConcurrentExecutions: 2 });
       }
-      return json(request, { Configuration: functionConfig, ...(concurrencyConfigured ? { Concurrency: { ReservedConcurrentExecutions: 2 } } : {}), Tags: tags });
+      const tagsField = tagsFrom === "get" ? { Tags: tags } : { TagsError: { ErrorCode: "AccessDeniedException", Message: "tags unavailable" } };
+      return json(request, { Configuration: functionConfig, ...(concurrencyConfigured ? { Concurrency: { ReservedConcurrentExecutions: 2 } } : {}), ...tagsField });
     }),
   );
   const layer = Layer.mergeAll(
@@ -107,7 +114,7 @@ function fakeLambda(options: { readonly existing?: Record<string, string>; reado
     Layer.succeed(Endpoint, Effect.undefined),
     Credentials.fromCredentials({ accessKeyId: Redacted.make("test"), secretAccessKey: Redacted.make("test") }, "ap-southeast-1"),
   );
-  return { layer, creates, deletes: () => deletes, isLive: () => live, tags: () => tags };
+  return { layer, creates, deletes: () => deletes, isLive: () => live, tags: () => tags, readTagsFrom: (next: TagsFrom) => (tagsFrom = next) };
 }
 
 // The function's role is an upstream output, as in the real stack. Its plan-time props
@@ -225,4 +232,47 @@ test("a recorded function whose tag is not this run's is never deleted", async (
   assert.equal(cleaned._tag, "Failure");
   assert.equal(aws.deletes(), 0);
   assert.equal(aws.isLive(), true);
+});
+
+// A crash after CreateFunction leaves a `creating` checkpoint with no attributes. The function is this
+// run's, but GetFunction answers without tags. Unreadable ownership is not foreign ownership.
+const interruptedCreate = (): CreatingResourceState => ({
+  status: "creating",
+  resourceType: VersionedFunction.Type,
+  logicalId: "Function",
+  fqn: "Function",
+  instanceId: "this-run",
+  namespace: undefined,
+  providerVersion: 0,
+  props,
+  bindings: [],
+  downstream: [],
+});
+const interruptedState = () => ({ "test-function": { "nightly-test": { Function: interruptedCreate() } } });
+const ours = { ...props.tags, [ownerTag]: "this-run" };
+
+test("an interrupted create whose tags GetFunction cannot return is recovered through ListTags and deleted", async () => {
+  const aws = fakeLambda({ existing: ours, tagsFrom: "list" });
+  const state: Parameters<typeof inMemoryState>[0] = interruptedState();
+  await Effect.runPromise(destroyTwice(stackFor(aws.layer, inMemoryState(state))).pipe(Effect.provide(Alchemist.layer()), Effect.scoped));
+  assert.equal(aws.deletes(), 1);
+  assert.equal(aws.isLive(), false);
+  assert.deepEqual(Object.keys(state["test-function"]?.["nightly-test"] ?? {}), []);
+});
+
+test("an interrupted create whose tags cannot be read at all fails with a typed refusal, keeps the checkpoint and deletes nothing", async () => {
+  const aws = fakeLambda({ existing: ours, tagsFrom: "nowhere" });
+  const state: Parameters<typeof inMemoryState>[0] = interruptedState();
+  const stack = stackFor(aws.layer, inMemoryState(state));
+  const exit = await Effect.runPromiseExit(destroyTwice(stack).pipe(Effect.provide(Alchemist.layer()), Effect.scoped));
+  assert.ok(Exit.isFailure(exit));
+  assert.match(refusalMessages(exit.cause).join(), /cannot be read/, "a typed failure, not a defect: the engine discards the checkpoint on a recovery defect");
+  assert.equal(aws.deletes(), 0);
+  assert.equal(aws.isLive(), true);
+  assert.equal(state["test-function"]?.["nightly-test"]?.Function?.status, "creating");
+  // Once the tags can be read again, the same checkpoint finishes the cleanup.
+  aws.readTagsFrom("get");
+  await Effect.runPromise(destroyTwice(stack).pipe(Effect.provide(Alchemist.layer()), Effect.scoped));
+  assert.equal(aws.deletes(), 1);
+  assert.equal(aws.isLive(), false);
 });

@@ -35,9 +35,11 @@ interface FakeLogGroup {
 interface FakeSchedule {
   description: string | undefined;
 }
-// The fake AWS HTTP boundary for CloudWatch Logs and EventBridge Scheduler.
+// The fake AWS HTTP boundary for CloudWatch Logs and EventBridge Scheduler. `seed` exists before the
+// run starts. `race` is a foreign resource that appears at the moment the run's create request
+// arrives: after every read saw nothing, before the create is processed.
 type Request = Parameters<typeof HttpClientResponse.fromWeb>[0];
-function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: FakeSchedule }) {
+function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: FakeSchedule }, race: { readonly logGroup?: FakeLogGroup; readonly schedule?: FakeSchedule } = {}) {
   const logGroups = new Map<string, FakeLogGroup>(seed.logGroup ? [[logName, { tags: { ...seed.logGroup.tags } }]] : []);
   const schedules = new Map<string, FakeSchedule>(seed.schedule ? [[scheduleName, { ...seed.schedule }]] : []);
   const calls: string[] = [];
@@ -58,7 +60,8 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
       case "ListTagsForResource":
         return group ? respond(request, { tags: group.tags }) : respond(request, { __type: "ResourceNotFoundException" }, 400, "ResourceNotFoundException");
       case "CreateLogGroup": {
-        if (group) return respond(request, { __type: "ResourceAlreadyExistsException" }, 400, "ResourceAlreadyExistsException");
+        if (!group && race.logGroup) logGroups.set(name, { tags: { ...race.logGroup.tags } });
+        if (logGroups.has(name)) return respond(request, { __type: "ResourceAlreadyExistsException" }, 400, "ResourceAlreadyExistsException");
         logGroups.set(name, { tags: Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(sent.tags ?? {}) });
         return respond(request, {});
       }
@@ -73,6 +76,7 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
     }
   };
   const handleSchedule = (request: Request, name: string, field: (key: string) => string) => {
+    if (request.method === "POST" && !schedules.has(name) && race.schedule) schedules.set(name, { ...race.schedule });
     const existing = schedules.get(name);
     calls.push(`${request.method} Schedule`);
     if (request.method === "POST" && existing) return respond(request, { Message: "exists" }, 409, "ConflictException");
@@ -184,6 +188,24 @@ for (const resource of ["log-group", "schedule"] as const) {
       Object.keys(state["test-run-owned"]?.["nightly-test"] ?? {}).filter((logicalId) => logicalId !== "Role"),
       [],
     );
+  });
+
+  test(`a ${resource} that appears between the read and the create is refused, never stamped or overwritten, and survives cleanup`, async () => {
+    const fake = fakeAws({}, foreign);
+    const state: Parameters<typeof inMemoryState>[0] = {};
+    const stack = stackFor(fake, resource, inMemoryState(state));
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const applied = yield* Effect.exit(Effect.flatMap(Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" }), Alchemist.apply));
+        assert.ok(Exit.isFailure(applied));
+        assert.match(Cause.pretty(applied.cause), /already exists and this run did not create it/);
+        yield* destroyTwice(stack, "nightly-test");
+      }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
+    );
+    for (const mutation of mutations.filter((name) => !name.startsWith("Create") && name !== "POST Schedule")) assert.equal(fake.count(mutation), 0, mutation);
+    assert.equal(present(fake), true);
+    if (resource === "log-group") assert.deepEqual(fake.logGroups.get(logName)?.tags, foreignTags);
+    else assert.equal(fake.schedules.get(scheduleName)?.description, "someone else's schedule");
   });
 
   test(`production's seeded ${resource}, created outside Alchemy, is not held to the run proof`, async () => {

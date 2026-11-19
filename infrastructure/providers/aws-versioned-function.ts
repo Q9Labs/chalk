@@ -2,6 +2,7 @@ import * as lambda from "@distilled.cloud/aws/lambda";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { Stage } from "alchemy/Stage";
+import { refuse } from "../platform/refusal.ts";
 import { parseStage } from "../platform/stages.ts";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -46,6 +47,22 @@ const required = <T>(value: T | undefined, name: string): T => {
   if (value === undefined) throw new Error(`Lambda did not return ${name}; values are not logged.`);
   return value;
 };
+// GetFunction omits `Tags` and reports `TagsError` when it cannot read them. That is "unknown", never
+// "no tags": ask ListTags, and fail with a typed refusal when that cannot answer either. A typed
+// failure keeps the engine's checkpoint; a missing answer read as "foreign" would make it drop the
+// checkpoint and leave the function running.
+const tagsOf = Effect.fn(function* (current: lambda.GetFunctionResponse) {
+  if (current.Tags) return current.Tags;
+  const arn = current.Configuration?.FunctionArn;
+  const listed =
+    arn === undefined
+      ? undefined
+      : yield* lambda.listTags({ Resource: arn }).pipe(
+          Effect.map((result) => result.Tags),
+          Effect.catch(() => Effect.undefined),
+        );
+  return listed ?? (yield* refuse(`The tags of Lambda function ${current.Configuration?.FunctionName ?? "(unnamed)"} cannot be read (GetFunction reported ${current.TagsError?.ErrorCode ?? "no tags"}), so its ownership is unproven; nothing was changed. Retry when tags are readable`));
+});
 const readFunction = Effect.fn(function* (functionName: string) {
   const current = yield* lambda.getFunction({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!current?.Configuration) return undefined;
@@ -63,7 +80,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
       config.LoggingConfig?.LogFormat && config.LoggingConfig.LogFormat !== "Text",
     ].some(Boolean);
   if (hasUnsupportedConfiguration()) {
-    return yield* Effect.die("Dispatcher has an unexpected networking, encryption, layer or logging configuration; refusing to proceed");
+    return yield* refuse("Dispatcher has an unexpected networking, encryption, layer or logging configuration; refusing to proceed");
   }
   const runOwned = (yield* Stage).startsWith("nightly-");
   const invoke = yield* lambda.getFunctionEventInvokeConfig({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", (error) => (runOwned ? Effect.undefined : Effect.fail(error))));
@@ -84,7 +101,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
     environment: Redacted.make(environment),
     tracingMode: config.TracingConfig?.Mode,
     ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination } } : {}),
-    tags: Object.fromEntries(Object.entries(current.Tags ?? {}).filter(([key]) => !key.startsWith("alchemy:"))),
+    tags: Object.fromEntries(Object.entries(yield* tagsOf(current)).filter(([key]) => !key.startsWith("alchemy:"))),
   });
   if (!runOwned) Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))(configuration);
   return { functionName, functionArn: required(config.FunctionArn, "function ARN"), codeSha256: required(config.CodeSha256, "code digest"), version: required(config.Version, "version"), configuration };
@@ -97,7 +114,7 @@ const readFunction = Effect.fn(function* (functionName: string) {
 const ownerTagKey = "alchemy:instance";
 const isOwnedBy = Effect.fn(function* (functionName: string, instanceId: string) {
   const current = yield* lambda.getFunction({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-  return current ? current.Tags?.[ownerTagKey] === instanceId : undefined;
+  return current ? (yield* tagsOf(current))[ownerTagKey] === instanceId : undefined;
 });
 const readOwned = Effect.fn(function* (functionName: string, instanceId: string) {
   const live = yield* readFunction(functionName);
@@ -148,7 +165,7 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
   yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } });
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
-  if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* Effect.die("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
+  if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
   return result;
 });
 
@@ -165,7 +182,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     if (!olds) return yield* createRunFunction(news, instanceId);
     const before = yield* settled(news.functionName);
     const live = yield* readFunction(news.functionName);
-    if (!live) return yield* Effect.die("Dispatcher function is missing; this migration never creates it.");
+    if (!live) return yield* refuse("Dispatcher function is missing; this migration never creates it.");
     const { code, ...configuration } = news;
     // Select the immutable object even when it contains identical bytes under a
     // new release key. Never rebuild, publish a version, or change architecture.
@@ -203,14 +220,14 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
       yield* lambda.tagResource({ Resource: live.functionArn, Tags: news.tags });
     }
     const result = yield* readFunction(news.functionName);
-    if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* Effect.die("Dispatcher exact ZIP/configuration readback failed; no values logged.");
+    if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP/configuration readback failed; no values logged.");
     return result;
   }),
   delete: Effect.fn(function* ({ output, instanceId }) {
     requireRunOwnedFunction(yield* Stage, output.functionName);
     const owned = yield* isOwnedBy(output.functionName, instanceId);
     if (owned === undefined) return;
-    if (!owned) return yield* Effect.die("Refusing to delete a Lambda function that this run did not create; its ownership tag is missing or belongs to another run");
+    if (!owned) return yield* refuse("Refusing to delete a Lambda function that this run did not create; its ownership tag is missing or belongs to another run");
     yield* lambda.deleteFunction({ FunctionName: output.functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
   }),
 });

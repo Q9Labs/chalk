@@ -23,17 +23,9 @@ legacy tag as a literal and the bucket name unchanged. Do not rename them in a
 structural change; a rename needs its own migration of the bucket, the
 distribution and the SSM settings.
 
-## State move
+## State
 
-The state still sits under `archive-cdn/nightly`. The registry marks the stage
-"production, state not yet moved", and until the move runs, deploy, plan, drift
-and retire refuse. `pnpm infra move-state recorder-runtime-downloads` copies the
-five records and the stack output to `recorder-runtime-downloads/production`
-under both leases, verifies the copy, then removes the old identity. It is
-idempotent, so a retry after a crash finishes the move, and it refuses a
-destination that holds different records. Run it with `--dry-run` first. See
-[the operator steps](../migration/README.md#recorder-runtime-downloads-state-move).
-After it, set `seeded: true` on the registry entry and run `pnpm infra table`.
+The state sits under this stack's own identity, `recorder-runtime-downloads/production`. It was seeded from OpenTofu as `archive-cdn` in the old Nightly stage and moved once. The registry marks the stage seeded, so plan, drift and deploy work on it as on any production Alchemy stack.
 
 `config.ts` validates `{public_key_file}` from `CHALK_INFRA_INPUTS`; provider
 credentials follow the shared platform boundary. The existing signing key must

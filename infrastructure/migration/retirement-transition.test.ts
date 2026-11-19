@@ -1,98 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
-import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
-import { inMemoryState } from "alchemy/State";
 import type { CreatedResourceState, ResourceState } from "alchemy/State";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import { clearStage } from "../releases/cleanup.ts";
-import { retire, settle, type RetireMode } from "./retirement-transition.ts";
-
-const stackName = "transcription-dispatcher";
-const fn = "chalk-nightly-transcription-dispatcher";
-const arn = `arn:aws:lambda:ap-southeast-1:000000000000:function:${fn}`;
-const tags = { chalk_environment: "nightly", chalk_component: "transcription-dispatcher" };
-type Rows = Record<string, ResourceState>;
-
-const created = (logicalId: string, resourceType: string, props: Record<string, unknown>, attr: Record<string, unknown>): CreatedResourceState => ({
-  status: "created",
-  resourceType,
-  logicalId,
-  fqn: logicalId,
-  namespace: undefined,
-  instanceId: logicalId,
-  providerVersion: 0,
-  props,
-  attr,
-  bindings: [],
-  downstream: [],
-  removalPolicy: "retain",
-});
-// The 14 records the Nightly seed left, each retained, with the physical names of the saved stage.
-const seeded = (): CreatedResourceState[] => [
-  created("ExecutionRole", "AWS.IAM.Role", { tags }, { roleName: `${fn}-execution` }),
-  created("SchedulerRole", "AWS.IAM.Role", {}, { roleName: `${fn}-scheduler` }),
-  created("AsyncFailure", "AWS.SQS.Queue", { tags }, { queueName: `${fn}-async-failure` }),
-  created("SchedulerDlq", "AWS.SQS.Queue", { tags }, { queueName: `${fn}-scheduler-dlq` }),
-  created("Logs", "AWS.Logs.LogGroup", { tags }, { logGroupName: `/aws/lambda/${fn}` }),
-  created("Function", "Chalk.Lambda.VersionedFunction", { tags }, { functionName: fn }),
-  created("Reconcile", "AWS.Scheduler.Schedule", {}, { scheduleName: "chalk-nightly-transcription-reconcile", groupName: "chalk-nightly" }),
-  created("SchedulerPermission", "AWS.Lambda.Permission", {}, { statementId: "AllowEventBridgeSchedulerWake", functionName: arn }),
-  created("ControlApiPermission", "AWS.Lambda.Permission", {}, { statementId: "AllowControlApiWake", functionName: arn }),
-  ...["Errors:errors", "Throttles:throttles", "AsyncEventsDropped:async-events-dropped", "AsyncFailureDepth:async-failure-depth", "SchedulerTargetErrors:scheduler-target-errors"].map((pair) => {
-    const [id = "", suffix = ""] = pair.split(":");
-    return created(id, "AWS.CloudWatch.Alarm", {}, { alarmName: `${fn}-${suffix}` });
-  }),
-];
-const rowsOf = (list: readonly ResourceState[]): Rows => Object.fromEntries(list.map((row) => [row.fqn, row]));
-
-interface LiveAttr {
-  readonly marker: string;
-  readonly state?: string;
-  readonly scheduleName?: string;
-  readonly groupName?: string;
-}
-interface Fake extends Resource<string, { readonly marker?: string }, LiveAttr> {}
-// The cloud boundary: one counting provider per legacy resource type. The planner, the state store,
-// cleanup and the transition are the real code.
-function fakeCloud(types: readonly string[]) {
-  const deleted: string[] = [];
-  const failOnce = new Set<string>();
-  const missing = new Set<string>();
-  const live = new Map<string, LiveAttr>();
-  const providers = types.map((type) =>
-    Provider.succeed(Resource<Fake>(type), {
-      read: ({ fqn }) => Effect.succeed(missing.has(fqn) ? undefined : (live.get(fqn) ?? { marker: fqn })),
-      reconcile: () => Effect.die("retirement never reconciles"),
-      delete: ({ instanceId }) =>
-        Effect.suspend(() => {
-          if (failOnce.delete(instanceId)) return Effect.die(`injected crash deleting ${instanceId}`);
-          deleted.push(instanceId);
-          return Effect.void;
-        }),
-    }),
-  );
-  return { layer: providers.reduce((all, one) => Layer.merge(all, one), Layer.empty), deleted, failOnce, missing, live };
-}
-const inventorySize = seeded().length;
-const legacyTypes = [...new Set(seeded().map((row) => row.resourceType)), "AWS.S3.Bucket", "AWS.KMS.Key"];
-
-function setup(rows: readonly ResourceState[]) {
-  const state: Record<string, Record<string, Rows>> = { [stackName]: { nightly: rowsOf(rows) } };
-  const cloud = fakeCloud(legacyTypes);
-  const stack = Alchemy.Stack(stackName, { providers: cloud.layer, state: inMemoryState(state, { [stackName]: { nightly: { saved: true } } }) }, Effect.void);
-  const run = (mode: RetireMode) => Effect.runPromiseExit(retire(stack, mode).pipe(Effect.provide(Alchemist.layer())));
-  const settleRun = () => Effect.runPromiseExit(settle(stack).pipe(Effect.provide(Alchemist.layer())));
-  const remaining = () => Object.values(state[stackName]?.nightly ?? {});
-  return { state, cloud, stack, run, settleRun, remaining };
-}
-const failureText = (exit: Exit.Exit<unknown, unknown>) => (Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "");
-const snapshot = (rows: readonly ResourceState[]) => JSON.stringify(rows);
+import { stackName, fn, account, region, queueAttr, tags, created, seeded, inventorySize, setup, failureText, snapshot, withAttr, survivors } from "./retirement-fixtures.ts";
 
 test("baseline: cleanup refuses the seeded retained records, which is why a transition is needed", async () => {
   const { stack, cloud } = setup(seeded());
@@ -166,10 +79,21 @@ const refusals: ReadonlyArray<readonly [string, (rows: CreatedResourceState[]) =
   ["a borrowed KMS key", (rows) => [...rows, created("Key", "AWS.KMS.Key", {}, { keyId: "key" })], /Unexpected record Key/],
   ["a known ID with another type", (rows) => rows.map((row) => (row.logicalId === "Errors" ? { ...row, resourceType: "AWS.S3.Bucket" } : row)), /not the expected AWS.CloudWatch.Alarm/],
   ["a record without the saved Nightly tag", (rows) => rows.map((row) => (row.logicalId === "Function" ? { ...row, props: { tags: { ...tags, chalk_environment: "production" } } } : row)), /saved Nightly environment tag/],
-  ["a production-named queue", (rows) => rows.map((row) => (row.logicalId === "AsyncFailure" ? { ...row, attr: { queueName: "chalk-production-transcription-dispatcher-async-failure" } } : row)), /outside the legacy Nightly naming/],
+  ["a production-named queue", (rows) => rows.map((row) => (row.logicalId === "AsyncFailure" ? { ...row, attr: queueAttr("chalk-production-transcription-dispatcher-async-failure") } : row)), /outside the legacy Nightly naming/],
+  // The upstream SQS provider deletes by queueUrl, so the URL and ARN are validated, not only the name.
+  ["a queue whose URL names another account", (rows) => withAttr(rows, "AsyncFailure", { queueUrl: `https://sqs.${region}.amazonaws.com/111111111111/${fn}-async-failure` }), /unexpected queueUrl/],
+  ["a queue whose URL names another region", (rows) => withAttr(rows, "AsyncFailure", { queueUrl: `https://sqs.us-east-1.amazonaws.com/${account}/${fn}-async-failure` }), /unexpected queueUrl/],
+  ["a queue whose URL names another queue", (rows) => withAttr(rows, "SchedulerDlq", { queueUrl: `https://sqs.${region}.amazonaws.com/${account}/chalk-production-api-dlq` }), /unexpected queueUrl/],
+  ["a queue whose ARN names another account", (rows) => withAttr(rows, "SchedulerDlq", { queueArn: `arn:aws:sqs:${region}:111111111111:${fn}-scheduler-dlq` }), /unexpected queueArn/],
+  ["a queue without a URL", (rows) => rows.map((row) => (row.logicalId === "AsyncFailure" ? { ...row, attr: { queueName: `${fn}-async-failure` } } : row)), /has no queueUrl/],
+  ["an unrelated Nightly permission", (rows) => withAttr(rows, "ControlApiPermission", { functionName: "chalk-nightly-other-api" }), /unexpected functionName/],
+  ["a permission with another statement ID", (rows) => withAttr(rows, "SchedulerPermission", { statementId: "AllowSomethingElse" }), /unexpected statementId/],
+  ["a permission on a function in another account", (rows) => withAttr(rows, "SchedulerPermission", { functionName: `arn:aws:lambda:${region}:111111111111:function:${fn}` }), /unexpected functionName/],
+  ["a schedule with another name", (rows) => withAttr(rows, "Reconcile", { scheduleName: "chalk-nightly-other-reconcile" }), /unexpected scheduleName/],
+  ["a schedule in another group", (rows) => withAttr(rows, "Reconcile", { groupName: "default" }), /unexpected groupName/],
   ["a permission outside the Nightly function", (rows) => rows.map((row) => (row.logicalId === "ControlApiPermission" ? { ...row, attr: { statementId: "AllowControlApiWake", functionName: "chalk-production-api" } } : row)), /outside the legacy Nightly naming/],
   ["a protected record", (rows) => rows.map((row) => (row.logicalId === "Logs" ? { ...row, removalPolicy: "protect" } : row)), /protect/],
-  ["records naming two functions", (rows) => rows.map((row) => (row.logicalId === "Function" ? { ...row, attr: { functionName: "chalk-nightly-other" } } : row)), /more than one dispatcher function/],
+  ["a function record with another name", (rows) => withAttr(rows, "Function", { functionName: "chalk-nightly-other" }), /unexpected functionName/],
 ];
 for (const [label, mutate, message] of refusals)
   test(`refuses ${label} before any write or delete`, async () => {
@@ -183,83 +107,20 @@ for (const [label, mutate, message] of refusals)
     assert.equal(cloud.deleted.length, 0);
   });
 
-const interrupted = (rows: CreatedResourceState[]): ResourceState[] =>
-  rows.map((row) =>
-    row.logicalId === "Reconcile"
-      ? {
-          status: "updating",
-          resourceType: row.resourceType,
-          logicalId: row.logicalId,
-          fqn: row.fqn,
-          namespace: undefined,
-          instanceId: row.instanceId,
-          providerVersion: 0,
-          props: { state: "ENABLED" },
-          old: { props: row.props, attr: row.attr, bindings: [], removalPolicy: "retain" },
-          bindings: [],
-          downstream: [],
-          removalPolicy: "retain",
-        }
-      : row,
-  );
-
-test("an updating record fails closed in preview and apply, naming the recovery step", async () => {
-  const { run, cloud, remaining } = setup(interrupted(seeded()));
-  const before = snapshot(remaining());
-  for (const mode of ["preview", "apply"] as const) {
-    const exit = await run(mode);
-    assert.match(failureText(exit), /Reconcile \(updating\) are not stable/);
-    assert.match(failureText(exit), /pnpm infra retire transcription-dispatcher --settle/);
-  }
-  assert.equal(snapshot(remaining()), before);
-  assert.equal(cloud.deleted.length, 0);
-});
-
-test("settle records the live resource as created, deletes nothing, and unblocks retirement", async () => {
-  const { run, settleRun, cloud, remaining } = setup(interrupted(seeded()));
-  cloud.live.set("Reconcile", { marker: "live", state: "DISABLED", scheduleName: "chalk-nightly-transcription-reconcile", groupName: "chalk-nightly" });
-  const settled = await settleRun();
-  assert.ok(Exit.isSuccess(settled), failureText(settled));
-  assert.deepEqual(settled.value, ["Reconcile"]);
-  assert.equal(cloud.deleted.length, 0);
-  const row = remaining().find((candidate) => candidate.fqn === "Reconcile");
-  assert.equal(row?.status, "created");
-  assert.equal(row?.removalPolicy, "retain");
-  assert.ok(Exit.isSuccess(await settleRun()), "settling again changes nothing");
+test("a valid partial inventory left by an earlier crash still retires, deleting only the survivors", async () => {
+  const { run, cloud, remaining } = setup(survivors("Reconcile", "SchedulerPermission", "Errors"));
+  assert.ok(Exit.isSuccess(await run("preview")));
   const exit = await run("apply");
   assert.ok(Exit.isSuccess(exit), failureText(exit));
-  assert.equal(cloud.deleted.length, inventorySize);
+  assert.deepEqual([...cloud.deleted].sort(), ["Errors", "Reconcile", "SchedulerPermission"]);
   assert.equal(remaining().length, 0);
 });
 
-test("settle refuses a record whose live resource is gone", async () => {
-  const { settleRun, cloud, remaining } = setup(interrupted(seeded()));
-  cloud.missing.add("Reconcile");
+test("a permission-only inventory is validated by its own identity, so an unrelated function is refused", async () => {
+  const rows = withAttr(survivors("ControlApiPermission"), "ControlApiPermission", { functionName: "chalk-nightly-other-api" });
+  const { run, cloud, remaining } = setup(rows);
   const before = snapshot(remaining());
-  const exit = await settleRun();
-  assert.match(failureText(exit), /Live Reconcile was not found/);
+  for (const mode of ["preview", "apply"] as const) assert.match(failureText(await run(mode)), /unexpected functionName/);
   assert.equal(snapshot(remaining()), before);
-});
-
-test("settle refuses a record that is not an interrupted update", async () => {
-  const rows = seeded().map((row): ResourceState => (row.logicalId === "Reconcile" ? { ...row, status: "creating" } : row));
-  const { settleRun, remaining } = setup(rows);
-  const before = snapshot(remaining());
-  assert.match(failureText(await settleRun()), /Reconcile is creating/);
-  assert.equal(snapshot(remaining()), before);
-});
-
-test("any retirement preview names the type and physical name, so a CloudFront distribution is visible before it goes", async () => {
-  const cloud = fakeCloud(["AWS.CloudFront.Distribution"]);
-  const state: Record<string, Record<string, Rows>> = {
-    "recording-control-address": { nightly: rowsOf([created("Cdn", "AWS.CloudFront.Distribution", {}, { distributionId: "E123EXAMPLE", distributionArn: "arn:aws:cloudfront::000000000000:distribution/E123EXAMPLE" })]) },
-  };
-  const stack = Alchemy.Stack("recording-control-address", { providers: cloud.layer, state: inMemoryState(state) }, Effect.void);
-  const exit = await Effect.runPromiseExit(retire(stack, "preview").pipe(Effect.provide(Alchemist.layer())));
-  assert.ok(Exit.isSuccess(exit), failureText(exit));
-  assert.deepEqual(
-    exit.value.map((item) => [item.id, item.type, item.name]),
-    [["Cdn", "AWS.CloudFront.Distribution", "E123EXAMPLE"]],
-  );
   assert.equal(cloud.deleted.length, 0);
 });

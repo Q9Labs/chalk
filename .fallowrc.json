@@ -89,7 +89,6 @@
     "infrastructure/releases/destroy-stage.ts",
     "infrastructure/releases/prove-dispatcher.ts",
     "infrastructure/migration/retire-nightly.ts",
-    "infrastructure/migration/move-state.ts",
     "infrastructure/migration/check-definitions.ts",
     "infrastructure/platform/check-drift.mjs",
     "infrastructure/sfu/render-cloud-init.ts",

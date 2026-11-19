@@ -7,6 +7,7 @@ import { VersionedFunction } from "../providers/aws-versioned-function.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { providers } from "../platform/config.ts";
+import { refuse } from "../platform/refusal.ts";
 
 function dispatcherPolicy(stack: ConfiguredStack<unknown, never>) {
   return Provider.effect(
@@ -16,7 +17,7 @@ function dispatcherPolicy(stack: ConfiguredStack<unknown, never>) {
       return {
         ...original,
         delete: Effect.fn(function* ({ output }: Parameters<typeof original.delete>[0]) {
-          if ((yield* Stage) !== "nightly" || output.configuration.tags.chalk_environment !== "nightly") return yield* Effect.die("Retirement refuses a non-Nightly dispatcher function");
+          if ((yield* Stage) !== "nightly" || output.configuration.tags.chalk_environment !== "nightly") return yield* refuse("Retirement refuses a non-Nightly dispatcher function");
           yield* lambda.deleteFunction({ FunctionName: output.functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         }),
       };

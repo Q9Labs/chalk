@@ -3,7 +3,7 @@ import { parseStage } from "./platform/stages.ts";
 
 const retiredHost = "Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host";
 const retiredSfu = "Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances";
-const recorderDownloads = "Production: the CloudFront distribution serves signed recorder software bundles and is referenced by production SSM (the CHALK_RECORDER_FLEET_ARCHIVE_CDN settings). Alchemy owns it; its state still sits under archive-cdn/nightly until pnpm infra move-state runs";
+const recorderDownloads = "Production: the CloudFront distribution serves signed recorder software bundles and is referenced by production SSM (the CHALK_RECORDER_FLEET_ARCHIVE_CDN settings). Alchemy owns it; its state sits under its own production identity";
 type RegisteredTarget = { readonly stackName: string; readonly directory: string; readonly reason: string } & (
   | { readonly stageKind: "retired"; readonly legacyStackName: string; readonly owner: "alchemy" }
   | { readonly stageKind: "retired"; readonly legacyStackName: string; readonly owner: "opentofu"; readonly root: string }
@@ -23,16 +23,14 @@ const targets = [
   { stackName: "sfu", directory: "sfu", stageKind: "production", provisioner: "opentofu", seeded: false, reason: "Primary variant: ported; live firewall drift blocks cutover" },
   { stackName: "sfu-standby", directory: "sfu", stageKind: "production", provisioner: "opentofu", seeded: false, reason: "Standby variant: ported; dry-run is not cutover authorization" },
   { stackName: "recorder", directory: "recorder", stageKind: "production", provisioner: "opentofu", seeded: false, reason: "Ported; reconcile CORS/pool firewall drift before cutover" },
-  { stackName: "recorder-runtime-downloads", directory: "recorder-runtime-downloads", stageKind: "production", provisioner: "alchemy", seeded: "state-not-moved", legacyStackName: "archive-cdn", reason: recorderDownloads },
+  { stackName: "recorder-runtime-downloads", directory: "recorder-runtime-downloads", stageKind: "production", provisioner: "alchemy", seeded: true, reason: recorderDownloads },
   { stackName: "media-relay-access", directory: "media-relay-access", stageKind: "production", provisioner: "none", seeded: false, reason: "Ported, deliberately not deployed; TURN key creation/adoption not authorized" },
 ] as const satisfies readonly RegisteredTarget[];
 export type Target = (typeof targets)[number];
 export type RetiredTarget = Extract<Target, { stageKind: "retired" }>;
 export const stacks = targets.filter((target, index) => targets.findIndex((candidate) => candidate.stackName === target.stackName) === index);
 export const entryFile = (stack: Target) => `${stack.directory}/alchemy.run.ts`;
-// Alchemy owns a production stage only once its state sits under the stage's own identity. Until
-// `pnpm infra move-state` has moved it, the stage is a production capability that nothing can act on.
-type ProductionOwnership = { readonly provisioner: "alchemy"; readonly seeded: true } | { readonly provisioner: "alchemy"; readonly seeded: "state-not-moved"; readonly legacyStackName: string } | { readonly provisioner: "opentofu" | "none"; readonly seeded: false };
+type ProductionOwnership = { readonly provisioner: "alchemy"; readonly seeded: true } | { readonly provisioner: "opentofu" | "none"; readonly seeded: false };
 const isCutover = (target: ProductionOwnership): boolean => target.seeded === true;
 export const cutoverStages = () => targets.filter((target) => target.stageKind === "production" && isCutover(target)).map((target) => ({ stack: target.stackName, stage: "production" }));
 export function selectStack(name: string | undefined, stageName: string | undefined) {
@@ -46,18 +44,6 @@ export function requireDeployable(target: Exclude<Target, RetiredTarget>) {
   if (!isCutover(target)) throw new Error("Deploy refused: production is not cut over and seeded");
   return target;
 }
-// Plan, drift and deploy read or write the stage's own state, which a not-yet-moved stage does not have.
-export function requireStateMoved(target: Exclude<Target, RetiredTarget>) {
-  if (target.stageKind === "production" && target.seeded === "state-not-moved") throw new Error(`State for ${target.stackName} has not moved to its production identity yet; run pnpm infra move-state ${target.stackName} first`);
-  return target;
-}
-type StateNotMovedTarget = Extract<Target, { readonly seeded: "state-not-moved" }>;
-export function stateMoveTarget(name: string | undefined): StateNotMovedTarget {
-  const target = targets.find((target): target is StateNotMovedTarget => target.stackName === name && target.stageKind === "production" && target.seeded === "state-not-moved");
-  if (!target) throw new Error("No production stage is waiting for a state move under this name; run pnpm infra list");
-  return target;
-}
-export const stateMoveIdentity = (target: StateNotMovedTarget) => ({ from: { stack: target.legacyStackName, stage: "nightly" }, to: { stack: target.stackName, stage: "production" } });
 export function retiredTarget(name: string | undefined): RetiredTarget {
   const target = targets.find((target): target is RetiredTarget => target.stackName === name && target.stageKind === "retired");
   if (target) return target;
@@ -71,7 +57,7 @@ export function registryTable() {
     "| --- | --- | --- | --- | --- |",
     ...targets.map(
       (target) =>
-        `| ${target.stackName} | ${target.stageKind === "retired" ? "retired legacy Nightly (not deployable)" : target.stageKind === "ephemeral" ? "nightly-<run-id> (ephemeral)" : "production (persistent)"} | ${target.stageKind === "retired" ? "cleanup inventory" : target.stageKind === "production" && target.seeded === "state-not-moved" ? "alchemy (state not yet moved)" : target.provisioner} | ${target.reason} | [${entryFile(target)}](${entryFile(target)}) |`,
+        `| ${target.stackName} | ${target.stageKind === "retired" ? "retired legacy Nightly (not deployable)" : target.stageKind === "ephemeral" ? "nightly-<run-id> (ephemeral)" : "production (persistent)"} | ${target.stageKind === "retired" ? "cleanup inventory" : target.provisioner} | ${target.reason} | [${entryFile(target)}](${entryFile(target)}) |`,
     ),
   ].join("\n");
 }

@@ -42,19 +42,25 @@ after both partial-creation failures, and repeated deletion. Production and
 cross-run names are refused. Ownership of a run-created function is a persisted
 fact: creation stamps the engine's instance ID as a tag, a function without it
 reads as unowned (so plan and create refuse), and delete verifies it first.
-Tests reproduce the cleanup that used to delete a same-named function it never
-created. The same proof guards the run-owned log group (stack/stage/id tags) and
-schedule (instance ID in its description) through `providers/aws-run-owned.ts`,
-which is excluded from parity like the other ownership checks; roles, queues and
-alarms already carry it upstream. Production's seeded resources are not held to
+When the tags cannot be read (a crash after creation left a `creating` record
+without attributes, and GetFunction returned no `Tags`), the provider asks
+ListTags; if that fails too, it stops with a typed refusal that keeps the record,
+so a retry decides once tags are readable. Tests reproduce the cleanup that used
+to delete a same-named function it never created. The same proof guards the
+run-owned log group (stack/stage/id tags) and schedule (instance ID in its
+description) through `providers/aws-run-owned.ts`, which is excluded from parity
+like the other ownership checks; roles, queues and alarms already carry it
+upstream. A new run-owned log group or schedule is created by a create-only call,
+so a resource that appears between the read and the create is a typed refusal,
+never stamped or overwritten, and cleanup leaves it alone. Production's seeded resources are not held to
 it. The former Nightly-only security
 conditions now apply to any nonproduction stage; production conditions are
 unchanged. Input schemas otherwise remain compared. These exclusions are not
 claimed as a whole-program no-op: stage behavior deliberately changed, and
 boundary/isolation tests cover it. No physical cloud name or live logical ID
 was renamed. The renamed retired components retain their old stack identities
-solely for cleanup, except recorder runtime downloads, whose state moves to its
-production identity (below).
+solely for cleanup. Recorder runtime downloads is not among them: its state
+already sits under its own production identity.
 
 ## Retire persistent Nightly after merge
 
@@ -66,7 +72,7 @@ No active operation accepts bare `nightly`; only retirement can address it.
 Recorder runtime downloads (`archive-cdn/nightly`) is **not** retired. Its
 CloudFront distribution is referenced by the production SSM recorder settings
 (`CHALK_RECORDER_FLEET_ARCHIVE_CDN_*`), so `pnpm infra retire
-recorder-runtime-downloads` refuses; see the state move below.
+recorder-runtime-downloads` refuses.
 
 For the two remaining Alchemy stages, preview first, then apply sequentially.
 Every preview prints each resource's type and physical name, so an operator sees
@@ -89,20 +95,29 @@ Every seeded Nightly dispatcher record carries `removalPolicy: "retain"`, which
 the planner turns into an `orphaned` node that cleanup refuses. `retire
 transcription-dispatcher --apply` therefore runs an explicit transition
 (`retirement-transition.ts`) under the stack/stage lease. It validates that the
-records are exactly the legacy Nightly dispatcher inventory (types, logical IDs,
-Nightly-prefixed physical names, the saved Nightly environment tag) and refuses
-anything else: an unexpected logical ID, a borrowed artifacts bucket, bucket
-versions or KMS key, a record from another environment, a `protect` policy.
-Then it makes only those records destroyable, one record at a time, and runs the
-existing preview/apply destroy in a second leased step that validates again.
-Every step is idempotent: a retry after a crash in the release step or in the
-destroy resumes where it stopped.
+records are exactly the legacy Nightly dispatcher inventory and refuses anything
+else: an unexpected logical ID, a borrowed artifacts bucket, bucket versions or
+KMS key, a record from another environment, a `protect` policy. Each record is
+checked on its own against its exact legacy physical identity, for every
+attribute the upstream provider deletes by: role, alarm, log group and function
+names; queue name, URL and ARN; schedule name and group; permission statement ID
+and function. The account and region come from the run's AWS credentials, so no
+account is written in Git. Because each record stands alone, a retry that finds
+only some records left validates them the same way. Then the transition makes
+only those records destroyable, one record at a time, and runs the existing
+preview/apply destroy in a second leased step that validates again. Every step is
+idempotent: a retry after a crash in the release step or in the destroy resumes
+where it stopped. Every retirement target validates before it acts. The recorder
+control endpoint has an empty expected inventory, so any record it holds is
+refused and nothing is destroyed.
 
-The preview fails closed on any record that is not stable. If a failed apply
-left a record `updating` (the live schedule was one), run `pnpm infra retire
-transcription-dispatcher --settle`: it re-reads each live resource, records it
-as `created`, deletes nothing, and refuses a record whose live resource is gone
-or a record in any state other than an interrupted update. Then preview again.
+The preview fails closed on any record that is not stable. `created` and
+`updated` are both finished states and are stable. If a failed apply left a
+record `updating`, run `pnpm infra retire transcription-dispatcher --settle`: it
+re-reads each live resource, records it as `created`, deletes nothing, and
+refuses a record whose live resource is gone or a record in any state other than
+an interrupted update. Then preview again. A refusal prints its reason on
+stderr; unknown failures stay hidden.
 
 The migration-only dispatcher deletion override requires the legacy `nightly`
 stage and a saved Nightly environment tag; normal production deletion remains
@@ -172,27 +187,15 @@ The proof has **not** been run live here. Its successful result replaces the
 obsolete "one persistent Nightly release" production-cutover gate. Production
 remains OpenTofu-owned/unseeded until the lead explicitly sequences cutover.
 
-## Recorder runtime downloads state move
+## Recorder runtime downloads plan check
 
 The CloudFront distribution behind recorder runtime downloads serves production,
-so its state moves from `archive-cdn/nightly` to
-`recorder-runtime-downloads/production` instead of retiring. Physical names do
-not change: the distribution keeps its `chalk:environment = nightly` tag and the
-bucket stays `chalk-nightly-artifacts-<account>`, because renaming either would
-replace a live resource (see the stack's README). The move is a recorded,
-replayable step; it holds both leases, copies the five records and the stack
-output, verifies the copy, and only then removes the old identity. It refuses a
-destination that holds different records, so a retry after a crash finishes the
-move and a second run changes nothing.
-
-```sh
-AWS_PROFILE=q9labs pnpm infra move-state recorder-runtime-downloads --dry-run
-AWS_PROFILE=q9labs pnpm infra move-state recorder-runtime-downloads
-```
-
-Then set `seeded: true` on the registry entry, run `pnpm infra table`, and prove
-the plan at `production` is all no-ops. The plan needs the private public-key
-input (`CHALK_INFRA_INPUTS`, a file with `{public_key_file}`):
+so it is never retired. Its state sits under `recorder-runtime-downloads/production`
+and the registry marks it seeded. Physical names do not change: the distribution
+keeps its `chalk:environment = nightly` tag and the bucket stays
+`chalk-nightly-artifacts-<account>`, because renaming either would replace a live
+resource (see the stack's README). Prove the plan at `production` is all no-ops.
+The plan needs the private public-key input (`CHALK_INFRA_INPUTS`, a file with `{public_key_file}`):
 
 ```sh
 AWS_PROFILE=q9labs CHALK_INFRA_INPUTS=<private inputs file> pnpm infra plan recorder-runtime-downloads production

@@ -7,15 +7,12 @@ import * as Schema from "effect/Schema";
 import { productionStageName } from "./stages.ts";
 import { loadInputs } from "./inputs.ts";
 import { credential } from "./credentials.ts";
-import { requireDeployable, requireStateMoved, retiredTarget, selectStack, stateMoveTarget } from "../registry.ts";
+import { requireDeployable, retiredTarget, selectStack } from "../registry.ts";
 
 test("registry rejects persistent Nightly, retired deployments and unseeded production", () => {
   assert.throws(() => selectStack("transcription-dispatcher", "nightly"));
-  assert.throws(() => requireDeployable(selectStack("recorder-runtime-downloads", "production").target), /not cut over and seeded/);
-  assert.throws(() => requireStateMoved(selectStack("recorder-runtime-downloads", "production").target), /move-state/);
+  assert.equal(requireDeployable(selectStack("recorder-runtime-downloads", "production").target).stageKind, "production");
   assert.throws(() => retiredTarget("recorder-runtime-downloads"), /Retire refused for recorder-runtime-downloads: Production: .*CHALK_RECORDER_FLEET_ARCHIVE_CDN/);
-  assert.equal(stateMoveTarget("recorder-runtime-downloads").legacyStackName, "archive-cdn");
-  assert.throws(() => stateMoveTarget("transcription-dispatcher"));
   assert.throws(() => selectStack("recorder-control-endpoint", "nightly-test"), /Unsupported/);
   assert.throws(() => requireDeployable(selectStack("transcription-dispatcher", "production").target), /not cut over and seeded/);
   assert.equal(requireDeployable(selectStack("transcription-dispatcher", "nightly-test").target).stageKind, "ephemeral");
