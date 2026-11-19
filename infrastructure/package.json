@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "check-types": "node alchemy/check-preview-build.mjs && tsc --noEmit"
   },
   "dependencies": {
-    "@alchemy.run/aws": "2.0.0-beta.87",
-    "@distilled.cloud/aws": "1.0.0-rc.20",
+    "@alchemy.run/aws": "https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz",
+    "@alchemy.run/cloudflare": "https://pkg.alchemy.run/@alchemy.run/cloudflare/-/616dd5bd4fb2ea3616e0a88dc5880d54815de499bdea75796e092cf7ae533806.tgz",
+    "@alchemy.run/digitalocean": "https://pkg.alchemy.run/@alchemy.run/digitalocean/-/be5445bc8a9de3f4d2fb498127f9078589af44d5e98fd4ded36cfd462dae7095.tgz",
+    "@distilled.cloud/aws": "https://pkg.alchemy.run/@distilled.cloud/aws/-/68eced2767d8b793ef1e6cffdca08a71183fa24a67c156b7fcdd670eac27282e.tgz",
+    "@distilled.cloud/digitalocean": "https://pkg.alchemy.run/@distilled.cloud/digitalocean/-/d22076809d31091b9af51efbaf78a5f193f68dc5c4eba77f9e09168fdd65cd08.tgz",
     "@effect/platform-node": "4.1.4",
-    "alchemy": "2.0.0-beta.87",
+    "alchemy": "https://pkg.alchemy.run/alchemy/-/4101ba4a1d3bbbd5229f8369f5f2b0b7df9a6e95f546726d99eb0414cbbd3a2f.tgz",
     "effect": "4.1.4"
   },
   "devDependencies": {

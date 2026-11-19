@@ -61,7 +61,50 @@ manifest should never point at stale assets.
 
 ## Alchemy stacks
 
-`@chalk/infrastructure` pins Alchemy and its AWS provider to `2.0.0-beta.87`.
+`@chalk/infrastructure` pins one complete preview build of Alchemy, AWS,
+Cloudflare, DigitalOcean and their workspace dependencies. The upstream commit
+and immutable content-addressed tarballs are recorded in
+[`alchemy/preview-build.json`](alchemy/preview-build.json). The tarballs still
+report `2.0.0-beta.87`; their URLs, not that version string, identify the build.
+Workspace overrides keep one Alchemy and one Effect 4.1.4 runtime in the
+infrastructure dependency graph. The application and SDK's existing Effect beta
+is intentionally untouched. No release-age or build-script policy is relaxed;
+the pre-existing q9stack non-registry policy is unchanged. The lockfile includes
+SHA-512 integrity for every preview tarball. `check-types` first checks the whole
+graph and rejects partial bumps. To additionally check provenance online, run
+`node infrastructure/alchemy/check-preview-build.mjs --verify-source`.
+
+### Return to npm releases
+
+When DigitalOcean reaches npm, change all `alchemy` and `@alchemy.run/*` URL
+entries in `infrastructure/package.json` to the same exact published version.
+Change the direct `@distilled.cloud/*` entries to the exact npm versions used by
+those providers. Remove the preview graph's twenty URL overrides and its scoped
+Effect override from `pnpm-workspace.yaml` (leave unrelated overrides alone).
+Replace `alchemy/preview-build.json` and its preview-only check with an exact npm
+version alignment check in the `check-types` script. Regenerate the lockfile with
+`pnpm install`; retain the existing age gate and build-script allowlist. Do not
+add a wildcard trust exception if the release is too new.
+
+Run the strict typecheck and a detailed no-op plan for **each** stack and stage
+before deploying with the npm build. Plans take leases: run them sequentially.
+Check drift too for already-cut-over stacks. A package switch never authorizes
+an otherwise unapproved production deployment.
+
+### Preview state compatibility
+
+Against `v2.0.0-beta.87`, the selected preview has no AWS StateStore changes and
+only one state-type addition: optional `old.removalPolicy` in an interrupted
+`updating` resource checkpoint. No keys, wire encoding, required fields, leases,
+or completed-resource rows change. Both versions can read each other's completed
+states. The preview planner also respects the last successful protected policy
+in that optional checkpoint; beta.87 can read it but lacks that protection fix.
+Do not downgrade during an interrupted update that changes a protected policy.
+The existing archive CDN's detailed plan and read-only drift were both all no-ops
+on the preview; no deploy was run for this compatibility proof.
+
+### Current cutovers
+
 The Nightly [archive CDN](nightly/archive-cdn/README.md) uses Alchemy after a
 verified no-change cutover on 2026-11-19.
 The [recorder address](nightly/recording-control-address/README.md) has an Alchemy
