@@ -2,7 +2,6 @@
 """Carry the approved API binding forward without rebuilding dispatcher code."""
 
 import argparse
-import copy
 import json
 import os
 import re
@@ -10,10 +9,9 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from release_core import digest, rebuild_dispatcher, require, validate_config
-from release_io import Provider, private_json
-
-MODULE = Path(__file__).resolve().parents[2] / "infrastructure/opentofu/modules/aws-transcription-dispatcher"
+from release_core import digest, require, validate_config
+from alchemy_dispatcher import read_inputs, run_plan, check_plan as check_alchemy_plan
+from release_io import Provider
 
 
 def binding_target(manifest):
@@ -28,70 +26,32 @@ def check_binding(function, release, code_hash):
     require(function["CodeSha256"] == code_hash, "dispatcher ZIP digest changed")
 
 
-def has_unknown(value):
-    if isinstance(value, dict):
-        return any(has_unknown(child) for child in value.values())
-    if isinstance(value, list):
-        return any(has_unknown(child) for child in value)
-    return value is True
-
-
 def check_binding_plan(plan, release, key, version, config_digest=None):
-    for item in plan.get("resource_changes", []):
-        change = item["change"]
-        if change["actions"] in (["no-op"], ["read"]):
-            continue
-        require(change["actions"] == ["update"], "binding plan must not create, delete or replace resources")
-        expected = copy.deepcopy(change["before"])
-        address = item["address"]
-        require(address in ("module.dispatcher.aws_lambda_function.dispatcher", "module.dispatcher.aws_cloudwatch_log_group.dispatcher"),
-                "binding plan exceeds resource allowlist")
-        for tag in ("tags", "tags_all"):
-            expected[tag]["chalk_release_id"] = release
-        if address.endswith("aws_lambda_function.dispatcher"):
-            expected["environment"][0]["variables"]["CHALK_RELEASE_ID"] = release
-            if config_digest:
-                expected["environment"][0]["variables"]["CHALK_CONFIG_DIGEST"] = config_digest
-                for tag in ("tags", "tags_all"):
-                    expected[tag]["chalk_config_digest"] = config_digest
-            expected.update(s3_key=key, s3_object_version=version, description=f"Track-aware transcription dispatcher ({release})")
-        # These provider-computed fields change when identical code is selected under a new key.
-        computed = {"last_modified", "qualified_arn", "qualified_invoke_arn", "version", "code_sha256", "source_code_size"}
-        unknown = change.get("after_unknown", {})
-        require(all(name in computed or not has_unknown(value) for name, value in unknown.items()), "unexpected unknown binding plan field")
-        actual = copy.deepcopy(change["after"])
-        for name in computed:
-            expected.pop(name, None)
-            actual.pop(name, None)
-        require(expected == actual, "binding plan changes more than release identity")
+    def logs(before):
+        before['tags']['chalk_release_id'] = release
+    def function(before):
+        logs(before)
+        before['environment']['CHALK_RELEASE_ID'] = release
+        if config_digest:
+            before['environment']['CHALK_CONFIG_DIGEST'] = config_digest
+            before['tags']['chalk_config_digest'] = config_digest
+        before['code'].update(key=key, version=version)
+        before['description'] = f'Track-aware transcription dispatcher ({release})'
+    check_alchemy_plan(plan, {'Function': function, 'Logs': logs}, {'artifact_identity', 'release_identity'})
 
 
-def check_output_plan(plan):
-    for item in plan.get("resource_changes", []):
-        require(item["change"]["actions"] == ["no-op"], "output plan must not change resources")
-    for name, change in plan.get("output_changes", {}).items():
-        require(change["actions"] == ["no-op"] or name in ("artifact_identity", "release_identity"),
-                "output plan exceeds output allowlist")
-
-
-def dispatcher_root(provider, config):
-    root = rebuild_dispatcher(provider.state(config), MODULE, config, provider.region, provider.profile)
-    if not provider.profile:
-        root["provider"]["aws"].pop("profile", None)
-        root["terraform"]["backend"]["s3"].pop("profile", None)
-    inputs = root["module"]["dispatcher"]
-    require(inputs["function_name"] == config["function_name"], "dispatcher state identity mismatch")
-    if config["function_name"] == "chalk-nightly-transcription-dispatcher":
-        require(inputs["environment_name"] == "nightly", "nightly dispatcher state environment mismatch")
-        require(inputs["control_api_url"] == "https://nightly-api.chalkmeet.com", "nightly dispatcher API mismatch")
-        require(inputs["control_api_audience"] == "chalk-nightly-control-api", "nightly dispatcher audience mismatch")
-        require(inputs["scheduler_name"] == "chalk-nightly-transcription-reconcile" and inputs["scheduler_group_name"] == "chalk-nightly", "nightly dispatcher scheduler mismatch")
-    return root
+def dispatcher_inputs(provider, config):
+    inputs = read_inputs(provider, config)
+    if config['function_name'] == 'chalk-nightly-transcription-dispatcher':
+        require(inputs['environment_name'] == 'nightly', 'nightly dispatcher state environment mismatch')
+        require(inputs['control_api_url'] == 'https://nightly-api.chalkmeet.com', 'nightly dispatcher API mismatch')
+        require(inputs['control_api_audience'] == 'chalk-nightly-control-api', 'nightly dispatcher audience mismatch')
+        require(inputs['scheduler_name'] == 'chalk-nightly-transcription-reconcile' and inputs['scheduler_group_name'] == 'chalk-nightly', 'nightly dispatcher scheduler mismatch')
+    return inputs
 
 
 def verify_dispatcher(provider, config, release):
-    root = dispatcher_root(provider, config)
-    inputs = root["module"]["dispatcher"]
+    inputs = dispatcher_inputs(provider, config)
     # Legacy recorder states have no API identity. The host verifier still
     # compares this observed binding to its loaded API and approved manifest.
     release = release or inputs["release_id"]
@@ -103,8 +63,7 @@ def verify_dispatcher(provider, config, release):
 
 def bind(provider, config, manifest, dry_run):
     release = binding_target(manifest)
-    root = dispatcher_root(provider, config)
-    inputs = root["module"]["dispatcher"]
+    inputs = dispatcher_inputs(provider, config)
     function = provider.aws("lambda", "get-function-configuration", "--function-name", config["function_name"])
     check_binding(function, inputs["release_id"], inputs["artifact_sha256_base64"])
     proof = {"action": "already-bound" if inputs["release_id"] == release else "rebind", "release_id": release,
@@ -112,18 +71,10 @@ def bind(provider, config, manifest, dry_run):
              "artifact_action": "retain current versioned ZIP" if inputs["release_id"] == release else "copy unchanged ZIP to versioned release key",
              "verified": False}
     if dry_run:
+        run_plan(provider, inputs, lambda plan: check_binding_plan(plan, inputs['release_id'], inputs['artifact_s3_key'], inputs['artifact_s3_object_version']))
         return proof
     with tempfile.TemporaryDirectory(prefix="chalk-dispatcher-binding-") as directory:
         directory = Path(directory)
-        path = directory / "main.tf.json"
-        private_json(path, root)
-        (directory / ".terraform.lock.hcl").write_bytes((MODULE / ".terraform.lock.hcl").read_bytes())
-
-        def tofu(*arguments):
-            return provider.command(["tofu", "-chdir=" + str(directory), *arguments], timeout=600)
-
-        tofu("init", "-input=false", "-upgrade=false")
-        tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
         if inputs["release_id"] != release:
             bucket = inputs["artifact_s3_bucket"]
             old_key, old_version = inputs["artifact_s3_key"], inputs["artifact_s3_object_version"]
@@ -140,17 +91,8 @@ def bind(provider, config, manifest, dry_run):
             environment.pop("CHALK_CONFIG_DIGEST", None)
             config_digest = "sha256:" + digest(json.dumps(environment, sort_keys=True, separators=(",", ":")))
             inputs.update(release_id=release, artifact_s3_key=key, artifact_s3_object_version=version, config_digest=config_digest)
-            private_json(path, root)
-            # Full plans defer unchanged policies through log/Lambda dependencies.
-            # Finish each dependency first; never approve an unknown IAM policy.
-            for resource in ("aws_cloudwatch_log_group.dispatcher", "aws_lambda_function.dispatcher"):
-                tofu("plan", "-input=false", "-no-color", "-target=module.dispatcher." + resource, "-out=binding.plan")
-                check_binding_plan(json.loads(tofu("show", "-json", "binding.plan")), release, key, version, config_digest)
-                tofu("apply", "-input=false", "-no-color", "binding.plan")
-            tofu("plan", "-input=false", "-no-color", "-out=outputs.plan")
-            check_output_plan(json.loads(tofu("show", "-json", "outputs.plan")))
-            tofu("apply", "-input=false", "-no-color", "outputs.plan")
-            tofu("plan", "-input=false", "-detailed-exitcode", "-no-color")
+            run_plan(provider, inputs, lambda plan: check_binding_plan(plan, release, key, version, config_digest), apply=True,
+                     allowed_inputs={'release_id', 'artifact_s3_key', 'artifact_s3_object_version', 'config_digest'})
         proof.update(verify_dispatcher(provider, config, release))
     return proof
 

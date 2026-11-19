@@ -5,14 +5,14 @@ import copy
 import json
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/recorder'))
-from dispatcher_binding import dispatcher_root, MODULE, has_unknown
+from dispatcher_binding import dispatcher_inputs
+from alchemy_dispatcher import run_plan, check_plan as check_alchemy_plan
 from release_core import digest, require, validate_config
-from release_io import Provider, private_json
+from release_io import Provider
 
 
 def policy_with_secret(policy, arn, enabled):
@@ -53,29 +53,23 @@ def canonical_policy(policy):
 
 
 def check_plan(plan, arn, enabled, environment):
-    for item in plan.get('resource_changes', []):
-        change = item['change']
-        if change['actions'] in (['no-op'], ['read']):
-            continue
-        require(change['actions'] == ['update'], 'MAI migration may not create, replace or delete resources')
-        before, after = copy.deepcopy(change['before']), copy.deepcopy(change['after'])
-        address = item['address']
-        if address == 'module.dispatcher.aws_iam_role_policy.dispatcher':
-            expected = canonical_policy(policy_with_secret(json.loads(before.pop('policy')), arn, enabled))
-            require(canonical_policy(json.loads(after.pop('policy'))) == expected, 'MAI migration expands permissions beyond its secret')
-            require(not has_unknown(change.get('after_unknown', {})), 'MAI policy must be completely known')
-        elif address == 'module.dispatcher.aws_lambda_function.dispatcher':
-            before['environment'][0]['variables'] = environment
-            for key in ('tags', 'tags_all'):
-                before[key]['chalk_config_digest'] = environment['CHALK_CONFIG_DIGEST']
-            computed = {'last_modified', 'qualified_arn', 'qualified_invoke_arn', 'version', 'code_sha256', 'source_code_size'}
-            require(all(name in computed or not has_unknown(value) for name, value in change.get('after_unknown', {}).items()), 'unknown MAI runtime field')
-            for name in computed:
-                before.pop(name, None)
-                after.pop(name, None)
-        else:
-            raise ValueError('MAI migration exceeds its resource allowlist: ' + address)
-        require(before == after, 'MAI migration changes unrelated resource fields')
+    def role(before):
+        policies = before['inlinePolicies']
+        require(len(policies) == 1, 'dispatcher execution role has unexpected inline policies')
+        name = next(iter(policies))
+        policies[name] = canonical_policy(policy_with_secret(policies[name], arn, enabled))
+    def function(before):
+        before['environment'] = environment
+        before['tags']['chalk_config_digest'] = environment['CHALK_CONFIG_DIGEST']
+    # Canonicalize IAM's scalar/array and statement ordering without allowing a
+    # permission addition other than the exact environment-scoped MAI secret.
+    normalized = copy.deepcopy(plan)
+    for row in normalized['resources']:
+        if row['id'] == 'ExecutionRole':
+            for side in ('before', 'after'):
+                for name, policy in row[side]['inlinePolicies'].items():
+                    row[side]['inlinePolicies'][name] = canonical_policy(policy)
+    check_alchemy_plan(normalized, {'ExecutionRole': role, 'Function': function}, {'required_egress_destinations', 'release_identity'})
 
 
 def main():
@@ -90,8 +84,7 @@ def main():
     args = parser.parse_args()
     provider = Provider(args.region, args.profile)
     config = validate_config(json.loads(provider.parameter(f'/chalk/{args.environment}/release/recorder.json')['Value']), args.environment)
-    root = dispatcher_root(provider, config['dispatcher'])
-    inputs = root['module']['dispatcher']
+    inputs = dispatcher_inputs(provider, config['dispatcher'])
     arn = args.secret_parameter_arn or inputs.get('openrouter_token_parameter_arn', '')
     require(re.fullmatch(r'arn:aws:ssm:[a-z0-9-]+:\d{12}:parameter/chalk/' + args.environment + r'/[A-Za-z0-9_.\-/]+', arn), 'MAI requires an environment-scoped secret ARN')
     current = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
@@ -106,32 +99,12 @@ def main():
     inputs['config_digest'] = 'sha256:' + digest(json.dumps(env, sort_keys=True, separators=(',', ':')))
     env['CHALK_CONFIG_DIGEST'] = inputs['config_digest']
     inputs.update(codeswitch_provider='' if args.disable else 'mai', openrouter_token_parameter_arn='' if args.disable else arn)
-    with tempfile.TemporaryDirectory(prefix='chalk-mai-configuration-') as temporary:
-        directory = Path(temporary)
-        private_json(directory / 'main.tf.json', root)
-        (directory / '.terraform.lock.hcl').write_bytes((MODULE / '.terraform.lock.hcl').read_bytes())
-        def tofu(*arguments):
-            return provider.command(['tofu', '-chdir=' + str(directory), *arguments], timeout=600)
-        tofu('init', '-input=false', '-upgrade=false')
-        # The unchanged scheduler policy is deferred while Lambda updates. Match the
-        # existing binding workflow: apply only checked targets, then prove a full no-op.
-        tofu('plan', '-input=false', '-no-color', '-target=module.dispatcher.aws_iam_role_policy.dispatcher',
-             '-target=module.dispatcher.aws_lambda_function.dispatcher', '-out=mai.plan')
-        plan = json.loads(tofu('show', '-json', 'mai.plan'))
-        if args.plan_output:
-            private_json(args.plan_output, plan)
-        check_plan(plan, arn, not args.disable, env)
-        if args.apply:
-            tofu('apply', '-input=false', '-no-color', 'mai.plan')
-            tofu('plan', '-input=false', '-no-color', '-out=outputs.plan')
-            outputs = json.loads(tofu('show', '-json', 'outputs.plan'))
-            require(all(item['change']['actions'] in (['no-op'], ['read']) for item in outputs.get('resource_changes', [])), 'MAI migration left resource drift')
-            require(all(item['actions'] == ['no-op'] or name in ('required_egress_destinations', 'release_identity') for name, item in outputs.get('output_changes', {}).items()), 'MAI migration changes unrelated outputs')
-            tofu('apply', '-input=false', '-no-color', 'outputs.plan')
-            tofu('plan', '-input=false', '-detailed-exitcode', '-no-color')
-            observed = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
-            require(observed['Environment']['Variables'] == env, 'MAI configuration readback mismatch')
-            require(observed['CodeSha256'] == current['CodeSha256'], 'MAI migration changed code')
+    run_plan(provider, inputs, lambda plan: check_plan(plan, arn, not args.disable, env), apply=args.apply,
+             plan_output=args.plan_output, allowed_inputs={'codeswitch_provider', 'openrouter_token_parameter_arn', 'config_digest'})
+    if args.apply:
+        observed = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
+        require(observed['Environment']['Variables'] == env, 'MAI configuration readback mismatch')
+        require(observed['CodeSha256'] == current['CodeSha256'], 'MAI migration changed code')
     print(json.dumps({'checked': True, 'applied': args.apply, 'auto': 'paused' if args.disable else 'mai', 'code_unchanged': True}))
 
 

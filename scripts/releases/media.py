@@ -2,7 +2,6 @@
 """Immutable recorder archives and dispatcher ZIP members of a managed release."""
 import argparse
 import base64
-import copy
 import json
 import os
 from pathlib import Path
@@ -20,17 +19,18 @@ import importlib.util
 _recorder_spec = importlib.util.spec_from_file_location("recorder_archive_release", ROOT / "scripts/recorder/release.py")
 recorder_release = importlib.util.module_from_spec(_recorder_spec)
 _recorder_spec.loader.exec_module(recorder_release)
-from dispatcher_binding import dispatcher_root, binding_target, verify_dispatcher, MODULE
+from dispatcher_binding import dispatcher_inputs, binding_target, verify_dispatcher
+from alchemy_dispatcher import run_plan, check_plan as check_alchemy_plan
 from github_release import GitHub, payload, retain, retained
 
 INPUTS = {
     'capture': ('apps/api/', 'features/media/sfu/protocol/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
     'render': ('apps/api/', 'features/media/sfu/protocol/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'dispatcher': ('infrastructure/alchemy/dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
     'dispatcher_configuration': ('infrastructure/nightly/transcription/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.
-SUPPORTED_DISPATCHER_CONFIGURATION = '8ea6b73b24126245ef9ce49a41e69be5f8f0dcd60b4c2d8bd00ad46e15468771'
+SUPPORTED_DISPATCHER_CONFIGURATION = 'f9d96320e4881034f12366696dfa83957788b4d9b9ad697c5272ea6d0c940d94'
 
 
 def fingerprint(member):
@@ -80,7 +80,7 @@ def current(provider, config):
             bucket = values['CHALK_RECORDER_FLEET_ARCHIVE_BUCKET']
             require(result.get('recorder_source_bucket', bucket) == bucket, 'recorder archive buckets differ')
             result['recorder_source_bucket'] = bucket
-    inputs = dispatcher_root(provider, config['dispatcher'])['module']['dispatcher']
+    inputs = dispatcher_inputs(provider, config['dispatcher'])
     result['dispatcher'] = dict(bucket=inputs['artifact_s3_bucket'], key=inputs['artifact_s3_key'], version_id=inputs['artifact_s3_object_version'], sha256=inputs['artifact_sha256'], corpus_digest=inputs['deepinfra_corpus_digest'])
     return validate_members(result)
 
@@ -155,26 +155,8 @@ def materialize_archives(provider, media, bucket):
         recorder_release.verify_object(provider, bucket, key, sha)
 
 
-def dispatcher_state_exists(provider, config):
-    listing = provider.aws('s3api', 'list-objects-v2', '--bucket', config['dispatcher']['state_bucket'], '--prefix', config['dispatcher']['state_key'])
-    return any(item['Key'] == config['dispatcher']['state_key'] for item in listing.get('Contents', []))
-
-
-def installed_dispatcher(provider, config):
-    if not dispatcher_state_exists(provider, config):
-        return False
-    state = provider.state(config['dispatcher'])
-    resources = {item['type'] + '.' + item['name']: item for item in state.get('resources', []) if item.get('mode', 'managed') == 'managed'}
-    required = {kind + '.' + name for kind, name in re.findall(r'^resource "([^"]+)" "([^"]+)"', (MODULE / 'main.tf').read_text(), re.MULTILINE)}
-    # The sole optional resource has count=0 unless an external invoker is configured.
-    required.discard('aws_lambda_permission.control_api')
-    return all(resources.get(name, {}).get('instances') for name in required)
-
-
 def dispatcher_matches(provider, config, archive):
-    if not installed_dispatcher(provider, config):
-        return False
-    inputs = dispatcher_root(provider, config['dispatcher'])['module']['dispatcher']
+    inputs = dispatcher_inputs(provider, config['dispatcher'])
     return inputs['artifact_sha256'] == archive.get('sha256')
 
 
@@ -270,30 +252,17 @@ def pin_archives(args):
 
 
 def check_dispatcher_update(plan, release, archive, key, version, manifest_digest, config_digest):
-    for item in plan.get('resource_changes', []):
-        change = item['change']
-        if change['actions'] in (['no-op'], ['read']):
-            continue
-        require(change['actions'] == ['update'], 'dispatcher update must not create, replace or delete resources')
-        before, after = copy.deepcopy(change['before']), copy.deepcopy(change['after'])
-        address = item['address']
-        require(address in ('module.dispatcher.aws_lambda_function.dispatcher', 'module.dispatcher.aws_cloudwatch_log_group.dispatcher', 'module.dispatcher.aws_scheduler_schedule.reconcile'), 'dispatcher update exceeds resource allowlist')
-        if address.endswith('aws_scheduler_schedule.reconcile'):
-            before['state'] = 'ENABLED'
-        else:
-            for tag in ('tags', 'tags_all'):
-                before[tag]['chalk_release_id'] = release
-            if address.endswith('aws_lambda_function.dispatcher'):
-                before.update(s3_key=key, s3_object_version=version, source_code_hash=base64.b64encode(bytes.fromhex(archive['sha256'])).decode(), description=f'Track-aware transcription dispatcher ({release})')
-                env = before['environment'][0]['variables']
-                env.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=manifest_digest, CHALK_CONFIG_DIGEST=config_digest, DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
-                for tag in ('tags', 'tags_all'):
-                    before[tag].update(chalk_release_manifest_digest=manifest_digest, chalk_config_digest=config_digest)
-        computed = ('last_modified', 'qualified_arn', 'qualified_invoke_arn', 'version', 'code_sha256', 'source_code_size')
-        for name in computed:
-            before.pop(name, None)
-            after.pop(name, None)
-        require(before == after, 'dispatcher plan changes more than code, binding metadata or scheduler state')
+    def logs(before):
+        before['tags']['chalk_release_id'] = release
+    def function(before):
+        logs(before)
+        before['code'].update(key=key, version=version, sha256=base64.b64encode(bytes.fromhex(archive['sha256'])).decode())
+        before['description'] = f'Track-aware transcription dispatcher ({release})'
+        before['environment'].update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=manifest_digest, CHALK_CONFIG_DIGEST=config_digest, DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
+        before['tags'].update(chalk_release_manifest_digest=manifest_digest, chalk_config_digest=config_digest)
+    def schedule(before):
+        before['state'] = 'ENABLED'
+    check_alchemy_plan(plan, {'Function': function, 'Logs': logs, 'Reconcile': schedule}, {'artifact_identity', 'release_identity'})
 
 
 def deploy_dispatcher(args):
@@ -307,92 +276,40 @@ def deploy_dispatcher(args):
         zip_path = directory / 'dispatcher.zip'
         provider.aws('s3api', 'get-object', '--bucket', archive['bucket'], '--key', archive['key'], '--version-id', archive['version_id'], zip_path)
         require(digest(zip_path.read_bytes()) == archive['sha256'], 'dispatcher ZIP readback mismatch')
-        installed = installed_dispatcher(provider, config)
-        if installed:
-            root = dispatcher_root(provider, config['dispatcher'])
-        else:
-            require(args.environment == 'nightly', 'production dispatcher must already be provisioned')
-            # Use the existing root's module without nesting its backend/provider.
-            # The checked-in root is copied so its module source remains absolute.
-            source = (ROOT / 'infrastructure/nightly/transcription/main.tf').read_text()
-            source = source.replace('source = "../../opentofu/modules/aws-transcription-dispatcher"', 'source = "' + str(MODULE) + '"')
-            (directory / 'main.tf').write_text(source)
-            (directory / 'variables.tf').write_bytes((ROOT / 'infrastructure/nightly/transcription/variables.tf').read_bytes())
-            root = None
+        current_inputs = dispatcher_inputs(provider, config['dispatcher'])
         release = binding_target(manifest)
         # The module requires the current API identity in the object key. Copy exact bytes, never rebuild.
         key = f'transcription-dispatcher/{release}/{archive["sha256"]}.zip'
-        bucket = os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'] if not installed else root['module']['dispatcher']['artifact_s3_bucket']
+        bucket = current_inputs['artifact_s3_bucket']
         if args.dry_run:
             bucket, key, version = archive['bucket'], archive['key'], archive['version_id']
-        elif (matches and root['module']['dispatcher']['release_id'] == release
-              and root['module']['dispatcher'].get('release_manifest_digest') == 'sha256:' + digest(args.manifest.read_bytes())
-              and root['module']['dispatcher']['deepinfra_corpus_digest'] == archive['corpus_digest']):
-            key = root['module']['dispatcher']['artifact_s3_key']
-            version = root['module']['dispatcher']['artifact_s3_object_version']
+        elif (matches and current_inputs['release_id'] == release
+              and current_inputs.get('release_manifest_digest') == 'sha256:' + digest(args.manifest.read_bytes())
+              and current_inputs['deepinfra_corpus_digest'] == archive['corpus_digest']):
+            key = current_inputs['artifact_s3_key']
+            version = current_inputs['artifact_s3_object_version']
         else:
             uploaded = provider.aws('s3api', 'put-object', '--bucket', bucket, '--key', key, '--body', zip_path)
             version = uploaded.get('VersionId')
         require(version and version != 'null', 'dispatcher destination bucket is not versioned')
-        inputs = dict(release_id=release, release_manifest_digest='sha256:' + digest(args.manifest.read_bytes()),
+        if args.dry_run:
+            # The destination object version does not exist until an upload. A
+            # dry run verifies the candidate bytes and rejects an in-memory
+            # current-state preflight plan; it never invents an S3 version.
+            run_plan(provider, current_inputs, lambda plan: check_alchemy_plan(plan, {}, set()))
+            print(json.dumps({'action': 'deploy-exact-media-zip', 'sha256': archive['sha256'], 'version_id': archive['version_id'],
+                              'artifact_verified': True, 'state_plan_verified': True, 'preflight_only': True, 'verified': False}))
+            return
+        inputs = {**current_inputs, **dict(release_id=release, release_manifest_digest='sha256:' + digest(args.manifest.read_bytes()),
                       artifact_s3_bucket=bucket, artifact_s3_key=key, artifact_s3_object_version=version,
                       artifact_sha256=archive['sha256'], artifact_sha256_base64=base64.b64encode(bytes.fromhex(archive['sha256'])).decode(),
-                      scheduler_state='ENABLED', deepinfra_corpus_digest=archive['corpus_digest'])
-        if root:
-            environment = provider.aws('lambda', 'get-function-configuration', '--function-name', config['dispatcher']['function_name'])['Environment']['Variables']
-            environment.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
-            environment.pop('CHALK_CONFIG_DIGEST', None)
-            inputs['config_digest'] = 'sha256:' + digest(json.dumps(environment, sort_keys=True, separators=(',', ':')))
-            if not args.dry_run:
-                root['module']['dispatcher'].update(inputs)
-            private_json(directory / 'main.tf.json', root)
-        else:
-            inputs.pop('artifact_s3_bucket')
-            inputs.update(privacy_gate_accepted=True, config_digest='sha256:' + digest(json.dumps(inputs, sort_keys=True)))
-            private_json(directory / 'terraform.tfvars.json', inputs)
-        (directory / '.terraform.lock.hcl').write_bytes((ROOT / 'infrastructure/nightly/transcription/.terraform.lock.hcl').read_bytes())
-        def tofu(*values):
-            return provider.command(['tofu', '-chdir=' + str(directory), *values], timeout=900)
-        def apply(plan):
-            changes = [*plan.get('resource_changes', []), *plan.get('output_changes', {}).values()]
-            if matches and all(item.get('change', item)['actions'] == ['no-op'] for item in changes):
-                return
-            tofu('apply', '-input=false', '-no-color', 'release.plan')
-        backend = ['-backend-config=bucket=' + config['dispatcher']['state_bucket']] if not installed else []
-        tofu('init', '-input=false', '-upgrade=false', *backend)
-        if args.dry_run:
-            flags = ['-refresh-only'] if installed else []
-            tofu('plan', '-input=false', '-lock=false', '-no-color', *flags, '-out=preflight.plan')
-            plan = json.loads(tofu('show', '-json', 'preflight.plan'))
-            for item in plan.get('resource_changes', []):
-                require('delete' not in item['change']['actions'], 'dispatcher preflight must not destroy or replace resources')
-            print(json.dumps({'action': 'deploy-exact-media-zip', 'sha256': archive['sha256'], 'version_id': archive['version_id'],
-                              'artifact_verified': True, 'state_plan_verified': True, 'verified': False}))
-            return
-        if not installed:
-            # These belong to the dispatcher module but provisioning created them before the first ZIP.
-            # `tofu state list` exits 1 until the backend holds a state object.
-            present = set(tofu('state', 'list').splitlines()) if dispatcher_state_exists(provider, config) else set()
-            function = config['dispatcher']['function_name']
-            for resource, name in [('aws_iam_role.dispatcher', function + '-execution'), ('aws_iam_role.scheduler', function + '-scheduler'),
-                                   ('aws_cloudwatch_log_group.dispatcher', '/aws/lambda/' + function)]:
-                address = 'module.dispatcher.' + resource
-                if address not in present:
-                    tofu('import', '-input=false', address, name)
-        if installed:
-            for target in ('aws_cloudwatch_log_group.dispatcher', 'aws_lambda_function.dispatcher'):
-                tofu('plan', '-input=false', '-no-color', '-target=module.dispatcher.' + target, '-out=release.plan')
-                plan = json.loads(tofu('show', '-json', 'release.plan'))
-                check_dispatcher_update(plan, release, archive, key, version, inputs['release_manifest_digest'], inputs['config_digest'])
-                apply(plan)
-        tofu('plan', '-input=false', '-no-color', '-out=release.plan')
-        plan = json.loads(tofu('show', '-json', 'release.plan'))
-        if installed:
-            check_dispatcher_update(plan, release, archive, key, version, inputs['release_manifest_digest'], inputs['config_digest'])
-        else:
-            for item in plan.get('resource_changes', []):
-                require('delete' not in item['change']['actions'], 'first-install dispatcher plan must not destroy or replace resources')
-        apply(plan)
+                      scheduler_state='ENABLED', deepinfra_corpus_digest=archive['corpus_digest'])}
+        environment = provider.aws('lambda', 'get-function-configuration', '--function-name', config['dispatcher']['function_name'])['Environment']['Variables']
+        environment.update(CHALK_RELEASE_ID=release, CHALK_RELEASE_MANIFEST_DIGEST=inputs['release_manifest_digest'], DEEPINFRA_CORPUS_DIGEST=archive['corpus_digest'])
+        environment.pop('CHALK_CONFIG_DIGEST', None)
+        inputs['config_digest'] = 'sha256:' + digest(json.dumps(environment, sort_keys=True, separators=(',', ':')))
+        run_plan(provider, inputs, lambda plan: check_dispatcher_update(plan, release, archive, key, version, inputs['release_manifest_digest'], inputs['config_digest']), apply=True,
+                 allowed_inputs={'release_id', 'release_manifest_digest', 'artifact_s3_bucket', 'artifact_s3_key', 'artifact_s3_object_version', 'artifact_sha256', 'artifact_sha256_base64', 'scheduler_state', 'deepinfra_corpus_digest', 'config_digest'})
         proof = verify_dispatcher(provider, config['dispatcher'], release)
         schedule = provider.aws('scheduler', 'get-schedule', '--name', config['dispatcher']['scheduler_name'], '--group-name', config['dispatcher']['scheduler_group'])
         require(schedule['State'] == 'ENABLED', 'dispatcher scheduler is not enabled')

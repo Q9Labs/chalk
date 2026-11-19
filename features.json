@@ -258,7 +258,7 @@
         "apps/api/internal/transcripts",
         "apps/transcription-dispatcher",
         "infrastructure/nightly/transcription",
-        "infrastructure/opentofu/modules/aws-transcription-dispatcher",
+        "infrastructure/alchemy/dispatcher",
         "infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle",
         "packages/transcript-language",
         "scripts/transcription-dispatcher"

@@ -800,7 +800,7 @@
     {
       "id": "workflow:cache-warm.yml#tofu",
       "owner": "Gate",
-      "catches": "Queue groups downloading the tofu toolchain from a flaky host because master saved no cache.",
+      "catches": "Recorder jobs downloading OpenTofu providers from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
       "minutes": 0.2,
@@ -1455,7 +1455,7 @@
     {
       "id": "workflow:release-contracts.yml#contracts",
       "owner": "Release chain",
-      "catches": "Release workflow lint, dispatcher and recorder image checks, OpenTofu validation or Nightly Alchemy stack typechecking breaking.",
+      "catches": "Release workflow lint, dispatcher release allowlists, exact-plan driver checks, recorder image contracts or Alchemy stack typechecking breaking.",
       "runs": ["pull_request"],
       "blocks": "advisory",
       "minutes": 4.0,

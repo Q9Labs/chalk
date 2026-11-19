@@ -21,6 +21,8 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
 import { providers, state, environmentName } from "./config.ts";
+import { seedDispatcher } from "./dispatcher/seed.ts";
+import { dispatcherProviders } from "./dispatcher/stack.ts";
 import { EipAssociation, readAssociation } from "./eip-association.ts";
 import { BucketPolicy, canonicalPolicy, readPolicy } from "./bucket-policy.ts";
 
@@ -31,10 +33,15 @@ const tags = Schema.Record(Schema.String, Schema.String);
 const main = Effect.gen(function* () {
   const [stack, stageInput, stateFile, mode, ...extra] = process.argv.slice(2);
   const stage = Schema.decodeUnknownSync(environmentName)(stageInput);
+  if (stack === "transcription-dispatcher" && stateFile && (mode === undefined || mode === "--dry-run") && extra.length === 0) {
+    yield* seedDispatcher(stateFile, stage, mode === "--dry-run");
+    return;
+  }
   const isSfu = stack === "sfu" || stack === "sfu-standby";
   const isRecorder = stack === "recorder";
   if ((!isSfu && !isRecorder && stack !== "recording-control-address" && stack !== "archive-cdn") || (!isSfu && !isRecorder && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
     return yield* Effect.die("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder> <nightly|production> <tofu-state.json> [--dry-run]");
+
   }
   if (stage === "production" && mode !== "--dry-run" && process.env.CHALK_ALCHEMY_PRODUCTION_SEED !== "approved") return yield* Effect.die("Production seed writes require explicit CHALK_ALCHEMY_PRODUCTION_SEED=approved; this lane uses --dry-run only.");
   const source = decode(tofuState, yield* Effect.tryPromise(() => readFile(stateFile, "utf8")), "tofu state");
@@ -193,8 +200,9 @@ const main = Effect.gen(function* () {
 
 await Effect.runPromise(
   Effect.gen(function* () {
-    const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
+    const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: process.argv[2] === "transcription-dispatcher" ? dispatcherProviders : Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
     yield* main.pipe(Effect.provide(sfuClient), Effect.provideContext(context));
+
   }).pipe(
     Effect.provideService(Stage, process.argv[3] ?? ""),
     Effect.provide(AlchemyContextLive),

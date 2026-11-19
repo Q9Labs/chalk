@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-MODULE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/aws-transcription-dispatcher"
+MODULE_DIR="$ROOT_DIR/infrastructure/alchemy/dispatcher"
 LIFECYCLE_DIR="$ROOT_DIR/infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle"
 fail() { echo "transcription dispatcher contract: $*" >&2; exit 1; }
 require() { grep -qE -- "$1" "$2" || fail "missing '$1' in $2"; }
@@ -14,35 +14,30 @@ forbid() {
   [[ $status -eq 1 ]] || fail "could not scan $2"
 }
 
-require 'required_version = "= 1\.12\.3"' "$MODULE_DIR/versions.tf"
-require 'version = "= 5\.90\.0"' "$MODULE_DIR/versions.tf"
-require 'runtime       = "nodejs22\.x"' "$MODULE_DIR/main.tf"
-require 'reserved_concurrent_executions = var\.reserved_concurrency' "$MODULE_DIR/main.tf"
-require 'default     = 50' "$MODULE_DIR/variables.tf"
-require 'var\.reserved_concurrency >= 3' "$MODULE_DIR/main.tf"
-require 'var\.timeout_seconds - var\.work_budget_seconds >= var\.completion_reserve_seconds' "$MODULE_DIR/main.tf"
-require 'default     = 60' "$MODULE_DIR/variables.tf"
-require 'maximum_retry_attempts       = var\.async_maximum_retry_attempts' "$MODULE_DIR/main.tf"
-require 'maximum_event_age_in_seconds = var\.async_max_event_age_seconds' "$MODULE_DIR/main.tf"
-require '1048576' "$MODULE_DIR/variables.tf"
-require 'destination_config' "$MODULE_DIR/main.tf"
-require 'schedule_expression[[:space:]]+= "rate\(1 minute\)"' "$MODULE_DIR/main.tf"
-require 'state[[:space:]]+= var\.scheduler_state' "$MODULE_DIR/main.tf"
-require 'variable "scheduler_state"' "$MODULE_DIR/variables.tf"
-require 'mode = "OFF"' "$MODULE_DIR/main.tf"
-require 'dead_letter_config' "$MODULE_DIR/main.tf"
-require 'source_code_hash' "$MODULE_DIR/main.tf"
-require 's3_object_version' "$MODULE_DIR/main.tf"
-require 'ssm:GetParameter' "$MODULE_DIR/main.tf"
-require 'ssm:GetParameters' "$MODULE_DIR/main.tf"
-require 'sqs:SendMessage' "$MODULE_DIR/main.tf"
-require 'DEEPINFRA_TOKEN_PARAMETER_ARN' "$MODULE_DIR/main.tf"
-require 'CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN' "$MODULE_DIR/main.tf"
-require 'CONTROL_API_AUDIENCE' "$MODULE_DIR/main.tf"
-require 'control_api_invoke_policy_json' "$MODULE_DIR/outputs.tf"
-require 'egress_destinations = toset\(concat\(' "$MODULE_DIR/main.tf"
-forbid 'vpc_config|vpc_subnet_ids|vpc_security_group_ids|vpc_egress_mode|aws_nat_gateway|aws_eip|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR/*.tf" \
-  "dispatcher must use default Lambda networking without VPC/NAT resources or a claimed network allowlist"
+require '"@alchemy.run/aws": "2.0.0-beta.87"' "$ROOT_DIR/infrastructure/package.json"
+require '"alchemy": "2.0.0-beta.87"' "$ROOT_DIR/infrastructure/package.json"
+require 'runtime: "nodejs22.x"' "$MODULE_DIR/resources.ts"
+require 'reservedConcurrency: input.reserved_concurrency' "$MODULE_DIR/resources.ts"
+require 'input.timeout_seconds - input.work_budget_seconds >= input.completion_reserve_seconds' "$MODULE_DIR/inputs.ts"
+require 'MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts' "$MODULE_DIR/function.ts"
+require 'MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge' "$MODULE_DIR/function.ts"
+require '1048576' "$MODULE_DIR/inputs.ts"
+require 'scheduleExpression: "rate\(1 minute\)"' "$MODULE_DIR/resources.ts"
+require 'state: input.scheduler_state' "$MODULE_DIR/resources.ts"
+require 'Mode: "OFF"' "$MODULE_DIR/resources.ts"
+require 'DeadLetterConfig' "$MODULE_DIR/resources.ts"
+require 'S3ObjectVersion: code.version' "$MODULE_DIR/function.ts"
+require 'result.codeSha256 !== code.sha256' "$MODULE_DIR/function.ts"
+require 'ssm:GetParameter' "$MODULE_DIR/resources.ts"
+require 'ssm:GetParameters' "$MODULE_DIR/resources.ts"
+require 'sqs:SendMessage' "$MODULE_DIR/resources.ts"
+require 'DEEPINFRA_TOKEN_PARAMETER_ARN' "$MODULE_DIR/environment.ts"
+require 'CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN' "$MODULE_DIR/environment.ts"
+require 'CONTROL_API_AUDIENCE' "$MODULE_DIR/environment.ts"
+require 'control_api_invoke_policy_json' "$MODULE_DIR/resources.ts"
+require 'required_egress_destinations' "$MODULE_DIR/resources.ts"
+forbid 'VpcConfig:|SubnetIds:|SecurityGroupIds:|CHALK_EGRESS_ALLOWLIST' "$MODULE_DIR" \
+  "dispatcher must retain default Lambda networking without VPC/NAT resources or a claimed network allowlist"
 require 'ALLOW_DIRTY_SOURCE' "$ROOT_DIR/scripts/transcription-dispatcher/build-release.sh"
 require 'dirty-local-proof' "$ROOT_DIR/scripts/transcription-dispatcher/verify-artifact.sh"
 require 'source_tree_digest' "$ROOT_DIR/scripts/transcription-dispatcher/emit-manifest.mjs"
@@ -63,6 +58,6 @@ if [[ -f "$APP_CONFIG" ]]; then
   done
 fi
 
-forbid 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR" \
+forbid 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR/resources.ts" \
   "broad database, reusable object-storage, or infrastructure-mutation permission found"
 echo "validated transcription dispatcher infrastructure contract"

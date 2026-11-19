@@ -110,7 +110,10 @@ verified no-change cutover on 2026-11-19.
 The [recorder address](nightly/recording-control-address/README.md) has an Alchemy
 definition but is currently unallocated and has not been deployed. Its historical
 OpenTofu state is stale: do not seed it or allocate a replacement without
-separate cost approval. Other roots still use OpenTofu.
+separate cost approval. The [transcription dispatcher](alchemy/dispatcher/README.md)
+has completed its Nightly no-op cutover and uses one Alchemy release path for
+both environments. Production must be explicitly seeded before that path runs
+there. Other roots still use OpenTofu.
 
 The [DigitalOcean SFU and recorder definitions](alchemy/digitalocean-migration.md)
 are prepared, but are not cut over. Their migration blockers and exact lead-only
@@ -123,10 +126,10 @@ credential-free check:
 pnpm --dir infrastructure check-types
 ```
 
-Both stacks share the AWS credential chain, including `AWS_PROFILE`, and pin
+All stacks share the AWS credential chain, including `AWS_PROFILE`, and pin
 `ap-southeast-1` independently of the profile's default region. Use Chalk's
-`nightly` and `production` stage names. These two entrypoints reject every stage
-except `nightly`. State uses `AWS.state({ migrateFrom: false })`: the on-demand `alchemy-state` DynamoDB
+`nightly` and `production` stage names. The address and CDN entrypoints reject every stage
+except `nightly`; the dispatcher accepts both stages. State uses `AWS.state({ migrateFrom: false })`: the on-demand `alchemy-state` DynamoDB
 table and its S3 overflow bucket in the same account and region. First use needs
 permission to provision both, or an operator must bootstrap the store ahead of
 time. Legacy Alchemy S3-state migration is disabled because these stacks have no
@@ -188,9 +191,11 @@ CloudFront caller references cannot be recovered from physical names alone.
 6. Only after successful cutover, remove that root's `.tf` and
    `.terraform.lock.hcl` files. Keep the original state objects and dated backups.
 
-The seed script covers only these two roots, not a generic Terraform provider
-schema. Extend its explicit mappings when another root migrates. It deliberately
-rejects modules, duplicate instances, deposed instances, and unknown resources.
+The seed script covers these roots and the dispatcher's explicit module mapping,
+not a generic Terraform provider schema. Follow the [dispatcher cutover runbook](../docs/transcription-production-release.md)
+for its private inputs, production gate and release rollback. Extend explicit
+mappings when another root migrates. The script rejects unexpected modules,
+duplicate or deposed instances and unknown resources.
 Do not run Alchemy and OpenTofu as concurrent owners.
 
 ### Undo a cutover
