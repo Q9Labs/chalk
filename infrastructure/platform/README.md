@@ -44,8 +44,10 @@ The workflow serializes its own runs, but operators must also sequence it with
 manual plans/releases on these stages. A held lease fails the check and alerts;
 it does not bypass locking.
 
-The scheduled command uses `alchemy drift`, which reads state and provider
-attributes without evaluating stack declarations. Thus it does not need the
+The scheduled command runs `platform/drift.ts`, which calls the same drift scan as `alchemy drift`:
+it reads state and provider attributes without evaluating stack declarations. A record the scan
+skips (no provider `read`, or a record that is creating, updating or deleting) is `check-failed`,
+not `clean`, because it was never compared with the real resource. Thus it does not need the
 retired download public key file or dispatcher runtime input files. Confirm role access
 and one clean manual run before enabling the schedule. No live access test was
 performed in the structure lane.

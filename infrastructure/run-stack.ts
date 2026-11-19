@@ -34,7 +34,9 @@ else if (operation === "table") {
             ? ["tsx", "releases/prove-dispatcher.ts", stage.name]
             : operation === "plan" && target.stackName === "transcription-dispatcher"
               ? ["tsx", "releases/driver.ts", "plan", stage.name]
-              : ["alchemy", operation ?? "", "--config", entryFile(target), "--stage", stage.name, "--no-input"];
+              : operation === "drift"
+                ? ["tsx", "platform/drift.ts", entryFile(target), stage.name]
+                : ["alchemy", operation ?? "", "--config", entryFile(target), "--stage", stage.name, "--no-input"];
 }
 if (command) {
   const result = spawnSync("pnpm", ["exec", ...command], { cwd, stdio: "inherit", env: { ...process.env, ...(name === "sfu" || name === "sfu-standby" ? { CHALK_SFU_STACK: name } : {}) } });
