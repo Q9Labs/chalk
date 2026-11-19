@@ -137,6 +137,15 @@ export function requireRunOwnedFunction(stageName: string, functionName: string)
   const stage = parseStage(stageName);
   if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
 }
+type Configuration = Pick<FunctionProps, "environment">;
+// Lambda returns environment variables in its own order, and deepEqual compares a redacted record in
+// key order, so the same variables in another order must not count as a difference.
+const environmentByKey = <T extends Configuration>(configuration: T) => ({
+  ...configuration,
+  environment: Redacted.make(Object.fromEntries(Object.entries(Redacted.value(configuration.environment)).sort(([left], [right]) => left.localeCompare(right)))),
+});
+const sameConfiguration = (live: Configuration, desired: Configuration) => deepEqual(environmentByKey(live), environmentByKey(desired));
+
 const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: string) {
   requireRunOwnedFunction(yield* Stage, news.functionName);
   yield* lambda
@@ -156,7 +165,7 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
       TracingConfig: { Mode: news.tracingMode },
       Tags: { ...news.tags, [ownerTagKey]: instanceId },
     })
-    .pipe(Effect.retry({ while: (error) => error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message), schedule: Schedule.spaced("2 seconds"), times: 30 }));
+    .pipe(Effect.retry({ while: (error) => error._tag === "ExecutionRoleNotAssumable" || (error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message)), schedule: Schedule.spaced("2 seconds"), times: 30 }));
   yield* lambda.getFunctionConfiguration({ FunctionName: news.functionName }).pipe(
     Effect.flatMap((config) => (config.State === "Active" ? Effect.succeed(config) : Effect.fail(new NotSettled()))),
     Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
@@ -165,7 +174,7 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: 
   yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } });
   const result = yield* readFunction(news.functionName);
   const { code, ...configuration } = news;
-  if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
+  if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
   return result;
 });
 
@@ -191,7 +200,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
       yield* lambda.updateFunctionCode({ FunctionName: news.functionName, S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version, RevisionId: before.RevisionId, Publish: false });
       yield* settled(news.functionName);
     }
-    if (!deepEqual(live.configuration, configuration)) {
+    if (!sameConfiguration(live.configuration, configuration)) {
       const current = yield* settled(news.functionName);
       yield* lambda.updateFunctionConfiguration({
         FunctionName: news.functionName,
@@ -220,7 +229,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
       yield* lambda.tagResource({ Resource: live.functionArn, Tags: news.tags });
     }
     const result = yield* readFunction(news.functionName);
-    if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP/configuration readback failed; no values logged.");
+    if (!result || result.codeSha256 !== code.sha256 || !sameConfiguration(result.configuration, configuration)) return yield* refuse("Dispatcher exact ZIP/configuration readback failed; no values logged.");
     return result;
   }),
   delete: Effect.fn(function* ({ output, instanceId }) {

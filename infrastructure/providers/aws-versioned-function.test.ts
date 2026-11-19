@@ -34,7 +34,7 @@ const props: FunctionProps = {
   memorySize: 512,
   reservedConcurrency: 2,
   ephemeralStorageSize: 512,
-  environment: Redacted.make({ TEST: "value" }),
+  environment: Redacted.make({ TEST: "value", ANOTHER: "value" }),
   tracingMode: "Active",
   eventInvokeConfig: { maximumEventAge: 60, maximumRetryAttempts: 0, onFailure: "arn:queue" },
   tags: { chalk_environment: "nightly-test" },
@@ -51,7 +51,8 @@ const functionConfig = {
   Timeout: props.timeout,
   MemorySize: props.memorySize,
   EphemeralStorage: { Size: props.ephemeralStorageSize },
-  Environment: { Variables: Redacted.value(props.environment) },
+  // Lambda does not return variables in the order they were sent.
+  Environment: { Variables: Object.fromEntries(Object.entries(Redacted.value(props.environment)).reverse()) },
   TracingConfig: { Mode: "Active" },
   Version: "$LATEST",
   CodeSha256: props.code.sha256,
