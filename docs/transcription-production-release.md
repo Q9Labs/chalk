@@ -73,6 +73,13 @@ AWS_PROFILE=q9labs pnpm infra drift transcription-dispatcher production
 AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
+After these proofs pass, change only the dispatcher's production row in
+`infrastructure/registry.ts` to `provisioner: "alchemy", seeded: true`, regenerate
+its README table with `pnpm infra table`, and review/commit that cutover record.
+Until then the release/deploy commands intentionally refuse production, even
+if state has been seeded. Verify the drift role's documented access before
+enabling its schedule; retired Nightly is never included.
+
 Never run `tofu destroy`, `alchemy destroy` or `alchemy nuke`. The original
 OpenTofu objects and their dated backups remain untouched.
 
@@ -82,7 +89,9 @@ For a release rollback, select the prior recorded manifest through the normal
 [managed release rollback](managed-release.md) path. It selects the previous
 versioned ZIP and verifies its digest without rebuilding or changing ownership.
 
-For an infrastructure-ownership rollback, stop all Alchemy writers. Save the
+For an infrastructure-ownership rollback, stop all Alchemy writers and return
+the production registry row to `provisioner: "opentofu", seeded: false`, then
+regenerate its table. Save the
 current Alchemy state privately, then forget only the affected stage's records:
 
 ```sh
