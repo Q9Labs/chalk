@@ -33,7 +33,7 @@ invocation prerequisites are healthy. The API runtime's invoke role is separate;
 
 Each environment's complete inputs are stored as the redacted
 `dispatcher_inputs` stack output in `AWS.state()`, in `ap-southeast-1`. This
-replaces the generated temporary `main.tf.json` root and tfvars. Release commands
+replaces the generated temporary generated JSON root and tfvars. Release commands
 refuse an environment that has not been explicitly seeded. They never fall back
 to OpenTofu state. Keep input JSON, detailed plans, state exports and diagnostics
 private; none belongs in Git or CI artifacts.

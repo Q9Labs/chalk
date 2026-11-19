@@ -1,7 +1,7 @@
 # Cloudflare TURN key
 
 `alchemy.run.ts` declares `chalk-<stage>-turn` using
-`@alchemy.run/cloudflare@2.0.0-beta.87`. Stage names retain the original
+the [unified pinned preview provider](../README.md#alchemy-stacks). Stage names retain the original
 `^[a-z][a-z0-9-]{1,31}$` validation. Supply `CLOUDFLARE_ACCOUNT_ID` and
 `CLOUDFLARE_API_TOKEN`, or an Alchemy Cloudflare profile. The shell's
 `_load_cloudflare_api_token` loads the existing 1Password-backed token used by

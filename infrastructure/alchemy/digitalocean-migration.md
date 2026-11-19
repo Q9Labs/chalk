@@ -57,7 +57,7 @@ seed dry-run refuses that non-no-op configuration mismatch; standby passes.
 
 ## Lifecycle differences and provider gaps
 
-- Upstream `packages/digitalocean/src/Droplet.ts:70`, `:325` replaces on size
+- Upstream [packages/digitalocean/src/Droplet.ts:70](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/digitalocean/src/Droplet.ts#L70), `:325` replaces on size
   changes and offers no ignore-changes option. `sfu-droplet.ts` retains CPU/RAM-only
   resize with `disk: false`, and ignores image, SSH keys and user data after first
   creation. A resize requires `CHALK_SFU_ALLOW_RESIZE=true` after a separately
@@ -72,14 +72,14 @@ seed dry-run refuses that non-no-op configuration mismatch; standby passes.
 - KMS and R2 `prevent_destroy` become `protect`, which also rejects replacement.
   The alias, pool tags and pool firewalls are protected too. Removing a declaration
   must not silently remove a shared tag or service policy.
-- Upstream `packages/cloudflare/src/R2/Bucket.ts:1653` returns old CORS and
+- Upstream [packages/cloudflare/src/R2/Bucket.ts:1653](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/cloudflare/src/R2/Bucket.ts#L1653) returns old CORS and
   lifecycle attributes from `read`. The custom `recording-bucket.ts` reads through
   the provider's full `lookup` so drift actually checks those endpoints.
   Its seed and definition canonicalize unordered policy sets because upstream
-  `Bucket.ts:1366` compares prop arrays by order.
-- `packages/aws/src/KMS/Key.ts:238` cannot discover an existing key without an
+  [Bucket.ts:1366](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/cloudflare/src/R2/Bucket.ts#L1366) compares prop arrays by order.
+- [packages/aws/src/KMS/Key.ts:238](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/aws/src/KMS/Key.ts#L238) cannot discover an existing key without an
   output ID. An explicit seed is required; `--adopt` is not a substitute.
-- Upstream `packages/digitalocean/src/Tag.ts:76` includes runtime resource counts
+- Upstream [packages/digitalocean/src/Tag.ts:76](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/digitalocean/src/Tag.ts#L76) includes runtime resource counts
   in its attributes. The custom pool tag providers persist only the name, so
   runtime fleet scaling does not become infrastructure drift.
 - Each recorder pool has a distinct resource type and credential layer. Capture
@@ -134,8 +134,8 @@ The following local paths still require the legacy toolchain:
   `scripts/transcription-dispatcher/configure-mai.py` now use Alchemy.
   `scripts/releases/check-contracts.sh` uses the infrastructure typecheck,
   not deleted dispatcher, address or CDN OpenTofu roots.
-- `.github/workflows/cache-warm.yml`, `ci.yml`, `gate.yml`, and
-  `release-contracts.yml`, their setup/cache actions and tool pins remain.
+- `.github/workflows/cache-warm.yml`, `.github/workflows/ci.yml`, `.github/workflows/gate.yml`, and
+  `.github/workflows/release-contracts.yml`, their setup/cache actions and tool pins remain.
 - The legacy SFU and recorder instructions remain available until those roots
   cut over. No script points at a deleted root.
 
