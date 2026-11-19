@@ -17,5 +17,5 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["alchemy/**/*.ts", "nightly/*/alchemy.run.ts"]
+  "include": ["alchemy/**/*.ts", "nightly/*/alchemy.run.ts", "sfu/**/*.ts", "recorder/**/*.ts"]
 }

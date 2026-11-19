@@ -1,5 +1,16 @@
 # Recorder infrastructure contract
 
+## Prepared Alchemy definition
+
+`alchemy.run.ts` retains the pool policies, KMS context restrictions, R2 CORS and
+lifecycle rules, capacity bounds and fail-closed production inputs. Runtime
+Droplets remain externally owned. This definition is not deployed: read-only
+production import validation refuses live R2 CORS origins that differ from the
+legacy state. Both pool firewalls also have a changed control-plane destination.
+The original root stays runnable. See the
+[migration reference](../alchemy/digitalocean-migration.md) and
+[cutover commands](../alchemy/cutover-digitalocean.md).
+
 This OpenTofu root is policy-only for the recorder compute pools. It owns immutable pool tags, unattached outbound-only firewalls, release and image contracts, the private temporary R2 bucket lifecycle and the Singapore recording KEK. It never creates or replaces runtime Droplets: the external recorder reconciler owns scheduled prewarm, scale-to-zero, desired capacity, fencing and replacement. Pool sizes, regions, caps and the `desired_capture_nodes` formula are in `variables.tf` and `locals.tf`; capture and render both default to zero desired nodes.
 
 Direct control TLS egress on ports 8443/8444 requires the exact managed-host `control_addresses` (/32 or /128); workers accept no inbound traffic. Admission targets and caps are capacity inputs, not a claim of regional load qualification. A smaller capture or render maximum lowers the supported concurrency, so operators must lower the admission ceiling with it before launch. Render-phase pipelines do not occupy capture admission. CPU and GPU artifacts are never mixed: a GPU pool needs `render_gpu = true` with an independently qualified GPU image, region and size. Confirm current regional size availability before applying.

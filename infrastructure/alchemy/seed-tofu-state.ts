@@ -1,4 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { seedRecorder } from "./seed-recorder.ts";
+import { recorderPoolProviders } from "./recorder-pools.ts";
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Layer from "effect/Layer";
+import { seedSfu } from "./seed-sfu.ts";
+import { sfuClient } from "./sfu-droplet.ts";
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -7,8 +14,6 @@ import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Provider from "alchemy/Provider";
-import type { ResourceClassLike, ResourceLike } from "alchemy/Resource";
 import { State } from "alchemy/State";
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
@@ -19,65 +24,24 @@ import { providers, state, environmentName } from "./config.ts";
 import { EipAssociation, readAssociation } from "./eip-association.ts";
 import { BucketPolicy, canonicalPolicy, readPolicy } from "./bucket-policy.ts";
 
-const tofuState = Schema.fromJsonString(
-  Schema.Struct({
-    version: Schema.Literal(4),
-    resources: Schema.Array(
-      Schema.Struct({
-        mode: Schema.Literals(["data", "managed"]),
-        type: Schema.String,
-        name: Schema.String,
-        module: Schema.optional(Schema.String),
-        instances: Schema.Array(Schema.Struct({ attributes: Schema.Unknown, deposed: Schema.optional(Schema.String) })),
-      }),
-    ),
-  }),
-);
+import { tofuState, decode, lookup, row } from "./tofu-state.ts";
+
 const tags = Schema.Record(Schema.String, Schema.String);
-
-const decode = <A, I>(schema: Schema.Codec<A, I>, value: unknown, label: string): A => {
-  try {
-    return Schema.decodeUnknownSync(schema)(value);
-  } catch {
-    throw new Error(`Invalid ${label}; state contents are not printed.`);
-  }
-};
-
-const lookup = <R extends ResourceLike>(resource: ResourceClassLike<R>, props: R["Lookup"]) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(resource);
-    if (!provider.lookup) return yield* Effect.die(`No lookup for ${resource.Type}`);
-    const attributes = yield* provider.lookup(props);
-    if (!attributes) return yield* Effect.die(`Existing ${resource.Type} was not found; refusing to seed.`);
-    return attributes;
-  });
-
-const row = <P extends object, A extends object>(resourceType: string, logicalId: string, instanceId: string, props: P, attr: A, downstream: string[], removalPolicy: "retain" | "destroy" = "destroy"): CreatedResourceState => ({
-  status: "created",
-  resourceType,
-  logicalId,
-  fqn: logicalId,
-  instanceId,
-  namespace: undefined,
-  providerVersion: 0,
-  props: { ...props },
-  attr: { ...attr },
-  bindings: [],
-  downstream,
-  removalPolicy,
-});
 
 const main = Effect.gen(function* () {
   const [stack, stageInput, stateFile, mode, ...extra] = process.argv.slice(2);
   const stage = Schema.decodeUnknownSync(environmentName)(stageInput);
-  if ((stack !== "recording-control-address" && stack !== "archive-cdn") || stage !== "nightly" || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
-    return yield* Effect.die("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn> nightly <tofu-state.json> [--dry-run]");
+  const isSfu = stack === "sfu" || stack === "sfu-standby";
+  const isRecorder = stack === "recorder";
+  if ((!isSfu && !isRecorder && stack !== "recording-control-address" && stack !== "archive-cdn") || (!isSfu && !isRecorder && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
+    return yield* Effect.die("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder> <nightly|production> <tofu-state.json> [--dry-run]");
   }
+  if (stage === "production" && mode !== "--dry-run" && process.env.CHALK_ALCHEMY_PRODUCTION_SEED !== "approved") return yield* Effect.die("Production seed writes require explicit CHALK_ALCHEMY_PRODUCTION_SEED=approved; this lane uses --dry-run only.");
   const source = decode(tofuState, yield* Effect.tryPromise(() => readFile(stateFile, "utf8")), "tofu state");
   const managed = source.resources.filter((resource) => resource.mode === "managed");
   const expected =
     stack === "recording-control-address" ? ["aws_eip.control", "aws_eip_association.control"] : ["aws_cloudfront_origin_access_control.archive", "aws_cloudfront_public_key.archive", "aws_cloudfront_key_group.archive", "aws_cloudfront_distribution.archive", "aws_s3_bucket_policy.artifacts"];
-  if (managed.length !== expected.length || managed.some((resource) => resource.module || !expected.includes(`${resource.type}.${resource.name}`))) {
+  if (!isSfu && !isRecorder && (managed.length !== expected.length || managed.some((resource) => resource.module || !expected.includes(`${resource.type}.${resource.name}`)))) {
     return yield* Effect.die("Unexpected managed resources in tofu state; refusing partial migration.");
   }
   const get = <A>(type: string, name: string, schema: Schema.Codec<A>): A => {
@@ -90,7 +54,11 @@ const main = Effect.gen(function* () {
     return decode(schema, instance.attributes, `${type}.${name} attributes`);
   };
   const rows: CreatedResourceState[] = [];
-  if (stack === "recording-control-address") {
+  if (isRecorder) {
+    rows.push(...(yield* seedRecorder(source, stage)));
+  } else if (isSfu) {
+    rows.push(...(yield* seedSfu(source, stage, stack)));
+  } else if (stack === "recording-control-address") {
     const eip = get("aws_eip", "control", Schema.Struct({ id: Schema.String, domain: Schema.Literal("vpc"), tags }));
     const association = get("aws_eip_association", "control", Schema.Struct({ allocation_id: Schema.String, instance_id: Schema.String, allow_reassociation: Schema.Boolean, id: Schema.String }));
     if (association.allocation_id !== eip.id) return yield* Effect.die("Tofu association does not reference its address.");
@@ -107,7 +75,7 @@ const main = Effect.gen(function* () {
           allocationId: association.allocation_id,
           instanceId: association.instance_id,
           allowReassociation: association.allow_reassociation,
-          environment: stage,
+          environment: "nightly",
         } satisfies EipAssociation["Props"],
         attached,
         [],
@@ -203,7 +171,7 @@ const main = Effect.gen(function* () {
     yield* Effect.logInfo(`Validated ${rows.length} live resource mappings for ${stack}/${stage}; no state written.`);
     return;
   }
-  // Build and validate every row before taking the state lease or writing anything.
+  // Build and validate every row before accessing destination state.
   const store = yield* yield* State;
   const existing = yield* store.list({ stack, stage });
   if (existing.some((fqn) => !rows.some((entry) => entry.fqn === fqn))) {
@@ -225,8 +193,8 @@ const main = Effect.gen(function* () {
 
 await Effect.runPromise(
   Effect.gen(function* () {
-    const context = yield* Stack.build({ name: process.argv[2] ?? "", providers, state });
-    yield* main.pipe(Effect.provideContext(context));
+    const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
+    yield* main.pipe(Effect.provide(sfuClient), Effect.provideContext(context));
   }).pipe(
     Effect.provideService(Stage, process.argv[3] ?? ""),
     Effect.provide(AlchemyContextLive),

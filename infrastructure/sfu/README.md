@@ -2,6 +2,20 @@
 
 This root applies the [SFU node module](node) once per environment, staging and production, each with its own state. Real addresses, state settings and certificates stay outside Git, in `~/.config/chalk-sfu/<env>` and 1Password.
 
+## Prepared Alchemy definition
+
+`alchemy.run.ts` supports `sfu` and `sfu-standby`, with private JSON inputs and
+Nightly-to-staging environment mapping. It is not deployed. Both Nightly legacy
+states currently name missing resources, so their create plans must not run.
+Production standby passes seed dry-run. Primary refuses a missing TCP media rule
+relative to the current definition; its state and live rules agree. No production
+state was written. See the
+[migration reference](../alchemy/digitalocean-migration.md) and
+[cutover commands](../alchemy/cutover-digitalocean.md).
+
+The original root below remains runnable until a verified cutover. The new
+cloud-init renderer is checked byte-for-byte against its OpenTofu rendering.
+
 ## Build or rebuild a node
 
 1. Copy `backend.hcl.example` and `node.tfvars.example` to the private directory and fill them in. `control_addresses` lists the API host's public addresses, the only ones that may reach the control port.
