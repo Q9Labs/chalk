@@ -1,0 +1,162 @@
+{
+  "CHALK_ENVIRONMENT": {
+    "input": "environment_name",
+    "type": "string"
+  },
+  "CHALK_RELEASE_ID": {
+    "input": "release_id",
+    "type": "string"
+  },
+  "CHALK_RELEASE_MANIFEST_DIGEST": {
+    "input": "release_manifest_digest",
+    "type": "string"
+  },
+  "CHALK_CONFIG_DIGEST": {
+    "input": "config_digest",
+    "type": "string"
+  },
+  "CONTROL_API_BASE_URL": {
+    "input": "control_api_url",
+    "type": "string"
+  },
+  "CONTROL_API_AUDIENCE": {
+    "input": "control_api_audience",
+    "type": "string"
+  },
+  "TRANSCRIPTION_MAX_BATCH": {
+    "input": "max_batch",
+    "type": "number"
+  },
+  "TRANSCRIPTION_CONCURRENCY": {
+    "input": "reserved_concurrency",
+    "type": "number"
+  },
+  "TRANSCRIPTION_TIMEOUT_RESERVE_MS": {
+    "input": "completion_reserve_seconds",
+    "type": "number"
+  },
+  "TRANSCRIPTION_PRIVACY_GATE_ACCEPTED": {
+    "input": "privacy_gate_accepted",
+    "type": "bool"
+  },
+  "DEEPINFRA_ENABLED": {
+    "input": "deepinfra_enabled",
+    "type": "bool"
+  },
+  "CLOUDFLARE_AI_ENABLED": {
+    "input": "cloudflare_enabled",
+    "type": "bool"
+  },
+  "TRANSCRIPTION_PROVIDER_TIMEOUT_MS": {
+    "input": "provider_timeout_ms",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_AUDIO_BYTES": {
+    "input": "max_audio_bytes",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_AUDIO_SECONDS": {
+    "input": "max_audio_seconds",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_RESPONSE_BYTES": {
+    "input": "max_response_bytes",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_TEXT_CHARS": {
+    "input": "max_text_chars",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_SEGMENTS": {
+    "input": "max_segments",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_WORDS": {
+    "input": "max_words",
+    "type": "number"
+  },
+  "TRANSCRIPTION_MAX_RETRIES": {
+    "input": "provider_max_retries",
+    "type": "number"
+  },
+  "TRANSCRIPTION_RETRY_BASE_DELAY_MS": {
+    "input": "retry_base_delay_ms",
+    "type": "number"
+  },
+  "TRANSCRIPTION_RETRY_MAX_DELAY_MS": {
+    "input": "retry_max_delay_ms",
+    "type": "number"
+  },
+  "TRANSCRIPTION_CIRCUIT_FAILURE_THRESHOLD": {
+    "input": "circuit_failure_threshold",
+    "type": "number"
+  },
+  "TRANSCRIPTION_CIRCUIT_COOLDOWN_MS": {
+    "input": "circuit_cooldown_ms",
+    "type": "number"
+  },
+  "CHALK_TRANSCRIPTION_HANDLER": {
+    "input": "handler",
+    "type": "string"
+  },
+  "CHALK_TRANSCRIPTION_WORK_BUDGET": {
+    "input": "work_budget_seconds",
+    "type": "number"
+  },
+  "CHALK_COMPLETION_RESERVE_SECONDS": {
+    "input": "completion_reserve_seconds",
+    "type": "number"
+  },
+  "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN": {
+    "input": "api_workload_auth_parameter_arn",
+    "type": "string"
+  },
+  "CODESWITCH_PROVIDER": {
+    "input": "codeswitch_provider",
+    "type": "string"
+  },
+  "OPENROUTER_TOKEN_PARAMETER_ARN": {
+    "input": "openrouter_token_parameter_arn",
+    "type": "string"
+  },
+  "DEEPINFRA_ADAPTER_CONTRACT_VERSION": {
+    "input": "deepinfra_adapter_contract_version",
+    "type": "string"
+  },
+  "DEEPINFRA_CORPUS_DIGEST": {
+    "input": "deepinfra_corpus_digest",
+    "type": "string"
+  },
+  "DEEPINFRA_TOKEN_PARAMETER_ARN": {
+    "input": "deepinfra_token_parameter_arn",
+    "type": "string"
+  },
+  "DEEPINFRA_EXECUTION_IDENTITY_PIN": {
+    "input": "deepinfra_execution_identity_pin",
+    "type": "string"
+  },
+  "DEEPINFRA_MODEL_VERSION_PIN": {
+    "input": "deepinfra_model_version_pin",
+    "type": "string"
+  },
+  "CLOUDFLARE_ACCOUNT_ID": {
+    "input": "cloudflare_account_id",
+    "type": "string"
+  },
+  "CLOUDFLARE_MODEL_SLUG": {
+    "input": "cloudflare_model_slug",
+    "type": "string"
+  },
+  "CLOUDFLARE_ADAPTER_CONTRACT_VERSION": {
+    "input": "cloudflare_adapter_contract_version",
+    "type": "string"
+  },
+  "CLOUDFLARE_CORPUS_DIGEST": {
+    "input": "cloudflare_corpus_digest",
+    "type": "string"
+  },
+  "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN": {
+    "input": "cloudflare_token_parameter_arn",
+    "type": "string"
+  }
+}
