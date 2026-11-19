@@ -112,6 +112,10 @@ definition but is currently unallocated and has not been deployed. Its historica
 OpenTofu state is stale: do not seed it or allocate a replacement without
 separate cost approval. Other roots still use OpenTofu.
 
+The [DigitalOcean SFU and recorder definitions](alchemy/digitalocean-migration.md)
+are prepared, but are not cut over. Their migration blockers and exact lead-only
+production commands are documented in the migration reference.
+
 Run commands from the repository root. Install with `pnpm install`, then run the
 credential-free check:
 
