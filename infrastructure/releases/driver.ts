@@ -8,10 +8,11 @@ import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { readFileSync, writeFileSync } from "node:fs";
 import { environmentName } from "../platform/config.ts";
-import stack, { stackName, storedInputs } from "../transcription-dispatcher/alchemy.run.ts";
+import stack, { stackName } from "../transcription-dispatcher/alchemy.run.ts";
 import { parseInputs } from "../transcription-dispatcher/config.ts";
 import { dispatcherPolicy } from "../transcription-dispatcher/policy.ts";
 import { applyCheckedPlan } from "./apply.ts";
+import { at, plainPlan } from "./policy.ts";
 import { planView } from "./plan-view.ts";
 
 const [commandArg, stageArg, ...args] = process.argv.slice(2);
@@ -26,7 +27,7 @@ const program = Effect.gen(function* () {
   const drift = yield* Drift.detect(plan.stack).pipe(Effect.provide(plan.context));
   if (Object.values(drift.resources).some((row) => row.action !== "unchanged")) return yield* Effect.die("Dispatcher live drift must be resolved before release planning");
   const view = yield* planView(plan, before).pipe(Effect.provide(plan.context));
-  const file = process.env.CHALK_DISPATCHER_INPUTS;
+  const file = process.env.CHALK_INFRA_INPUTS;
   const inputs = file ? parseInputs(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(readFileSync(file, "utf8"))) : undefined;
   const apply = command === "cutover" || args.includes("--apply");
   if (command === "cutover" && (stage !== "nightly" || view.resources.some((row) => row.action !== "noop"))) return yield* Effect.die("Cutover requires a Nightly all-no-op plan; refusing mutations");
@@ -34,7 +35,7 @@ const program = Effect.gen(function* () {
     if (inputs) return yield* Effect.die("Use a declared release policy for proposed inputs");
     // A cutover is not a release bypass: it can apply only a complete no-op.
     if (command === "cutover") {
-      const checked = dispatcherPolicy(view, storedInputs(before), "noop");
+      const checked = dispatcherPolicy(view, parseInputs(at(plainPlan(view).outputs.before, ["dispatcher_inputs"])), "noop");
       yield* applyCheckedPlan(plan, checked.plan, checked.policy, true);
     }
   } else {

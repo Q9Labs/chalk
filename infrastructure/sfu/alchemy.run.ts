@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { credential } from "../platform/credentials.ts";
 import { environment, providers, state } from "../platform/config.ts";
 import { SfuDroplet, sfuClient, sfuDropletProvider } from "../providers/digitalocean-sfu-droplet.ts";
 import { loadConfig, firewallConfig, renderCloudInit } from "./config.ts";
@@ -24,6 +25,7 @@ export default Alchemy.Stack(
     const stage = yield* environment;
     const config = yield* Effect.tryPromise(loadConfig);
     if (config.environment !== (stage === "nightly" ? "staging" : "production")) return yield* Effect.die("SFU environment must match the Alchemy stage (nightly maps to staging).");
+    credential("DIGITALOCEAN_TOKEN");
     const keys = yield* DO.listSshKeys.items({ per_page: 200 }).pipe(Stream.runCollect);
     const matches = keys.filter((key) => key.name === config.ssh_key_name);
     const key = matches[0];

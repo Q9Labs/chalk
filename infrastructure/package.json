@@ -7,7 +7,7 @@
     "check-types": "node platform/check-preview-build.mjs && tsx infra.ts check && tsc --noEmit",
     "test:digitalocean": "tsx --test recorder/config.test.ts",
     "test:dispatcher": "tsx --test transcription-dispatcher/*.test.ts releases/*.test.ts providers/aws-dispatcher-alarm.test.ts",
-    "test": "tsx --test providers/*.test.ts migration/*.test.ts recorder/*.test.ts transcription-dispatcher/*.test.ts releases/*.test.ts"
+    "test": "tsx --test platform/*.test.ts providers/*.test.ts migration/*.test.ts recorder/*.test.ts transcription-dispatcher/*.test.ts releases/*.test.ts"
   },
   "dependencies": {
     "@alchemy.run/aws": "https://pkg.alchemy.run/@alchemy.run/aws/-/cec317a3469f7264dce2c22ca35d2bb4f7fa959a45d7e7874abe267e52b893af.tgz",

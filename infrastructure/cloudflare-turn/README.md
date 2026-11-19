@@ -3,7 +3,7 @@
 `alchemy.run.ts` declares `chalk-<stage>-turn` using
 the [unified pinned preview provider](../README.md#alchemy-stacks). Stage names retain the original
 `^[a-z][a-z0-9-]{1,31}$` validation. Supply `CLOUDFLARE_ACCOUNT_ID` and
-`CLOUDFLARE_API_TOKEN`, or an Alchemy Cloudflare profile. The shell's
+`CLOUDFLARE_API_TOKEN`, from the protected operator/CI environment. The shell's
 `_load_cloudflare_api_token` loads the existing 1Password-backed token used by
 Wrangler. State uses the shared AWS credential chain and `AWS.state()` in
 `ap-southeast-1`.

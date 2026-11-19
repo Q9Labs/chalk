@@ -1,7 +1,8 @@
 # Nightly recorder control address
 
 This stack reserves the recorder control Elastic IP and associates it with the
-instance in `/chalk/nightly/release/recorder.json` at `runtime.instance_id`.
+instance selected by `instance_id` in the private `CHALK_INFRA_INPUTS` JSON.
+Before an approved installation, take that ID from the current release manifest.
 Both planning and association reconciliation reject hosts without
 `chalk:environment=nightly`. Reassociation is allowed. Removing the address
 retains its allocation through Alchemy's persisted removal policy.
@@ -21,7 +22,7 @@ ephemeral proof host; it does not remove this release requirement.
 
 **Do not deploy without approval for a new recurring cost.** A first deployment
 with empty Alchemy state creates a new Elastic IP and associates it with the
-Nightly instance from SSM. It does not recover the former IP or update DNS or
+Nightly instance selected by the input file. It does not recover the former IP or update DNS or
 recorder firewalls. An approved first install also needs those private
 configuration changes before qualification can succeed.
 
@@ -31,6 +32,7 @@ From the repository root, with AWS access to the Nightly account:
 
 ```sh
 export AWS_PROFILE=q9labs
+export CHALK_INFRA_INPUTS=/absolute/path/to/recording-control-address.json
 pnpm --dir infrastructure check-types
 pnpm --dir infrastructure exec alchemy plan --config recording-control-address/alchemy.run.ts --stage nightly --detailed
 pnpm --dir infrastructure exec alchemy deploy --config recording-control-address/alchemy.run.ts --stage nightly

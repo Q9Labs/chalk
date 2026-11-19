@@ -8,7 +8,7 @@ This runbook keeps the rules for releasing transcript-first transcription to pro
 - The provider is direct DeepInfra with an adapter contract version. Set `deepinfra_enabled = true` and `cloudflare_enabled = false`. Do not substitute Cloudflare, a VPC/NAT design or a rendered MP4 path to get around a blocker.
 - The provider corpus digest is mandatory when DeepInfra is enabled. It must be the digest of the retained, passing qualification corpus for this adapter and model. A short request or a made-up digest does not qualify. Optional execution-identity and model-version pins stay absent until the provider returns a stable value to assert. They are not qualification evidence.
 - The release owner confirms outside this repo that the provider account is active, funded as intended and has automatic top-ups disabled.
-- Transcript-first capture bundles live under `tenants/<tenant>/recordings/<recording>/capture/`, outside the 24-hour R2 lifecycle prefixes (`transcription/chunks/` and `transcription/orphans/`, module `cloudflare-r2-transcription-lifecycle`), so no broad R2 lifecycle change is needed. The API keeps the source authority and cleanup fencing valid for the recording source and Export window (30 days, capped in `artifactpolicy`). Transcript retention is unchanged.
+- Transcript-first capture bundles live under `tenants/<tenant>/recordings/<recording>/capture/`, outside the 24-hour R2 lifecycle prefixes (`transcription/chunks/` and `transcription/orphans/`, component `r2-transcription-lifecycle`), so no broad R2 lifecycle change is needed. The API keeps the source authority and cleanup fencing valid for the recording source and Export window (30 days, capped in `artifactpolicy`). Transcript retention is unchanged.
 - A legacy immutable Episode snapshot with `recording.retention_seconds = 0` resolves to the same capture-anchored 30 days. The API does not rewrite Tenant, Space or Episode policy, and an explicit positive snapshot value stays authoritative. Watch or Download requests never renew the window.
 - The transcription source window bounds audio preparation. It is capped by the recording window and may end earlier without changing Export availability.
 
@@ -69,7 +69,7 @@ normal plans take a DynamoDB lease.
 After seed and plan, require read-only drift detection and unchanged live facts:
 
 ```sh
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy drift --config nightly/transcription/alchemy.run.ts --stage production
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy drift --config transcription-dispatcher/alchemy.run.ts --stage production
 AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
@@ -86,7 +86,7 @@ For an infrastructure-ownership rollback, stop all Alchemy writers. Save the
 current Alchemy state privately, then forget only the affected stage's records:
 
 ```sh
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state delete transcription-dispatcher/nightly --config nightly/transcription/alchemy.run.ts --recursive
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state delete transcription-dispatcher/nightly --config transcription-dispatcher/alchemy.run.ts --recursive
 ```
 
 For production, replace `nightly` in the **state path** with `production`; the

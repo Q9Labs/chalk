@@ -17,7 +17,6 @@ const base = process.argv[2];
 if (!base || process.argv.length !== 3) throw new Error("Usage: tsx migration/check-definitions.ts <before-commit>");
 const moves = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)))(readFileSync(new URL("structure-moves.json", import.meta.url), "utf8"));
 const originalPath = (path: string) => Object.entries(moves).find(([, current]) => current === path)?.[0] ?? path;
-const currentPath = (path: string) => moves[path] ?? path;
 function ast(node: ts.Node): Schema.Json {
   const children: Schema.Json[] = [];
   ts.forEachChild(node, (child) => { children.push(ast(child)); });
@@ -40,25 +39,44 @@ function configInitializer(component: string, name: string) {
   assert.ok(variable?.initializer && variable.name.getText(file) === name);
   return variable.initializer.getText(file);
 }
-function expanded(path: string, source: string) {
-  if (path === "infrastructure/cloudflare-turn/alchemy.run.ts") return source.replace("turnStage(yield* Stage)", `${configInitializer("cloudflare-turn", "turnStage")}(yield* Stage)`);
-  if (path === "infrastructure/recording-control-address/alchemy.run.ts") return source.replace("parseRelease(release.Parameter?.Value)", `${configInitializer("recording-control-address", "parseRelease")}(release.Parameter?.Value)`);
-  if (path === "infrastructure/archive-cdn/alchemy.run.ts") {
-    const initializer = configInitializer("archive-cdn", "publicKey");
-    const match = /^Effect\.gen\(function\* \(\) \{([\s\S]*)\}\)$/.exec(initializer);
-    assert.ok(match?.[1], "Public-key config shape changed; inspect before extending the proof");
-    return source.replace("const encodedKey = yield* publicKey;", match[1].replace("return yield* Effect.tryPromise", "const encodedKey = yield* Effect.tryPromise"));
+function normalizedSource(path: string, source: string, before: boolean) {
+  const identity = before ? path : originalPath(path);
+  if (identity.endsWith("nightly/archive-cdn/alchemy.run.ts")) {
+    if (before) source = source.replace(/    const publicKeyFile[\s\S]*?(?=    const access)/, "    const encodedKey = __INPUT__;\n");
+    else source = source.replace("yield* publicKey", "__INPUT__");
   }
+  if (identity.endsWith("nightly/recording-control-address/alchemy.run.ts")) source = source.replace(before ? /    const release =[\s\S]*?(?=    const host)/ : /    const \{ instance_id: instanceId \} =[^;]+;/, "    const instanceId = __INPUT__;\n");
+  if (identity.endsWith("managed-episode/direct-sync/alchemy.run.ts")) {
+    source = source.replace(before ? /    const config = Schema.decodeUnknownSync[\s\S]*?(?=    \/\/ Invoke)/ : /    const config = yield\* Effect.tryPromise\(loadConfig\);/, "    const config = __INPUT__;\n");
+    source = source.replace("CHALK_DIRECT_SYNC_AWS_REGION", "AWS_REGION");
+  }
+  if (!before && path === "infrastructure/cloudflare-turn/alchemy.run.ts") source = source.replace("turnStage(yield* Stage)", `${configInitializer("cloudflare-turn", "turnStage")}(yield* Stage)`);
+  if (identity.endsWith("alchemy/dispatcher/stack.ts")) source = source.replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS");
+  // These are fail-closed credential guards, not declaration inputs/props.
+  source = source.replace(/^    (?:requireCloudflareCredentials\(\)|credential\("[A-Z_]+"\));\n/gm, "");
+  if (identity === "infrastructure/recorder/alchemy.run.ts") source = source.replace(/^    requireInput\(!!process.env.CHALK_CAPTURE[^\n]+\n/m, "");
+  if (!before && path === "infrastructure/platform/config.ts") source = source.replace(/^      yield\* resolveCredentials.pipe[^\n]+\n/m, "");
   return source;
 }
-const extractedConfigs = new Set(["infrastructure/archive-cdn/config.ts", "infrastructure/recording-control-address/config.ts", "infrastructure/cloudflare-turn/config.ts"]);
+const inputModules = new Set(["infrastructure/archive-cdn/config.ts", "infrastructure/recording-control-address/config.ts", "infrastructure/cloudflare-turn/config.ts", "infrastructure/platform/inputs.ts", "infrastructure/platform/credentials.ts"]);
+const boundaryImports = new Map<string, readonly string[]>([
+  ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
+  ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],
+  ["infrastructure/managed-episode/direct-sync/alchemy.run.ts", ["effect/Schema"]],
+  ["infrastructure/recorder/config.ts", ["node:fs/promises"]],
+  ["infrastructure/alchemy/sfu-droplet.ts", ["effect/http/FetchHttpClient", "effect/Layer"]],
+  ["infrastructure/alchemy/recorder-pools.ts", ["@distilled.cloud/digitalocean/Credentials", "effect/http/FetchHttpClient", "effect/Redacted"]],
+]);
+function isInputLoader(node: ts.Statement) {
+  return ts.isVariableStatement(node) && node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client"].includes(declaration.name.getText()));
+}
 function graph(entry: string, before: boolean) {
   const modules = new Map<string, { code: string; edges: string[]; declarations: string[] }>();
   function visit(path: string) {
     const identity = before ? path : originalPath(path);
     if (modules.has(identity)) return;
     const raw = before ? oldSource(path) : newSource(path);
-    const file = parse(path, before ? raw : expanded(path, raw));
+    const file = parse(path, normalizedSource(path, raw, before));
     const edges: string[] = [], dependencies: string[] = [], declarations: string[] = [];
     const runtime: ts.Statement[] = [];
     for (const statement of file.statements) {
@@ -66,15 +84,19 @@ function graph(entry: string, before: boolean) {
         const specifier = statement.moduleSpecifier.text;
         if (specifier.startsWith(".")) {
           const dependency = posix.normalize(posix.join(dirname(path), specifier));
-          if (!before && extractedConfigs.has(dependency)) {
-            const config = parse(dependency, newSource(dependency));
-            for (const node of config.statements) if (ts.isImportDeclaration(node)) edges.push(node.getText(config));
+          if (!before && inputModules.has(dependency)) {
+            if (dependency.endsWith("cloudflare-turn/config.ts")) edges.push('import * as Schema from "effect/Schema";');
             continue;
           }
           dependencies.push(dependency);
-          edges.push(`${before ? dependency : originalPath(dependency)}:${statement.importClause?.getText(file) ?? "side-effect"}`);
-        } else edges.push(statement.getText(file));
-      } else runtime.push(statement);
+          const clause = identity.endsWith("managed-episode/direct-sync/alchemy.run.ts") && dependency.endsWith("/config.ts") ? "stack-inputs" : statement.importClause?.getText(file) ?? "side-effect";
+          edges.push(`${before ? dependency : originalPath(dependency)}:${clause}`);
+        } else if (!(boundaryImports.get(identity) ?? []).includes(specifier)) edges.push(statement.getText(file));
+      } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+        const dependency = posix.normalize(posix.join(dirname(path), statement.moduleSpecifier.text));
+        dependencies.push(dependency);
+        edges.push(`export:${before ? dependency : originalPath(dependency)}:${statement.exportClause?.getText(file) ?? "*"}`);
+      } else if (!isInputLoader(statement)) runtime.push(statement);
     }
     function calls(node: ts.Node) {
       if (ts.isCallExpression(node)) {

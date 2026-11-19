@@ -29,6 +29,7 @@ const awsEnvironmentForRegion = (region: string) => {
     AWSEnvironment,
     Effect.gen(function* () {
       const resolveCredentials = yield* Credentials.Credentials;
+      yield* resolveCredentials.pipe(Effect.catch(() => Effect.die("Missing AWS credentials; set AWS_PROFILE for the protected operator profile or supply the CI/instance role credential chain")));
       return yield* Effect.cached(
         Effect.gen(function* () {
           const identity = yield* sts.getCallerIdentity({}).pipe(Effect.orDie);

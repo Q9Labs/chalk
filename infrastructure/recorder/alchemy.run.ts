@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { environment, providers, state } from "../platform/config.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag, recorderPoolProviders } from "../providers/digitalocean-recorder-pools.ts";
 import { RecordingBucket, recordingBucketProvider } from "../providers/cloudflare-recording-bucket.ts";
+import { requireCloudflareCredentials, credential } from "../platform/credentials.ts";
 import { loadRecorderConfig, requireInput } from "./config.ts";
 import { bucketProps, keyProps, poolFirewallProps } from "./resources.ts";
 
@@ -27,7 +28,9 @@ export default Alchemy.Stack(
     requireInput(config.environment === stage, "Recorder inputs must match the Alchemy stage.");
     const capacity = { desired_capture_nodes: config.desired_capture_nodes, desired_render_nodes: config.desired_render_nodes, global_recorder_compute_nodes: config.global_recorder_compute_nodes, recording_bucket_name: config.bucket_name };
     if (!config.enable_apply) return { ...capacity, recording_kms_key_arn: null, capture: { droplet_ids: [], droplet_names: [], firewall_id: null }, render: { droplet_ids: [], droplet_names: [], firewall_id: null } };
-    requireInput(!!process.env.CHALK_CAPTURE_DIGITALOCEAN_TOKEN?.trim() && !!process.env.CHALK_RENDER_DIGITALOCEAN_TOKEN?.trim() && !!process.env.CLOUDFLARE_API_TOKEN?.trim(), "Recorder mutation requires separate protected capture/render DigitalOcean tokens and scoped Cloudflare credentials.");
+    credential("CHALK_CAPTURE_DIGITALOCEAN_TOKEN");
+    credential("CHALK_RENDER_DIGITALOCEAN_TOKEN");
+    requireCloudflareCredentials();
     const { accountId } = yield* AWSEnvironment.current;
     const cf = yield* CloudflareEnvironment.current;
     requireInput(cf.accountId === config.cloudflare_account_id, "Cloudflare credential account does not match the recorder inputs.");

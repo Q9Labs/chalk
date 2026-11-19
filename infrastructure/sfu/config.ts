@@ -2,6 +2,7 @@ import type * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as Schema from "effect/Schema";
 import { isIP } from "node:net";
 import { readFile } from "node:fs/promises";
+import { loadInputs } from "../platform/inputs.ts";
 
 const schema = Schema.Struct({
   environment: Schema.Literals(["staging", "production"]),
@@ -36,18 +37,7 @@ export const parseConfig = (input: unknown) => {
 };
 export type SfuConfig = ReturnType<typeof parseConfig>;
 
-export const loadConfig = async () => {
-  const path = process.env.CHALK_SFU_CONFIG_FILE;
-  if (!path) throw new Error("Set CHALK_SFU_CONFIG_FILE to a private JSON file with the SFU inputs.");
-  const text = await readFile(path, "utf8");
-  let value: Schema.Json;
-  try {
-    value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(text);
-  } catch {
-    throw new Error("Invalid private SFU JSON; input contents are not printed.");
-  }
-  return parseConfig(value);
-};
+export const loadConfig = () => loadInputs("sfu", parseConfig);
 
 export const renderCloudInit = async (config: Pick<SfuConfig, "control_addresses" | "ssh_addresses">): Promise<string> => {
   const template = await readFile(new URL("node/cloud-init.yaml.tftpl", import.meta.url), "utf8");

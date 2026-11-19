@@ -15,7 +15,7 @@ Alchemy resources. Thirteen resources are managed when the optional control API
 permission is absent; fourteen when it is present. Existing physical names,
 tags, SSE-SQS and the queues' 256 KiB message limit are preserved.
 
-`inputs.ts` checks the former module's validations and preconditions before
+[`config.ts`](config.ts) checks the former module's validations and preconditions before
 planning. It also checks that the hexadecimal and base64 ZIP hashes agree.
 Defaults do not enable a provider. Provider credentials and workload credentials
 remain SSM SecureStrings; the Lambda receives exact parameter ARNs, not their

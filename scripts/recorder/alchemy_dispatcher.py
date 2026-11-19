@@ -65,7 +65,7 @@ def run_plan(provider, inputs, policy='noop', *, apply=False, plan_output=None):
         diagnostics.close()
         process = subprocess.run([*DRIVER, policy, inputs['environment_name'], *(['--apply'] if apply else [])],
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                 timeout=900, env={**driver_environment(provider), 'CHALK_DISPATCHER_INPUTS': str(source),
+                                 timeout=900, env={**driver_environment(provider), 'CHALK_INFRA_INPUTS': str(source),
                                    'CHALK_ALCHEMY_DIAGNOSTICS': diagnostics.name, 'CHALK_INFRA_RESULT': str(result_file),
                                    **({'CHALK_INFRA_PLAN_OUTPUT': str(plan_output.resolve())} if plan_output else {})})
         require(process.returncode == 0 and result_file.is_file(), 'Alchemy operation failed; private diagnostics: ' + diagnostics.name)

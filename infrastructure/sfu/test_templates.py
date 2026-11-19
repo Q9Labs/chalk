@@ -35,7 +35,7 @@ class CloudInitParity(unittest.TestCase):
                 expression = 'jsonencode(templatefile(' + json.dumps(str(INFRA / 'node/cloud-init.yaml.tftpl')) + ', ' + json.dumps(values) + '))'
                 original = subprocess.check_output(['tofu', '-chdir=' + directory, 'console', '-no-color'], input=expression.encode())
                 expected = json.loads(json.loads(original))
-                actual = subprocess.check_output(['pnpm', '--silent', '--dir', str(REPO / 'infrastructure'), 'exec', 'tsx', 'sfu/render-cloud-init.ts'], env={**os.environ, 'CHALK_SFU_CONFIG_FILE': str(path)})
+                actual = subprocess.check_output(['pnpm', '--silent', '--dir', str(REPO / 'infrastructure'), 'exec', 'tsx', 'sfu/render-cloud-init.ts'], env={**os.environ, 'CHALK_INFRA_INPUTS': str(path)})
                 self.assertEqual(actual, expected.encode(), 'Changed cloud-init replaces the Droplet')
 
 MOCK = r'''#!/usr/bin/env python3

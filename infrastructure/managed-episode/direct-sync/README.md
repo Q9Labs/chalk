@@ -1,6 +1,6 @@
 # Direct Sync network
 
-`alchemy.run.ts` uses the shared Alchemy AWS and Cloudflare providers at
+[`../../direct-sync/alchemy.run.ts`](../../direct-sync/alchemy.run.ts) uses the shared Alchemy AWS and Cloudflare providers at
 `2.0.0-beta.87`. It preserves the Nightly-only boundary, host environment-tag
 postcondition, DNS-name validation, security group name, TCP 443 ingress,
 optional IPv6 rule and AAAA record, DNS-only records with TTL 60 and their
@@ -14,23 +14,13 @@ list update has no compare-and-swap operation.
 
 ## Inputs and credentials
 
-Provide private values through the environment, never tracked files:
-
-| Input                       | Variable                                                  |
-| --------------------------- | --------------------------------------------------------- |
-| AWS credentials             | `AWS_PROFILE=q9labs` or the AWS credential chain          |
-| Host region                 | `CHALK_DIRECT_SYNC_AWS_REGION` (default `ap-southeast-1`) |
-| Host instance               | `CHALK_DIRECT_SYNC_INSTANCE_ID`                           |
-| Lowercase DNS hostname      | `CHALK_DIRECT_SYNC_HOST`                                  |
-| Cloudflare zone and account | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_ACCOUNT_ID`             |
-| Stable public IPv4          | `CHALK_DIRECT_SYNC_IPV4`                                  |
-| Optional IPv6               | `CHALK_DIRECT_SYNC_IPV6` (unset means no IPv6 resources)  |
-| Cloudflare credentials      | `CLOUDFLARE_API_TOKEN`, or an Alchemy Cloudflare profile  |
-
-The shell's Wrangler wrapper loads the existing 1Password-backed Cloudflare
-token. Call `_load_cloudflare_api_token` in that shell before Alchemy; calling
-Alchemy itself does not invoke the wrapper. State always uses `AWS.state({ migrateFrom: false })` in
-`ap-southeast-1`, independently of the host region.
+Provide `CHALK_INFRA_INPUTS` pointing to private JSON with `instance_id`,
+`hostname`, `zone_id`, `ipv4_address` and optional `ipv6_address`.
+Use `AWS_REGION` (default `ap-southeast-1`), `AWS_PROFILE` or the role credential
+chain, and protected `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` environment
+variables. No Alchemy token-profile fallback is used. The proxy runtime's
+`CHALK_DIRECT_SYNC_HOST` is separate and unchanged.
+See [the shared input and credential rule](../../README.md#inputs-and-provider-credentials).
 
 ## Cutover status and procedure
 

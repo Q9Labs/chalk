@@ -29,7 +29,7 @@ export default Alchemy.Stack(
     const store = yield* service;
     const previous = yield* store.getOutput({ stack: stackName, stage });
     requireInput(previous !== undefined, "Dispatcher has no Alchemy state; run the explicit seed command before releases");
-    const file = process.env.CHALK_DISPATCHER_INPUTS;
+    const file = process.env.CHALK_INFRA_INPUTS;
     const input = file ? parseInputs(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(yield* Effect.tryPromise(() => readFile(file, "utf8")))) : storedInputs(previous);
     requireInput(input.environment_name === stage, "Dispatcher input environment does not match stage");
     const aws = yield* AWSEnvironment.current;

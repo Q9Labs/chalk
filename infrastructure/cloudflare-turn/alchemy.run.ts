@@ -3,6 +3,7 @@ import * as Alchemy from "alchemy";
 import { Stage } from "alchemy/Stage";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
+import { requireCloudflareCredentials } from "../platform/credentials.ts";
 import { turnStage } from "./config.ts";
 import * as Layer from "effect/Layer";
 import { state } from "../platform/config.ts";
@@ -13,6 +14,7 @@ export default Alchemy.Stack(
   "cloudflare-turn",
   { providers: Layer.merge(cloudflare, guardedTurnKeyProvider.pipe(Layer.provide(cloudflare))), state },
   Effect.gen(function* () {
+    requireCloudflareCredentials();
     const environment = turnStage(yield* Stage);
     const name = `chalk-${environment}-turn`;
     const key = yield* Cloudflare.Calls.TurnKey("Turn", { name }).pipe(RemovalPolicy.retain());

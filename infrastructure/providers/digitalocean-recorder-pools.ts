@@ -1,26 +1,13 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as DO from "@distilled.cloud/digitalocean";
 import { Unowned } from "alchemy/AdoptPolicy";
-import { Credentials } from "@distilled.cloud/digitalocean/Credentials";
+import { digitalOceanClient } from "../platform/credentials.ts";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
-const client = (role: "CAPTURE" | "RENDER") =>
-  Layer.merge(
-    FetchHttpClient.layer,
-    Layer.succeed(
-      Credentials,
-      Effect.sync(() => {
-        const token = process.env[`CHALK_${role}_DIGITALOCEAN_TOKEN`];
-        if (!token?.trim()) throw new Error(`Set CHALK_${role}_DIGITALOCEAN_TOKEN from the pool's existing protected credential source.`);
-        return { apiKey: Redacted.make(token), apiBaseUrl: "https://api.digitalocean.com" };
-      }),
-    ),
-  );
+const client = digitalOceanClient;
 
 const firewallService = (role: "CAPTURE" | "RENDER") =>
   Effect.gen(function* () {

@@ -85,6 +85,9 @@
     "apps/recording-renderer/src/compose-fixture.ts",
     "infrastructure/migration/seed.ts",
     "infrastructure/releases/driver.ts",
+    "infrastructure/releases/deploy.ts",
+    "infrastructure/migration/check-definitions.ts",
+    "infrastructure/platform/check-drift.mjs",
     "infrastructure/sfu/render-cloud-init.ts",
     "infrastructure/components/r2-transcription-lifecycle.ts"
   ],

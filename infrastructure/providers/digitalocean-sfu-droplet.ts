@@ -5,15 +5,15 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import { digitalOceanClient } from "../platform/credentials.ts";
 
 // The upstream Droplet replaces on size changes and has no ignore_changes.
 // Keep the original SFU's CPU/RAM-only resize and first-boot-only inputs.
 export type SfuDropletProps = Pick<DigitalOcean.DropletProps, "name" | "region" | "size" | "image" | "sshKeys" | "tags" | "monitoring" | "ipv6" | "backups" | "userData">;
 export interface SfuDroplet extends Resource<"Chalk.DigitalOcean.SfuDroplet", SfuDropletProps, DigitalOcean.DropletAttributes> {}
 export const SfuDroplet = Resource<SfuDroplet>("Chalk.DigitalOcean.SfuDroplet");
-export const sfuClient = Layer.merge(DigitalOcean.CredentialsFromEnv, FetchHttpClient.layer);
+export const sfuClient = digitalOceanClient("sfu");
 class UnsafeSfuChange extends Data.TaggedError("UnsafeSfuChange")<{ message: string }> {}
 
 const bootInputs = (props: SfuDropletProps) => ({ ...props, image: undefined, sshKeys: undefined, userData: undefined, size: undefined });

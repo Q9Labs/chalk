@@ -5,12 +5,12 @@ import * as Alchemy from "alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
+import { requireCloudflareCredentials } from "../platform/credentials.ts";
 import { nightly, awsProviders, state } from "../platform/config.ts";
 import { NetworkInterfaceSecurityGroup, networkInterfaceSecurityGroupProvider } from "../providers/aws-network-interface-security-group.ts";
-import { directSyncConfig } from "./config.ts";
+import { loadConfig } from "./config.ts";
 
-const providers = awsProviders(process.env.CHALK_DIRECT_SYNC_AWS_REGION ?? "ap-southeast-1");
+const providers = awsProviders(process.env.AWS_REGION ?? "ap-southeast-1");
 export default Alchemy.Stack(
   "direct-sync",
   {
@@ -19,13 +19,8 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const environment = yield* nightly;
-    const config = Schema.decodeUnknownSync(directSyncConfig)({
-      instanceId: process.env.CHALK_DIRECT_SYNC_INSTANCE_ID,
-      hostname: process.env.CHALK_DIRECT_SYNC_HOST,
-      zoneId: process.env.CLOUDFLARE_ZONE_ID,
-      ipv4Address: process.env.CHALK_DIRECT_SYNC_IPV4,
-      ...(process.env.CHALK_DIRECT_SYNC_IPV6 ? { ipv6Address: process.env.CHALK_DIRECT_SYNC_IPV6 } : {}),
-    });
+    const config = yield* Effect.tryPromise(loadConfig);
+    requireCloudflareCredentials();
     // Invoke the read-only lookup providers directly because the postcondition must
     // fail before any resources are declared, not while an Output is reconciled.
     const instanceProvider = yield* Provider.findProvider(AWS.EC2.Instance);

@@ -29,7 +29,7 @@ import { BucketPolicy, canonicalPolicy, readPolicy } from "../providers/aws-buck
 import { directSyncRows } from "./direct-sync.ts";
 import { tofuState, decode, lookup, row } from "./opentofu.ts";
 
-const providers = awsProviders(process.argv[2] === "direct-sync" ? (process.env.CHALK_DIRECT_SYNC_AWS_REGION ?? "ap-southeast-1") : "ap-southeast-1");
+const providers = awsProviders(process.argv[2] === "direct-sync" ? (process.env.AWS_REGION ?? "ap-southeast-1") : "ap-southeast-1");
 
 const tags = Schema.Record(Schema.String, Schema.String);
 

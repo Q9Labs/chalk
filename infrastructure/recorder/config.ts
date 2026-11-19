@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { readFile } from "node:fs/promises";
+import { loadInputs } from "../platform/inputs.ts";
 import { cidr } from "../sfu/config.ts";
 
 const corsRules = Schema.Array(
@@ -179,14 +179,4 @@ export const parseRecorderConfig = (value: unknown) => {
   return { ...config, desired_capture_nodes, desired_render_nodes: config.render_desired_nodes, global_recorder_compute_nodes: desired_capture_nodes + config.render_desired_nodes, bucket_name: config.recording_bucket_name ?? "chalk-recorder-nightly" };
 };
 export type RecorderConfig = ReturnType<typeof parseRecorderConfig>;
-export const loadRecorderConfig = async () => {
-  if (!process.env.CHALK_RECORDER_CONFIG_FILE) throw new Error("Set CHALK_RECORDER_CONFIG_FILE to private JSON inputs (no credentials).");
-  const text = await readFile(process.env.CHALK_RECORDER_CONFIG_FILE, "utf8");
-  let value: Schema.Json;
-  try {
-    value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(text);
-  } catch {
-    throw new Error("Invalid private recorder JSON; input contents are not printed.");
-  }
-  return parseRecorderConfig(value);
-};
+export const loadRecorderConfig = () => loadInputs("recorder", parseRecorderConfig);

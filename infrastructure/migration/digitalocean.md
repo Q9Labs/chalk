@@ -29,7 +29,7 @@ The cutover procedure still requires a dated copy before any future seed or depl
 
 ## Resource mapping and discovery
 
-All mappings use the commit recorded in `preview-build.json`.
+All mappings use the commit recorded in [`platform/preview-build.json`](../platform/preview-build.json).
 
 | OpenTofu address                                                                                       | Provider                       | Alchemy mapping                                 | Discovery without Alchemy state                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -58,7 +58,7 @@ seed dry-run refuses that non-no-op configuration mismatch; standby passes.
 ## Lifecycle differences and provider gaps
 
 - Upstream [packages/digitalocean/src/Droplet.ts:70](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/digitalocean/src/Droplet.ts#L70), `:325` replaces on size
-  changes and offers no ignore-changes option. `sfu-droplet.ts` retains CPU/RAM-only
+  changes and offers no ignore-changes option. [`providers/digitalocean-sfu-droplet.ts`](../providers/digitalocean-sfu-droplet.ts) retains CPU/RAM-only
   resize with `disk: false`, and ignores image, SSH keys and user data after first
   creation. A resize requires `CHALK_SFU_ALLOW_RESIZE=true` after a separately
   approved drained, already-powered-off node operation. The provider never stops
@@ -73,7 +73,7 @@ seed dry-run refuses that non-no-op configuration mismatch; standby passes.
   The alias, pool tags and pool firewalls are protected too. Removing a declaration
   must not silently remove a shared tag or service policy.
 - Upstream [packages/cloudflare/src/R2/Bucket.ts:1653](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/cloudflare/src/R2/Bucket.ts#L1653) returns old CORS and
-  lifecycle attributes from `read`. The custom `recording-bucket.ts` reads through
+  lifecycle attributes from `read`. The custom [`providers/cloudflare-recording-bucket.ts`](../providers/cloudflare-recording-bucket.ts) reads through
   the provider's full `lookup` so drift actually checks those endpoints.
   Its seed and definition canonicalize unordered policy sets because upstream
   [Bucket.ts:1366](https://github.com/alchemy-run/alchemy/blob/852675fdd85bf84fa5fd033ece571b26f46920e0/packages/cloudflare/src/R2/Bucket.ts#L1366) compares prop arrays by order.
@@ -85,18 +85,18 @@ seed dry-run refuses that non-no-op configuration mismatch; standby passes.
 - Each recorder pool has a distinct resource type and credential layer. Capture
   operations cannot accidentally run with render credentials, or vice versa.
 
-Upstream source paths above refer to the full commit in `preview-build.json`, not
+Upstream source paths above refer to the full commit in [`platform/preview-build.json`](../platform/preview-build.json), not
 the moving `main` branch. The checked-out source is outside the public repository.
 
 ## Inputs and credentials
 
-SFU: set `CHALK_SFU_CONFIG_FILE` to private JSON with `environment`,
+SFU: set `CHALK_INFRA_INPUTS` to private JSON with `environment`,
 `control_addresses`, and optional `size`, `region`, `ssh_key_name`, and
 `ssh_addresses`. `nightly` maps to legacy `staging`. Set `CHALK_SFU_STACK` to
 `sfu` or `sfu-standby`; the default is `sfu`. Keep the same credential source as
 the old root: `DIGITALOCEAN_TOKEN` from `doctl auth token`.
 
-Recorder: set `CHALK_RECORDER_CONFIG_FILE` to private JSON using the existing
+Recorder: set `CHALK_INFRA_INPUTS` to private JSON using the existing
 snake_case input names. Defaults, validations, KMS context cutover acknowledgment,
 capacity formulas, qualification evidence and production bucket-adoption evidence
 remain enforced. Unknown fields and embedded credentials fail validation.

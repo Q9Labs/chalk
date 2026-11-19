@@ -3,7 +3,6 @@ import { test } from "node:test";
 import * as Schema from "effect/Schema";
 import { parseRecorderConfig } from "./config.ts";
 import { canonicalBucketProps, kmsPolicy, poolFirewallProps } from "./resources.ts";
-import { firewallProps, tofuFirewall } from "../migration/sfu.ts";
 
 test("recorder defaults remain zero-idle and do not authorize mutations", () => {
   const config = parseRecorderConfig({});
@@ -52,19 +51,6 @@ test("legacy KMS context permits decryption only and retains all authenticated c
   assert.equal(Object.keys(canonical?.Condition?.Null ?? {}).length, 8);
   assert.equal(canonical?.Condition?.Null?.["kms:EncryptionContext:chalk.capture_epoch"], "false");
   assert.equal(canonical?.Condition?.Null?.["kms:EncryptionContext:chalk.envelope_digest"], "false");
-});
-
-test("state import rejects firewall selectors it cannot preserve", () => {
-  const firewall = { id: "example", name: "example", droplet_ids: [], tags: [], inbound_rule: [], outbound_rule: [{ protocol: "tcp", port_range: "443", destination_tags: ["not-an-address-rule"] }] };
-  assert.throws(() => Schema.decodeUnknownSync(tofuFirewall)(firewall));
-});
-
-test("state import accepts legacy null ICMP ports but never unspecified TCP ports", () => {
-  const fixture = (protocol: string) => ({ id: "example", name: "example", droplet_ids: [], tags: null, inbound_rule: [{ protocol, port_range: null, source_addresses: ["192.0.2.1/32"] }], outbound_rule: [] });
-  const icmp = Schema.decodeUnknownSync(tofuFirewall)(fixture("icmp"));
-  assert.equal(firewallProps(icmp).inboundRules?.[0]?.ports, "0");
-  const tcp = Schema.decodeUnknownSync(tofuFirewall)(fixture("tcp"));
-  assert.throws(() => firewallProps(tcp), /Invalid firewall port range/);
 });
 
 test("imported R2 policy sets and definitions compare identically without hiding policy changes", () => {

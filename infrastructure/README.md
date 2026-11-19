@@ -106,29 +106,29 @@ on the preview; no deploy was run for this compatibility proof.
 ### Stack registry
 
 [`registry.ts`](registry.ts) is the authority for entrypoints, supported stages,
-and current ownership. Seven component directories use `alchemy.run.ts`,
-`config.ts` and `README.md`. SFU primary and standby share one component but
+and current ownership. Seven component directories use the same entrypoint, typed configuration and
+README filenames (for example [archive-cdn](archive-cdn/README.md)). SFU primary and standby share one component but
 retain distinct state identities. Runtime assets stay in their existing paths;
 Direct Sync's proxy and retained OpenTofu root remain under `managed-episode/`.
 The following table is checked by `pnpm infra check`; regenerate it with
 `pnpm infra table` when ownership changes.
 
 <!-- stacks:start -->
-| Stack | Stage | Owner | Entry |
-| --- | --- | --- | --- |
-| archive-cdn | nightly | alchemy | [archive-cdn/alchemy.run.ts](archive-cdn/alchemy.run.ts) |
-| recording-control-address | nightly | unmanaged | [recording-control-address/alchemy.run.ts](recording-control-address/alchemy.run.ts) |
-| transcription-dispatcher | nightly | alchemy | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| transcription-dispatcher | production | opentofu | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| direct-sync | nightly | opentofu | [direct-sync/alchemy.run.ts](direct-sync/alchemy.run.ts) |
-| sfu | nightly | opentofu | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu | production | opentofu | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | nightly | opentofu | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | production | opentofu | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| recorder | nightly | opentofu | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
-| recorder | production | opentofu | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
-| cloudflare-turn | nightly | unmanaged | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
-| cloudflare-turn | production | unmanaged | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
+| Stack | Stage | Owner | Seeded | Status | Entry |
+| --- | --- | --- | --- | --- | --- |
+| archive-cdn | nightly | alchemy | yes | Cut over; existing resources retained | [archive-cdn/alchemy.run.ts](archive-cdn/alchemy.run.ts) |
+| recording-control-address | nightly | unmanaged | no | Ported, deliberately not deployed: persistent Nightly host removed 2026-11-15 (PR #1432) | [recording-control-address/alchemy.run.ts](recording-control-address/alchemy.run.ts) |
+| transcription-dispatcher | nightly | alchemy | yes | Cut over; schedule expected DISABLED after coordinated retirement change | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
+| transcription-dispatcher | production | opentofu | no | Ported; production seed and cutover pending | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
+| direct-sync | nightly | opentofu | no | Ported, deliberately not deployed: persistent Nightly host removed 2026-11-15 (PR #1432) | [direct-sync/alchemy.run.ts](direct-sync/alchemy.run.ts) |
+| sfu | nightly | opentofu | no | Ported, deliberately not deployed: shared staging SFU removed 2026-11-15 (PR #1453) | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| sfu | production | opentofu | no | Ported; live firewall drift blocks cutover | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| sfu-standby | nightly | opentofu | no | Ported, deliberately not deployed: shared staging SFU removed 2026-11-15 (PR #1453) | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| sfu-standby | production | opentofu | no | Ported; dry-run is not cutover authorization | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| recorder | nightly | opentofu | no | Ported; retained root still owns policy resources | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
+| recorder | production | opentofu | no | Ported; reconcile CORS and pool firewall drift before cutover | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
+| cloudflare-turn | nightly | unmanaged | no | Ported, deliberately not deployed; key creation/adoption not authorized | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
+| cloudflare-turn | production | unmanaged | no | Ported, deliberately not deployed; key creation/adoption not authorized | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
 <!-- stacks:end -->
 
 `alchemy` means the stage is cut over. `opentofu` means its legacy state remains
@@ -154,6 +154,34 @@ must be sequential because even plans and drift hold its state lease. Dispatcher
 releases use the declared policies in `transcription-dispatcher/policy.ts`, not
 an unrestricted deploy. Python calls `releases/driver.ts` once and reads one
 private JSON result; the checked in-memory plan is the only plan applied.
+
+### Inputs and provider credentials
+
+Every component reads proposed private inputs from the JSON file named by
+`CHALK_INFRA_INPUTS`, decoded by its component configuration. File contents and validation
+payloads are never logged. Existing SFU/recorder JSON keys are preserved;
+archive CDN uses `public_key_file`, Direct Sync uses `instance_id`, `hostname`,
+`zone_id`, `ipv4_address` and optional `ipv6_address`, and recording control
+address uses `instance_id`. Select the correct private file per command, not
+per checkout. TURN has no private declaration inputs beyond its stage.
+
+The one exception is the transcription dispatcher: normal operations read the
+last deployed inputs from its redacted stack output, so retention/rollback and
+release checks start from what is deployed, not a second local configuration.
+A proposed release still uses `CHALK_INFRA_INPUTS`; its schema, exact match and
+allowed input edits are checked before apply. Unset that variable before a
+stored-input dispatcher no-op proof. No fallback to OpenTofu exists.
+
+[`platform/credentials.ts`](platform/credentials.ts) owns token lookup and
+fail-closed errors. AWS uses `AWS_PROFILE` locally or the standard role chain in
+CI; `AWS_REGION` defaults to `ap-southeast-1`. Cloudflare requires
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the protected environment,
+not an Alchemy OAuth/global-key profile. SFU uses `DIGITALOCEAN_TOKEN`.
+Recorder pools retain separately scoped `CHALK_CAPTURE_DIGITALOCEAN_TOKEN` and
+`CHALK_RENDER_DIGITALOCEAN_TOKEN`; combining these would expand authority.
+All three DigitalOcean scopes use the same shared resolver/client. Credentials
+never belong in the input JSON. Missing-credential messages name the variable
+and protected operator/CI source, never values.
 
 ### Layout and glossary
 
@@ -183,7 +211,7 @@ restructure. No live state rename is required.
 
 ### Scheduled drift
 
-[`infrastructure-drift.yml`](../.github/workflows/infrastructure-drift.yml) reads
+[Infrastructure drift workflow](../.github/workflows/infrastructure-drift.yml) reads
 cut-over stack/stage pairs from the registry, serially runs read-only drift and
 notifies the existing Oncall webhook on drift or check failure. It is gated by
 `CHALK_ALCHEMY_DRIFT_ENABLED=true` and the dedicated role secret

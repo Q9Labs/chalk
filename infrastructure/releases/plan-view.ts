@@ -5,8 +5,8 @@ import { isResolved } from "alchemy/Diff";
 import { encodeState } from "alchemy/State/StateEncoding";
 import * as Schema from "effect/Schema";
 
-// Only the private parent/child pipe receives values. Human summaries contain
-// logical IDs and actions only; never serialize a provider's live attributes.
+// Detailed projections stay in-process or in an explicitly requested private
+// review file. Public summaries contain only logical IDs and actions.
 export const jsonValue = (value: unknown): Schema.MutableJson => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(JSON.stringify(encodeState(value)));
 export const planView = Effect.fn(function* (plan: StackPlan, beforeOutput: unknown) {
   if (plan.actions.length) throw new Error("Dispatcher plans may not contain Actions");

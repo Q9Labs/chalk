@@ -16,17 +16,17 @@ plans and deployments; key rotation is a separate operation.
 
 ## Plan and deploy
 
-Set `CHALK_ARCHIVE_CDN_PUBLIC_KEY_FILE` to an absolute path containing the existing
-RSA public key PEM. It replaces OpenTofu's `public_key_pem` input. The private key
+Set `CHALK_INFRA_INPUTS` to a private JSON file with `public_key_file`, the
+absolute path of the existing RSA public key PEM. It replaces OpenTofu's `public_key_pem` input. The private key
 stays in the controller's private configuration and never enters this stack.
 From the repository root:
 
 ```sh
 export AWS_PROFILE=q9labs
-export CHALK_ARCHIVE_CDN_PUBLIC_KEY_FILE=/absolute/path/to/archive-cdn.pub.pem
+export CHALK_INFRA_INPUTS=/absolute/path/to/archive-cdn.json
 pnpm --dir infrastructure check-types
 pnpm --dir infrastructure exec alchemy plan --config archive-cdn/alchemy.run.ts --stage nightly --detailed
-pnpm --dir infrastructure exec alchemy deploy --config archive-cdn/alchemy.run.ts --stage nightly
+pnpm infra deploy archive-cdn nightly
 pnpm --dir infrastructure exec alchemy plan --config archive-cdn/alchemy.run.ts --stage nightly --detailed
 pnpm --dir infrastructure exec alchemy drift --config archive-cdn/alchemy.run.ts --stage nightly
 ```

@@ -70,11 +70,11 @@ Stop on the first unexpected plan action:
 
 ```sh
 CHALK_ALCHEMY_PRODUCTION_SEED=approved AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx migration/seed.ts sfu production "$migration_dir/sfu.json"
-CHALK_SFU_STACK=sfu CHALK_SFU_CONFIG_FILE="$private_dir/sfu.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config sfu/alchemy.run.ts --stage production --detailed --no-input
+CHALK_SFU_STACK=sfu CHALK_INFRA_INPUTS="$private_dir/sfu.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config sfu/alchemy.run.ts --stage production --detailed --no-input
 CHALK_ALCHEMY_PRODUCTION_SEED=approved AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx migration/seed.ts sfu-standby production "$migration_dir/sfu-standby.json"
-CHALK_SFU_STACK=sfu-standby CHALK_SFU_CONFIG_FILE="$private_dir/sfu-standby.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config sfu/alchemy.run.ts --stage production --detailed --no-input
+CHALK_SFU_STACK=sfu-standby CHALK_INFRA_INPUTS="$private_dir/sfu-standby.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config sfu/alchemy.run.ts --stage production --detailed --no-input
 CHALK_ALCHEMY_PRODUCTION_SEED=approved AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx migration/seed.ts recorder production "$migration_dir/recorder.json"
-CHALK_RECORDER_CONFIG_FILE="$private_dir/recorder.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config recorder/alchemy.run.ts --stage production --detailed --no-input
+CHALK_INFRA_INPUTS="$private_dir/recorder.json" AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy plan --config recorder/alchemy.run.ts --stage production --detailed --no-input
 ```
 
 Set `private_dir` to the private JSON-input directory, not the state-download
