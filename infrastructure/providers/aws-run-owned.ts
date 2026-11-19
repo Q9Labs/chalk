@@ -18,7 +18,7 @@ const isRunOwnedStage = Effect.map(Stage, (stage) => stage.startsWith("nightly-"
 
 const refuseDelete = (kind: string) => Effect.die(`Refusing to delete a ${kind} that this run did not create; its ownership proof is missing or belongs to another run`);
 
-export const logGroupProvider = (upstream: Layer.Layer<unknown>) =>
+export const logGroupProvider = <RIn>(upstream: Layer.Layer<never, never, RIn>) =>
   Provider.effect(
     LogGroup,
     Effect.gen(function* () {
@@ -56,7 +56,7 @@ const hideMarker = (attr: Schedule["Attributes"]): Schedule["Attributes"] => {
   return { ...attr, configuration: visible ? { ...rest, description: visible } : rest };
 };
 
-export const scheduleProvider = (upstream: Layer.Layer<unknown>) =>
+export const scheduleProvider = <RIn>(upstream: Layer.Layer<never, never, RIn>) =>
   Provider.effect(
     Schedule,
     Effect.gen(function* () {

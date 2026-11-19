@@ -12,7 +12,9 @@ import * as Alchemist from "alchemy/Alchemist";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { inMemoryState } from "alchemy/State";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
@@ -110,7 +112,7 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
     Layer.succeed(AWSEnvironment, Effect.succeed({ accountId: "000000000000", region: "ap-southeast-1", credentials: Effect.succeed({ accessKeyId: Redacted.make("test"), secretAccessKey: Redacted.make("test"), sessionToken: undefined, region: "ap-southeast-1" }) })),
   );
   // The real upstream providers over the fake HTTP boundary, not the full AWS registry, which brings its own HTTP client.
-  const upstream = Layer.mergeAll(LogGroupProvider(), ScheduleProvider()).pipe(Layer.provide(clients));
+  const upstream = Layer.mergeAll(LogGroupProvider(), ScheduleProvider()).pipe(Layer.provideMerge(clients));
   return { upstream, calls, logGroups, schedules, count: (operation: string) => calls.filter((call) => call === operation).length };
 }
 
@@ -165,7 +167,8 @@ for (const resource of ["log-group", "schedule"] as const) {
     await Effect.runPromise(
       Effect.gen(function* () {
         const applied = yield* Effect.exit(Alchemist.apply(yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" })));
-        assert.equal(applied._tag, "Failure");
+        assert.ok(Exit.isFailure(applied));
+        assert.match(Cause.pretty(applied.cause), /OwnedBySomeoneElse/);
         yield* destroyTwice(stack, "nightly-test");
       }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );

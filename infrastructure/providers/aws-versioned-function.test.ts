@@ -9,7 +9,9 @@ import { inMemoryState } from "alchemy/State";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import { Endpoint } from "@distilled.cloud/aws/Endpoint";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/http/HttpClient";
@@ -188,7 +190,8 @@ for (const [label, existing] of [
       Effect.gen(function* () {
         const plan = yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" });
         const applied = yield* Effect.exit(Alchemist.apply(plan));
-        assert.equal(applied._tag, "Failure");
+        assert.ok(Exit.isFailure(applied));
+        assert.match(Cause.pretty(applied.cause), /OwnedBySomeoneElse/);
         yield* destroyTwice(stack);
       }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
