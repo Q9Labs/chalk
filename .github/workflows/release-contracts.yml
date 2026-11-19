@@ -11,7 +11,6 @@ on:
       - .github/actionlint.yaml
       - .github/actions/setup-opentofu/**
       - .github/actions/setup-doctl/**
-      - .github/actions/cache-tofu-providers/**
       - scripts/releases/**
       - scripts/deploy/**
       - scripts/transcription-dispatcher/**
@@ -21,7 +20,6 @@ on:
       - infrastructure/package.json
       - infrastructure/tsconfig.json
       - infrastructure/nightly/**
-      - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
       - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**
       - apps/transcription-dispatcher/**
       - .tool-versions
@@ -82,7 +80,6 @@ jobs:
         with:
           cache: "false"
           install: "false"
-      - uses: ./.github/actions/setup-opentofu
       - name: Install pinned workflow lint
         run: |
           go install "github.com/rhysd/actionlint/cmd/actionlint@v$(scripts/lib/tool-version.sh actionlint)"
