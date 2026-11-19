@@ -134,11 +134,12 @@ The following local paths still require the legacy toolchain:
   `scripts/transcription-dispatcher/configure-mai.py` now use Alchemy.
   `scripts/releases/check-contracts.sh` uses the infrastructure typecheck,
   not deleted dispatcher, address or CDN OpenTofu roots.
-- `.github/workflows/cache-warm.yml`, `.github/workflows/ci.yml`, `.github/workflows/gate.yml`, and
-  `.github/workflows/release-contracts.yml`, their setup/cache actions and tool pins remain.
-- The legacy SFU and recorder instructions remain available until those roots
+- `.github/workflows/cache-warm.yml`, `.github/workflows/ci.yml` and
+  `.github/workflows/gate.yml`, their OpenTofu setup/cache actions and tool pins remain.
+  Release-contract validation no longer installs OpenTofu.
+- The legacy SFU, direct Sync and recorder instructions remain available until those roots
   cut over. No script points at a deleted root.
 
 Do not remove shared OpenTofu CI or pins until a fresh search of the merged
 branches finds no remaining execution path. The recorder gate now also runs the
-strict Alchemy typecheck, six DigitalOcean contract tests, and SFU template tests.
+strict Alchemy typecheck, DigitalOcean contract tests, and SFU template tests.
