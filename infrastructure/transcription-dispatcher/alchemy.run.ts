@@ -10,12 +10,13 @@ import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
 import { environment, providers, state } from "../platform/config.ts";
 import { alarmProvider } from "../providers/aws-dispatcher-alarm.ts";
+import { logGroupProvider, scheduleProvider } from "../providers/aws-run-owned.ts";
 import { VersionedFunction, functionProvider } from "../providers/aws-versioned-function.ts";
 import { parseInputs, requireInput } from "./config.ts";
 import { resourceProps } from "./resources.ts";
 
 export const stackName = "transcription-dispatcher";
-export const dispatcherProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider);
+export const dispatcherProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider, logGroupProvider(providers), scheduleProvider(providers));
 const storedInputs = (value: unknown) => {
   const output = Schema.decodeUnknownSync(Schema.Struct({ dispatcher_inputs: Schema.Redacted(Schema.Unknown) }))(value);
   return parseInputs(Redacted.value(output.dispatcher_inputs));

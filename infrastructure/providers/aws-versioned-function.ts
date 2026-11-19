@@ -102,6 +102,8 @@ const isOwnedBy = Effect.fn(function* (functionName: string, instanceId: string)
 const readOwned = Effect.fn(function* (functionName: string, instanceId: string) {
   const live = yield* readFunction(functionName);
   if (!live) return undefined;
+  // Production's function was created by OpenTofu and seeded; only run-owned stages create one here.
+  if (!(yield* Stage).startsWith("nightly-")) return live;
   return (yield* isOwnedBy(functionName, instanceId)) ? live : Unowned(live);
 });
 

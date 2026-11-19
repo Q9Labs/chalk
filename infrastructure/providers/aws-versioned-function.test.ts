@@ -58,7 +58,7 @@ const functionConfig = {
 const invokeConfig = { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0, DestinationConfig: { OnFailure: { Destination: "arn:queue" } } };
 
 // The fake AWS HTTP boundary. `existing` is a complete function another run left behind.
-function fakeLambda(options: { readonly existing?: Record<string, string>; readonly crashAt?: string }) {
+function fakeLambda(options: { readonly existing?: Record<string, string>; readonly crashAt?: string | undefined }) {
   let live = options.existing !== undefined;
   let tags: Record<string, string> = { ...options.existing };
   let invokeConfigured = live;
