@@ -4,11 +4,15 @@ CloudFront in front of `recorder/*` in the `chalk-nightly-artifacts-<account>` b
 
 Access is by signed link only (key group). The bucket policy lets only this distribution read `recorder/*` and keeps the TLS-only deny statement. The installer still checks the archive SHA256.
 
-The Alchemy definition is ready for migration, but live cutover is not complete.
-The OpenTofu configuration remains for recovery. Follow the
-[shared migration procedure](../../README.md#migrate-an-existing-root) before the
-first plan. Keep the existing public key. Do not generate or rotate a key during
-cutover.
+Alchemy owns this stack after the Nightly cutover on 2026-11-19. The original
+OpenTofu state and its dated backup remain untouched; the `.tf` and lock files
+were removed after verification. Both plans and the deploy were all no-ops,
+read-only drift exited zero, and the full live distribution, public key, key
+group, origin access control, and bucket policy matched the before capture.
+
+Do not rerun the [migration seed](../../README.md#migrate-an-existing-root)
+against this already-managed stack. Keep the existing public key for normal
+plans and deployments; key rotation is a separate operation.
 
 ## Plan and deploy
 

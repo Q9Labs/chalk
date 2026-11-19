@@ -62,10 +62,12 @@ manifest should never point at stale assets.
 ## Alchemy stacks
 
 `@chalk/infrastructure` pins Alchemy and its AWS provider to `2.0.0-beta.87`.
-The Nightly [recorder address](nightly/recording-control-address/README.md) and
-[archive CDN](nightly/archive-cdn/README.md) have Alchemy definitions. Their live
-cutover is not complete. Keep their OpenTofu configurations until both migrations
-pass the checks below. Other roots still use OpenTofu.
+The Nightly [archive CDN](nightly/archive-cdn/README.md) uses Alchemy after a
+verified no-change cutover on 2026-11-19.
+The [recorder address](nightly/recording-control-address/README.md) has an Alchemy
+definition but is currently unallocated and has not been deployed. Its historical
+OpenTofu state is stale: do not seed it or allocate a replacement without
+separate cost approval. Other roots still use OpenTofu.
 
 Run commands from the repository root. Install with `pnpm install`, then run the
 credential-free check:
@@ -77,10 +79,17 @@ pnpm --dir infrastructure check-types
 Both stacks share the AWS credential chain, including `AWS_PROFILE`, and pin
 `ap-southeast-1` independently of the profile's default region. Use Chalk's
 `nightly` and `production` stage names. These two entrypoints reject every stage
-except `nightly`. State uses `AWS.state()`: the on-demand `alchemy-state` DynamoDB
+except `nightly`. State uses `AWS.state({ migrateFrom: false })`: the on-demand `alchemy-state` DynamoDB
 table and its S3 overflow bucket in the same account and region. First use needs
 permission to provision both, or an operator must bootstrap the store ahead of
-time. The store holds a lease for each stack and stage.
+time. Legacy Alchemy S3-state migration is disabled because these stacks have no
+legacy Alchemy state; this also avoids requesting access to an unused bucket.
+The store holds a lease for each stack and stage. Bootstrap the configured store
+without evaluating the stack program:
+
+```sh
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state bootstrap --config nightly/archive-cdn/alchemy.run.ts --no-input
+```
 
 ### Migrate an existing root
 
@@ -105,7 +114,7 @@ CloudFront caller references cannot be recovered from physical names alone.
    done
    ```
 
-3. Run the shared seed script for each root. It validates the managed resource
+3. Run the shared seed script only for a root whose resources still exist. It validates the managed resource
    set, reads the existing resources from AWS, and writes completed Alchemy
    records through `State`. It never writes OpenTofu state or product resources.
    The first state-store use can provision the table and overflow bucket.
@@ -113,16 +122,20 @@ CloudFront caller references cannot be recovered from physical names alone.
    A retry skips matching destination records and refuses conflicting records.
    A missing live resource fails before any records are written.
    CDN ETags and the bucket policy must still match the original state.
+   The address root is not eligible: its allocation is gone, so do not seed its
+   stale state. The command below documents the CDN migration, not a step to
+   repeat after cutover.
 
    ```sh
-   pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts recording-control-address nightly "$migration_dir/recording-control-address.json"
    pnpm --dir infrastructure exec tsx alchemy/seed-tofu-state.ts archive-cdn nightly "$migration_dir/archive-cdn.json"
    ```
 
 4. Follow each stack's plan instructions. Before deploying, require only no-ops
    or in-place ownership-tag changes with no observable product effect. Stop on
    any create, replacement, or delete. Never use a deploy to fix a rejected plan.
-5. Deploy, then require an all-no-op second plan and a read-only `alchemy drift`
+5. Deploy, then run verification commands sequentially: even plan and drift
+   take a stack/stage state lease and cannot run concurrently. Require an
+   all-no-op second plan and a read-only `alchemy drift`
    exit code of zero. Compare all captured live facts, including the full bucket
    policy document. Do not use `drift --repair` or `drift --yes` as proof.
 6. Only after successful cutover, remove that root's `.tf` and
@@ -139,12 +152,12 @@ Delete only the Alchemy records for the affected stack and stage, using its
 entrypoint, before restoring the previous commit's OpenTofu configuration:
 
 ```sh
-pnpm --dir infrastructure exec alchemy state delete recording-control-address/nightly --config nightly/recording-control-address/alchemy.run.ts --yes
 pnpm --dir infrastructure exec alchemy state delete archive-cdn/nightly --config nightly/archive-cdn/alchemy.run.ts --yes
 ```
 
 Run only the command for the stack being rolled back. `state delete` forgets
-records and outputs, not AWS resources. Restore the saved commit's `.tf` files,
+records and outputs, not AWS resources. No address cutover was performed; its
+historical state cannot recover a released allocation. Restore the saved commit's `.tf` files,
 initialize OpenTofu with the original backend, and inspect its plan against the
 untouched original state. An ownership-tag difference is expected if Alchemy
 added tags. Never run `tofu destroy`, `alchemy destroy`, or `alchemy nuke` for this
