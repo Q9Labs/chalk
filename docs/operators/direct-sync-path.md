@@ -35,7 +35,7 @@ target.
 ## Host pieces
 
 Code and config live in `infrastructure/managed-episode/direct-sync/`: a Caddy
-TLS proxy with an nftables connection cap, and an OpenTofu root for the security
+TLS proxy with an nftables connection cap, and an Alchemy v2 stack for the security
 group and DNS. Sync enforces connection bounds for proxied requests in
 `apps/sync/lib/chalk_sync/transport/direct_limits.ex`. No hostname, address or
 account identifier is stored in Git.
@@ -49,12 +49,11 @@ token.
 
 ## Turn it on (nightly only)
 
-The OpenTofu root accepts only `environment = "nightly"`, and `build-web` passes
+The Alchemy stack accepts only `--stage nightly`, and `build-web` passes
 the direct URL to the nightly build only. Staging or production need a reviewed
 change to both.
 
-1. Apply the OpenTofu root with a stable public IPv4 address (for example an Elastic IP), because the nightly host is a spot
-   instance whose address must survive stop and start.
+1. Follow the [network stack cutover](../../infrastructure/managed-episode/direct-sync/README.md) with a stable public IPv4 address (for example an Elastic IP). Adoption is currently blocked: the interface saved in Nightly state no longer exists. Do not deploy against empty Alchemy state or recreate the attachment as part of adoption.
 2. Install the proxy on the host as root with
    `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` and confirm
    `direct-sync-proxy status` shows a valid certificate. Do this before the flag:
@@ -78,7 +77,7 @@ Production keeps running on the Tunnel until someone does all of this, each step
 needing the owner's go-ahead because DNS and the production security group
 change:
 
-1. Widen the `environment` validation in `infrastructure/managed-episode/direct-sync/opentofu/variables.tf` (it accepts only `nightly`) in a reviewed change, apply the root for production and install the proxy.
+1. Widen the `environment` validation in `infrastructure/alchemy/config.ts` and the direct-sync stack (it accepts only `nightly`) in a reviewed change, plan and deploy the stack for production and install the proxy.
 2. Check from outside the VPC that 443 answers, a Sync upgrade and an SFU
    preflight succeed, and every other path returns 404.
 3. Pass a nightly trial first: at least 30 joins per arm from at least 2 Pakistani
@@ -94,12 +93,12 @@ production web build, and the grant door does not need it. Keep that guard.
 
 Use the first row that fits. The fallback is what makes the no-deploy rows safe.
 
-| Goal                                 | Action                                                                                                                                                          | Deploy |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off.         | no     |
-| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                           | no     |
-| Turn the flag off for new page loads | Delete the secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (`gh secret delete`) and cut a web release. Loaded pages keep trying and fall back, so also do the row above. | yes    |
-| Remove everything                    | `direct-sync-proxy remove --purge`, then `tofu destroy`                                                                                                         | no     |
+| Goal                                 | Action                                                                                                                                                           | Deploy |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Stop advertising the API door        | Unset `CHALK_API_DIRECT_URL`, restart the API. Clients that already hold a grant keep the door until it expires or the 10 minute memory moves them off.          | no     |
+| Stop all direct traffic now          | `systemctl stop chalk-direct-sync-proxy`, or delete the DNS records. Open sockets drop and reconnect over the Tunnel.                                            | no     |
+| Turn the flag off for new page loads | Delete the secret `CHALK_NIGHTLY_SYNC_DIRECT_URL` (`gh secret delete`) and cut a web release. Loaded pages keep trying and fall back, so also do the row above.  | yes    |
+| Remove everything                    | Disable both direct URL flags first; use the [state-only rollback](../../infrastructure/managed-episode/direct-sync/README.md#rollback), never a destroy command | no     |
 
 ## What to watch
 
@@ -123,6 +122,16 @@ trial measured the same latency over IPv4 and IPv6. Add an AAAA record only afte
 the whole chain works (VPC and subnet IPv6, a default route, an address on the
 host that persists across stop and start) and you confirmed reachability from
 outside, because an unreachable AAAA delays every first attempt.
+
+## Infrastructure migration
+
+The AWS and Cloudflare providers are pinned to `2.0.0-beta.87`. Direct-sync uses
+the shared `AWS.state()` store in `ap-southeast-1`; DNS remains unproxied, and
+the custom interface resource preserves all other security groups. Private
+inputs, seeding, the stop-on-create plan gate, before/after proof and rollback
+are documented in the [stack README](../../infrastructure/managed-episode/direct-sync/README.md).
+The original OpenTofu files and state remain while stale-state adoption is
+blocked. Do not let both tools write the same resources.
 
 ## Not proved
 
