@@ -1,4 +1,5 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { Stage } from "alchemy/Stage";
 import { parseStage } from "../platform/stages.ts";
@@ -89,6 +90,21 @@ const readFunction = Effect.fn(function* (functionName: string) {
   return { functionName, functionArn: required(config.FunctionArn, "function ARN"), codeSha256: required(config.CodeSha256, "code digest"), version: required(config.Version, "version"), configuration };
 });
 
+// Ownership is a fact stamped on the function, never inferred from its name. The
+// engine persists the resource's instance ID before any cloud call, and creation
+// writes that ID as this tag in the same request. The `alchemy:` prefix keeps it out
+// of the compared configuration. A function without this run's ID is not ours.
+const ownerTagKey = "alchemy:instance";
+const isOwnedBy = Effect.fn(function* (functionName: string, instanceId: string) {
+  const current = yield* lambda.getFunction({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+  return current ? current.Tags?.[ownerTagKey] === instanceId : undefined;
+});
+const readOwned = Effect.fn(function* (functionName: string, instanceId: string) {
+  const live = yield* readFunction(functionName);
+  if (!live) return undefined;
+  return (yield* isOwnedBy(functionName, instanceId)) ? live : Unowned(live);
+});
+
 class NotSettled extends Data.TaggedError("NotSettled") {}
 
 const settled = Effect.fn(function* (functionName: string) {
@@ -102,7 +118,7 @@ export function requireRunOwnedFunction(stageName: string, functionName: string)
   const stage = parseStage(stageName);
   if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
 }
-const createRunFunction = Effect.fn(function* (news: FunctionProps) {
+const createRunFunction = Effect.fn(function* (news: FunctionProps, instanceId: string) {
   requireRunOwnedFunction(yield* Stage, news.functionName);
   yield* lambda
     .createFunction({
@@ -119,7 +135,7 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps) {
       EphemeralStorage: { Size: news.ephemeralStorageSize },
       Environment: { Variables: Redacted.value(news.environment) },
       TracingConfig: { Mode: news.tracingMode },
-      Tags: { ...news.tags },
+      Tags: { ...news.tags, [ownerTagKey]: instanceId },
     })
     .pipe(Effect.retry({ while: (error) => error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message), schedule: Schedule.spaced("2 seconds"), times: 30 }));
   yield* lambda.getFunctionConfiguration({ FunctionName: news.functionName }).pipe(
@@ -139,12 +155,12 @@ const createRunFunction = Effect.fn(function* (news: FunctionProps) {
 // preconditions and verify the exact ZIP digest without rebuilding or publishing.
 export const functionProvider = Provider.succeed(VersionedFunction, {
   stables: ["functionName", "functionArn"],
-  read: ({ olds, output }) => (output ? readFunction(output.functionName) : isResolved(olds) && olds ? readFunction(olds.functionName) : Effect.undefined),
+  read: ({ olds, output, instanceId }) => (output ? readOwned(output.functionName, instanceId) : isResolved(olds) && olds ? readOwned(olds.functionName, instanceId) : Effect.undefined),
   diff: Effect.fn(function* ({ olds, news }) {
     if (isResolved(news) && olds.functionName !== news.functionName) return { action: "replace" };
   }),
-  reconcile: Effect.fn(function* ({ news, olds }) {
-    if (!olds) return yield* createRunFunction(news);
+  reconcile: Effect.fn(function* ({ news, olds, instanceId }) {
+    if (!olds) return yield* createRunFunction(news, instanceId);
     const before = yield* settled(news.functionName);
     const live = yield* readFunction(news.functionName);
     if (!live) return yield* Effect.die("Dispatcher function is missing; this migration never creates it.");
@@ -188,8 +204,11 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* Effect.die("Dispatcher exact ZIP/configuration readback failed; no values logged.");
     return result;
   }),
-  delete: Effect.fn(function* ({ output }) {
+  delete: Effect.fn(function* ({ output, instanceId }) {
     requireRunOwnedFunction(yield* Stage, output.functionName);
+    const owned = yield* isOwnedBy(output.functionName, instanceId);
+    if (owned === undefined) return;
+    if (!owned) return yield* Effect.die("Refusing to delete a Lambda function that this run did not create; its ownership tag is missing or belongs to another run");
     yield* lambda.deleteFunction({ FunctionName: output.functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
   }),
 });
