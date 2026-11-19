@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts/recorder'))
-from transcription_state import dispatcher_inputs_from_tofu, migration_props
+from transcription_dispatcher_state import dispatcher_inputs_from_tofu, migration_props
 from release_io import Provider, private_json
 from release_core import require
 

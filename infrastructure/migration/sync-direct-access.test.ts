@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { interfaceGroups } from "../providers/aws-network-interface-security-group.ts";
-import { validateDirectSyncResourceSet } from "./direct-sync.ts";
+import { validateDirectSyncResourceSet } from "./sync-direct-access.ts";
 
 test("attaching and detaching one group preserves the interface's other groups", () => {
   assert.deepEqual(interfaceGroups(["host", "monitor"], "direct", true), ["host", "monitor", "direct"]);

@@ -16,6 +16,7 @@ const targets = [
   { stackName: "sync-direct-access", directory: "sync-direct-access", stageKind: "retired", legacyStackName: "direct-sync", owner: "opentofu", root: "managed-episode/direct-sync/opentofu", reason: retiredHost },
   { stackName: "sfu", directory: "sfu", stageKind: "retired", legacyStackName: "sfu", owner: "opentofu", root: "sfu", reason: retiredSfu },
   { stackName: "sfu-standby", directory: "sfu", stageKind: "retired", legacyStackName: "sfu-standby", owner: "opentofu", root: "sfu", reason: retiredSfu },
+  { stackName: "recorder", directory: "recorder", stageKind: "retired", legacyStackName: "recorder", owner: "opentofu", root: "recorder", reason: "Retire: ported, deliberately not deployed after persistent host removal (2026-11-15, PR #1432); original Nightly state is stale" },
   { stackName: "transcription-dispatcher", directory: "transcription-dispatcher", stageKind: "retired", legacyStackName: "transcription-dispatcher", owner: "alchemy", reason: "Retire: no between-run control API or reconciliation schedule; per-run proof replaces the old release gate" },
   { stackName: "transcription-dispatcher", directory: "transcription-dispatcher", stageKind: "ephemeral", provisioner: "alchemy", reason: "Run-owned deploy/release/convergence/cleanup proof; no seed or always-on Nightly" },
   { stackName: "transcription-dispatcher", directory: "transcription-dispatcher", stageKind: "production", provisioner: "opentofu", seeded: false, reason: "Ported; production cutover waits for an ephemeral release proof" },

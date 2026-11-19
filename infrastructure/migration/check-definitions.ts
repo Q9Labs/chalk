@@ -139,5 +139,5 @@ for (const stack of [...stacks.map((stack) => ({ name: stack.stackName, entry: `
   const differences = before.filter(([path, value]) => !isDeepStrictEqual(after.find(([name]) => name === path)?.[1], value)).map(([path]) => path);
   assert.ok(isDeepStrictEqual(after, before), `${stack.name}: changed declaration/dependencies in ${differences.join(", ")}`);
   const hash = createHash("sha256").update(JSON.stringify(before)).digest("hex");
-  process.stdout.write(`${stack.name}: identical, ${before.length} transitive modules, ${hash}\n`);
+  process.stdout.write(`${stack.name}: declaration parity (documented boundary changes excluded), ${before.length} transitive modules, ${hash}\n`);
 }

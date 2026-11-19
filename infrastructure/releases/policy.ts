@@ -11,6 +11,7 @@ export type Policy = {
   readonly resources: readonly { readonly id: string; readonly type: string; readonly required: boolean; readonly patches: readonly Patch[] }[];
   readonly outputs: readonly string[];
   readonly inputs: readonly string[];
+  readonly inputsOutputName: string;
   readonly requestedInputs: Schema.Json;
 };
 export function object(value: Schema.MutableJson | undefined) {
@@ -66,9 +67,9 @@ export function checkPlan(plan: Plan, policy: Policy): void {
     if (!isDeepStrictEqual(expected, row.after)) throw new Error("Plan changes a property outside the allowlist");
   }
   if (policy.resources.some((rule) => rule.required && !seen.has(rule.id))) throw new Error("Plan is partial; full-stack checks are required");
-  equalExcept(plan.outputs.before, plan.outputs.after, [...policy.outputs, "dispatcher_inputs"], "Output");
-  const beforeInputs = at(plan.outputs.before, ["dispatcher_inputs"]);
-  const afterInputs = at(plan.outputs.after, ["dispatcher_inputs"]);
+  equalExcept(plan.outputs.before, plan.outputs.after, [...policy.outputs, policy.inputsOutputName], "Output");
+  const beforeInputs = at(plan.outputs.before, [policy.inputsOutputName]);
+  const afterInputs = at(plan.outputs.after, [policy.inputsOutputName]);
   if (!isDeepStrictEqual(afterInputs, policy.requestedInputs)) throw new Error("Planned inputs differ from requested configuration");
   equalExcept(beforeInputs, afterInputs, policy.inputs, "Input");
 }

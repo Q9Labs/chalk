@@ -47,7 +47,7 @@ const partialMatches = (actual: Schema.Json, expected: Schema.Json): boolean => 
 };
 const migrationSchema = Schema.Struct({ inputs: Schema.Unknown, resources: Schema.Record(Schema.String, Schema.Json), live: Schema.Record(Schema.String, Schema.Json) });
 export const seedDispatcher = Effect.fn(function* (stateFile: string, stage: "nightly" | "production", dryRun: boolean) {
-  const source = Schema.decodeUnknownSync(Schema.fromJsonString(migrationSchema))(execFileSync("python3", [fileURLToPath(new URL("./transcription_state.py", import.meta.url)), stateFile], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }));
+  const source = Schema.decodeUnknownSync(Schema.fromJsonString(migrationSchema))(execFileSync("python3", [fileURLToPath(new URL("./transcription_dispatcher_state.py", import.meta.url)), stateFile], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }));
   const input = parseInputs(source.inputs);
   requireInput(input.environment_name === stage, "Tofu input environment does not match seed stage");
   const aws = yield* AWSEnvironment.current;

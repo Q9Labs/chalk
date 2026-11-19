@@ -26,8 +26,13 @@ import { dispatcherProviders } from "../transcription-dispatcher/alchemy.run.ts"
 import { EipAssociation, readAssociation } from "../providers/aws-eip-association.ts";
 import { BucketPolicy, canonicalPolicy, readPolicy } from "../providers/aws-bucket-policy.ts";
 
-import { directSyncRows } from "./direct-sync.ts";
+import { directSyncRows } from "./sync-direct-access.ts";
 import { tofuState, decode, lookup, row } from "./opentofu.ts";
+
+import { selectStack } from "../registry.ts";
+
+const selected = selectStack(process.argv[2], process.argv[3]);
+if (selected.stage.kind !== "production") throw new Error("Only production roots can be imported; ephemeral stages bootstrap and legacy Nightly stages retire");
 
 const environmentName = Schema.Literals(["nightly", "production"]);
 

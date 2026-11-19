@@ -69,7 +69,7 @@ its grant; retry preserves all unrelated statements. Destroy reads saved state
 without evaluating retired declarations. Cleanup refuses retained/orphaned
 resources and refuses to forget state while any resources remain.
 
-The Sync trial and SFU variants are still OpenTofu-owned. `pnpm infra retire`
+The Sync trial, SFU variants and legacy recorder policy are still OpenTofu-owned. `pnpm infra retire`
 refuses them rather than falsely reporting an empty Alchemy store as cleanup.
 Use their original protected backend and variable files, not a new state root:
 
@@ -83,6 +83,14 @@ tofu -chdir=infrastructure/sfu plan -destroy -var-file=/private/sfu/nightly/node
 tofu -chdir=infrastructure/sfu show /private/sfu/nightly/retire.tfplan
 tofu -chdir=infrastructure/sfu apply /private/sfu/nightly/retire.tfplan
 ```
+
+The recorder's legacy Nightly state is also stale. Inspect its original private
+backend with `tofu -chdir=infrastructure/recorder init -reconfigure
+-backend-config=/private/recorder/nightly/backend.hcl`, then `tofu
+-chdir=infrastructure/recorder state list`. Do not infer deleted recording data
+from a missing host. Do not apply a destroy of a recording bucket or KMS key;
+retention decisions require a separate inventory. The Alchemy port was never
+deployed there, so there is no Alchemy cleanup to run.
 
 Repeat the four SFU commands with `/private/sfu-standby/nightly/` for the standby
 backend/vars. Review the saved plans before applying: only the old trial network

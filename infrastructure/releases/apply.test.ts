@@ -56,20 +56,20 @@ for (const { apply, allowed } of [
       Effect.gen(function* () {
         evaluations++;
         yield* ExternalResource("Function", { value: desired });
-        return { dispatcher_inputs: { identity: "test" } };
+        return { stored_inputs: { identity: "test" } };
       }),
     );
     const run = Effect.runPromise(
       Effect.gen(function* () {
         const plan = yield* Alchemist.plan({ stack, stage: "nightly", operation: "deploy" });
-        const view = yield* planView(plan, { dispatcher_inputs: { identity: "test" } }).pipe(Effect.provide(plan.context));
+        const view = yield* planView(plan, { stored_inputs: { identity: "test" } }).pipe(Effect.provide(plan.context));
         assert.deepEqual(
           view.resources.map((row) => ({ action: row.action, before: row.before, after: row.after })),
           [{ action: "update", before: { value: 1 }, after: { value: 2 } }],
         );
         // A second stack evaluation would deploy 99, violating the checked plan.
         desired = 99;
-        const applied = yield* applyCheckedPlan(plan, view, { resources: [{ id: "Function", type: ExternalResource.Type, required: true, patches: [{ path: ["value"], value: allowed }] }], inputs: [], outputs: [], requestedInputs: { identity: "test" } }, apply);
+        const applied = yield* applyCheckedPlan(plan, view, { resources: [{ id: "Function", type: ExternalResource.Type, required: true, patches: [{ path: ["value"], value: allowed }] }], inputs: [], outputs: [], inputsOutputName: "stored_inputs", requestedInputs: { identity: "test" } }, apply);
         assert.equal(applied, apply);
       }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );

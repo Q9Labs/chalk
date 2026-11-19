@@ -48,7 +48,7 @@ Capture live facts before the seed. This command records environment variable
 names, never values:
 
 ```sh
-AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-before.json"
+AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
 Seed in one command, then plan in one command:
@@ -70,7 +70,7 @@ After seed and plan, require read-only drift detection and unchanged live facts:
 
 ```sh
 AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy drift --config transcription-dispatcher/alchemy.run.ts --stage production
-AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
+AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
 Never run `tofu destroy`, `alchemy destroy` or `alchemy nuke`. The original

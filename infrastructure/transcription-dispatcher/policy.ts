@@ -130,5 +130,5 @@ export function dispatcherPolicy(raw: Plan, input: DispatcherInputs, operation: 
     outputs = ["required_egress_destinations", "release_identity"];
     inputs = ["codeswitch_provider", "openrouter_token_parameter_arn", "config_digest"];
   }
-  return { plan, policy: { resources: Object.entries(resourceTypes).map(([id, type]) => ({ id, type, required: id !== "ControlApiPermission", patches: edits.get(id) ?? [] })), outputs, inputs, requestedInputs: input } };
+  return { plan, policy: { resources: Object.entries(resourceTypes).map(([id, type]) => ({ id, type, required: id !== "ControlApiPermission", patches: edits.get(id) ?? [] })), outputs, inputs, inputsOutputName: "dispatcher_inputs", requestedInputs: input } };
 }
