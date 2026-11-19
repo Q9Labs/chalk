@@ -131,7 +131,7 @@ const partialSchema = Schema.Struct({
   codeswitch_provider: Schema.optionalKey(Schema.String),
   openrouter_token_parameter_arn: Schema.optionalKey(Schema.String),
 });
-export const defaults = {
+const defaults = {
   handler: "index.handler",
   timeout_seconds: 600,
   work_budget_seconds: 300,
@@ -199,48 +199,81 @@ export const parseInputs = (value: unknown): DispatcherInputs => {
   } catch {
     throw new Error("Invalid dispatcher inputs; values are not logged.");
   }
-  requireInput(new RegExp("^[a-zA-Z0-9-_]{1,64}$").test(input.function_name), "function_name failed validation");
-  requireInput(new RegExp("^[a-z][a-z0-9-]{0,31}$").test(input.environment_name), "environment_name failed validation");
-  requireInput(new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$").test(input.release_id) && !input.release_id.toLowerCase().includes("latest"), "release_id failed validation");
-  requireInput(new RegExp("^sha256:[0-9a-f]{64}$").test(input.release_manifest_digest), "release_manifest_digest failed validation");
-  requireInput(new RegExp("^sha256:[0-9a-f]{64}$").test(input.config_digest), "config_digest failed validation");
-  requireInput(new RegExp("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$").test(input.artifact_s3_bucket), "artifact_s3_bucket failed validation");
-  requireInput(input.artifact_s3_key.trim().length > 0 && !input.artifact_s3_key.toLowerCase().includes("latest"), "artifact_s3_key failed validation");
-  requireInput(input.artifact_s3_object_version.trim().length > 0 && !input.artifact_s3_object_version.toLowerCase().includes("latest") && input.artifact_s3_object_version.trim().toLowerCase() !== "null", "artifact_s3_object_version failed validation");
-  requireInput(new RegExp("^[0-9a-f]{64}$").test(input.artifact_sha256), "artifact_sha256 failed validation");
-  requireInput(new RegExp("^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$").test(input.artifact_sha256_base64), "artifact_sha256_base64 failed validation");
-  requireInput(new RegExp("^[A-Za-z0-9_./-]+$").test(input.handler), "handler failed validation");
-  requireInput(Number.isInteger(input.timeout_seconds) && input.timeout_seconds >= 61 && input.timeout_seconds <= 900, "timeout_seconds failed validation");
-  requireInput(Number.isInteger(input.work_budget_seconds) && input.work_budget_seconds >= 1, "work_budget_seconds failed validation");
-  requireInput(Number.isInteger(input.completion_reserve_seconds) && input.completion_reserve_seconds >= 60, "completion_reserve_seconds failed validation");
-  requireInput(Number.isInteger(input.reserved_concurrency) && input.reserved_concurrency >= 3 && input.reserved_concurrency <= 50, "reserved_concurrency failed validation");
-  requireInput(Number.isInteger(input.memory_size) && input.memory_size >= 128 && input.memory_size <= 4096, "memory_size failed validation");
-  requireInput(Number.isInteger(input.ephemeral_storage_size) && input.ephemeral_storage_size >= 512 && input.ephemeral_storage_size <= 4096, "ephemeral_storage_size failed validation");
-  requireInput(new RegExp("^https://").test(input.control_api_url), "control_api_url failed validation");
-  requireInput(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$").test(input.control_api_audience), "control_api_audience failed validation");
-  requireInput(Number.isInteger(input.max_batch) && input.max_batch >= 3 && input.max_batch <= 50, "max_batch failed validation");
-  requireInput(input.deepinfra_adapter_contract_version === "deepinfra-native-whisper-turbo.v1", "deepinfra_adapter_contract_version failed validation");
-  requireInput(input.deepinfra_corpus_digest === "" || new RegExp("^[a-fA-F0-9]{32,128}$").test(input.deepinfra_corpus_digest), "deepinfra_corpus_digest failed validation");
-  requireInput(input.cloudflare_account_id === "" || new RegExp("^[a-f0-9]{32}$").test(input.cloudflare_account_id), "cloudflare_account_id failed validation");
-  requireInput(input.cloudflare_model_slug === "@cf/openai/whisper-large-v3-turbo", "cloudflare_model_slug failed validation");
-  requireInput(input.cloudflare_corpus_digest === "" || new RegExp("^[a-fA-F0-9]{32,128}$").test(input.cloudflare_corpus_digest), "cloudflare_corpus_digest failed validation");
-  requireInput(Number.isInteger(input.provider_timeout_ms) && input.provider_timeout_ms >= 100 && input.provider_timeout_ms <= 120000, "provider_timeout_ms failed validation");
-  requireInput(Number.isInteger(input.log_retention_days) && input.log_retention_days >= 1 && input.log_retention_days <= 3653, "log_retention_days failed validation");
-  requireInput(Number.isInteger(input.async_max_event_age_seconds) && input.async_max_event_age_seconds >= 60 && input.async_max_event_age_seconds <= 21600, "async_max_event_age_seconds failed validation");
-  requireInput(Number.isInteger(input.async_maximum_retry_attempts) && input.async_maximum_retry_attempts >= 0 && input.async_maximum_retry_attempts <= 2, "async_maximum_retry_attempts failed validation");
-  requireInput(["DISABLED", "ENABLED"].includes(input.scheduler_state), "scheduler_state failed validation");
-  requireInput(validJson(input.scheduler_input_json) && input.scheduler_input_json.length <= 1048576, "scheduler_input_json failed validation");
-  requireInput(Number.isInteger(input.scheduler_max_event_age_seconds) && input.scheduler_max_event_age_seconds >= 60 && input.scheduler_max_event_age_seconds <= 86400, "scheduler_max_event_age_seconds failed validation");
-  requireInput(Number.isInteger(input.scheduler_maximum_retry_attempts) && input.scheduler_maximum_retry_attempts >= 0 && input.scheduler_maximum_retry_attempts <= 185, "scheduler_maximum_retry_attempts failed validation");
-  requireInput(["", "mai"].includes(input.codeswitch_provider), "codeswitch_provider failed validation");
-  requireInput(input.openrouter_token_parameter_arn === "" || new RegExp("^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/").test(input.openrouter_token_parameter_arn), "openrouter_token_parameter_arn failed validation");
-  requireInput(input.artifact_s3_key.includes(input.release_id), "artifact key must contain release_id");
-  requireInput(Buffer.from(input.artifact_sha256, "hex").toString("base64") === input.artifact_sha256_base64, "artifact SHA-256 encodings disagree");
-  requireInput(input.timeout_seconds - input.work_budget_seconds >= input.completion_reserve_seconds, "timeout must leave the completion reserve after bounded work");
-  requireInput(!input.deepinfra_enabled || (input.deepinfra_token_parameter_arn.length > 0 && input.deepinfra_corpus_digest.length > 0), "DeepInfra requires credentials and corpus evidence");
-  requireInput(!input.cloudflare_enabled || [input.cloudflare_token_parameter_arn, input.cloudflare_account_id, input.cloudflare_adapter_contract_version, input.cloudflare_corpus_digest].every((value) => value.length > 0), "Cloudflare requires credentials and conformance evidence");
-  requireInput(input.deepinfra_enabled || input.cloudflare_enabled, "Select at least one qualified provider");
-  requireInput((input.control_api_invoker_principal === null) === (input.control_api_invoke_source_arn === null), "Configure both control API permission fields, or neither");
-  requireInput(input.codeswitch_provider !== "mai" || new RegExp(`^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/${input.environment_name}/`).test(input.openrouter_token_parameter_arn), "MAI requires an environment-scoped secret ARN");
+  const validateReleaseIdentity = () => {
+    requireInput(new RegExp("^[a-zA-Z0-9-_]{1,64}$").test(input.function_name), "function_name failed validation");
+    requireInput(new RegExp("^[a-z][a-z0-9-]{0,31}$").test(input.environment_name), "environment_name failed validation");
+    requireInput(new RegExp("^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$").test(input.release_id) && !input.release_id.toLowerCase().includes("latest"), "release_id failed validation");
+    requireInput(new RegExp("^sha256:[0-9a-f]{64}$").test(input.release_manifest_digest), "release_manifest_digest failed validation");
+  };
+  validateReleaseIdentity();
+  const validateArtifactLocation = () => {
+    requireInput(new RegExp("^sha256:[0-9a-f]{64}$").test(input.config_digest), "config_digest failed validation");
+    requireInput(new RegExp("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$").test(input.artifact_s3_bucket), "artifact_s3_bucket failed validation");
+    requireInput(input.artifact_s3_key.trim().length > 0 && !input.artifact_s3_key.toLowerCase().includes("latest"), "artifact_s3_key failed validation");
+    requireInput(input.artifact_s3_object_version.trim().length > 0 && !input.artifact_s3_object_version.toLowerCase().includes("latest") && input.artifact_s3_object_version.trim().toLowerCase() !== "null", "artifact_s3_object_version failed validation");
+  };
+  validateArtifactLocation();
+  const validateArtifactRuntime = () => {
+    requireInput(new RegExp("^[0-9a-f]{64}$").test(input.artifact_sha256), "artifact_sha256 failed validation");
+    requireInput(new RegExp("^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$").test(input.artifact_sha256_base64), "artifact_sha256_base64 failed validation");
+    requireInput(new RegExp("^[A-Za-z0-9_./-]+$").test(input.handler), "handler failed validation");
+    requireInput(Number.isInteger(input.timeout_seconds) && input.timeout_seconds >= 61 && input.timeout_seconds <= 900, "timeout_seconds failed validation");
+  };
+  validateArtifactRuntime();
+  const validateExecutionBounds = () => {
+    requireInput(Number.isInteger(input.work_budget_seconds) && input.work_budget_seconds >= 1, "work_budget_seconds failed validation");
+    requireInput(Number.isInteger(input.completion_reserve_seconds) && input.completion_reserve_seconds >= 60, "completion_reserve_seconds failed validation");
+    requireInput(Number.isInteger(input.reserved_concurrency) && input.reserved_concurrency >= 3 && input.reserved_concurrency <= 50, "reserved_concurrency failed validation");
+    requireInput(Number.isInteger(input.memory_size) && input.memory_size >= 128 && input.memory_size <= 4096, "memory_size failed validation");
+  };
+  validateExecutionBounds();
+  const validateProviderLimits = () => {
+    requireInput(Number.isInteger(input.ephemeral_storage_size) && input.ephemeral_storage_size >= 512 && input.ephemeral_storage_size <= 4096, "ephemeral_storage_size failed validation");
+    requireInput(new RegExp("^https://").test(input.control_api_url), "control_api_url failed validation");
+    requireInput(new RegExp("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$").test(input.control_api_audience), "control_api_audience failed validation");
+    requireInput(Number.isInteger(input.max_batch) && input.max_batch >= 3 && input.max_batch <= 50, "max_batch failed validation");
+  };
+  validateProviderLimits();
+  const validateRetryLimits = () => {
+    requireInput(input.deepinfra_adapter_contract_version === "deepinfra-native-whisper-turbo.v1", "deepinfra_adapter_contract_version failed validation");
+    requireInput(input.deepinfra_corpus_digest === "" || new RegExp("^[a-fA-F0-9]{32,128}$").test(input.deepinfra_corpus_digest), "deepinfra_corpus_digest failed validation");
+    requireInput(input.cloudflare_account_id === "" || new RegExp("^[a-f0-9]{32}$").test(input.cloudflare_account_id), "cloudflare_account_id failed validation");
+    requireInput(input.cloudflare_model_slug === "@cf/openai/whisper-large-v3-turbo", "cloudflare_model_slug failed validation");
+  };
+  validateRetryLimits();
+  const validateQueueAndScheduler = () => {
+    requireInput(input.cloudflare_corpus_digest === "" || new RegExp("^[a-fA-F0-9]{32,128}$").test(input.cloudflare_corpus_digest), "cloudflare_corpus_digest failed validation");
+    requireInput(Number.isInteger(input.provider_timeout_ms) && input.provider_timeout_ms >= 100 && input.provider_timeout_ms <= 120000, "provider_timeout_ms failed validation");
+    requireInput(Number.isInteger(input.log_retention_days) && input.log_retention_days >= 1 && input.log_retention_days <= 3653, "log_retention_days failed validation");
+    requireInput(Number.isInteger(input.async_max_event_age_seconds) && input.async_max_event_age_seconds >= 60 && input.async_max_event_age_seconds <= 21600, "async_max_event_age_seconds failed validation");
+  };
+  validateQueueAndScheduler();
+  const validateSecurityAndActions = () => {
+    requireInput(Number.isInteger(input.async_maximum_retry_attempts) && input.async_maximum_retry_attempts >= 0 && input.async_maximum_retry_attempts <= 2, "async_maximum_retry_attempts failed validation");
+    requireInput(["DISABLED", "ENABLED"].includes(input.scheduler_state), "scheduler_state failed validation");
+    requireInput(validJson(input.scheduler_input_json) && input.scheduler_input_json.length <= 1048576, "scheduler_input_json failed validation");
+    requireInput(Number.isInteger(input.scheduler_max_event_age_seconds) && input.scheduler_max_event_age_seconds >= 60 && input.scheduler_max_event_age_seconds <= 86400, "scheduler_max_event_age_seconds failed validation");
+  };
+  validateSecurityAndActions();
+  const validateSchedulerAndArtifactIdentity = () => {
+    requireInput(Number.isInteger(input.scheduler_maximum_retry_attempts) && input.scheduler_maximum_retry_attempts >= 0 && input.scheduler_maximum_retry_attempts <= 185, "scheduler_maximum_retry_attempts failed validation");
+    requireInput(["", "mai"].includes(input.codeswitch_provider), "codeswitch_provider failed validation");
+    requireInput(input.openrouter_token_parameter_arn === "" || new RegExp("^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/").test(input.openrouter_token_parameter_arn), "openrouter_token_parameter_arn failed validation");
+    requireInput(input.artifact_s3_key.includes(input.release_id), "artifact key must contain release_id");
+  };
+  validateSchedulerAndArtifactIdentity();
+  const validateQualifiedProviders = () => {
+    requireInput(Buffer.from(input.artifact_sha256, "hex").toString("base64") === input.artifact_sha256_base64, "artifact SHA-256 encodings disagree");
+    requireInput(input.timeout_seconds - input.work_budget_seconds >= input.completion_reserve_seconds, "timeout must leave the completion reserve after bounded work");
+    requireInput(!input.deepinfra_enabled || (input.deepinfra_token_parameter_arn.length > 0 && input.deepinfra_corpus_digest.length > 0), "DeepInfra requires credentials and corpus evidence");
+    requireInput(!input.cloudflare_enabled || [input.cloudflare_token_parameter_arn, input.cloudflare_account_id, input.cloudflare_adapter_contract_version, input.cloudflare_corpus_digest].every((value) => value.length > 0), "Cloudflare requires credentials and conformance evidence");
+  };
+  validateQualifiedProviders();
+  const validateProviderSelection = () => {
+    requireInput(input.deepinfra_enabled || input.cloudflare_enabled, "Select at least one qualified provider");
+    requireInput((input.control_api_invoker_principal === null) === (input.control_api_invoke_source_arn === null), "Configure both control API permission fields, or neither");
+    requireInput(input.codeswitch_provider !== "mai" || new RegExp(`^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/${input.environment_name}/`).test(input.openrouter_token_parameter_arn), "MAI requires an environment-scoped secret ARN");
+  };
+  validateProviderSelection();
   return input;
 };

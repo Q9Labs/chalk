@@ -50,14 +50,13 @@ export const checkFirewall = (props: DigitalOcean.FirewallProps, attr: DigitalOc
         }),
       )
       .sort();
-  if (
+  const hasFirewallDrift = () =>
     props.name !== attr.name ||
     !deepEqual([...(props.dropletIds ?? [])].sort(), [...attr.dropletIds].sort()) ||
     !deepEqual([...(props.tags ?? [])].sort(), [...attr.tags].sort()) ||
     !deepEqual(normalize(props.inboundRules), normalize(attr.inboundRules)) ||
-    !deepEqual(normalize(props.outboundRules), normalize(attr.outboundRules))
-  )
-    throw new Error("Live firewall differs from tofu state; resolve drift before seeding.");
+    !deepEqual(normalize(props.outboundRules), normalize(attr.outboundRules));
+  if (hasFirewallDrift()) throw new Error("Live firewall differs from tofu state; resolve drift before seeding.");
 };
 
 export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, stack: string) {
@@ -83,7 +82,8 @@ export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, st
   );
   const firewall = getResource(source, "module.node.digitalocean_firewall.node", tofuFirewall);
   const key = getResource(source, "module.node.data.digitalocean_ssh_key.operator", Schema.Struct({ id: Schema.Number, name: Schema.String, fingerprint: Schema.String }));
-  if (!Number.isSafeInteger(Number(node.id)) || Number(node.id) < 1 || !Number.isSafeInteger(key.id) || key.id < 1) return yield* Effect.die("Invalid numeric DigitalOcean identity in state.");
+  const hasInvalidImage = () => !Number.isSafeInteger(Number(node.id)) || Number(node.id) < 1 || !Number.isSafeInteger(key.id) || key.id < 1;
+  if (hasInvalidImage()) return yield* Effect.die("Invalid numeric DigitalOcean identity in state.");
   // Exact IDs from state must still exist; never recover by name after a 404.
   yield* DO.getDroplet({ droplet_id: Number(node.id) }).pipe(Effect.catchTag("NotFound", () => Effect.die("Original SFU Droplet is absent; refusing to seed or recreate.")));
   yield* DO.getFirewall({ firewall_id: firewall.id }).pipe(Effect.catchTag("NotFound", () => Effect.die("Original SFU firewall is absent; refusing to seed or recreate.")));
@@ -91,7 +91,8 @@ export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, st
   const liveKey = (yield* DO.getSshKey({ ssh_key_identifier: String(key.id) })).ssh_key;
   if (liveKey.fingerprint !== key.fingerprint || liveKey.name !== key.name) return yield* Effect.die("Existing operator SSH key differs from state.");
   const environment = stage === "nightly" ? "staging" : "production";
-  if (node.name !== `chalk-sfu-${environment}${stack === "sfu-standby" ? "-standby" : ""}` || firewall.name !== node.name || !deepEqual([...firewall.droplet_ids], [Number(node.id)])) return yield* Effect.die("SFU state does not belong to the selected stack and stage.");
+  const hasWrongIdentity = () => node.name !== `chalk-sfu-${environment}${stack === "sfu-standby" ? "-standby" : ""}` || firewall.name !== node.name || !deepEqual([...firewall.droplet_ids], [Number(node.id)]);
+  if (hasWrongIdentity()) return yield* Effect.die("SFU state does not belong to the selected stack and stage.");
   const config = parseConfig({
     environment,
     size: node.size,
@@ -113,8 +114,8 @@ export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, st
     userData: yield* Effect.tryPromise(() => renderCloudInit(config)),
   };
   const attr = yield* observe(DigitalOcean.Droplet, props, "Node");
-  if (attr.dropletId !== Number(node.id) || attr.createdAt !== node.created_at || attr.ipv4 !== node.ipv4_address || attr.sizeSlug !== node.size || attr.region !== node.region || !deepEqual([...attr.tags].sort(), [...node.tags].sort()))
-    return yield* Effect.die("Live SFU identity or configuration differs from state.");
+  const hasDropletDrift = () => attr.dropletId !== Number(node.id) || attr.createdAt !== node.created_at || attr.ipv4 !== node.ipv4_address || attr.sizeSlug !== node.size || attr.region !== node.region || !deepEqual([...attr.tags].sort(), [...node.tags].sort());
+  if (hasDropletDrift()) return yield* Effect.die("Live SFU identity or configuration differs from state.");
   const fwProps = firewallConfig(config, firewall.name, Number(node.id));
   const fwAttr = yield* observe(DigitalOcean.Firewall, fwProps, "Firewall");
   if (fwAttr.firewallId !== firewall.id) return yield* Effect.die("Live firewall identity differs from state.");

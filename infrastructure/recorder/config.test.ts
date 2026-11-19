@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Schema from "effect/Schema";
-import { parseConfig } from "./config.ts";
+import { parseRecorderConfig } from "./config.ts";
 import { canonicalBucketProps, kmsPolicy, poolFirewallProps } from "./resources.ts";
 import { firewallProps, tofuFirewall } from "../alchemy/seed-sfu.ts";
 
 test("recorder defaults remain zero-idle and do not authorize mutations", () => {
-  const config = parseConfig({});
+  const config = parseRecorderConfig({});
   assert.equal(config.enable_apply, false);
   assert.equal(config.desired_capture_nodes, 0);
   assert.equal(config.desired_render_nodes, 0);
@@ -14,23 +14,23 @@ test("recorder defaults remain zero-idle and do not authorize mutations", () => 
 });
 
 test("capture demand includes the free-slot floor and the largest qualified constraint", () => {
-  const config = parseConfig({ reserved_capture_episodes: 3, ready_spare: 1, reserved_capture_participants: 100, reserved_capture_input_mbps: 40 });
+  const config = parseRecorderConfig({ reserved_capture_episodes: 3, ready_spare: 1, reserved_capture_participants: 100, reserved_capture_input_mbps: 40 });
   assert.equal(config.desired_capture_nodes, 4);
-  assert.throws(() => parseConfig({ reserved_capture_episodes: 10, ready_spare: 1 }), /exceeds capture_max_nodes/);
-  assert.throws(() => parseConfig({ reserved_capture_participants: 101 }), /launch ceiling/);
-  assert.throws(() => parseConfig({ render_desired_nodes: 1 }), /external reconciliation/);
+  assert.throws(() => parseRecorderConfig({ reserved_capture_episodes: 10, ready_spare: 1 }), /exceeds capture_max_nodes/);
+  assert.throws(() => parseRecorderConfig({ reserved_capture_participants: 101 }), /launch ceiling/);
+  assert.throws(() => parseRecorderConfig({ render_desired_nodes: 1 }), /external reconciliation/);
 });
 
 test("production and mutations fail closed without their existing evidence contracts", () => {
-  assert.throws(() => parseConfig({ environment: "production" }), /explicit existing R2 inventory/);
-  assert.throws(() => parseConfig({ enable_apply: true }), /requires evidence/);
-  assert.throws(() => parseConfig({ control_addresses: ["192.0.2.0/24"] }), /individual IPv4/);
-  assert.throws(() => parseConfig({ capture_provider_token: "not-a-real-token" }), /embedded credentials/);
-  assert.throws(() => parseConfig({ reserved_capture_meetings: 1 }), /unknown fields/);
+  assert.throws(() => parseRecorderConfig({ environment: "production" }), /explicit existing R2 inventory/);
+  assert.throws(() => parseRecorderConfig({ enable_apply: true }), /requires evidence/);
+  assert.throws(() => parseRecorderConfig({ control_addresses: ["192.0.2.0/24"] }), /individual IPv4/);
+  assert.throws(() => parseRecorderConfig({ capture_provider_token: "not-a-real-token" }), /embedded credentials/);
+  assert.throws(() => parseRecorderConfig({ reserved_capture_meetings: 1 }), /unknown fields/);
 });
 
 test("recorder firewalls stay unattached and outbound-only, including SFU media port 1473", () => {
-  const config = parseConfig({ control_addresses: ["192.0.2.1/32"] });
+  const config = parseRecorderConfig({ control_addresses: ["192.0.2.1/32"] });
   const roles: ("capture" | "render")[] = ["capture", "render"];
   for (const role of roles) {
     const firewall = poolFirewallProps(config, role);

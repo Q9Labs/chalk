@@ -74,19 +74,20 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     "terraform_data.apply_gate",
     Schema.Struct({ input: Schema.Struct({ value: Schema.Struct({ desired_capture_nodes: Schema.Number, desired_render_nodes: Schema.Number, environment: Schema.String, global_recorder_node_count: Schema.Number, release_id: Schema.String, staging_evidence_digest: Schema.String }) }) }),
   ).input.value;
-  if (
-    applied.environment !== stage ||
-    key.tags.chalk_environment !== stage ||
-    applied.release_id !== key.tags.chalk_release ||
-    key.description !== `Chalk ${stage} recorder bundle KEK` ||
-    alias.name !== `alias/chalk-recorder-${stage}` ||
-    alias.target_key_id !== key.id ||
-    cors.account_id !== bucket.account_id ||
-    lifecycle.account_id !== bucket.account_id ||
-    cors.bucket_name !== bucket.name ||
-    lifecycle.bucket_name !== bucket.name
-  )
-    return yield* Effect.die("Recorder state resources do not share the selected stage and identity.");
+  const hasWrongIdentity = () =>
+    [
+      applied.environment !== stage,
+      key.tags.chalk_environment !== stage,
+      applied.release_id !== key.tags.chalk_release,
+      key.description !== `Chalk ${stage} recorder bundle KEK`,
+      alias.name !== `alias/chalk-recorder-${stage}`,
+      alias.target_key_id !== key.id,
+      cors.account_id !== bucket.account_id,
+      lifecycle.account_id !== bucket.account_id,
+      cors.bucket_name !== bucket.name,
+      lifecycle.bucket_name !== bucket.name,
+    ].some(Boolean);
+  if (hasWrongIdentity()) return yield* Effect.die("Recorder state resources do not share the selected stage and identity.");
   if (stage === "production") {
     const cutover = getResource(
       source,
@@ -96,8 +97,8 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     if (cutover.episode_kms_context_cutover_complete === cutover.legacy_kms_context_decrypt_policy_active) return yield* Effect.die("Invalid production KMS context cutover state.");
   }
   const keyAttr = yield* lookup(AWS.KMS.Key, { keyId: key.id });
-  if (keyAttr.keyArn !== key.arn || keyAttr.description !== key.description || !keyAttr.enabled || !keyAttr.keyRotationEnabled || semanticJson(keyAttr.policy ?? "null") !== semanticJson(key.policy) || semanticJson(keyAttr.tags) !== semanticJson(key.tags))
-    return yield* Effect.die("Live recorder KMS key differs from tofu state.");
+  const hasKeyDrift = () => [keyAttr.keyArn !== key.arn, keyAttr.description !== key.description, !keyAttr.enabled, !keyAttr.keyRotationEnabled, semanticJson(keyAttr.policy ?? "null") !== semanticJson(key.policy), semanticJson(keyAttr.tags) !== semanticJson(key.tags)].some(Boolean);
+  if (hasKeyDrift()) return yield* Effect.die("Live recorder KMS key differs from tofu state.");
   const aliasAttr = yield* lookup(AWS.KMS.Alias, { aliasName: alias.name });
   if (aliasAttr.targetKeyId !== key.id) return yield* Effect.die("Live KMS alias target differs from state.");
   const rows: CreatedResourceState[] = [
@@ -132,23 +133,25 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
   rows.push(row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps }), bucketAttr, [], "protect"));
   let capture = 0;
   const roles: ("capture" | "render")[] = ["capture", "render"];
-  for (const role of roles) {
+  const seedPool = Effect.fn(function* (role: "capture" | "render") {
     const contract = getResource(source, `module.${role}.terraform_data.runtime_capacity_contract`, runtime).input.value;
-    if (
-      !Number.isSafeInteger(contract.desired_nodes) ||
-      contract.desired_nodes < 0 ||
-      !Number.isSafeInteger(contract.max_nodes) ||
-      contract.max_nodes < 1 ||
-      contract.desired_nodes > contract.max_nodes ||
-      contract.pool !== `chalk-recorder-${role}` ||
-      (role === "render" && (contract.desired_nodes !== 0 || contract.max_nodes !== 10))
-    )
-      return yield* Effect.die("Invalid recorder runtime capacity contract.");
+    const hasInvalidCapacity = () =>
+      [
+        !Number.isSafeInteger(contract.desired_nodes),
+        contract.desired_nodes < 0,
+        !Number.isSafeInteger(contract.max_nodes),
+        contract.max_nodes < 1,
+        contract.desired_nodes > contract.max_nodes,
+        contract.pool !== `chalk-recorder-${role}`,
+        role === "render" && (contract.desired_nodes !== 0 || contract.max_nodes !== 10),
+      ].some(Boolean);
+    if (hasInvalidCapacity()) return yield* Effect.die("Invalid recorder runtime capacity contract.");
     if (role === "capture") capture = contract.desired_nodes;
     if (contract.desired_nodes !== (role === "capture" ? applied.desired_capture_nodes : applied.desired_render_nodes)) return yield* Effect.die("Recorder runtime contract and apply gate capacity differ.");
     const tag = getResource(source, `module.${role}.digitalocean_tag.pool`, Schema.Struct({ id: Schema.String, name: Schema.String }));
     const fw = getResource(source, `module.${role}.digitalocean_firewall.${role}`, tofuFirewall);
-    if (tag.name !== contract.pool || tag.id !== tag.name || fw.name !== `chalk-recorder-${role}-${stage}` || fw.droplet_ids.length || fw.inbound_rule.length || fw.tags?.length) return yield* Effect.die("Recorder policies must remain outbound-only, unattached and correctly named.");
+    const hasInvalidPoolPolicy = () => [tag.name !== contract.pool, tag.id !== tag.name, fw.name !== `chalk-recorder-${role}-${stage}`, fw.droplet_ids.length, fw.inbound_rule.length, fw.tags?.length].some(Boolean);
+    if (hasInvalidPoolPolicy()) return yield* Effect.die("Recorder policies must remain outbound-only, unattached and correctly named.");
     const sourceProps = firewallProps(fw);
     const props = poolFirewallProps({ environment: Schema.decodeUnknownSync(Schema.Literals(["nightly", "production"]))(stage), control_addresses: fw.outbound_rule.find((rule) => rule.protocol === "tcp" && rule.port_range === recorderControlPorts)?.destination_addresses ?? [] }, role);
     const fwResource = role === "capture" ? CaptureFirewall : RenderFirewall;
@@ -159,7 +162,8 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     checkFirewall(sourceProps, fwAttr);
     checkFirewall(props, fwAttr);
     rows.push(row(fwResource.Type, role === "capture" ? "CaptureFirewall" : "RenderFirewall", fw.id, props, fwAttr, [], "protect"), row(tagResource.Type, role === "capture" ? "CaptureTag" : "RenderTag", tag.id, { name: tag.name }, tagAttr, [], "protect"));
-  }
+  });
+  for (const role of roles) yield* seedPool(role);
   if (applied.global_recorder_node_count !== capture + applied.desired_render_nodes || applied.global_recorder_node_count > 20) return yield* Effect.die("Recorder compute demand exceeds or disagrees with the global contract.");
   return rows;
 });

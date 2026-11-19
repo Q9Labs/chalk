@@ -33,7 +33,7 @@ const canonicalRules = (rules: readonly LifecycleRule[]) =>
     .map((rule) => ({ ...rule, storageClassTransitions: rule.storageClassTransitions ?? [] }))
     .sort((left, right) => left.id.localeCompare(right.id));
 
-export interface R2Lifecycle extends Resource<"Chalk.R2.Lifecycle", { accountId: string; bucketName: string; rules: readonly LifecycleRule[]; finalizedPrefix: string }, { accountId: string; bucketName: string; rules: readonly LifecycleRule[] }> {}
+interface R2Lifecycle extends Resource<"Chalk.R2.Lifecycle", { accountId: string; bucketName: string; rules: readonly LifecycleRule[]; finalizedPrefix: string }, { accountId: string; bucketName: string; rules: readonly LifecycleRule[] }> {}
 export const R2Lifecycle = Resource<R2Lifecycle>("Chalk.R2.Lifecycle");
 
 export function replaceLifecycleRules(current: readonly LifecycleRule[], managedIds: readonly string[], desired: readonly LifecycleRule[]): LifecycleRule[] {

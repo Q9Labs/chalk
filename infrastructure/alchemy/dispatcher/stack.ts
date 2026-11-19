@@ -16,7 +16,7 @@ import { resourceProps } from "./resources.ts";
 
 export const stackName = "transcription-dispatcher";
 export const dispatcherProviders = Layer.mergeAll(providers, functionProvider.pipe(Layer.provide(providers)), alarmProvider);
-export const storedInputs = (value: unknown) => {
+const storedInputs = (value: unknown) => {
   const output = Schema.decodeUnknownSync(Schema.Struct({ dispatcher_inputs: Schema.Redacted(Schema.Unknown) }))(value);
   return parseInputs(Redacted.value(output.dispatcher_inputs));
 };

@@ -84,11 +84,11 @@ acknowledgments, the existing release ID and the original rule IDs.
 
 Expected resource actions after a valid seed and matching inputs:
 
-| Stack | Expected detailed plan |
-| --- | --- |
-| `sfu` | `Node noop`, `Firewall noop` |
-| `sfu-standby` | `Node noop`, `Firewall noop` |
-| `recorder` | `RecordingKey`, `RecordingAlias`, `RecordingBucket`, `CaptureTag`, `RenderTag`, `CaptureFirewall`, `RenderFirewall`: all `noop` |
+| Stack         | Expected detailed plan                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `sfu`         | `Node noop`, `Firewall noop`                                                                                                    |
+| `sfu-standby` | `Node noop`, `Firewall noop`                                                                                                    |
+| `recorder`    | `RecordingKey`, `RecordingAlias`, `RecordingBucket`, `CaptureTag`, `RenderTag`, `CaptureFirewall`, `RenderFirewall`: all `noop` |
 
 These are the acceptance criteria, not production receipts. Output initialization
 may appear separately because legacy outputs have not been written to Alchemy.

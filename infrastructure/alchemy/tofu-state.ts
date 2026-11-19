@@ -52,7 +52,7 @@ export const row = <P extends object, A extends object>(resourceType: string, lo
 });
 
 export type TofuState = Schema.Schema.Type<typeof tofuState>;
-export const resourceAddress = (resource: TofuState["resources"][number]): string => `${resource.module ? `${resource.module}.` : ""}${resource.mode === "data" ? "data." : ""}${resource.type}.${resource.name}`;
+const resourceAddress = (resource: TofuState["resources"][number]): string => `${resource.module ? `${resource.module}.` : ""}${resource.mode === "data" ? "data." : ""}${resource.type}.${resource.name}`;
 export const expectResources = (source: TofuState, addresses: string[]) => {
   const managed = source.resources.filter((resource) => resource.mode === "managed");
   if (managed.length !== addresses.length || new Set(managed.map(resourceAddress)).size !== addresses.length || managed.some((resource) => !addresses.includes(resourceAddress(resource)))) throw new Error("Unexpected managed resources; refusing partial migration.");

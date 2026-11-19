@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 
-export interface RecordingBucket extends Resource<"Chalk.R2.RecordingBucket", Cloudflare.R2.BucketProps, Cloudflare.R2.Bucket["Attributes"]> {}
+interface RecordingBucket extends Resource<"Chalk.R2.RecordingBucket", Cloudflare.R2.BucketProps, Cloudflare.R2.Bucket["Attributes"]> {}
 export const RecordingBucket = Resource<RecordingBucket>("Chalk.R2.RecordingBucket");
 
 // Upstream Bucket.read copies CORS/lifecycle from old attributes instead of

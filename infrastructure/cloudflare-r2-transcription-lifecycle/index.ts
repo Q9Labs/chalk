@@ -2,6 +2,8 @@ import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import { R2Lifecycle, validateLifecycleRules } from "../alchemy/r2-lifecycle.ts";
 
+export { r2LifecycleProvider } from "../alchemy/r2-lifecycle.ts";
+
 export interface TranscriptionLifecycleProps {
   accountId: string;
   bucketName: string;
