@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "infra": "tsx infra.ts",
-    "check-types": "node platform/check-preview-build.mjs && tsx infra.ts check && tsc --noEmit",
+    "infra": "tsx run-stack.ts",
+    "check-types": "node platform/check-preview-build.mjs && tsx run-stack.ts check && tsc --noEmit",
     "test:digitalocean": "tsx --test recorder/config.test.ts",
     "test:dispatcher": "tsx --test transcription-dispatcher/*.test.ts releases/*.test.ts providers/aws-dispatcher-alarm.test.ts",
     "test": "tsx --test platform/*.test.ts providers/*.test.ts migration/*.test.ts recorder/*.test.ts transcription-dispatcher/*.test.ts releases/*.test.ts"

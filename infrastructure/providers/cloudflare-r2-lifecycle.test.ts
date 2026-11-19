@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeRules, replaceLifecycleRules, validateLifecycleRules } from "./cloudflare-r2-lifecycle.ts";
-import { transcriptionLifecycleConfig } from "../components/r2-transcription-lifecycle.ts";
+import { transcriptionLifecycleConfig } from "../transcription-storage/temporary-object-cleanup.ts";
 
 const input = { accountId: "a".repeat(32), bucketName: "test-transcripts" };
 

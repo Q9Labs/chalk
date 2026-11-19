@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import * as Schema from "effect/Schema";
 
-export const planSchema = Schema.Struct({
+const planSchema = Schema.Struct({
   resources: Schema.Array(Schema.Struct({ id: Schema.String, type: Schema.String, action: Schema.String, before: Schema.MutableJson, after: Schema.MutableJson })),
   outputs: Schema.Struct({ before: Schema.MutableJson, after: Schema.MutableJson }),
 });
@@ -17,7 +17,7 @@ export function object(value: Schema.MutableJson | undefined) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Plan property must be a completely known object");
   return value;
 }
-export function unredact(value: Schema.MutableJson): Schema.MutableJson {
+function unredact(value: Schema.MutableJson): Schema.MutableJson {
   if (Array.isArray(value)) return value.map(unredact);
   if (value !== null && typeof value === "object") {
     if (Object.keys(value).length === 1 && "__redacted__" in value) return unredact(value.__redacted__);

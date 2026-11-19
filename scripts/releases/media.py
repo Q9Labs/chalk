@@ -26,7 +26,7 @@ from github_release import GitHub, payload, retain, retained
 INPUTS = {
     'capture': ('apps/api/', 'features/media/sfu/protocol/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
     'render': ('apps/api/', 'features/media/sfu/protocol/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'dispatcher': ('infrastructure/transcription-dispatcher/', 'infrastructure/transcription-dispatcher/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'dispatcher': ('infrastructure/transcription-dispatcher/', 'infrastructure/platform/', 'infrastructure/providers/', 'infrastructure/releases/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
     'dispatcher_configuration': ('infrastructure/transcription-dispatcher/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.

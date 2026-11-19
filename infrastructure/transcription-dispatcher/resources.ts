@@ -15,13 +15,13 @@ export const resourceProps = (input: DispatcherInputs, account: string, region: 
   const logName = `/aws/lambda/${input.function_name}`;
   const secrets = [input.api_workload_auth_parameter_arn, ...(input.codeswitch_provider === "mai" ? [input.openrouter_token_parameter_arn] : []), ...(input.deepinfra_enabled ? [input.deepinfra_token_parameter_arn] : []), ...(input.cloudflare_enabled ? [input.cloudflare_token_parameter_arn] : [])];
   const tags = { chalk_environment: input.environment_name, chalk_component: "transcription-dispatcher" };
-  const sourceAccount = input.environment_name === "nightly" ? { StringEquals: { "aws:SourceAccount": account } } : {};
+  const sourceAccount = input.environment_name !== "production" ? { StringEquals: { "aws:SourceAccount": account } } : {};
   const executionPolicy = policy([
     allow("WriteOwnLogs", ["logs:CreateLogStream", "logs:PutLogEvents"], [`arn:aws:logs:${region}:${account}:log-group:${logName}:*`]),
     allow("ReadOnlyTranscriptionAndApiSecrets", ["ssm:GetParameter", "ssm:GetParameters"], secrets),
     allow("WriteOnlyAsyncFailureDestination", ["sqs:SendMessage"], [queueArn("async-failure")]),
     ...(input.ssm_kms_key_arns.length
-      ? [{ ...allow("DecryptOnlyConfiguredSsmKeys", ["kms:Decrypt"], [...input.ssm_kms_key_arns]), Condition: { StringEquals: { "kms:ViaService": `ssm.${region}.amazonaws.com`, ...(input.environment_name === "nightly" ? { "kms:EncryptionContext:PARAMETER_ARN": secrets } : {}) } } }]
+      ? [{ ...allow("DecryptOnlyConfiguredSsmKeys", ["kms:Decrypt"], [...input.ssm_kms_key_arns]), Condition: { StringEquals: { "kms:ViaService": `ssm.${region}.amazonaws.com`, ...(input.environment_name !== "production" ? { "kms:EncryptionContext:PARAMETER_ARN": secrets } : {}) } } }]
       : []),
   ]);
   const executionRole: AWS.IAM.Role["Props"] = {
@@ -38,7 +38,7 @@ export const resourceProps = (input: DispatcherInputs, account: string, region: 
         Effect: "Allow",
         Action: ["sts:AssumeRole"],
         Principal: { Service: ["scheduler.amazonaws.com"] },
-        ...(input.environment_name === "nightly" ? { Condition: { ...sourceAccount, ArnEquals: { "aws:SourceArn": `arn:aws:scheduler:${region}:${account}:schedule-group/${input.scheduler_group_name}` } } } : {}),
+        ...(input.environment_name !== "production" ? { Condition: { ...sourceAccount, ArnEquals: { "aws:SourceArn": `arn:aws:scheduler:${region}:${account}:schedule-group/${input.scheduler_group_name}` } } } : {}),
       },
     ]),
     inlinePolicies: { [`${input.function_name}-scheduler-target`]: policy([allow("InvokeDispatcherOnly", ["lambda:InvokeFunction"], [functionArn]), allow("WriteSchedulerDlqOnly", ["sqs:SendMessage"], [queueArn("scheduler-dlq")])]) },

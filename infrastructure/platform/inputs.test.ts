@@ -6,14 +6,14 @@ import { test } from "node:test";
 import * as Schema from "effect/Schema";
 import { loadInputs } from "./inputs.ts";
 import { credential } from "./credentials.ts";
-import { requireCutover, selectStack } from "../registry.ts";
+import { requireDeployable, selectStack } from "../registry.ts";
 
-test("registry rejects absent stages and deploys before cutover/seed", () => {
-  assert.throws(() => selectStack("archive-cdn", "production"), /Unknown/);
-  assert.throws(() => selectStack("recording-control-address", "production"), /Unknown/);
-  assert.throws(() => requireCutover(selectStack("transcription-dispatcher", "production")), /not cut over and seeded/);
-  assert.throws(() => requireCutover(selectStack("direct-sync", "nightly")), /not cut over and seeded/);
-  assert.equal(requireCutover(selectStack("archive-cdn", "nightly")).seeded, true);
+test("registry rejects persistent Nightly, retired deployments and unseeded production", () => {
+  assert.throws(() => selectStack("transcription-dispatcher", "nightly"));
+  assert.throws(() => selectStack("recorder-runtime-downloads", "production"), /Unsupported/);
+  assert.throws(() => selectStack("recorder-control-endpoint", "nightly-test"), /Unsupported/);
+  assert.throws(() => requireDeployable(selectStack("transcription-dispatcher", "production").target), /not cut over and seeded/);
+  assert.equal(requireDeployable(selectStack("transcription-dispatcher", "nightly-test").target).stageKind, "ephemeral");
 });
 test("one input file boundary validates without disclosing private values", async () => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-input-test-"));

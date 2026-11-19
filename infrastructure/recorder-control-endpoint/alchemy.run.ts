@@ -5,7 +5,7 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { loadConfig } from "./config.ts";
-import { nightly, providers, state } from "../platform/config.ts";
+import { retiredStage, providers, state } from "../platform/config.ts";
 import { EipAssociation, associationProvider } from "../providers/aws-eip-association.ts";
 
 export default Alchemy.Stack(
@@ -15,7 +15,7 @@ export default Alchemy.Stack(
     state,
   },
   Effect.gen(function* () {
-    const environment = yield* nightly;
+    const environment = yield* retiredStage;
     const { instance_id: instanceId } = yield* Effect.tryPromise(loadConfig);
     const host = yield* ec2.describeInstances({ InstanceIds: [instanceId] });
     const instance = host.Reservations?.flatMap((reservation) => reservation.Instances ?? [])[0];

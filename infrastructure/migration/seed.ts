@@ -20,7 +20,7 @@ import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
-import { awsProviders, state, environmentName } from "../platform/config.ts";
+import { awsProviders, state } from "../platform/config.ts";
 import { seedDispatcher } from "./transcription-dispatcher.ts";
 import { dispatcherProviders } from "../transcription-dispatcher/alchemy.run.ts";
 import { EipAssociation, readAssociation } from "../providers/aws-eip-association.ts";
@@ -28,6 +28,8 @@ import { BucketPolicy, canonicalPolicy, readPolicy } from "../providers/aws-buck
 
 import { directSyncRows } from "./direct-sync.ts";
 import { tofuState, decode, lookup, row } from "./opentofu.ts";
+
+const environmentName = Schema.Literals(["nightly", "production"]);
 
 const providers = awsProviders(process.argv[2] === "direct-sync" ? (process.env.AWS_REGION ?? "ap-southeast-1") : "ap-southeast-1");
 

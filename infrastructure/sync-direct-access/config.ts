@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { loadInputs } from "../platform/inputs.ts";
 
-export const directSyncConfig = Schema.Struct({
+const directSyncConfig = Schema.Struct({
   instanceId: Schema.String,
   hostname: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/))),
   zoneId: Schema.String,

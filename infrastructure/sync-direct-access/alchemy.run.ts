@@ -6,7 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { requireCloudflareCredentials } from "../platform/credentials.ts";
-import { nightly, awsProviders, state } from "../platform/config.ts";
+import { retiredStage, awsProviders, state } from "../platform/config.ts";
 import { NetworkInterfaceSecurityGroup, networkInterfaceSecurityGroupProvider } from "../providers/aws-network-interface-security-group.ts";
 import { loadConfig } from "./config.ts";
 
@@ -18,7 +18,7 @@ export default Alchemy.Stack(
     state,
   },
   Effect.gen(function* () {
-    const environment = yield* nightly;
+    const environment = yield* retiredStage;
     const config = yield* Effect.tryPromise(loadConfig);
     requireCloudflareCredentials();
     // Invoke the read-only lookup providers directly because the postcondition must

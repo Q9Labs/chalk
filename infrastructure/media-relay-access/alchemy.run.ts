@@ -7,11 +7,11 @@ import { requireCloudflareCredentials } from "../platform/credentials.ts";
 import { turnStage } from "./config.ts";
 import * as Layer from "effect/Layer";
 import { state } from "../platform/config.ts";
-import { guardedTurnKeyProvider } from "../providers/cloudflare-turn-key.ts";
+import { guardedTurnKeyProvider } from "../providers/cloudflare-media-relay-key.ts";
 
 const cloudflare = Cloudflare.providers();
 export default Alchemy.Stack(
-  "cloudflare-turn",
+  "media-relay-access",
   { providers: Layer.merge(cloudflare, guardedTurnKeyProvider.pipe(Layer.provide(cloudflare))), state },
   Effect.gen(function* () {
     requireCloudflareCredentials();

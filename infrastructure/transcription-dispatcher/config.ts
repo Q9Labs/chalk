@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { parseStage } from "../platform/stages.ts";
 
 const inputSchema = Schema.Struct({
   function_name: Schema.String,
@@ -275,5 +276,11 @@ export const parseInputs = (value: unknown): DispatcherInputs => {
     requireInput(input.codeswitch_provider !== "mai" || new RegExp(`^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/${input.environment_name}/`).test(input.openrouter_token_parameter_arn), "MAI requires an environment-scoped secret ARN");
   };
   validateProviderSelection();
+  const stage = parseStage(input.environment_name);
+  if (stage.kind === "ephemeral") {
+    requireInput(input.function_name === `chalk-${stage.name}-transcription-dispatcher`, "Ephemeral function_name must be derived from its stage");
+    requireInput(input.scheduler_name === `chalk-${stage.name}-transcription-reconcile` && input.scheduler_group_name === "default", "Ephemeral scheduler must be stage-scoped in the default group");
+    requireInput(input.scheduler_state === "DISABLED", "Ephemeral proof schedules remain disabled; the proof invokes releases explicitly");
+  }
   return input;
 };

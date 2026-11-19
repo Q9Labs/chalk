@@ -7,10 +7,11 @@ import { checkPlan, at, object, plainPlan, type Plan } from "../releases/policy.
 import { jsonValue } from "../releases/plan-view.ts";
 
 const original = parseInputs({
-  function_name: "test-dispatcher", environment_name: "nightly", release_id: "release-old", release_manifest_digest: `sha256:${"ab".repeat(32)}`,
+  function_name: "chalk-nightly-test-transcription-dispatcher", environment_name: "nightly-test", release_id: "release-old", release_manifest_digest: `sha256:${"ab".repeat(32)}`,
   config_digest: `sha256:${"cd".repeat(32)}`, artifact_s3_bucket: "test-artifacts", artifact_s3_key: "release-old/code.zip",
   artifact_s3_object_version: "old-version", artifact_sha256: "ab".repeat(32), artifact_sha256_base64: Buffer.from("ab".repeat(32), "hex").toString("base64"),
   control_api_url: "https://api.example.test", control_api_audience: "test-control-api", api_workload_auth_parameter_arn: "arn:workload",
+  scheduler_name: "chalk-nightly-test-transcription-reconcile",
   scheduler_state: "DISABLED", privacy_gate_accepted: true, deepinfra_enabled: true, deepinfra_token_parameter_arn: "arn:provider", deepinfra_corpus_digest: "ef".repeat(32),
   ssm_kms_key_arns: ["arn:kms"],
 });
@@ -63,7 +64,10 @@ test("rejects_partial_plan_and_resource_type_swap", () => {
   if (!row) throw new Error("Fixture missing Function");
   row.type = "AWS.IAM.User";
   assert.throws(() => verify(swapped), /unexpected resource/);
-  const duplicate = fixture(); duplicate.resources.push(structuredClone(row));
+  const duplicate = fixture();
+  const existing = duplicate.resources[0];
+  if (!existing) throw new Error("Fixture missing first row");
+  duplicate.resources.push(structuredClone(existing));
   assert.throws(() => verify(duplicate), /unexpected resource/);
 });
 const binding = parseInputs({ ...original, release_id: "release-new", artifact_s3_key: "release-new/code.zip", artifact_s3_object_version: "new-version", config_digest: `sha256:${"12".repeat(32)}` });
@@ -76,13 +80,13 @@ test("binding_changes_only_release_identity", () => {
   const plan = fixture(binding); object(change(plan, "Function").code).sha256 = "different-bytes";
   assert.throws(() => verify(plan, binding, "binding"), /outside the allowlist/);
 });
-const release = parseInputs({ ...binding, artifact_sha256: "34".repeat(32), artifact_sha256_base64: Buffer.from("34".repeat(32), "hex").toString("base64"), release_manifest_digest: `sha256:${"56".repeat(32)}`, deepinfra_corpus_digest: "78".repeat(32), scheduler_state: "ENABLED" });
+const release = parseInputs({ ...binding, artifact_sha256: "34".repeat(32), artifact_sha256_base64: Buffer.from("34".repeat(32), "hex").toString("base64"), release_manifest_digest: `sha256:${"56".repeat(32)}`, deepinfra_corpus_digest: "78".repeat(32), scheduler_state: "DISABLED" });
 test("media_release_changes_only_exact_artifact_and_metadata", () => {
   verify(fixture(release), release, "release");
   const plan = fixture(release); change(plan, "Reconcile").scheduleExpression = "rate(1 hour)";
   assert.throws(() => verify(plan, release, "release"), /outside the allowlist/);
 });
-const secret = `arn:aws:ssm:ap-southeast-1:${"0".repeat(12)}:parameter/chalk/nightly/mai`;
+const secret = `arn:aws:ssm:ap-southeast-1:${"0".repeat(12)}:parameter/chalk/nightly-test/mai`;
 const mai = parseInputs({ ...original, codeswitch_provider: "mai", openrouter_token_parameter_arn: secret, config_digest: `sha256:${"90".repeat(32)}` });
 test("mai_does_not_expand_other_permissions_or_change_code", () => {
   verify(fixture(mai), mai, "mai");
@@ -101,6 +105,8 @@ test("mai_does_not_expand_other_permissions_or_change_code", () => {
 test("unrelated_outputs_and_noop_prop_changes_are_rejected", () => {
   const outputs = plainPlan(fixture()); object(outputs.outputs.after).unrelated = "changed";
   assert.throws(() => verify(outputs), /names changed/);
+  const egress = plainPlan(fixture()); object(egress.outputs.after).required_egress_destinations = ["expanded"];
+  assert.throws(() => verify(egress), /unrelated/);
   const props = plainPlan(fixture()); const row = props.resources.find((row) => row.id === "Function");
   if (!row) throw new Error("Fixture missing Function");
   object(row.after).extra = "unapproved";

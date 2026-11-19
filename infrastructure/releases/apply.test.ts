@@ -12,8 +12,8 @@ import { planView } from "./plan-view.ts";
 interface ExternalResource extends Resource<"Test.Dispatcher.External", { value: number }, { value: number }> {}
 const ExternalResource = Resource<ExternalResource>("Test.Dispatcher.External");
 
-for (const apply of [true, false]) {
-  test(`driver decision ${JSON.stringify(apply)} applies only the checked in-memory plan`, async () => {
+for (const { apply, allowed } of [{ apply: true, allowed: 2 }, { apply: false, allowed: 2 }, { apply: true, allowed: 3 }]) {
+  test(`apply=${apply}, allowed=${allowed}: only a checked in-memory plan can apply`, async () => {
     let desired = 2;
     let observed = 1;
     let evaluations = 0;
@@ -55,7 +55,7 @@ for (const apply of [true, false]) {
         return { dispatcher_inputs: { identity: "test" } };
       }),
     );
-    await Effect.runPromise(
+    const run = Effect.runPromise(
       Effect.gen(function* () {
         const plan = yield* Alchemist.plan({ stack, stage: "nightly", operation: "deploy" });
         const view = yield* planView(plan, { dispatcher_inputs: { identity: "test" } }).pipe(Effect.provide(plan.context));
@@ -65,11 +65,12 @@ for (const apply of [true, false]) {
         );
         // A second stack evaluation would deploy 99, violating the checked plan.
         desired = 99;
-        const applied = yield* applyCheckedPlan(plan, view, { resources: [{ id: "Function", type: ExternalResource.Type, required: true, patches: [{ path: ["value"], value: 2 }] }], inputs: [], outputs: [], requestedInputs: { identity: "test" } }, apply);
+        const applied = yield* applyCheckedPlan(plan, view, { resources: [{ id: "Function", type: ExternalResource.Type, required: true, patches: [{ path: ["value"], value: allowed }] }], inputs: [], outputs: [], requestedInputs: { identity: "test" } }, apply);
         assert.equal(applied, apply);
       }).pipe(Effect.provide(Alchemist.layer()), Effect.scoped),
     );
-    assert.equal(observed, apply ? 2 : 1);
+    if (allowed === 2) await run; else await assert.rejects(run, /outside the allowlist/);
+    assert.equal(observed, apply && allowed === 2 ? 2 : 1);
     assert.equal(evaluations, 1);
   });
 }

@@ -5,7 +5,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { publicKey } from "./config.ts";
-import { nightly, providers, state } from "../platform/config.ts";
+import { retiredStage, providers, state } from "../platform/config.ts";
 import { BucketPolicy, bucketPolicyProvider, canonicalPolicy } from "../providers/aws-bucket-policy.ts";
 
 export default Alchemy.Stack(
@@ -15,7 +15,7 @@ export default Alchemy.Stack(
     state,
   },
   Effect.gen(function* () {
-    const environment = yield* nightly;
+    const environment = yield* retiredStage;
     const { accountId } = yield* AWSEnvironment.current;
     const bucketName = `chalk-nightly-artifacts-${accountId}`;
     const bucket = AWS.S3.Bucket.lookup({ bucketName });

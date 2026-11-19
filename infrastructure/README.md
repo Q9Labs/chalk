@@ -1,332 +1,142 @@
 # Infrastructure
 
-Public deployable support tooling lives here.
+Stacks describe product capabilities, not environments. Each registered stack has
+`<component>/alchemy.run.ts`, `config.ts` and `README.md`. SFU variants share one
+component. Runtime assets under `sfu`, `recorder` and `managed-episode` stay put.
 
-## Service Health And Uptime Monitoring
+## Vocabulary
 
-Every new deployable service must expose an independently checkable health or
-synthetic target and join Chalk's uptime coverage in the same change. Add a
-stable, non-secret monitor key and target to `uptime-worker/src/index.ts`, define
-the expected response and severity, and add focused tests that prove the target
-is checked and its result is ingested.
+| Name | What it is for |
+| --- | --- |
+| `recorder-runtime-downloads` | Delivers signed recorder software bundles to recorder hosts, **not finished user recordings**. |
+| `recorder-control-endpoint` | Gives a recorder controller a stable public network endpoint. |
+| `sync-direct-access` | Connects clients directly to a Sync host without its tunnel. |
+| `media-relay-access` | Supplies credentials for relaying media when direct connectivity fails. |
+| `sfu` / `sfu-standby` | Runs the primary / standby media forwarding server. |
+| `recorder` | Provisions capture and render workers and recording storage. |
+| `transcription-dispatcher` | Dispatches transcription work and reconciles stalled jobs. |
+| `transcription-storage` | Defines temporary transcription-object cleanup; it is an unused reusable declaration, not an eighth stack. |
 
-The monitor must cover the user-visible dependency rather than a handler that
-can stay green while the service is unusable. Verify at least one scheduled run,
-the result in the operational surface, and a real failure-to-recovery
-transition. Add or update status-page projection when the service is a distinct
-customer-visible component. Deployment-specific URLs, monitor IDs, alert
-recipients, and credentials stay in private configuration rather than public
-documentation.
+The download name follows [recorder release keys](../scripts/recorder/README.md)
+(`recorder/<role>/<sha256>.tar.gz`) and the recorder fleet's signed-bundle adapter.
+Finished recording downloads are a different product capability.
 
-Recorder admission uses the public-safe API contracts
-`/healthz/recorder/capture` and `/healthz/recorder/render`. Each returns 200
-only when its reconciler and qualified capacity are healthy, and 503 when
-stale provider, qualification, or readiness state closes admission; neither
-response exposes pool counts, regions, identifiers, or failure details.
+## Layout
 
-See [`../docs/observability.md`](../docs/observability.md) for correlation,
-telemetry, alerting, and end-to-end proof requirements.
+- `platform/`: shared stage, credential, input and state boundaries, plus the pinned preview-build guard.
+- `providers/`: cloud-provider-specific resources, with tests beside each provider.
+- `releases/`: check a declared plan policy and apply the same in-memory plan; also run-owned lifecycle operations.
+- `migration/`: temporary OpenTofu import, retirement and declaration-comparison tools; delete after the last cutover and retirement.
+- Component directories: one stack and its typed configuration, documentation and owned assets.
 
-## Recorder infrastructure
+There is no framework, base class or environment-specific stack entrypoint.
 
-The recorder pools are declared under [`recorder/`](recorder/); its README explains the policies. OpenTofu owns immutable pool tags, outbound-only firewalls, image and release contracts, and the zero-idle capacity bounds. The external recorder reconciler owns Droplet creation, prewarm, desired capacity, fencing and replacement. The KMS policy grants data-key operations only to the control-plane role with the fixed environment and required recording context; recorder nodes receive neither KMS nor provider credentials.
+## Stack and stage registry
 
-`pnpm run recorder:gate` runs backend-disabled validation and the fail-closed credential check, and never applies infrastructure. A mutation takes values from protected environment configuration, never tracked tfvars, cloud-init, plans or logs. Production R2 adoption needs an explicit existing bucket name, so a default name can never create a replacement. The reconciler's signed one-time bootstrap assertion is never received or stored by OpenTofu.
-
-## Asset CDN
-
-Shared SDK media assets are served from Cloudflare R2 through the public custom
-domain:
-
-```text
-https://assets.chalkmeet.com
-```
-
-The bucket is `chalk-assets`, with public paths under `ui/`. Hashed media files (`ui/backgrounds/`, `ui/sounds/`, names carry a sha256 prefix) are served `public, max-age=31536000, immutable`. The unversioned `ui` manifest is served `public, max-age=300, stale-while-revalidate=86400`. R2 CORS allows `GET` and `HEAD` from any origin.
-
-`@q9labsai/chalk-assets` stays metadata-only (URLs, filenames, MIME types, sizes, hash prefixes); neither it nor `@q9labsai/chalk-ui/assets` bundles binaries.
-
-### Update Flow
-
-1. Generate or collect source assets outside package source.
-2. Normalize and export hashed derivatives.
-3. Upload hashed media to `chalk-assets`.
-4. Upload the generated ui/manifest.json with the short manifest cache policy.
-5. Update `packages/assets/src/index.ts`.
-6. Verify live URLs, CORS, content types, and cache headers.
-
-If replacing immutable assets, delete stale R2 objects and purge exact old URLs
-from Cloudflare edge cache when a cache-purge-capable token is available. The
-manifest should never point at stale assets.
-
-## Alchemy stacks
-
-`@chalk/infrastructure` pins one complete preview build of Alchemy, AWS,
-Cloudflare, DigitalOcean and their workspace dependencies. The upstream commit
-and immutable content-addressed tarballs are recorded in
-[`platform/preview-build.json`](platform/preview-build.json). The tarballs still
-report `2.0.0-beta.87`; their URLs, not that version string, identify the build.
-Workspace overrides keep one Alchemy and one Effect 4.1.4 runtime in the
-infrastructure dependency graph. The application and SDK's existing Effect beta
-is intentionally untouched. No release-age or build-script policy is relaxed;
-the pre-existing q9stack non-registry policy is unchanged. The lockfile includes
-SHA-512 integrity for every preview tarball. `check-types` first checks the whole
-graph and rejects partial bumps. To additionally check provenance online, run
-`node infrastructure/platform/check-preview-build.mjs --verify-source`.
-
-### Return to npm releases
-
-When DigitalOcean reaches npm, change all `alchemy` and `@alchemy.run/*` URL
-entries in `infrastructure/package.json` to the same exact published version.
-Change the direct `@distilled.cloud/*` entries to the exact npm versions used by
-those providers. Remove the preview graph's twenty URL overrides and its scoped
-Effect override from `pnpm-workspace.yaml` (leave unrelated overrides alone).
-Replace `platform/preview-build.json` and its preview-only check with an exact npm
-version alignment check in the `check-types` script. Regenerate the lockfile with
-`pnpm install`; retain the existing age gate and build-script allowlist. Do not
-add a wildcard trust exception if the release is too new.
-
-Run the strict typecheck and a detailed no-op plan for **each** stack and stage
-before deploying with the npm build. Plans take leases: run them sequentially.
-Check drift too for already-cut-over stacks. A package switch never authorizes
-an otherwise unapproved production deployment.
-
-### Preview state compatibility
-
-Against `v2.0.0-beta.87`, the selected preview has no AWS StateStore changes and
-only one state-type addition: optional `old.removalPolicy` in an interrupted
-`updating` resource checkpoint. No keys, wire encoding, required fields, leases,
-or completed-resource rows change. Both versions can read each other's completed
-states. The preview planner also respects the last successful protected policy
-in that optional checkpoint; beta.87 can read it but lacks that protection fix.
-Do not downgrade during an interrupted update that changes a protected policy.
-The existing archive CDN's detailed plan and read-only drift were both all no-ops
-on the preview; no deploy was run for this compatibility proof.
-
-### Stack registry
-
-[`registry.ts`](registry.ts) is the authority for entrypoints, supported stages,
-and current ownership. Seven component directories use the same entrypoint, typed configuration and
-README filenames (for example [archive-cdn](archive-cdn/README.md)). SFU primary and standby share one component but
-retain distinct state identities. Runtime assets stay in their existing paths;
-Direct Sync's proxy and retained OpenTofu root remain under `managed-episode/`.
-The following table is checked by `pnpm infra check`; regenerate it with
-`pnpm infra table` when ownership changes.
+`registry.ts` is the authority for commands, type/contract checks, drift CI and
+this checked table. Run `pnpm infra table` after changing it.
 
 <!-- stacks:start -->
-| Stack | Stage | Owner | Seeded | Status | Entry |
-| --- | --- | --- | --- | --- | --- |
-| archive-cdn | nightly | alchemy | yes | Cut over; existing resources retained | [archive-cdn/alchemy.run.ts](archive-cdn/alchemy.run.ts) |
-| recording-control-address | nightly | unmanaged | no | Ported, deliberately not deployed: persistent Nightly host removed 2026-11-15 (PR #1432) | [recording-control-address/alchemy.run.ts](recording-control-address/alchemy.run.ts) |
-| transcription-dispatcher | nightly | alchemy | yes | Cut over; schedule expected DISABLED after coordinated retirement change | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| transcription-dispatcher | production | opentofu | no | Ported; production seed and cutover pending | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
-| direct-sync | nightly | opentofu | no | Ported, deliberately not deployed: persistent Nightly host removed 2026-11-15 (PR #1432) | [direct-sync/alchemy.run.ts](direct-sync/alchemy.run.ts) |
-| sfu | nightly | opentofu | no | Ported, deliberately not deployed: shared staging SFU removed 2026-11-15 (PR #1453) | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu | production | opentofu | no | Ported; live firewall drift blocks cutover | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | nightly | opentofu | no | Ported, deliberately not deployed: shared staging SFU removed 2026-11-15 (PR #1453) | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| sfu-standby | production | opentofu | no | Ported; dry-run is not cutover authorization | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
-| recorder | nightly | opentofu | no | Ported; retained root still owns policy resources | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
-| recorder | production | opentofu | no | Ported; reconcile CORS and pool firewall drift before cutover | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
-| cloudflare-turn | nightly | unmanaged | no | Ported, deliberately not deployed; key creation/adoption not authorized | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
-| cloudflare-turn | production | unmanaged | no | Ported, deliberately not deployed; key creation/adoption not authorized | [cloudflare-turn/alchemy.run.ts](cloudflare-turn/alchemy.run.ts) |
+| Stack | Stage kind | Provisioner | Status | Entry |
+| --- | --- | --- | --- | --- |
+| recorder-runtime-downloads | retired legacy Nightly (not deployable) | cleanup inventory | Retire: Nightly proofs do not consume recorder runtime CDN downloads | [recorder-runtime-downloads/alchemy.run.ts](recorder-runtime-downloads/alchemy.run.ts) |
+| recorder-control-endpoint | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host | [recorder-control-endpoint/alchemy.run.ts](recorder-control-endpoint/alchemy.run.ts) |
+| sync-direct-access | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host | [sync-direct-access/alchemy.run.ts](sync-direct-access/alchemy.run.ts) |
+| sfu | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| sfu-standby | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| transcription-dispatcher | retired legacy Nightly (not deployable) | cleanup inventory | Retire: no between-run control API or reconciliation schedule; per-run proof replaces the old release gate | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
+| transcription-dispatcher | nightly-<run-id> (ephemeral) | alchemy | Run-owned deploy/release/convergence/cleanup proof; no seed or always-on Nightly | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
+| transcription-dispatcher | production (persistent) | opentofu | Ported; production cutover waits for an ephemeral release proof | [transcription-dispatcher/alchemy.run.ts](transcription-dispatcher/alchemy.run.ts) |
+| sfu | production (persistent) | opentofu | Primary variant: ported; live firewall drift blocks cutover | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| sfu-standby | production (persistent) | opentofu | Standby variant: ported; dry-run is not cutover authorization | [sfu/alchemy.run.ts](sfu/alchemy.run.ts) |
+| recorder | production (persistent) | opentofu | Ported; reconcile CORS/pool firewall drift before cutover | [recorder/alchemy.run.ts](recorder/alchemy.run.ts) |
+| media-relay-access | production (persistent) | none | Ported, deliberately not deployed; TURN key creation/adoption not authorized | [media-relay-access/alchemy.run.ts](media-relay-access/alchemy.run.ts) |
 <!-- stacks:end -->
 
-`alchemy` means the stage is cut over. `opentofu` means its legacy state remains
-the authority until a reviewed migration; it is not permission to deploy Alchemy.
-`unmanaged` means this port is not an active owner. The retired recording control
-address must not be recreated from stale state. TURN creation is not authorized.
-The [R2 transcription lifecycle component](components/README.md) has no callers
-and no stack or state identity; do not add a fictitious root for it.
+`production` is persistent. `nightly-<run-id>` is ephemeral: a lowercase
+alphanumeric/hyphen run ID of 1–15 characters, with alphanumeric ends. Bare
+`nightly` is rejected. Retired rows are cleanup inventory, never active stages.
+All former persistent Nightly stages retire; only the dispatcher gains a
+run-owned deployment for the production-cutover proof. Existing Nightly media
+proofs already create/delete their hosts and use isolated runtime assets; they
+do not need the retired CDN, address, direct Sync trial or shared SFU.
 
-### One command
+The registry discriminates ownership and seeding: a production Alchemy owner
+must be seeded; OpenTofu/not-deployed rows cannot deploy. Deploy also checks real
+resource/output state, so metadata cannot bypass a missing seed.
+
+## Commands
 
 ```sh
 pnpm infra list
-pnpm infra plan archive-cdn nightly
-pnpm infra drift archive-cdn nightly
-pnpm infra seed sfu production /private/tofu-state.json --dry-run
+pnpm infra plan transcription-dispatcher production
+pnpm infra drift transcription-dispatcher production
+pnpm infra deploy transcription-dispatcher nightly-123456
+pnpm infra destroy transcription-dispatcher nightly-123456
+pnpm infra prove transcription-dispatcher nightly-123456
 ```
 
-`infra.ts` validates the stack and stage before starting Alchemy. `deploy` is
-refused for stages that are not cut over. `drift` accepts no mutation flags and
-preserves Alchemy's exit code (2 means drift). Operations on the same stack/stage
-must be sequential because even plans and drift hold its state lease. Dispatcher
-releases use the declared policies in `transcription-dispatcher/policy.ts`, not
-an unrestricted deploy. Python calls `releases/driver.ts` once and reads one
-private JSON result; the checked in-memory plan is the only plan applied.
+Plan/drift are read-only cloud operations but acquire a stage lease. Never run
+them concurrently with another lane's proof. Deploy/destroy are explicit writes.
+Destroy only accepts ephemeral stages, deletes owned resources and stage state,
+and is retry-idempotent. Production deploy is refused until cut over and seeded.
+The proof command deploys, makes one checked versioned-code release, requires a
+no-op re-plan and clean drift, and destroys twice even when the proof fails.
+See [proof and retirement instructions](migration/README.md).
 
-### Inputs and provider credentials
+## One input boundary
 
-Every component reads proposed private inputs from the JSON file named by
-`CHALK_INFRA_INPUTS`, decoded by its component configuration. File contents and validation
-payloads are never logged. Existing SFU/recorder JSON keys are preserved;
-archive CDN uses `public_key_file`, Direct Sync uses `instance_id`, `hostname`,
-`zone_id`, `ipv4_address` and optional `ipv6_address`, and recording control
-address uses `instance_id`. Select the correct private file per command, not
-per checkout. TURN has no private declaration inputs beyond its stage.
+Set `CHALK_INFRA_INPUTS` to a protected JSON file. Each component's `config.ts`
+parses a typed schema with excess-property rejection before resource work.
+Input keys use `snake_case`; never commit private input files. Schema failures
+name the component/source without printing values. SFU and recorder retain their
+existing typed config shapes; the SFU variant is selected by the registry.
 
-The one exception is the transcription dispatcher: normal operations read the
-last deployed inputs from its redacted stack output, so retention/rollback and
-release checks start from what is deployed, not a second local configuration.
-A proposed release still uses `CHALK_INFRA_INPUTS`; its schema, exact match and
-allowed input edits are checked before apply. Unset that variable before a
-stored-input dispatcher no-op proof. No fallback to OpenTofu exists.
+Examples of required shapes: recorder-runtime downloads `{public_key_file}`;
+recorder control endpoint `{instance_id}`; Sync direct access
+`{instance_id, hostname, zone_id, ipv4_address, ipv6_address?}`. Read the component
+schemas for complete recorder, SFU and dispatcher inputs.
 
-[`platform/credentials.ts`](platform/credentials.ts) owns token lookup and
-fail-closed errors. AWS uses `AWS_PROFILE` locally or the standard role chain in
-CI; `AWS_REGION` defaults to `ap-southeast-1`. Cloudflare requires
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the protected environment,
-not an Alchemy OAuth/global-key profile. SFU uses `DIGITALOCEAN_TOKEN`.
-Recorder pools retain separately scoped `CHALK_CAPTURE_DIGITALOCEAN_TOKEN` and
-`CHALK_RENDER_DIGITALOCEAN_TOKEN`; combining these would expand authority.
-All three DigitalOcean scopes use the same shared resolver/client. Credentials
-never belong in the input JSON. Missing-credential messages name the variable
-and protected operator/CI source, never values.
+The dispatcher has one deliberate exception: normal releases read the deployed
+redacted `dispatcher_inputs` output when no proposed file is supplied. The
+release policy compares proposed inputs to this deployed authority; rebuilding
+configuration from unrelated environment variables would weaken that guarantee.
+Only a new ephemeral stage may bootstrap without previous output, and only
+with explicit validated inputs. Production always fails loudly when unseeded.
 
-### Layout and glossary
+## One credential boundary
 
-- Component directories (`archive-cdn`, `recording-control-address`,
-  `transcription-dispatcher`, `direct-sync`, `sfu`, `recorder`, `cloudflare-turn`)
-  each own one stack definition and its typed configuration.
-- `platform/` owns shared stage parsing, AWS providers/state, and the pinned
-  preview build and its guard.
-- `providers/` owns custom resource adapters, named for their cloud provider,
-  with their focused tests beside them.
-- `components/` owns reusable resource groups with no independent stack identity.
-- `releases/` owns plan projection, generic policy checking and exact-plan apply.
-- `migration/` owns temporary OpenTofu readers, seed mappings and the offline
-  definition-preservation proof; delete it after the last cutover.
+Credentials are not stack inputs. `platform/credentials.ts` and `config.ts`
+resolve them from the protected operator/CI environment and never print values:
 
-A **component** is the provisioning boundary (for example SFU). A **stack** is
-its durable Alchemy state identity (for example `sfu-standby`). A **stage** is the
-environment (`nightly` or `production`), never a directory. **Transcription
-dispatcher** is the one name for the Lambda and its queues, schedule and alarms;
-“transcription” alone describes the wider product capability. **Direct Sync**
-is the proxy's network infrastructure, not a state-storage mechanism. A
-**provider** adapts a cloud resource; a **policy** declares the exact permitted
-plan edits; a **seed** imports verified existing resources without deployment.
+| Provider | Source |
+| --- | --- |
+| AWS | Standard credential chain: operator `AWS_PROFILE` or CI/instance role; state is in `ap-southeast-1`. |
+| Cloudflare | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. |
+| DigitalOcean SFU | `DIGITALOCEAN_TOKEN`. |
+| DigitalOcean recorder pools | `CHALK_CAPTURE_DIGITALOCEAN_TOKEN`, `CHALK_RENDER_DIGITALOCEAN_TOKEN`; separate pool authorities stay separate. |
 
-No physical names, logical IDs, resource types or stack names change in this
-restructure. No live state rename is required.
+Missing credentials name the missing source, never its value. State uses the
+existing `alchemy-state` store and overflow objects; no account identifier is
+stored in the repository.
 
-### Scheduled drift
+## Alchemy stacks
 
-[Infrastructure drift workflow](../.github/workflows/infrastructure-drift.yml) reads
-cut-over stack/stage pairs from the registry, serially runs read-only drift and
-notifies the existing Oncall webhook on drift or check failure. It is gated by
-`CHALK_ALCHEMY_DRIFT_ENABLED=true` and the dedicated role secret
-`CHALK_ALCHEMY_DRIFT_ROLE_ARN`. It is **not enabled by this change**; no IAM was
-modified or live proof attempted. See [the permission contract](platform/README.md)
-before enabling it. Never use `--repair` in this workflow.
+All stacks use one [pinned preview graph](platform/preview-build.json), guarded
+by `pnpm --dir infrastructure run check-types`. Run all infrastructure tests
+with `pnpm --dir infrastructure test`. The [release mechanism](releases/README.md)
+contains the Python-to-TypeScript policy parity table.
 
-The persistent Nightly host and shared staging SFU were deliberately removed on
-2026-11-15 (PRs #1432 and #1453, commit `011fc3f34`). Nightly cuts use
-`deploy_managed: false` and prove on throwaway stacks. The address, direct Sync,
-and Nightly SFU ports remain reachable through manually dispatched managed
-Nightly deployment only. Retiring that path and `media.py` address reconciliation
-is a follow-up, not part of this migration. Do not seed stale state to recreate
-the retired resources. Production is untouched.
+The [drift workflow](platform/README.md) is gated off until its dedicated role is
+configured and checked. It follows only active, seeded production cutovers;
+currently that list is empty. Retired Nightly schedules are deleted by
+retirement, not maintained in a permanently disabled steady state.
 
-Shared OpenTofu CI actions, caches and tool pins remain because SFU, recorder and
-direct Sync still have runnable legacy roots. Dispatcher release tooling no
-longer invokes OpenTofu. See the [DigitalOcean migration reference](migration/digitalocean.md)
-for remaining validation consumers and the production handoff.
+## Migration and retained OpenTofu
 
-Run commands from the repository root. Install with `pnpm install`, then run the
-credential-free check:
-
-```sh
-pnpm --dir infrastructure check-types
-```
-
-AWS stacks share the credential chain, including `AWS_PROFILE`. State always
-uses `ap-southeast-1`; direct Sync can select a different host region. Use Chalk's
-`nightly` and `production` stage names. The address and CDN entrypoints reject every stage
-except `nightly`; the dispatcher accepts both stages. State uses `AWS.state({ migrateFrom: false })`: the on-demand `alchemy-state` DynamoDB
-table and its S3 overflow bucket in the same account and region. First use needs
-permission to provision both, or an operator must bootstrap the store ahead of
-time. Legacy Alchemy S3-state migration is disabled because these stacks have no
-legacy Alchemy state; this also avoids requesting access to an unused bucket.
-The store holds a lease for each stack and stage. Bootstrap the configured store
-without evaluating the stack program:
-
-```sh
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state bootstrap --config archive-cdn/alchemy.run.ts --no-input
-```
-
-### Migrate an existing root
-
-Do not deploy against an empty Alchemy state store. EIP allocation IDs and
-CloudFront caller references cannot be recovered from physical names alone.
-`--adopt` does not replace the seed step.
-
-1. Stop infrastructure writers for the root. Save the current Git commit as the
-   undo, and capture live IDs, configuration, tags, and outputs privately.
-2. Back up both original state objects without changing their keys:
-
-   ```sh
-   export AWS_PROFILE=q9labs
-   account_id=$(aws sts get-caller-identity --query Account --output text)
-   state_bucket="chalk-nightly-state-$account_id"
-   backup_prefix="alchemy-migration-backup/$(date -u +%Y-%m-%dT%H%M%SZ)"
-   migration_dir=$(mktemp -d)
-   chmod 700 "$migration_dir"
-   for stack in recording-control-address archive-cdn; do
-     aws s3api copy-object --bucket "$state_bucket" --copy-source "$state_bucket/$stack/terraform.tfstate" --key "$backup_prefix/$stack/terraform.tfstate" >/dev/null
-     aws s3 cp "s3://$state_bucket/$stack/terraform.tfstate" "$migration_dir/$stack.json" --only-show-errors
-   done
-   ```
-
-3. Run the shared seed script only for a root whose resources still exist. It validates the managed resource
-   set, reads the existing resources from AWS, and writes completed Alchemy
-   records through `State`. It never writes OpenTofu state or product resources.
-   The first state-store use can provision the table and overflow bucket.
-   Add `--dry-run` to validate live mappings without provisioning or writing state.
-   A retry skips matching destination records and refuses conflicting records.
-   A missing live resource fails before any records are written.
-   CDN ETags and the bucket policy must still match the original state.
-   The address root is not eligible: its allocation is gone, so do not seed its
-   stale state. The command below documents the CDN migration, not a step to
-   repeat after cutover.
-
-   ```sh
-   pnpm --dir infrastructure exec tsx migration/seed.ts archive-cdn nightly "$migration_dir/archive-cdn.json"
-   ```
-
-4. Follow each stack's plan instructions. Before deploying, require only no-ops
-   or in-place ownership-tag changes with no observable product effect. Stop on
-   any create, replacement, or delete. Never use a deploy to fix a rejected plan.
-5. Deploy, then run verification commands sequentially: even plan and drift
-   take a stack/stage state lease and cannot run concurrently. Require an
-   all-no-op second plan and a read-only `alchemy drift`
-   exit code of zero. Compare all captured live facts, including the full bucket
-   policy document. Do not use `drift --repair` or `drift --yes` as proof.
-6. Only after successful cutover, remove that root's `.tf` and
-   `.terraform.lock.hcl` files. Keep the original state objects and dated backups.
-
-The seed script covers these roots, direct Sync, and the dispatcher's explicit module mapping,
-not a generic Terraform provider schema. Follow the [dispatcher cutover runbook](../docs/transcription-production-release.md)
-for its private inputs, production gate and release rollback. Extend explicit
-mappings when another root migrates. The script rejects unexpected modules,
-duplicate or deposed instances and unknown resources.
-Direct Sync validates its complete saved resource set, including optional IPv6,
-and refuses a missing interface or attachment before writing state. See its
-[guide](managed-episode/direct-sync/README.md) for its separate state key and inputs.
-Do not run Alchemy and OpenTofu as concurrent owners.
-
-### Undo a cutover
-
-Delete only the Alchemy records for the affected stack and stage, using its
-entrypoint, before restoring the previous commit's OpenTofu configuration:
-
-```sh
-pnpm --dir infrastructure exec alchemy state delete archive-cdn/nightly --recursive --config archive-cdn/alchemy.run.ts --no-input
-```
-
-Run only the command for the stack being rolled back. `state delete` forgets
-records and outputs, not AWS resources. No address cutover was performed; its
-historical state cannot recover a released allocation. Restore the saved commit's `.tf` files,
-initialize OpenTofu with the original backend, and inspect its plan against the
-untouched original state. An ownership-tag difference is expected if Alchemy
-added tags. Never run `tofu destroy`, `alchemy destroy`, or `alchemy nuke` for this
-migration. Do not redeploy Alchemy after deleting its records without reseeding.
+Use [migration instructions](migration/README.md) for import, declaration parity,
+retirement and the new production-cutover proof. SFU, recorder and the retained
+[direct Sync trial](managed-episode/direct-sync/README.md) keep runnable OpenTofu
+roots. Never let two provisioners own one stage concurrently. Physical resource
+names and existing logical IDs are unchanged; legacy state identities remain
+explicit in the registry until retirement. No live state rename is required.

@@ -86,10 +86,13 @@
     "infrastructure/migration/seed.ts",
     "infrastructure/releases/driver.ts",
     "infrastructure/releases/deploy.ts",
+    "infrastructure/releases/destroy-stage.ts",
+    "infrastructure/releases/prove-dispatcher.ts",
+    "infrastructure/migration/retire-nightly.ts",
     "infrastructure/migration/check-definitions.ts",
     "infrastructure/platform/check-drift.mjs",
     "infrastructure/sfu/render-cloud-init.ts",
-    "infrastructure/components/r2-transcription-lifecycle.ts"
+    "infrastructure/transcription-storage/temporary-object-cleanup.ts"
   ],
   "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": [],

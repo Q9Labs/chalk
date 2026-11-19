@@ -1,6 +1,6 @@
 # Transcription dispatcher
 
-This stack replaces the dispatcher OpenTofu module for Nightly and production.
+This stack serves persistent production and run-owned `nightly-<run-id>` release proofs. Bare Nightly is retired; see [retirement and proof commands](../migration/README.md). Production remains OpenTofu-owned and unseeded.
 `@chalk/infrastructure` uses the unified [pinned preview build](../README.md#alchemy-stacks), including its AWS provider.
 The entrypoint is `infrastructure/transcription-dispatcher/alchemy.run.ts`; the stage
 selects the environment, not a different implementation.

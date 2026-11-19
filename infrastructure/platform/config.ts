@@ -5,20 +5,15 @@ import { Endpoint } from "@distilled.cloud/aws/Endpoint";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
 import { Stage } from "alchemy/Stage";
+import { stageName } from "./stages.ts";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-export const environmentName = Schema.Literals(["nightly", "production"]);
+export const environmentName = stageName;
 export const environment = Effect.map(Stage, Schema.decodeUnknownSync(environmentName));
-export const nightly = Effect.gen(function* () {
-  const stage = yield* environment;
-  if (stage !== "nightly") {
-    return yield* Effect.die("This stack only manages Nightly resources; use --stage nightly.");
-  }
-  return stage;
-});
+export const retiredStage = Effect.die("This persistent Nightly stack is retired; use the migration retirement command, never deploy it");
 
 const defaultRegion = "ap-southeast-1";
 const awsEnvironmentForRegion = (region: string) => {

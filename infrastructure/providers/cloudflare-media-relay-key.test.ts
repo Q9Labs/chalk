@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hasConflictingTurnKey } from "./cloudflare-turn-key.ts";
+import { hasConflictingTurnKey } from "./cloudflare-media-relay-key.ts";
 
 test("TURN creation refuses an existing name but allows updates of its saved key", () => {
   const keys = [

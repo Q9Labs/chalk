@@ -4,8 +4,8 @@ import { parseInputs } from "./config.ts";
 import { buildEnvironment } from "./environment.ts";
 
 const valid = {
-  function_name: "test-dispatcher",
-  environment_name: "nightly",
+  function_name: "chalk-nightly-test-transcription-dispatcher",
+  environment_name: "nightly-test",
   release_id: "release-test-01",
   release_manifest_digest: `sha256:${"ab".repeat(32)}`,
   config_digest: `sha256:${"cd".repeat(32)}`,
@@ -17,6 +17,7 @@ const valid = {
   control_api_url: "https://api.example.test",
   control_api_audience: "test-control-api",
   api_workload_auth_parameter_arn: "workload-parameter",
+  scheduler_name: "chalk-nightly-test-transcription-reconcile",
   scheduler_state: "DISABLED",
   privacy_gate_accepted: true,
   deepinfra_enabled: true,

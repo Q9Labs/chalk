@@ -11,15 +11,15 @@ The scheduled workflow is gated by `CHALK_ALCHEMY_DRIFT_ENABLED=true`; this
 change does not set the variable, create a role or change IAM. Its dedicated
 `CHALK_ALCHEMY_DRIFT_ROLE_ARN` must trust GitHub's OIDC provider for this
 repository's default-branch workflow (`aud=sts.amazonaws.com`). Do not reuse a
-deploy role. It needs the following access for the two currently cut-over
-Nightly stacks, scoped to their existing resources wherever AWS supports it:
+deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The current active cutover list is empty; retired Nightly is excluded:
 
 | Boundary | Actions |
 | --- | --- |
 | Caller identity | `sts:GetCallerIdentity` |
 | Existing `alchemy-state` table | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query` |
-| Stage leases on that table | `dynamodb:PutItem`, `dynamodb:DeleteItem` for `STAGE#archive-cdn#nightly` and `STAGE#transcription-dispatcher#nightly` partitions; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row |
-| Existing state overflow objects | `s3:GetObject` on the two stack/stage prefixes in the existing Alchemy overflow bucket |
+| Stage leases on that table | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row |
+| Existing state overflow bucket | `s3:ListBucket` (the state backend checks existence with HeadBucket) |
+| Existing state overflow objects | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket |
 | Archive CDN | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource`, `cloudfront:GetPublicKeyConfig`, `cloudfront:GetKeyGroupConfig`, `cloudfront:GetOriginAccessControlConfig`; `s3:GetBucketPolicy` for the existing artifacts bucket |
 | Dispatcher IAM roles | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags` |
 | Dispatcher queues | `sqs:GetQueueAttributes`, `sqs:ListQueueTags` |
@@ -34,7 +34,7 @@ resource/output write, overflow write or `drift --repair` permission is needed.
 The state table and bucket must already be bootstrapped by an operator; CI
 refuses missing infrastructure rather than creating it. Lease writes are the
 only intended writes and share the DynamoDB API actions with resource-state
-writes. A partition condition limits the two stages but cannot restrict the
+writes. A partition condition limits the registered stages but cannot restrict the
 sort key with `dynamodb:LeadingKeys`; grant this role only to this workflow and
 keep the explicit read-only command boundary.
 
@@ -47,6 +47,6 @@ it does not bypass locking.
 
 The scheduled command uses `alchemy drift`, which reads state and provider
 attributes without evaluating stack declarations. Thus it does not need the
-archive public key file or dispatcher runtime input files. Confirm role access
+retired download public key file or dispatcher runtime input files. Confirm role access
 and one clean manual run before enabling the schedule. No live access test was
 performed in the structure lane.

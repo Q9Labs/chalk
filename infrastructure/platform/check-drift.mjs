@@ -15,7 +15,7 @@ try {
     const log = openSync(join(directory, `${stack}-${stage}.log`), "wx", 0o600);
     let result;
     try {
-      result = spawnSync("pnpm", ["exec", "tsx", "infra.ts", "drift", stack, stage], { cwd, stdio: ["ignore", log, log], timeout: 600_000 });
+      result = spawnSync("pnpm", ["exec", "tsx", "run-stack.ts", "drift", stack, stage], { cwd, stdio: ["ignore", log, log], timeout: 600_000 });
     } finally {
       closeSync(log);
     }

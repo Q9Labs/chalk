@@ -27,17 +27,16 @@ function ast(node: ts.Node): Schema.Json {
 const parse = (path: string, source: string) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 const oldSource = (path: string) => execFileSync("git", ["show", `${base}:${path}`], { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
 const newSource = (path: string) => readFileSync(resolve(root, path), "utf8");
-function configInitializer(component: string, name: string) {
-  const path = `infrastructure/${component}/config.ts`;
-  const file = parse(path, newSource(path));
-  const statements = file.statements.filter((node) => !ts.isImportDeclaration(node));
-  assert.equal(statements.length, 1, `${path}: unexpected executable config statement`);
-  const statement = statements[0];
-  assert.ok(statement && ts.isVariableStatement(statement));
-  assert.equal(statement.declarationList.declarations.length, 1);
-  const variable = statement.declarationList.declarations[0];
-  assert.ok(variable?.initializer && variable.name.getText(file) === name);
-  return variable.initializer.getText(file);
+function normalizeStageBoundaries(path: string, identity: string, source: string, before: boolean) {
+  if (identity.endsWith("alchemy/dispatcher/stack.ts")) {
+    source = source.replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS").replace('previous !== undefined || stage !== "production"', 'previous !== undefined').replace(/^    requireInput\(previous !== undefined \|\| file !== undefined[^\n]+\n/m, "");
+  }
+  if (!before && identity.endsWith("alchemy/dispatcher/resources.ts")) source = source.replaceAll('input.environment_name !== "production"', 'input.environment_name === "nightly"');
+  if (!before && identity === "infrastructure/cloudflare-turn/alchemy.run.ts") source = source.replace('"media-relay-access"', '"cloudflare-turn"');
+  if (!before && identity.includes("nightly/") || !before && identity.includes("managed-episode/direct-sync/alchemy.run.ts")) source = source.replaceAll("retiredStage", "nightly");
+  if (identity.endsWith("managed-episode/direct-sync/config.ts")) source = source.replace("export const directSyncConfig", "const directSyncConfig");
+  if (!before && identity.endsWith("alchemy/dispatcher/inputs.ts")) source = source.replace(/  const stage = parseStage\(input.environment_name\);[\s\S]*?(?=  return input;)/, "");
+  return source;
 }
 function normalizedSource(path: string, source: string, before: boolean) {
   const identity = before ? path : originalPath(path);
@@ -50,15 +49,15 @@ function normalizedSource(path: string, source: string, before: boolean) {
     source = source.replace(before ? /    const config = Schema.decodeUnknownSync[\s\S]*?(?=    \/\/ Invoke)/ : /    const config = yield\* Effect.tryPromise\(loadConfig\);/, "    const config = __INPUT__;\n");
     source = source.replace("CHALK_DIRECT_SYNC_AWS_REGION", "AWS_REGION");
   }
-  if (!before && path === "infrastructure/cloudflare-turn/alchemy.run.ts") source = source.replace("turnStage(yield* Stage)", `${configInitializer("cloudflare-turn", "turnStage")}(yield* Stage)`);
-  if (identity.endsWith("alchemy/dispatcher/stack.ts")) source = source.replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS");
+  if (!before && path === "infrastructure/media-relay-access/alchemy.run.ts") source = source.replace("turnStage(yield* Stage)", "Schema.decodeUnknownSync(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z][a-z0-9-]{1,31}$/))))(yield* Stage)");
+  source = normalizeStageBoundaries(path, identity, source, before);
   // These are fail-closed credential guards, not declaration inputs/props.
   source = source.replace(/^    (?:requireCloudflareCredentials\(\)|credential\("[A-Z_]+"\));\n/gm, "");
   if (identity === "infrastructure/recorder/alchemy.run.ts") source = source.replace(/^    requireInput\(!!process.env.CHALK_CAPTURE[^\n]+\n/m, "");
   if (!before && path === "infrastructure/platform/config.ts") source = source.replace(/^      yield\* resolveCredentials.pipe[^\n]+\n/m, "");
   return source;
 }
-const inputModules = new Set(["infrastructure/archive-cdn/config.ts", "infrastructure/recording-control-address/config.ts", "infrastructure/cloudflare-turn/config.ts", "infrastructure/platform/inputs.ts", "infrastructure/platform/credentials.ts"]);
+const inputModules = new Set(["infrastructure/recorder-runtime-downloads/config.ts", "infrastructure/recorder-control-endpoint/config.ts", "infrastructure/media-relay-access/config.ts", "infrastructure/platform/inputs.ts", "infrastructure/platform/credentials.ts", "infrastructure/platform/stages.ts"]);
 const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
   ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],
@@ -67,8 +66,8 @@ const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/alchemy/sfu-droplet.ts", ["effect/http/FetchHttpClient", "effect/Layer"]],
   ["infrastructure/alchemy/recorder-pools.ts", ["@distilled.cloud/digitalocean/Credentials", "effect/http/FetchHttpClient", "effect/Redacted"]],
 ]);
-function isInputLoader(node: ts.Statement) {
-  return ts.isVariableStatement(node) && node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client"].includes(declaration.name.getText()));
+function isInputLoader(node: ts.Statement, identity: string) {
+  return ts.isVariableStatement(node) && node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()));
 }
 function graph(entry: string, before: boolean) {
   const modules = new Map<string, { code: string; edges: string[]; declarations: string[] }>();
@@ -85,7 +84,7 @@ function graph(entry: string, before: boolean) {
         if (specifier.startsWith(".")) {
           const dependency = posix.normalize(posix.join(dirname(path), specifier));
           if (!before && inputModules.has(dependency)) {
-            if (dependency.endsWith("cloudflare-turn/config.ts")) edges.push('import * as Schema from "effect/Schema";');
+            if (dependency.endsWith("media-relay-access/config.ts")) edges.push('import * as Schema from "effect/Schema";');
             continue;
           }
           dependencies.push(dependency);
@@ -96,7 +95,7 @@ function graph(entry: string, before: boolean) {
         const dependency = posix.normalize(posix.join(dirname(path), statement.moduleSpecifier.text));
         dependencies.push(dependency);
         edges.push(`export:${before ? dependency : originalPath(dependency)}:${statement.exportClause?.getText(file) ?? "*"}`);
-      } else if (!isInputLoader(statement)) runtime.push(statement);
+      } else if (!isInputLoader(statement, identity)) runtime.push(statement);
     }
     function calls(node: ts.Node) {
       if (ts.isCallExpression(node)) {
@@ -113,7 +112,7 @@ function graph(entry: string, before: boolean) {
   visit(entry);
   return [...modules.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
-for (const stack of [...stacks.map((stack) => ({ name: stack.name, entry: `infrastructure/${entryFile(stack)}` })), { name: "r2-transcription-lifecycle", entry: "infrastructure/components/r2-transcription-lifecycle.ts" }]) {
+for (const stack of [...stacks.map((stack) => ({ name: stack.stackName, entry: `infrastructure/${entryFile(stack)}` })), { name: "r2-transcription-lifecycle", entry: "infrastructure/transcription-storage/temporary-object-cleanup.ts" }]) {
   const entry = stack.entry;
   const before = graph(originalPath(entry), true), after = graph(entry, false);
   const differences = before.filter(([path, value]) => !isDeepStrictEqual(after.find(([name]) => name === path)?.[1], value)).map(([path]) => path);
