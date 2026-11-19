@@ -117,7 +117,11 @@ const refusals: ReadonlyArray<readonly [string, () => World, RegExp]> = [
   ["a destination with a record outside the inventory", () => world(seeded(), [created("Surprise", "AWS.S3.Bucket")]), /not a completed resource of the expected inventory/],
   ["a source with a record outside the inventory", () => world([...seeded(), created("Surprise", "AWS.S3.Bucket")]), /not a completed resource of the expected inventory/],
   ["a source record of another type", () => world(seeded().map((row) => (row.logicalId === "Archive" ? { ...row, resourceType: "AWS.S3.Bucket" } : row))), /not a completed resource/],
-  ["a source record that is not completed", () => world(seeded().map((row): ResourceState => (row.logicalId === "Archive" ? { status: "creating", resourceType: row.resourceType, logicalId: row.logicalId, fqn: row.fqn, namespace: undefined, instanceId: row.instanceId, providerVersion: 0, props: {}, bindings: [], downstream: [] } : row))), /not a completed resource/],
+  [
+    "a source record that is not completed",
+    () => world(seeded().map((row): ResourceState => (row.logicalId === "Archive" ? { status: "creating", resourceType: row.resourceType, logicalId: row.logicalId, fqn: row.fqn, namespace: undefined, instanceId: row.instanceId, providerVersion: 0, props: {}, bindings: [], downstream: [] } : row))),
+    /not a completed resource/,
+  ],
   ["a partial source with an empty destination", () => world(seeded().slice(0, 4)), /neither archive-cdn\/nightly nor recorder-runtime-downloads\/production/],
   ["a destination with a different output", () => world(seeded(), [], { source: output, destination: { distribution_url: "https://other.example.net" } }), /different stack output/],
   ["two empty identities", () => world([]), /nothing to move/],

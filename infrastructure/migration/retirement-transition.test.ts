@@ -114,7 +114,10 @@ test("preview lists type and physical name for every record and writes nothing",
   assert.equal(names.length, inventorySize);
   assert.ok(names.includes("Chalk.Lambda.VersionedFunction chalk-nightly-transcription-dispatcher"));
   assert.ok(names.includes("AWS.Scheduler.Schedule chalk-nightly-transcription-reconcile"));
-  assert.ok(exit.value.every((item) => item.action === "orphaned"), "retained records are shown as not yet destroyable");
+  assert.ok(
+    exit.value.every((item) => item.action === "orphaned"),
+    "retained records are shown as not yet destroyable",
+  );
   assert.equal(snapshot(remaining()), before);
   assert.equal(cloud.deleted.length, 0);
 });

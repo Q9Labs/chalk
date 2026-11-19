@@ -36,71 +36,76 @@ interface FakeSchedule {
   description: string | undefined;
 }
 // The fake AWS HTTP boundary for CloudWatch Logs and EventBridge Scheduler.
+type Request = Parameters<typeof HttpClientResponse.fromWeb>[0];
 function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: FakeSchedule }) {
   const logGroups = new Map<string, FakeLogGroup>(seed.logGroup ? [[logName, { tags: { ...seed.logGroup.tags } }]] : []);
   const schedules = new Map<string, FakeSchedule>(seed.schedule ? [[scheduleName, { ...seed.schedule }]] : []);
   const calls: string[] = [];
   const respond = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], payload: Record<string, unknown>, status = 200, errorType?: string) =>
-    HttpClientResponse.fromWeb(
-      request,
-      new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/x-amz-json-1.1", ...(errorType ? { "x-amzn-errortype": errorType } : {}) } }),
-    );
+    HttpClientResponse.fromWeb(request, new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/x-amz-json-1.1", ...(errorType ? { "x-amzn-errortype": errorType } : {}) } }));
+  const handleLogs = (request: Request, operation: string, field: (key: string) => string, sent: Record<string, unknown>) => {
+    calls.push(operation);
+    const name =
+      field("logGroupName") ||
+      field("logGroupIdentifier") ||
+      field("resourceArn")
+        .replace(/^.*log-group:/, "")
+        .replace(/:\*$/, "");
+    const group = logGroups.get(name);
+    switch (operation) {
+      case "DescribeLogGroups":
+        return respond(request, { logGroups: [...logGroups.keys()].filter((key) => key.startsWith(field("logGroupNamePrefix"))).map((key) => ({ logGroupName: key, arn: `arn:aws:logs:ap-southeast-1:000000000000:log-group:${key}:*`, logGroupClass: "STANDARD" })) });
+      case "ListTagsForResource":
+        return group ? respond(request, { tags: group.tags }) : respond(request, { __type: "ResourceNotFoundException" }, 400, "ResourceNotFoundException");
+      case "CreateLogGroup": {
+        if (group) return respond(request, { __type: "ResourceAlreadyExistsException" }, 400, "ResourceAlreadyExistsException");
+        logGroups.set(name, { tags: Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(sent.tags ?? {}) });
+        return respond(request, {});
+      }
+      case "TagResource":
+        if (group) Object.assign(group.tags, Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(sent.tags ?? {}));
+        return respond(request, {});
+      case "DeleteLogGroup":
+        logGroups.delete(name);
+        return respond(request, {});
+      default:
+        return respond(request, {});
+    }
+  
+  };
+  const handleSchedule = (request: Request, name: string, field: (key: string) => string) => {
+    const existing = schedules.get(name);
+    calls.push(`${request.method} Schedule`);
+    if (request.method === "POST" && existing) return respond(request, { Message: "exists" }, 409, "ConflictException");
+    if (request.method === "POST" || request.method === "PUT") {
+      schedules.set(name, { description: field("Description") || undefined });
+      return respond(request, { ScheduleArn: `arn:aws:scheduler:ap-southeast-1:000000000000:schedule/default/${name}` });
+    }
+    if (request.method === "DELETE") {
+      schedules.delete(name);
+      return respond(request, {});
+    }
+    if (!existing) return respond(request, { Message: "missing" }, 404, "ResourceNotFoundException");
+    return respond(request, {
+      Arn: `arn:aws:scheduler:ap-southeast-1:000000000000:schedule/default/${name}`,
+      Name: name,
+      GroupName: "default",
+      State: "DISABLED",
+      ScheduleExpression: "rate(1 minute)",
+      FlexibleTimeWindow: { Mode: "OFF" },
+      Target: { Arn: "arn:aws:lambda:ap-southeast-1:000000000000:function:target", RoleArn: "arn:aws:iam::000000000000:role/test" },
+      ...(existing.description ? { Description: existing.description } : {}),
+    });
+  
+  };
   const client = HttpClient.make((request, url) =>
     Effect.sync(() => {
       const sent = request.body._tag === "Uint8Array" ? Schema.decodeUnknownSync(body)(new TextDecoder().decode(request.body.body)) : {};
       const field = (key: string) => (typeof sent[key] === "string" ? sent[key] : "");
       const target = request.headers["x-amz-target"];
-      if (target?.startsWith("Logs_20140328.")) {
-        const operation = target.slice("Logs_20140328.".length);
-        calls.push(operation);
-        const name = field("logGroupName") || field("logGroupIdentifier") || field("resourceArn").replace(/^.*log-group:/, "").replace(/:\*$/, "");
-        const group = logGroups.get(name);
-        switch (operation) {
-          case "DescribeLogGroups":
-            return respond(request, { logGroups: [...logGroups.keys()].filter((key) => key.startsWith(field("logGroupNamePrefix"))).map((key) => ({ logGroupName: key, arn: `arn:aws:logs:ap-southeast-1:000000000000:log-group:${key}:*`, logGroupClass: "STANDARD" })) });
-          case "ListTagsForResource":
-            return group ? respond(request, { tags: group.tags }) : respond(request, { __type: "ResourceNotFoundException" }, 400, "ResourceNotFoundException");
-          case "CreateLogGroup": {
-            if (group) return respond(request, { __type: "ResourceAlreadyExistsException" }, 400, "ResourceAlreadyExistsException");
-            logGroups.set(name, { tags: Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(sent.tags ?? {}) });
-            return respond(request, {});
-          }
-          case "TagResource":
-            if (group) Object.assign(group.tags, Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(sent.tags ?? {}));
-            return respond(request, {});
-          case "DeleteLogGroup":
-            logGroups.delete(name);
-            return respond(request, {});
-          default:
-            return respond(request, {});
-        }
-      }
+      if (target?.startsWith("Logs_20140328.")) return handleLogs(request, target.slice("Logs_20140328.".length), field, sent);
       const match = url.pathname.match(/^\/schedules\/([^/]+)$/);
-      if (match?.[1]) {
-        const name = decodeURIComponent(match[1]);
-        const existing = schedules.get(name);
-        calls.push(`${request.method} Schedule`);
-        if (request.method === "POST" && existing) return respond(request, { Message: "exists" }, 409, "ConflictException");
-        if (request.method === "POST" || request.method === "PUT") {
-          schedules.set(name, { description: field("Description") || undefined });
-          return respond(request, { ScheduleArn: `arn:aws:scheduler:ap-southeast-1:000000000000:schedule/default/${name}` });
-        }
-        if (request.method === "DELETE") {
-          schedules.delete(name);
-          return respond(request, {});
-        }
-        if (!existing) return respond(request, { Message: "missing" }, 404, "ResourceNotFoundException");
-        return respond(request, {
-          Arn: `arn:aws:scheduler:ap-southeast-1:000000000000:schedule/default/${name}`,
-          Name: name,
-          GroupName: "default",
-          State: "DISABLED",
-          ScheduleExpression: "rate(1 minute)",
-          FlexibleTimeWindow: { Mode: "OFF" },
-          Target: { Arn: "arn:aws:lambda:ap-southeast-1:000000000000:function:target", RoleArn: "arn:aws:iam::000000000000:role/test" },
-          ...(existing.description ? { Description: existing.description } : {}),
-        });
-      }
+      if (match?.[1]) return handleSchedule(request, decodeURIComponent(match[1]), field);
       return respond(request, { Message: "unexpected request" }, 500);
     }),
   );
@@ -177,7 +182,10 @@ for (const resource of ["log-group", "schedule"] as const) {
     );
     for (const mutation of mutations) assert.equal(fake.count(mutation), 0, mutation);
     assert.equal(present(fake), true);
-    assert.deepEqual(Object.keys(state["test-run-owned"]?.["nightly-test"] ?? {}).filter((logicalId) => logicalId !== "Role"), []);
+    assert.deepEqual(
+      Object.keys(state["test-run-owned"]?.["nightly-test"] ?? {}).filter((logicalId) => logicalId !== "Role"),
+      [],
+    );
   });
 
   test(`production's seeded ${resource}, created outside Alchemy, is not held to the run proof`, async () => {

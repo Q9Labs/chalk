@@ -80,10 +80,10 @@ AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint
 AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint --apply
 ```
 
-| Retired component                                  | Deletes                                                                                                                                                | Keeps                                                                                                 |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Transcription dispatcher                           | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output.                                    | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
-| Recorder control endpoint                          | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent.                                                                 | Refuses retained resources instead of silently forgetting an unexpected protected allocation.         |
+| Retired component         | Deletes                                                                                                             | Keeps                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Transcription dispatcher  | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output. | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
+| Recorder control endpoint | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent.                              | Refuses retained resources instead of silently forgetting an unexpected protected allocation.         |
 
 Every seeded Nightly dispatcher record carries `removalPolicy: "retain"`, which
 the planner turns into an `orphaned` node that cleanup refuses. `retire

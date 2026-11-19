@@ -32,10 +32,7 @@ export const stacks = targets.filter((target, index) => targets.findIndex((candi
 export const entryFile = (stack: Target) => `${stack.directory}/alchemy.run.ts`;
 // Alchemy owns a production stage only once its state sits under the stage's own identity. Until
 // `pnpm infra move-state` has moved it, the stage is a production capability that nothing can act on.
-type ProductionOwnership =
-  | { readonly provisioner: "alchemy"; readonly seeded: true }
-  | { readonly provisioner: "alchemy"; readonly seeded: "state-not-moved"; readonly legacyStackName: string }
-  | { readonly provisioner: "opentofu" | "none"; readonly seeded: false };
+type ProductionOwnership = { readonly provisioner: "alchemy"; readonly seeded: true } | { readonly provisioner: "alchemy"; readonly seeded: "state-not-moved"; readonly legacyStackName: string } | { readonly provisioner: "opentofu" | "none"; readonly seeded: false };
 const isCutover = (target: ProductionOwnership): boolean => target.seeded === true;
 export const cutoverStages = () => targets.filter((target) => target.stageKind === "production" && isCutover(target)).map((target) => ({ stack: target.stackName, stage: "production" }));
 export function selectStack(name: string | undefined, stageName: string | undefined) {

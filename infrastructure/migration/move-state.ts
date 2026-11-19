@@ -1,15 +1,9 @@
-import { AlchemyContextLive } from "alchemy/AlchemyContext";
-import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileStoreLive } from "alchemy/Auth/Profile";
-import { layerNonInteractive } from "alchemy/Interaction";
+import * as Alchemist from "alchemy/Alchemist";
 import * as Stack from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State } from "alchemy/State";
-import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { state } from "../platform/config.ts";
 import { stateMoveIdentity, stateMoveTarget } from "../registry.ts";
 import { moveState, recorderRuntimeDownloadsInventory } from "./state-move.ts";
@@ -28,13 +22,7 @@ const report = await Effect.runPromise(
     }).pipe(Effect.provideContext(context));
   }).pipe(
     Effect.provideService(Stage, move.to.stage),
-    Effect.provide(AlchemyContextLive),
-    Effect.provide(ProfileStoreLive),
-    Effect.provide(CredentialsStoreLive),
-    Effect.provide(layerNonInteractive()),
-    Effect.provideService(ArtifactStore, createArtifactStore()),
-    Effect.provide(FetchHttpClient.layer),
-    Effect.provide(PlatformServices),
+    Effect.provide(Alchemist.layer()),
     Effect.scoped,
   ),
 );

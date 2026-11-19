@@ -42,7 +42,10 @@ function normalizeRunFunction(source: string) {
     )
     .replace(/^  if \(!runOwned\) Schema.decodeUnknownSync[^\n]+\n/m, "")
     .replace(/^    if \(!olds\) return yield\* createRunFunction\(news, instanceId\);\n/m, "")
-    .replace("read: ({ olds, output, instanceId }) => (output ? readOwned(output.functionName, instanceId) : isResolved(olds) && olds ? readOwned(olds.functionName, instanceId) : Effect.undefined),", "read: ({ olds, output }) => (output ? readFunction(output.functionName) : isResolved(olds) && olds ? readFunction(olds.functionName) : Effect.undefined),")
+    .replace(
+      "read: ({ olds, output, instanceId }) => (output ? readOwned(output.functionName, instanceId) : isResolved(olds) && olds ? readOwned(olds.functionName, instanceId) : Effect.undefined),",
+      "read: ({ olds, output }) => (output ? readFunction(output.functionName) : isResolved(olds) && olds ? readFunction(olds.functionName) : Effect.undefined),",
+    )
     .replace("reconcile: Effect.fn(function* ({ news, olds, instanceId }) {", "reconcile: Effect.fn(function* ({ news, olds }) {")
     .replace(/  delete: Effect.fn\(function\* \({ output, instanceId }\) {[\s\S]*?\n  }\),/, '  delete: () => Effect.die("Dispatcher deletion is forbidden; use the documented state-only rollback."),');
 }

@@ -15,7 +15,7 @@ export interface StateMove {
   readonly from: StateIdentity;
   readonly to: StateIdentity;
 }
-export interface StateMoveReport {
+interface StateMoveReport {
   readonly dryRun: boolean;
   readonly copied: readonly string[];
   readonly removed: readonly string[];
@@ -45,7 +45,8 @@ const rowsOf = Effect.fn(function* (store: StateService, identity: StateIdentity
   return rows;
 });
 
-export const moveState = Effect.fn(function* (store: StateService, { from, to }: StateMove, inventory: Readonly<Record<string, string>>, dryRun: boolean) {
+// What both identities hold, validated: a record that exists on both sides must be identical.
+const survey = Effect.fn(function* (store: StateService, { from, to }: StateMove, inventory: Readonly<Record<string, string>>) {
   const source = yield* rowsOf(store, from, inventory);
   const destination = yield* rowsOf(store, to, inventory);
   const sourceOutput = yield* store.getOutput(from);
@@ -61,30 +62,38 @@ export const moveState = Effect.fn(function* (store: StateService, { from, to }:
     if (!source.has(fqn) && !destination.has(fqn)) return yield* Effect.die(`Record ${fqn} is in neither ${from.stack}/${from.stage} nor ${to.stack}/${to.stage}; refusing a partial move`);
   }
   if (sourceOutput !== undefined && destinationOutput !== undefined && !isDeepStrictEqual(sourceOutput, destinationOutput)) return yield* Effect.die(`${to.stack}/${to.stage} holds a different stack output; refusing to overwrite it`);
-  const copied = [...source.keys()].filter((fqn) => !destination.has(fqn));
-  const outputCopied = sourceOutput !== undefined && destinationOutput === undefined;
-  const removed = [...source.keys()];
-  const hasOldState = source.size > 0 || sourceOutput !== undefined;
-  if (dryRun) return { dryRun, copied, removed: hasOldState ? removed : [], outputCopied } satisfies StateMoveReport;
+  return { source, destination, sourceOutput, destinationOutput };
+});
 
-  for (const fqn of copied) {
-    const row = source.get(fqn);
-    if (row) yield* store.set({ ...to, fqn, value: row });
-  }
-  if (outputCopied) yield* store.setOutput({ ...to, value: sourceOutput });
-
-  // Verify the destination before anything is removed.
+// The destination must hold every source record, byte for byte, before anything is removed.
+const verify = Effect.fn(function* (store: StateService, { to }: StateMove, inventory: Readonly<Record<string, string>>, source: ReadonlyMap<string, PersistedState>, sourceOutput: unknown) {
   const verified = yield* rowsOf(store, to, inventory);
   for (const [fqn, row] of source) {
     if (!isDeepStrictEqual(verified.get(fqn), row)) return yield* Effect.die(`Copy of ${fqn} did not verify; the old state is untouched`);
   }
   if (verified.size !== Object.keys(inventory).length) return yield* Effect.die("The destination is incomplete after the copy; the old state is untouched");
   if (sourceOutput !== undefined && !isDeepStrictEqual(yield* store.getOutput(to), sourceOutput)) return yield* Effect.die("Copy of the stack output did not verify; the old state is untouched");
+});
 
-  if (hasOldState) {
-    for (const fqn of source.keys()) yield* store.delete({ ...from, fqn });
-    yield* store.deleteStack(from);
-    if ((yield* store.list(from)).length || (yield* store.getOutput(from)) !== undefined) return yield* Effect.die("The old state was not fully removed");
+const removeOld = Effect.fn(function* (store: StateService, { from }: StateMove, fqns: Iterable<string>) {
+  for (const fqn of fqns) yield* store.delete({ ...from, fqn });
+  yield* store.deleteStack(from);
+  if ((yield* store.list(from)).length || (yield* store.getOutput(from)) !== undefined) return yield* Effect.die("The old state was not fully removed");
+});
+
+export const moveState = Effect.fn(function* (store: StateService, move: StateMove, inventory: Readonly<Record<string, string>>, dryRun: boolean) {
+  const { source, destination, sourceOutput, destinationOutput } = yield* survey(store, move, inventory);
+  const copied = [...source.keys()].filter((fqn) => !destination.has(fqn));
+  const outputCopied = sourceOutput !== undefined && destinationOutput === undefined;
+  const hasOldState = source.size > 0 || sourceOutput !== undefined;
+  const report = { dryRun, copied, removed: hasOldState ? [...source.keys()] : [], outputCopied } satisfies StateMoveReport;
+  if (dryRun) return report;
+  for (const fqn of copied) {
+    const row = source.get(fqn);
+    if (row) yield* store.set({ ...move.to, fqn, value: row });
   }
-  return { dryRun, copied, removed: hasOldState ? removed : [], outputCopied } satisfies StateMoveReport;
+  if (outputCopied) yield* store.setOutput({ ...move.to, value: sourceOutput });
+  yield* verify(store, move, inventory, source, sourceOutput);
+  if (hasOldState) yield* removeOld(store, move, source.keys());
+  return report;
 });

@@ -15,7 +15,7 @@ import { clearStage } from "../releases/cleanup.ts";
 // any point ends in the same state. Every step plans first, so it holds the stack/stage lease; the
 // lease is bound to the step's scope, so the release step and the destroy step are separate scopes
 // and the destroy step validates the inventory again.
-export const legacyStage = "nightly";
+const legacyStage = "nightly";
 const dispatcher = "transcription-dispatcher";
 const nightlyPrefix = "chalk-nightly-";
 
@@ -90,30 +90,41 @@ const readRows = Effect.fn(function* (store: StateService) {
 // Every record must be exactly one expected legacy resource. A bucket, a KMS key, a retained shared
 // resource or a record from another environment is refused: retirement deletes only what the Nightly
 // dispatcher stack itself created.
+const identify = Effect.fn(function* (row: ResourceState) {
+  const expected = row.fqn === row.logicalId ? Object.entries(inventory).find(([id]) => id === row.logicalId)?.[1] : undefined;
+  if (!expected) return yield* Effect.die(`Unexpected record ${row.fqn} (${row.resourceType}); only the legacy Nightly dispatcher inventory may be retired`);
+  if (row.resourceType !== expected.type) return yield* Effect.die(`Record ${row.fqn} is ${row.resourceType}, not the expected ${expected.type}; retirement refused`);
+  if (row.removalPolicy !== undefined && row.removalPolicy !== "retain" && row.removalPolicy !== "destroy") return yield* Effect.die(`Record ${row.fqn} has removal policy ${row.removalPolicy}; retirement refused`);
+  const applied = lastApplied(row);
+  if (!applied) return yield* Effect.die(`Record ${row.fqn} is ${row.status}; retirement cannot reason about it. Inspect the live resource by hand`);
+  if (row.status === "deleting" && !resumable(row)) return yield* Effect.die(`Record ${row.fqn} is deleting without having been released by this retirement; inspect the live resource by hand`);
+  if (expected.tagged && row.status !== "deleting" && !taggedNightly(applied.props)) return yield* Effect.die(`Record ${row.fqn} does not carry the saved Nightly environment tag; retirement refused`);
+  return { expected, applied };
+});
+
+// The function name a record's physical name derives from, or undefined when it names none.
+const physicalFunctionName = Effect.fn(function* (row: ResourceState, expected: Entry, applied: Applied) {
+  const name = yield* attrString(applied.attr, expected.field, row.fqn);
+  if (expected.statementId !== undefined) {
+    if ((yield* attrString(applied.attr, "statementId", row.fqn)) !== expected.statementId) return yield* Effect.die(`Record ${row.fqn} has an unexpected statement ID; retirement refused`);
+    // The permission names its function by name or ARN.
+    if (!(name.split(":").pop() ?? "").startsWith(nightlyPrefix)) return yield* Effect.die(`Record ${row.fqn} grants a function outside the legacy Nightly naming; retirement refused`);
+    return undefined;
+  }
+  if (row.logicalId === "Reconcile") {
+    if (!(yield* attrString(applied.attr, "groupName", row.fqn)).startsWith(scheduleGroupPrefix) || !name.startsWith(nightlyPrefix)) return yield* Effect.die(`Record ${row.fqn} is outside the legacy Nightly naming; retirement refused`);
+    return undefined;
+  }
+  if (!name.startsWith(expected.prefix + nightlyPrefix) || !name.endsWith(expected.suffix)) return yield* Effect.die(`Record ${row.fqn} is ${name}, outside the legacy Nightly naming; retirement refused`);
+  return name.slice(expected.prefix.length, name.length - expected.suffix.length);
+});
+
 const validate = Effect.fn(function* (rows: readonly ResourceState[]) {
   const functionNames = new Set<string>();
   for (const row of rows) {
-    const expected = row.fqn === row.logicalId ? Object.entries(inventory).find(([id]) => id === row.logicalId)?.[1] : undefined;
-    if (!expected) return yield* Effect.die(`Unexpected record ${row.fqn} (${row.resourceType}); only the legacy Nightly dispatcher inventory may be retired`);
-    if (row.resourceType !== expected.type) return yield* Effect.die(`Record ${row.fqn} is ${row.resourceType}, not the expected ${expected.type}; retirement refused`);
-    if (row.removalPolicy !== undefined && row.removalPolicy !== "retain" && row.removalPolicy !== "destroy") return yield* Effect.die(`Record ${row.fqn} has removal policy ${row.removalPolicy}; retirement refused`);
-    const applied = lastApplied(row);
-    if (!applied) return yield* Effect.die(`Record ${row.fqn} is ${row.status}; retirement cannot reason about it. Inspect the live resource by hand`);
-    if (row.status === "deleting" && !resumable(row)) return yield* Effect.die(`Record ${row.fqn} is deleting without having been released by this retirement; inspect the live resource by hand`);
-    if (expected.tagged && row.status !== "deleting" && !taggedNightly(applied.props)) return yield* Effect.die(`Record ${row.fqn} does not carry the saved Nightly environment tag; retirement refused`);
-    const name = yield* attrString(applied.attr, expected.field, row.fqn);
-    if (expected.statementId !== undefined) {
-      if ((yield* attrString(applied.attr, "statementId", row.fqn)) !== expected.statementId) return yield* Effect.die(`Record ${row.fqn} has an unexpected statement ID; retirement refused`);
-      // The permission names its function by name or ARN.
-      if (!(name.split(":").pop() ?? "").startsWith(nightlyPrefix)) return yield* Effect.die(`Record ${row.fqn} grants a function outside the legacy Nightly naming; retirement refused`);
-      continue;
-    }
-    if (row.logicalId === "Reconcile") {
-      if (!(yield* attrString(applied.attr, "groupName", row.fqn)).startsWith(scheduleGroupPrefix) || !name.startsWith(nightlyPrefix)) return yield* Effect.die(`Record ${row.fqn} is outside the legacy Nightly naming; retirement refused`);
-      continue;
-    }
-    if (!name.startsWith(expected.prefix + nightlyPrefix) || !name.endsWith(expected.suffix)) return yield* Effect.die(`Record ${row.fqn} is ${name}, outside the legacy Nightly naming; retirement refused`);
-    functionNames.add(name.slice(expected.prefix.length, name.length - expected.suffix.length));
+    const { expected, applied } = yield* identify(row);
+    const functionName = yield* physicalFunctionName(row, expected, applied);
+    if (functionName !== undefined) functionNames.add(functionName);
   }
   if (functionNames.size > 1) return yield* Effect.die("Records name more than one dispatcher function; retirement refused");
 });
@@ -122,13 +133,11 @@ const validate = Effect.fn(function* (rows: readonly ResourceState[]) {
 const requireStable = Effect.fn(function* (rows: readonly ResourceState[]) {
   const unstable = rows.filter((row) => row.status !== "created" && !resumable(row));
   if (unstable.length)
-    return yield* Effect.die(
-      `Records ${unstable.map((row) => `${row.fqn} (${row.status})`).join(", ")} are not stable. Run \`pnpm infra retire transcription-dispatcher --settle\`: it re-reads each live resource and marks an interrupted update created, deleting nothing. Then preview again`,
-    );
+    return yield* Effect.die(`Records ${unstable.map((row) => `${row.fqn} (${row.status})`).join(", ")} are not stable. Run \`pnpm infra retire transcription-dispatcher --settle\`: it re-reads each live resource and marks an interrupted update created, deleting nothing. Then preview again`);
 });
 
 // Make exactly the validated records destroyable, one record at a time.
-export const releaseLegacyDispatcher = Effect.fn(function* (store: StateService) {
+const releaseLegacyDispatcher = Effect.fn(function* (store: StateService) {
   const rows = yield* readRows(store);
   yield* validate(rows);
   yield* requireStable(rows);
@@ -140,7 +149,7 @@ export const releaseLegacyDispatcher = Effect.fn(function* (store: StateService)
 
 // Recovery for records a failed apply left updating: confirm the physical resource exists, then record
 // what is live as the created state. Deletes nothing; a resource that is gone is refused.
-export const settleLegacyDispatcher = Effect.fn(function* (store: StateService) {
+const settleLegacyDispatcher = Effect.fn(function* (store: StateService) {
   const rows = yield* readRows(store);
   yield* validate(rows);
   const settledIds: string[] = [];
@@ -180,7 +189,7 @@ const physicalName = (row: ResourceState) => {
 };
 
 export type RetireMode = "preview" | "apply";
-export interface RetirementItem {
+interface RetirementItem {
   readonly id: string;
   readonly type: string;
   readonly name: string;
@@ -193,8 +202,7 @@ const open = Effect.fn(function* (stack: ConfiguredStack<unknown, never>) {
   const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
   return { plan, store };
 });
-const items = (plan: Alchemist.StackPlan): RetirementItem[] =>
-  Object.values(plan.native.deletions).flatMap((row) => (row ? [{ id: row.resource.FQN, type: row.resource.Type, name: physicalName(row.state), status: row.state.status, action: row.action }] : []));
+const items = (plan: Alchemist.StackPlan): RetirementItem[] => Object.values(plan.native.deletions).flatMap((row) => (row ? [{ id: row.resource.FQN, type: row.resource.Type, name: physicalName(row.state), status: row.state.status, action: row.action }] : []));
 
 // Settles the legacy dispatcher's interrupted records and returns the ones it settled.
 export const settle = Effect.fn(function* (stack: ConfiguredStack<unknown, never>) {
