@@ -6,7 +6,7 @@ the custom resource's API dependencies from the caller's Cloudflare layer:
 ```ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Layer from "effect/Layer";
-import { r2LifecycleProvider } from "../providers/cloudflare-r2-lifecycle.ts";
+import { r2LifecycleProvider } from "./r2-transcription-lifecycle.ts";
 
 const cloudflare = Cloudflare.providers();
 const providers = Layer.merge(cloudflare, r2LifecycleProvider.pipe(Layer.provide(cloudflare)));

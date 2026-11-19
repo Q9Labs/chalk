@@ -8,7 +8,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
-export const functionProps = Schema.Struct({
+const functionProps = Schema.Struct({
   functionName: Schema.String,
   description: Schema.String,
   role: Schema.String,
@@ -26,7 +26,7 @@ export const functionProps = Schema.Struct({
   tags: Schema.Record(Schema.String, Schema.String),
 });
 export type FunctionProps = typeof functionProps.Type;
-export interface VersionedFunction extends Resource<
+interface VersionedFunction extends Resource<
   "Chalk.Lambda.VersionedFunction",
   FunctionProps,
   {
@@ -43,21 +43,23 @@ const required = <T>(value: T | undefined, name: string): T => {
   if (value === undefined) throw new Error(`Lambda did not return ${name}; values are not logged.`);
   return value;
 };
-export const readFunction = Effect.fn(function* (functionName: string) {
+const readFunction = Effect.fn(function* (functionName: string) {
   const current = yield* lambda.getFunction({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!current?.Configuration) return undefined;
   const config = current.Configuration;
-  if (
-    config.VpcConfig?.VpcId ||
-    config.VpcConfig?.SubnetIds?.length ||
-    config.VpcConfig?.SecurityGroupIds?.length ||
-    config.Layers?.length ||
-    config.FileSystemConfigs?.length ||
-    config.KMSKeyArn ||
-    config.DeadLetterConfig?.TargetArn ||
-    (config.LoggingConfig?.LogGroup && config.LoggingConfig.LogGroup !== `/aws/lambda/${functionName}`) ||
-    (config.LoggingConfig?.LogFormat && config.LoggingConfig.LogFormat !== "Text")
-  ) {
+  const hasUnsupportedConfiguration = () =>
+    [
+      config.VpcConfig?.VpcId,
+      config.VpcConfig?.SubnetIds?.length,
+      config.VpcConfig?.SecurityGroupIds?.length,
+      config.Layers?.length,
+      config.FileSystemConfigs?.length,
+      config.KMSKeyArn,
+      config.DeadLetterConfig?.TargetArn,
+      config.LoggingConfig?.LogGroup && config.LoggingConfig.LogGroup !== `/aws/lambda/${functionName}`,
+      config.LoggingConfig?.LogFormat && config.LoggingConfig.LogFormat !== "Text",
+    ].some(Boolean);
+  if (hasUnsupportedConfiguration()) {
     return yield* Effect.die("Dispatcher has an unexpected networking, encryption, layer or logging configuration; refusing to proceed");
   }
   const invoke = yield* lambda.getFunctionEventInvokeConfig({ FunctionName: functionName });
@@ -106,7 +108,8 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     const { code, ...configuration } = news;
     // Select the immutable object even when it contains identical bytes under a
     // new release key. Never rebuild, publish a version, or change architecture.
-    if (!deepEqual(olds?.code, code) || before.CodeSha256 !== code.sha256) {
+    const codeChanged = () => !deepEqual(olds?.code, code) || before.CodeSha256 !== code.sha256;
+    if (codeChanged()) {
       yield* lambda.updateFunctionCode({ FunctionName: news.functionName, S3Bucket: code.bucket, S3Key: code.key, S3ObjectVersion: code.version, RevisionId: before.RevisionId, Publish: false });
       yield* settled(news.functionName);
     }

@@ -11,7 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { environment, providers, state } from "../platform/config.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag, recorderPoolProviders } from "../providers/digitalocean-recorder-pools.ts";
 import { RecordingBucket, recordingBucketProvider } from "../providers/cloudflare-recording-bucket.ts";
-import { loadConfig, requireInput } from "./config.ts";
+import { loadRecorderConfig, requireInput } from "./config.ts";
 import { bucketProps, keyProps, poolFirewallProps } from "./resources.ts";
 
 const cloudflare = Cloudflare.providers();
@@ -23,7 +23,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const stage = yield* environment;
-    const config = yield* Effect.tryPromise(loadConfig);
+    const config = yield* Effect.tryPromise(loadRecorderConfig);
     requireInput(config.environment === stage, "Recorder inputs must match the Alchemy stage.");
     const capacity = { desired_capture_nodes: config.desired_capture_nodes, desired_render_nodes: config.desired_render_nodes, global_recorder_compute_nodes: config.global_recorder_compute_nodes, recording_bucket_name: config.bucket_name };
     if (!config.enable_apply) return { ...capacity, recording_kms_key_arn: null, capture: { droplet_ids: [], droplet_names: [], firewall_id: null }, render: { droplet_ids: [], droplet_names: [], firewall_id: null } };
