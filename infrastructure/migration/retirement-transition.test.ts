@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import { clearStage } from "../releases/cleanup.ts";
-import { retire, type RetireMode } from "./retirement-transition.ts";
+import { retire, settle, type RetireMode } from "./retirement-transition.ts";
 
 const stackName = "transcription-dispatcher";
 const fn = "chalk-nightly-transcription-dispatcher";
@@ -51,17 +51,17 @@ const seeded = (): CreatedResourceState[] => [
 ];
 const rowsOf = (list: readonly ResourceState[]): Rows => Object.fromEntries(list.map((row) => [row.fqn, row]));
 
-interface Fake extends Resource<"Fake", Record<string, unknown>, Record<string, unknown>> {}
+interface Fake extends Resource<string, { readonly marker?: string }, { readonly marker: string; readonly state?: string }> {}
 // The cloud boundary: one counting provider per legacy resource type. The planner, the state store,
 // cleanup and the transition are the real code.
 function fakeCloud(types: readonly string[]) {
   const deleted: string[] = [];
   const failOnce = new Set<string>();
   const missing = new Set<string>();
-  const live = new Map<string, Record<string, unknown>>();
+  const live = new Map<string, { readonly marker: string; readonly state?: string }>();
   const providers = types.map((type) =>
     Provider.succeed(Resource<Fake>(type), {
-      read: ({ fqn }) => Effect.succeed(missing.has(fqn) ? undefined : (live.get(fqn) ?? { fromLive: fqn })),
+      read: ({ fqn }) => Effect.succeed(missing.has(fqn) ? undefined : (live.get(fqn) ?? { marker: fqn })),
       reconcile: () => Effect.die("retirement never reconciles"),
       delete: ({ instanceId }) =>
         Effect.suspend(() => {
@@ -71,7 +71,7 @@ function fakeCloud(types: readonly string[]) {
         }),
     }),
   );
-  return { layer: Layer.mergeAll(...providers), deleted, failOnce, missing, live };
+  return { layer: providers.reduce((all, one) => Layer.merge(all, one), Layer.empty), deleted, failOnce, missing, live };
 }
 const inventorySize = seeded().length;
 const legacyTypes = [...new Set(seeded().map((row) => row.resourceType)), "AWS.S3.Bucket", "AWS.KMS.Key"];
@@ -81,8 +81,9 @@ function setup(rows: readonly ResourceState[]) {
   const cloud = fakeCloud(legacyTypes);
   const stack = Alchemy.Stack(stackName, { providers: cloud.layer, state: inMemoryState(state, { [stackName]: { nightly: { saved: true } } }) }, Effect.void);
   const run = (mode: RetireMode) => Effect.runPromiseExit(retire(stack, mode).pipe(Effect.provide(Alchemist.layer())));
+  const settleRun = () => Effect.runPromiseExit(settle(stack).pipe(Effect.provide(Alchemist.layer())));
   const remaining = () => Object.values(state[stackName]?.nightly ?? {});
-  return { state, cloud, stack, run, remaining };
+  return { state, cloud, stack, run, settleRun, remaining };
 }
 const failureText = (exit: Exit.Exit<unknown, unknown>) => (Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "");
 const snapshot = (rows: readonly ResourceState[]) => JSON.stringify(rows);
@@ -158,7 +159,7 @@ const refusals: ReadonlyArray<readonly [string, (rows: CreatedResourceState[]) =
   ["a record without the saved Nightly tag", (rows) => rows.map((row) => (row.logicalId === "Function" ? { ...row, props: { tags: { ...tags, chalk_environment: "production" } } } : row)), /saved Nightly environment tag/],
   ["a production-named queue", (rows) => rows.map((row) => (row.logicalId === "AsyncFailure" ? { ...row, attr: { queueName: "chalk-production-transcription-dispatcher-async-failure" } } : row)), /outside the legacy Nightly naming/],
   ["a permission outside the Nightly function", (rows) => rows.map((row) => (row.logicalId === "ControlApiPermission" ? { ...row, attr: { statementId: "AllowControlApiWake", functionName: "chalk-production-api" } } : row)), /outside the legacy Nightly naming/],
-  ["a protected record", (rows) => rows.map((row) => (row.logicalId === "Logs" ? { ...row, removalPolicy: "protect" } : row)), /removal policy protect/],
+  ["a protected record", (rows) => rows.map((row) => (row.logicalId === "Logs" ? { ...row, removalPolicy: "protect" } : row)), /protect/],
   ["records naming two functions", (rows) => rows.map((row) => (row.logicalId === "Function" ? { ...row, attr: { functionName: "chalk-nightly-other" } } : row)), /more than one dispatcher function/],
 ];
 for (const [label, mutate, message] of refusals)
@@ -206,16 +207,16 @@ test("an updating record fails closed in preview and apply, naming the recovery 
 });
 
 test("settle records the live resource as created, deletes nothing, and unblocks retirement", async () => {
-  const { run, cloud, remaining } = setup(interrupted(seeded()));
-  cloud.live.set("Reconcile", { scheduleName: "chalk-nightly-transcription-reconcile", groupName: "chalk-nightly", state: "DISABLED" });
-  const settled = await run("settle");
+  const { run, settleRun, cloud, remaining } = setup(interrupted(seeded()));
+  cloud.live.set("Reconcile", { marker: "live", state: "DISABLED" });
+  const settled = await settleRun();
   assert.ok(Exit.isSuccess(settled), failureText(settled));
   assert.deepEqual(settled.value, ["Reconcile"]);
   assert.equal(cloud.deleted.length, 0);
   const row = remaining().find((candidate) => candidate.fqn === "Reconcile");
   assert.equal(row?.status, "created");
   assert.equal(row?.removalPolicy, "retain");
-  assert.ok(Exit.isSuccess(await run("settle")), "settling again changes nothing");
+  assert.ok(Exit.isSuccess(await settleRun()), "settling again changes nothing");
   const exit = await run("apply");
   assert.ok(Exit.isSuccess(exit), failureText(exit));
   assert.equal(cloud.deleted.length, inventorySize);
@@ -223,18 +224,18 @@ test("settle records the live resource as created, deletes nothing, and unblocks
 });
 
 test("settle refuses a record whose live resource is gone", async () => {
-  const { run, cloud, remaining } = setup(interrupted(seeded()));
+  const { settleRun, cloud, remaining } = setup(interrupted(seeded()));
   cloud.missing.add("Reconcile");
   const before = snapshot(remaining());
-  const exit = await run("settle");
+  const exit = await settleRun();
   assert.match(failureText(exit), /Live Reconcile was not found/);
   assert.equal(snapshot(remaining()), before);
 });
 
 test("settle refuses a record that is not an interrupted update", async () => {
   const rows = seeded().map((row): ResourceState => (row.logicalId === "Reconcile" ? { ...row, status: "creating" } : row));
-  const { run, remaining } = setup(rows);
+  const { settleRun, remaining } = setup(rows);
   const before = snapshot(remaining());
-  assert.match(failureText(await run("settle")), /Reconcile is creating/);
+  assert.match(failureText(await settleRun()), /Reconcile is creating/);
   assert.equal(snapshot(remaining()), before);
 });

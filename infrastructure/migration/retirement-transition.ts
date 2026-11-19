@@ -164,7 +164,7 @@ export const settleLegacyDispatcher = Effect.fn(function* (store: StateService) 
       attr: { ...stripUnowned(live) },
       bindings: row.bindings,
       downstream: row.downstream,
-      removalPolicy: row.removalPolicy,
+      ...(row.removalPolicy ? { removalPolicy: row.removalPolicy } : {}),
     };
     yield* store.set({ stack: dispatcher, stage: legacyStage, fqn: row.fqn, value: settled });
     settledIds.push(row.fqn);
@@ -179,7 +179,7 @@ const physicalName = (row: ResourceState) => {
   return typeof found === "string" ? found : "(no recorded physical name)";
 };
 
-export type RetireMode = "preview" | "apply" | "settle";
+export type RetireMode = "preview" | "apply";
 export interface RetirementItem {
   readonly id: string;
   readonly type: string;
@@ -196,18 +196,20 @@ const open = Effect.fn(function* (stack: ConfiguredStack<unknown, never>) {
 const items = (plan: Alchemist.StackPlan): RetirementItem[] =>
   Object.values(plan.native.deletions).flatMap((row) => (row ? [{ id: row.resource.FQN, type: row.resource.Type, name: physicalName(row.state), status: row.state.status, action: row.action }] : []));
 
-// The one retirement entry point. `preview` writes nothing, `settle` returns the records it settled; `apply`
-// releases the dispatcher inventory and then runs the existing destroy. Every mode returns each
-// resource's type and physical name, so an operator sees what goes before it goes.
+// Settles the legacy dispatcher's interrupted records and returns the ones it settled.
+export const settle = Effect.fn(function* (stack: ConfiguredStack<unknown, never>) {
+  if (stack.stackName !== dispatcher) return yield* Effect.die("Only the legacy transcription dispatcher has a settle step");
+  return yield* Effect.gen(function* () {
+    const { plan, store } = yield* open(stack);
+    return yield* settleLegacyDispatcher(store).pipe(Effect.provide(plan.context));
+  }).pipe(Effect.scoped);
+});
+
+// The one retirement entry point. `preview` writes nothing; `apply` releases the dispatcher inventory
+// and then runs the existing destroy. Both return each resource's type and physical name, so an
+// operator sees what goes before it goes.
 export const retire = Effect.fn(function* (stack: ConfiguredStack<unknown, never>, mode: RetireMode) {
   const legacy = stack.stackName === dispatcher;
-  if (mode === "settle") {
-    if (!legacy) return yield* Effect.die("Only the legacy transcription dispatcher has a settle step");
-    return yield* Effect.gen(function* () {
-      const { plan, store } = yield* open(stack);
-      return yield* settleLegacyDispatcher(store).pipe(Effect.provide(plan.context));
-    }).pipe(Effect.scoped);
-  }
   if (mode === "apply" && legacy) {
     yield* Effect.gen(function* () {
       const { store } = yield* open(stack);
