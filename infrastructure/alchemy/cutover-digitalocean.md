@@ -97,9 +97,12 @@ the cutover. No production deploy is included in this handoff.
 
 ## Cut over Nightly only after its original resources are found
 
-Neither currently downloaded Nightly state is eligible. Both missing Droplets
-and firewalls must be investigated before a cutover. Do not deploy their current
-create plans.
+Neither currently downloaded Nightly state is eligible. The persistent Nightly
+host and shared staging SFU were deliberately retired on 2026-11-15 (PRs #1432
+and #1453, commit `011fc3f34`). Normal cuts use throwaway proof stacks with
+`deploy_managed: false`. Do not deploy these create plans or seed stale state.
+A future manually dispatched managed Nightly deployment is a new allocation,
+not adoption of the retired resources.
 
 For an eligible Nightly stack, use its Nightly bucket and original state key.
 Copy that state to a dated backup key first. Run seed dry-run, seed, detailed
