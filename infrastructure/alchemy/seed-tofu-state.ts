@@ -152,12 +152,13 @@ const seedArchive = Effect.fn(function* (get: ReadResource) {
 });
 
 const parseSeedOptions = () => {
-  const [stack, stageInput, stateFile, mode, ...extra] = process.argv.slice(2);
+  const [stackInput, stageInput, stateFile, mode, ...extra] = process.argv.slice(2);
+  const stack = Schema.decodeUnknownSync(Schema.Literals(["recording-control-address", "archive-cdn", "sfu", "sfu-standby", "recorder", "direct-sync"]))(stackInput);
   const stage = Schema.decodeUnknownSync(environmentName)(stageInput);
   const isSfu = stack === "sfu" || stack === "sfu-standby";
   const isRecorder = stack === "recorder";
   const isDirectSync = stack === "direct-sync";
-  if ((!isSfu && !isRecorder && !isDirectSync && stack !== "recording-control-address" && stack !== "archive-cdn") || (!isSfu && !isRecorder && !isDirectSync && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
+  if ((!isSfu && !isRecorder && !isDirectSync && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
     throw new Error("Usage: tsx alchemy/seed-tofu-state.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder|direct-sync|transcription-dispatcher> <nightly|production> <tofu-state.json> [--dry-run]");
   }
   if (stage === "production" && mode !== "--dry-run" && process.env.CHALK_ALCHEMY_PRODUCTION_SEED !== "approved") throw new Error("Production seed writes require explicit CHALK_ALCHEMY_PRODUCTION_SEED=approved; this lane uses --dry-run only.");

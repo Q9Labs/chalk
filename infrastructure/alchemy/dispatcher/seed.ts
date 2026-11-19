@@ -90,10 +90,9 @@ export const seedDispatcher = Effect.fn(function* (stateFile: string, stage: "ni
   );
   for (const row of rows) {
     const old = yield* store.get({ stack: "transcription-dispatcher", stage, fqn: row.fqn });
-    requireInput(
-      old === undefined || (old.status === "created" && "props" in old && old.resourceType === row.resourceType && old.instanceId === row.instanceId && canonical(jsonValue(old.props)) === canonical(jsonValue(row.props)) && canonical(jsonValue(old.attr)) === canonical(jsonValue(row.attr))),
-      `Existing ${row.fqn} is not this unchanged seed; refusing to overwrite`,
-    );
+    const matchesSeed = () =>
+      old === undefined || (old.status === "created" && "props" in old && old.resourceType === row.resourceType && old.instanceId === row.instanceId && canonical(jsonValue(old.props)) === canonical(jsonValue(row.props)) && canonical(jsonValue(old.attr)) === canonical(jsonValue(row.attr)));
+    requireInput(matchesSeed(), `Existing ${row.fqn} is not this unchanged seed; refusing to overwrite`);
   }
   const output = yield* store.getOutput({ stack: "transcription-dispatcher", stage });
   requireInput(output === undefined || canonical(jsonValue(output)) === canonical(jsonValue(props.outputs)), "Dispatcher outputs already changed; refusing to reseed");
