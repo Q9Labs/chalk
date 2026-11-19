@@ -152,7 +152,7 @@ Delete only the Alchemy records for the affected stack and stage, using its
 entrypoint, before restoring the previous commit's OpenTofu configuration:
 
 ```sh
-pnpm --dir infrastructure exec alchemy state delete archive-cdn/nightly --config nightly/archive-cdn/alchemy.run.ts --yes
+pnpm --dir infrastructure exec alchemy state delete archive-cdn/nightly --recursive --config nightly/archive-cdn/alchemy.run.ts --no-input
 ```
 
 Run only the command for the stack being rolled back. `state delete` forgets
