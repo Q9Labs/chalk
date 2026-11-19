@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
+import { checkBootstrap } from "./deploy.ts";
 import { clearStage } from "./cleanup.ts";
 
 interface RunResource extends Resource<"Test.RunResource", { name: string }, { name: string }> {}
@@ -42,6 +43,9 @@ test("run-owned resources and state are destroyed; retry is idempotent and never
       const create = yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" });
       yield* Alchemist.apply(create);
       assert.ok(live);
+      const refused = yield* Effect.exit(checkBootstrap(create));
+      assert.equal(refused._tag, "Failure");
+      assert.ok(live, "a pre-existing run is never claimed or deleted by bootstrap validation");
       for (let attempt = 0; attempt < 2; attempt++) {
         const destroy = yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "destroy" });
         yield* clearStage(destroy);
