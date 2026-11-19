@@ -14,7 +14,7 @@ else if (operation === "table") {
   writeFileSync(file, readFileSync(file, "utf8").replace(/<!-- stacks:start -->[\s\S]*?<!-- stacks:end -->/, `<!-- stacks:start -->\n${registryTable()}\n<!-- stacks:end -->`));
 } else if (operation === "retire") {
   retiredTarget(name);
-  if ((stageName !== undefined && stageName !== "--apply") || args.length) throw new Error("Usage: pnpm infra retire <stack> [--apply]");
+  if ((stageName !== undefined && stageName !== "--apply" && stageName !== "--settle") || args.length) throw new Error("Usage: pnpm infra retire <stack> [--apply|--settle]");
   command = ["tsx", "migration/retire-nightly.ts", name ?? "", ...(stageName ? [stageName] : [])];
 } else {
   const { target, stage } = selectStack(name, stageName);
