@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { reportFailure } from "../releases/failure.ts";
 
 export type DriftOutcome = "clean" | "drift" | "check-failed";
-export const driftExitCode = { clean: 0, drift: 2, "check-failed": 1 } as const satisfies Record<DriftOutcome, number>;
+const driftExitCode = { clean: 0, drift: 2, "check-failed": 1 } as const satisfies Record<DriftOutcome, number>;
 
 // A skipped record (no `read`, or a record that is creating, updating or deleting) was never compared
 // with the real resource, so "no drift found" would be false comfort. Only a full check may be clean.

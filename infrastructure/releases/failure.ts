@@ -20,7 +20,7 @@ const nameOf = (value: unknown): string => {
   const name = "_tag" in value && typeof value._tag === "string" ? value._tag : value.constructor?.name;
   return name !== undefined && plainName.test(name) ? name : "unclassified";
 };
-export const failureReasons = (cause: Cause.Cause<unknown>): string[] => {
+const failureReasons = (cause: Cause.Cause<unknown>): string[] => {
   const reasons = cause.reasons.map((reason) => (Cause.isFailReason(reason) ? `error ${nameOf(reason.error)}` : Cause.isDieReason(reason) ? `defect ${nameOf(reason.defect)}` : "interrupted"));
   return [...new Set(reasons)].slice(0, 3);
 };
