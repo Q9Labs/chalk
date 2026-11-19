@@ -3,6 +3,7 @@ import { test } from "node:test";
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { LogGroupProvider } from "@alchemy.run/aws/Logs/LogGroup";
+import { Providers } from "@alchemy.run/aws/Providers";
 import { ScheduleProvider } from "@alchemy.run/aws/Scheduler/Schedule";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import { Endpoint } from "@distilled.cloud/aws/Endpoint";
@@ -125,10 +126,12 @@ const roleProvider = Provider.succeed(TestRole, {
   reconcile: ({ news }) => Effect.succeed({ arn: `arn:aws:iam::000000000000:role/${news.name}` }),
   delete: () => Effect.void,
 });
+// The stack types its AWS resources against the AWS collection; the providers are registered directly, which the engine prefers.
+const emptyCollection = Layer.succeed(Providers, { kind: "ProviderCollection", get: () => undefined, providers: {} });
 const stackFor = (fake: ReturnType<typeof fakeAws>, resource: "log-group" | "schedule", state = inMemoryState()) =>
   Alchemy.Stack(
     "test-run-owned",
-    { providers: Layer.mergeAll(fake.upstream, logGroupProvider(fake.upstream), scheduleProvider(fake.upstream), roleProvider), state },
+    { providers: Layer.mergeAll(fake.upstream, logGroupProvider(fake.upstream), scheduleProvider(fake.upstream), roleProvider, emptyCollection), state },
     Effect.gen(function* () {
       const role = yield* TestRole("Role", { name: "scheduler" });
       if (resource === "log-group") yield* AWS.Logs.LogGroup("Logs", { logGroupName: logName, retention: "14 days", tags: { chalk_environment: "nightly-test" } });
@@ -166,7 +169,7 @@ for (const resource of ["log-group", "schedule"] as const) {
     const stack = stackFor(fake, resource, inMemoryState(state));
     await Effect.runPromise(
       Effect.gen(function* () {
-        const applied = yield* Effect.exit(Alchemist.apply(yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" })));
+        const applied = yield* Effect.exit(Effect.flatMap(Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" }), Alchemist.apply));
         assert.ok(Exit.isFailure(applied));
         assert.match(Cause.pretty(applied.cause), /OwnedBySomeoneElse/);
         yield* destroyTwice(stack, "nightly-test");

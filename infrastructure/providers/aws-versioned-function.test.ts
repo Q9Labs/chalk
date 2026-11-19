@@ -188,8 +188,7 @@ for (const [label, existing] of [
     const stack = stackFor(aws.layer, inMemoryState(state));
     await Effect.runPromise(
       Effect.gen(function* () {
-        const plan = yield* Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" });
-        const applied = yield* Effect.exit(Alchemist.apply(plan));
+        const applied = yield* Effect.exit(Effect.flatMap(Alchemist.plan({ stack, stage: "nightly-test", operation: "deploy" }), Alchemist.apply));
         assert.ok(Exit.isFailure(applied));
         assert.match(Cause.pretty(applied.cause), /OwnedBySomeoneElse/);
         yield* destroyTwice(stack);
