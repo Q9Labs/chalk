@@ -239,3 +239,18 @@ test("settle refuses a record that is not an interrupted update", async () => {
   assert.match(failureText(await settleRun()), /Reconcile is creating/);
   assert.equal(snapshot(remaining()), before);
 });
+
+test("any retirement preview names the type and physical name, so a CloudFront distribution is visible before it goes", async () => {
+  const cloud = fakeCloud(["AWS.CloudFront.Distribution"]);
+  const state: Record<string, Record<string, Rows>> = {
+    "recording-control-address": { nightly: rowsOf([created("Cdn", "AWS.CloudFront.Distribution", {}, { distributionId: "E123EXAMPLE", distributionArn: "arn:aws:cloudfront::000000000000:distribution/E123EXAMPLE" })]) },
+  };
+  const stack = Alchemy.Stack("recording-control-address", { providers: cloud.layer, state: inMemoryState(state) }, Effect.void);
+  const exit = await Effect.runPromiseExit(retire(stack, "preview").pipe(Effect.provide(Alchemist.layer())));
+  assert.ok(Exit.isSuccess(exit), failureText(exit));
+  assert.deepEqual(
+    exit.value.map((item) => [item.id, item.type, item.name]),
+    [["Cdn", "AWS.CloudFront.Distribution", "E123EXAMPLE"]],
+  );
+  assert.equal(cloud.deleted.length, 0);
+});

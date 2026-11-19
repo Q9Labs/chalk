@@ -5,17 +5,18 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { publicKey } from "./config.ts";
-import { retiredStage, providers, state } from "../platform/config.ts";
+import { providers, state } from "../platform/config.ts";
 import { BucketPolicy, bucketPolicyProvider, canonicalPolicy } from "../providers/aws-bucket-policy.ts";
 
 export default Alchemy.Stack(
-  "archive-cdn",
+  "recorder-runtime-downloads",
   {
     providers: Layer.merge(providers, bucketPolicyProvider.pipe(Layer.provide(providers))),
     state,
   },
   Effect.gen(function* () {
-    const environment = yield* retiredStage;
+    // The distribution keeps its legacy tag: changing it would update a live production resource.
+    const environment = "nightly";
     const { accountId } = yield* AWSEnvironment.current;
     const bucketName = `chalk-nightly-artifacts-${accountId}`;
     const bucket = AWS.S3.Bucket.lookup({ bucketName });

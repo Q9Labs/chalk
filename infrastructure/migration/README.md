@@ -53,7 +53,8 @@ unchanged. Input schemas otherwise remain compared. These exclusions are not
 claimed as a whole-program no-op: stage behavior deliberately changed, and
 boundary/isolation tests cover it. No physical cloud name or live logical ID
 was renamed. The renamed retired components retain their old stack identities
-solely for cleanup; no copy/delete state rename is needed.
+solely for cleanup, except recorder runtime downloads, whose state moves to its
+production identity (below).
 
 ## Retire persistent Nightly after merge
 
@@ -62,20 +63,18 @@ not run them. First save private state/output snapshots and complete the other
 lane's current no-op proof. All commands below are **future operator writes**.
 No active operation accepts bare `nightly`; only retirement can address it.
 
-Before deleting recorder runtime downloads, inspect protected fleet/release
-settings for the three `CHALK_RECORDER_FLEET_ARCHIVE_CDN_*` variables. The Go
-fleet and boot-probe adapters can optionally use this CDN; current Nightly
-orchestration does not require it. Confirm no remaining consumer points at the
-retired distribution. Where a consumer must switch to existing S3 presigning,
-remove all three settings together (`OptionalCDN` rejects a partial set). No
-private deployment settings or live consumer inventory were read in this lane.
+Recorder runtime downloads (`archive-cdn/nightly`) is **not** retired. Its
+CloudFront distribution is referenced by the production SSM recorder settings
+(`CHALK_RECORDER_FLEET_ARCHIVE_CDN_*`), so `pnpm infra retire
+recorder-runtime-downloads` refuses; see the state move below.
 
-For the two seeded Alchemy stages, preview first, then apply sequentially:
+For the two remaining Alchemy stages, preview first, then apply sequentially.
+Every preview prints each resource's type and physical name, so an operator sees
+what goes before it goes (a CloudFront distribution, a bucket, a KMS key):
 
 ```sh
-AWS_PROFILE=q9labs pnpm infra retire recorder-runtime-downloads
-AWS_PROFILE=q9labs pnpm infra retire recorder-runtime-downloads --apply
 AWS_PROFILE=q9labs pnpm infra retire transcription-dispatcher
+AWS_PROFILE=q9labs pnpm infra retire transcription-dispatcher --settle   # only if the preview says a record is not stable
 AWS_PROFILE=q9labs pnpm infra retire transcription-dispatcher --apply
 AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint
 AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint --apply
@@ -83,14 +82,31 @@ AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint --apply
 
 | Retired component                                  | Deletes                                                                                                                                                | Keeps                                                                                                 |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Recorder runtime downloads (`archive-cdn/nightly`) | Distribution, public key, key group, origin access control, its state/output, and only `AllowRecorderArchiveCloudFront` from the shared bucket policy. | Looked-up artifacts bucket, every object/version, TLS deny and unrelated bucket-policy statements.    |
 | Transcription dispatcher                           | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output.                                    | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
 | Recorder control endpoint                          | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent.                                                                 | Refuses retained resources instead of silently forgetting an unexpected protected allocation.         |
 
+Every seeded Nightly dispatcher record carries `removalPolicy: "retain"`, which
+the planner turns into an `orphaned` node that cleanup refuses. `retire
+transcription-dispatcher --apply` therefore runs an explicit transition
+(`retirement-transition.ts`) under the stack/stage lease. It validates that the
+records are exactly the legacy Nightly dispatcher inventory (types, logical IDs,
+Nightly-prefixed physical names, the saved Nightly environment tag) and refuses
+anything else: an unexpected logical ID, a borrowed artifacts bucket, bucket
+versions or KMS key, a record from another environment, a `protect` policy.
+Then it makes only those records destroyable, one record at a time, and runs the
+existing preview/apply destroy in a second leased step that validates again.
+Every step is idempotent: a retry after a crash in the release step or in the
+destroy resumes where it stopped.
+
+The preview fails closed on any record that is not stable. If a failed apply
+left a record `updating` (the live schedule was one), run `pnpm infra retire
+transcription-dispatcher --settle`: it re-reads each live resource, records it
+as `created`, deletes nothing, and refuses a record whose live resource is gone
+or a record in any state other than an interrupted update. Then preview again.
+
 The migration-only dispatcher deletion override requires the legacy `nightly`
 stage and a saved Nightly environment tag; normal production deletion remains
-forbidden. The bucket-policy retirement provider reads the current policy and removes only
-its grant; retry preserves all unrelated statements. Destroy reads saved state
+forbidden. Destroy reads saved state
 without evaluating retired declarations. Cleanup refuses retained/orphaned
 resources and refuses to forget state while any resources remain.
 
@@ -155,3 +171,32 @@ AWS_PROFILE=q9labs pnpm infra destroy transcription-dispatcher nightly-123456
 The proof has **not** been run live here. Its successful result replaces the
 obsolete "one persistent Nightly release" production-cutover gate. Production
 remains OpenTofu-owned/unseeded until the lead explicitly sequences cutover.
+
+## Recorder runtime downloads state move
+
+The CloudFront distribution behind recorder runtime downloads serves production,
+so its state moves from `archive-cdn/nightly` to
+`recorder-runtime-downloads/production` instead of retiring. Physical names do
+not change: the distribution keeps its `chalk:environment = nightly` tag and the
+bucket stays `chalk-nightly-artifacts-<account>`, because renaming either would
+replace a live resource (see the stack's README). The move is a recorded,
+replayable step; it holds both leases, copies the five records and the stack
+output, verifies the copy, and only then removes the old identity. It refuses a
+destination that holds different records, so a retry after a crash finishes the
+move and a second run changes nothing.
+
+```sh
+AWS_PROFILE=q9labs pnpm infra move-state recorder-runtime-downloads --dry-run
+AWS_PROFILE=q9labs pnpm infra move-state recorder-runtime-downloads
+```
+
+Then set `seeded: true` on the registry entry, run `pnpm infra table`, and prove
+the plan at `production` is all no-ops. The plan needs the private public-key
+input (`CHALK_INFRA_INPUTS`, a file with `{public_key_file}`):
+
+```sh
+AWS_PROFILE=q9labs CHALK_INFRA_INPUTS=<private inputs file> pnpm infra plan recorder-runtime-downloads production
+```
+
+Every resource must plan as a no-op. Any update or replacement means the
+declaration differs from the seeded state: stop, and do not apply.

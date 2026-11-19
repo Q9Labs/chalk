@@ -40,7 +40,6 @@ this checked table. Run `pnpm infra table` after changing it.
 
 | Stack                      | Stage kind                              | Provisioner       | Status                                                                                                                          | Entry                                                                                  |
 | -------------------------- | --------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| recorder-runtime-downloads | retired legacy Nightly (not deployable) | cleanup inventory | Retire: Nightly proofs do not consume recorder runtime CDN downloads                                                            | [recorder-runtime-downloads/alchemy.run.ts](recorder-runtime-downloads/alchemy.run.ts) |
 | recorder-control-endpoint  | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host                          | [recorder-control-endpoint/alchemy.run.ts](recorder-control-endpoint/alchemy.run.ts)   |
 | sync-direct-access         | retired legacy Nightly (not deployable) | cleanup inventory | Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host                          | [sync-direct-access/alchemy.run.ts](sync-direct-access/alchemy.run.ts)                 |
 | sfu                        | retired legacy Nightly (not deployable) | cleanup inventory | Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances                           | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
@@ -52,6 +51,7 @@ this checked table. Run `pnpm infra table` after changing it.
 | sfu                        | production (persistent)                 | opentofu          | Primary variant: ported; live firewall drift blocks cutover                                                                     | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
 | sfu-standby                | production (persistent)                 | opentofu          | Standby variant: ported; dry-run is not cutover authorization                                                                   | [sfu/alchemy.run.ts](sfu/alchemy.run.ts)                                               |
 | recorder                   | production (persistent)                 | opentofu          | Ported; reconcile CORS/pool firewall drift before cutover                                                                       | [recorder/alchemy.run.ts](recorder/alchemy.run.ts)                                     |
+| recorder-runtime-downloads | production (persistent) | alchemy (state not yet moved) | Production: the CloudFront distribution serves signed recorder software bundles and is referenced by production SSM (CHALK_RECORDER_FLEET_ARCHIVE_CDN_*). Alchemy owns it; its state still sits under archive-cdn/nightly until pnpm infra move-state runs | [recorder-runtime-downloads/alchemy.run.ts](recorder-runtime-downloads/alchemy.run.ts) |
 | media-relay-access         | production (persistent)                 | none              | Ported, deliberately not deployed; TURN key creation/adoption not authorized                                                    | [media-relay-access/alchemy.run.ts](media-relay-access/alchemy.run.ts)                 |
 
 <!-- stacks:end -->
@@ -59,14 +59,19 @@ this checked table. Run `pnpm infra table` after changing it.
 `production` is persistent. `nightly-<run-id>` is ephemeral: a lowercase
 alphanumeric/hyphen run ID of 1–15 characters, with alphanumeric ends. Bare
 `nightly` is rejected. Retired rows are cleanup inventory, never active stages.
-All former persistent Nightly stages retire; only the dispatcher gains a
-run-owned deployment for the production-cutover proof. Existing Nightly media
-proofs already create/delete their hosts and use isolated runtime assets; they
-do not need the retired CDN, address, direct Sync trial or shared SFU.
+The former persistent Nightly stages retire, except the recorder runtime
+downloads CDN: it serves production, so it is a production target (see below),
+never a retirement. The dispatcher gains a run-owned deployment for the
+production-cutover proof. Existing Nightly media proofs already create/delete
+their hosts and use isolated runtime assets; they do not need the retired
+address, direct Sync trial or shared SFU.
 
 The registry discriminates ownership and seeding: a production Alchemy owner
 must be seeded; OpenTofu/not-deployed rows cannot deploy. Deploy also checks real
-resource/output state, so metadata cannot bypass a missing seed.
+resource/output state, so metadata cannot bypass a missing seed. A production
+Alchemy owner whose state has not moved to its own identity yet
+(`seeded: "state-not-moved"`) refuses deploy, plan, drift and retire alike; only
+`pnpm infra move-state <stack> [--dry-run]` can act on it.
 
 ## Commands
 
@@ -142,4 +147,5 @@ retirement and the new production-cutover proof. SFU, recorder and the retained
 [direct Sync trial](managed-episode/direct-sync/README.md) keep runnable OpenTofu
 roots. Never let two provisioners own one stage concurrently. Physical resource
 names and existing logical IDs are unchanged; legacy state identities remain
-explicit in the registry until retirement. No live state rename is required.
+explicit in the registry until retirement. The one live state move is the recorder
+runtime downloads stage, by the recorded `pnpm infra move-state` step.

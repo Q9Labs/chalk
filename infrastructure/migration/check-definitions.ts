@@ -64,6 +64,10 @@ function normalizeStageBoundaries(identity: string, source: string, before: bool
 }
 function normalizedSource(path: string, source: string, before: boolean) {
   const identity = before ? path : originalPath(path);
+  if (!before && identity.endsWith("nightly/archive-cdn/alchemy.run.ts")) {
+    // Same stack, now addressed as the production stage `recorder-runtime-downloads` under the unchanged "nightly" tag.
+    source = source.replace('"recorder-runtime-downloads",', '"archive-cdn",').replace('const environment = "nightly";', "const environment = yield* nightly;").replace("import { providers, state }", "import { nightly, providers, state }");
+  }
   if (identity.endsWith("nightly/archive-cdn/alchemy.run.ts")) {
     if (before) source = source.replace(/    const publicKeyFile[\s\S]*?(?=    const access)/, "    const encodedKey = __INPUT__;\n");
     else source = source.replace("yield* publicKey", "__INPUT__");
