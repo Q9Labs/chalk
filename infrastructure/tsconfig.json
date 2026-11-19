@@ -17,5 +17,5 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["alchemy/**/*.ts", "nightly/*/alchemy.run.ts"]
+  "include": ["alchemy/**/*.ts", "nightly/*/alchemy.run.ts", "managed-episode/direct-sync/*.ts", "cloudflare-turn/*.ts", "cloudflare-r2-transcription-lifecycle/*.ts"]
 }
