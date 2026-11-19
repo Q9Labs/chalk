@@ -71,7 +71,6 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
       default:
         return respond(request, {});
     }
-  
   };
   const handleSchedule = (request: Request, name: string, field: (key: string) => string) => {
     const existing = schedules.get(name);
@@ -96,7 +95,6 @@ function fakeAws(seed: { readonly logGroup?: FakeLogGroup; readonly schedule?: F
       Target: { Arn: "arn:aws:lambda:ap-southeast-1:000000000000:function:target", RoleArn: "arn:aws:iam::000000000000:role/test" },
       ...(existing.description ? { Description: existing.description } : {}),
     });
-  
   };
   const client = HttpClient.make((request, url) =>
     Effect.sync(() => {

@@ -3,7 +3,7 @@ import { parseStage } from "./platform/stages.ts";
 
 const retiredHost = "Retire: persistent Nightly host removed 2026-11-15 (PR #1432); proofs create and delete their own host";
 const retiredSfu = "Retire: shared staging SFU removed 2026-11-15 (PR #1453); proofs use isolated run-owned SFU instances";
-const recorderDownloads = "Production: the CloudFront distribution serves signed recorder software bundles and is referenced by production SSM (CHALK_RECORDER_FLEET_ARCHIVE_CDN_*). Alchemy owns it; its state still sits under archive-cdn/nightly until pnpm infra move-state runs";
+const recorderDownloads = "Production: the CloudFront distribution serves signed recorder software bundles and is referenced by production SSM (the CHALK_RECORDER_FLEET_ARCHIVE_CDN settings). Alchemy owns it; its state still sits under archive-cdn/nightly until pnpm infra move-state runs";
 type RegisteredTarget = { readonly stackName: string; readonly directory: string; readonly reason: string } & (
   | { readonly stageKind: "retired"; readonly legacyStackName: string; readonly owner: "alchemy" }
   | { readonly stageKind: "retired"; readonly legacyStackName: string; readonly owner: "opentofu"; readonly root: string }

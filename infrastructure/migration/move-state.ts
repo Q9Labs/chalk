@@ -20,10 +20,6 @@ const report = await Effect.runPromise(
       const store = yield* yield* State;
       return yield* moveState(store, move, recorderRuntimeDownloadsInventory, mode === "--dry-run");
     }).pipe(Effect.provideContext(context));
-  }).pipe(
-    Effect.provideService(Stage, move.to.stage),
-    Effect.provide(Alchemist.layer()),
-    Effect.scoped,
-  ),
+  }).pipe(Effect.provideService(Stage, move.to.stage), Effect.provide(Alchemist.layer()), Effect.scoped),
 );
 process.stdout.write(`${JSON.stringify({ stack: target.stackName, from: `${move.from.stack}/${move.from.stage}`, to: `${move.to.stack}/${move.to.stage}`, ...report })}\n`);
