@@ -54,7 +54,8 @@ export const resourceProps = (input: DispatcherInputs, account: string, region: 
     ...(input.failure_queue_kms_key_arn ? { kmsMasterKeyId: input.failure_queue_kms_key_arn, kmsDataKeyReusePeriod: "5 minutes" } : {}),
     // OpenTofu's existing standard queues use SSE-SQS, not the provider's false default.
     sqsManagedSseEnabled: input.failure_queue_kms_key_arn === null,
-    policy: JSON.stringify(policy([{ ...allow(Sid, ["sqs:SendMessage"], [queueArn(suffix)]), Principal: { Service: [Service] }, Condition: { ...(conditions ? sourceAccount : {}), ArnEquals: { "aws:SourceArn": sourceArn } } }])),
+    // SQS rewrites a queue policy on write: one-element lists become bare strings and statement keys take its own order. The record keeps the declared text, so any other form never equals SQS's live read and every drift check fails.
+    policy: JSON.stringify({ Version: "2012-10-17", Statement: [{ Sid, Effect: "Allow", Principal: { Service }, Action: "sqs:SendMessage", Resource: queueArn(suffix), Condition: { ...(conditions ? sourceAccount : {}), ArnEquals: { "aws:SourceArn": sourceArn } } }] }),
     tags: { ...tags, chalk_component: `transcription-dispatcher-${suffix}` },
   });
   const log: AWS.Logs.LogGroup["Props"] = { logGroupName: logName, retention: `${input.log_retention_days} days`, ...(input.log_kms_key_arn ? { kmsKeyId: input.log_kms_key_arn } : {}), tags: { ...tags, chalk_release_id: input.release_id } };

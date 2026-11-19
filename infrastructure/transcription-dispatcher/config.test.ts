@@ -107,3 +107,23 @@ test("ephemeral names isolate concurrent runs and reject persistent Nightly", ()
   assert.throws(() => parseInputs({ ...valid, function_name: "chalk-other-transcription-dispatcher" }));
   assert.throws(() => parseInputs({ ...valid, scheduler_state: "ENABLED" }));
 });
+
+// SQS rewrites a queue policy on write: one-element lists inside a statement become bare strings, and statement keys take SQS's own order. The state record keeps the declared text, so any other form reads back as drift.
+const statementKeyOrder = ["Sid", "Effect", "Principal", "Action", "Resource", "Condition"];
+const collapseLists = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.length === 1 ? collapseLists(value[0]) : value.map(collapseLists);
+  if (value !== null && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, collapseLists(child)]));
+  return value;
+};
+const sqsStoredPolicy = (policy: { Version: string; Statement: object[] }) => ({
+  ...policy,
+  Statement: policy.Statement.map((statement) => Object.fromEntries(Object.entries(collapseLists(statement) as object).sort(([left], [right]) => statementKeyOrder.indexOf(left) - statementKeyOrder.indexOf(right)))),
+});
+
+test("queue policies are declared in the form SQS stores, so the recorded policy equals the live read", () => {
+  const props = resourceProps(parseInputs(valid), "000000000000", "ap-southeast-1");
+  for (const queue of [props.asyncFailure, props.schedulerDlq]) {
+    assert.ok(queue.policy);
+    assert.equal(JSON.stringify(sqsStoredPolicy(JSON.parse(String(queue.policy)))), queue.policy);
+  }
+});
