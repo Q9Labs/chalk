@@ -41,7 +41,7 @@ export CHALK_PRODUCTION_TOFU_STATE="$(mktemp)"
 chmod 600 "$CHALK_PRODUCTION_TOFU_STATE"
 aws --profile q9labs s3api get-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key production/transcription-dispatcher/terraform.tfstate "$CHALK_PRODUCTION_TOFU_STATE" >/dev/null
 aws --profile q9labs s3api copy-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key "production/transcription-dispatcher/backups/$(date -u +%Y-%m-%dT%H-%M-%SZ)/terraform.tfstate" --copy-source "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1/production/transcription-dispatcher/terraform.tfstate" >/dev/null
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx migration/seed.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE" --dry-run
+AWS_PROFILE=q9labs pnpm infra seed transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE" --dry-run
 ```
 
 Capture live facts before the seed. This command records environment variable
@@ -54,8 +54,8 @@ AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evi
 Seed in one command, then plan in one command:
 
 ```sh
-AWS_PROFILE=q9labs CHALK_ALLOW_PRODUCTION_SEED=1 pnpm --dir infrastructure exec tsx migration/seed.ts transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE"
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec tsx releases/driver.ts plan production
+AWS_PROFILE=q9labs CHALK_ALLOW_PRODUCTION_SEED=1 pnpm infra seed transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE"
+AWS_PROFILE=q9labs pnpm infra plan transcription-dispatcher production
 ```
 
 Expect only `noop` for `Logs`, `AsyncFailure`, `SchedulerDlq`, `ExecutionRole`,
@@ -69,7 +69,7 @@ normal plans take a DynamoDB lease.
 After seed and plan, require read-only drift detection and unchanged live facts:
 
 ```sh
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy drift --config transcription-dispatcher/alchemy.run.ts --stage production
+AWS_PROFILE=q9labs pnpm infra drift transcription-dispatcher production
 AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
 ```
 
@@ -86,12 +86,12 @@ For an infrastructure-ownership rollback, stop all Alchemy writers. Save the
 current Alchemy state privately, then forget only the affected stage's records:
 
 ```sh
-AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state delete transcription-dispatcher/nightly --config transcription-dispatcher/alchemy.run.ts --recursive
+AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state delete transcription-dispatcher/production --config transcription-dispatcher/alchemy.run.ts --recursive
 ```
 
-For production, replace `nightly` in the **state path** with `production`; the
-entrypoint path stays the same. `state delete` forgets records and outputs, not
-AWS resources. Restore the dispatcher module, Nightly caller and release scripts
+`state delete` forgets production records and outputs, not AWS resources. Retired
+Nightly has no rollback-to-service path; use its retirement command instead.
+Restore the dispatcher module, production caller and release scripts
 from the retained pre-cutover commit. Initialize against the original backend
 and inspect its plan with the untouched OpenTofu state. Later Alchemy releases
 may have changed the live ZIP, so do not assume that plan is a no-op or apply it
