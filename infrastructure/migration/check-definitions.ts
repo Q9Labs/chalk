@@ -27,7 +27,7 @@ function ast(node: ts.Node): Schema.Json {
 const parse = (path: string, source: string) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 const oldSource = (path: string) => execFileSync("git", ["show", `${base}:${path}`], { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
 const newSource = (path: string) => readFileSync(resolve(root, path), "utf8");
-function normalizeStageBoundaries(path: string, identity: string, source: string, before: boolean) {
+function normalizeStageBoundaries(identity: string, source: string, before: boolean) {
   if (identity.endsWith("alchemy/dispatcher/stack.ts")) {
     source = source.replace("CHALK_INFRA_INPUTS", "CHALK_DISPATCHER_INPUTS").replace('previous !== undefined || stage !== "production"', 'previous !== undefined').replace(/^    requireInput\(previous !== undefined \|\| file !== undefined[^\n]+\n/m, "");
   }
@@ -50,7 +50,7 @@ function normalizedSource(path: string, source: string, before: boolean) {
     source = source.replace("CHALK_DIRECT_SYNC_AWS_REGION", "AWS_REGION");
   }
   if (!before && path === "infrastructure/media-relay-access/alchemy.run.ts") source = source.replace("turnStage(yield* Stage)", "Schema.decodeUnknownSync(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z][a-z0-9-]{1,31}$/))))(yield* Stage)");
-  source = normalizeStageBoundaries(path, identity, source, before);
+  source = normalizeStageBoundaries(identity, source, before);
   // These are fail-closed credential guards, not declaration inputs/props.
   source = source.replace(/^    (?:requireCloudflareCredentials\(\)|credential\("[A-Z_]+"\));\n/gm, "");
   if (identity === "infrastructure/recorder/alchemy.run.ts") source = source.replace(/^    requireInput\(!!process.env.CHALK_CAPTURE[^\n]+\n/m, "");

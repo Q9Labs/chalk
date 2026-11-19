@@ -25,7 +25,8 @@ export const sfuDropletProvider = Provider.effect(
     const diff: NonNullable<Provider.ProviderService<SfuDroplet>["diff"]> = ({ olds, news, output }) =>
       Effect.sync(() => {
         if (!isResolved(news)) return;
-        if (olds.region !== news.region || olds.monitoring !== news.monitoring || (olds.ipv6 && !news.ipv6)) return { action: "replace" };
+        const requiresReplacement = () => olds.region !== news.region || olds.monitoring !== news.monitoring || (olds.ipv6 && !news.ipv6);
+        if (requiresReplacement()) return { action: "replace" };
         if (
           deepEqual(bootInputs(olds), bootInputs(news)) &&
           output?.sizeSlug === news.size &&

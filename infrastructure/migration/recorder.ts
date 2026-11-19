@@ -105,35 +105,39 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     row(AWS.KMS.Key.Type, "RecordingKey", key.id, { description: key.description, deletionWindow: "30 days", enableKeyRotation: true, policy: semanticJson(key.policy), tags: key.tags } satisfies AWS.KMS.Key["Props"], keyAttr, ["RecordingAlias"], "protect"),
     row(AWS.KMS.Alias.Type, "RecordingAlias", alias.name, { aliasName: aliasAttr.aliasName, targetKeyId: key.id } satisfies AWS.KMS.Alias["Props"], aliasAttr, [], "protect"),
   ];
-  const cf = yield* CloudflareEnvironment.current;
-  if (cf.accountId !== bucket.account_id) return yield* Effect.die("Cloudflare credential account differs from the source state.");
-  const bucketAttr = yield* lookup(Cloudflare.R2.Bucket, { name: bucket.name, jurisdiction: "default" });
-  const corsProps: Cloudflare.R2.BucketCorsRule[] = cors.rules.map((rule) => ({
-    ...(rule.id == null ? {} : { id: rule.id }),
-    allowedOrigins: [...rule.allowed.origins],
-    allowedMethods: [...rule.allowed.methods],
-    ...(rule.allowed.headers == null ? {} : { allowedHeaders: [...rule.allowed.headers] }),
-    ...(rule.expose_headers == null ? {} : { exposeHeaders: [...rule.expose_headers] }),
-    ...(rule.max_age_seconds == null ? {} : { maxAgeSeconds: rule.max_age_seconds }),
-  }));
-  const lifecycleProps: Cloudflare.R2.BucketLifecycleRule[] = lifecycle.rules.map((rule) => ({
-    id: rule.id,
-    enabled: rule.enabled,
-    prefix: rule.conditions.prefix,
-    ...(rule.abort_multipart_uploads_transition?.condition?.type !== "Age" ? {} : { abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: rule.abort_multipart_uploads_transition.condition.max_age } } }),
-    ...(rule.delete_objects_transition?.condition?.type !== "Age" ? {} : { deleteObjectsTransition: { condition: { type: "Age", maxAge: rule.delete_objects_transition.condition.max_age } } }),
-  }));
-  const bucketDrift = [
-    ...(bucketAttr.bucketName !== bucket.name || bucketAttr.accountId !== bucket.account_id || bucketAttr.location !== "apac" || bucketAttr.storageClass !== bucket.storage_class ? ["identity/location/storage class"] : []),
-    ...(bucketAttr.publicDomain !== undefined || bucketAttr.domains.length ? ["public access"] : []),
-    ...(semanticJson(bucketAttr.cors) !== semanticJson(corsProps) ? ["CORS"] : []),
-    ...(semanticJson(bucketAttr.lifecycleRules) !== semanticJson(lifecycleProps) ? ["lifecycle"] : []),
-  ];
-  if (bucketDrift.length) return yield* Effect.die(`Live R2 differs from tofu state: ${bucketDrift.join(", ")}; resolve drift before seeding.`);
-  rows.push(row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps }), bucketAttr, [], "protect"));
+  const seedBucket = Effect.fn(function* () {
+    const cf = yield* CloudflareEnvironment.current;
+    if (cf.accountId !== bucket.account_id) return yield* Effect.die("Cloudflare credential account differs from the source state.");
+    const bucketAttr = yield* lookup(Cloudflare.R2.Bucket, { name: bucket.name, jurisdiction: "default" });
+    const corsProps: Cloudflare.R2.BucketCorsRule[] = cors.rules.map((rule) => ({
+      ...(rule.id == null ? {} : { id: rule.id }),
+      allowedOrigins: [...rule.allowed.origins],
+      allowedMethods: [...rule.allowed.methods],
+      ...(rule.allowed.headers == null ? {} : { allowedHeaders: [...rule.allowed.headers] }),
+      ...(rule.expose_headers == null ? {} : { exposeHeaders: [...rule.expose_headers] }),
+      ...(rule.max_age_seconds == null ? {} : { maxAgeSeconds: rule.max_age_seconds }),
+    }));
+    const lifecycleProps: Cloudflare.R2.BucketLifecycleRule[] = lifecycle.rules.map((rule) => ({
+      id: rule.id,
+      enabled: rule.enabled,
+      prefix: rule.conditions.prefix,
+      ...(rule.abort_multipart_uploads_transition?.condition?.type !== "Age" ? {} : { abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: rule.abort_multipart_uploads_transition.condition.max_age } } }),
+      ...(rule.delete_objects_transition?.condition?.type !== "Age" ? {} : { deleteObjectsTransition: { condition: { type: "Age", maxAge: rule.delete_objects_transition.condition.max_age } } }),
+    }));
+    const bucketDrift = [
+      ...(bucketAttr.bucketName !== bucket.name || bucketAttr.accountId !== bucket.account_id || bucketAttr.location !== "apac" || bucketAttr.storageClass !== bucket.storage_class ? ["identity/location/storage class"] : []),
+      ...(bucketAttr.publicDomain !== undefined || bucketAttr.domains.length ? ["public access"] : []),
+      ...(semanticJson(bucketAttr.cors) !== semanticJson(corsProps) ? ["CORS"] : []),
+      ...(semanticJson(bucketAttr.lifecycleRules) !== semanticJson(lifecycleProps) ? ["lifecycle"] : []),
+    ];
+    if (bucketDrift.length) return yield* Effect.die(`Live R2 differs from tofu state: ${bucketDrift.join(", ")}; resolve drift before seeding.`);
+    return row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps }), bucketAttr, [], "protect");
+  });
+  rows.push(yield* seedBucket());
   let capture = 0;
   const roles: ("capture" | "render")[] = ["capture", "render"];
   const seedPool = Effect.fn(function* (role: "capture" | "render") {
+    const identity = role === "capture" ? { firewall: "CaptureFirewall", tag: "CaptureTag", desired: applied.desired_capture_nodes } : { firewall: "RenderFirewall", tag: "RenderTag", desired: applied.desired_render_nodes };
     const contract = getResource(source, `module.${role}.terraform_data.runtime_capacity_contract`, runtime).input.value;
     const hasInvalidCapacity = () =>
       [
@@ -147,7 +151,7 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
       ].some(Boolean);
     if (hasInvalidCapacity()) return yield* Effect.die("Invalid recorder runtime capacity contract.");
     if (role === "capture") capture = contract.desired_nodes;
-    if (contract.desired_nodes !== (role === "capture" ? applied.desired_capture_nodes : applied.desired_render_nodes)) return yield* Effect.die("Recorder runtime contract and apply gate capacity differ.");
+    if (contract.desired_nodes !== identity.desired) return yield* Effect.die("Recorder runtime contract and apply gate capacity differ.");
     const tag = getResource(source, `module.${role}.digitalocean_tag.pool`, Schema.Struct({ id: Schema.String, name: Schema.String }));
     const fw = getResource(source, `module.${role}.digitalocean_firewall.${role}`, tofuFirewall);
     const hasInvalidPoolPolicy = () => [tag.name !== contract.pool, tag.id !== tag.name, fw.name !== `chalk-recorder-${role}-${stage}`, fw.droplet_ids.length, fw.inbound_rule.length, fw.tags?.length].some(Boolean);
@@ -161,7 +165,7 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     if (fwAttr.firewallId !== fw.id || tagAttr.name !== tag.name) return yield* Effect.die("Recorder DigitalOcean resource identity differs from state.");
     checkFirewall(sourceProps, fwAttr);
     checkFirewall(props, fwAttr);
-    rows.push(row(fwResource.Type, role === "capture" ? "CaptureFirewall" : "RenderFirewall", fw.id, props, fwAttr, [], "protect"), row(tagResource.Type, role === "capture" ? "CaptureTag" : "RenderTag", tag.id, { name: tag.name }, tagAttr, [], "protect"));
+    rows.push(row(fwResource.Type, identity.firewall, fw.id, props, fwAttr, [], "protect"), row(tagResource.Type, identity.tag, tag.id, { name: tag.name }, tagAttr, [], "protect"));
   });
   for (const role of roles) yield* seedPool(role);
   if (applied.global_recorder_node_count !== capture + applied.desired_render_nodes || applied.global_recorder_node_count > 20) return yield* Effect.die("Recorder compute demand exceeds or disagrees with the global contract.");

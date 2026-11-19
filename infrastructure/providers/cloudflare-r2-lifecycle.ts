@@ -45,7 +45,7 @@ export function validateLifecycleRules(rules: readonly LifecycleRule[], finalize
   for (const rule of rules) {
     const prefix = rule.conditions.prefix;
     if (!prefix || prefix.startsWith("/") || finalizedPrefix.startsWith(prefix)) throw new Error("Temporary lifecycle prefixes must be relative and must not contain the finalized transcript prefix; committed deletion is application-owned.");
-    if (!rule.enabled || rule.deleteObjectsTransition?.condition?.type !== "Age" || rule.deleteObjectsTransition.condition.maxAge !== 86400 || rule.abortMultipartUploadsTransition?.condition?.maxAge !== 86400 || rule.storageClassTransitions?.length)
+    if ([!rule.enabled, rule.deleteObjectsTransition?.condition?.type !== "Age" || rule.deleteObjectsTransition.condition.maxAge !== 86400, rule.abortMultipartUploadsTransition?.condition?.maxAge !== 86400, rule.storageClassTransitions?.length].some(Boolean))
       throw new Error("Temporary transcription rules must delete objects and abort multipart uploads after exactly 24 hours, with no storage class transition.");
   }
 }
