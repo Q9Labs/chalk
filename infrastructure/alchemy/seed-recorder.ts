@@ -4,7 +4,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { poolFirewallProps } from "../recorder/resources.ts";
+import { canonicalBucketProps, poolFirewallProps } from "../recorder/resources.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag } from "./recorder-pools.ts";
 import { RecordingBucket } from "./recording-bucket.ts";
 import { checkFirewall, firewallProps, tofuFirewall } from "./seed-sfu.ts";
@@ -129,7 +129,7 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     ...(semanticJson(bucketAttr.lifecycleRules) !== semanticJson(lifecycleProps) ? ["lifecycle"] : []),
   ];
   if (bucketDrift.length) return yield* Effect.die(`Live R2 differs from tofu state: ${bucketDrift.join(", ")}; resolve drift before seeding.`);
-  rows.push(row(RecordingBucket.Type, "RecordingBucket", bucket.id, { name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps } satisfies RecordingBucket["Props"], bucketAttr, [], "protect"));
+  rows.push(row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps }), bucketAttr, [], "protect"));
   let capture = 0;
   const roles: ("capture" | "render")[] = ["capture", "render"];
   for (const role of roles) {

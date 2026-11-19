@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Schema from "effect/Schema";
 import { parseConfig } from "./config.ts";
-import { kmsPolicy, poolFirewallProps } from "./resources.ts";
+import { canonicalBucketProps, kmsPolicy, poolFirewallProps } from "./resources.ts";
 import { firewallProps, tofuFirewall } from "../alchemy/seed-sfu.ts";
 
 test("recorder defaults remain zero-idle and do not authorize mutations", () => {
@@ -65,4 +65,11 @@ test("state import accepts legacy null ICMP ports but never unspecified TCP port
   assert.equal(firewallProps(icmp).inboundRules?.[0]?.ports, "0");
   const tcp = Schema.decodeUnknownSync(tofuFirewall)(fixture("tcp"));
   assert.throws(() => firewallProps(tcp), /Invalid firewall port range/);
+});
+
+test("imported R2 policy sets and definitions compare identically without hiding policy changes", () => {
+  const left = { cors: [{ id: "whiteboard", allowedMethods: ["GET", "PUT"], allowedOrigins: ["*"], allowedHeaders: ["If-None-Match", "Content-Type"] }], lifecycleRules: [{ id: "temporary" }, { id: "abort" }] } satisfies Parameters<typeof canonicalBucketProps>[0];
+  const right = { cors: [{ id: "whiteboard", allowedMethods: ["PUT", "GET"], allowedOrigins: ["*"], allowedHeaders: ["Content-Type", "If-None-Match"] }], lifecycleRules: [{ id: "abort" }, { id: "temporary" }] } satisfies Parameters<typeof canonicalBucketProps>[0];
+  assert.deepEqual(canonicalBucketProps(left), canonicalBucketProps(right));
+  assert.notDeepEqual(canonicalBucketProps(left), canonicalBucketProps({ ...right, cors: right.cors.map((rule) => ({ ...rule, allowedOrigins: ["https://example.com"] })) }));
 });
