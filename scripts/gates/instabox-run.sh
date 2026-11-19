@@ -32,9 +32,9 @@ export GOTOOLCHAIN=auto
 # Most test files wait on timers and sockets, so extra Vitest workers cost about 100 MB each and shorten the run:
 # the Client suite takes 158 s with 1 worker, 82 s with 2 and 47 s with 4.
 export VITEST_MAX_WORKERS="${VITEST_MAX_WORKERS:-4}"
-if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null || ! command -v java >/dev/null; then
+if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null || ! command -v java >/dev/null || ! command -v gpg >/dev/null; then
   sudo apt-get update -qq
-  sudo apt-get install -y -qq ruby lsof default-jre-headless
+  sudo apt-get install -y -qq ruby lsof default-jre-headless gnupg
 fi
 pnpm install --frozen-lockfile
 if ((browser)); then
