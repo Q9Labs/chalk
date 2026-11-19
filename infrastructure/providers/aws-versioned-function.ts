@@ -1,5 +1,7 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
 import { deepEqual, isResolved } from "alchemy/Diff";
+import { Stage } from "alchemy/Stage";
+import { parseStage } from "../platform/stages.ts";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
@@ -34,7 +36,7 @@ interface VersionedFunction extends Resource<
     functionArn: string;
     codeSha256: string;
     version: string;
-    configuration: Omit<FunctionProps, "code">;
+    configuration: Omit<FunctionProps, "code" | "reservedConcurrency" | "eventInvokeConfig"> & Partial<Pick<FunctionProps, "reservedConcurrency" | "eventInvokeConfig">>;
   }
 > {}
 export const VersionedFunction = Resource<VersionedFunction>("Chalk.Lambda.VersionedFunction");
@@ -62,9 +64,12 @@ const readFunction = Effect.fn(function* (functionName: string) {
   if (hasUnsupportedConfiguration()) {
     return yield* Effect.die("Dispatcher has an unexpected networking, encryption, layer or logging configuration; refusing to proceed");
   }
-  const invoke = yield* lambda.getFunctionEventInvokeConfig({ FunctionName: functionName });
+  const runOwned = (yield* Stage).startsWith("nightly-");
+  const invoke = yield* lambda.getFunctionEventInvokeConfig({ FunctionName: functionName }).pipe(Effect.catchTag("ResourceNotFoundException", (error) => (runOwned ? Effect.undefined : Effect.fail(error))));
   const environment = Object.fromEntries(Object.entries(config.Environment?.Variables ?? {}).map(([key, value]) => [key, typeof value === "string" ? value : Redacted.value(required(value, "environment variable"))]));
-  const configuration = Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))({
+  const configuration = Schema.decodeUnknownSync(
+    Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code), reservedConcurrency: Schema.optionalKey(functionProps.fields.reservedConcurrency), eventInvokeConfig: Schema.optionalKey(functionProps.fields.eventInvokeConfig) }),
+  )({
     functionName,
     description: config.Description ?? "",
     role: config.Role,
@@ -73,13 +78,14 @@ const readFunction = Effect.fn(function* (functionName: string) {
     architectures: config.Architectures,
     timeout: config.Timeout,
     memorySize: config.MemorySize,
-    reservedConcurrency: current.Concurrency?.ReservedConcurrentExecutions,
+    ...(current.Concurrency?.ReservedConcurrentExecutions === undefined ? {} : { reservedConcurrency: current.Concurrency.ReservedConcurrentExecutions }),
     ephemeralStorageSize: config.EphemeralStorage?.Size,
     environment: Redacted.make(environment),
     tracingMode: config.TracingConfig?.Mode,
-    eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination },
+    ...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination } } : {}),
     tags: Object.fromEntries(Object.entries(current.Tags ?? {}).filter(([key]) => !key.startsWith("alchemy:"))),
   });
+  if (!runOwned) Schema.decodeUnknownSync(Schema.Struct({ ...functionProps.fields, code: Schema.optionalKey(functionProps.fields.code) }))(configuration);
   return { functionName, functionArn: required(config.FunctionArn, "function ARN"), codeSha256: required(config.CodeSha256, "code digest"), version: required(config.Version, "version"), configuration };
 });
 
@@ -92,6 +98,42 @@ const settled = Effect.fn(function* (functionName: string) {
   );
 });
 
+export function requireRunOwnedFunction(stageName: string, functionName: string) {
+  const stage = parseStage(stageName);
+  if (stage.kind !== "ephemeral" || functionName !== `chalk-${stage.name}-transcription-dispatcher`) throw new Error("Only a stage-scoped ephemeral dispatcher function may be created or deleted");
+}
+const createRunFunction = Effect.fn(function* (news: FunctionProps) {
+  requireRunOwnedFunction(yield* Stage, news.functionName);
+  yield* lambda
+    .createFunction({
+      FunctionName: news.functionName,
+      Description: news.description,
+      Role: news.role,
+      Runtime: news.runtime,
+      Handler: news.handler,
+      Architectures: [...news.architectures],
+      Code: { S3Bucket: news.code.bucket, S3Key: news.code.key, S3ObjectVersion: news.code.version },
+      Publish: false,
+      Timeout: news.timeout,
+      MemorySize: news.memorySize,
+      EphemeralStorage: { Size: news.ephemeralStorageSize },
+      Environment: { Variables: Redacted.value(news.environment) },
+      TracingConfig: { Mode: news.tracingMode },
+      Tags: { ...news.tags },
+    })
+    .pipe(Effect.retry({ while: (error) => error._tag === "InvalidParameterValueException" && /role.*assum/i.test(error.message), schedule: Schedule.spaced("2 seconds"), times: 30 }));
+  yield* lambda.getFunctionConfiguration({ FunctionName: news.functionName }).pipe(
+    Effect.flatMap((config) => (config.State === "Active" ? Effect.succeed(config) : Effect.fail(new NotSettled()))),
+    Effect.retry({ while: (error) => error._tag === "NotSettled", schedule: Schedule.spaced("2 seconds"), times: 90 }),
+  );
+  yield* lambda.putFunctionConcurrency({ FunctionName: news.functionName, ReservedConcurrentExecutions: news.reservedConcurrency });
+  yield* lambda.putFunctionEventInvokeConfig({ FunctionName: news.functionName, MaximumEventAgeInSeconds: news.eventInvokeConfig.maximumEventAge, MaximumRetryAttempts: news.eventInvokeConfig.maximumRetryAttempts, DestinationConfig: { OnFailure: { Destination: news.eventInvokeConfig.onFailure } } });
+  const result = yield* readFunction(news.functionName);
+  const { code, ...configuration } = news;
+  if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* Effect.die("Ephemeral dispatcher exact ZIP/configuration readback failed; no values logged");
+  return result;
+});
+
 // Cloud Control can select S3 ZIPs, but its generic provider patches the write-only
 // Code on *every* reconcile. It cannot read back CodeSha256. Use Lambda's revision
 // preconditions and verify the exact ZIP digest without rebuilding or publishing.
@@ -102,6 +144,7 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     if (isResolved(news) && olds.functionName !== news.functionName) return { action: "replace" };
   }),
   reconcile: Effect.fn(function* ({ news, olds }) {
+    if (!olds) return yield* createRunFunction(news);
     const before = yield* settled(news.functionName);
     const live = yield* readFunction(news.functionName);
     if (!live) return yield* Effect.die("Dispatcher function is missing; this migration never creates it.");
@@ -145,5 +188,8 @@ export const functionProvider = Provider.succeed(VersionedFunction, {
     if (!result || result.codeSha256 !== code.sha256 || !deepEqual(result.configuration, configuration)) return yield* Effect.die("Dispatcher exact ZIP/configuration readback failed; no values logged.");
     return result;
   }),
-  delete: () => Effect.die("Dispatcher deletion is forbidden; use the documented state-only rollback."),
+  delete: Effect.fn(function* ({ output }) {
+    requireRunOwnedFunction(yield* Stage, output.functionName);
+    yield* lambda.deleteFunction({ FunctionName: output.functionName }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+  }),
 });

@@ -72,3 +72,12 @@ encoding directly, including its S3 overflow form, without installing Node,
 bootstrapping state or acquiring a lease. Do not run it against unseeded production as a probe.
 Use the seed dry-run for production preparation. After seeding, expect all 13
 (or 14) resources to plan as no-ops. A successful run-owned deploy/release/no-op/destroy proof is required before production cutover; see [the proof command](../migration/README.md#ephemeral-release-gate-for-production-cutover).
+
+## Run-owned lifecycle
+
+Only ephemeral stages may create or delete the Lambda. Their function and every
+other owned resource name derive from the stage; production creation/deletion
+remain forbidden. The provider selects the exact versioned ZIP and verifies
+its SHA and full configuration after creation. The release proof claims an empty
+stage under its lease before applying, so a stage-name collision cannot trigger
+cleanup of another run. Partial creation is cleaned in `finally`.

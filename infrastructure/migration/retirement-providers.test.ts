@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { removeDownloadGrant } from "./recorder-download-retirement.ts";
+import { removeDownloadGrant } from "./retirement-providers.ts";
 
 test("retirement removes only the recorder runtime grant, preserves TLS denial and is idempotent", () => {
   const tls = { Sid: "DenyInsecureTransport", Effect: "Deny", Principal: "*", Action: "s3:*" };

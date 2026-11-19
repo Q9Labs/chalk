@@ -29,6 +29,21 @@ function ast(node: ts.Node): Schema.Json {
 const parse = (path: string, source: string) => ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 const oldSource = (path: string) => execFileSync("git", ["show", `${base}:${path}`], { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
 const newSource = (path: string) => readFileSync(resolve(root, path), "utf8");
+function normalizeRunFunction(source: string) {
+  return source
+    .replace('configuration: Omit<FunctionProps, "code" | "reservedConcurrency" | "eventInvokeConfig"> & Partial<Pick<FunctionProps, "reservedConcurrency" | "eventInvokeConfig">>;', 'configuration: Omit<FunctionProps, "code">;')
+    .replace(/^  const runOwned =[^\n]+\n/m, "")
+    .replace(/(const invoke = yield\* lambda.getFunctionEventInvokeConfig\({ FunctionName: functionName }\))\.pipe\([^\n]+/, "$1;")
+    .replace(", reservedConcurrency: Schema.optionalKey(functionProps.fields.reservedConcurrency), eventInvokeConfig: Schema.optionalKey(functionProps.fields.eventInvokeConfig)", "")
+    .replace("...(current.Concurrency?.ReservedConcurrentExecutions === undefined ? {} : { reservedConcurrency: current.Concurrency.ReservedConcurrentExecutions })", "reservedConcurrency: current.Concurrency?.ReservedConcurrentExecutions")
+    .replace(
+      "...(invoke ? { eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination } } : {})",
+      "eventInvokeConfig: { maximumEventAge: invoke.MaximumEventAgeInSeconds, maximumRetryAttempts: invoke.MaximumRetryAttempts, onFailure: invoke.DestinationConfig?.OnFailure?.Destination }",
+    )
+    .replace(/^  if \(!runOwned\) Schema.decodeUnknownSync[^\n]+\n/m, "")
+    .replace(/^    if \(!olds\) return yield\* createRunFunction\(news\);\n/m, "")
+    .replace(/  delete: Effect.fn\(function\* \({ output }\) {[\s\S]*?\n  }\),/, '  delete: () => Effect.die("Dispatcher deletion is forbidden; use the documented state-only rollback."),');
+}
 function normalizeStageBoundaries(identity: string, source: string, before: boolean) {
   if (identity.endsWith("alchemy/dispatcher/stack.ts")) {
     source = source
@@ -41,6 +56,7 @@ function normalizeStageBoundaries(identity: string, source: string, before: bool
   if ((!before && identity.includes("nightly/")) || (!before && identity.includes("managed-episode/direct-sync/alchemy.run.ts"))) source = source.replaceAll("retiredStage", "nightly");
   if (identity.endsWith("managed-episode/direct-sync/config.ts")) source = source.replace("export const directSyncConfig", "const directSyncConfig");
   if (!before && identity.endsWith("alchemy/dispatcher/inputs.ts")) source = source.replace(/  const stage = parseStage\(input.environment_name\);[\s\S]*?(?=  return input;)/, "");
+  if (!before && identity.endsWith("alchemy/dispatcher/function.ts")) source = normalizeRunFunction(source);
   return source;
 }
 function normalizedSource(path: string, source: string, before: boolean) {
@@ -71,6 +87,7 @@ const inputModules = new Set([
   "infrastructure/platform/stages.ts",
 ]);
 const boundaryImports = new Map<string, readonly string[]>([
+  ["infrastructure/alchemy/dispatcher/function.ts", ["alchemy/Stage"]],
   ["infrastructure/nightly/archive-cdn/alchemy.run.ts", ["node:fs/promises"]],
   ["infrastructure/nightly/recording-control-address/alchemy.run.ts", ["@distilled.cloud/aws/ssm", "effect/Schema"]],
   ["infrastructure/managed-episode/direct-sync/alchemy.run.ts", ["effect/Schema"]],
@@ -79,9 +96,12 @@ const boundaryImports = new Map<string, readonly string[]>([
   ["infrastructure/alchemy/recorder-pools.ts", ["@distilled.cloud/digitalocean/Credentials", "effect/http/FetchHttpClient", "effect/Redacted"]],
 ]);
 function isInputLoader(node: ts.Statement, identity: string) {
+  if (identity.endsWith("alchemy/dispatcher/function.ts") && ts.isFunctionDeclaration(node) && node.name?.text === "requireRunOwnedFunction") return true;
   return (
     ts.isVariableStatement(node) &&
-    node.declarationList.declarations.every((declaration) => ["loadConfig", "loadRecorderConfig", "sfuClient", "client", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()))
+    node.declarationList.declarations.every((declaration) =>
+      ["loadConfig", "loadRecorderConfig", "sfuClient", "client", "createRunFunction", ...(identity === "infrastructure/alchemy/config.ts" ? ["environmentName", "environment", "nightly", "retiredStage"] : [])].includes(declaration.name.getText()),
+    )
   );
 }
 function graph(entry: string, before: boolean) {

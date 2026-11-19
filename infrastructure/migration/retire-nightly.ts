@@ -1,5 +1,5 @@
 import * as Alchemist from "alchemy/Alchemist";
-import { retirementStack } from "./recorder-download-retirement.ts";
+import { retirementStack } from "./retirement-providers.ts";
 import { clearStage } from "../releases/cleanup.ts";
 import * as Effect from "effect/Effect";
 import { entryFile, retiredTarget } from "../registry.ts";

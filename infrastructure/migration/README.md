@@ -32,7 +32,14 @@ the same resources, logical IDs, physical names, props and outputs.
 
 Explicit exclusions are intentional boundary changes: JSON/credential loading,
 stage parsing, retired-stage refusal, ephemeral bootstrap validation and the
-new media-relay stack label (never deployed). The former Nightly-only security
+new media-relay stack label (never deployed). The custom Lambda provider also
+adds explicitly stage-scoped ephemeral creation/deletion; its existing update
+branch and all resource declarations remain compared. Run-owned reads represent
+missing concurrency/invoke settings after interrupted creation, so cleanup can
+finish; production still requires the complete configuration. Native-engine
+tests with a fake AWS HTTP boundary prove exact versioned creation, cleanup
+after both partial-creation failures, and repeated deletion. Production and
+cross-run names are refused. The former Nightly-only security
 conditions now apply to any nonproduction stage; production conditions are
 unchanged. Input schemas otherwise remain compared. These exclusions are not
 claimed as a whole-program no-op: stage behavior deliberately changed, and
@@ -64,7 +71,9 @@ AWS_PROFILE=q9labs pnpm infra retire recorder-control-endpoint --apply
 | Transcription dispatcher                           | Function/versions, logs, queues, IAM roles/policies, schedule, invoke permission and alarms, then its state/output.                                    | Borrowed artifacts bucket/versions, SSM parameters, KMS keys, control API and caller-owned resources. |
 | Recorder control endpoint                          | Nothing expected: it was released, never seeded/cut over; empty cleanup is idempotent.                                                                 | Refuses retained resources instead of silently forgetting an unexpected protected allocation.         |
 
-The bucket-policy retirement provider reads the current policy and removes only
+The migration-only dispatcher deletion override requires the legacy `nightly`
+stage and a saved Nightly environment tag; normal production deletion remains
+forbidden. The bucket-policy retirement provider reads the current policy and removes only
 its grant; retry preserves all unrelated statements. Destroy reads saved state
 without evaluating retired declarations. Cleanup refuses retained/orphaned
 resources and refuses to forget state while any resources remain.
