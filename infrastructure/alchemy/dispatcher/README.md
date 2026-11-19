@@ -56,7 +56,11 @@ digest. Full-stack resource/type, input and output allowlists reject partial
 plans, creates, adoption, replacement, deletion and unrelated changes. Before
 approval the driver also runs read-only drift detection against persisted live
 attributes. This is a separate live-state check, not Terraform's refresh plan;
-it does not validate provider-computed fields that providers do not observe.
+it covers only fields each provider observes, not every Terraform-refreshed
+attribute. In particular, native SQS reads only explicitly managed attributes;
+unset optional attributes such as redrive policies are outside that live check.
+Known queue defaults are explicit props. Alarm evaluation state and timestamps
+are excluded, while alarm configuration remains checked.
 
 The focused Lambda provider passes bucket, key and object version directly to
 AWS. It never bundles or publishes a Lambda version. The deployed `CodeSha256`
