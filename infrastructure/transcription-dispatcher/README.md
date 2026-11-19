@@ -56,22 +56,24 @@ policy. Private detailed plans and diagnostics never enter Git or CI artifacts.
 A dry run checks the current-state preflight when the future versioned upload
 does not yet exist; it never invents a version ID.
 
-## Cutover and rollback
+## Ownership and rollback
 
-Follow [the production release runbook](../../docs/transcription-production-release.md)
-for seed, plan and rollback commands. Back up OpenTofu state in its existing
-bucket first. Never modify the original state or use a destroy/nuke command.
-The seed boundary rejects unknown resources, ambiguous/deposed instances,
-unexpected modules, changed live configuration and conflicting destination state.
-`--dry-run` does not open the Alchemy state store or write state, including locks.
-An interrupted seed can resume only when its completed records still match.
+Production is owned by Alchemy. Its records and the redacted `dispatcher_inputs`
+output live in the existing `alchemy-state` table under
+`transcription-dispatcher/production`, seeded once from the former OpenTofu
+state. That state no longer holds any record of these resources, and the
+OpenTofu module and its seed tooling are gone from the tree. Never use a
+destroy/nuke command on production.
+
+Rolling a release back means selecting the prior recorded manifest; see
+[the production release runbook](../../docs/transcription-production-release.md#roll-back),
+which also covers returning ownership to OpenTofu.
 
 The normal release driver acquires a state lease even for a plan dry run; it
 makes no product changes. Python pin retention reads the pinned DynamoDB output
 encoding directly, including its S3 overflow form, without installing Node,
 bootstrapping state or acquiring a lease. Do not run it against unseeded production as a probe.
-Use the seed dry-run for production preparation. After seeding, expect all 13
-(or 14) resources to plan as no-ops. A successful run-owned deploy/release/no-op/destroy proof is required before production cutover; see [the proof command](../migration/README.md#ephemeral-release-gate-for-production-cutover).
+Expect all 13 (or 14) resources to plan as no-ops. The run-owned deploy/release/no-op/destroy proof ([the proof command](../migration/README.md#ephemeral-release-gate-for-production-cutover)) still guards driver changes.
 
 ## Run-owned lifecycle
 

@@ -66,7 +66,8 @@ class Provider:
         if read_only:
             self.reads.append(service + ":" + operation)
         if payload is None:
-            return json.loads(self.command(command + ["--output", "json"], timeout=timeout, read_only=read_only))
+            # AWS prints nothing for an empty result, such as a missing DynamoDB item.
+            return json.loads(self.command(command + ["--output", "json"], timeout=timeout, read_only=read_only) or "{}")
         with tempfile.TemporaryDirectory(prefix="chalk-release-payload-") as directory:
             path = Path(directory, "payload.json")
             private_json(path, payload)

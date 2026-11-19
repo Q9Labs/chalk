@@ -14,7 +14,8 @@ test("registry rejects persistent Nightly, retired deployments and unseeded prod
   assert.equal(requireDeployable(selectStack("recorder-runtime-downloads", "production").target).stageKind, "production");
   assert.throws(() => retiredTarget("recorder-runtime-downloads"), /Retire refused for recorder-runtime-downloads: Production: .*CHALK_RECORDER_FLEET_ARCHIVE_CDN/);
   assert.throws(() => selectStack("recorder-control-endpoint", "nightly-test"), /Unsupported/);
-  assert.throws(() => requireDeployable(selectStack("transcription-dispatcher", "production").target), /not cut over and seeded/);
+  assert.equal(requireDeployable(selectStack("transcription-dispatcher", "production").target).stageKind, "production");
+  assert.throws(() => requireDeployable(selectStack("sfu", "production").target), /not cut over and seeded/);
   assert.equal(requireDeployable(selectStack("transcription-dispatcher", "nightly-test").target).stageKind, "ephemeral");
 });
 test("one input file boundary validates without disclosing private values", async () => {

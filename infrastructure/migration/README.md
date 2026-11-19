@@ -185,7 +185,7 @@ AWS_PROFILE=q9labs pnpm infra destroy transcription-dispatcher nightly-123456
 
 The proof has **not** been run live here. Its successful result replaces the
 obsolete "one persistent Nightly release" production-cutover gate. Production
-remains OpenTofu-owned/unseeded until the lead explicitly sequences cutover.
+is already cut over: it is seeded and Alchemy-owned, and its seed tooling was removed afterwards.
 
 ## Recorder runtime downloads plan check
 

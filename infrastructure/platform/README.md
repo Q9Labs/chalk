@@ -11,7 +11,7 @@ The scheduled workflow is gated by `CHALK_ALCHEMY_DRIFT_ENABLED=true`; this
 change does not set the variable, create a role or change IAM. Its dedicated
 `CHALK_ALCHEMY_DRIFT_ROLE_ARN` must trust GitHub's OIDC provider for this
 repository's default-branch workflow (`aud=sts.amazonaws.com`). Do not reuse a
-deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The current active cutover list is empty; retired Nightly is excluded:
+deploy role. It needs the following access for each future seeded production cutover, scoped to its existing resources wherever AWS supports it. The active cutover list is the seeded production stages in `registry.ts` (recorder runtime downloads and the transcription dispatcher); retired Nightly is excluded:
 
 | Boundary                                   | Actions                                                                                                                                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

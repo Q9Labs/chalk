@@ -28,60 +28,11 @@ Keep the API migration forward-only. Do not restore an older recorder image whil
 
 A missing corpus qualification, private secret comparison, invoke-role policy or required endpoint is a release blocker.
 
-## Cut production over to Alchemy
+## Production ownership
 
-Do this only after the [ephemeral dispatcher release proof](../infrastructure/migration/README.md#ephemeral-release-gate-for-production-cutover) passes through deploy, release, no-op re-plan and complete teardown. There is no persistent Nightly stage. Stop
-concurrent infrastructure writers. Keep the pre-cutover commit and all evidence
-in the protected workspace. Read and back up the original state without changing
-it. Run from the repository root:
+Alchemy owns the production dispatcher. Its records and inputs sit in the existing `alchemy-state` table under `transcription-dispatcher/production`, and every release goes through the guarded driver. The former OpenTofu state holds no record of these resources: its previous versions stay in the state bucket, which is versioned. Never run `tofu destroy`, `alchemy destroy` or `alchemy nuke` against production.
 
-```sh
-export CHALK_AWS_ACCOUNT="$(aws --profile q9labs sts get-caller-identity --query Account --output text)"
-export CHALK_PRODUCTION_TOFU_STATE="$(mktemp)"
-chmod 600 "$CHALK_PRODUCTION_TOFU_STATE"
-aws --profile q9labs s3api get-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key production/transcription-dispatcher/terraform.tfstate "$CHALK_PRODUCTION_TOFU_STATE" >/dev/null
-aws --profile q9labs s3api copy-object --bucket "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1" --key "production/transcription-dispatcher/backups/$(date -u +%Y-%m-%dT%H-%M-%SZ)/terraform.tfstate" --copy-source "chalk-production-state-${CHALK_AWS_ACCOUNT}-ap-southeast-1/production/transcription-dispatcher/terraform.tfstate" >/dev/null
-AWS_PROFILE=q9labs pnpm infra seed transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE" --dry-run
-```
-
-Capture live facts before the seed. This command records environment variable
-names, never values:
-
-```sh
-AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-before.json"
-```
-
-Seed in one command, then plan in one command:
-
-```sh
-AWS_PROFILE=q9labs CHALK_ALLOW_PRODUCTION_SEED=1 pnpm infra seed transcription-dispatcher production "$CHALK_PRODUCTION_TOFU_STATE"
-AWS_PROFILE=q9labs pnpm infra plan transcription-dispatcher production
-```
-
-Expect only `noop` for `Logs`, `AsyncFailure`, `SchedulerDlq`, `ExecutionRole`,
-`Function`, `SchedulerRole`, `Reconcile`, `SchedulerPermission`, `Errors`,
-`Throttles`, `AsyncEventsDropped`, `AsyncFailureDepth` and
-`SchedulerTargetErrors`. If configured, `ControlApiPermission` is also a no-op.
-A create, replacement or deletion stops the cutover. Do not apply to repair a
-rejected plan. Do not open production Alchemy state before this authorized seed;
-normal plans take a DynamoDB lease.
-
-After seed and plan, require read-only drift detection and unchanged live facts:
-
-```sh
-AWS_PROFILE=q9labs pnpm infra drift transcription-dispatcher production
-AWS_PROFILE=q9labs python3 infrastructure/migration/transcription-dispatcher-evidence.py --tofu-state "$CHALK_PRODUCTION_TOFU_STATE" --output "$CHALK_PRIVATE_EVIDENCE/production-after.json" --compare "$CHALK_PRIVATE_EVIDENCE/production-before.json"
-```
-
-After these proofs pass, change only the dispatcher's production row in
-`infrastructure/registry.ts` to `provisioner: "alchemy", seeded: true`, regenerate
-its README table with `pnpm infra table`, and review/commit that cutover record.
-Until then the release/deploy commands intentionally refuse production, even
-if state has been seeded. Verify the drift role's documented access before
-enabling its schedule; retired Nightly is never included.
-
-Never run `tofu destroy`, `alchemy destroy` or `alchemy nuke`. The original
-OpenTofu objects and their dated backups remain untouched.
+To check the stage, expect only `noop` from `pnpm infra plan transcription-dispatcher production` and a clean `pnpm infra drift transcription-dispatcher production`, both with `AWS_PROFILE=q9labs`. A create, replacement or deletion is a stop: do not apply to repair it.
 
 ## Roll back
 
@@ -89,20 +40,10 @@ For a release rollback, select the prior recorded manifest through the normal
 [managed release rollback](managed-release.md) path. It selects the previous
 versioned ZIP and verifies its digest without rebuilding or changing ownership.
 
-For an infrastructure-ownership rollback, stop all Alchemy writers and return
-the production registry row to `provisioner: "opentofu", seeded: false`, then
-regenerate its table. Save the
-current Alchemy state privately, then forget only the affected stage's records:
+For an infrastructure-ownership rollback, stop all Alchemy writers and save the current Alchemy state privately. Restore the previous version of the former OpenTofu state object from the versioned state bucket, then forget only this stage's Alchemy records:
 
 ```sh
 AWS_PROFILE=q9labs pnpm --dir infrastructure exec alchemy state delete transcription-dispatcher/production --config transcription-dispatcher/alchemy.run.ts --recursive
 ```
 
-`state delete` forgets production records and outputs, not AWS resources. Retired
-Nightly has no rollback-to-service path; use its retirement command instead.
-Restore the dispatcher module, production caller and release scripts
-from the retained pre-cutover commit. Initialize against the original backend
-and inspect its plan with the untouched OpenTofu state. Later Alchemy releases
-may have changed the live ZIP, so do not assume that plan is a no-op or apply it
-without review. Never run both owners. Do not deploy Alchemy again after deleting
-its state without reseeding.
+`state delete` forgets production records and outputs, not AWS resources. Restore the dispatcher module, production caller, release scripts and seed tooling from the commit before the cutover, and set the registry row to `provisioner: "opentofu", seeded: false`. Initialize OpenTofu against the original backend and inspect its plan with the restored state. Later Alchemy releases may have changed the live ZIP, so do not assume that plan is a no-op or apply it without review. Never run both owners.

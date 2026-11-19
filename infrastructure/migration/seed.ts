@@ -21,8 +21,6 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { readFile } from "node:fs/promises";
 import { awsProviders, state } from "../platform/config.ts";
-import { seedDispatcher } from "./transcription-dispatcher.ts";
-import { dispatcherProviders } from "../transcription-dispatcher/alchemy.run.ts";
 import { EipAssociation, readAssociation } from "../providers/aws-eip-association.ts";
 import { BucketPolicy, canonicalPolicy, readPolicy } from "../providers/aws-bucket-policy.ts";
 
@@ -166,7 +164,7 @@ const parseSeedOptions = () => {
   const isRecorder = stack === "recorder";
   const isDirectSync = stack === "direct-sync";
   if ((!isSfu && !isRecorder && !isDirectSync && stage !== "nightly") || !stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) {
-    throw new Error("Usage: tsx migration/seed.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder|direct-sync|transcription-dispatcher> <nightly|production> <tofu-state.json> [--dry-run]");
+    throw new Error("Usage: tsx migration/seed.ts <recording-control-address|archive-cdn|sfu|sfu-standby|recorder|direct-sync> <nightly|production> <tofu-state.json> [--dry-run]");
   }
   if (stage === "production" && mode !== "--dry-run" && process.env.CHALK_ALCHEMY_PRODUCTION_SEED !== "approved") throw new Error("Production seed writes require explicit CHALK_ALCHEMY_PRODUCTION_SEED=approved; this lane uses --dry-run only.");
 
@@ -233,16 +231,8 @@ const main = Effect.gen(function* () {
 
 await Effect.runPromise(
   Effect.gen(function* () {
-    if (process.argv[2] === "transcription-dispatcher") {
-      const context = yield* Stack.build({ name: process.argv[2], providers: dispatcherProviders, state });
-      const [, stageInput, stateFile, mode, ...extra] = process.argv.slice(2);
-      const stage = Schema.decodeUnknownSync(environmentName)(stageInput);
-      if (!stateFile || (mode !== undefined && mode !== "--dry-run") || extra.length) return yield* Effect.die("Usage: tsx migration/seed.ts transcription-dispatcher <nightly|production> <tofu-state.json> [--dry-run]");
-      yield* seedDispatcher(stateFile, stage, mode === "--dry-run").pipe(Effect.provideContext(context));
-    } else {
-      const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
-      yield* main.pipe(Effect.provide(sfuClient), Effect.provideContext(context));
-    }
+    const context = yield* Stack.build({ name: process.argv[2] ?? "", providers: Layer.mergeAll(providers, DigitalOcean.providers(), Cloudflare.providers(), recorderPoolProviders), state });
+    yield* main.pipe(Effect.provide(sfuClient), Effect.provideContext(context));
   }).pipe(
     Effect.provideService(Stage, process.argv[3] ?? ""),
     Effect.provide(AlchemyContextLive),

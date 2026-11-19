@@ -27,7 +27,6 @@
   "infrastructure/alchemy/dispatcher/approval.ts": "infrastructure/releases/apply.ts",
   "infrastructure/alchemy/dispatcher/stack.ts": "infrastructure/transcription-dispatcher/alchemy.run.ts",
   "infrastructure/alchemy/dispatcher/inputs.ts": "infrastructure/transcription-dispatcher/config.ts",
-  "infrastructure/alchemy/dispatcher/seed.ts": "infrastructure/migration/transcription-dispatcher.ts",
   "infrastructure/alchemy/dispatcher/README.md": "infrastructure/transcription-dispatcher/README.md",
   "infrastructure/alchemy/dispatcher/inputs.test.ts": "infrastructure/transcription-dispatcher/config.test.ts",
   "infrastructure/alchemy/dispatcher/environment-bindings.json": "infrastructure/transcription-dispatcher/environment-bindings.json",
@@ -46,7 +45,5 @@
   "infrastructure/cloudflare-r2-transcription-lifecycle/README.md": "infrastructure/transcription-storage/README.md",
   "infrastructure/cloudflare-turn/provider.ts": "infrastructure/providers/cloudflare-media-relay-key.ts",
   "infrastructure/cloudflare-turn/alchemy.run.ts": "infrastructure/media-relay-access/alchemy.run.ts",
-  "infrastructure/cloudflare-turn/README.md": "infrastructure/media-relay-access/README.md",
-  "scripts/recorder/dispatcher_state.py": "infrastructure/migration/transcription_dispatcher_state.py",
-  "scripts/transcription-dispatcher/cutover-evidence.py": "infrastructure/migration/transcription-dispatcher-evidence.py"
+  "infrastructure/cloudflare-turn/README.md": "infrastructure/media-relay-access/README.md"
 }
