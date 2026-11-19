@@ -6,10 +6,24 @@ Both planning and association reconciliation reject hosts without
 `chalk:environment=nightly`. Reassociation is allowed. Removing the address
 retains its allocation through Alchemy's persisted removal policy.
 
-The Alchemy definition is ready for migration, but live cutover is not complete.
-The OpenTofu configuration remains for recovery. Follow the
-[shared migration procedure](../../README.md#migrate-an-existing-root) before the
-first plan. Do not allocate a replacement when an existing address is missing.
+## Current status: not allocated
+
+No Nightly recorder control address is currently allocated. The original
+OpenTofu state is stale and must not be used to seed a replacement. This stack
+has not been deployed or seeded into Alchemy. The OpenTofu source was removed;
+the original state and dated backup remain untouched.
+
+The address is still required by `scripts/releases/media.py qualify`: Nightly
+qualification requires exactly one allocation with both recorder tags and
+reassociates it before either recorder cold boot. Missing allocations fail
+closed. The on-demand host-proof workflow introduced in PR #1432 is a separate,
+ephemeral proof host; it does not remove this release requirement.
+
+**Do not deploy without approval for a new recurring cost.** A first deployment
+with empty Alchemy state creates a new Elastic IP and associates it with the
+Nightly instance from SSM. It does not recover the former IP or update DNS or
+recorder firewalls. An approved first install also needs those private
+configuration changes before qualification can succeed.
 
 ## Plan and deploy
 
@@ -24,7 +38,9 @@ pnpm --dir infrastructure exec alchemy plan --config nightly/recording-control-a
 pnpm --dir infrastructure exec alchemy drift --config nightly/recording-control-address/alchemy.run.ts --stage nightly
 ```
 
-Deploy only after the first plan satisfies the shared migration rules. The
+The commands above describe an approved first install, not a completed cutover.
+The first plan will create an address and its association; that plan is not
+authorized by the no-change migration approval. After an approved install, the
 second plan must contain only no-ops, and drift must exit zero without repair.
 Outputs keep the names `public_ip` and `allocation_id`. Read persisted outputs
 without a deployment:
@@ -41,10 +57,12 @@ with a plan rather than racing the controller.
 ## Roll back
 
 To undo an association change, move the retained allocation back to the previous
-host. Reverting source alone does not move it. To undo the Alchemy migration,
-[delete this stack's Alchemy state records and restore the previous commit's
-OpenTofu configuration](../../README.md#undo-a-cutover), using the untouched
-original state. Never release or replace the allocation as an undo.
+host. Reverting source alone does not move it. No live address migration occurred
+and there are no Alchemy records to roll back. Restoring the previous commit's
+OpenTofu source with its untouched historical state does not recover a released
+address; applying that replacement requires separate cost approval. After a
+future approved install, retain its current state and allocation when changing
+infrastructure tooling. Never release or replace the allocation as an undo.
 
 The narrow release permissions remain in [release-policy.json](release-policy.json).
 The migration operator separately needs allocation, tagging, association, and

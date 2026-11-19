@@ -14,17 +14,20 @@ The 2 GiB host fits only because nightly caps are smaller than production's. The
 
 ### Stable recorder address
 
-The nightly Spot host must use the Elastic IP owned by [`recording-control-address`](recording-control-address/main.tf). An automatic public IP changes after a Spot stop and start, leaving the recorder's direct TLS hostname pointing at the old address, and the API tunnel does not replace that listener.
+The Nightly recorder host requires the Elastic IP owned by [`recording-control-address`](recording-control-address/README.md). An automatic public IP changes after a Spot stop and start, leaving the recorder's direct TLS hostname pointing at the old address, and the API tunnel does not replace that listener.
 
-Apply this root once to install the retained allocation. On later host replacements, update the nightly release configuration's `runtime.instance_id` and the nightly managed deployment target together. Release calls `scripts/releases/media.py qualify` after deployment and before either recorder cold boot; that moves the tagged allocation to the SSM target and waits for AWS to confirm. A retry after a lost response observes the completed move. Missing or ambiguous allocations fail closed, and Release never allocates, releases or changes DNS. The root has its own state so the allocation survives host replacement; only the association moves. Never destroy or recreate the allocation during replacement.
+Only after separate cost approval, deploy this root once to install a new retained allocation. On later host replacements, update the nightly release configuration's `runtime.instance_id` and the nightly managed deployment target together. Release calls `scripts/releases/media.py qualify` after deployment and before either recorder cold boot; that moves the tagged allocation to the SSM target and waits for AWS to confirm. A retry after a lost response observes the completed move. Missing or ambiguous allocations fail closed, and Release never allocates, releases or changes DNS. The root has its own state so the allocation survives host replacement; only the association moves. Never destroy or recreate the allocation during replacement.
 
 Use the [recorder address stack guide](recording-control-address/README.md) for
-Alchemy planning, deployment, outputs, and rollback. Complete the
-[shared state migration](../README.md#migrate-an-existing-root) before the first
-Alchemy plan. The original OpenTofu state and dated backup remain untouched.
-The OpenTofu configuration stays in this branch until cutover is proved.
+Alchemy planning, deployment, outputs, and rollback. The address is currently **not allocated**; the historical OpenTofu state is
+stale. Do not seed it or deploy a replacement under the no-change migration
+approval. A first deployment creates a new recurring-cost Elastic IP and its
+association and needs separate approval. Nightly media qualification still
+fails closed without the allocation. The original state and dated backup remain
+untouched. The separate on-demand host-proof workflow does not use or replace
+this allocation.
 
-Save the `allocation_id` output durably with the private backend coordinates and DNS undo before replacing a host or removing the root. If it is lost, recover it read-only by tags, match the public IP to `nightly-recording-control.chalkmeet.com`, then use the migration seed script:
+After an approved installation, save the `allocation_id` output durably with the private state coordinates and DNS undo before replacing a host or removing the root. If the ID is lost, recover it read-only by tags and verify DNS before recovering current Alchemy state. Do not seed a new allocation from the stale historical OpenTofu state:
 
 ```sh
 aws ec2 describe-addresses --region ap-southeast-1 --filters Name=tag:Name,Values=chalk-nightly-recording-control Name=tag:chalk:environment,Values=nightly --query 'Addresses[].{AllocationId:AllocationId,PublicIp:PublicIp}'
@@ -34,7 +37,7 @@ The release needs [release-policy.json](recording-control-address/release-policy
 
 On the first install only, save the full Cloudflare record as the undo and set only the DNS-only A record `nightly-recording-control.chalkmeet.com` to the output, keeping its TTL. Append `/32` to the output for the capture and render recorder policies' `control_addresses` and apply both firewalls before the cold-boot check. Confirm the public DNS answer matches before the signed recorder cold-boot check, and keep the record unchanged across host replacements.
 
-To undo an association change, move the retained allocation back to the previous host. Reverting code does not release the live address, because both definitions retain the allocation. OpenTofu uses `lifecycle.destroy = false`; Alchemy persists `retain` after cutover. If Alchemy forgets the allocation, reseed it from the original OpenTofu state before a new Alchemy deployment. To undo the migration, delete the stack's Alchemy records and restore the previous commit's OpenTofu configuration with the untouched original state. Production's recorder address is not managed by this root.
+To undo an association change, move the retained allocation back to the previous host. After an approved installation, Alchemy retains the allocation on removal. Reverting code alone neither moves nor releases it. If Alchemy forgets a future allocation, recover its current state before deploying again; the historical OpenTofu state does not describe that new allocation. No live address migration occurred. Restoring the previous OpenTofu source and untouched state restores only the old definition, not the released address; do not apply its replacement plan without cost approval. Production's recorder address is not managed by this root.
 
 ## Database and privacy
 
