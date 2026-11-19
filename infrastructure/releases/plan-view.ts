@@ -11,7 +11,8 @@ import * as Schema from "effect/Schema";
 export const jsonValue = (value: unknown): Schema.MutableJson => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.MutableJson))(JSON.stringify(encodeState(value)));
 export const planView = Effect.fn(function* (plan: StackPlan, beforeOutput: unknown) {
   const drift = yield* Drift.detect(plan.stack);
-  if (Object.values(drift.resources).some((row) => row.action !== "unchanged")) throw new Error("Dispatcher live drift must be resolved before release planning");
+  const drifted = Object.entries(drift.resources).filter(([, row]) => row.action !== "unchanged");
+  if (drifted.length) throw new Error(`Dispatcher live drift must be resolved before release planning: ${drifted.map(([id, row]) => `${id} (${row.action})`).join(", ")}`);
   if (plan.actions.length) throw new Error("Dispatcher plans may not contain Actions");
   const nodes = [...Object.values(plan.native.resources), ...Object.values(plan.native.deletions).filter((node) => node !== undefined)];
   const stableAttrs = Object.fromEntries(
