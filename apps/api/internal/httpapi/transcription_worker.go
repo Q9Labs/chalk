@@ -215,23 +215,19 @@ func workerJobResponse(job transcripts.Job) workerJobResponseBody {
 }
 
 // writeWorkloadUnauthorized answers 401 and logs why the workload was refused.
-// The reasons come from the authorizer and name no secret; the headers logged
-// are the ones a mismatch is read from, never the signature or nonce.
-func writeWorkloadUnauthorized(w http.ResponseWriter, r *http.Request, reason error) {
-	observability.RequestLogger(r.Context()).WarnContext(r.Context(), "workload authorization rejected", "event", "workload.unauthorized",
-		"method", r.Method, "route", r.URL.Path, "reason", clipLogValue(reason.Error()),
-		"role", clipLogValue(r.Header.Get(workloadRoleHeader)), "environment", clipLogValue(r.Header.Get(workloadEnvironmentHeader)),
-		"release", clipLogValue(r.Header.Get(workloadReleaseHeader)), "audience", clipLogValue(r.Header.Get(workloadAudienceHeader)),
-		"timestamp", clipLogValue(r.Header.Get(workloadTimestampHeader)))
-	writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
-}
-
-func clipLogValue(value string) string {
-	const limit = 128
-	if len(value) > limit {
-		return value[:limit]
+// The log names one reason from the fixed list the authorizer returns, never
+// the error text or any request header.
+func writeWorkloadUnauthorized(w http.ResponseWriter, r *http.Request, rejection error) {
+	reason := "unrecognized"
+	for _, known := range workloadRejectionReasons {
+		if errors.Is(rejection, known) {
+			reason = known.Error()
+			break
+		}
 	}
-	return value
+	observability.RequestLogger(r.Context()).WarnContext(r.Context(), "workload authorization rejected", "event", "workload.unauthorized",
+		"method", r.Method, "route", r.URL.Path, "reason", reason)
+	writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
 }
 
 func writeWorkerError(w http.ResponseWriter, r *http.Request, err error) {

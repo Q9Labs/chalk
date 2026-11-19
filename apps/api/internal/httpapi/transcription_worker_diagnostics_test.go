@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
@@ -36,6 +38,12 @@ func (s failingClaimService) ClaimCleanup(context.Context, transcripts.CleanupCl
 	return transcripts.CleanupJob{}, "", s.err
 }
 
+type transcriptionWorkerTestService interface {
+	TranscriptWorkerService
+	CleanupWorkerService
+	TranscriptFinalizerWorkerService
+}
+
 type workloadAuthorizerFunc func(*http.Request) error
 
 func (f workloadAuthorizerFunc) AuthorizeWorkload(_ context.Context, r *http.Request, _ string) error {
@@ -50,7 +58,7 @@ var transcriptionClaimRoutes = []string{
 
 // serveTranscriptionWorker mounts every worker route behind the production
 // journey and request-logging middleware and returns the structured log.
-func serveTranscriptionWorker(t *testing.T, service failingClaimService, auth WorkloadAuthorizer, path string, headers map[string]string) (*httptest.ResponseRecorder, string, []map[string]any) {
+func serveTranscriptionWorker(t *testing.T, service transcriptionWorkerTestService, auth WorkloadAuthorizer, path string, headers map[string]string) (*httptest.ResponseRecorder, string, []map[string]any) {
 	t.Helper()
 	var logs bytes.Buffer
 	logger := observability.New(observability.Config{}, &logs).Logger()
@@ -131,33 +139,82 @@ func TestTranscriptionClaimRoutesLogTheCauseOfAnUnknownError(t *testing.T) {
 	}
 }
 
+type refusingNonceStore struct{}
+
+func (refusingNonceStore) Consume(context.Context, string, time.Duration) (bool, error) {
+	return false, errors.New("nonce store down at redis.internal.example:6379")
+}
+
 func TestTranscriptionWorkerRoutesLogWhyAWorkloadWasRejected(t *testing.T) {
 	const signature, nonce = "private-signature-value", "private-nonce-value-0123456789"
-	rejection := errors.New("workload audience mismatch")
-	auth := workloadAuthorizerFunc(func(*http.Request) error { return rejection })
-	headers := map[string]string{
-		workloadAuthorizationHeader: "Chalk-Workload-HMAC " + signature,
-		workloadNonceHeader:         nonce,
-		workloadAudienceHeader:      "chalk-api",
+	auth := NewHMACWorkloadAuthorizer(HMACWorkloadAuthorizerConfig{Secret: []byte("test-secret"), Environment: "test", ReleaseID: "release-1", Audience: "chalk-api", Nonces: refusingNonceStore{}})
+	now := time.Now().Unix()
+	headers := func(override map[string]string) map[string]string {
+		values := map[string]string{
+			workloadAuthorizationHeader: "Chalk-Workload-HMAC " + signature,
+			workloadTimestampHeader:     strconv.FormatInt(now, 10),
+			workloadNonceHeader:         nonce,
+			workloadEnvironmentHeader:   "test",
+			workloadReleaseHeader:       "release-1",
+			workloadRoleHeader:          transcriptionWorkloadRole,
+			workloadAudienceHeader:      "chalk-api",
+			workloadBodySHAHeader:       "not-the-body-digest",
+		}
+		for name, value := range override {
+			values[name] = value
+		}
+		return values
 	}
-	for _, path := range transcriptionClaimRoutes {
-		t.Run(path, func(t *testing.T) {
-			response, journeyID, lines := serveTranscriptionWorker(t, failingClaimService{}, auth, path, headers)
-			if response.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d: %s", response.Code, response.Body.String())
-			}
-			line := logLine(lines, "workload.unauthorized")
-			if line == nil || line["reason"] != rejection.Error() || line["route"] != path || line["audience"] != "chalk-api" || line["journey_id"] != journeyID {
-				t.Fatalf("rejection log = %v", line)
-			}
-			encoded, err := json.Marshal(lines)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, secret := range []string{signature, nonce} {
-				if strings.Contains(string(encoded), secret) {
-					t.Fatalf("log contains %q", secret)
+	for name, test := range map[string]struct {
+		headers map[string]string
+		reason  string
+	}{
+		"audience":  {headers(map[string]string{workloadAudienceHeader: "attacker.example:8443"}), "workload audience mismatch"},
+		"release":   {headers(map[string]string{workloadReleaseHeader: "release-2"}), "workload release mismatch"},
+		"timestamp": {headers(map[string]string{workloadTimestampHeader: "soon"}), "invalid workload timestamp"},
+		"checksum":  {headers(nil), "workload body checksum mismatch"},
+	} {
+		for _, path := range transcriptionClaimRoutes {
+			t.Run(name+" "+path, func(t *testing.T) {
+				response, journeyID, lines := serveTranscriptionWorker(t, failingClaimService{}, auth, path, test.headers)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("status = %d: %s", response.Code, response.Body.String())
 				}
+				line := logLine(lines, "workload.unauthorized")
+				if line == nil || line["reason"] != test.reason || line["route"] != path || line["journey_id"] != journeyID {
+					t.Fatalf("rejection log = %v", line)
+				}
+				encoded, err := json.Marshal(lines)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, private := range []string{signature, nonce, "attacker.example", "release-2", "not-the-body-digest"} {
+					if strings.Contains(string(encoded), private) {
+						t.Fatalf("log contains %q: %s", private, encoded)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestWorkloadRejectionLogNamesOnlyAKnownReason(t *testing.T) {
+	for name, test := range map[string]struct {
+		err    error
+		reason string
+	}{
+		"known":   {fmt.Errorf("wrapped: %w", errWorkloadNonceReplay), "workload nonce replay"},
+		"unknown": {errors.New("redis.internal.example:6379 refused"), "unrecognized"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			auth := workloadAuthorizerFunc(func(*http.Request) error { return test.err })
+			response, _, lines := serveTranscriptionWorker(t, failingClaimService{}, auth, transcriptionClaimRoutes[0], nil)
+			line := logLine(lines, "workload.unauthorized")
+			if response.Code != http.StatusUnauthorized || line == nil || line["reason"] != test.reason {
+				t.Fatalf("status = %d, log = %v", response.Code, line)
+			}
+			if encoded, _ := json.Marshal(lines); strings.Contains(string(encoded), "redis.internal.example") {
+				t.Fatalf("log contains the authorizer's error text: %s", encoded)
 			}
 		})
 	}

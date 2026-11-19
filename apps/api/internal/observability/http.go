@@ -5,12 +5,14 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
@@ -33,7 +35,12 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 
 	detail := err.Error()
 	var requestErr *url.Error
-	if errors.As(err, &requestErr) {
+	driverFacts := driverFailureAttrs(err)
+	if driverFacts != nil {
+		// Driver and socket errors echo database hosts, addresses and connection
+		// parameters, so only the allowlisted facts below leave the process.
+		detail = driverFailureDetail
+	} else if errors.As(err, &requestErr) {
 		// Transport errors can include credential-bearing URLs.
 		detail = requestErr.Err.Error()
 	}
@@ -49,8 +56,46 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 		detail = detail[:256]
 	}
 	attrs := []any{"event", "http.failure", "method", method, "route", route, "code", code, "error", detail}
+	attrs = append(attrs, driverFacts...)
 	attrs = append(attrs, UpstreamAttrs(err)...)
 	logger.ErrorContext(ctx, "http endpoint failed", attrs...)
+}
+
+const driverFailureDetail = "database or network error"
+
+var sqlStatePattern = regexp.MustCompile(`^[0-9A-Z]{5}$`)
+
+// driverFailureAttrs returns the bounded facts of a Postgres driver or network
+// failure: its class, the SQLSTATE, whether it happened while connecting and
+// whether it timed out. It returns nil for any other error. The error text is
+// never part of the result.
+func driverFailureAttrs(err error) []any {
+	var pgError *pgconn.PgError
+	var connectError *pgconn.ConnectError
+	var configError *pgconn.ParseConfigError
+	var network net.Error
+	var requestErr *url.Error
+	var attrs []any
+	isConnect := errors.As(err, &connectError)
+	switch {
+	case errors.As(err, &pgError):
+		attrs = []any{"error_class", "postgres"}
+		if sqlStatePattern.MatchString(pgError.Code) {
+			attrs = append(attrs, "sqlstate", pgError.Code)
+		}
+	case errors.As(err, &configError):
+		attrs = []any{"error_class", "postgres_config"}
+	case isConnect:
+		attrs = []any{"error_class", "postgres_connect"}
+	case errors.As(err, &requestErr):
+		// HTTP client errors keep their own handling in LogHTTPError.
+		return nil
+	case errors.As(err, &network):
+		attrs = []any{"error_class", "network"}
+	default:
+		return nil
+	}
+	return append(attrs, "connect", isConnect, "timeout", errors.As(err, &network) && network.Timeout())
 }
 
 // UpstreamAttrs returns the status and code a provider answered with. The
