@@ -1,14 +1,23 @@
-import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as joinPath } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { run } from "../../../../../scripts/diagnose-call/diagnose.mjs";
+import { unwrapRow } from "../../../../../scripts/diagnose-call/live/world.mjs";
 import { CATALOGUE } from "../../../../../scripts/diagnose-call/proof/catalogue.mjs";
-import { judgeFixture, ruleResult } from "../../../../../scripts/diagnose-call/proof/rows.mjs";
+import { completeWatermarks, judgeFixture, observationsFromRows, ruleResult } from "../../../../../scripts/diagnose-call/proof/rows.mjs";
+import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import type { TelemetryEvent } from "../telemetry/types";
 import type { ConnectionSyncFactoryInput } from "./dependencies";
 
-type Symptom = "access.connection_lost" | "reconnect.dead_live" | "background.resume_stalled";
+const findings = {
+  "access.connection_lost": { outcome: "broken", hop: "access_refresh" },
+  "reconnect.dead_live": { outcome: "broken", hop: "transport_liveness" },
+  "background.resume_stalled": { outcome: "degraded", hop: "resume" },
+} as const;
+type Symptom = keyof typeof findings;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -70,7 +79,7 @@ async function join({ denyRefresh = false }: { denyRefresh?: boolean } = {}) {
 }
 
 type Fixture = Parameters<typeof judgeFixture>[0];
-function runRule(code: Symptom, arm: "positive" | "healthy", events: readonly TelemetryEvent[]) {
+async function runRule(code: Symptom, arm: "positive" | "healthy", events: readonly TelemetryEvent[]) {
   const input: Fixture = JSON.parse(readFileSync(new URL(`../../../../../observability/fixtures/${code}/${arm}.json`, import.meta.url), "utf8"));
   if (input.declaration.kind !== "episode") throw new Error("The fault fixture must declare an Episode");
   const affected = input.declaration.seats[0]?.participant;
@@ -78,10 +87,25 @@ function runRule(code: Symptom, arm: "positive" | "healthy", events: readonly Te
   const recorded = events.flatMap((event) => {
     const template = templates.find((row) => row.event === `client.${event.type}`);
     if (!template) return [];
-    return [{ ...template, event_id: event.event_id, seq: event.seq, est_server_ms: input.declaration.window.from_ms + 120_000 + event.elapsed_ms, continuity_result: event.continuity_result }];
+    // The fault harness supplies only the authority stamp and calibrated time that live ingest lacks.
+    return [
+      unwrapRow({
+        event: "sdk.telemetry",
+        type: event.type,
+        attributes: {
+          ...template,
+          event: "sdk.telemetry",
+          event_id: event.event_id,
+          seq: event.seq,
+          est_server_ms: input.declaration.window.from_ms + 120_000 + event.elapsed_ms,
+          continuity_result: event.continuity_result,
+        },
+      }),
+    ];
   });
   const controls = input.rows.filter((row) => row.participant_id !== affected);
-  const { dropped, verdict } = judgeFixture({ ...input, rows: [...recorded, ...controls] }, CATALOGUE, code);
+  const rows = [...recorded, ...controls];
+  const { dropped, verdict } = judgeFixture({ ...input, rows }, CATALOGUE, code);
   expect(dropped).toEqual([]);
   const result = ruleResult(verdict, code);
   if (arm === "positive") {
@@ -93,6 +117,42 @@ function runRule(code: Symptom, arm: "positive" | "healthy", events: readonly Te
       const missing = judgeFixture({ ...input, rows: [...recorded.filter((row) => row.event !== eventName), ...controls] }, CATALOGUE, code);
       expect(ruleResult(missing.verdict, code)).toMatchObject({ findings: 0, checked: 1, eligible: 2 });
     }
+  }
+
+  const directory = mkdtempSync(joinPath(tmpdir(), "chalk-continuity-"));
+  try {
+    const source = joinPath(directory, "world.mjs");
+    const { declaration, asof_ms } = input;
+    const evidence = {
+      observations: observationsFromRows(rows).observations,
+      watermarks: completeWatermarks(declaration, CATALOGUE, asof_ms),
+    };
+    writeFileSync(
+      source,
+      "export default " +
+        JSON.stringify({
+          asof_ms,
+          tenants: [{ id: declaration.tenant, name: "Test", tz: "UTC" }],
+          people: [],
+          declarations: [declaration],
+          sessions: [],
+          evidence: { [declaration.id]: evidence },
+          history: [{ item: declaration.id, asof_ms, evidence }],
+        }),
+    );
+    const output = await run([declaration.id, "--fixture", source]);
+    expect(output).toMatchObject({ code: 0, err: "" });
+    const line = output.out.split("\n").find((line) => line.startsWith("f_") && line.includes(` ${code} `));
+    if (arm === "positive") {
+      const { outcome, hop } = findings[code];
+      expect(line, output.out).toContain(` ${outcome} ${code} pt_`);
+      expect(line).toContain('("Seat A")');
+      expect(line).toContain(`hop=${hop} module=sdk.connection upstream=unknown`);
+    } else {
+      expect(line).toBeUndefined();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -106,7 +166,7 @@ describe("continuity observations", () => {
       }
       expect(test.client.getSnapshot().connection.status).toBe(denyRefresh ? "failed" : "live");
       const events = await test.records("grant_check", denyRefresh ? "expired" : "verified");
-      runRule("access.connection_lost", denyRefresh ? "positive" : "healthy", events);
+      await runRule("access.connection_lost", denyRefresh ? "positive" : "healthy", events);
     } finally {
       test.client.dispose();
     }
@@ -127,8 +187,8 @@ describe("continuity observations", () => {
       test.peer(state);
       const events = await test.records("resume_check", state === "failed" ? "dead_live" : "verified");
       const arm = state === "failed" ? "positive" : "healthy";
-      runRule("reconnect.dead_live", arm, events);
-      runRule("background.resume_stalled", arm, events);
+      await runRule("reconnect.dead_live", arm, events);
+      await runRule("background.resume_stalled", arm, events);
     } finally {
       test.client.dispose();
     }

@@ -1141,17 +1141,19 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           );
         });
       };
-      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: ConnectionMediaSnapshot): Effect.Effect<void> =>
-        Effect.gen(function* () {
+      const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: ConnectionMediaSnapshot): Effect.Effect<void> => {
+        const resume = telemetry?.resumeCount;
+        return Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
           if (snapshot === model.mediaSnapshot) return;
           const phase = mediaDiagnosticPhase(snapshot);
           if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
           model.mediaSnapshot = snapshot;
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
-          if (active(model)) continuity.media(checkMediaLink(snapshot, model.recoveryQueued !== null));
+          if (active(model) && telemetry?.resumeCount === resume) continuity.media(checkMediaLink(snapshot, model.recoveryQueued !== null));
           yield* publish();
         });
+      };
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
         if (model.state === "leaving") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;

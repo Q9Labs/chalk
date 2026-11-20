@@ -14,7 +14,7 @@ This slice explains a connection that stops working after entry to an Episode. S
 - Sync: `apps/sync/lib/chalk_sync/stateholder/postgres/presence.ex` and `apps/sync/lib/chalk_sync/stateholder/postgres.ex`. Keep presence renewals serialized with removal.
 - Delivery: `apps/api/internal/sdktelemetry/` and its generated contract, only for the bounded SDK event payload.
 - Formal: `tools/formal/client-recovery/anchors` tracks the refresh guard. The observation does not change the modeled transitions.
-- Rules and proof: `observability/registry/areas/access.json`, one rule, fixture pair and runtime fault scenario per symptom, and the diagnose example world and goldens.
+- Rules and proof: `observability/registry/areas/access.json`, one rule, fixture pair and runtime fault scenario per symptom, and the diagnose example world and goldens. The coverage-gate regression test constructs a missing witness explicitly so it does not depend on which slice remains allow-listed.
 
 ## 2. Symptom catalogue
 

@@ -48,7 +48,6 @@ test("an allow-listed symptom that is complete fails, so the list only shrinks",
 });
 
 test("an incomplete symptom that is not allow-listed fails", async () => {
-  const stub = graph.symptoms.find((symptom) => symptom.allowlisted);
-  const { failures } = await checkCoverage({ root, graph: only({ ...stub, allowlisted: false }) });
-  assert.match(failures.join("\n"), new RegExp(`${stub.code.replace(".", "\\.")} is missing: witnesses`, "u"));
+  const { failures } = await checkCoverage({ root, graph: only({ ...example, witnesses: [] }) });
+  assert.match(failures.join("\n"), /end\.wrong_screen is missing: witnesses/u);
 });
