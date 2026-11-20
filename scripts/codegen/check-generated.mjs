@@ -17,7 +17,7 @@ const checks = [
   { name: "Observability registry", command: ["node", "scripts/codegen/obs-registry.mjs"] },
   // The coverage graph is generated; this proves every symptom in it still has each link, or is allow-listed.
   { name: "Observability coverage", command: ["node", "scripts/gates/obs-coverage.mjs"] },
-  { name: "Observability coverage proof", command: ["node", "--test", "scripts/gates/obs-coverage.test.mjs"] },
+  { name: "Observability coverage proof", command: ["node", "--test", "scripts/gates/obs-coverage.test.mjs", "scripts/codegen/obs-registry.test.mjs"] },
 ];
 
 function run({ name, command, fix }) {

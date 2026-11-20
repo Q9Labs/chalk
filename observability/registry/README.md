@@ -75,13 +75,13 @@ Then run the tests of every kernel you emit from (below). The generator's error 
 
 Each kernel has the same five calls. Each call writes one record, checked against the registry. In tests and CI the kernel is closed, so a violation throws; in production it is open, so a violation is counted and the record still goes out.
 
-| Call       | TypeScript (`createKernel` from `sdks/typescript/client/src/obs`)  | Go (`internal/obs`)                                   | Elixir (`ChalkSync.Obs`)                                           |
-| ---------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------ |
-| op         | `kernel.op(name, fields, (scope) => work, { classify })`           | `obs.Op(ctx, name, func(ctx, scope) error, attrs...)` | `Obs.op(name, fields, fn -> work end, classify: fun)`              |
-| transition | `kernel.transition(machine, from, to, trigger, trail, { reason })` | `obs.Transition(ctx, obs.Move{...}, attrs...)`        | `Obs.transition(machine, from, to, trigger, fields, reason: code)` |
-| decision   | `kernel.decision(name, decision, fields, reason)`                  | `obs.Decision(ctx, name, decision, reason, attrs...)` | `Obs.decision(name, decision, fields, reason)`                     |
-| surface    | `kernel.surface(name, fields).dismiss()`                           | `dismiss := obs.Surface(ctx, name, attrs...)`         | `dismiss = Obs.surface(name, fields)`                              |
-| fact       | `kernel.fact(name, fields)`                                        | `obs.Fact(ctx, name, attrs...)`                       | `Obs.fact(name, fields)`                                           |
+| Call       | TypeScript (`createKernel` from `sdks/typescript/client/src/obs/kernel.ts`) | Go (`internal/obs`)                                   | Elixir (`ChalkSync.Obs`)                                           |
+| ---------- | --------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------ |
+| op         | `kernel.op(name, fields, (scope) => work, { classify })`                    | `obs.Op(ctx, name, func(ctx, scope) error, attrs...)` | `Obs.op(name, fields, fn -> work end, classify: fun)`              |
+| transition | `kernel.transition(machine, from, to, trigger, trail, { reason })`          | `obs.Transition(ctx, obs.Move{...}, attrs...)`        | `Obs.transition(machine, from, to, trigger, fields, reason: code)` |
+| decision   | `kernel.decision(name, decision, fields, reason)`                           | `obs.Decision(ctx, name, decision, reason, attrs...)` | `Obs.decision(name, decision, fields, reason)`                     |
+| surface    | `kernel.surface(name, fields).dismiss()`                                    | `dismiss := obs.Surface(ctx, name, attrs...)`         | `dismiss = Obs.surface(name, fields)`                              |
+| fact       | `kernel.fact(name, fields)`                                                 | `obs.Fact(ctx, name, attrs...)`                       | `Obs.fact(name, fields)`                                           |
 
 An op records exactly one terminal outcome:
 

@@ -133,36 +133,54 @@ function isRecordValue(value: unknown): value is RecordValue {
   return typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || isFlagMap(value);
 }
 
-function valueProblem(field: string, value: unknown, spec: FieldSpec, allowed: readonly string[] | undefined): string | undefined {
-  const fits = {
-    enum: typeof value === "string" && (allowed ?? []).includes(value),
-    int: typeof value === "number" && Number.isSafeInteger(value),
-    number: typeof value === "number" && Number.isFinite(value),
-    bool: typeof value === "boolean",
-    string: typeof value === "string" && value.length > 0,
-    id: typeof value === "string" && value.length > 0,
-    map: isFlagMap(value),
-  }[spec.type];
-  return fits ? undefined : `field ${field} has ${JSON.stringify(value)}, which is not a valid ${spec.type}${spec.type === "enum" ? ` (${(allowed ?? []).join(", ")})` : ""}`;
+const nonEmptyString = (value: unknown) => typeof value === "string" && value.length > 0;
+const FITS: { readonly [type: string]: (value: unknown, allowed: readonly string[]) => boolean } = {
+  enum: (value, allowed) => typeof value === "string" && allowed.includes(value),
+  int: (value) => typeof value === "number" && Number.isSafeInteger(value),
+  number: (value) => typeof value === "number" && Number.isFinite(value),
+  bool: (value) => typeof value === "boolean",
+  string: nonEmptyString,
+  id: nonEmptyString,
+  map: isFlagMap,
+};
+
+function valueProblem(field: string, value: unknown, spec: FieldSpec, allowed: readonly string[]): string | undefined {
+  if (FITS[spec.type]?.(value, allowed) === true) return undefined;
+  const choices = spec.type === "enum" ? ` (${allowed.join(", ")})` : "";
+  return `field ${field} has ${JSON.stringify(value)}, which is not a valid ${spec.type}${choices}`;
+}
+
+const isDefined = <T>(value: T | undefined): value is T => value !== undefined;
+
+function givenFieldProblem(name: string, field: string, value: unknown, rules: { readonly [name: string]: FieldRule }): string | undefined {
+  const spec = FIELD_SPECS.get(field);
+  if (!spec) return `${name}: field ${field} is not in the registry`;
+  const rule = rules[field];
+  if (!rule && spec.group !== "trail") return `${name}: field ${field} is not declared on this event`;
+  const problem = valueProblem(field, value, spec, rule?.values ?? spec.values ?? []);
+  return problem === undefined ? undefined : `${name}: ${problem}`;
 }
 
 // Checks caller-supplied fields: trail fields anywhere, event fields only on their event.
 function fieldProblems(name: string, fields: object, rules: { readonly [name: string]: FieldRule }): string[] {
-  const problems: string[] = [];
-  for (const [field, value] of entriesOf(fields)) {
-    if (value === undefined) continue;
-    const spec = FIELD_SPECS.get(field);
-    const rule = rules[field];
-    if (!spec) problems.push(`${name}: field ${field} is not in the registry`);
-    else if (!rule && spec.group !== "trail") problems.push(`${name}: field ${field} is not declared on this event`);
-    else {
-      const problem = valueProblem(field, value, spec, rule?.values ?? spec.values);
-      if (problem) problems.push(`${name}: ${problem}`);
-    }
-  }
-  for (const [field, rule] of Object.entries(rules)) if (rule.required && entriesOf(fields).every(([key, value]) => key !== field || value === undefined)) problems.push(`${name}: required field ${field} is missing`);
+  const given = entriesOf(fields).filter(([, value]) => value !== undefined);
+  const supplied = new Set(given.map(([field]) => field));
+  const missing = Object.entries(rules).filter(([field, rule]) => rule.required && !supplied.has(field));
+  return [...given.map(([field, value]) => givenFieldProblem(name, field, value, rules)).filter(isDefined), ...missing.map(([field]) => `${name}: required field ${field} is missing`)];
+}
+
+function machineProblems(machine: string, from: string, to: string, trigger: string, fields: object): string[] {
+  const spec = MACHINE_SPECS.get(machine);
+  if (!spec) return [`unknown machine ${machine}`];
+  const problems = fieldProblems(machine, fields, {});
+  if (!spec.edges.some(([edgeFrom, edgeTo]) => edgeFrom === from && edgeTo === to)) problems.push(`${machine}: ${from} -> ${to} is not a declared edge`);
+  if (!spec.triggers.includes(trigger)) problems.push(`${machine}: unknown trigger ${trigger}`);
   return problems;
 }
+
+const unwrapped = (error: unknown) => (error instanceof ClassifiedError && error.cause !== undefined ? error.cause : error);
+
+type OpState = { extra: object; expectedCode?: ExpectedReason; classification?: Classification };
 
 function eventProblems(name: string, kind: Kind, fields: object): string[] {
   const spec = EVENT_SPECS.get(name);
@@ -241,47 +259,47 @@ export function createKernel(options: KernelOptions): Kernel {
     return isAbortError(error) ? { outcome: "expected", code: "cancelled" } : { outcome: "error", code: "unclassified" };
   };
 
+  // Records the op's one terminal outcome, checking any fields it learned while it ran.
+  const finishOp = (name: string, fields: object, state: OpState, run: { readonly opId: string; readonly started: number; readonly options: OpOptions | undefined }) => {
+    const outcome = state.classification?.outcome ?? "ok";
+    const code = state.classification?.code;
+    const late = Object.keys(state.extra).length > 0 ? eventProblems(name, "op", { ...fields, ...state.extra }) : [];
+    violate([...late, reasonProblem(code, outcome)].filter(isDefined));
+    send("op", name, { ...fields, ...state.extra, attempt: run.options?.attempt }, { outcome, reason_code: code, duration_ms: Math.round(performance.now() - run.started), op_id: run.opId, parent_op_id: run.options?.parentOpId });
+  };
+
   const kernel: Kernel = {
     async op(name, fields, run, opOptions) {
       violate(eventProblems(name, "op", fields));
       const opId = uuid();
       const started = performance.now();
-      let extra: object = {};
-      let expectedCode: ExpectedReason | undefined;
-      let classification: Classification | undefined;
+      const state: OpState = { extra: {} };
       inFlight.set(opId, { name, op_id: opId, started_ms: Math.round(now()) });
       const scope: OpScope<typeof name> = {
         opId,
         expected: (code) => {
-          expectedCode = code;
+          state.expectedCode = code;
         },
         set: (more) => {
-          extra = { ...extra, ...more };
+          state.extra = { ...state.extra, ...more };
         },
       };
       try {
         const value = await run(scope);
-        if (expectedCode !== undefined) classification = { outcome: "expected", code: expectedCode };
+        if (state.expectedCode !== undefined) state.classification = { outcome: "expected", code: state.expectedCode };
         return value;
       } catch (error) {
-        classification = classify(error, opOptions?.classify);
-        throw error instanceof ClassifiedError && error.cause !== undefined ? error.cause : error;
+        state.classification = classify(error, opOptions?.classify);
+        throw unwrapped(error);
       } finally {
         inFlight.delete(opId);
-        const outcome = classification?.outcome ?? "ok";
-        violate([...(Object.keys(extra).length > 0 ? eventProblems(name, "op", { ...fields, ...extra }) : []), reasonProblem(classification?.code, outcome)].filter((problem) => problem !== undefined));
-        send("op", name, { ...fields, ...extra, attempt: opOptions?.attempt }, { outcome, reason_code: classification?.code, duration_ms: Math.round(performance.now() - started), op_id: opId, parent_op_id: opOptions?.parentOpId });
+        finishOp(name, fields, state, { opId, started, options: opOptions });
       }
     },
 
     transition(machine, from, to, trigger, fields = {}, transitionOptions) {
-      const spec = MACHINE_SPECS.get(machine);
-      const problems = spec ? fieldProblems(machine, fields, {}) : [`unknown machine ${machine}`];
-      if (spec && !spec.edges.some(([edgeFrom, edgeTo]) => edgeFrom === from && edgeTo === to)) problems.push(`${machine}: ${from} -> ${to} is not a declared edge`);
-      if (spec && !spec.triggers.includes(trigger)) problems.push(`${machine}: unknown trigger ${trigger}`);
       const reason = reasonProblem(transitionOptions?.reason);
-      if (reason) problems.push(`${machine}: ${reason}`);
-      violate(problems);
+      violate([...machineProblems(machine, from, to, trigger, fields), ...(reason === undefined ? [] : [`${machine}: ${reason}`])]);
       send("transition", machine, fields, { machine, from_state: from, to_state: to, trigger, reason_code: transitionOptions?.reason, duration_ms: transitionOptions?.durationMs });
     },
 

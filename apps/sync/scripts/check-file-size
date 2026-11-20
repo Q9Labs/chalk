@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails when a hand-written Elixir file under lib/ or test/ is over 300 lines without a reason
 # in size-baseline.txt, or when a baseline line has no reason or names a file that is no longer over.
-# Baseline lines are "path: reason". The generated contract files never count.
+# Baseline lines are "path: reason". The generated contract files and the generated obs registry never count.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -12,7 +12,7 @@ failed=0
 
 over=$(
   git ls-files 'lib/*.ex' 'lib/**/*.ex' 'test/*.ex' 'test/*.exs' 'test/**/*.ex' 'test/**/*.exs' |
-    grep -v -e '^lib/chalk_sync/contract/generated' |
+    grep -v -e '^lib/chalk_sync/contract/generated' -e '^lib/chalk_sync/obs/registry.ex$' |
     xargs wc -l |
     awk -v limit="$limit" '$2 != "total" && $1 > limit { print $2 " " $1 }'
 )

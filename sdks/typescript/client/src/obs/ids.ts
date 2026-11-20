@@ -100,41 +100,59 @@ function bareCandidates(text: string): readonly Candidate[] {
 
 export function parseHandle(input: string): ParsedHandle {
   const text = input.trim();
-  if (text.length === 0) return { ok: false, error: "empty" };
   const lower = text.toLowerCase();
+  if (text.length === 0) return { ok: false, error: "empty" };
   if (lower.startsWith(DIAGNOSTIC_CODE.prefix.toLowerCase())) return parseDiagnosticCode(text.slice(DIAGNOSTIC_CODE.prefix.length));
-  if (lower.startsWith("session:")) {
-    const id = text.slice("session:".length);
-    if (id.length === 0) return { ok: false, error: "empty" };
-    const candidates = SESSION_MEANINGS.flatMap((meaning): Candidate[] => {
-      if (!meaning.lookup || meaning.kind === null) return [];
-      const entry = spec(meaning.kind);
-      if (entry.canonical === "token") return [{ kind: entry.kind, id }];
-      const hex = hexOf(entry, id);
-      return hex === undefined ? [] : [{ kind: entry.kind, id: stored(entry, hex) }];
-    });
-    return { ok: true, handle: { form: "session", candidates } };
-  }
-  if (/^[0-9a-f]{64}$/.test(lower)) {
-    const owner = ID_KINDS.find((entry) => entry.legacyHashField !== null);
-    if (owner) return { ok: true, handle: { form: "legacy_hash", kind: owner.kind, hash: lower } };
-  }
-  const separator = text.indexOf("_");
-  if (separator <= 0) {
-    const candidates = bareCandidates(text);
-    return candidates.length > 0 ? { ok: true, handle: { form: "bare", candidates } } : { ok: false, error: "unrecognized" };
-  }
-  const entry = ID_KINDS.find((candidate) => candidate.prefix === lower.slice(0, separator));
-  if (!entry) return { ok: false, error: "unknown_prefix" };
-  const rest = text.slice(separator + 1);
-  if (entry.canonical === "token") return rest.length > 0 && !/\s/.test(rest) ? { ok: true, handle: { form: "full", kind: entry.kind, id: rest } } : { ok: false, error: "bad_value" };
+  if (lower.startsWith("session:")) return parseSession(text.slice("session:".length));
+  return parseLegacyHash(lower) ?? parseValue(text);
+}
+
+function sessionCandidates(meaning: (typeof SESSION_MEANINGS)[number], id: string): Candidate[] {
+  if (!meaning.lookup || meaning.kind === null) return [];
+  const entry = spec(meaning.kind);
+  if (entry.canonical === "token") return [{ kind: entry.kind, id }];
+  const hex = hexOf(entry, id);
+  return hex === undefined ? [] : [{ kind: entry.kind, id: stored(entry, hex) }];
+}
+
+function parseSession(id: string): ParsedHandle {
+  if (id.length === 0) return { ok: false, error: "empty" };
+  return { ok: true, handle: { form: "session", candidates: SESSION_MEANINGS.flatMap((meaning) => sessionCandidates(meaning, id)) } };
+}
+
+function parseLegacyHash(lower: string): ParsedHandle | undefined {
+  if (!/^[0-9a-f]{64}$/.test(lower)) return undefined;
+  const owner = ID_KINDS.find((entry) => entry.legacyHashField !== null);
+  return owner ? { ok: true, handle: { form: "legacy_hash", kind: owner.kind, hash: lower } } : undefined;
+}
+
+function parseBare(text: string): ParsedHandle {
+  const candidates = bareCandidates(text);
+  return candidates.length > 0 ? { ok: true, handle: { form: "bare", candidates } } : { ok: false, error: "unrecognized" };
+}
+
+function parseToken(entry: IdKindSpec, rest: string): ParsedHandle {
+  return rest.length > 0 && !/\s/.test(rest) ? { ok: true, handle: { form: "full", kind: entry.kind, id: rest } } : { ok: false, error: "bad_value" };
+}
+
+function parseHex(entry: IdKindSpec, full: number, rest: string): ParsedHandle {
   const hex = rest.toLowerCase().replaceAll("-", "");
-  const full = HEX_LENGTH[entry.canonical];
   if (!HEX.test(hex)) return { ok: false, error: "bad_value" };
   if (hex.length > full) return { ok: false, error: "too_long" };
   if (hex.length === full) return { ok: true, handle: { form: "full", kind: entry.kind, id: stored(entry, hex) } };
   if (hex.length < MIN_SHORT) return { ok: false, error: "too_short" };
   return { ok: true, handle: { form: "short", kind: entry.kind, prefix: hex } };
+}
+
+// A prefixed handle (ep_..., cs_...) or, with no prefix, a bare id that may be several kinds.
+function parseValue(text: string): ParsedHandle {
+  const separator = text.indexOf("_");
+  if (separator <= 0) return parseBare(text);
+  const prefix = text.slice(0, separator).toLowerCase();
+  const entry = ID_KINDS.find((candidate) => candidate.prefix === prefix);
+  if (!entry) return { ok: false, error: "unknown_prefix" };
+  const rest = text.slice(separator + 1);
+  return entry.canonical === "token" ? parseToken(entry, rest) : parseHex(entry, HEX_LENGTH[entry.canonical], rest);
 }
 
 function tryCanonical(kind: IdKind, id: string): string | undefined {
@@ -144,19 +162,24 @@ function tryCanonical(kind: IdKind, id: string): string | undefined {
   return hex === undefined ? undefined : stored(entry, hex);
 }
 
-function matches(handle: Handle, target: Candidate & { readonly legacyHash?: string }): boolean {
+const sameCandidate = (a: Candidate, b: Candidate) => a.kind === b.kind && a.id === b.id;
+const startsWithHex = (id: string, prefix: string) => id.replaceAll("-", "").startsWith(prefix);
+const legacyHashMatches = (hash: string, target: HandleTarget) => target.legacyHash?.toLowerCase() === hash;
+const diagnosticCodeMatches = (code: string, target: HandleTarget) => target.kind === "client_session" && diagnosticCode(target.id) === code;
+
+function matches(handle: Handle, target: HandleTarget): boolean {
   switch (handle.form) {
     case "full":
-      return handle.kind === target.kind && handle.id === target.id;
+      return sameCandidate(handle, target);
     case "short":
-      return handle.kind === target.kind && target.id.replaceAll("-", "").startsWith(handle.prefix);
+      return handle.kind === target.kind && startsWithHex(target.id, handle.prefix);
     case "bare":
     case "session":
-      return handle.candidates.some((candidate) => candidate.kind === target.kind && candidate.id === target.id);
+      return handle.candidates.some((candidate) => sameCandidate(candidate, target));
     case "legacy_hash":
-      return handle.kind === target.kind && target.legacyHash?.toLowerCase() === handle.hash;
+      return handle.kind === target.kind && legacyHashMatches(handle.hash, target);
     case "diagnostic_code":
-      return target.kind === "client_session" && diagnosticCode(target.id) === handle.code;
+      return diagnosticCodeMatches(handle.code, target);
   }
 }
 

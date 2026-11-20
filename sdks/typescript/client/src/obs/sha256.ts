@@ -7,32 +7,48 @@ const K = new Uint32Array([
 
 const rotr = (value: number, bits: number) => (value >>> bits) | (value << (32 - bits));
 
-export function sha256Hex(text: string): string {
-  const bytes = new TextEncoder().encode(text);
+// The message padded to whole 64-byte blocks, ending in its bit length.
+function padded(bytes: Uint8Array): DataView {
   const length = Math.ceil((bytes.length + 9) / 64) * 64;
-  const padded = new Uint8Array(length);
-  padded.set(bytes);
-  padded[bytes.length] = 0x80;
-  const view = new DataView(padded.buffer);
+  const block = new Uint8Array(length);
+  block.set(bytes);
+  block[bytes.length] = 0x80;
+  const view = new DataView(block.buffer);
   view.setUint32(length - 8, Math.floor((bytes.length * 8) / 0x100000000));
   view.setUint32(length - 4, (bytes.length * 8) >>> 0);
+  return view;
+}
+
+const word = (words: Uint32Array, index: number) => words[index] ?? 0;
+
+function schedule(view: DataView, offset: number, w: Uint32Array): void {
+  for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+  for (let i = 16; i < 64; i++) {
+    const a = word(w, i - 15);
+    const b = word(w, i - 2);
+    w[i] = (word(w, i - 16) + (rotr(a, 7) ^ rotr(a, 18) ^ (a >>> 3)) + word(w, i - 7) + (rotr(b, 17) ^ rotr(b, 19) ^ (b >>> 10))) >>> 0;
+  }
+}
+
+function compress(hash: Uint32Array, w: Uint32Array): void {
+  let [a, b, c, d, e, f, g, h] = [word(hash, 0), word(hash, 1), word(hash, 2), word(hash, 3), word(hash, 4), word(hash, 5), word(hash, 6), word(hash, 7)];
+  for (let i = 0; i < 64; i++) {
+    const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + word(K, i) + word(w, i)) >>> 0;
+    const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+    [h, g, f, e, d, c, b, a] = [g, f, e, (d + t1) >>> 0, c, b, a, (t1 + t2) >>> 0];
+  }
+  [a, b, c, d, e, f, g, h].forEach((value, index) => {
+    hash[index] = (word(hash, index) + value) >>> 0;
+  });
+}
+
+export function sha256Hex(text: string): string {
+  const view = padded(new TextEncoder().encode(text));
   const hash = new Uint32Array([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
   const w = new Uint32Array(64);
-  for (let offset = 0; offset < length; offset += 64) {
-    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
-    for (let i = 16; i < 64; i++) {
-      const a = w[i - 15] ?? 0;
-      const b = w[i - 2] ?? 0;
-      w[i] = ((w[i - 16] ?? 0) + (rotr(a, 7) ^ rotr(a, 18) ^ (a >>> 3)) + (w[i - 7] ?? 0) + (rotr(b, 17) ^ rotr(b, 19) ^ (b >>> 10))) >>> 0;
-    }
-    let [a, b, c, d, e, f, g, h] = [hash[0] ?? 0, hash[1] ?? 0, hash[2] ?? 0, hash[3] ?? 0, hash[4] ?? 0, hash[5] ?? 0, hash[6] ?? 0, hash[7] ?? 0];
-    for (let i = 0; i < 64; i++) {
-      const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + (K[i] ?? 0) + (w[i] ?? 0)) >>> 0;
-      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
-      [h, g, f, e, d, c, b, a] = [g, f, e, (d + t1) >>> 0, c, b, a, (t1 + t2) >>> 0];
-    }
-    const next = [a, b, c, d, e, f, g, h];
-    for (let i = 0; i < 8; i++) hash[i] = ((hash[i] ?? 0) + (next[i] ?? 0)) >>> 0;
+  for (let offset = 0; offset < view.byteLength; offset += 64) {
+    schedule(view, offset, w);
+    compress(hash, w);
   }
-  return Array.from(hash, (word) => word.toString(16).padStart(8, "0")).join("");
+  return Array.from(hash, (value) => value.toString(16).padStart(8, "0")).join("");
 }

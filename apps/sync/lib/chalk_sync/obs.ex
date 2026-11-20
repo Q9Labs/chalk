@@ -6,14 +6,15 @@ defmodule ChalkSync.Obs do
   The registry in `observability/registry` declares every event, field, reason code and state machine; the
   generated `ChalkSync.Obs.Registry` holds its tables. In closed mode (the test config, or
   CHALK_OBS_MODE=closed) a violation raises `ChalkSync.Obs.Violation`; in open mode (production) it is counted and
-  the record still goes out. Configure with
+  the record still goes out. `ChalkSync.Obs.Check` holds the checks and `ChalkSync.Obs.Flags` the flags hash.
+  Configure with
 
       config :chalk_sync, ChalkSync.Obs, mode: :auto, env: "production", release_sha: "...", source_id: "..."
 
   See observability/registry/README.md for how a slice declares and emits its events.
   """
 
-  alias ChalkSync.Obs.Registry
+  alias ChalkSync.Obs.{Check, Flags, Registry}
 
   @event [:chalk_sync, :obs, :record]
   @op_stack {__MODULE__, :op_stack}
@@ -109,7 +110,9 @@ defmodule ChalkSync.Obs do
         {:error, code} -> {"error", code}
       end
 
-    violate(event_problems(name, "op", fields) ++ reason_problems(name, code, outcome_name))
+    violate(
+      Check.event_problems(name, "op", fields) ++ Check.reason_problems(name, code, outcome_name)
+    )
 
     own =
       %{
@@ -132,28 +135,10 @@ defmodule ChalkSync.Obs do
     fields = normalize(fields)
     reason = Keyword.get(options, :reason)
 
-    machine_problems =
-      case Registry.machines()[machine] do
-        nil ->
-          ["unknown machine " <> machine]
-
-        spec ->
-          edge =
-            if [from, to] in spec["edges"],
-              do: [],
-              else: ["#{machine}: #{from} -> #{to} is not a declared edge"]
-
-          trigger_problem =
-            if trigger in spec["triggers"],
-              do: [],
-              else: ["#{machine}: unknown trigger #{trigger}"]
-
-          edge ++ trigger_problem
-      end
-
     violate(
-      field_problems(machine, fields, %{}) ++
-        machine_problems ++ reason_problems(machine, reason, nil)
+      Check.field_problems(machine, fields, %{}) ++
+        Check.machine_problems(machine, from, to, trigger) ++
+        Check.reason_problems(machine, reason, nil)
     )
 
     own =
@@ -169,18 +154,9 @@ defmodule ChalkSync.Obs do
   def decision(name, decision, fields, reason \\ nil) do
     fields = normalize(fields)
 
-    decision_problems =
-      case Registry.events()[name] do
-        %{"decisions" => decisions} ->
-          if decision in decisions, do: [], else: ["#{name}: unknown decision #{decision}"]
-
-        nil ->
-          []
-      end
-
     violate(
-      event_problems(name, "decision", fields) ++
-        decision_problems ++ reason_problems(name, reason, nil)
+      Check.event_problems(name, "decision", fields) ++
+        Check.decision_problems(name, decision) ++ Check.reason_problems(name, reason, nil)
     )
 
     decision_id = uuid()
@@ -199,7 +175,7 @@ defmodule ChalkSync.Obs do
   @spec surface(String.t(), fields()) :: (-> :ok)
   def surface(name, fields) do
     fields = normalize(fields)
-    violate(event_problems(name, "surface", fields))
+    violate(Check.event_problems(name, "surface", fields))
     shown = System.monotonic_time(:millisecond)
     send_record("surface", name, fields, %{"surface_state" => "shown"})
     done = :atomics.new(1, [])
@@ -220,14 +196,14 @@ defmodule ChalkSync.Obs do
   @spec fact(String.t(), fields()) :: :ok
   def fact(name, fields) do
     fields = normalize(fields)
-    violate(event_problems(name, "fact", fields))
+    violate(Check.event_problems(name, "fact", fields))
     send_record("fact", name, fields, %{})
   end
 
   @doc "Records the full flags map and stamps its hash on every later record. Call it at boot and on change."
   @spec set_flags(%{optional(String.t()) => String.t() | boolean() | integer() | nil}) :: :ok
   def set_flags(flags) do
-    case flags_hash(flags) do
+    case Flags.hash(flags) do
       {:ok, hash} ->
         :persistent_term.put(@flags_hash, hash)
         send_record("fact", "obs.flags_snapshot", %{"flags" => flags}, %{})
@@ -247,77 +223,6 @@ defmodule ChalkSync.Obs do
       export_failures: :atomics.get(counters, @export_failures)
     }
   end
-
-  @doc "The flags map as canonical JSON: sorted keys, no whitespace, and only strings, booleans, integers or nil."
-  @spec canonical_flags(map()) :: {:ok, String.t()} | {:error, String.t()}
-  def canonical_flags(flags) when is_map(flags) do
-    flags
-    |> Enum.sort_by(fn {key, _value} -> key end)
-    |> Enum.reduce_while({:ok, []}, fn {key, value}, {:ok, parts} ->
-      case flag_entry(key, value) do
-        {:ok, part} -> {:cont, {:ok, [part | parts]}}
-        error -> {:halt, error}
-      end
-    end)
-    |> case do
-      {:ok, parts} -> {:ok, "{" <> (parts |> Enum.reverse() |> Enum.join(",")) <> "}"}
-      error -> error
-    end
-  end
-
-  @max_safe_integer 9_007_199_254_740_991
-
-  defp flag_entry(key, value) do
-    cond do
-      not (is_binary(key) and String.match?(key, ~r/\A[a-z][a-z0-9_.]*\z/)) ->
-        {:error, "obs: flag key #{inspect(key)} must be lower snake_case with dots"}
-
-      is_binary(value) ->
-        {:ok, json_string(key) <> ":" <> json_string(value)}
-
-      is_nil(value) or is_boolean(value) or
-          (is_integer(value) and abs(value) <= @max_safe_integer) ->
-        {:ok, json_string(key) <> ":" <> scalar(value)}
-
-      true ->
-        {:error, "obs: flag #{key} must be a string, boolean, integer or null"}
-    end
-  end
-
-  @doc "16 hex characters of the SHA-256 of the canonical flags JSON."
-  @spec flags_hash(map()) :: {:ok, String.t()} | {:error, String.t()}
-  def flags_hash(flags) do
-    with {:ok, canonical} <- canonical_flags(flags) do
-      {:ok,
-       :sha256 |> :crypto.hash(canonical) |> Base.encode16(case: :lower) |> binary_part(0, 16)}
-    end
-  end
-
-  defp scalar(nil), do: "null"
-  defp scalar(value), do: to_string(value)
-
-  # The escapes JavaScript's JSON.stringify writes, so every kernel hashes the same bytes.
-  @escapes %{
-    ?" => "\\\"",
-    ?\\ => "\\\\",
-    ?\b => "\\b",
-    ?\f => "\\f",
-    ?\n => "\\n",
-    ?\r => "\\r",
-    ?\t => "\\t"
-  }
-
-  defp json_string(text) do
-    "\"" <> for(<<char::utf8 <- text>>, into: "", do: escape(char)) <> "\""
-  end
-
-  defp escape(char) when is_map_key(@escapes, char), do: @escapes[char]
-
-  defp escape(char) when char < 0x20,
-    do:
-      "\\u" <> (char |> Integer.to_string(16) |> String.downcase() |> String.pad_leading(4, "0"))
-
-  defp escape(char), do: <<char::utf8>>
 
   defp config, do: Application.get_env(:chalk_sync, __MODULE__, [])
 
@@ -374,71 +279,6 @@ defmodule ChalkSync.Obs do
     end
 
     :ok
-  end
-
-  defp event_problems(name, kind, fields) do
-    case Registry.events()[name] do
-      nil -> ["unknown event " <> name]
-      %{"kind" => ^kind, "fields" => rules} -> field_problems(name, fields, rules)
-      %{"kind" => declared} -> ["#{name} is declared as #{declared}, not #{kind}"]
-    end
-  end
-
-  defp field_problems(name, fields, rules) do
-    given =
-      Enum.flat_map(fields, fn {field, value} ->
-        spec = Registry.fields()[field]
-        rule = rules[field]
-
-        cond do
-          spec == nil ->
-            ["#{name}: field #{field} is not in the registry"]
-
-          rule == nil and spec["group"] != "trail" ->
-            ["#{name}: field #{field} is not declared on this event"]
-
-          fits?(spec["type"], (rule || %{})["values"] || spec["values"], value) ->
-            []
-
-          true ->
-            [
-              "#{name}: field #{field} has #{inspect(value)}, which is not a valid #{spec["type"]}"
-            ]
-        end
-      end)
-
-    missing =
-      for {field, %{"required" => true}} <- rules,
-          not Map.has_key?(fields, field),
-          do: "#{name}: required field #{field} is missing"
-
-    Enum.sort(given ++ missing)
-  end
-
-  defp fits?("enum", values, value), do: is_binary(value) and value in values
-
-  defp fits?(type, _values, value) when type in ["string", "id"],
-    do: is_binary(value) and value != ""
-
-  defp fits?("int", _values, value), do: is_integer(value)
-  defp fits?("number", _values, value), do: is_number(value)
-  defp fits?("bool", _values, value), do: is_boolean(value)
-  defp fits?("map", _values, value), do: is_map(value)
-  defp fits?(_type, _values, _value), do: false
-
-  defp reason_problems(_name, nil, _outcome), do: []
-
-  defp reason_problems(name, code, outcome) do
-    case Registry.reasons()[code] do
-      nil ->
-        ["#{name}: unknown reason code #{code}"]
-
-      known when outcome != nil and known != outcome ->
-        ["#{name}: reason #{code} is #{known}, not #{outcome}"]
-
-      _known ->
-        []
-    end
   end
 
   defp normalize(fields), do: Map.new(fields, fn {field, value} -> {to_string(field), value} end)

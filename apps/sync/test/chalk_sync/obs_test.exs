@@ -2,7 +2,7 @@ defmodule ChalkSync.ObsTest do
   use ExUnit.Case, async: false
 
   alias ChalkSync.Obs
-  alias ChalkSync.Obs.{Ids, Registry, Violation}
+  alias ChalkSync.Obs.{Flags, Ids, Registry, Violation}
 
   @vectors "../../../../observability/registry/vectors.json"
            |> Path.expand(__DIR__)
@@ -82,10 +82,10 @@ defmodule ChalkSync.ObsTest do
     test "flags_hash" do
       for vector <- @vectors["flags_hash"] do
         if vector["error"] do
-          assert {:error, _problem} = Obs.flags_hash(vector["flags"])
+          assert {:error, _problem} = Flags.hash(vector["flags"])
         else
-          assert Obs.canonical_flags(vector["flags"]) == {:ok, vector["canonical"]}
-          assert Obs.flags_hash(vector["flags"]) == {:ok, vector["expect"]}
+          assert Flags.canonical(vector["flags"]) == {:ok, vector["canonical"]}
+          assert Flags.hash(vector["flags"]) == {:ok, vector["expect"]}
         end
       end
     end

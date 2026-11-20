@@ -446,6 +446,7 @@
         "infrastructure/uptime-worker",
         "observability",
         "scripts/codegen/obs-registry.mjs",
+        "scripts/codegen/obs-registry.test.mjs",
         "scripts/diagnose-call",
         "scripts/gates/obs-coverage.mjs",
         "scripts/gates/obs-coverage.test.mjs",
