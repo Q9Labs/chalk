@@ -1,0 +1,48 @@
+name: Telemetry delivery model
+
+# Model-checks client telemetry delivery (docs/telemetry-delivery.md), then replays traces
+# of the real outbox against the model. See tools/formal/telemetry-delivery/README.md.
+on:
+  pull_request:
+    paths:
+      - sdks/typescript/client/src/telemetry/**
+      - sdks/typescript/client/src/access/grant.ts
+      - sdks/typescript/client/src/connection/telemetry.ts
+      - apps/api/internal/httpapi/telemetry.go
+      - apps/api/internal/sdktelemetry/**
+      - apps/api/internal/telemetrydelivery/**
+      - tools/formal/telemetry-delivery/**
+      - .github/workflows/formal-telemetry-delivery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-telemetry-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Telemetry delivery model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-js
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check telemetry delivery
+        run: tools/formal/telemetry-delivery/run.sh
+
+      - name: Record delivery traces of the real outbox
+        env:
+          TELEMETRY_TRACE_DIR: ${{ runner.temp }}/telemetry-traces
+        run: pnpm --dir sdks/typescript/client exec vitest run src/telemetry/outbox.delivery.test.ts
+
+      - name: Replay the traces against the model
+        run: tools/formal/telemetry-delivery/run.sh --trace "$RUNNER_TEMP/telemetry-traces"
