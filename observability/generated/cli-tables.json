@@ -1,11 +1,13 @@
 {
   "doc": "Generated: the tables the diagnosis CLI prints and resolves against.",
-  "schema_ver": "55748406f5e1",
+  "schema_ver": "43d2a1352a2d",
   "symptoms": [
     {
       "code": "access.connection_lost",
       "area": "access",
       "slice": 7,
+      "item": "episode",
+      "per": "seat",
       "doc": "The client lost its connection and did not recover within the recovery window.",
       "user_words": ["it keeps saying connection lost"],
       "witnesses": [],
@@ -13,9 +15,29 @@
       "status": "incomplete"
     },
     {
+      "code": "admission.unresolved",
+      "area": "entry",
+      "slice": 1,
+      "item": "attempt",
+      "per": "item",
+      "doc": "A join attempt never got an admission decision, so the person waited on a screen that never resolved.",
+      "user_words": ["it just kept loading", "I never got in"],
+      "witnesses": [
+        {
+          "fact": "admission.decision",
+          "from": ["api"],
+          "required": true
+        }
+      ],
+      "rule": "observability/rules/admission.unresolved.mjs",
+      "status": "incomplete"
+    },
+    {
       "code": "audio.cant_hear",
       "area": "audio",
       "slice": 3,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant can't hear someone who is speaking.",
       "user_words": ["I can't hear anyone"],
       "witnesses": [],
@@ -26,9 +48,27 @@
       "code": "audio.not_heard",
       "area": "audio",
       "slice": 3,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant's microphone is on but others can't hear them.",
       "user_words": ["nobody can hear me"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "audio.mic_state",
+          "from": ["client"],
+          "required": true
+        },
+        {
+          "fact": "audio.ingress",
+          "from": ["sfu"],
+          "required": true
+        },
+        {
+          "fact": "audio.capture",
+          "from": ["client"],
+          "required": false
+        }
+      ],
       "rule": "observability/rules/audio.not_heard.mjs",
       "status": "incomplete"
     },
@@ -36,27 +76,55 @@
       "code": "board.view_jumped",
       "area": "board",
       "slice": 6,
+      "item": "episode",
+      "per": "seat",
       "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
       "user_words": ["the board keeps jumping"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "board.camera",
+          "from": ["client"],
+          "required": true
+        }
+      ],
       "rule": "observability/rules/board.view_jumped.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "end.time_limit",
+      "area": "end",
+      "slice": 8,
+      "item": "episode",
+      "per": "item",
+      "doc": "The Episode reached its time limit and ended. Expected, and it claims the client failures the end itself caused.",
+      "user_words": ["the call cut off"],
+      "witnesses": [
+        {
+          "fact": "end.episode",
+          "from": ["api"],
+          "required": true
+        }
+      ],
+      "rule": "observability/rules/end.time_limit.mjs",
       "status": "incomplete"
     },
     {
       "code": "end.wrong_screen",
       "area": "end",
       "slice": 8,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
       "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
       "witnesses": [
         {
-          "id": "server_end",
-          "event": "sync.episode.ended",
+          "fact": "end.episode",
+          "from": ["sync"],
           "required": true
         },
         {
-          "id": "client_end",
-          "event": "client.call_ended",
+          "fact": "end.client_screen",
+          "from": ["client"],
           "required": true
         }
       ],
@@ -67,6 +135,8 @@
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant joined but no media connected, so they neither hear nor are heard.",
       "user_words": ["I joined but nothing works", "stuck on connecting"],
       "witnesses": [],
@@ -77,6 +147,8 @@
       "code": "page.crashed",
       "area": "crash",
       "slice": 9,
+      "item": "episode",
+      "per": "seat",
       "doc": "The call page crashed or rendered an error boundary.",
       "user_words": ["the page went blank", "the app crashed"],
       "witnesses": [],
@@ -87,9 +159,17 @@
       "code": "recording.not_ready",
       "area": "recording",
       "slice": 10,
+      "item": "job",
+      "per": "item",
       "doc": "An ended Episode's recording never became ready to watch.",
       "user_words": ["the recording isn't there"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true
+        }
+      ],
       "rule": "observability/rules/recording.not_ready.mjs",
       "status": "incomplete"
     },
@@ -97,6 +177,8 @@
       "code": "rejoin.refused",
       "area": "end",
       "slice": 8,
+      "item": "episode",
+      "per": "seat",
       "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
       "user_words": ["it won't let me back in"],
       "witnesses": [],
@@ -107,6 +189,8 @@
       "code": "share.wont_stop",
       "area": "share",
       "slice": 5,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant stopped sharing but others still see the share.",
       "user_words": ["my screen is still being shared"],
       "witnesses": [],
@@ -117,6 +201,8 @@
       "code": "video.frozen",
       "area": "video",
       "slice": 4,
+      "item": "episode",
+      "per": "seat",
       "doc": "A video tile stopped updating while its publisher was still sending.",
       "user_words": ["their video froze"],
       "witnesses": [],
@@ -130,6 +216,12 @@
       "outcome": "expected",
       "area": "core",
       "doc": "The caller cancelled the operation before it finished."
+    },
+    {
+      "code": "end.time_limit",
+      "outcome": "expected",
+      "area": "end",
+      "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
     },
     {
       "code": "unclassified",
@@ -352,6 +444,42 @@
       "field": "finding_id",
       "canonical": "uuid",
       "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "flags",
+      "prefix": "fl",
+      "field": "flags_hash",
+      "canonical": "hex16",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "diagnostic_upload",
+      "prefix": "dg",
+      "field": "diagnostic_upload_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "api_key",
+      "prefix": "ak",
+      "field": "api_key_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "webhook_endpoint",
+      "prefix": "wh",
+      "field": "webhook_endpoint_id",
+      "canonical": "uuid",
+      "scope": "tenant",
       "companions": [],
       "legacy_hash_field": null
     }

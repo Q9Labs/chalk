@@ -10,6 +10,8 @@
   "symptoms": [
     {
       "code": "share.wont_stop",
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant stopped sharing but others still see the share.",
       "user_words": ["my screen is still being shared"],
       "witnesses": [],

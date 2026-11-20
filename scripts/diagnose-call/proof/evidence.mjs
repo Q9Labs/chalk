@@ -7,13 +7,13 @@
  * proof, or unknown. Zero, "" and null never stand in for missing: a count of 0 voiced packets is a present value, and a fact nobody
  * could have emitted is unknown, never absent.
  */
-import { factKind } from "./facts.mjs";
+import { SOURCE_TABLE, factKind } from "./facts.mjs";
 
 /** @typedef {{ from_ms: number, to_ms: number }} Window */
 
 /**
  * The subject an observation names, in canonical ids (never display handles). A source sets only the keys it knows.
- * @typedef {{ episode?: string, participant?: string, generation?: number, connection?: string, attempt?: string, job?: string }} Subject
+ * @typedef {{ episode?: string, participant?: string, generation?: number, connection?: string, attempt?: string, job?: string, space?: string, tenant?: string, environment?: string }} Subject
  */
 
 /**
@@ -31,7 +31,7 @@ import { factKind } from "./facts.mjs";
  * }} Observation
  *
  * - `id`: the row's stable event id (C1 envelope `event_id`, deduplicated by C3); its display handle is `ev_`.
- * - `source`: the delivery stream whose watermark proves completeness: client, api, sfu, sync, db, recorder or report.
+ * - `source`: the delivery stream whose watermark proves completeness, one of the registry's sources (core.json `sources`).
  * - `origin`: the independence key, the authority that determined the value. Two rows copying one decision share an origin, so they
  *   count as one witness: build it with `origin.decision(id)` or `origin.measured(source)`, never from the row's own source by habit.
  * - `claim`: the canonical value compared across witnesses (see facts.mjs for how each fact kind compares).
@@ -82,8 +82,8 @@ export function observation(o) {
  * @typedef {{ source: string, subject: string, complete_to_ms: number | null, evidence_gaps: readonly EvidenceGap[], emits: readonly string[], build: string }} Watermark
  */
 
-/** Sources each Participant's own device delivers. One seat's complete stream says nothing about another seat's. */
-const PER_SEAT_SOURCES = new Set(["client"]);
+/** Sources each Participant's own device delivers (the registry's per-seat sources). One seat's complete stream says nothing about another seat's. */
+const PER_SEAT_SOURCES = new Set(SOURCE_TABLE.filter((entry) => entry.per_seat).map((entry) => entry.source));
 
 /**
  * @param {Watermark} w

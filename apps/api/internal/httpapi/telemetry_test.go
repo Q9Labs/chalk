@@ -38,6 +38,8 @@ type telemetryFixture struct {
 	mediaToken     string
 	telemetryToken string
 	subject        accessgrants.Subject
+	// issuer signs further credentials, such as another participant's telemetry token.
+	issuer accessgrants.Issuer
 }
 
 func newTelemetryFixture(t *testing.T) telemetryFixture {
@@ -72,7 +74,7 @@ func newTelemetryFixture(t *testing.T) telemetryFixture {
 	telemetryEndpoint(real, real, ledger).Mount(router, limits)
 	connectionReportEndpoint(verifier).Mount(router, limits)
 	callStatsEndpoint(verifier).Mount(router, limits)
-	return telemetryFixture{router: router, logs: logs, path: "/tenants/" + subject.TenantID.String(), ledger: ledger, mediaToken: media.Token, telemetryToken: telemetry.Token, subject: subject}
+	return telemetryFixture{router: router, logs: logs, path: "/tenants/" + subject.TenantID.String(), ledger: ledger, mediaToken: media.Token, telemetryToken: telemetry.Token, subject: subject, issuer: issuer}
 }
 
 func (f telemetryFixture) post(route, body string) *httptest.ResponseRecorder {

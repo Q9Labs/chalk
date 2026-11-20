@@ -13,17 +13,17 @@ const DAY = { tenant: "1f0c3b2a-7d6e-4c5b-9a8f-2e1d0c9b8a7f", from_ms: Date.pars
 const options = { catalogue: CATALOGUE, rules: RULES, asof_ms: ASOF };
 
 describe("check", () => {
-  it("enumerates Episodes, the attempt that never became one and the pending job, and judges only what is not current", async () => {
+  it("enumerates Episodes, the attempt that never became one, the pending job and the Space day, and judges only what is not current", async () => {
     const { ports } = await openWorld(nov18(), { catalogue: CATALOGUE, rules: RULES });
     const results = await check(DAY, ports, options);
     const byId = Object.fromEntries(results.map((result) => [result.item.id, result]));
-    assert.deepEqual(Object.keys(byId).sort(), [IDS.ep9feb, IDS.ep7a21, IDS.ep31aa, IDS.ep5c0d, IDS.attempt, IDS.job].sort());
+    assert.deepEqual(Object.keys(byId).sort(), [IDS.ep9feb, IDS.ep7a21, IDS.ep31aa, IDS.ep5c0d, IDS.attempt, IDS.job, IDS.space].sort());
     assert.equal(byId[IDS.ep7a21].action, "checked");
     assert.equal(byId[IDS.ep7a21].verdict.outcome, "healthy");
     assert.equal(byId[IDS.ep31aa].action, "rechecked");
     assert.equal(byId[IDS.ep31aa].was, "healthy");
     assert.equal(byId[IDS.ep31aa].verdict.findings[0]?.backstop, "BLIND_SPOT");
-    assert.equal(byId[IDS.attempt].verdict.findings[0]?.code, "entry.unresolved");
+    assert.equal(byId[IDS.attempt].verdict.findings[0]?.code, "admission.unresolved");
     assert.equal(byId[IDS.job].verdict.findings[0]?.code, "recording.not_ready");
     assert.ok(
       byId[IDS.job].verdict.coverage.gaps.some((gap) => gap.kind === "open"),

@@ -129,6 +129,7 @@ type Querier interface {
 	// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
 	EnsureTelemetrySource(ctx context.Context, arg EnsureTelemetrySourceParams) error
+	EnsureTelemetrySourceBinding(ctx context.Context, arg EnsureTelemetrySourceBindingParams) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
 	// admission use that same lock, so an earlier reconnect cancels the old window.
@@ -306,6 +307,7 @@ type Querier interface {
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetryEpisodeRowsParams) ([]TelemetrySource, error)
+	ListTelemetrySourceBindings(ctx context.Context, arg ListTelemetrySourceBindingsParams) ([]TelemetrySourceBinding, error)
 	ListTelemetrySourceRows(ctx context.Context, arg ListTelemetrySourceRowsParams) ([]TelemetrySource, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
@@ -449,6 +451,7 @@ type Querier interface {
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
+	TelemetryParticipantIdentity(ctx context.Context, arg TelemetryParticipantIdentityParams) (pgtype.UUID, error)
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)

@@ -80,7 +80,7 @@ describe("baseline", () => {
     assert.equal(verdict.outcome, "broken");
     assert.equal(verdict.coverage.state, "partial");
     assert.deepEqual(verdict.coverage.by_code["board.view_jumped"], { checked: 0, eligible: 4 });
-    const silent = verdict.findings.find((finding) => finding.code === "audio.no_voice_detected");
+    const silent = verdict.findings.find((finding) => finding.code === "audio.not_heard");
     assert.equal(silent?.hop, "sfu_ingress");
     assert.equal(silent?.upstream, "unknown");
     assert.equal(silent?.hypothesis, null, "zero voiced packets alone must not become a cause");
@@ -241,7 +241,7 @@ describe("contradict", () => {
 describe("retention: deleting evidence never erases a proven broken finding", () => {
   const { declaration, evidence } = base(IDS.ep9feb);
   const prior = verdictOf(declaration, evidence);
-  const silent = /** @type {import("./verdict.mjs").Finding} */ (prior.findings.find((finding) => finding.code === "audio.no_voice_detected"));
+  const silent = /** @type {import("./verdict.mjs").Finding} */ (prior.findings.find((finding) => finding.code === "audio.not_heard"));
 
   it("keeps it after any single row is deleted silently", () => {
     for (const index of evidence.observations.keys()) {
@@ -279,17 +279,17 @@ describe("copies of one decision are one witness", () => {
     item: "episode",
     per: "item",
     applies: () => true,
-    requires: [{ fact: "episode.end", from: ["api", "sync"], independent: 2, query: "q" }],
+    requires: [{ fact: "end.episode", from: ["api", "sync"], independent: 2, query: "q" }],
     optional: [],
     expected: "two independent sources record the end",
-    decide: ({ readings }) => (readings["episode.end"].kind === "present" ? { status: "pass" } : { status: "unknown", reason: "no end" }),
+    decide: ({ readings }) => (readings["end.episode"].kind === "present" ? { status: "pass" } : { status: "unknown", reason: "no end" }),
   };
   const catalogue = [twoWitnesses];
   const { declaration } = base(IDS.ep5c0d);
   const end = /** @type {number} */ (declaration.window.to_ms);
   /** @param {string} id @param {string} source @param {string} from */
-  const row = (id, source, from) => ({ id, fact: "episode.end", source, origin: from, subject: { episode: declaration.id }, window: { from_ms: end, to_ms: end }, claim: "host_ended", value: {}, failure: false, query: "q" });
-  const watermarks = ["api", "sync", "report"].map((source) => ({ source, subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["episode.end", "report.problem"], build: source }));
+  const row = (id, source, from) => ({ id, fact: "end.episode", source, origin: from, subject: { episode: declaration.id }, window: { from_ms: end, to_ms: end }, claim: "host_ended", value: {}, failure: false, query: "q" });
+  const watermarks = ["api", "sync", "report"].map((source) => ({ source, subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "report.problem"], build: source }));
 
   it("does not count an API decision and its Sync copy as two", () => {
     const verdict = verdictOf(declaration, { observations: [row("e1", "api", origin.decision("d1")), row("e2", "sync", origin.decision("d1"))], watermarks }, { catalogue });
@@ -316,7 +316,7 @@ describe("backstops and the empty profile", () => {
     const seat = declaration.kind === "episode" ? declaration.seats[0] : null;
     evidence.observations.push({
       id: "u1",
-      fact: "client.leave",
+      fact: "join.leave",
       source: "client",
       origin: origin.measured("client"),
       subject: { episode: declaration.id, participant: seat?.participant },
@@ -359,8 +359,8 @@ describe("backstops and the empty profile", () => {
 describe("rules are held to their evidence", () => {
   const { declaration, evidence } = base(IDS.ep5c0d);
   /** @param {CheckDef["decide"]} decide @returns {CheckDef[]} */
-  const one = (decide) => [{ code: "x.test", item: "episode", per: "item", applies: () => true, requires: [{ fact: "episode.end", from: ["api"], query: "q" }], optional: [], expected: "x", decide }];
-  const finding = /** @type {const} */ ({ status: "finding", outcome: "broken", window: { from_ms: 0, to_ms: 0 }, hop: null, upstream: null, observed: "x", hypothesis: null, falsify: { absence: null, attribution: null } });
+  const one = (decide) => [{ code: "x.test", item: "episode", per: "item", applies: () => true, requires: [{ fact: "end.episode", from: ["api"], query: "q" }], optional: [], expected: "x", decide }];
+  const finding = /** @type {const} */ ({ status: "finding", outcome: "broken", window: { from_ms: 0, to_ms: 0 }, hop: null, module: "unknown", reason: null, upstream: null, observed: "x", hypothesis: null, falsify: { absence: null, attribution: null } });
 
   it("rejects a fact that cites a row the check did not read", () => {
     assert.throws(() => verdictOf(declaration, evidence, { catalogue: one(() => ({ ...finding, facts: [{ text: "t", evidence: [evidence.observations[0].id], window: null, absent: null }] })) }), /not a present, citable observation/u);
@@ -368,7 +368,7 @@ describe("rules are held to their evidence", () => {
 
   it("rejects an absence its reading does not prove", () => {
     const unread = { observations: evidence.observations, watermarks: evidence.watermarks.filter((w) => w.source !== "api") };
-    assert.throws(() => verdictOf(declaration, unread, { catalogue: one(() => ({ ...finding, facts: [{ text: "t", evidence: [], window: null, absent: "episode.end" }] })) }), /does not prove it/u);
+    assert.throws(() => verdictOf(declaration, unread, { catalogue: one(() => ({ ...finding, facts: [{ text: "t", evidence: [], window: null, absent: "end.episode" }] })) }), /does not prove it/u);
   });
 
   it("rejects a fact with neither evidence nor a proven absence", () => {
@@ -376,7 +376,7 @@ describe("rules are held to their evidence", () => {
   });
 
   it("rejects a decision the kernel does not define instead of reading it as a pass", () => {
-    const fact = { text: "t", evidence: [evidence.observations.find((o) => o.fact === "episode.end")?.id ?? ""], window: null, absent: null };
+    const fact = { text: "t", evidence: [evidence.observations.find((o) => o.fact === "end.episode")?.id ?? ""], window: null, absent: null };
     /** @type {[string, () => unknown, RegExp][]} */
     const cases = [
       ["a misspelt status", () => ({ status: "fail" }), /status "fail"/u],
@@ -391,16 +391,16 @@ describe("rules are held to their evidence", () => {
 
 describe("the catalogue is checked when it loads", () => {
   /** @param {Partial<CheckDef>} change @returns {CheckDef[]} */
-  const one = (change) => [{ code: "x.test", item: "episode", per: "item", applies: () => true, requires: [{ fact: "episode.end", from: ["api"], query: "where episode_id == '{episode}'" }], optional: [], expected: "x", decide: () => ({ status: "pass" }), ...change }];
+  const one = (change) => [{ code: "x.test", item: "episode", per: "item", applies: () => true, requires: [{ fact: "end.episode", from: ["api"], query: "where episode_id == '{episode}'" }], optional: [], expected: "x", decide: () => ({ status: "pass" }), ...change }];
   /** @type {[string, Partial<CheckDef>, RegExp][]} */
   const cases = [
     ["a code with no area", { code: "nofr" }, /<area>\.<symptom>/u],
     ["a per-seat check on an attempt", { item: "attempt", per: "seat" }, /per-seat checks apply to Episodes only/u],
     ["no required fact", { requires: [] }, /at least one fact/u],
-    ["an unknown fact", { requires: [{ fact: "video.frames", from: ["sfu"], query: "q" }] }, /add it to scripts\/diagnose-call\/proof\/facts\.mjs/u],
-    ["an unknown source", { requires: [{ fact: "episode.end", from: ["sfuu"], query: "q" }] }, /source "sfuu"/u],
-    ["a misspelt placeholder", { requires: [{ fact: "episode.end", from: ["api"], query: "{particpant}" }] }, /\{particpant\}; placeholders are/u],
-    ["a placeholder the check cannot fill", { requires: [{ fact: "episode.end", from: ["api"], query: "{participant}" }] }, /per-item episode check cannot fill/u],
+    ["an unknown fact", { requires: [{ fact: "video.frames", from: ["sfu"], query: "q" }] }, /declare it under an area.s facts/u],
+    ["an unknown source", { requires: [{ fact: "end.episode", from: ["sfuu"], query: "q" }] }, /source "sfuu"/u],
+    ["a misspelt placeholder", { requires: [{ fact: "end.episode", from: ["api"], query: "{particpant}" }] }, /\{particpant\}; placeholders are/u],
+    ["a placeholder the check cannot fill", { requires: [{ fact: "end.episode", from: ["api"], query: "{participant}" }] }, /per-item episode check cannot fill/u],
   ];
   for (const [name, change, pattern] of cases) it(`rejects ${name}`, () => assert.throws(() => rulesVersion(one(change), []), pattern));
 

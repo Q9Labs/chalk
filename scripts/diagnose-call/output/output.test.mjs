@@ -18,13 +18,15 @@ const WRITE = process.env.DIAGNOSE_GOLDEN === "write";
 /** @type {Record<string, string[]>} */
 export const GOLDENS = {
   "episode-9feb": ["ep_9feb"],
-  "evidence-no-voice": ["evidence", "f_98d4"],
+  "evidence-no-voice": ["evidence", "f_5b55"],
   "day-th": ["day", "TH", "2026-11-18"],
   "check-th": ["check", "TH", "2026-11-18"],
-  "participant-haris": ["participant", "usr_9a1b"],
-  "pattern-no-voice": ["pattern", "audio.no_voice_detected", "--tenant", "TH"],
+  "participant-haris": ["participant", "usr_th-1041"],
+  "pattern-no-voice": ["pattern", "audio.not_heard", "--tenant", "TH"],
   "resolve-haris": ["Haris"],
-  "attempt-unresolved": ["attempt", "jr_6d5e"],
+  "attempt-unresolved": ["attempt", "cs_6d5e"],
+  "space-day": ["space", "spc_5bac", "2026-11-18"],
+  "platform-day": ["platform", "production", "2026-11-18"],
   "job-recording": ["job", "job_4a3b"],
 };
 
@@ -64,13 +66,13 @@ describe("goldens", () => {
   it("renders the reviewer's corrected 18 Nov example: partial coverage that names the board, no cause from zero voiced packets", async () => {
     const text = (await diagnose(["ep_9feb"])).out;
     const [first, anchor, finding, fact] = text.split("\n");
-    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=5\/9 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
+    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=9\/13 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
     assert.equal(anchor, "anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4");
-    assert.match(finding, /^f_98d4 broken audio\.no_voice_detected pt_4c1e\(Haris\) \+07:10\.\.\+10:40 hop=sfu_ingress upstream=unknown ev=ev_a1f3$/u);
+    assert.match(finding, /^f_5b55 broken audio\.not_heard pt_4c1e\(Haris\) \+07:10\.\.\+10:40 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3$/u);
     assert.equal(fact, "fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]");
     assert.ok(!text.includes("hypothesis:"), "no hypothesis without an upstream witness");
     assert.ok(text.includes("gap: board.view_jumped all 4 seats: board.camera not emitted by client 3.1.0"));
-    assert.ok(text.includes("next: diagnose evidence f_98d4"));
+    assert.ok(text.includes("next: diagnose evidence f_5b55"));
   });
 
   it("matches the token counts recorded for the goldens", () => {
@@ -127,7 +129,7 @@ describe("paging", () => {
   it("stops at a budget, says so, and still prints every gap", async () => {
     const out = (await diagnose(["day", "TH", "2026-11-18", "--budget", "10"])).out;
     assert.match(out, /^more: \d+ omitted by budget/mu);
-    assert.equal(out.split("\n").filter((line) => line.startsWith("gap: ")).length, 4);
+    assert.equal(out.split("\n").filter((line) => line.startsWith("gap: ")).length, 5);
   });
 });
 
@@ -142,7 +144,7 @@ describe("lookup", () => {
 
   it("opens the only match inside a tenant and says how it resolved", async () => {
     const out = (await diagnose(["Haris", "--tenant", "TH"])).out;
-    assert.match(out, /^participant usr_9a1b\(Haris\) /u);
+    assert.match(out, /^participant usr_th-1041\(Haris\) /u);
     assert.match(out, /^via: "Haris" as user Haris$/mu);
   });
 
@@ -163,8 +165,8 @@ describe("lookup", () => {
   it("looks up a window and a Participant across a date range", async () => {
     const window = (await diagnose(["window", "TH", "--from", "2026-11-18T09:00Z", "--to", "2026-11-18T11:00Z"])).out;
     assert.match(window, /^window tenant=TH /u);
-    assert.ok(window.includes("f_98d4"));
-    const range = (await diagnose(["participant", "usr_9a1b", "--from", "2026-11-01", "--to", "2026-11-12"])).out;
+    assert.ok(window.includes("f_5b55"));
+    const range = (await diagnose(["participant", "usr_th-1041", "--from", "2026-11-01", "--to", "2026-11-12"])).out;
     assert.ok(range.includes("ep_2d4e") && !range.includes("ep_9feb"));
   });
 });
@@ -208,7 +210,7 @@ describe("review fixes", () => {
   const argvOf = (command) => [...command.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/gu)].map((match) => (match[1] === undefined ? match[2] : JSON.parse(`"${match[1]}"`)));
 
   it("prints only next: commands that run", async () => {
-    const starts = [...Object.values(GOLDENS), ["check", "TH", "--limit", "2"], ["pt_4c1e", "--limit", "1"], ["participant", "usr_9a1b", "--limit", "1"], ["day", "TH", "2026-11-18", "--limit", "1"], ["participant", "Haris", "--from", "2026-11-01", "--to", "2026-11-12"]];
+    const starts = [...Object.values(GOLDENS), ["check", "TH", "--limit", "2"], ["pt_4c1e", "--limit", "1"], ["participant", "usr_th-1041", "--limit", "1"], ["day", "TH", "2026-11-18", "--limit", "1"], ["participant", "Haris", "--from", "2026-11-01", "--to", "2026-11-12"]];
     for (const argv of starts) {
       for (const command of nextOf((await diagnose(argv)).out)) {
         const result = await run([...argvOf(command), "--fixture", "nov18"]);
@@ -224,7 +226,7 @@ describe("review fixes", () => {
 
   it("gives the same cursor scope whether a person was reached by seat or by user", async () => {
     const bySeat = (await diagnose(["pt_4c1e", "--limit", "1"])).out;
-    const byUser = (await diagnose(["participant", "usr_9a1b", "--limit", "1"])).out;
+    const byUser = (await diagnose(["participant", "usr_th-1041", "--limit", "1"])).out;
     assert.equal(bySeat.split("\n")[0], byUser.split("\n")[0]);
     assert.equal(/--cursor (c_\S+)/u.exec(bySeat)?.[1], /--cursor (c_\S+)/u.exec(byUser)?.[1]);
   });

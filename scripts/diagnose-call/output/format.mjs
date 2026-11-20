@@ -3,19 +3,17 @@
  * Small formatting rules every view shares: times, scope-unique short handles, parties and coverage tokens. All times are stored in
  * UTC; a view converts to the tenant's time zone only here, when it prints.
  */
-import { formatHandle } from "./handle.mjs";
+import { formatHandle } from "../../../sdks/typescript/client/src/obs/ids.ts";
 
 /** @typedef {import("../proof/evidence.mjs").Window} Window */
 /** @typedef {import("../proof/evidence.mjs").Uncovered} Uncovered */
 
 /** A handle to be shortened once the whole view is known: `{ $h: kind, id }`. */
-/** @typedef {{ $h: string, id: string }} Ref */
+/** @typedef {import("../../../sdks/typescript/client/src/obs/registry.ts").IdKind} IdKind */
+/** @typedef {{ $h: IdKind, id: string }} Ref */
 
-/** @param {string} kind @param {string} id @returns {Ref} */
+/** @param {IdKind} kind @param {string} id @returns {Ref} */
 export const ref = (kind, id) => ({ $h: kind, id });
-
-/** The shortest id prefix a short handle shows; collisions inside one view lengthen it. */
-const MIN_HANDLE = 4;
 
 /**
  * Replaces every Ref in the view with a handle that is unique among the view's handles of the same kind, at least four characters
@@ -26,22 +24,17 @@ const MIN_HANDLE = 4;
  */
 export function finalizeHandles(view) {
   /** @type {Map<string, Set<string>>} */
-  const byKind = new Map();
+  const idsByKind = new Map();
   walk(view, (value) => {
-    if (isRef(value)) byKind.set(value.$h, (byKind.get(value.$h) ?? new Set()).add(formatHandle(value.$h, value.id)));
+    if (isRef(value)) idsByKind.set(value.$h, (idsByKind.get(value.$h) ?? new Set()).add(value.id));
   });
   /** @type {Map<string, string>} */
   const short = new Map();
-  for (const handles of byKind.values()) {
-    const list = [...handles];
-    for (const full of list) {
-      const start = full.indexOf("_") + 1;
-      let length = Math.min(full.length, start + MIN_HANDLE);
-      while (length < full.length && list.some((other) => other !== full && other.startsWith(full.slice(0, length)))) length += 1;
-      short.set(full, full.slice(0, length));
-    }
+  for (const [kind, ids] of idsByKind) {
+    const scope = [...ids];
+    for (const id of scope) short.set(`${kind}:${id}`, formatHandle(/** @type {IdKind} */ (kind), id, { scope }));
   }
-  return /** @type {T} */ (replace(view, (value) => (isRef(value) ? short.get(formatHandle(value.$h, value.id)) : undefined)));
+  return /** @type {T} */ (replace(view, (value) => (isRef(value) ? short.get(`${value.$h}:${value.id}`) : undefined)));
 }
 
 /** @param {unknown} value @returns {value is Ref} */

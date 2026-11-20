@@ -2,7 +2,7 @@
   "area": "end",
   "slice": 8,
   "title": "Call end and rejoin",
-  "prefixes": ["end", "rejoin", "episode"],
+  "prefixes": ["end", "rejoin"],
   "fields": [
     {
       "name": "end_reason",
@@ -66,7 +66,13 @@
       }
     }
   ],
-  "reasons": [],
+  "reasons": [
+    {
+      "code": "end.time_limit",
+      "outcome": "expected",
+      "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+    }
+  ],
   "machines": [
     {
       "name": "episode.lifecycle",
@@ -81,31 +87,83 @@
       "triggers": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
     }
   ],
+  "facts": [
+    {
+      "name": "end.episode",
+      "kind": "once",
+      "per": "item",
+      "doc": "The Episode's authoritative end. Claim: the end reason.",
+      "events": [
+        {
+          "event": "sync.episode.ended",
+          "source": "sync",
+          "claim": "end_reason",
+          "fields": ["episode_id", "end_reason", "est_server_ms"]
+        }
+      ]
+    },
+    {
+      "name": "end.client_screen",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The end screen a client chose for its call. Claim: the client's end reason. A failure screen (connection lost, join failed) is a failure some finding must explain.",
+      "events": [
+        {
+          "event": "client.call_ended",
+          "source": "client",
+          "claim": "end_reason",
+          "failure_claims": ["connection_lost", "join_failed"],
+          "fields": ["episode_id", "participant_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"]
+        }
+      ]
+    }
+  ],
   "symptoms": [
     {
       "code": "end.wrong_screen",
+      "item": "episode",
+      "per": "seat",
       "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
       "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
       "witnesses": [
         {
-          "id": "server_end",
-          "event": "sync.episode.ended",
-          "fields": ["episode_id", "end_reason", "est_server_ms"],
+          "fact": "end.episode",
+          "from": ["sync"],
           "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
-          "id": "client_end",
-          "event": "client.call_ended",
-          "fields": ["episode_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"],
+          "fact": "end.client_screen",
+          "from": ["client"],
           "required": true,
-          "doc": "The end screen each client chose."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'call_ended'",
+          "doc": "The end screen the seat's client chose."
         }
       ],
       "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
     },
     {
+      "code": "end.time_limit",
+      "item": "episode",
+      "per": "item",
+      "doc": "The Episode reached its time limit and ended. Expected, and it claims the client failures the end itself caused.",
+      "user_words": ["the call cut off"],
+      "witnesses": [
+        {
+          "fact": "end.episode",
+          "from": ["api"],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'decision' and name == 'episode.end'",
+          "doc": "The API's end decision and its reason."
+        }
+      ],
+      "fault_scenario": null
+    },
+    {
       "code": "rejoin.refused",
+      "item": "episode",
+      "per": "seat",
       "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
       "user_words": ["it won't let me back in"],
       "witnesses": [],

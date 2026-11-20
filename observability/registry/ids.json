@@ -42,7 +42,11 @@
     { "kind": "admission_request", "prefix": "adm", "field": "admission_request_id", "canonical": "uuid", "authority": "admission_requests.id", "scope": "episode", "doc": "A request to be admitted to an Episode." },
     { "kind": "event", "prefix": "ev", "field": "event_id", "canonical": "uuid", "authority": "the emitter", "doc": "One telemetry record. Delivery semantics belong to contract C3." },
     { "kind": "batch", "prefix": "bt", "field": "batch_id", "canonical": "uuid", "authority": "the batcher or the ingest", "doc": "One delivered batch of records. Delivery semantics belong to contract C3." },
-    { "kind": "finding", "prefix": "f", "field": "finding_id", "canonical": "uuid", "authority": "the checker", "doc": "One checker finding." }
+    { "kind": "finding", "prefix": "f", "field": "finding_id", "canonical": "uuid", "authority": "the checker", "doc": "One checker finding." },
+    { "kind": "flags", "prefix": "fl", "field": "flags_hash", "canonical": "hex16", "authority": "the kernel's flags snapshot", "doc": "One flags snapshot: the hash of the canonical flag map a record ran under. The obs.flags_snapshot fact holds the map itself." },
+    { "kind": "diagnostic_upload", "prefix": "dg", "field": "diagnostic_upload_id", "canonical": "uuid", "authority": "the API, when it issues the upload", "scope": "tenant", "doc": "One diagnostic bundle a client uploaded after a problem report or a live request (slice 13)." },
+    { "kind": "api_key", "prefix": "ak", "field": "api_key_id", "canonical": "uuid", "authority": "api_keys.id", "scope": "tenant", "doc": "A tenant API key, by its row id. The secret and its hash are credentials: never logged." },
+    { "kind": "webhook_endpoint", "prefix": "wh", "field": "webhook_endpoint_id", "canonical": "uuid", "authority": "webhook_endpoints.id", "scope": "tenant", "doc": "A tenant's webhook endpoint. Each delivery to it is a whd_." }
   ],
   "session_meanings": [
     { "meaning": "episode", "kind": "episode", "lookup": true, "doc": "The dashboard calls an Episode a session. Read session:<id> there as an Episode." },

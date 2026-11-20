@@ -26,3 +26,17 @@ select tenant_id, source_id, participant_id, episode_id, ranges, reported_next_s
 from telemetry_sources
 where tenant_id = $1 and episode_id = $2
 order by source_id, participant_id;
+
+-- name: TelemetryParticipantIdentity :one
+select identity_id from participants where tenant_id = $1 and id = $2;
+
+-- name: EnsureTelemetrySourceBinding :exec
+insert into telemetry_source_bindings (tenant_id, source_id, participant_id, identity_id, bound_at)
+values ($1, $2, $3, $4, $5)
+on conflict (tenant_id, source_id) do nothing;
+
+-- name: ListTelemetrySourceBindings :many
+select tenant_id, source_id, participant_id, identity_id, bound_at
+from telemetry_source_bindings
+where tenant_id = $1 and source_id = any(@source_ids::uuid[])
+order by source_id;

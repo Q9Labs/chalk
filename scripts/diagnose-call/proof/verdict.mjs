@@ -17,7 +17,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { overlaps, reading, uncovered as uncoveredBy } from "./evidence.mjs";
-import { factKind } from "./facts.mjs";
+import { factDef, factKind } from "./facts.mjs";
 import { validateCatalogue, validateDecision } from "./rules.mjs";
 import { ITEM, deepFreeze } from "./profile.mjs";
 import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
@@ -54,6 +54,8 @@ import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
  *   subject: string,
  *   window: Window,
  *   hop: string | null,
+ *   module: string | null,
+ *   reason: string | null,
  *   upstream: "witnessed" | "unknown" | null,
  *   expected: string,
  *   observed: string,
@@ -103,7 +105,7 @@ const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "rules
  */
 export function rulesVersion(catalogue, sources) {
   validateCatalogue(catalogue);
-  const text = [KERNEL, ...sources, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, String(def.applies), String(def.decide)]))].join("\n");
+  const text = [KERNEL, ...sources, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, def.settle_ms ?? 0, String(def.applies), String(def.decide)]))].join("\n");
   return createHash("sha256").update(text).digest("hex").slice(0, 8);
 }
 
@@ -271,6 +273,8 @@ function runCheck(bundle, planned, def, rules) {
     subject: planned.subject,
     window: decision.window,
     hop: decision.hop,
+    module: decision.module,
+    reason: decision.reason,
     upstream: decision.upstream,
     expected: def.expected,
     observed: decision.observed,
@@ -378,14 +382,16 @@ function provenAbsent(value, window) {
  */
 function readFact(bundle, planned, requirement) {
   factKind(requirement.fact);
-  const matched = bundle.observations.filter((o) => o.fact === requirement.fact && requirement.from.includes(o.source) && (planned.subject === ITEM || o.bound === planned.subject) && overlaps(o.window, planned.window)).map(stripBinding);
+  const itemFact = factDef(requirement.fact).per === "item";
+  const onSubject = (/** @type {BoundObservation} */ o) => planned.subject === ITEM || o.bound === planned.subject || (itemFact && o.bound === ITEM);
+  const matched = bundle.observations.filter((o) => o.fact === requirement.fact && requirement.from.includes(o.source) && onSubject(o) && overlaps(o.window, planned.window)).map(stripBinding);
   const declaration = bundle.profile.declaration;
   const coverage = requirement.from.flatMap((source) => {
     const wide = bundle.watermarks.get(watermarkKey(source, ITEM));
     /** @type {string[]} */
     let subjects;
     if (wide) subjects = [ITEM];
-    else if (planned.subject !== ITEM) subjects = [planned.subject];
+    else if (planned.subject !== ITEM) subjects = itemFact ? [ITEM] : [planned.subject];
     else subjects = declaration.kind === "episode" && declaration.seats.length > 0 ? declaration.seats.map((seat) => `pt:${seat.participant}`) : [ITEM];
     return subjects.map((subject) => {
       const w = bundle.watermarks.get(watermarkKey(source, subject));
@@ -525,6 +531,8 @@ function backstopFinding(bundle, rules, o, { backstop, outcome, expected, falsif
     subject: o.bound,
     window: o.window,
     hop: null,
+    module: "unknown",
+    reason: null,
     upstream: null,
     expected,
     observed: text,
@@ -566,8 +574,12 @@ function fillQuery(template, bundle, planned) {
     participant: planned.seat?.participant ?? "",
     attempt: declaration.kind === "attempt" ? declaration.id : "",
     job: declaration.kind === "job" ? declaration.id : "",
+    space: declaration.kind === "space" ? declaration.id : "",
+    tenant: declaration.tenant ?? "",
+    environment: declaration.kind === "platform" ? declaration.id : "",
+    day: "day" in declaration ? declaration.day : "",
     from: new Date(planned.window.from_ms).toISOString(),
     to: new Date(planned.window.to_ms).toISOString(),
   };
-  return template.replace(/\{(episode|participant|attempt|job|from|to)\}/gu, (_, name) => values[name]);
+  return template.replace(/\{(episode|participant|attempt|job|space|tenant|environment|day|from|to)\}/gu, (_, name) => values[name]);
 }

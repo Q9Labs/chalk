@@ -9,7 +9,7 @@
  * - ep_7a21: never checked. Healthy once someone checks it.
  * - ep_31aa: checked healthy in the morning; a problem report arrived later, so it is stale, and a recheck finds a BLIND_SPOT.
  * - ep_5c0d: checked, healthy.
- * - an attempt that never got an admission decision (entry.unresolved, broken).
+ * - an attempt that never got an admission decision (admission.unresolved, broken).
  * - ep_9feb's recording job, still pending 14 h later (recording.not_ready, degraded, open).
  * - ep_2d4e on 11 Nov: Haris silent again, so `participant` shows a pattern across days.
  * - a second Haris in tenant AB, so the name alone is ambiguous.
@@ -27,17 +27,19 @@ export const ASOF = at("2026-11-19T01:00:00Z");
 const TH = "1f0c3b2a-7d6e-4c5b-9a8f-2e1d0c9b8a7f";
 const AB = "a8b7c6d5-e4f3-4a2b-9c1d-0e9f8a7b6c5d";
 
+/** User ids are tenant-supplied tokens (C1 `user` is canonical `token`), so their handles print in full. */
 export const PEOPLE = Object.freeze({
-  haris: { kind: /** @type {const} */ ("user"), id: "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d", name: "Haris", tenant: TH },
-  sana: { kind: /** @type {const} */ ("user"), id: "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d", name: "Sana", tenant: TH },
-  zara: { kind: /** @type {const} */ ("user"), id: "d1e2f3a4-b5c6-4d7e-8f9a-0b1c2d3e4f5a", name: "Zara", tenant: TH },
-  omar: { kind: /** @type {const} */ ("user"), id: "0c1d2e3f-4a5b-4c6d-9e7f-8a9b0c1d2e3f", name: "Omar", tenant: TH },
-  ayesha: { kind: /** @type {const} */ ("user"), id: "b3c4d5e6-f7a8-4b9c-8d0e-1f2a3b4c5d6e", name: "Ayesha", tenant: TH },
-  harisAB: { kind: /** @type {const} */ ("user"), id: "9a7e6d5c-4b3a-4f2e-9d1c-0b9a8f7e6d5c", name: "Haris", tenant: AB },
-  lina: { kind: /** @type {const} */ ("user"), id: "e7f8a9b0-c1d2-4e3f-8a4b-5c6d7e8f9a0b", name: "Lina", tenant: AB },
+  haris: { kind: /** @type {const} */ ("user"), id: "th-1041", name: "Haris", tenant: TH },
+  sana: { kind: /** @type {const} */ ("user"), id: "th-1042", name: "Sana", tenant: TH },
+  zara: { kind: /** @type {const} */ ("user"), id: "th-1043", name: "Zara", tenant: TH },
+  omar: { kind: /** @type {const} */ ("user"), id: "th-1044", name: "Omar", tenant: TH },
+  ayesha: { kind: /** @type {const} */ ("user"), id: "th-1045", name: "Ayesha", tenant: TH },
+  harisAB: { kind: /** @type {const} */ ("user"), id: "ab-2001", name: "Haris", tenant: AB },
+  lina: { kind: /** @type {const} */ ("user"), id: "ab-2002", name: "Lina", tenant: AB },
 });
 
 export const IDS = Object.freeze({
+  space: "5bace000-1c2d-4e3f-8a4b-5c6d7e8f9a01",
   ep9feb: "9feb0ff6-3c1a-4e7b-9a52-0d4c8e1f2a77",
   ep7a21: "7a21c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
   ep31aa: "31aa4b5c-6d7e-4f8a-9b0c-1d2e3f4a5b6c",
@@ -61,7 +63,7 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "client.leave"]);
+const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
 
 /**
  * @param {string} participant
@@ -97,14 +99,15 @@ const ingress = (episode, participant, id, from, to, packets, voiced) =>
   row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim: voiced > 0 ? "voiced" : "silent", value: { packets, voiced }, failure: false });
 
 /**
- * Complete watermarks for an ended Episode: whole-item API, SFU and report streams, and each seat's client.
+ * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
  * @param {readonly string[]} participants
  * @param {number} complete_to_ms
  * @returns {Watermark[]}
  */
 const episodeWatermarks = (participants, complete_to_ms) => [
-  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["episode.end", "entry.decision"], build: "api 2026.11.18" },
+  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "admission.decision"], build: "api 2026.11.18" },
   { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
+  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
   ...participants.map((participant) => ({ source: "client", subject: `pt:${participant}`, complete_to_ms, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD })),
 ];
@@ -130,7 +133,7 @@ function quietEpisode(id, tenant, from, minutes, people) {
       observations,
       watermarks: episodeWatermarks(
         seats.map((s) => s.participant),
-        to + 10_000,
+        to + 130_000,
       ),
     },
   };
@@ -155,9 +158,9 @@ export function nov18() {
     mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),
     ingress(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), 176_000, 61_500),
     mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
-    row(IDS.evEnd, { fact: "episode.end", source: "api", origin: origin.decision(IDS.evEnd), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "time_limit", value: { cap_minutes: 60 }, failure: false }),
+    row(IDS.evEnd, { fact: "end.episode", source: "api", origin: origin.decision(IDS.evEnd), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "time_limit", value: { cap_minutes: 60 }, failure: false }),
     row(IDS.evLeave, {
-      fact: "client.leave",
+      fact: "join.leave",
       source: "client",
       origin: origin.measured("client", IDS.ptZara),
       subject: { episode: ep, participant: IDS.ptZara, generation: 1, connection: connectionOf(IDS.ptZara) },
@@ -183,7 +186,7 @@ export function nov18() {
       observations,
       watermarks: episodeWatermarks(
         seats.map((s) => s.participant),
-        end + 10_000,
+        end + 130_000,
       ),
     },
   };
@@ -218,14 +221,26 @@ export function nov18() {
   const attemptWindow = { from_ms: at("2026-11-18T10:02:00Z"), to_ms: at("2026-11-18T10:02:40Z") };
   const attempt = {
     declaration: { kind: /** @type {const} */ ("attempt"), id: IDS.attempt, tenant: TH, window: attemptWindow },
-    evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["episode.end", "entry.decision"], build: "api 2026.11.18" }] },
+    evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "admission.decision"], build: "api 2026.11.18" }] },
   };
   const job = {
     declaration: { kind: /** @type {const} */ ("job"), id: IDS.job, tenant: TH, episode: ep, job_kind: "recording", window: { from_ms: end, to_ms: null } },
-    evidence: { observations: [], watermarks: [{ source: "db", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["job.terminal"], build: "postgres" }] },
+    evidence: { observations: [], watermarks: [{ source: "db", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["recording.job_state"], build: "postgres" }] },
   };
 
-  const all = [ep9feb, ep7a21, ep5c0d, ep31aa, ep2d4e, epe0f1, attempt, job];
+  // One UTC day of a Space and of the platform. No check judges them yet (the slices add Space, Tenant and platform checks), so
+  // they read as unchecked, never healthy.
+  const utcDay = { from_ms: at("2026-11-18T00:00:00Z"), to_ms: at("2026-11-19T00:00:00Z") };
+  const spaceDay = {
+    declaration: { kind: /** @type {const} */ ("space"), id: IDS.space, tenant: TH, day: "2026-11-18", window: utcDay, episodes: [ep, IDS.ep7a21, IDS.ep5c0d, IDS.ep31aa] },
+    evidence: { observations: [], watermarks: [] },
+  };
+  const platformDay = {
+    declaration: { kind: /** @type {const} */ ("platform"), id: "production", tenant: null, day: "2026-11-18", window: utcDay },
+    evidence: { observations: [], watermarks: [] },
+  };
+
+  const all = [ep9feb, ep7a21, ep5c0d, ep31aa, ep2d4e, epe0f1, attempt, job, spaceDay, platformDay];
   return {
     asof_ms: ASOF,
     tenants: [

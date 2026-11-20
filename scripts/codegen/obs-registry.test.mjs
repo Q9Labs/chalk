@@ -69,14 +69,18 @@ test("events, reasons and machines are checked against the core lists and their 
   assert.match(errors, /triggers must be a non-empty list/u);
 });
 
-test("a symptom's witnesses must name known events, and the allow-list only known symptoms", () => {
+test("a symptom's witnesses must name known facts, a fact known events, and the allow-list only known symptoms", () => {
   const broken = clone();
   const selftest = area(broken, "selftest");
   selftest.prefixes.push("ghost");
-  selftest.symptoms = [{ code: "ghost.seen", doc: "A ghost.", witnesses: [{ id: "w", event: "selftest.nope", required: true }] }];
+  selftest.facts = [{ name: "ghost.state", kind: "state", per: "seat", doc: "A ghost fact.", events: [{ event: "selftest.nope", source: "client", claim: "state", failure_claims: [], fields: [] }] }];
+  selftest.symptoms = [{ code: "ghost.seen", item: "episode", per: "seat", doc: "A ghost.", witnesses: [{ fact: "ghost.missing", from: ["client"], required: true, query: "q", doc: "d" }] }];
+  broken.core.fault_components.components.push("ghost");
   broken.allowlist.incomplete.push({ code: "ghost.unlisted", slice: 0 });
   const errors = errorsOf(broken);
-  assert.match(errors, /witness w names unknown event selftest\.nope/u);
+  assert.match(errors, /witness names unknown fact ghost\.missing/u);
+  assert.match(errors, /fact ghost\.state names unknown event selftest\.nope/u);
+  assert.match(errors, /ghost is also a symptom prefix/u);
   assert.match(errors, /ghost\.unlisted is not a catalogued symptom/u);
 });
 

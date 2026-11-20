@@ -2,10 +2,19 @@
   "area": "report",
   "slice": 13,
   "title": "Report a problem and live introspection",
-  "prefixes": ["report"],
+  "prefixes": ["report", "live"],
   "fields": [],
   "events": [],
   "reasons": [],
   "machines": [],
+  "facts": [
+    {
+      "name": "report.problem",
+      "kind": "event",
+      "per": "any",
+      "events": [],
+      "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+    }
+  ],
   "symptoms": []
 }

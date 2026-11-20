@@ -135,6 +135,9 @@ func admitTelemetry(ctx context.Context, ledger TelemetryLedger, subject accessg
 	switch {
 	case errors.Is(err, telemetrydelivery.ErrLedgerFull):
 		return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, "ledger_full")
+	case errors.Is(err, telemetrydelivery.ErrSourceBound):
+		// 400 like ledger_full: the client drops the batch as refused and never retries it.
+		return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, "source_bound", "source_id", request.Batch.SourceID)
 	case errors.Is(err, telemetrydelivery.ErrBatch):
 		return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, "schema")
 	case err != nil:

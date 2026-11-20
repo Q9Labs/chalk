@@ -41,7 +41,8 @@ type Ranges struct {
 }
 
 // SourceRow is one ledger row, keyed by (TenantID, SourceID, ParticipantID). A source spans
-// participants when its SDK client rejoins, so the watermark of a source is the union of its rows.
+// participants when its User or Agent rejoins as a successor (see Binding), so the watermark of a
+// source is the union of its rows.
 type SourceRow struct {
 	TenantID      utilities.ID
 	SourceID      utilities.ID

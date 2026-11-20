@@ -1,11 +1,12 @@
-pattern audio.no_voice_detected tenant=TH range=10-20..11-19 outcome=broken coverage=partial checked=5/7 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=b992ec71
+pattern audio.not_heard tenant=TH range=10-20..11-19 outcome=broken coverage=partial checked=5/8 partial=2 stale=1 unchecked=2 asof=2026-11-19T01:00Z rules=e679be28
 anchor=2026-10-20T01:00Z local=2026-10-20T06:00+05:00 tz=Asia/Karachi
-audio.no_voice_detected broken episodes=2 people=1 ep_9feb ep_2d4e
-f_77c7 broken audio.no_voice_detected ep_2d4e pt_2d4e(Haris) 11-11 15:05 hop=sfu_ingress upstream=unknown ev=ev_2a3b
-f_98d4 broken audio.no_voice_detected ep_9feb pt_4c1e(Haris) 11-18 14:52 hop=sfu_ingress upstream=unknown ev=ev_a1f3
+audio.not_heard broken episodes=2 people=1 ep_9feb ep_2d4e
+f_d12a broken audio.not_heard ep_2d4e pt_2d4e(Haris) 11-11 15:05 hop=sfu_ingress module=unknown upstream=unknown ev=ev_2a3b
+f_5b55 broken audio.not_heard ep_9feb pt_4c1e(Haris) 11-18 14:52 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3
+gap: unchecked spc_5bac 11-18 05:00
 gap: stale ep_31aa 11-18 11:00 was=healthy
 gap: partial ep_9feb 11-18 14:45 missing=board
 gap: partial job_4a3b 11-18 15:45 missing=open
 gap: unchecked ep_7a21 11-18 16:00
 next: diagnose check --tenant TH --since 30d
-next: diagnose evidence f_98d4
+next: diagnose evidence f_5b55

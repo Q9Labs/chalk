@@ -17,7 +17,7 @@ export const USAGE = `usage: diagnose <anything> | <command> [args] [options]
   call <episode uuid> [--fixture rows.json] [--strict]   the existing single-call report over today's rows
 options: --json --strict --limit N (default ${DEFAULT_LIMIT}) --cursor C --budget TOKENS --fixture <world module> --store <file> --asof <instant>`;
 
-const COMMANDS = new Set(["day", "episode", "attempt", "job", "evidence", "participant", "pattern", "window", "check", "resolve", "call"]);
+const COMMANDS = new Set(["day", "episode", "attempt", "job", "space", "tenant", "platform", "evidence", "participant", "pattern", "window", "check", "resolve", "call"]);
 const FLAGS = new Set(["json", "strict"]);
 const VALUES = new Set(["limit", "cursor", "budget", "fixture", "store", "asof", "tenant", "since", "from", "to", "symptom"]);
 

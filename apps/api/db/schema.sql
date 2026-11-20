@@ -5262,3 +5262,15 @@ create table telemetry_sources (
     check ((end_state is null) = (end_next_seq is null))
 );
 create index telemetry_sources_episode_idx on telemetry_sources (tenant_id, episode_id);
+
+-- The participant each telemetry source is bound to: the first that sent a batch touching it.
+-- identity_id is its User or Agent, null for a guest; a later participant of the same identity is a
+-- successor and may write to the source too.
+create table telemetry_source_bindings (
+    tenant_id uuid not null,
+    source_id uuid not null,
+    participant_id uuid not null,
+    identity_id uuid,
+    bound_at timestamptz not null,
+    primary key (tenant_id, source_id)
+);

@@ -1,11 +1,70 @@
 {
-  "description": "The Episode hit its maximum duration. One client lost the end notice, read a stale active status after its media credential was revoked, and showed connection lost 1.2 s after the end. The other client ended cleanly.",
+  "description": "The Episode hit its maximum duration. One client lost the end notice, read a stale active status after its media credential was revoked, and showed connection lost 1.2 s after the end. The other client ended cleanly. Every source is complete, so the seat is checked and the finding is broken.",
+  "asof_ms": 1795600300000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": [],
+    "window": {
+      "from_ms": 1795596400000,
+      "to_ms": 1795600000000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat A",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795600000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat A"
+        }
+      },
+      {
+        "participant": "a1000000-0000-4000-8000-000000000002",
+        "name": "Seat B",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795600000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000002",
+          "name": "Seat B"
+        }
+      }
+    ]
+  },
   "rows": [
-    { "event": "sync.episode.ended", "event_id": "5d0c2a52-6f1e-4f7a-9c1b-2f4c8e7a0001", "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e", "end_reason": "maximum_duration", "est_server_ms": 1795600000000, "clock_state": "server" },
+    {
+      "event": "sync.episode.ended",
+      "event_id": "5d0c2a52-6f1e-4f7a-9c1b-2f4c8e7a0001",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "end_reason": "maximum_duration",
+      "est_server_ms": 1795600000000,
+      "clock_state": "server"
+    },
     {
       "event": "client.call_ended",
       "event_id": "5d0c2a52-6f1e-4f7a-9c1b-2f4c8e7a0002",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
       "client_session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
       "end_reason": "connection_lost",
       "est_server_ms": 1795600001200,
@@ -16,6 +75,7 @@
       "event": "client.call_ended",
       "event_id": "5d0c2a52-6f1e-4f7a-9c1b-2f4c8e7a0003",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
       "client_session_id": "9b2f3c1d-1111-4222-8333-944455556666",
       "end_reason": "episode_ended",
       "est_server_ms": 1795600000300,

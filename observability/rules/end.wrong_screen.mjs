@@ -1,50 +1,63 @@
-// end.wrong_screen: the Episode ended for an authoritative reason, but a client in it chose a failure end screen.
-//
-// Evidence comes in by witness id (see areas/end.json): server_end rows are sync.episode.ended and client_end rows
-// are client.call_ended. A client row counts when it is in the same Episode, chose connection_lost or join_failed,
-// and its est_server_ms falls in a window around the server end, widened by the row's clock_err_ms. A client row
-// with no est_server_ms (an unsynced clock) can't be placed in time, so it never makes a hit. No hit is not a
-// healthy verdict, only the absence of proof.
+// @ts-check
+/**
+ * end.wrong_screen: the Episode ended for an authoritative reason, but a seat's client chose a failure end screen (connection lost
+ * or join failed) instead of the Episode-ended screen.
+ *
+ * The witnesses are in areas/end.json: `end.episode` from Sync (sync.episode.ended) and `end.client_screen` from the seat's client
+ * (client.call_ended). A client screen counts when it is a failure screen and its time, widened by the row's clock error, falls in a
+ * window around the end. A client row with no server time can't be placed, so the adapter drops it and the seat stays unchecked.
+ */
+
+/** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
+/** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Seat} Seat */
+/** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").DecideInput} DecideInput */
+/** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Decision} Decision */
 
 export const symptom = "end.wrong_screen";
 
 const FAILURE_SCREENS = new Set(["connection_lost", "join_failed"]);
-// Media is revoked as part of ending, so a client can fail a little before the end commits.
+/** Media is revoked as part of ending, so a client can fail a little before the end commits. */
 const BEFORE_MS = 10_000;
-// A client that loses the end notice keeps going until its own recovery gives up.
+/** A client that loses the end notice keeps going until its own recovery gives up. */
 const AFTER_MS = 120_000;
 
-const inWindow = (offset, error) => offset >= -BEFORE_MS - error && offset <= AFTER_MS + error;
+/** Records about the end arrive after it, so the check reads this far past the Episode's end. */
+export const settle_ms = AFTER_MS;
+
+export const expected = `when the Episode ends, every seat's client shows the Episode-ended screen, and none shows a failure screen from ${BEFORE_MS / 1000} s before the end to ${AFTER_MS / 1000} s after it`;
+
+/** @param {Declaration} declaration @param {Seat | null} seat */
+export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null;
 
 /**
- * @typedef {{ readonly [field: string]: unknown }} Row
- * @typedef {{ readonly symptom: string, readonly episode_id: string, readonly client_session_id: string, readonly server_end_reason: string, readonly client_end_reason: string, readonly offset_ms: number, readonly evidence: readonly unknown[] }} RuleHit
- * @param {Row} end
- * @param {Row} client
- * @returns {RuleHit | undefined}
+ * @param {DecideInput} input
+ * @returns {Decision}
  */
-function hitFor(end, client) {
-  if (client.episode_id !== end.episode_id || !FAILURE_SCREENS.has(String(client.end_reason))) return undefined;
-  if (typeof client.est_server_ms !== "number" || typeof end.est_server_ms !== "number") return undefined;
-  const error = typeof client.clock_err_ms === "number" ? client.clock_err_ms : 0;
-  const offset = client.est_server_ms - end.est_server_ms;
-  if (!inWindow(offset, error)) return undefined;
+export function decide({ readings }) {
+  const end = readings["end.episode"];
+  const screen = readings["end.client_screen"];
+  if (end.kind === "unknown") return { status: "unknown", reason: "the Episode's end is not witnessed" };
+  if (end.kind === "absent") return { status: "pass" };
+  const [server] = [...end.observations].sort((a, b) => a.window.from_ms - b.window.from_ms);
+  if (screen.kind === "unknown") return { status: "unknown", reason: "the seat's end screen is not witnessed" };
+  if (screen.kind === "absent") return { status: "pass" };
+  const at = server.window.from_ms;
+  const wrong = screen.observations.find((o) => FAILURE_SCREENS.has(o.claim) && o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
+  if (!wrong) return { status: "pass" };
   return {
-    symptom,
-    episode_id: String(end.episode_id),
-    client_session_id: String(client.client_session_id),
-    server_end_reason: String(end.end_reason),
-    client_end_reason: String(client.end_reason),
-    offset_ms: offset,
-    evidence: [end.event_id, client.event_id].filter((id) => id !== undefined),
+    status: "finding",
+    outcome: "broken",
+    window: { from_ms: Math.min(at, wrong.window.from_ms), to_ms: Math.max(at, wrong.window.to_ms) },
+    hop: "client_end",
+    module: "sdk.connection",
+    reason: null,
+    upstream: "witnessed",
+    observed: `the Episode ended (${server.claim}) and the client showed ${wrong.claim}`,
+    facts: [
+      { text: `Sync saw the Episode end: ${server.claim}`, evidence: [server.id], window: server.window, absent: null },
+      { text: `the client showed the ${wrong.claim} screen`, evidence: [wrong.id], window: wrong.window, absent: null },
+    ],
+    hypothesis: { text: "the client lost the end notice and read a stale Episode status", falsified_by: "an end notice delivered on the seat's Sync connection before the client chose its screen" },
+    falsify: { absence: null, attribution: `an Episode-ended screen for this seat, or a failure screen more than ${BEFORE_MS / 1000} s before the end` },
   };
-}
-
-/**
- * @param {{ readonly [witness: string]: readonly Row[] }} evidence
- * @returns {RuleHit[]}
- */
-export function evaluate(evidence) {
-  const clients = evidence.client_end ?? [];
-  return (evidence.server_end ?? []).flatMap((end) => clients.map((client) => hitFor(end, client)).filter((hit) => hit !== undefined));
 }

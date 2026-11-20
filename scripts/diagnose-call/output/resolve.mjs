@@ -6,7 +6,8 @@
  * A session id has three meanings in Chalk (an Episode id, an SDK client session `cs_`, a media provider's session id), so a raw id
  * is matched against all of them and each candidate says which meaning matched.
  */
-import { formatHandle, parseHandle } from "./handle.mjs";
+import { formatHandle, parseHandle, resolveHandle } from "../../../sdks/typescript/client/src/obs/ids.ts";
+import { ID_KINDS } from "../../../sdks/typescript/client/src/obs/registry.ts";
 import { localWhen } from "./format.mjs";
 import { refKind } from "./views.mjs";
 
@@ -59,7 +60,7 @@ export function indexWorld(world, items, verdicts) {
     for (const finding of verdict?.findings ?? []) entries.push({ kind: "finding", id: finding.id, label: finding.code, tenant: tenantName(item.tenant), meaning: null, when_ms: finding.window.from_ms, target: { kind: "finding", item, finding: finding.id }, tenant_id: item.tenant, name: null });
   }
   for (const item of items) {
-    for (const o of world.evidence[item.id]?.observations ?? []) entries.push({ kind: "evidence", id: o.id, label: o.fact, tenant: tenantName(item.tenant), meaning: null, when_ms: o.window.from_ms, target: { kind: "item", item }, tenant_id: item.tenant, name: null });
+    for (const o of world.evidence[item.id]?.observations ?? []) entries.push({ kind: "event", id: o.id, label: o.fact, tenant: tenantName(item.tenant), meaning: null, when_ms: o.window.from_ms, target: { kind: "item", item }, tenant_id: item.tenant, name: null });
   }
   return entries;
 }
@@ -88,6 +89,23 @@ function itemEntries(item, tenant, tz) {
 }
 
 const compact = (/** @type {string} */ id) => id.toLowerCase().replaceAll("-", "");
+/** The kinds C1's handles name; a lookup entry of another kind (a person by name) is never a handle target. */
+const ID_KIND_NAMES = new Set(ID_KINDS.map((entry) => String(entry.kind)));
+
+/**
+ * The id kind a prefixed handle names (`ep_9feb` is an episode), or null for a bare id, a name or a `session:` or CHK lookup.
+ * @param {string} text
+ */
+export function handleKind(text) {
+  const parsed = parseHandle(text);
+  return parsed.ok && (parsed.handle.form === "full" || parsed.handle.form === "short") ? parsed.handle.kind : null;
+}
+
+/** Whether the text is handle syntax (a prefix, `session:`, a CHK code or a legacy hash) rather than a bare id or a name. @param {string} text */
+export const isHandle = (text) => {
+  const parsed = parseHandle(text);
+  return parsed.ok && parsed.handle.form !== "bare";
+};
 const HEX = /^[0-9a-f-]{4,}$/iu;
 
 /**
@@ -103,8 +121,15 @@ export function resolve(entries, query, { tenant = null, kinds = null } = {}) {
   const parsed = parseHandle(text);
   /** @type {Entry[]} */
   let found;
-  if (parsed) found = inScope.filter((entry) => entry.kind === parsed.kind && compact(entry.id).startsWith(parsed.fragment));
-  else if (HEX.test(text) && compact(text).length >= 4) found = inScope.filter((entry) => entry.kind !== "tenant" && compact(entry.id).startsWith(compact(text)));
+  if (parsed.ok && parsed.handle.form !== "bare") {
+    const targets = inScope.filter((entry) => ID_KIND_NAMES.has(entry.kind));
+    const resolution = resolveHandle(
+      parsed.handle,
+      targets.map((entry) => ({ kind: /** @type {import("../../../sdks/typescript/client/src/obs/registry.ts").IdKind} */ (entry.kind), id: entry.id })),
+    );
+    const hits = resolution.status === "unique" ? [resolution.match] : resolution.status === "ambiguous" ? resolution.matches : [];
+    found = targets.filter((entry) => hits.some((hit) => hit.kind === entry.kind && compact(hit.id) === compact(entry.id)));
+  } else if (HEX.test(text) && compact(text).length >= 4) found = inScope.filter((entry) => entry.kind !== "tenant" && compact(entry.id).startsWith(compact(text)));
   else {
     const name = text.toLowerCase();
     found = inScope.filter((entry) => {

@@ -1,6 +1,7 @@
 // @ts-check
 /**
- * The profile: what one item (an Episode, an attempt that never became one, or a post-call job) should have produced, given what
+ * The profile: what one item (an Episode, an attempt that never became one, a post-call job, or one UTC day of a Space, a Tenant or
+ * the platform) should have produced, given what
  * the authority declared about it. It is chosen from the declaration alone, before any telemetry is read, so the evidence can never
  * shrink what it is judged against: an Episode whose board was declared on needs board evidence, whether or not any arrived.
  */
@@ -10,8 +11,10 @@
 /** @typedef {import("./evidence.mjs").Observation} Observation */
 
 /**
- * Declarations come from the authority: Postgres for Episodes, seats and jobs, and the attempt population (API and edge
- * request records) for attempts. Never from client or SFU telemetry. `to_ms: null` is an item that has not ended.
+ * Declarations come from the authority: Postgres for Episodes, seats, jobs, Spaces and Tenants, the attempt population (API and edge
+ * request records) for attempts, and the release markers for the platform. Never from client or SFU telemetry. `to_ms: null` is an
+ * item that has not ended. An attempt is keyed by its client session id (`cs_`), the one id a client has before it has a seat.
+ * A Space, Tenant or platform item is one UTC `day` of that subject, so its checks are aggregate and item-wide.
  *
  * @typedef {{ from_ms: number, to_ms: number | null }} OpenWindow
  * @typedef {{ kind: "user" | "agent", id: string, name: string | null } | { kind: "guest", device: string | null, name: string | null }} Person
@@ -19,13 +22,17 @@
  * @typedef {{ kind: "episode", id: string, tenant: string, features: readonly string[], window: OpenWindow, seats: readonly Seat[] }} EpisodeDeclaration
  * @typedef {{ kind: "attempt", id: string, tenant: string, window: OpenWindow }} AttemptDeclaration
  * @typedef {{ kind: "job", id: string, tenant: string, episode: string, job_kind: string, window: OpenWindow }} JobDeclaration
- * @typedef {EpisodeDeclaration | AttemptDeclaration | JobDeclaration} Declaration
+ * @typedef {{ kind: "space", id: string, tenant: string, day: string, window: OpenWindow, episodes: readonly string[] }} SpaceDeclaration
+ * @typedef {{ kind: "tenant", id: string, tenant: string, day: string, window: OpenWindow }} TenantDeclaration
+ * @typedef {{ kind: "platform", id: string, tenant: null, day: string, window: OpenWindow }} PlatformDeclaration `id` is the environment.
+ * @typedef {EpisodeDeclaration | AttemptDeclaration | JobDeclaration | SpaceDeclaration | TenantDeclaration | PlatformDeclaration} Declaration
  */
 
 /**
  * One witness a check needs. `from` lists the sources that may witness the fact; each must cover the window before an absence or a
  * pass counts. `independent` is how many distinct origins must claim the fact before a pass counts (default 1). `query` is the proof
- * query template a reader reruns; `{episode}`, `{participant}`, `{attempt}`, `{job}`, `{from}` and `{to}` are filled in.
+ * query template a reader reruns; `{episode}`, `{participant}`, `{attempt}`, `{job}`, `{space}`, `{tenant}`, `{environment}`, `{day}`,
+ * `{from}` and `{to}` are filled in.
  * @typedef {{ fact: string, from: readonly string[], independent?: number, query: string }} Requirement
  */
 
@@ -41,6 +48,8 @@
  *   outcome: FindingOutcome,
  *   window: Window,
  *   hop: string | null,
+ *   module: string | null,
+ *   reason: string | null,
  *   upstream: "witnessed" | "unknown" | null,
  *   observed: string,
  *   facts: readonly Fact[],
@@ -50,6 +59,9 @@
  * @typedef {{ status: "pass" } | { status: "unknown", reason: string } | FindingDecision} Decision
  *
  * - `hop`: the first hop of the witness chain where the observation diverged from what was expected (`sfu_ingress`).
+ * - `module`: the code that owns the hop, `<component>.<area>` from the registry's fault components (`sfu.ingress`), or `network` or
+ *   `unknown`; null only when nothing failed.
+ * - `reason`: the registry reason code an `expected` finding stands for (`end.time_limit`); null for every other outcome.
  * - `upstream`: whether the hops before it were witnessed. `unknown` says the divergence may have started earlier.
  * - `observed`: one line of what the witnesses showed, for the proof view.
  */
@@ -77,7 +89,10 @@
  *   optional: readonly Requirement[],
  *   expected: string,
  *   decide: (input: DecideInput) => Decision,
+ *   settle_ms?: number,
  * }} CheckDef
+ * `settle_ms` extends an ended item's window for this check, because some records about an end arrive after it (a client's end
+ * screen). The sources must cover the extended window before the check counts.
  */
 
 /**
@@ -104,15 +119,16 @@ export function profileFor(declaration, catalogue, asof_ms) {
   /** @type {PlannedCheck[]} */
   const checks = [];
   for (const def of catalogue.filter((candidate) => candidate.item === declaration.kind)) {
+    const settle = open ? 0 : (def.settle_ms ?? 0);
     if (def.per === "item") {
-      if (def.applies(declaration, null)) checks.push({ key: `${def.code}@${ITEM}`, code: def.code, subject: ITEM, window, seat: null });
+      if (def.applies(declaration, null)) checks.push({ key: `${def.code}@${ITEM}`, code: def.code, subject: ITEM, window: { from_ms: window.from_ms, to_ms: window.to_ms + settle }, seat: null });
       continue;
     }
     if (declaration.kind !== "episode") throw new TypeError(`check ${def.code}: per-seat checks apply to Episodes only`);
     for (const seat of declaration.seats) {
       if (!def.applies(declaration, seat)) continue;
       const from_ms = Math.max(window.from_ms, seat.window.from_ms);
-      const to_ms = Math.min(window.to_ms, seat.window.to_ms ?? window.to_ms);
+      const to_ms = Math.min(window.to_ms, seat.window.to_ms ?? window.to_ms) + settle;
       checks.push({ key: `${def.code}@${seatKey(seat.participant)}`, code: def.code, subject: seatKey(seat.participant), window: { from_ms, to_ms: Math.max(from_ms, to_ms) }, seat });
     }
   }

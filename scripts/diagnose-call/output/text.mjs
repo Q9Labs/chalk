@@ -12,7 +12,7 @@
  *
  * Times are relative (`+07:10`) only in an Episode, attempt or job detail; aggregate views print tenant-local clock times.
  */
-import { formatHandle } from "./handle.mjs";
+import { formatHandle } from "../../../sdks/typescript/client/src/obs/ids.ts";
 import { partyText } from "./format.mjs";
 import { approxTokens } from "./page.mjs";
 
@@ -27,7 +27,7 @@ import { approxTokens } from "./page.mjs";
 const handle = (value) => {
   if (typeof value === "string") return value;
   if (value !== null && typeof value === "object" && "$h" in value && "id" in value) {
-    const full = formatHandle(String(value.$h), String(value.id));
+    const full = formatHandle(/** @type {import("../../../sdks/typescript/client/src/obs/registry.ts").IdKind} */ (value.$h), String(value.id));
     return full.slice(0, full.indexOf("_") + 5);
   }
   return String(value);
@@ -63,6 +63,7 @@ function headLine(head) {
   const scope = head.scope;
   const words = [head.view];
   if (head.view === "episode" || head.view === "attempt" || head.view === "job") words.push(String(scope.item), `tenant=${scope.tenant}`);
+  else if (head.view === "space" || head.view === "tenant" || head.view === "platform") words.push(String(scope.item), String(scope.date));
   else if (head.view === "evidence") words.push(String(scope.finding), String(scope.code), partyText(/** @type {any} */ (scope.party), handle), `of=${scope.item}`);
   else if (head.view === "day") words.push(String(scope.tenant), String(scope.date), ...(scope.symptom ? [`symptom=${scope.symptom}`] : []));
   else if (head.view === "resolve") words.push(JSON.stringify(scope.query), `matched=${scope.matched}`);
@@ -110,7 +111,20 @@ const at = (text, when) => (when ? `${text} ${when}` : text);
  */
 const RECORD_LINES = {
   finding: (r, h, party) => {
-    const words = [h(r.f), r.outcome, r.code, ...(r.item ? [h(r.item)] : []), ...(r.party ? [party(r.party)] : []), r.when, ...opt("hop", r.hop), ...opt("upstream", r.upstream), ...(r.ev ? [`ev=${h(r.ev)}`] : []), ...(r.retained ? ["retained"] : [])];
+    const words = [
+      h(r.f),
+      r.outcome,
+      r.code,
+      ...(r.item ? [h(r.item)] : []),
+      ...(r.party ? [party(r.party)] : []),
+      r.when,
+      ...opt("hop", r.hop),
+      ...opt("module", r.module),
+      ...opt("upstream", r.upstream),
+      ...opt("reason", r.reason),
+      ...(r.ev ? [`ev=${h(r.ev)}`] : []),
+      ...(r.retained ? ["retained"] : []),
+    ];
     const lines = [words.join(" ")];
     for (const fact of r.facts ?? []) lines.push(`fact: ${at(fact.text, fact.when)} ${fact.absent ? "[proven absent]" : cite(fact.ev)}`);
     if (r.hypothesis) lines.push(`hypothesis: ${r.hypothesis.text}`);
@@ -121,7 +135,7 @@ const RECORD_LINES = {
     return [`disagree ${r.about} ${party(r.party)} ${r.when} ${r.claims.map((/** @type {any} */ c) => `${c.source}:${c.claim}${cite([c.ev])}`).join(" ")} independent=${r.independent ? "yes" : "no"}`];
   },
   report: (r, h, party) => [`report ${h(r.ev)} ${party(r.party)} ${r.when} ${JSON.stringify(r.text)} explained_by=${r.explained_by ? h(r.explained_by) : "none"}`],
-  group: (r, h) => [[r.code, r.outcome, `episodes=${r.episodes}`, ...opt("people", r.people), ...r.items.map(h), ...(r.more > 0 ? [`+${r.more}`] : [])].join(" ")],
+  group: (r, h) => [[r.code, r.outcome, `${r.kind}s=${r.count}`, ...opt("people", r.people), ...r.items.map(h), ...(r.more > 0 ? [`+${r.more}`] : [])].join(" ")],
   item: (r, h) => {
     const missing = r.coverage.missing.length > 0 ? `(${r.coverage.missing.join(",")})` : "";
     return [[r.state, h(r.item), r.when, `outcome=${r.outcome}`, `coverage=${r.coverage.state}${missing}`, ...(r.codes?.length > 0 ? [`codes=${r.codes.join(",")}`] : []), ...opt("was", r.was)].join(" ")];

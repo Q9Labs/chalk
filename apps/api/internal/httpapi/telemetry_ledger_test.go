@@ -227,6 +227,38 @@ func TestTelemetryV2RangeCapIsAMalformedBatchWithReasonLedgerFull(t *testing.T) 
 	}
 }
 
+// A participant of the tenant that knows another client's source_id cannot add claims to it: the
+// batch is refused whole with 400 and the reason source_bound, so the SDK drops it as refused and
+// never retries it, and the victim's ledger is unchanged.
+func TestTelemetryV2BatchOnASourceBoundToAnotherParticipantIsRefusedWithReasonSourceBound(t *testing.T) {
+	f := newTelemetryFixture(t)
+	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 4, ledgerEvent(0))); answer.Accepted != 1 {
+		t.Fatalf("answer = %+v, want the victim's record accepted", answer)
+	}
+	before, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
+
+	hostile := f.subject
+	hostile.ParticipantID = mustLedgerID(t, "55555555-5555-4555-8555-555555555555")
+	token, err := f.issuer.IssueTelemetry(t.Context(), hostile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"version":2,"source_id":%q,"batch_id":%q,"next_seq":4,"end":"closed","events":[%s]}`, ledgerSource, ledgerOtherBatch, strings.Join([]string{ledgerEvent(1), ledgerEvent(2), ledgerEvent(3)}, ","))
+	recorder := f.postWith(token.Token, ledgerRoute, body)
+	if recorder.Code != http.StatusBadRequest || strings.Contains(recorder.Body.String(), "acks") {
+		t.Fatalf("status = %d, body = %s, want 400 with no acks", recorder.Code, recorder.Body.String())
+	}
+	if rows := f.rows(t, "sdk.telemetry.rejected"); len(rows) != 1 || rows[0]["reason"] != "source_bound" || rows[0]["source_id"] != ledgerSource {
+		t.Fatalf("rejection rows = %v, want one with reason source_bound naming the source", rows)
+	}
+	if rows := f.sinkRows(t); rows != 1 {
+		t.Fatalf("sink rows = %d, want only the victim's record", rows)
+	}
+	if after, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); !reflect.DeepEqual(after, before) {
+		t.Fatalf("victim rows = %+v, want them unchanged: %+v", after, before)
+	}
+}
+
 func TestTelemetryV1IsUnchangedAndNeverTouchesTheLedger(t *testing.T) {
 	f := newTelemetryFixture(t)
 	f.ledger.Fail = errors.New("database is down")

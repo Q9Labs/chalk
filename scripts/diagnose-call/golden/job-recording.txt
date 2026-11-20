@@ -1,6 +1,6 @@
-job job_4a3b tenant=TH outcome=degraded coverage=partial(open) checked=1/1 asof=2026-11-19T01:00Z rules=b992ec71
+job job_4a3b tenant=TH outcome=degraded coverage=partial(open) checked=1/1 asof=2026-11-19T01:00Z rules=e679be28
 anchor=2026-11-18T10:45Z local=15:45+05:00 episode=ep_9feb
-f_db10 degraded recording.not_ready all +00:00..+855:00 hop=recorder upstream=unknown
+f_db10 degraded recording.not_ready all +00:00..+855:00 hop=recorder module=recorder.job upstream=unknown
 fact: no terminal job state [proven absent]
 gap: open: the job has not ended, so what it has not done yet is unknown
 next: diagnose evidence f_db10

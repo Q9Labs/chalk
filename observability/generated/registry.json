@@ -1,5 +1,5 @@
 {
-  "schema_ver": "55748406f5e1",
+  "schema_ver": "43d2a1352a2d",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -34,6 +34,69 @@
     "jump_ms": 2000
   },
   "sensitivity_levels": [],
+  "items": ["episode", "attempt", "job", "space", "tenant", "platform"],
+  "sources": [
+    {
+      "source": "client",
+      "per_seat": true
+    },
+    {
+      "source": "api",
+      "per_seat": false
+    },
+    {
+      "source": "sync",
+      "per_seat": false
+    },
+    {
+      "source": "sfu",
+      "per_seat": false
+    },
+    {
+      "source": "cf",
+      "per_seat": false
+    },
+    {
+      "source": "recorder",
+      "per_seat": false
+    },
+    {
+      "source": "lambda",
+      "per_seat": false
+    },
+    {
+      "source": "provider_webhook",
+      "per_seat": false
+    },
+    {
+      "source": "db",
+      "per_seat": false
+    },
+    {
+      "source": "r2",
+      "per_seat": false
+    },
+    {
+      "source": "host",
+      "per_seat": false
+    },
+    {
+      "source": "edge",
+      "per_seat": false
+    },
+    {
+      "source": "report",
+      "per_seat": false
+    },
+    {
+      "source": "release",
+      "per_seat": false
+    }
+  ],
+  "fault_components": {
+    "components": ["web", "react", "rn", "sdk", "mobile", "ios", "api", "sync", "sfu", "cf", "recorder", "dispatcher", "postgres", "storage", "host", "tenant"],
+    "standalone": ["network", "unknown"]
+  },
   "id_kinds": [
     {
       "kind": "tenant",
@@ -250,6 +313,42 @@
       "scope": null,
       "companions": [],
       "legacy_hash_field": null
+    },
+    {
+      "kind": "flags",
+      "prefix": "fl",
+      "field": "flags_hash",
+      "canonical": "hex16",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "diagnostic_upload",
+      "prefix": "dg",
+      "field": "diagnostic_upload_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "api_key",
+      "prefix": "ak",
+      "field": "api_key_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "webhook_endpoint",
+      "prefix": "wh",
+      "field": "webhook_endpoint_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
     }
   ],
   "session_meanings": [
@@ -283,7 +382,7 @@
   "envelope": [
     {
       "group": "delivery",
-      "fields": ["event_id", "seq", "batch_id", "source_id"]
+      "fields": ["event_id", "seq", "batch_id", "source_id", "next_seq", "end", "dropped_seqs", "drop_reason", "dropped_source_id"]
     },
     {
       "group": "trail",
@@ -334,7 +433,7 @@
       "area": "access",
       "slice": 7,
       "title": "Access, reconnection and background",
-      "prefixes": ["access", "reconnect"],
+      "prefixes": ["access", "reconnect", "background"],
       "test_only": false
     },
     {
@@ -355,28 +454,28 @@
       "area": "crash",
       "slice": 9,
       "title": "Crashes and performance, on web and native",
-      "prefixes": ["page", "crash", "perf"],
+      "prefixes": ["page", "app", "perf"],
       "test_only": false
     },
     {
       "area": "end",
       "slice": 8,
       "title": "Call end and rejoin",
-      "prefixes": ["end", "rejoin", "episode"],
+      "prefixes": ["end", "rejoin"],
       "test_only": false
     },
     {
       "area": "entry",
       "slice": 1,
       "title": "Entry: dashboard, invite, admission, prejoin, embed and boot",
-      "prefixes": ["entry", "admit", "prejoin"],
+      "prefixes": ["boot", "embed", "invite", "admission", "prejoin", "dashboard"],
       "test_only": false
     },
     {
       "area": "join",
       "slice": 2,
       "title": "Join and media connection, including listen-only",
-      "prefixes": ["join", "media", "client"],
+      "prefixes": ["join", "media"],
       "test_only": false
     },
     {
@@ -390,21 +489,21 @@
       "area": "platform",
       "slice": 14,
       "title": "Platform: DB, releases, flags, Cloudflare edge",
-      "prefixes": ["platform", "db", "release", "edge"],
+      "prefixes": ["db", "release", "flags", "edge"],
       "test_only": false
     },
     {
       "area": "recording",
       "slice": 10,
       "title": "Recording and rendering",
-      "prefixes": ["recording", "render"],
+      "prefixes": ["recording", "render", "playback"],
       "test_only": false
     },
     {
       "area": "report",
       "slice": 13,
       "title": "Report a problem and live introspection",
-      "prefixes": ["report"],
+      "prefixes": ["report", "live"],
       "test_only": false
     },
     {
@@ -439,7 +538,7 @@
       "area": "webhooks",
       "slice": 12,
       "title": "Webhooks and tenant integration",
-      "prefixes": ["webhook"],
+      "prefixes": ["webhook", "integration"],
       "test_only": false
     }
   ],
@@ -589,12 +688,46 @@
       "doc": "The persistent device."
     },
     {
+      "name": "drop_reason",
+      "type": "enum",
+      "values": ["queue_full", "credential_expired", "refused"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "envelope.delivery",
+      "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs."
+    },
+    {
+      "name": "dropped_seqs",
+      "type": "ranges",
+      "required": false,
+      "sensitivity": null,
+      "owner": "envelope.delivery",
+      "doc": "On a drop record (C3): the half-open seq ranges [from, to) the client gave up on, at most 64."
+    },
+    {
+      "name": "dropped_source_id",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "envelope.delivery",
+      "doc": "On a drop record (C3): the predecessor source the dropped seqs belong to, when they are not this source's."
+    },
+    {
       "name": "duration_ms",
       "type": "int",
       "required": false,
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "An op's duration, or how long a state lasted."
+    },
+    {
+      "name": "end",
+      "type": "enum",
+      "values": ["closed", "abandoned"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "envelope.delivery",
+      "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (a successor found it dead and reports the last high-water mark it persisted)."
     },
     {
       "name": "end_reason",
@@ -749,6 +882,14 @@
       "sensitivity": null,
       "owner": "envelope.record",
       "doc": "The registry event name. A transition's name is its machine."
+    },
+    {
+      "name": "next_seq",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "envelope.delivery",
+      "doc": "The source's high-water mark on every batch (C3): every seq below it has been assigned."
     },
     {
       "name": "note_kind",
@@ -986,6 +1127,13 @@
       "doc": "The caller cancelled the operation before it finished."
     },
     {
+      "code": "end.time_limit",
+      "outcome": "expected",
+      "area": "end",
+      "test_only": false,
+      "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+    },
+    {
       "code": "selftest.broken",
       "outcome": "error",
       "area": "selftest",
@@ -1215,11 +1363,111 @@
       "doc": "A self-test machine."
     }
   ],
+  "facts": [
+    {
+      "name": "admission.decision",
+      "area": "entry",
+      "kind": "once",
+      "per": "item",
+      "events": [],
+      "doc": "The API's admission decision for a join attempt. Claim: admitted, or the refusal reason."
+    },
+    {
+      "name": "audio.capture",
+      "area": "audio",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [],
+      "doc": "A rollup of a seat's microphone level before WebRTC over exactly its window. Values: rms_max_dbfs."
+    },
+    {
+      "name": "audio.ingress",
+      "area": "audio",
+      "kind": "aggregate",
+      "per": "seat",
+      "events": [],
+      "doc": "A rollup of a seat's audio packets at SFU ingress over exactly its window. Values: packets, voiced."
+    },
+    {
+      "name": "audio.mic_state",
+      "area": "audio",
+      "kind": "state",
+      "per": "seat",
+      "events": [],
+      "doc": "Whether a seat's microphone was muted or unmuted, held over a window. Claim: muted or unmuted."
+    },
+    {
+      "name": "board.camera",
+      "area": "board",
+      "kind": "event",
+      "per": "seat",
+      "events": [],
+      "doc": "One move of a viewer's board camera. Claim: what moved it (user_pan, follow, fit and so on)."
+    },
+    {
+      "name": "end.client_screen",
+      "area": "end",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.call_ended",
+          "source": "client",
+          "claim": "end_reason",
+          "failure_claims": ["connection_lost", "join_failed"],
+          "fields": ["episode_id", "participant_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"]
+        }
+      ],
+      "doc": "The end screen a client chose for its call. Claim: the client's end reason. A failure screen (connection lost, join failed) is a failure some finding must explain."
+    },
+    {
+      "name": "end.episode",
+      "area": "end",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "sync.episode.ended",
+          "source": "sync",
+          "claim": "end_reason",
+          "failure_claims": [],
+          "fields": ["episode_id", "end_reason", "est_server_ms"]
+        }
+      ],
+      "doc": "The Episode's authoritative end. Claim: the end reason."
+    },
+    {
+      "name": "join.leave",
+      "area": "join",
+      "kind": "event",
+      "per": "seat",
+      "events": [],
+      "doc": "A seat's leave request and its outcome. A failed leave is a failure every finding must account for."
+    },
+    {
+      "name": "recording.job_state",
+      "area": "recording",
+      "kind": "once",
+      "per": "item",
+      "events": [],
+      "doc": "The terminal state of a post-call job, read from its Postgres row. Claim: succeeded or the failure state."
+    },
+    {
+      "name": "report.problem",
+      "area": "report",
+      "kind": "event",
+      "per": "any",
+      "events": [],
+      "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+    }
+  ],
   "symptoms": [
     {
       "code": "access.connection_lost",
       "area": "access",
       "slice": 7,
+      "item": "episode",
+      "per": "seat",
       "doc": "The client lost its connection and did not recover within the recovery window.",
       "user_words": ["it keeps saying connection lost"],
       "witnesses": [],
@@ -1231,9 +1479,36 @@
       "fault_scenario": null
     },
     {
+      "code": "admission.unresolved",
+      "area": "entry",
+      "slice": 1,
+      "item": "attempt",
+      "per": "item",
+      "doc": "A join attempt never got an admission decision, so the person waited on a screen that never resolved.",
+      "user_words": ["it just kept loading", "I never got in"],
+      "witnesses": [
+        {
+          "fact": "admission.decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and event == 'decision' and name == 'admission'",
+          "doc": "The decision that admits or refuses the attempt."
+        }
+      ],
+      "rule": "observability/rules/admission.unresolved.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/admission.unresolved/positive.json",
+        "healthy": "observability/fixtures/admission.unresolved/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
       "code": "audio.cant_hear",
       "area": "audio",
       "slice": 3,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant can't hear someone who is speaking.",
       "user_words": ["I can't hear anyone"],
       "witnesses": [],
@@ -1248,9 +1523,36 @@
       "code": "audio.not_heard",
       "area": "audio",
       "slice": 3,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant's microphone is on but others can't hear them.",
       "user_words": ["nobody can hear me"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "audio.mic_state",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "When the seat's microphone was unmuted."
+        },
+        {
+          "fact": "audio.ingress",
+          "from": ["sfu"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "Whether voiced packets reached the SFU while it was unmuted."
+        },
+        {
+          "fact": "audio.capture",
+          "from": ["client"],
+          "required": false,
+          "independent": 1,
+          "query": "r2 flight-recorder/{episode}/{participant} mic_rms {from}..{to}",
+          "doc": "The capture level, which attributes a silent ingress to a client hop."
+        }
+      ],
       "rule": "observability/rules/audio.not_heard.mjs",
       "fixtures": {
         "positive": "observability/fixtures/audio.not_heard/positive.json",
@@ -1262,9 +1564,20 @@
       "code": "board.view_jumped",
       "area": "board",
       "slice": 6,
+      "item": "episode",
+      "per": "seat",
       "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
       "user_words": ["the board keeps jumping"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "board.camera",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "r2 flight-recorder/{episode}/{participant} board_camera {from}..{to}",
+          "doc": "Every camera move, so a burst of automatic moves shows."
+        }
+      ],
       "rule": "observability/rules/board.view_jumped.mjs",
       "fixtures": {
         "positive": "observability/fixtures/board.view_jumped/positive.json",
@@ -1273,25 +1586,54 @@
       "fault_scenario": null
     },
     {
+      "code": "end.time_limit",
+      "area": "end",
+      "slice": 8,
+      "item": "episode",
+      "per": "item",
+      "doc": "The Episode reached its time limit and ended. Expected, and it claims the client failures the end itself caused.",
+      "user_words": ["the call cut off"],
+      "witnesses": [
+        {
+          "fact": "end.episode",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'decision' and name == 'episode.end'",
+          "doc": "The API's end decision and its reason."
+        }
+      ],
+      "rule": "observability/rules/end.time_limit.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/end.time_limit/positive.json",
+        "healthy": "observability/fixtures/end.time_limit/healthy.json"
+      },
+      "fault_scenario": null
+    },
+    {
       "code": "end.wrong_screen",
       "area": "end",
       "slice": 8,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
       "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
       "witnesses": [
         {
-          "id": "server_end",
-          "event": "sync.episode.ended",
-          "fields": ["episode_id", "end_reason", "est_server_ms"],
+          "fact": "end.episode",
+          "from": ["sync"],
           "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
-          "id": "client_end",
-          "event": "client.call_ended",
-          "fields": ["episode_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"],
+          "fact": "end.client_screen",
+          "from": ["client"],
           "required": true,
-          "doc": "The end screen each client chose."
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'call_ended'",
+          "doc": "The end screen the seat's client chose."
         }
       ],
       "rule": "observability/rules/end.wrong_screen.mjs",
@@ -1305,6 +1647,8 @@
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant joined but no media connected, so they neither hear nor are heard.",
       "user_words": ["I joined but nothing works", "stuck on connecting"],
       "witnesses": [],
@@ -1319,6 +1663,8 @@
       "code": "page.crashed",
       "area": "crash",
       "slice": 9,
+      "item": "episode",
+      "per": "seat",
       "doc": "The call page crashed or rendered an error boundary.",
       "user_words": ["the page went blank", "the app crashed"],
       "witnesses": [],
@@ -1333,9 +1679,20 @@
       "code": "recording.not_ready",
       "area": "recording",
       "slice": 10,
+      "item": "job",
+      "per": "item",
       "doc": "An ended Episode's recording never became ready to watch.",
       "user_words": ["the recording isn't there"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "postgres: select state, updated_at from recording_jobs where id = '{job}'",
+          "doc": "Whether and how the job ended."
+        }
+      ],
       "rule": "observability/rules/recording.not_ready.mjs",
       "fixtures": {
         "positive": "observability/fixtures/recording.not_ready/positive.json",
@@ -1347,6 +1704,8 @@
       "code": "rejoin.refused",
       "area": "end",
       "slice": 8,
+      "item": "episode",
+      "per": "seat",
       "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
       "user_words": ["it won't let me back in"],
       "witnesses": [],
@@ -1361,6 +1720,8 @@
       "code": "share.wont_stop",
       "area": "share",
       "slice": 5,
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant stopped sharing but others still see the share.",
       "user_words": ["my screen is still being shared"],
       "witnesses": [],
@@ -1375,6 +1736,8 @@
       "code": "video.frozen",
       "area": "video",
       "slice": 4,
+      "item": "episode",
+      "per": "seat",
       "doc": "A video tile stopped updating while its publisher was still sending.",
       "user_words": ["their video froze"],
       "witnesses": [],
@@ -1392,6 +1755,10 @@
       "slice": 7
     },
     {
+      "code": "admission.unresolved",
+      "slice": 1
+    },
+    {
       "code": "audio.cant_hear",
       "slice": 3
     },
@@ -1402,6 +1769,10 @@
     {
       "code": "board.view_jumped",
       "slice": 6
+    },
+    {
+      "code": "end.time_limit",
+      "slice": 8
     },
     {
       "code": "join.no_media",

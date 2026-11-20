@@ -1,18 +1,37 @@
 // Fault scenario for the symptom end.wrong_screen (observability/registry/areas/end.json).
 // The Episode ends while the client's end notice is lost and its status read is stale, so a media 403 is taken
 // for a revoked credential and the client chooses the connection-lost screen. The test drives the real client,
-// captures the call_ended event it really records, and checks that the rule finds the symptom in it.
+// captures the call_ended event it really records, puts it in the fixture in place of the row it stands for, and judges the
+// fixture the way diagnose does (scripts/diagnose-call/proof/rows.mjs), with the rule from observability/rules.
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { evaluate, symptom } from "../../../../../observability/rules/end.wrong_screen.mjs";
+import { symptom } from "../../../../../observability/rules/end.wrong_screen.mjs";
+import { CATALOGUE } from "../../../../../scripts/diagnose-call/proof/catalogue.mjs";
+import { judgeFixture, ruleResult } from "../../../../../scripts/diagnose-call/proof/rows.mjs";
 import { CloudflareSFUError } from "../media";
 import { legacyEventName } from "../obs/legacy.ts";
 import type { ConnectionDependencies, ConnectionMediaFactoryInput } from "./dependencies";
 import { joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "../space-client/terminal.test.helpers";
 
 type Row = { readonly event: string; readonly [field: string]: unknown };
+type Fixture = Parameters<typeof judgeFixture>[0] & { readonly rows: Row[] };
 
-const fixture = (name: "positive" | "healthy"): readonly Row[] => JSON.parse(readFileSync(new URL(`../../../../../observability/fixtures/end.wrong_screen/${name}.json`, import.meta.url), "utf8")).rows;
+const fixture = (name: "positive" | "healthy"): Fixture => JSON.parse(readFileSync(new URL(`../../../../../observability/fixtures/end.wrong_screen/${name}.json`, import.meta.url), "utf8"));
+
+const judged = (input: Fixture) => {
+  const { verdict, dropped } = judgeFixture(input, CATALOGUE, symptom);
+  expect(dropped).toEqual([]);
+  return { verdict, ...ruleResult(verdict, symptom) };
+};
+
+// The fixture with its client row that ended like the draft replaced by the row the client really recorded.
+function withRecorded(name: "positive" | "healthy", draft: { readonly type: string; readonly end_reason?: string } | undefined): Fixture {
+  const input = fixture(name);
+  const index = input.rows.findIndex((row) => row.event === "client.call_ended" && row.end_reason === draft?.end_reason);
+  const like = input.rows[index];
+  if (!draft || !like) throw new Error(`the ${name} fixture has no client row ending with ${draft?.end_reason}`);
+  return { ...input, rows: input.rows.map((row, at) => (at === index ? clientRow(draft, like) : row)) };
+}
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -47,8 +66,6 @@ function clientRow(draft: { readonly type: string; readonly end_reason?: string 
   return { ...like, event, end_reason: draft.end_reason };
 }
 
-const evidence = (rows: readonly Row[]) => ({ server_end: rows.filter((row) => row.event === "sync.episode.ended"), client_end: rows.filter((row) => row.event === "client.call_ended") });
-
 describe(symptom, () => {
   it("positive: a stale active status and a lost end notice make the client show connection lost", async () => {
     const test = scenario("active");
@@ -58,13 +75,9 @@ describe(symptom, () => {
       await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("failed"));
       const [draft, ...extra] = test.callEnded();
       expect(extra).toEqual([]);
-      const rows = fixture("positive");
-      const [server] = evidence(rows).server_end;
-      const like = evidence(rows).client_end.find((row) => row.end_reason === draft?.end_reason);
-      if (!draft || !server || !like) throw new Error(`the positive fixture has no client row ending with ${draft?.end_reason}`);
-      const hits = evaluate({ server_end: [server], client_end: [clientRow(draft, like)] });
-      expect(hits).toHaveLength(1);
-      expect(hits[0]).toMatchObject({ symptom, client_end_reason: "connection_lost", server_end_reason: "maximum_duration" });
+      const { verdict, findings } = judged(withRecorded("positive", draft));
+      expect(findings).toBe(1);
+      expect(verdict.findings.find((finding) => finding.code === symptom)).toMatchObject({ outcome: "broken", hop: "client_end", module: "sdk.connection", observed: "the Episode ended (maximum_duration) and the client showed connection_lost" });
     } finally {
       test.client.dispose();
     }
@@ -77,18 +90,14 @@ describe(symptom, () => {
       test.revokeMedia();
       await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
       const [draft] = test.callEnded();
-      const rows = fixture("healthy");
-      const [server] = evidence(rows).server_end;
-      const like = evidence(rows).client_end.find((row) => row.end_reason === draft?.end_reason);
-      if (!draft || !server || !like) throw new Error(`the healthy fixture has no client row ending with ${draft?.end_reason}`);
-      expect(evaluate({ server_end: [server], client_end: [clientRow(draft, like)] })).toEqual([]);
+      expect(judged(withRecorded("healthy", draft))).toMatchObject({ findings: 0, checked: 2, eligible: 2 });
     } finally {
       test.client.dispose();
     }
   });
 
   it("the fixtures agree with the rule", () => {
-    expect(evaluate(evidence(fixture("positive")))).toHaveLength(1);
-    expect(evaluate(evidence(fixture("healthy")))).toEqual([]);
+    expect(judged(fixture("positive")).findings).toBe(1);
+    expect(judged(fixture("healthy"))).toMatchObject({ findings: 0, checked: 2, eligible: 2 });
   });
 });

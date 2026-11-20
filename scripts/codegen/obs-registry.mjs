@@ -17,12 +17,14 @@ const GO_TARGETS = ["apps/api/internal/obs", "features/media/sfu/internal/obs"];
 const TS_REGISTRY = "sdks/typescript/client/src/obs/registry.ts";
 const EX_REGISTRY = "apps/sync/lib/chalk_sync/obs/registry.ex";
 
-const FIELD_TYPES = new Set(["string", "int", "number", "bool", "enum", "id", "map"]);
+const FIELD_TYPES = new Set(["string", "int", "number", "bool", "enum", "id", "map", "ranges"]);
+const FACT_KINDS = new Set(["once", "state", "aggregate", "event"]);
+const FACT_PERS = new Set(["seat", "item", "any"]);
 const SIDES = new Set(["client", "server", "any"]);
 const BANNED_UNIT_SUFFIXES = ["_s", "_sec", "_secs", "_seconds", "_millis", "_us", "_kb", "_mb", "_kbps", "_mbps", "_percent"];
 const NAME = /^[a-z][a-z0-9_]*$/;
 const DOTTED = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
-const AXIOM_TYPES = { string: "string", int: "integer", number: "float", bool: "boolean", enum: "string", id: "string", map: "map" };
+const AXIOM_TYPES = { string: "string", int: "integer", number: "float", bool: "boolean", enum: "string", id: "string", map: "map", ranges: "array" };
 
 export async function loadRegistry(root = repositoryRoot) {
   const read = async (path) => JSON.parse(await readFile(join(root, path), "utf8"));
@@ -56,6 +58,9 @@ export function buildModel(source) {
       "core.surface_states": core.surface_states,
     },
     idKinds: new Map(ids.kinds.map((entry) => [entry.kind, entry])),
+    items: core.items.map((entry) => entry.item),
+    sources: core.sources.map((entry) => entry.source),
+    facts: new Map(),
     fail: (where, message) => errors.push(`${where}: ${message}`),
     fields: new Map(),
     reasons: new Map(core.reserved_reasons.map((entry) => [entry.code, { code: entry.code, outcome: entry.outcome, area: "core", test_only: false, doc: entry.doc }])),
@@ -85,6 +90,9 @@ export function buildModel(source) {
     clock_states: ctx.enumSources["core.clock_states"],
     clock: { drift_ppm: core.clock.drift_ppm, jump_ms: core.clock.jump_ms },
     sensitivity_levels: core.sensitivity_levels,
+    items: ctx.items,
+    sources: core.sources.map(({ source, per_seat }) => ({ source, per_seat })),
+    fault_components: { components: core.fault_components.components, standalone: core.fault_components.standalone },
     id_kinds: ids.kinds.map(({ kind, prefix, field, canonical, scope, companions, legacy_hash_field }) => ({ kind, prefix, field, canonical, scope: scope ?? null, companions: companions ?? [], legacy_hash_field: legacy_hash_field ?? null })),
     session_meanings: ids.session_meanings.map(({ meaning, kind, lookup }) => ({ meaning, kind, lookup })),
     diagnostic_code: { prefix: ids.diagnostic_code.prefix, length: ids.diagnostic_code.length, alphabet: ids.diagnostic_code.alphabet, source_kind: ids.diagnostic_code.source_kind },
@@ -94,6 +102,7 @@ export function buildModel(source) {
     reasons: sorted(ctx.reasons),
     events: sorted(ctx.events),
     machines: sorted(ctx.machines),
+    facts: sorted(ctx.facts),
     symptoms: sorted(ctx.symptoms),
     incomplete: allowlist.incomplete.map(({ code, slice }) => ({ code, slice })).sort((a, b) => a.code.localeCompare(b.code)),
   };
@@ -167,6 +176,7 @@ const AREA_PARTS = [
   ["reasons", addReason],
   ["machines", addMachine],
   ["events", addEvent],
+  ["facts", addFact],
   ["symptoms", addSymptom],
 ];
 
@@ -282,37 +292,71 @@ function addEvent(scope, declared) {
   });
 }
 
+// A fact is what a witness claims (scripts/diagnose-call/proof/facts.mjs explains the kinds). Each of its events says which
+// source delivers it, which field carries the claim, and which claims are failures some finding must explain.
+const FACT_CHECKS = [
+  [(fact) => isDotted(fact.name), () => "fact name must be dotted snake_case"],
+  [(fact, { owns }) => !isDotted(fact.name) || owns(fact.name), (fact, { area }) => `fact ${fact.name} must start with one of this area's prefixes (${area.prefixes.join(", ")})`],
+  [(fact, { facts }) => !facts.has(fact.name), (fact, { facts }) => `fact ${fact.name} is already declared by areas/${facts.get(fact.name)?.area}.json`],
+  [(fact) => FACT_KINDS.has(fact.kind), (fact) => `fact ${fact.name} kind must be one of ${[...FACT_KINDS].join(", ")}`],
+  [(fact) => FACT_PERS.has(fact.per), (fact) => `fact ${fact.name} per must be one of ${[...FACT_PERS].join(", ")}`],
+  [hasDoc, (fact) => `fact ${fact.name} needs a doc`],
+];
+const FACT_EVENT_CHECKS = [
+  [(entry, { sources }) => sources.includes(entry.source), (entry, { sources }) => `event ${entry.event} source must be one of ${sources.join(", ")}`],
+  [(entry) => NAME.test(entry.claim ?? ""), (entry) => `event ${entry.event} needs the claim field's name`],
+  [(entry) => Array.isArray(entry.fields) && entry.fields.includes(entry.claim), (entry) => `event ${entry.event} fields must list the fields a fixture row carries, including the claim`],
+  [(entry) => entry.failure_claims === undefined || allNames(entry.failure_claims), (entry) => `event ${entry.event} failure_claims must be snake_case claims`],
+];
+
+function addFact(scope, declared) {
+  const fact = { events: [], ...declared };
+  const where = `${scope.where} fact ${fact.name}`;
+  report(scope.fail, where, [...problemsOf(FACT_CHECKS, fact, scope), ...fact.events.flatMap((entry) => problemsOf(FACT_EVENT_CHECKS, entry, scope))]);
+  const events = fact.events.map(({ event, source, claim, failure_claims, fields }) => ({ event, source, claim, failure_claims: failure_claims ?? [], fields: fields ?? [] }));
+  scope.facts.set(fact.name, { name: fact.name, area: scope.area.area, kind: fact.kind, per: fact.per, events, doc: fact.doc });
+}
+
 const SYMPTOM_CHECKS = [
   [(symptom) => SYMPTOM_CODE.test(symptom.code ?? ""), () => "symptom code must be <prefix>.<snake_case>"],
   [(symptom, { owns }) => !SYMPTOM_CODE.test(symptom.code ?? "") || owns(symptom.code), (symptom, { area }) => `symptom code must start with one of this area's prefixes (${area.prefixes.join(", ")})`],
   [(symptom, { symptoms }) => !symptoms.has(symptom.code), () => "symptom is declared twice"],
+  [(symptom, { items }) => items.includes(symptom.item), (symptom, { items }) => `item must be one of ${items.join(", ")}, not ${JSON.stringify(symptom.item)}`],
+  [(symptom) => symptom.per === "item" || symptom.per === "seat", () => "per must be item or seat"],
+  [(symptom) => symptom.per !== "seat" || symptom.item === "episode", () => "a per-seat symptom belongs to an Episode"],
   [hasDoc, () => "symptom needs a doc"],
 ];
 
 const WITNESS_CHECKS = [
-  [(witness, { seen }) => NAME.test(witness.id ?? "") && !seen.has(witness.id), (witness) => `witness id ${JSON.stringify(witness.id)} must be unique snake_case`],
-  [(witness) => typeof witness.required === "boolean", (witness) => `witness ${witness.id} must say whether it is required`],
+  [(witness, { seen }) => isDotted(witness.fact) && !seen.has(witness.fact), (witness) => `witness fact ${JSON.stringify(witness.fact)} must be a dotted fact name, once per symptom`],
+  [(witness, { sources }) => isNonEmptyList(witness.from) && witness.from.every((source) => sources.includes(source)), (witness, { sources }) => `witness ${witness.fact} from must list sources out of ${sources.join(", ")}`],
+  [(witness) => typeof witness.required === "boolean", (witness) => `witness ${witness.fact} must say whether it is required`],
+  [(witness) => witness.independent === undefined || (Number.isInteger(witness.independent) && witness.independent >= 1), (witness) => `witness ${witness.fact} independent must be a positive integer`],
+  [(witness) => typeof witness.query === "string" && witness.query.length > 0, (witness) => `witness ${witness.fact} needs the proof query a reader reruns`],
+  [hasDoc, (witness) => `witness ${witness.fact} needs a doc`],
 ];
 
-function witnessProblems(witnesses) {
+function witnessProblems(witnesses, sources) {
   const seen = new Set();
   return witnesses.flatMap((witness) => {
-    const problems = problemsOf(WITNESS_CHECKS, witness, { seen });
-    seen.add(witness.id);
+    const problems = problemsOf(WITNESS_CHECKS, witness, { seen, sources });
+    seen.add(witness.fact);
     return problems;
   });
 }
 
-const witnessRecord = ({ id, event, fields, required, doc }) => ({ id, event, fields: fields ?? [], required, doc: doc ?? "" });
+const witnessRecord = ({ fact, from, required, independent, query, doc }) => ({ fact, from, required, independent: independent ?? 1, query, doc });
 
 function addSymptom(scope, declared) {
   const symptom = { user_words: [], witnesses: [], fault_scenario: null, ...declared };
   const { code } = symptom;
-  report(scope.fail, `${scope.where} symptom ${code}`, [...problemsOf(SYMPTOM_CHECKS, symptom, scope), ...witnessProblems(symptom.witnesses)]);
+  report(scope.fail, `${scope.where} symptom ${code}`, [...problemsOf(SYMPTOM_CHECKS, symptom, scope), ...witnessProblems(symptom.witnesses, scope.sources)]);
   scope.symptoms.set(code, {
     code,
     area: scope.area.area,
     slice: scope.area.slice,
+    item: symptom.item,
+    per: symptom.per,
     doc: symptom.doc,
     user_words: symptom.user_words,
     witnesses: symptom.witnesses.map(witnessRecord),
@@ -324,21 +368,29 @@ function addSymptom(scope, declared) {
 
 const isEnvelopeField = (fields, name) => fields.get(name)?.owner.startsWith("envelope.") === true;
 
-function witnessReferenceProblems({ events, fields }, witness) {
-  const event = events.get(witness.event);
-  if (!event) return [`witness ${witness.id} names unknown event ${witness.event}`];
-  const stray = witness.fields.filter((name) => !(name in event.fields) && !isEnvelopeField(fields, name));
-  return stray.map((name) => `witness ${witness.id} field ${name} is neither on ${event.name} nor in the envelope`);
+function factEventProblems({ events, fields }, fact) {
+  return fact.events.flatMap((entry) => {
+    const event = events.get(entry.event);
+    if (!event) return [`fact ${fact.name} names unknown event ${entry.event}`];
+    const stray = entry.fields.filter((name) => !(name in event.fields) && !isEnvelopeField(fields, name));
+    const failures = entry.failure_claims.filter((claim) => !(event.fields[entry.claim]?.values ?? fields.get(entry.claim)?.values ?? [claim]).includes(claim));
+    return [...stray.map((name) => `fact ${fact.name} field ${name} is neither on ${event.name} nor in the envelope`), ...failures.map((claim) => `fact ${fact.name} failure claim ${claim} is not a value of ${event.name}.${entry.claim}`)];
+  });
 }
 
 // Witnesses, name clashes and the allow-list can only be checked once every area is known.
 function checkCrossReferences(ctx, allowlist) {
-  for (const symptom of ctx.symptoms.values())
+  for (const fact of ctx.facts.values()) report(ctx.fail, `fact ${fact.name}`, factEventProblems(ctx, fact));
+  for (const symptom of ctx.symptoms.values()) {
+    const unknown = symptom.witnesses.filter((witness) => !ctx.facts.has(witness.fact));
     report(
       ctx.fail,
       `symptom ${symptom.code}`,
-      symptom.witnesses.flatMap((witness) => witnessReferenceProblems(ctx, witness)),
+      unknown.map((witness) => `witness names unknown fact ${witness.fact}; declare it under an area's facts`),
     );
+  }
+  const fault = ctx.core.fault_components;
+  for (const name of [...fault.components, ...fault.standalone].filter((component) => ctx.prefixOwners.has(component))) ctx.fail("core.json fault_components", `${name} is also a symptom prefix of ${ctx.prefixOwners.get(name)}, so a module ${name}.x would read as a symptom code`);
   const clashes = [...ctx.machines.keys()].filter((name) => ctx.events.has(name));
   for (const name of clashes) ctx.fail(`machine ${name}`, "a machine and an event share this name");
   const unknown = allowlist.incomplete.filter((entry) => !ctx.symptoms.has(entry.code));
@@ -373,6 +425,8 @@ function eventLinks(model, name) {
   return { name, fields: Object.keys(event.fields), emit_sites: event.emit_sites };
 }
 
+const factOf = (model, name) => model.facts.find((fact) => fact.name === name) ?? { events: [] };
+
 function emitJson(model, axiom) {
   const live = (list) => list.filter((entry) => !entry.test_only);
   const coverage = {
@@ -383,8 +437,10 @@ function emitJson(model, axiom) {
       area: symptom.area,
       slice: symptom.slice,
       allowlisted: model.incomplete.some((entry) => entry.code === symptom.code),
-      witnesses: symptom.witnesses.map(({ id, event, fields, required }) => ({ id, event, fields, required })),
-      events: [...new Set(symptom.witnesses.map((witness) => witness.event))].map((name) => eventLinks(model, name)),
+      item: symptom.item,
+      per: symptom.per,
+      witnesses: symptom.witnesses.map(({ fact, from, required }) => ({ fact, from, required, events: factOf(model, fact).events.map(({ event, source, fields }) => ({ event, source, fields })) })),
+      events: [...new Set(symptom.witnesses.flatMap((witness) => factOf(model, witness.fact).events.map((entry) => entry.event)))].map((name) => eventLinks(model, name)),
       rule: symptom.rule,
       fixtures: symptom.fixtures,
       fault_scenario: symptom.fault_scenario,
@@ -393,13 +449,15 @@ function emitJson(model, axiom) {
   const cli = {
     doc: "Generated: the tables the diagnosis CLI prints and resolves against.",
     schema_ver: model.schema_ver,
-    symptoms: live(model.symptoms).map(({ code, area, slice, doc, user_words, witnesses, rule }) => ({
+    symptoms: live(model.symptoms).map(({ code, area, slice, item, per, doc, user_words, witnesses, rule }) => ({
       code,
       area,
       slice,
+      item,
+      per,
       doc,
       user_words,
-      witnesses: witnesses.map(({ id, event, required }) => ({ id, event, required })),
+      witnesses: witnesses.map(({ fact, from, required }) => ({ fact, from, required })),
       rule,
       status: model.incomplete.some((entry) => entry.code === code) ? "incomplete" : "complete",
     })),
@@ -422,7 +480,7 @@ const groupOf = (field) => (field.owner.startsWith("envelope.") ? field.owner.sl
 const tsString = (value) => JSON.stringify(value);
 const tsUnion = (values) => (values.length === 0 ? "never" : values.map(tsString).join(" | "));
 
-const TS_TYPES = { string: "string", id: "string", int: "number", number: "number", bool: "boolean", map: "FlagMap" };
+const TS_TYPES = { string: "string", id: "string", int: "number", number: "number", bool: "boolean", map: "FlagMap", ranges: "readonly { readonly from: number; readonly to: number }[]" };
 const tsFieldType = (field, values) => (field.type === "enum" ? tsUnion(values ?? field.values) : TS_TYPES[field.type]);
 const TS_LISTS = [
   ["MODULES", "modules"],

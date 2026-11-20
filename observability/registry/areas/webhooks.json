@@ -2,7 +2,7 @@
   "area": "webhooks",
   "slice": 12,
   "title": "Webhooks and tenant integration",
-  "prefixes": ["webhook"],
+  "prefixes": ["webhook", "integration"],
   "fields": [],
   "events": [],
   "reasons": [],

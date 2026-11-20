@@ -1,4 +1,4 @@
-evidence f_98d4 audio.no_voice_detected pt_4c1e(Haris) of=ep_9feb outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=b992ec71
+evidence f_5b55 audio.not_heard pt_4c1e(Haris) of=ep_9feb outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=e679be28
 anchor=2026-11-18T09:45Z local=14:45+05:00
 expected: while the microphone is unmuted for 5 s or more, voiced audio packets reach SFU ingress
 observed: unmuted, 10480 packets and 0 voiced at SFU ingress +07:10..+10:40
@@ -9,7 +9,7 @@ witness: ev_a1f3 audio.ingress sfu origin=measured:sfu claim=silent +07:10..+10:
 row: axiom chalk-logs | where event_id == 'a1f3e0c2-5b6d-4e7f-8a9b-0c1d2e3f4a5b'
 witness: ev_c9d0 audio.mic_state client origin=measured:client:4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c claim=unmuted +07:10..+10:40
 row: axiom chalk-logs | where event_id == 'c9d0b1a2-3c4d-4e5f-9a6b-7c8d9e0f1a2b'
-watermark: client pt_4c1e(Haris) complete_to=+60:10 evidence_gaps=0 build="client 3.1.0"
+watermark: client pt_4c1e(Haris) complete_to=+62:10 evidence_gaps=0 build="client 3.1.0"
 watermark: sfu all complete_to=+915:00 evidence_gaps=0 build="sfu 2026.11.12"
 query: audio.mic_state: axiom chalk-logs | where episode_id == '9feb0ff6-3c1a-4e7b-9a52-0d4c8e1f2a77' and participant_id == '4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c' and event == 'sdk.mic_state' | where _time between (datetime(2026-11-18T09:45:00.000Z) .. datetime(2026-11-18T10:45:00.000Z))
 query: audio.ingress: axiom chalk-logs | where episode_id == '9feb0ff6-3c1a-4e7b-9a52-0d4c8e1f2a77' and participant_id == '4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime(2026-11-18T09:45:00.000Z) .. datetime(2026-11-18T10:45:00.000Z))

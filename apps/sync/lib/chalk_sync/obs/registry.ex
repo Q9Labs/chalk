@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "55748406f5e1"
+  @schema_ver "43d2a1352a2d"
 
   @events %{
     "client.call_ended" => %{
@@ -203,11 +203,35 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "drop_reason" => %{
+      "type" => "enum",
+      "group" => "delivery",
+      "required" => false,
+      "values" => ["queue_full", "credential_expired", "refused"]
+    },
+    "dropped_seqs" => %{
+      "type" => "ranges",
+      "group" => "delivery",
+      "required" => false,
+      "values" => nil
+    },
+    "dropped_source_id" => %{
+      "type" => "string",
+      "group" => "delivery",
+      "required" => false,
+      "values" => nil
+    },
     "duration_ms" => %{
       "type" => "int",
       "group" => "record",
       "required" => false,
       "values" => nil
+    },
+    "end" => %{
+      "type" => "enum",
+      "group" => "delivery",
+      "required" => false,
+      "values" => ["closed", "abandoned"]
     },
     "end_reason" => %{
       "type" => "enum",
@@ -315,6 +339,12 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "string",
       "group" => "record",
       "required" => true,
+      "values" => nil
+    },
+    "next_seq" => %{
+      "type" => "int",
+      "group" => "delivery",
+      "required" => false,
       "values" => nil
     },
     "note_kind" => %{
@@ -519,6 +549,7 @@ defmodule ChalkSync.Obs.Registry do
 
   @reasons %{
     "cancelled" => "expected",
+    "end.time_limit" => "expected",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
     "unclassified" => "error"
@@ -690,6 +721,34 @@ defmodule ChalkSync.Obs.Registry do
       "kind" => "finding",
       "prefix" => "f",
       "field" => "finding_id",
+      "canonical" => "uuid",
+      "legacy_hash_field" => nil
+    },
+    %{
+      "kind" => "flags",
+      "prefix" => "fl",
+      "field" => "flags_hash",
+      "canonical" => "hex16",
+      "legacy_hash_field" => nil
+    },
+    %{
+      "kind" => "diagnostic_upload",
+      "prefix" => "dg",
+      "field" => "diagnostic_upload_id",
+      "canonical" => "uuid",
+      "legacy_hash_field" => nil
+    },
+    %{
+      "kind" => "api_key",
+      "prefix" => "ak",
+      "field" => "api_key_id",
+      "canonical" => "uuid",
+      "legacy_hash_field" => nil
+    },
+    %{
+      "kind" => "webhook_endpoint",
+      "prefix" => "wh",
+      "field" => "webhook_endpoint_id",
       "canonical" => "uuid",
       "legacy_hash_field" => nil
     }

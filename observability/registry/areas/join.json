@@ -2,7 +2,7 @@
   "area": "join",
   "slice": 2,
   "title": "Join and media connection, including listen-only",
-  "prefixes": ["join", "media", "client"],
+  "prefixes": ["join", "media"],
   "fields": [],
   "events": [],
   "reasons": [],
@@ -31,9 +31,20 @@
       "triggers": ["join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"]
     }
   ],
+  "facts": [
+    {
+      "name": "join.leave",
+      "kind": "event",
+      "per": "seat",
+      "events": [],
+      "doc": "A seat's leave request and its outcome. A failed leave is a failure every finding must account for."
+    }
+  ],
   "symptoms": [
     {
       "code": "join.no_media",
+      "item": "episode",
+      "per": "seat",
       "doc": "The Participant joined but no media connected, so they neither hear nor are heard.",
       "user_words": ["I joined but nothing works", "stuck on connecting"],
       "witnesses": [],

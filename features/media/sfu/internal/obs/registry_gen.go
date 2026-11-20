@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "55748406f5e1"
+const SchemaVer = "43d2a1352a2d"
 
 // Event names.
 const (
@@ -27,6 +27,7 @@ const (
 // Reason codes.
 const (
 	ReasonCancelled      = "cancelled"
+	ReasonEndTimeLimit   = "end.time_limit"
 	ReasonSelftestBroken = "selftest.broken"
 	ReasonSelftestBusy   = "selftest.busy"
 	ReasonUnclassified   = "unclassified"
@@ -51,7 +52,11 @@ const (
 	FieldDecisionID         = "decision_id"
 	FieldDeviceEphemeral    = "device_ephemeral"
 	FieldDeviceID           = "device_id"
+	FieldDropReason         = "drop_reason"
+	FieldDroppedSeqs        = "dropped_seqs"
+	FieldDroppedSourceID    = "dropped_source_id"
 	FieldDurationMs         = "duration_ms"
+	FieldEnd                = "end"
 	FieldEndReason          = "end_reason"
 	FieldEnv                = "env"
 	FieldEpisodeID          = "episode_id"
@@ -70,6 +75,7 @@ const (
 	FieldMediaConnectionID  = "media_connection_id"
 	FieldModule             = "module"
 	FieldName               = "name"
+	FieldNextSeq            = "next_seq"
 	FieldNoteKind           = "note_kind"
 	FieldOpID               = "op_id"
 	FieldOutcome            = "outcome"
@@ -116,7 +122,11 @@ var registryFields = map[string]fieldSpec{
 	"decision_id":          {typ: "id", group: "record", required: false},
 	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
 	"device_id":            {typ: "id", group: "trail", required: false},
+	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
+	"dropped_source_id":    {typ: "string", group: "delivery", required: false},
 	"duration_ms":          {typ: "int", group: "record", required: false},
+	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
 	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
 	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
 	"episode_id":           {typ: "id", group: "trail", required: false},
@@ -135,6 +145,7 @@ var registryFields = map[string]fieldSpec{
 	"media_connection_id":  {typ: "id", group: "trail", required: false},
 	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
 	"name":                 {typ: "string", group: "record", required: true},
+	"next_seq":             {typ: "int", group: "delivery", required: false},
 	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
 	"op_id":                {typ: "id", group: "record", required: false},
 	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
@@ -182,6 +193,7 @@ var registryMachines = map[string]machineSpec{
 
 var registryReasons = map[string]string{
 	"cancelled":       "expected",
+	"end.time_limit":  "expected",
 	"selftest.broken": "error",
 	"selftest.busy":   "expected",
 	"unclassified":    "error",
@@ -212,6 +224,10 @@ var registryIDKinds = []idKind{
 	{kind: "event", prefix: "ev", field: "event_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "batch", prefix: "bt", field: "batch_id", canonical: "uuid", legacyHashField: ""},
 	{kind: "finding", prefix: "f", field: "finding_id", canonical: "uuid", legacyHashField: ""},
+	{kind: "flags", prefix: "fl", field: "flags_hash", canonical: "hex16", legacyHashField: ""},
+	{kind: "diagnostic_upload", prefix: "dg", field: "diagnostic_upload_id", canonical: "uuid", legacyHashField: ""},
+	{kind: "api_key", prefix: "ak", field: "api_key_id", canonical: "uuid", legacyHashField: ""},
+	{kind: "webhook_endpoint", prefix: "wh", field: "webhook_endpoint_id", canonical: "uuid", legacyHashField: ""},
 }
 
 var registrySessionMeanings = []sessionMeaning{

@@ -42,6 +42,26 @@
       "kind": "user",
       "id": "has space",
       "error": true
+    },
+    {
+      "kind": "flags",
+      "id": "9F3A00C1D2E4B5A6",
+      "expect": "fl_9f3a00c1d2e4b5a6"
+    },
+    {
+      "kind": "diagnostic_upload",
+      "id": "3f9a1c2e-0000-4000-8000-00000000a001",
+      "expect": "dg_3f9a1c2e00004000800000000000a001"
+    },
+    {
+      "kind": "api_key",
+      "id": "11111111-2222-4333-8444-555555555555",
+      "expect": "ak_11111111222243338444555555555555"
+    },
+    {
+      "kind": "webhook_endpoint",
+      "id": "66666666-7777-4888-9999-aaaaaaaaaaaa",
+      "expect": "wh_66666666777748889999aaaaaaaaaaaa"
     }
   ],
   "parse": [
@@ -350,6 +370,22 @@
     {
       "text": "usr_",
       "error": "bad_value"
+    },
+    {
+      "text": "dg_3f9a1c2e00004000800000000000a001",
+      "expect": {
+        "form": "full",
+        "kind": "diagnostic_upload",
+        "id": "3f9a1c2e-0000-4000-8000-00000000a001"
+      }
+    },
+    {
+      "text": "fl_9f3a00c1d2e4b5a6",
+      "expect": {
+        "form": "full",
+        "kind": "flags",
+        "id": "9f3a00c1d2e4b5a6"
+      }
     }
   ],
   "resolve": [

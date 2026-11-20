@@ -5,6 +5,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestMemoryLedgerWritesTheSinkBeforeItCommitsAndRetriesWriteAgain(t *testing.T) {
@@ -49,11 +51,12 @@ func TestMemoryLedgerLeavesRowsAloneWhenTheSinkFails(t *testing.T) {
 }
 
 func TestMemoryLedgerKeepsRowsPerParticipantAndReadsThemBack(t *testing.T) {
-	ledger := &MemoryLedger{}
 	noSink := func(context.Context, Admission) error { return nil }
 	first := identity(t)
 	second := first
-	second.ParticipantID = id(t, "44444444-4444-4444-8444-444444444444")
+	second.ParticipantID = id(t, participantSecond)
+	// The second participant is the same User rejoined, so it may write to the source.
+	ledger := &MemoryLedger{Identities: map[utilities.ID]utilities.ID{first.ParticipantID: id(t, identityUser), second.ParticipantID: id(t, identityUser)}}
 
 	// The same seqs under another participant are new, not duplicates: a credential cannot mark
 	// another participant's seqs as stored.

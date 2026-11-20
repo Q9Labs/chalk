@@ -8,7 +8,18 @@
         { "name": "event_id", "type": "id", "id_kind": "event", "required": true, "sensitivity": null, "doc": "One record. Minted by the kernel when the record is made." },
         { "name": "seq", "type": "int", "required": true, "sensitivity": null, "doc": "The record's position in its source's stream, starting at 1." },
         { "name": "batch_id", "type": "id", "id_kind": "batch", "required": false, "sensitivity": null, "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel." },
-        { "name": "source_id", "type": "string", "required": true, "sensitivity": null, "doc": "The stream that owns seq. A client uses its client session id; a server uses its instance id." }
+        { "name": "source_id", "type": "string", "required": true, "sensitivity": null, "doc": "The stream that owns seq. A client uses its client session id; a server uses its instance id." },
+        { "name": "next_seq", "type": "int", "sensitivity": null, "doc": "The source's high-water mark on every batch (C3): every seq below it has been assigned." },
+        {
+          "name": "end",
+          "type": "enum",
+          "sensitivity": null,
+          "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (a successor found it dead and reports the last high-water mark it persisted).",
+          "values": ["closed", "abandoned"]
+        },
+        { "name": "dropped_seqs", "type": "ranges", "sensitivity": null, "doc": "On a drop record (C3): the half-open seq ranges [from, to) the client gave up on, at most 64." },
+        { "name": "drop_reason", "type": "enum", "values": ["queue_full", "credential_expired", "refused"], "sensitivity": null, "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs." },
+        { "name": "dropped_source_id", "type": "string", "sensitivity": null, "doc": "On a drop record (C3): the predecessor source the dropped seqs belong to, when they are not this source's." }
       ]
     },
     {

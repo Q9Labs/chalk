@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
@@ -49,6 +51,7 @@ func newTelemetryProof(t *testing.T) telemetryProof {
 	identity := telemetrydelivery.Identity{TenantID: accountTenantIntegrationID(t), EpisodeID: accountTenantIntegrationID(t), ParticipantID: accountTenantIntegrationID(t)}
 	t.Cleanup(func() {
 		mustExec(t, pool, `delete from telemetry_sources where tenant_id = $1`, uuid(identity.TenantID))
+		mustExec(t, pool, `delete from telemetry_source_bindings where tenant_id = $1`, uuid(identity.TenantID))
 	})
 	return telemetryProof{t: t, pool: pool, ledger: NewTelemetryLedger(pool), identity: identity}
 }
@@ -211,13 +214,11 @@ func TestTelemetryLedgerRowLockMakesConcurrentRetriesDuplicates(t *testing.T) {
 	}
 }
 
-// A reload is a new source, so its seq 0 is new; and another participant's copy of a source never
-// dedupes against this participant's.
-func TestTelemetryLedgerKeysRowsBySourceAndParticipant(t *testing.T) {
+// A reload is a new source, so its seq 0 is new.
+func TestTelemetryLedgerKeysRowsBySource(t *testing.T) {
 	proof := newTelemetryProof(t)
 	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
-	one := telemetryBatch(t, proofSource, 1, "", telemetryEvent(0))
-	if _, err := proof.admit(one, noSink); err != nil {
+	if _, err := proof.admit(telemetryBatch(t, proofSource, 1, "", telemetryEvent(0)), noSink); err != nil {
 		t.Fatal(err)
 	}
 	reloaded := telemetryBatch(t, proofPredecessor, 1, "", telemetryEvent(0))
@@ -225,15 +226,213 @@ func TestTelemetryLedgerKeysRowsBySourceAndParticipant(t *testing.T) {
 	if err != nil || admission.Duplicates != 0 || len(admission.New) != 1 {
 		t.Fatalf("a new source's seq 0: duplicates = %d, new = %d, err = %v, want it stored", admission.Duplicates, len(admission.New), err)
 	}
+}
 
-	other := proof
-	other.identity.ParticipantID = accountTenantIntegrationID(t)
-	admission, err = other.admit(one, noSink)
+type telemetryBinding struct {
+	participant utilities.ID
+	identity    utilities.ID
+	boundAt     time.Time
+}
+
+func (p telemetryProof) bindings() map[string]telemetryBinding {
+	p.t.Helper()
+	rows, err := p.ledger.db.Query(p.t.Context(), `select source_id, participant_id, identity_id, bound_at from telemetry_source_bindings where tenant_id = $1`, uuid(p.identity.TenantID))
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	defer rows.Close()
+	bound := map[string]telemetryBinding{}
+	for rows.Next() {
+		var source, participant, identity pgtype.UUID
+		var boundAt pgtype.Timestamptz
+		if err := rows.Scan(&source, &participant, &identity, &boundAt); err != nil {
+			p.t.Fatal(err)
+		}
+		bound[nullableID(source).String()] = telemetryBinding{nullableID(participant), nullableID(identity), boundAt.Time}
+	}
+	if err := rows.Err(); err != nil {
+		p.t.Fatal(err)
+	}
+	return bound
+}
+
+// A batch binds its own source and every predecessor it names to its participant, as a guest when
+// the participant has no row.
+func TestTelemetryLedgerBindsEverySourceABatchTouches(t *testing.T) {
+	proof := newTelemetryProof(t)
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":4,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":10}],"dropped_source_id":%q}`, 0, proofPredecessor)
+	received := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+	if _, err := proof.ledger.Admit(t.Context(), proof.identity, telemetryBatch(t, proofSource, 1, "", drop), received, func(context.Context, telemetrydelivery.Admission) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	bound := proof.bindings()
+	for _, source := range []string{proofSource, proofPredecessor} {
+		binding, found := bound[source]
+		if !found || binding.participant != proof.identity.ParticipantID || !binding.identity.IsZero() || !binding.boundAt.Equal(received) {
+			t.Fatalf("binding of %s = %+v, %v, want the batch's participant as a guest bound at %s", source, binding, found, received)
+		}
+	}
+	if len(bound) != 2 {
+		t.Fatalf("bindings = %v, want the two sources", bound)
+	}
+}
+
+// Another participant of the tenant that knows a source_id cannot add records, a close or drop
+// claims to it: the whole batch is refused before the sink, and the victim's rows, gaps and
+// bindings stay as they were.
+func TestTelemetryLedgerRefusesAnotherParticipantAndLeavesTheVictimAlone(t *testing.T) {
+	victim := newTelemetryProof(t)
+	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
+	if _, err := victim.admit(telemetryBatch(t, proofSource, 4, "", telemetryEvent(0)), noSink); err != nil {
+		t.Fatal(err)
+	}
+	before, bindingsBefore := victim.rows(proofSource), victim.bindings()
+	gapsBefore, _ := telemetrydelivery.Gaps(before)
+
+	hostile := victim
+	hostile.identity.ParticipantID = accountTenantIntegrationID(t)
+	hostileSource := "0b7c0000-0000-4000-8000-00000000000c"
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":1,"to":4}],"dropped_source_id":%q}`, 0, proofSource)
+	for _, attack := range []sdktelemetry.Request{
+		telemetryBatch(t, proofSource, 4, "closed", telemetryEvent(1), telemetryEvent(2), telemetryEvent(3)),
+		telemetryBatch(t, hostileSource, 1, "", drop),
+	} {
+		sunk := false
+		_, err := hostile.admit(attack, func(context.Context, telemetrydelivery.Admission) error {
+			sunk = true
+			return nil
+		})
+		if !errors.Is(err, telemetrydelivery.ErrSourceBound) || sunk {
+			t.Fatalf("hostile batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, sunk)
+		}
+	}
+	after := victim.rows(proofSource)
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("victim rows = %+v, want them unchanged: %+v", after, before)
+	}
+	if gaps, _ := telemetrydelivery.Gaps(after); !reflect.DeepEqual(gaps, gapsBefore) || len(gaps) != 2 || gaps[0].Cause != telemetrydelivery.GapMissing {
+		t.Fatalf("victim gaps = %+v, want them unchanged with [1,4) missing: %+v", gaps, gapsBefore)
+	}
+	if bound := victim.bindings(); !reflect.DeepEqual(bound, bindingsBefore) {
+		t.Fatalf("bindings = %v, want only the victim's: %v", bound, bindingsBefore)
+	}
+	if rows := victim.rows(hostileSource); len(rows) != 0 {
+		t.Fatalf("hostile source rows = %v, want none from a refused batch", rows)
+	}
+}
+
+// seedTelemetryParticipants creates a tenant with one Episode and returns participants of it: two
+// of the same User, one of another User and a guest. Everything lives in tx and is rolled back.
+func seedTelemetryParticipants(t *testing.T, tx pgx.Tx) (tenant, episode utilities.ID, first, successor, stranger, guest utilities.ID) {
+	t.Helper()
+	ctx := t.Context()
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, query, args...); err != nil {
+			t.Fatalf("seed %q: %v", query, err)
+		}
+	}
+	tenant, space, episode := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	exec(`insert into tenants(id, name) values($1, 'Telemetry bindings')`, uuid(tenant))
+	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Telemetry bindings', $2, $3, 'cf_sfu')`, uuid(space), uuid(tenant), "telemetry-bindings-"+space.String())
+	exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, 'active', $2, $3, '{"media_plane_binding":{"provider":"cf_sfu"}}'::jsonb)`, uuid(episode), uuid(space), uuid(tenant))
+	user, other := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	for _, identity := range []utilities.ID{user, other} {
+		exec(`insert into identities(id, tenant_id, kind, external_id, display_name) values($1, $2, 'user', $3, 'Telemetry')`, uuid(identity), uuid(tenant), identity.String())
+	}
+	participant := func(identity utilities.ID) utilities.ID {
+		id := accountTenantIntegrationID(t)
+		exec(`insert into participants(id, tenant_id, space_id, episode_id, identity_id, capabilities, generation, status, role) values($1, $2, $3, $4, $5, '{subscribe}'::text[], 1, 'left', 'collaborator')`, uuid(id), uuid(tenant), uuid(space), uuid(episode), uuid(identity))
+		return id
+	}
+	return tenant, episode, participant(user), participant(user), participant(other), participant(utilities.ID{})
+}
+
+// The same User rejoined is a new participant of the same identity, so it may write to the source
+// its earlier participant bound; its copy of a seq is new, not a duplicate, because rows are keyed
+// by participant. A participant of another User and a guest are refused.
+func TestTelemetryLedgerAcceptsASuccessorOfTheSameIdentityOnly(t *testing.T) {
+	pool := telemetryLedgerPool(t)
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tenant, episode, first, successor, stranger, guest := seedTelemetryParticipants(t, tx)
+	proof := telemetryProof{t: t, pool: pool, ledger: NewTelemetryLedger(tx), identity: telemetrydelivery.Identity{TenantID: tenant, EpisodeID: episode, ParticipantID: first}}
+	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
+
+	one := telemetryBatch(t, proofSource, 1, "", telemetryEvent(0))
+	if _, err := proof.admit(one, noSink); err != nil {
+		t.Fatal(err)
+	}
+	if binding := proof.bindings()[proofSource]; binding.participant != first || binding.identity.IsZero() {
+		t.Fatalf("binding = %+v, want the first participant with its identity", binding)
+	}
+	next := proof
+	next.identity.ParticipantID = successor
+	admission, err := next.admit(one, noSink)
 	if err != nil || admission.Duplicates != 0 || len(admission.New) != 1 {
-		t.Fatalf("another participant's copy: duplicates = %d, new = %d, err = %v, want it stored", admission.Duplicates, len(admission.New), err)
+		t.Fatalf("the successor's copy: duplicates = %d, new = %d, err = %v, want it stored", admission.Duplicates, len(admission.New), err)
 	}
 	if rows := proof.rows(proofSource); len(rows) != 2 {
 		t.Fatalf("rows of the source = %d, want one per participant", len(rows))
+	}
+	for name, participant := range map[string]utilities.ID{"another User": stranger, "a guest": guest} {
+		refused := proof
+		refused.identity.ParticipantID = participant
+		if _, err := refused.admit(telemetryBatch(t, proofSource, 2, "closed", telemetryEvent(1)), noSink); !errors.Is(err, telemetrydelivery.ErrSourceBound) {
+			t.Fatalf("%s: err = %v, want ErrSourceBound", name, err)
+		}
+	}
+}
+
+// Two first batches of one new source from different participants: the second waits on the
+// first's uncommitted binding, then finds it and is refused, so the source has exactly one binding.
+func TestTelemetryLedgerConcurrentFirstBatchesBindTheSourceOnce(t *testing.T) {
+	proof := newTelemetryProof(t)
+	other := proof
+	other.identity.ParticipantID = accountTenantIntegrationID(t)
+	request := telemetryBatch(t, proofSource, 1, "", telemetryEvent(0))
+	inSink, release := make(chan struct{}), make(chan struct{})
+	first := make(chan error, 1)
+	go func() {
+		_, err := proof.admit(request, func(context.Context, telemetrydelivery.Admission) error {
+			close(inSink)
+			<-release
+			return nil
+		})
+		first <- err
+	}()
+	<-inSink
+
+	var secondSunk atomic.Bool
+	second := make(chan error, 1)
+	go func() {
+		_, err := other.admit(request, func(context.Context, telemetrydelivery.Admission) error {
+			secondSunk.Store(true)
+			return nil
+		})
+		second <- err
+	}()
+	select {
+	case err := <-second:
+		t.Fatalf("the second batch finished (%v) while the first held its uncommitted binding", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-second; !errors.Is(err, telemetrydelivery.ErrSourceBound) || secondSunk.Load() {
+		t.Fatalf("second batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, secondSunk.Load())
+	}
+	var count int
+	if err := proof.pool.QueryRow(t.Context(), `select count(*) from telemetry_source_bindings where tenant_id = $1 and source_id = $2`, uuid(proof.identity.TenantID), uuidString(proofSource)).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if binding := proof.bindings()[proofSource]; count != 1 || binding.participant != proof.identity.ParticipantID {
+		t.Fatalf("bindings = %d, binding = %+v, want exactly one, of the first participant", count, binding)
 	}
 }
 

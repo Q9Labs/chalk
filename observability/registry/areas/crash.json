@@ -2,7 +2,7 @@
   "area": "crash",
   "slice": 9,
   "title": "Crashes and performance, on web and native",
-  "prefixes": ["page", "crash", "perf"],
+  "prefixes": ["page", "app", "perf"],
   "fields": [],
   "events": [],
   "reasons": [],
@@ -10,6 +10,8 @@
   "symptoms": [
     {
       "code": "page.crashed",
+      "item": "episode",
+      "per": "seat",
       "doc": "The call page crashed or rendered an error boundary.",
       "user_words": ["the page went blank", "the app crashed"],
       "witnesses": [],

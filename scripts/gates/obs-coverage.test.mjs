@@ -32,8 +32,8 @@ test("an emit site that no longer contains its literal fails", async () => {
 test("a healthy fixture the rule flags, or a positive one it misses, fails", async () => {
   const swapped = { ...example, fixtures: { positive: example.fixtures.healthy, healthy: example.fixtures.positive } };
   const { failures } = await checkCoverage({ root, graph: only(swapped) });
-  assert.match(failures.join("\n"), /positive fixture .* gives no hit/u);
-  assert.match(failures.join("\n"), /healthy fixture .* gives 1 hit/u);
+  assert.match(failures.join("\n"), /positive fixture .* gives no end\.wrong_screen finding/u);
+  assert.match(failures.join("\n"), /healthy fixture .* gives 1 end\.wrong_screen finding/u);
 });
 
 test("an allow-listed symptom that is complete fails, so the list only shrinks", async () => {

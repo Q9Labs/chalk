@@ -9,7 +9,7 @@ It reads a world module today (`--fixture nov18` is the 18 Nov example). Reading
 ```text
 episode ep_9feb tenant=TH outcome=broken coverage=partial(board) checked=5/9 asof=2026-11-19T01:00Z rules=b992ec71
 anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4
-f_98d4 broken audio.no_voice_detected pt_4c1e(Haris) +07:10..+10:40 hop=sfu_ingress upstream=unknown ev=ev_a1f3
+f_98d4 broken audio.not_heard pt_4c1e(Haris) +07:10..+10:40 hop=sfu_ingress upstream=unknown ev=ev_a1f3
 fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]
 fact: microphone unmuted [ev_c9d0]
 gap: board.view_jumped all 4 seats: board.camera not emitted by client 3.1.0
@@ -34,7 +34,7 @@ The backstops make silence honest. `UNEXPLAINED` is a problem report or failure 
 | What happened in one Episode, attempt or job? | `diagnose ep_9feb`, `diagnose attempt jr_6d5e`, `diagnose job job_4a3b`                           |
 | Is the proof behind a finding enough?         | `diagnose evidence f_98d4`                                                                        |
 | How has one person fared?                     | `diagnose participant usr_9a1b --since 30d` or `--from 2026-11-01 --to 2026-11-12`                |
-| Where else does a symptom appear?             | `diagnose pattern audio.no_voice_detected --tenant TH`                                            |
+| Where else does a symptom appear?             | `diagnose pattern audio.not_heard --tenant TH`                                            |
 | What happened in a time window?               | `diagnose window TH --from 2026-11-18T09:00Z --to 2026-11-18T11:00Z`                              |
 | Bring verdicts up to date                     | `diagnose check TH 2026-11-18`, `diagnose check ep_9feb`, `diagnose check --tenant TH --since 7d` |
 | I only have a name or an id                   | `diagnose Haris`, `diagnose 3e4f5a6b-...`, any handle or raw hex prefix                           |

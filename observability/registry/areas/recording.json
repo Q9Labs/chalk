@@ -2,17 +2,36 @@
   "area": "recording",
   "slice": 10,
   "title": "Recording and rendering",
-  "prefixes": ["recording", "render"],
+  "prefixes": ["recording", "render", "playback"],
   "fields": [],
   "events": [],
   "reasons": [],
   "machines": [],
+  "facts": [
+    {
+      "name": "recording.job_state",
+      "kind": "once",
+      "per": "item",
+      "events": [],
+      "doc": "The terminal state of a post-call job, read from its Postgres row. Claim: succeeded or the failure state."
+    }
+  ],
   "symptoms": [
     {
       "code": "recording.not_ready",
+      "item": "job",
+      "per": "item",
       "doc": "An ended Episode's recording never became ready to watch.",
       "user_words": ["the recording isn't there"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "recording.job_state",
+          "from": ["db"],
+          "required": true,
+          "query": "postgres: select state, updated_at from recording_jobs where id = '{job}'",
+          "doc": "Whether and how the job ended."
+        }
+      ],
       "fault_scenario": null
     }
   ]

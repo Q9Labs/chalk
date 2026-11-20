@@ -38,9 +38,19 @@ const rank = (/** @type {string} */ outcome) => String(SEVERITY.findIndex((entry
 const pad = (/** @type {number} */ ms) => Math.max(0, ms).toString(36).padStart(9, "0");
 const short = (/** @type {string} */ id) => id.replaceAll("-", "").slice(0, 12);
 /** @param {Item["kind"]} kind */
-export const refKind = (kind) => (kind === "attempt" ? "journey" : kind);
+export const refKind = (kind) => (kind === "attempt" ? "client_session" : kind);
 /** @param {Item} item */
-const itemRef = (item) => ref(refKind(item.kind), item.id);
+const itemRef = (item) => (item.kind === "platform" ? item.id : ref(refKind(item.kind), item.id));
+
+/**
+ * The header scope of a day item: `space spc_x 2026-11-18`, `tenant ten_x 2026-11-18`, `platform production 2026-11-18`.
+ * @param {import("../proof/profile.mjs").Declaration} declaration
+ */
+const dayScope = (declaration) => {
+  if (declaration.kind === "platform") return { item: declaration.id, date: declaration.day };
+  if (declaration.kind === "space" || declaration.kind === "tenant") return { item: ref(declaration.kind, declaration.id), date: declaration.day };
+  return null;
+};
 
 /**
  * The worst proven outcome among several, and `healthy` only when every one is healthy.
@@ -101,7 +111,7 @@ function verdictGaps(verdict, declaration, at) {
   for (const gap of /** @type {readonly VerdictGap[]} */ (verdict.coverage.gaps)) {
     if (gap.kind === "open") out.push({ t: "gap", code: "open", why: `${declaration.kind === "episode" ? "the Episode" : `the ${declaration.kind}`} has not ended, so what it has not done yet is unknown` });
     else if (gap.kind === "empty") out.push({ t: "gap", code: "empty", why: "no check applies to this item, so nothing proves it healthy" });
-    else if (gap.kind === "unbound") out.push({ t: "gap", code: "unbound", ev: ref("evidence", gap.evidence), why: `${gap.fact} ${gap.why}` });
+    else if (gap.kind === "unbound") out.push({ t: "gap", code: "unbound", ev: ref("event", gap.evidence), why: `${gap.fact} ${gap.why}` });
     else {
       const why = gap.uncovered.length > 0 ? [...new Set(gap.uncovered.map((entry) => uncoveredText(entry, at)))].join("; ") : (gap.reason ?? "undecided");
       const key = `${gap.code}|${why}`;
@@ -133,7 +143,7 @@ export function itemView({ item, status, tenant, ctx, via = null }) {
   /** @type {Head} */
   const head = {
     view: item.kind,
-    scope: { item: itemRef(item), tenant: tenant.name },
+    scope: dayScope(declaration) ?? { item: itemRef(item), tenant: tenant.name },
     outcome,
     coverage: coverageOf(verdict, status),
     checked: verdict?.coverage.checked ?? 0,
@@ -199,14 +209,16 @@ function findingRecords(verdict, declaration, at) {
       party: partyOf(declaration, finding.subject),
       when: span(finding.window, at),
       hop: finding.hop,
+      module: finding.module,
       upstream: finding.upstream,
-      ev: primary === null ? null : ref("evidence", primary),
+      reason: finding.reason,
+      ev: primary === null ? null : ref("event", primary),
       retained: finding.retained !== null,
       // An expected finding (a time-limit end) explains rather than accuses, so its facts wait for `evidence`.
       facts: (finding.outcome === "expected" ? [] : finding.facts).map((fact) => ({
         text: fact.text,
         when: fact.window === null || sameWindow(fact.window) ? null : span(fact.window, at),
-        ev: fact.evidence.map((id) => ref("evidence", id)),
+        ev: fact.evidence.map((id) => ref("event", id)),
         absent: fact.absent !== null,
       })),
       hypothesis: finding.hypothesis,
@@ -232,7 +244,7 @@ function disagreementRecords(verdict, declaration, at) {
       about: entry.fact,
       party: partyOf(declaration, entry.subject),
       when: span({ from_ms: from, to_ms: to }, at),
-      claims: entry.claims.map((claim) => ({ source: claim.source, claim: claim.claim, ev: ref("evidence", claim.evidence) })),
+      claims: entry.claims.map((claim) => ({ source: claim.source, claim: claim.claim, ev: ref("event", claim.evidence) })),
       independent: entry.independent,
     };
   });
@@ -248,7 +260,7 @@ function reportRecords(verdict, declaration, at) {
   return verdict.reports.map((report) => ({
     key: `3|${pad(report.window.from_ms)}|${short(report.evidence)}`,
     t: "report",
-    ev: ref("evidence", report.evidence),
+    ev: ref("event", report.evidence),
     party: partyOf(declaration, report.subject),
     when: at(report.window.from_ms),
     text: report.text,
@@ -266,7 +278,8 @@ function reportRecords(verdict, declaration, at) {
 function itemNext(item, status, verdict, cursor) {
   const next = [];
   const handle = itemRef(item);
-  if (status.state !== "current") next.push(["check", handle]);
+  // `check` takes a handle or a tenant scope, and the platform has neither, so its day is rechecked by a platform sweep.
+  if (status.state !== "current" && item.kind !== "platform") next.push(["check", handle]);
   const worst = (verdict?.findings ?? []).find((finding) => finding.outcome !== "expected");
   if (worst) {
     next.push(["evidence", ref("finding", worst.id)]);
@@ -306,9 +319,9 @@ export function evidenceView({ item, status, finding, tenant, ctx, via = null })
   const records = [
     { t: "expected", text: finding.expected },
     { t: "observed", text: finding.observed, when: span(finding.window, at) },
-    ...finding.facts.map((fact) => ({ t: "fact", text: fact.text, when: fact.window === null ? null : span(fact.window, at), ev: fact.evidence.map((id) => ref("evidence", id)), absent: fact.absent })),
+    ...finding.facts.map((fact) => ({ t: "fact", text: fact.text, when: fact.window === null ? null : span(fact.window, at), ev: fact.evidence.map((id) => ref("event", id)), absent: fact.absent })),
     ...(finding.hypothesis ? [{ t: "hypothesis", text: finding.hypothesis.text, falsified_by: finding.hypothesis.falsified_by }] : [{ t: "hypothesis", text: null, falsified_by: null }]),
-    ...finding.proof.observations.map((o) => ({ t: "witness", ev: ref("evidence", o.id), fact: o.fact, source: o.source, origin: o.origin, claim: o.claim, when: span(o.window, at), value: o.value, row: o.query })),
+    ...finding.proof.observations.map((o) => ({ t: "witness", ev: ref("event", o.id), fact: o.fact, source: o.source, origin: o.origin, claim: o.claim, when: span(o.window, at), value: o.value, row: o.query })),
     ...finding.proof.watermarks.map((w) => ({ t: "watermark", source: w.source, party: partyOf(declaration, w.subject), complete_to: w.complete_to_ms === null ? null : at(w.complete_to_ms), gaps: w.evidence_gaps.length, build: w.build })),
     ...finding.proof.queries.map((query) => ({ t: "query", fact: query.fact, text: query.text })),
     { t: "falsify", absence: finding.falsify.absence, attribution: finding.falsify.attribution },
@@ -395,7 +408,7 @@ function groups(entries, keep) {
   return [...byCode.entries()].map(([code, group]) => {
     const outcome = combine(group.outcomes);
     const shown = group.items.slice(0, 3);
-    return { key: `${rank(outcome)}|${code}`, t: "group", code, outcome, episodes: group.items.length, people: group.people.size > 0 ? group.people.size : null, items: shown.map(itemRef), more: group.items.length - shown.length };
+    return { key: `${rank(outcome)}|${code}`, t: "group", code, outcome, kind: group.items[0].kind, count: group.items.length, people: group.people.size > 0 ? group.people.size : null, items: shown.map(itemRef), more: group.items.length - shown.length };
   });
 }
 
@@ -416,7 +429,7 @@ export function dayView({ tenant, date, entries, ctx, symptom = null, via = null
   const next = [];
   if (gaps.some((gap) => "state" in gap && (gap.state === "unchecked" || gap.state === "stale"))) next.push(["check", tenant.name, date]);
   const firstGroup = paged.records[0];
-  if (firstGroup && "items" in firstGroup && Array.isArray(firstGroup.items) && firstGroup.items[0]) next.push(["episode", firstGroup.items[0]]);
+  if (firstGroup && "items" in firstGroup && Array.isArray(firstGroup.items) && firstGroup.items[0]) next.push([firstGroup.items[0].$h === "client_session" ? "attempt" : firstGroup.items[0].$h === "job" ? "job" : "episode", firstGroup.items[0]]);
   if (paged.page.cursor) next.push(["day", tenant.name, date, ...(symptom ? ["--symptom", symptom] : []), "--cursor", paged.page.cursor]);
   return finish({ view: "day", head, anchor: { utc: isoMinute(midnight), local: localAnchor(midnight, tenant.tz, true), tz: tenant.tz }, via, records: paged.records, gaps, page: paged.page, next });
 }
@@ -446,8 +459,10 @@ export function rangeView({ title, tenantTz, range, entries, keep, check, again,
         party: title.view === "pattern" ? partyOf(item.declaration, finding.subject) : null,
         when: when(finding.window.from_ms),
         hop: finding.hop,
+        module: finding.module,
         upstream: finding.upstream,
-        ev: primary === null ? null : ref("evidence", primary),
+        reason: finding.reason,
+        ev: primary === null ? null : ref("event", primary),
         retained: finding.retained !== null,
       });
     }

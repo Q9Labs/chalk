@@ -18,8 +18,7 @@ import { localDate, localMidnight, ref } from "./output/format.mjs";
 import { renderJson } from "./output/json.mjs";
 import { UsageError } from "./output/page.mjs";
 import { USAGE, instant, parseQuery, realDate } from "./output/query.mjs";
-import { parseHandle } from "./output/handle.mjs";
-import { indexWorld, resolve } from "./output/resolve.mjs";
+import { handleKind, indexWorld, isHandle, resolve } from "./output/resolve.mjs";
 import { measureRecord, renderText } from "./output/text.mjs";
 import { checkView, dayView, evidenceView, itemView, quoteArg, rangeView, refKind, resolveView } from "./output/views.mjs";
 
@@ -130,7 +129,7 @@ const COMMANDS = {
     const text = need(query.args, "what to look up").join(" ");
     const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null });
     if (found.length !== 1) return candidates(session, text, found);
-    const direct = parseHandle(text)?.kind === found[0].kind && found[0].target.kind !== "person";
+    const direct = handleKind(text) === found[0].kind && found[0].target.kind !== "person";
     return openEntry(session, found[0], query, direct ? null : { query: text, as: describe(found[0]) });
   },
   day: (query, session) => {
@@ -140,6 +139,9 @@ const COMMANDS = {
   episode: openItem("episode"),
   attempt: openItem("attempt"),
   job: openItem("job"),
+  space: openDay("space"),
+  tenant: openDay("tenant"),
+  platform: openDay("platform"),
   evidence: (query, session, tenantScope) => {
     const text = need(query.args, "a finding").join(" ");
     const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null, kinds: ["finding"] });
@@ -324,13 +326,39 @@ function day(session, tenant, date, symptom) {
 }
 
 /**
+ * Opens one UTC day of a Space, a Tenant or the platform: `space spc_x 2026-11-18`, `tenant ten_x 2026-11-18` or
+ * `platform production 2026-11-18`. Unlike `day`, which sweeps a tenant's Episodes, this opens the day item itself and its checks.
+ * @param {"space" | "tenant" | "platform"} command
+ * @returns {Command}
+ */
+function openDay(command) {
+  return (query, session, tenantScope) => {
+    const [what, date] = need(query.args, command === "platform" ? "an environment and a date" : `a ${command} and a date`);
+    if (date === undefined || !realDate(date)) throw new UsageError(`diagnose ${command} <${command === "platform" ? "environment" : command}> <YYYY-MM-DD>: the day is a UTC date like 2026-11-18`);
+    const named = command === "platform" ? [] : resolve(session.entries, what, { tenant: tenantScope?.id ?? null, kinds: [command] });
+    const ids = command === "platform" ? [what] : named.map((entry) => entry.id);
+    const found = session.items.filter((item) => item.declaration.kind === command && ids.includes(item.id) && item.declaration.day === date);
+    if (found.length !== 1) {
+      if (command === "platform") throw new UsageError(`no platform day ${what} ${date} in the world`);
+      return candidates(session, what, named);
+    }
+    const [item] = found;
+    const tenant = item.tenant === null ? UTC_TENANT : tenantOf(session, item.tenant);
+    return itemView({ item, status: statusFor(session, item), tenant, ctx: session.ctx });
+  };
+}
+
+/** The platform belongs to no tenant, so its day prints in UTC. */
+const UTC_TENANT = Object.freeze({ id: "", name: "platform", tz: "UTC" });
+
+/**
  * @param {Session} session
  * @param {string} query
  * @param {readonly Entry[]} found
  * @param {Query["options"] | null} [range] a range the query asked for, carried into each candidate's next command
  */
 function candidates(session, query, found, range = null) {
-  const elsewhere = found.length === 0 && parseHandle(query) !== null ? resolve(session.entries, query) : [];
+  const elsewhere = found.length === 0 && isHandle(query) ? resolve(session.entries, query) : [];
   if (elsewhere.length === 1) throw new UsageError(`${query} names ${describe(elsewhere[0])}, not what this command opens; run diagnose ${query}`);
   const carry = range === null || (range.since === null && range.from === null) ? [] : rangeArgs(range, rangeOf(session, range, "UTC", 30));
   return resolveView({ query, candidates: found, ctx: session.ctx, tz: "UTC", carry });

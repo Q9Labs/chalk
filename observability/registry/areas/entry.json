@@ -2,10 +2,37 @@
   "area": "entry",
   "slice": 1,
   "title": "Entry: dashboard, invite, admission, prejoin, embed and boot",
-  "prefixes": ["entry", "admit", "prejoin"],
+  "prefixes": ["boot", "embed", "invite", "admission", "prejoin", "dashboard"],
   "fields": [],
   "events": [],
   "reasons": [],
   "machines": [],
-  "symptoms": []
+  "facts": [
+    {
+      "name": "admission.decision",
+      "kind": "once",
+      "per": "item",
+      "events": [],
+      "doc": "The API's admission decision for a join attempt. Claim: admitted, or the refusal reason."
+    }
+  ],
+  "symptoms": [
+    {
+      "code": "admission.unresolved",
+      "item": "attempt",
+      "per": "item",
+      "doc": "A join attempt never got an admission decision, so the person waited on a screen that never resolved.",
+      "user_words": ["it just kept loading", "I never got in"],
+      "witnesses": [
+        {
+          "fact": "admission.decision",
+          "from": ["api"],
+          "required": true,
+          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and event == 'decision' and name == 'admission'",
+          "doc": "The decision that admits or refuses the attempt."
+        }
+      ],
+      "fault_scenario": null
+    }
+  ]
 }

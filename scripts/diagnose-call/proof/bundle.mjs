@@ -123,6 +123,9 @@ function bind(profile, o) {
   const subject = o.subject;
   if (declaration.kind === "attempt") return subject.attempt === declaration.id ? { key: ITEM } : { why: "names another attempt" };
   if (declaration.kind === "job") return subject.job === declaration.id ? { key: ITEM } : { why: "names another job" };
+  if (declaration.kind === "space") return subject.space === declaration.id ? { key: ITEM } : { why: "names another Space" };
+  if (declaration.kind === "tenant") return subject.tenant === declaration.id ? { key: ITEM } : { why: "names another Tenant" };
+  if (declaration.kind === "platform") return subject.environment === declaration.id ? { key: ITEM } : { why: "names another environment" };
   if (subject.episode !== declaration.id) return { why: subject.episode === undefined ? "names no Episode" : "names another Episode" };
   if (subject.participant !== undefined) {
     const seat = declaration.seats.find((candidate) => candidate.participant === subject.participant);
