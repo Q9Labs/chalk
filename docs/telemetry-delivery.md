@@ -82,6 +82,8 @@ The answer comes only after the commit, so an acknowledged seq is always stored.
 
 The ledger is the table `telemetry_sources`, one row per `(tenant_id, source_id, participant_id)`, holding the Episode, the ranges as JSON, `reported_next_seq`, `end`, `end_next_seq` and the first and last receive times. Rows are keyed by participant so that a batch signed for one participant can never mark another participant's seqs as stored and suppress them. A source spans participants when the SDK client rejoins, so the watermark of a source is the union of its rows.
 
+A range set holds at most 4096 ranges, so a row stays bounded whatever a client sends. A batch that would grow a set past the cap is refused whole with 400 and the reason `ledger_full`, and the client drops it as `refused`. The table has no foreign keys, so a late batch is never refused because an Episode or participant row is gone, and a tenant purge removes its rows by `tenant_id`. The lock is `SELECT ... FOR UPDATE` in source order inside the same transaction as the sink callback, so two batches of one source queue behind each other and the second finds the first's commit.
+
 ## Watermarks and gaps
 
 `telemetrydelivery.Gaps` turns a source's rows into `EvidenceGap`s, and C2+C4 read them by these names:
@@ -102,7 +104,7 @@ A source the server never heard of has no row, so its gaps are not visible here 
 
 ## The telemetry token
 
-Telemetry has its own credential, so a loss no longer follows the 5-minute media credential. Every access grant response carries `telemetry: { token, expires_at }`, an EdDSA JWT with audience `chalk-telemetry`, the same subject (tenant, Space, Episode, participant) and a 24-hour lifetime. The route accepts it, and still accepts the media credential from older SDKs. It authorizes only the telemetry route, so the 24 hours buy delivery after a reload or a long background, not access. The byte budget per participant still bounds it.
+Telemetry has its own credential, so a loss no longer follows the 5-minute media credential. Every access grant response carries `telemetry: { token, expires_at }`, an EdDSA JWT with audience `chalk-telemetry`, the same subject (tenant, Space, Episode, participant) and a 24-hour lifetime. The route accepts it, and still accepts the media credential from older SDKs. It authorizes only the telemetry route, so the 24 hours buy delivery after a reload or a long background, not access: it has its own audience and its own lifetime cap, so it never verifies as a media credential and a media credential never verifies as it. The route asks the telemetry verifier first and falls back to the media verifier, and no other route accepts the telemetry token. The byte budget per participant still bounds it. The field is required in the grant contract. A refresh replay sealed before the token existed lacks it, and a client that finds it missing keeps using the media credential.
 
 ## Known gaps
 
