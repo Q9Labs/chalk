@@ -5,6 +5,7 @@ name: Client connection recovery model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - sdks/typescript/client/src/connection/lifecycle.ts
       - sdks/typescript/client/src/access/manager.ts
@@ -24,6 +25,7 @@ concurrency:
 jobs:
   check:
     name: Client connection recovery model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

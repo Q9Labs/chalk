@@ -23,3 +23,16 @@ test("an unreachable function or a higher clone count is reported", () => {
   assert.equal(rises("duplication", 71, 72).length, 1);
   assert.deepEqual(rises("duplication", 71, 70), []);
 });
+
+test("a PR only fails for complexity overages in files it changes", () => {
+  const baseline = { "apps/api/base.go F": 20, "base.mjs": [20], "feature.mjs": [18] };
+  const inherited = { "apps/api/base.go F": 21, "base.mjs": [23], "feature.mjs": [18] };
+  const changed = new Set(["feature.mjs", "apps/api/feature.go"]);
+  assert.deepEqual(rises("complexity", baseline, inherited, changed), []);
+  const current = { ...inherited, "feature.mjs": [19], "apps/api/feature.go G": 17 };
+  const failures = rises("complexity", baseline, current, changed);
+  assert.equal(failures.length, 2);
+  assert.match(failures[0], /feature\.mjs/);
+  assert.match(failures[1], /feature\.go G/);
+  assert.equal(rises("complexity", baseline, current).length, 4);
+});

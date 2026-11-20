@@ -2,7 +2,7 @@
 
 `pnpm gate` runs `scripts/gates/commit.mjs --local`, which checks the install and the docs, runs the tracker check, then `q9gate run` with Chalk's checks declared as custom lanes in `gate.config.ts`; `pnpm gate:full` adds `--full`. `commit.mjs --local` makes each gate run single-threaded (`GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, q9gate concurrency 1) so it fits a small machine; an already-set variable replaces the default. "gate.report.json" records every selected and skipped lane.
 
-Every profile first runs `doclint.mjs`. The pre-commit hook runs `pnpm gate:fast` (doc checks, tracker check, and the `scope`, `format`, `hygiene` and `secrets` lanes on staged files). The `generated` lane is too slow for the hook, so run `pnpm run check:generated` yourself after editing a generator input. A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended.
+Every profile first runs `doclint.mjs`. The pre-commit hook runs `pnpm gate:fast` (doc checks, tracker check, and the `scope`, `format`, `hygiene`, `secrets` and `oxlint` lanes selected from staged files). The `generated` lane is too slow for the hook, so run `pnpm run check:generated` yourself after editing a generator input. A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended.
 
 ## Native Windows
 
@@ -33,13 +33,7 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 **Caches.** Only `.github/workflows/cache-warm.yml`, on pushes to `master`, saves the Go build caches, so pull requests and queue groups start from master's caches and do not evict each other's. The API job sets `-count=1` because a cached Go test result would not see a migration or database change.
 
-## Ready cap
-
-Only a few pull requests against master are ready (not draft) at once, whoever opened them, because every push to a ready pull request reruns the Gate and the merge queue lands about two an hour on hosted runners. `ready-cap.mjs` counts the open, non-draft pull requests against master other than the one named by `--pr` (the merge queue's entries are among them, and the output reports how many) and exits 1 when that count has reached the cap. Run it before `gh pr ready`.
-
-The same script runs as the first job of `.github/workflows/gate.yml` (`Ready cap`) when a pull request is opened non-draft, reopened or marked ready; pushes to an already ready pull request are not counted again. With `--enforce` it sets `capped=true` and comments why. `capped=true` makes `Select gate jobs` and every job after it stand down and makes `Root gate` fail, so a refused pull request cannot merge and costs about a minute of a small runner, not a Gate run. The job cannot convert the pull request to draft itself (the workflow token is refused that mutation), so the comment tells the author to run `gh pr ready --undo`. If the job itself fails (an API error), the Gate runs as before: the cap never blocks a pull request by breaking.
-
-The cap is 6 (`DEFAULT_CAP` in the script). Set the repository variable `CHALK_READY_CAP` to change it; it applies to the next ready event. The `ready-cap-exempt` label lets one pull request through. Two pull requests marked ready in the same second can both pass and reach cap + 1, and the cap is a rule for fleets that cooperate, not a security boundary: whoever can push a branch can edit the workflow.
+Batch related changes in a draft pull request. Mark it ready after local verification and review; a new push to a ready pull request cancels its older Gate run.
 
 ## Checks register
 
@@ -69,7 +63,11 @@ The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow
 
 ## Test policy checks
 
+Oxlint checks JavaScript and TypeScript for selected correctness rules. For test files, it rejects focused, disabled, and commented-out tests, duplicate titles, and tests without assertions. The one empty-block exception is the intentional busy loop in the call performance proof.
+
 The `ast-grep` lane rejects a test that mocks a module of this repository, whatever name the mock call hangs on (`vi`, an alias of it, node:test's `mock`) and whether the path is a string, a template or `import(...)`, in any file. An `ast-grep-ignore` comment without a rule name, or one naming that rule, fails the lane, because ast-grep would honor it and hide the mock. The `mock-calls` lane counts assertions on mock calls (matchers, reads of `fn.mock.calls`, and node:test's `fn.mock.callCount()`) per package in every JavaScript and TypeScript test file and fails when a count differs from `mock-call-baseline.json`: a rise is a new assertion, and a fall means the baseline is stale. `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop and refuses to raise it. The lane also reads the baseline on the merge base with `GATE_BASE_REF` (default `origin/master`) and fails when the committed one is higher, or when that base cannot be read. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
+
+Pull requests and merge groups check file size and complexity on changed files. Copy counts, clone counts, and unreachable Go functions can span files, so those checks also compare results against the merge base when the checked-in baseline is exceeded. Use `--base <ref>` to run a scoped ratchet locally. Runs without a comparison base and all `--write` runs enforce the baseline across the whole tree.
 
 ## Heavy runs on Instabox
 

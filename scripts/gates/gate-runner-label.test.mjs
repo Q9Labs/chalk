@@ -17,7 +17,7 @@ const rootLanes = `\${{ ${guard} && matrix.group != 'sfu' && (matrix.group == 'b
 const runsOn = [...workflow.matchAll(/^ {4}runs-on: (.+)$/gmu)].map((match) => match[1]);
 
 test("every Gate job takes its runner from a shared expression and falls back to a hosted label", () => {
-  assert.equal(runsOn.length, 8);
+  assert.equal(runsOn.length, 7);
   for (const value of runsOn) {
     const shared = hostedLabels.some((label) => value === runnerExpression(small, label) || value === runnerExpression(big, label));
     assert.ok(shared || value === rootLanes, `runs-on is not a shared expression: ${value}`);

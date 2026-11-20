@@ -3,7 +3,7 @@
 //
 //   node scripts/gates/commit.mjs [--local] [--fast] [--] [q9gate run arguments...]
 //
-// --fast is the pre-commit profile: only the lanes that finish in about a second and are staged-scoped.
+// --fast is the pre-commit profile: it selects quick lanes from the staged diff.
 // Everything else, including the generated-files check, runs in the Gate workflow on the pull request, or via pnpm run gate.
 // --local runs one worker at a time so the gate fits a small machine; a variable that is already set wins.
 import path from "node:path";
@@ -34,7 +34,7 @@ for (const script of ["check-install.mjs", "doclint.mjs"]) {
 
 if (args[0] === "--") args.shift();
 
-const lanes = args[0] === "--fast" ? ["--lane", "scope", "--lane", "format", "--lane", "hygiene", "--lane", "secrets"] : [];
+const lanes = args[0] === "--fast" ? ["--lane", "scope", "--lane", "format", "--lane", "hygiene", "--lane", "secrets", "--lane", "oxlint"] : [];
 if (lanes.length > 0) args.shift();
 
 // check:tracker stays a root package script, so hygiene.mjs can verify that every script this file runs exists.

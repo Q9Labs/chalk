@@ -5,6 +5,7 @@ name: Episode lifecycle model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/api/internal/adapters/postgres/episode_lifecycle_create.go
       - apps/api/internal/adapters/postgres/episode_control.go
@@ -36,6 +37,7 @@ concurrency:
 jobs:
   check:
     name: Episode lifecycle model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

@@ -5,6 +5,7 @@ name: Recording pipeline model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/api/db/queries/recording_pipeline.sql
       - apps/api/db/queries/recording_key_object_authority.sql
@@ -41,6 +42,7 @@ concurrency:
 jobs:
   check:
     name: Recording pipeline model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

@@ -11,9 +11,10 @@
 //                                                              and it starts a check that has no baseline yet
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { execCommandSync } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { changedPaths, ratchetBase } from "./ratchet-scope.mjs";
 
 const baselineFile = join(repositoryRoot, "scripts/gates/analysis-baseline.json");
 const maxComplexity = 15;
@@ -70,12 +71,12 @@ function measureComplexity() {
 }
 
 /** Unreachable Go functions, as { "module/path function": true }. */
-function measureDeadCode() {
+function measureDeadCode(root = repositoryRoot) {
   const found = {};
   for (const module of goModules) {
     let report;
     try {
-      report = run("go", ["run", deadcode, "-test", "./..."], { cwd: join(repositoryRoot, module) });
+      report = run("go", ["run", deadcode, "-test", "./..."], { cwd: join(root, module) });
     } catch (error) {
       if (error.message.includes("no main packages")) continue;
       throw error;
@@ -89,13 +90,28 @@ function measureDeadCode() {
 }
 
 /** The clone count that jscpd finds in source files. */
-function measureDuplication() {
+function measureDuplication(root = repositoryRoot) {
   const output = mkdtempSync(join(tmpdir(), "jscpd-"));
   try {
-    run("pnpm", ["dlx", jscpd, "--min-lines", "12", "--min-tokens", "100", "--reporters", "json", "--output", output, "--ignore", jscpdIgnore.join(","), "."]);
+    run("pnpm", ["dlx", jscpd, "--min-lines", "12", "--min-tokens", "100", "--reporters", "json", "--output", output, "--ignore", jscpdIgnore.join(","), "."], { cwd: root });
     return JSON.parse(readFileSync(join(output, "jscpd-report.json"), "utf8")).statistics.total.clones;
   } finally {
     rmSync(output, { recursive: true, force: true });
+  }
+}
+
+function measureAtBase(base, measure) {
+  const directory = mkdtempSync(join(tmpdir(), "analysis-base-"));
+  const tree = join(directory, "tree");
+  try {
+    run("git", ["worktree", "add", "--detach", tree, base]);
+    try {
+      return measure(tree);
+    } finally {
+      run("git", ["worktree", "remove", "--force", tree]);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
@@ -122,17 +138,32 @@ const checks = {
   },
 };
 
-export const rises = (name, baseline, current) => checks[name].rises(baseline, current);
+export function rises(name, baseline, current, changed) {
+  if (name === "complexity" && changed) {
+    current = Object.fromEntries(Object.entries(current).filter(([key, value]) => changed.has(Array.isArray(value) ? key : key.slice(0, key.indexOf(" ")))));
+  }
+  return checks[name].rises(baseline, current);
+}
 
 if (import.meta.main) {
   const name = process.argv[2];
   if (!Object.hasOwn(checks, name)) {
-    console.error(`usage: analysis.mjs ${Object.keys(checks).join("|")} [--write]`);
+    console.error(`usage: analysis.mjs ${Object.keys(checks).join("|")} [--base <ref> | --write]`);
     process.exit(2);
   }
+  const base = ratchetBase(process.argv.slice(3));
   const baselines = JSON.parse(readFileSync(baselineFile, "utf8"));
-  const current = checks[name].measure();
-  const failures = name in baselines ? rises(name, baselines[name], current) : [];
+  const { measure } = checks[name];
+  const current = measure();
+  const changed = base && name === "complexity" ? changedPaths(base) : null;
+  let failures = name in baselines ? rises(name, baselines[name], current, changed) : [];
+  // A clone spans two files, and deleting a caller can make a function in an untouched file dead.
+  // These checks compare results for both trees rather than limiting findings to changed paths.
+  if (base && name !== "complexity" && failures.length > 0) {
+    const previous = measureAtBase(base, measure);
+    const allowed = name === "duplication" ? Math.max(baselines[name], previous) : { ...baselines[name], ...previous };
+    failures = rises(name, allowed, current);
+  }
   if (failures.length > 0) {
     for (const failure of failures) console.error(failure);
     process.exitCode = 1;
