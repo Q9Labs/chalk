@@ -150,6 +150,7 @@ LateConfirm(s) ==
 \* publication id stays live so a later resume needs no new publish.
 Hold(s) ==
     /\ phase[s] = "retiring" /\ cause[s] = "user_pause" /\ handle[s] > 0
+    /\ ~stopped
     /\ phase' = [phase EXCEPT ![s] = "held"]
     /\ parked' = [parked EXCEPT ![s] = handle[s]]
     /\ UNCHANGED <<handle, cause, inFlight, stopped, mint, wasRetired, resumedAs>>
@@ -211,17 +212,29 @@ Reap(s) ==
     /\ phase' = [phase EXCEPT ![s] = "idle"]
     /\ UNCHANGED <<handle, parked, cause, inFlight, stopped, mint, wasRetired, retireAsked, resumedAs>>
 
-\* stop(): every owned publication is retired at once
-\* (`for (const publication of this.#ownedPublications) lifecycle = retired`).
+\* stop(): every owned publication is marked retiring and cleanup runs
+\* asynchronously (`for (const publication of this.#locals.owned) this.#locals.markRetiring(publication)`).
+\* A pending publish whose response lands after stop() still runs LateConfirm
+\* to attach its handle before RetireDone closes it.
 Stop ==
     /\ ~stopped
     /\ stopped' = TRUE
+    /\ phase' = [s \in Slots |-> IF phase[s] \in LivePhases THEN "retiring" ELSE phase[s]]
+    /\ cause' = [s \in Slots |-> IF phase[s] \in LivePhases THEN "publish_failure" ELSE cause[s]]
+    /\ retireAsked' = [s \in Slots |-> retireAsked[s] \/ phase[s] \in LivePhases]
+    /\ UNCHANGED <<handle, parked, inFlight, mint, wasRetired, resumedAs>>
+
+\* LocalPublicationLedger.fence(): connection replacement or expired retired
+\* connection drops every owned publication directly to retired.
+Fence ==
+    /\ \E s \in Slots : phase[s] \notin {"idle", "retired"}
     /\ phase' = [s \in Slots |-> IF phase[s] \in {"idle", "retired"} THEN phase[s] ELSE "retired"]
     /\ wasRetired' = [s \in Slots |-> wasRetired[s] \/ phase[s] \notin {"idle", "retired"}]
-    /\ UNCHANGED <<handle, parked, cause, inFlight, mint, retireAsked, resumedAs>>
+    /\ UNCHANGED <<handle, parked, cause, inFlight, stopped, mint, retireAsked, resumedAs>>
 
 Next ==
     \/ Stop
+    \/ Fence
     \/ \E s \in Slots :
         \/ Create(s) \/ Confirm(s) \/ PublishFail(s) \/ RetirePending(s) \/ RetireStart(s)
         \/ LateConfirm(s) \/ Hold(s) \/ Resume(s) \/ Reconnect(s)
@@ -257,9 +270,10 @@ ResumedKeepsHandle ==
 RetiringKeepsCourse ==
     \A s \in Slots : retireAsked[s] => phase[s] \notin LivePhases
 
-\* After stop() nothing is left live.
+\* After stop() nothing is left live; owned publications stay retiring until
+\* their asynchronous close finishes, and a late response cannot resurrect them.
 StopRetiresAll ==
-    stopped => \A s \in Slots : phase[s] \in {"idle", "retired"}
+    stopped => \A s \in Slots : phase[s] \notin LivePhases
 
 \* Retired is terminal: no late response or reconnect recreates the
 \* publication inside the same slot.

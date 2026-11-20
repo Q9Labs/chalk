@@ -14,4 +14,5 @@ Resume	sdks/typescript/client/src/media/local-publications.ts	lifecycle.kind ===
 Resume	sdks/typescript/client/src/media/client.ts	if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
 RetireDone	sdks/typescript/client/src/media/local-publications.ts	item.lifecycle.kind === "retiring" && item.lifecycle.handle
 RetireDone	sdks/typescript/client/src/media/local-publications.ts	publication.lifecycle = { kind: "retired" };
-Stop	sdks/typescript/client/src/media/local-publications.ts	for (const publication of this.owned) publication.lifecycle = { kind: "retired" };
+Stop	sdks/typescript/client/src/media/client.ts	for (const publication of this.#locals.owned) this.#locals.markRetiring(publication);
+Fence	sdks/typescript/client/src/media/local-publications.ts	for (const publication of this.owned) publication.lifecycle = { kind: "retired" };
