@@ -12,9 +12,7 @@ import (
 )
 
 // The unified signalling route serves every SFU operation from one URL. A browser
-// caches a CORS preflight per URL, so one URL pays one preflight for a whole join
-// where the per-operation routes paid one each. Each operation runs the same
-// function as its per-operation route and keeps that route's quota and errors.
+// caches the CORS preflight for that URL across operations.
 const (
 	sfuSignalOpPublications  = "publications"
 	sfuSignalOpSubscriptions = "subscriptions"
@@ -24,8 +22,7 @@ const (
 	sfuSignalOpRenegotiate   = "renegotiate"
 )
 
-// sfuSignalRequest is the body of the unified route. Each operation reads the
-// fields its per-operation route reads from its body or query string.
+// sfuSignalRequest carries the operation and its arguments.
 type sfuSignalRequest struct {
 	Op                       string                         `json:"op"`
 	ConnectionID             string                         `json:"connection_id,omitempty"`
@@ -52,9 +49,8 @@ func SFUSignalFieldEnum(fieldName string) []string {
 	}
 }
 
-// sfuSignalResponse is the contract of the unified route's answer. The body of
-// each operation is exactly its per-operation route's body, so this is their
-// union with every field optional: tracks, tracks_update and tracks_close answer
+// sfuSignalResponse describes the fields each operation can return. The
+// tracks, tracks_update and tracks_close operations answer
 // sessionDescription, tracks, trackErrors and requiresImmediateRenegotiation;
 // renegotiate answers accepted; publications and subscriptions answer their lists.
 // Publications is an array for the publications operation, and an object holding
@@ -109,8 +105,7 @@ func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants
 		ErrorRules(episodeLifecycleRules)
 }
 
-// sfuSignalRateLimit charges the quota each per-operation route charges: the
-// writes share the authenticated write quota and the two reads have none.
+// The writes share the authenticated write quota and the two reads have none.
 func sfuSignalRateLimit(request sfuSignalEndpointRequest) (ratelimit.Policy, bool) {
 	switch request.Body.Op {
 	case sfuSignalOpPublications, sfuSignalOpSubscriptions:

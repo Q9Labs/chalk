@@ -14,11 +14,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
-	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -649,27 +647,6 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		schema["minLength"] = 36
 		schema["maxLength"] = 36
 	}
-	if schemaName == "ConnectionReportRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{1}
-		case "events":
-			schema["minItems"] = 1
-			schema["maxItems"] = httpapi.ConnectionReportEventLimit
-		case "elapsed_ms", "attempt", "duration_ms", "heartbeat_gap_ms":
-			schema["minimum"] = 0
-			schema["maximum"] = sdktelemetry.MaxMilliseconds
-		case "close_code":
-			schema["minimum"] = 1000
-			schema["maximum"] = 4999
-		case "http_status":
-			schema["minimum"] = 400
-			schema["maximum"] = 599
-		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off", "receivers_stopped":
-			schema["minimum"] = 0
-			schema["maximum"] = sdktelemetry.MaxReceiveCount
-		}
-	}
 	applyTelemetryConstraints(schema, schemaName, fieldName)
 	if schemaName == "ProblemReportRequest" {
 		switch fieldName {
@@ -738,23 +715,12 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 }
 
 func fieldEnum(schemaName string, fieldName string) []string {
-	if schemaName == "ConnectionReportRequest" {
-		return httpapi.ConnectionReportFieldEnum(fieldName)
-	}
 	if values := telemetryFieldEnum(schemaName, fieldName); values != nil {
 		return values
 	}
 	if schemaName == "CloudflareSFUSignalRequest" {
 		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
 			return values
-		}
-	}
-	if schemaName == "SFUSubscriptionsResponse" {
-		switch fieldName {
-		case "state":
-			return []string{mediaplane.SubscriptionActive, mediaplane.SubscriptionPaused}
-		case "reason":
-			return []string{mediaplane.PauseCongestion, mediaplane.PauseViewer, mediaplane.PauseSourceInactive, mediaplane.PauseSourceUnauthorized}
 		}
 	}
 	switch fieldName {
@@ -1171,9 +1137,6 @@ func isUUIDField(fieldName string) bool {
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if schemaName == "IssueAccessGrantRequest" && fieldName == "expected_media_connection_id" {
-		return true
-	}
-	if schemaName == "SFUSubscriptionsResponse" && fieldName == "session_id" {
 		return true
 	}
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {

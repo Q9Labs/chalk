@@ -128,35 +128,6 @@ export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantReque
 export const AuditLogIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId")))();
 export type AuditLogId = typeof AuditLogIdSchema.Type;
 
-export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    samples: Schema.Array(
-      Schema.Struct({
-        connection_type: Schema.Literals(["udp", "tcp", "turn", "unknown"]),
-        elapsed_ms: Schema.Number,
-        freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
-        freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
-        recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
-        recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
-        recv_hidden_videos: Schema.optional(Schema.NullOr(Schema.Number)),
-        recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
-        recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),
-        relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
-        remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
-        rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        send_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
-        send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
-        send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
-        window_ms: Schema.Number,
-      }),
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(30)),
-    version: Schema.Literal(1),
-  }))();
-export type CallStatsRequest = typeof CallStatsRequestSchema.Type;
-
 export const CancelRecordingPreparationRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     expected_revision: Schema.Number,
@@ -189,83 +160,6 @@ export const ChatAttachmentUploadSchema = /* @__PURE__ */ (() =>
     uploadUrl: Schema.String,
   }))();
 export type ChatAttachmentUpload = typeof ChatAttachmentUploadSchema.Type;
-
-export const CloudflareSFUCloseTracksAPIResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
-    sessionDescription: Schema.optional(
-      Schema.NullOr(
-        Schema.Struct({
-          sdp: Schema.String,
-          type: Schema.String,
-        }),
-      ),
-    ),
-    tracks: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          mid: Schema.String,
-          publication_id: Schema.String,
-          source: Schema.String,
-        }),
-      ),
-    ),
-  }))();
-export type CloudflareSFUCloseTracksAPIResponse = typeof CloudflareSFUCloseTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUCloseTracksRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    connection_id: Schema.String.check(Schema.isMinLength(1)),
-    force: Schema.Boolean,
-    receive_only: Schema.optional(Schema.Boolean),
-    session_description: Schema.optional(
-      Schema.NullOr(
-        Schema.Struct({
-          sdp: Schema.String.check(Schema.isMinLength(1)),
-          type: Schema.String.check(Schema.isMinLength(1)),
-        }),
-      ),
-    ),
-    tracks: Schema.Array(
-      Schema.Struct({
-        mid: Schema.String.check(Schema.isMinLength(1)),
-        publication_id: Schema.String.check(Schema.isMinLength(1)),
-        source: Schema.String.check(Schema.isMinLength(1)),
-      }),
-    ),
-  }))();
-export type CloudflareSFUCloseTracksRequest = typeof CloudflareSFUCloseTracksRequestSchema.Type;
-
-export const CloudflareSFUPublicationsResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    incarnation: Schema.Number,
-    publications: Schema.Array(
-      Schema.Struct({
-        participant_id: ParticipantIdSchema,
-        paused: Schema.optional(Schema.Boolean),
-        publication_id: Schema.String,
-        source: Schema.String,
-      }),
-    ),
-    sequence: Schema.Number,
-  }))();
-export type CloudflareSFUPublicationsResponse = typeof CloudflareSFUPublicationsResponseSchema.Type;
-
-export const CloudflareSFURenegotiateRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    connection_id: Schema.String.check(Schema.isMinLength(1)),
-    session_description: Schema.Struct({
-      sdp: Schema.String.check(Schema.isMinLength(1)),
-      type: Schema.String.check(Schema.isMinLength(1)),
-    }),
-  }))();
-export type CloudflareSFURenegotiateRequest = typeof CloudflareSFURenegotiateRequestSchema.Type;
-
-export const CloudflareSFURenegotiateResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    accepted: Schema.Boolean,
-  }))();
-export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
 
 export const CloudflareSFUSignalAPIResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -399,222 +293,6 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
     ),
   }))();
 export type CloudflareSFUSignalRequest = typeof CloudflareSFUSignalRequestSchema.Type;
-
-export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    publications: Schema.optional(Schema.NullOr(CloudflareSFUPublicationsResponseSchema)),
-    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
-    sessionDescription: Schema.optional(
-      Schema.NullOr(
-        Schema.Struct({
-          sdp: Schema.String,
-          type: Schema.String,
-        }),
-      ),
-    ),
-    trackErrors: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          code: Schema.String,
-          connectionId: Schema.String,
-          trackName: Schema.String,
-        }),
-      ),
-    ),
-    tracks: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          location: Schema.String,
-          mid: Schema.optional(Schema.String),
-          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
-          publication_id: Schema.optional(Schema.String),
-          sessionId: Schema.optional(Schema.String),
-          simulcast: Schema.optional(
-            Schema.NullOr(
-              Schema.Struct({
-                preferredRid: Schema.String,
-                priorityOrdering: Schema.String,
-                ridNotAvailable: Schema.String,
-              }),
-            ),
-          ),
-          source: Schema.optional(Schema.String),
-          trackName: Schema.String,
-        }),
-      ),
-    ),
-  }))();
-export type CloudflareSFUUpdateTracksAPIResponse = typeof CloudflareSFUUpdateTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUTracksAPIResponseSchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksAPIResponseSchema)();
-export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUTracksRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    connection_id: Schema.String.check(Schema.isMinLength(1)),
-    pull_published_audio: Schema.optional(Schema.Boolean),
-    session_description: Schema.optional(
-      Schema.NullOr(
-        Schema.Struct({
-          sdp: Schema.String.check(Schema.isMinLength(1)),
-          type: Schema.String.check(Schema.isMinLength(1)),
-        }),
-      ),
-    ),
-    tracks: Schema.Array(
-      Schema.Struct({
-        location: Schema.String.check(Schema.isMinLength(1)),
-        mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
-        publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        simulcast: Schema.optional(
-          Schema.NullOr(
-            Schema.Struct({
-              preferredRid: Schema.String.check(Schema.isMinLength(1)),
-              priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
-              ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
-            }),
-          ),
-        ),
-        source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        trackName: Schema.String.check(Schema.isMinLength(1)),
-      }),
-    ),
-  }))();
-export type CloudflareSFUTracksRequest = typeof CloudflareSFUTracksRequestSchema.Type;
-
-export const CloudflareSFUUpdateTracksRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    connection_id: Schema.String.check(Schema.isMinLength(1)),
-    tracks: Schema.Array(
-      Schema.Struct({
-        location: Schema.String.check(Schema.isMinLength(1)),
-        mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
-        publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        simulcast: Schema.optional(
-          Schema.NullOr(
-            Schema.Struct({
-              preferredRid: Schema.String.check(Schema.isMinLength(1)),
-              priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
-              ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
-            }),
-          ),
-        ),
-        source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-        trackName: Schema.String.check(Schema.isMinLength(1)),
-      }),
-    ),
-  }))();
-export type CloudflareSFUUpdateTracksRequest = typeof CloudflareSFUUpdateTracksRequestSchema.Type;
-
-export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    events: Schema.Array(
-      Schema.Struct({
-        attempt: Schema.optional(Schema.NullOr(Schema.Number)),
-        bundle_tag_held: Schema.optional(Schema.NullOr(Schema.Boolean)),
-        close_code: Schema.optional(Schema.NullOr(Schema.Number)),
-        code: Schema.optional(
-          Schema.Literals([
-            "invalid_state",
-            "invalid_access",
-            "access_unavailable",
-            "permission_denied",
-            "device_not_found",
-            "device_busy",
-            "device_constraint_invalid",
-            "media_capture_failed",
-            "sync_start_failed",
-            "state_digest_recovery_failed",
-            "sync_hello_timeout",
-            "media_start_failed",
-            "join_cleanup_unconfirmed",
-            "sync_recovery_exhausted",
-            "media_recovery_exhausted",
-            "command_rejected",
-            "leave_unconfirmed",
-            "episode_ended",
-            "unsupported_environment",
-            "internal_error",
-            "collaboration_unavailable",
-            "chat_cursor_reset_required",
-            "rate_limited",
-            "invalid_payload",
-            "media_timeout",
-            "retry_exhausted",
-            "not_live",
-          ]),
-        ),
-        duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        elapsed_ms: Schema.Number,
-        element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
-        event: Schema.Literals([
-          "space_join_span",
-          "state_changed",
-          "connection_failed",
-          "sync_connect_failed",
-          "sync_dial_timeout",
-          "access_refreshed",
-          "access_refresh_failed",
-          "recovery_attempt",
-          "recovery_succeeded",
-          "recovery_exhausted",
-          "cleanup_completed",
-          "cleanup_unconfirmed",
-          "sync_socket_open",
-          "sync_socket_close",
-          "sync_heartbeat_gap",
-          "media_state",
-          "media_http_error",
-          "media_projection_mismatch",
-          "audio_receive_stuck",
-          "audio_receive_summary",
-          "receivers_closed",
-          "access_retry",
-          "chat_upload_failed",
-        ]),
-        granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
-        granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
-        heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-        http_status: Schema.optional(Schema.NullOr(Schema.Number)),
-        media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
-        media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"])),
-        outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
-        phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
-        play_result: Schema.optional(Schema.Literals(["ok", "NotAllowedError", "AbortError", "unknown"])),
-        projection_state: Schema.optional(Schema.Literals(["on", "off"])),
-        publication_state: Schema.optional(Schema.Literals(["on", "off"])),
-        receive_counts: Schema.optional(
-          Schema.NullOr(
-            Schema.Struct({
-              announced: Schema.optional(Schema.NullOr(Schema.Number)),
-              bytes_flowing: Schema.optional(Schema.NullOr(Schema.Number)),
-              element_bound: Schema.optional(Schema.NullOr(Schema.Number)),
-              playing: Schema.optional(Schema.NullOr(Schema.Number)),
-              projection_off: Schema.optional(Schema.NullOr(Schema.Number)),
-              pull_failed: Schema.optional(Schema.NullOr(Schema.Number)),
-              pull_requested: Schema.optional(Schema.NullOr(Schema.Number)),
-              pull_succeeded: Schema.optional(Schema.NullOr(Schema.Number)),
-              track_received: Schema.optional(Schema.NullOr(Schema.Number)),
-            }),
-          ),
-        ),
-        receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
-        receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
-        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio", "screen_video"])),
-        state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
-        step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
-        track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
-        upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
-      }),
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "upload_failed"]),
-    version: Schema.Literal(1),
-  }))();
-export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;
 
 export const CreateAPIKeyRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -1404,23 +1082,6 @@ export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
     secret: Schema.String,
   }))();
 export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
-
-export const SFUSubscriptionsResponseSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    subscriptions: Schema.Array(
-      Schema.Struct({
-        effective_rid: Schema.optional(Schema.String),
-        mid: Schema.String,
-        reason: Schema.optional(Schema.Literals(["congestion", "viewer", "source_inactive", "source_unauthorized"])),
-        requested_rid: Schema.optional(Schema.String),
-        revision: Schema.Number,
-        session_id: Schema.String,
-        state: Schema.Literals(["active", "paused"]),
-        track_name: Schema.String,
-      }),
-    ),
-  }))();
-export type SFUSubscriptionsResponse = typeof SFUSubscriptionsResponseSchema.Type;
 
 export const SetEpisodeDeadlineRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2599,55 +2260,6 @@ export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Typ
 export const RetryAfterHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)))();
 export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
 
-export const AddCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
-
-export const AddCloudflareSFUTracksQueryParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
-    replacement_cause: Schema.optional(
-      Schema.Literals([
-        "user_pause",
-        "moderation_pause",
-        "sync_recovery_loss",
-        "discovery_absent",
-        "capture_cleanup",
-        "consent_revoked",
-        "publish_failure",
-        "enable_failure",
-        "projection_mismatch",
-        "forced_pause",
-        "local_signaling_failure",
-        "remote_signaling_failure",
-        "dormant_connection",
-        "access_refresh",
-        "receive_stalled",
-        "section_budget",
-      ]),
-    ),
-  }))();
-export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
-
-export const AddCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUTracksRequestSchema)();
-export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
-
-export const AddCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUTracksAPIResponseSchema)();
-export type AddCloudflareSFUTracksResponse = typeof AddCloudflareSFUTracksResponseSchema.Type;
-
-export const AddCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type AddCloudflareSFUTracks429ResponseHeaders = typeof AddCloudflareSFUTracks429ResponseHeadersSchema.Type;
-
 export const AdmitEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
@@ -2796,29 +2408,6 @@ export const CancelSpaceRecordingPreparation429ResponseHeadersSchema = /* @__PUR
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type CancelSpaceRecordingPreparation429ResponseHeaders = typeof CancelSpaceRecordingPreparation429ResponseHeadersSchema.Type;
-
-export const CloseCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type CloseCloudflareSFUTracksPathParams = typeof CloseCloudflareSFUTracksPathParamsSchema.Type;
-
-export const CloseCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUCloseTracksRequestSchema)();
-export type CloseCloudflareSFUTracksRequestBody = typeof CloseCloudflareSFUTracksRequestBodySchema.Type;
-
-export const CloseCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUCloseTracksAPIResponseSchema)();
-export type CloseCloudflareSFUTracksResponse = typeof CloseCloudflareSFUTracksResponseSchema.Type;
-
-export const CloseCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type CloseCloudflareSFUTracks429ResponseHeaders = typeof CloseCloudflareSFUTracks429ResponseHeadersSchema.Type;
 
 export const CreateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3534,26 +3123,6 @@ export type ListAPIKeysQueryParams = typeof ListAPIKeysQueryParamsSchema.Type;
 export const ListAPIKeysResponseSchema = /* @__PURE__ */ (() => APIKeyListSchema)();
 export type ListAPIKeysResponse = typeof ListAPIKeysResponseSchema.Type;
 
-export const ListCloudflareSFUPublicationsPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type ListCloudflareSFUPublicationsPathParams = typeof ListCloudflareSFUPublicationsPathParamsSchema.Type;
-
-export const ListCloudflareSFUPublicationsResponseSchema = /* @__PURE__ */ (() => CloudflareSFUPublicationsResponseSchema)();
-export type ListCloudflareSFUPublicationsResponse = typeof ListCloudflareSFUPublicationsResponseSchema.Type;
-
-export const ListCloudflareSFUPublications429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type ListCloudflareSFUPublications429ResponseHeaders = typeof ListCloudflareSFUPublications429ResponseHeadersSchema.Type;
-
 export const ListEpisodesPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     space_id: SpaceIdSchema,
@@ -3628,26 +3197,6 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 
 export const ListRecordingsResponseSchema = /* @__PURE__ */ (() => RecordingListSchema)();
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
-
-export const ListSFUSubscriptionsPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type ListSFUSubscriptionsPathParams = typeof ListSFUSubscriptionsPathParamsSchema.Type;
-
-export const ListSFUSubscriptionsResponseSchema = /* @__PURE__ */ (() => SFUSubscriptionsResponseSchema)();
-export type ListSFUSubscriptionsResponse = typeof ListSFUSubscriptionsResponseSchema.Type;
-
-export const ListSFUSubscriptions429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type ListSFUSubscriptions429ResponseHeaders = typeof ListSFUSubscriptions429ResponseHeadersSchema.Type;
 
 export const ListSpaceActivityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3970,46 +3519,6 @@ export const RemoveEpisodeParticipant429ResponseHeadersSchema = /* @__PURE__ */ 
   }))();
 export type RemoveEpisodeParticipant429ResponseHeaders = typeof RemoveEpisodeParticipant429ResponseHeadersSchema.Type;
 
-export const RenegotiateCloudflareSFUPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type RenegotiateCloudflareSFUPathParams = typeof RenegotiateCloudflareSFUPathParamsSchema.Type;
-
-export const RenegotiateCloudflareSFURequestBodySchema = /* @__PURE__ */ (() => CloudflareSFURenegotiateRequestSchema)();
-export type RenegotiateCloudflareSFURequestBody = typeof RenegotiateCloudflareSFURequestBodySchema.Type;
-
-export const RenegotiateCloudflareSFUResponseSchema = /* @__PURE__ */ (() => CloudflareSFURenegotiateResponseSchema)();
-export type RenegotiateCloudflareSFUResponse = typeof RenegotiateCloudflareSFUResponseSchema.Type;
-
-export const RenegotiateCloudflareSFU429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
-
-export const ReportConnectionFailurePathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    tenant_id: TenantIdSchema,
-  }))();
-export type ReportConnectionFailurePathParams = typeof ReportConnectionFailurePathParamsSchema.Type;
-
-export const ReportConnectionFailureRequestBodySchema = /* @__PURE__ */ (() => ConnectionReportRequestSchema)();
-export type ReportConnectionFailureRequestBody = typeof ReportConnectionFailureRequestBodySchema.Type;
-
-export const ReportConnectionFailure429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type ReportConnectionFailure429ResponseHeaders = typeof ReportConnectionFailure429ResponseHeadersSchema.Type;
-
 export const RequestRecordingExportPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     recording_id: RecordingIdSchema,
@@ -4273,29 +3782,6 @@ export const TestWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =
   }))();
 export type TestWebhookEndpoint429ResponseHeaders = typeof TestWebhookEndpoint429ResponseHeadersSchema.Type;
 
-export const UpdateCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }))();
-export type UpdateCloudflareSFUTracksPathParams = typeof UpdateCloudflareSFUTracksPathParamsSchema.Type;
-
-export const UpdateCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksRequestSchema)();
-export type UpdateCloudflareSFUTracksRequestBody = typeof UpdateCloudflareSFUTracksRequestBodySchema.Type;
-
-export const UpdateCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksAPIResponseSchema)();
-export type UpdateCloudflareSFUTracksResponse = typeof UpdateCloudflareSFUTracksResponseSchema.Type;
-
-export const UpdateCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type UpdateCloudflareSFUTracks429ResponseHeaders = typeof UpdateCloudflareSFUTracks429ResponseHeadersSchema.Type;
-
 export const UpdateMembershipPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     membership_id: MembershipIdSchema,
@@ -4406,23 +3892,6 @@ export const UpdateWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (()
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type UpdateWebhookEndpoint429ResponseHeaders = typeof UpdateWebhookEndpoint429ResponseHeadersSchema.Type;
-
-export const UploadCallStatsPathParamsSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    tenant_id: TenantIdSchema,
-  }))();
-export type UploadCallStatsPathParams = typeof UploadCallStatsPathParamsSchema.Type;
-
-export const UploadCallStatsRequestBodySchema = /* @__PURE__ */ (() => CallStatsRequestSchema)();
-export type UploadCallStatsRequestBody = typeof UploadCallStatsRequestBodySchema.Type;
-
-export const UploadCallStats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
-  Schema.Struct({
-    "Retry-After": RetryAfterHeaderSchema,
-    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-  }))();
-export type UploadCallStats429ResponseHeaders = typeof UploadCallStats429ResponseHeadersSchema.Type;
 
 export const UploadTelemetryPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6762,24 +6231,6 @@ export const WhiteboardStorageUnavailableErrorSchema = WhiteboardStorageUnavaila
   }),
 );
 
-export const AddCloudflareSFUTracksErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type AddCloudflareSFUTracksError = typeof AddCloudflareSFUTracksErrorSchema.Type;
-
 export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6882,24 +6333,6 @@ export const CancelSpaceRecordingPreparationErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type CancelSpaceRecordingPreparationError = typeof CancelSpaceRecordingPreparationErrorSchema.Type;
-
-export const CloseCloudflareSFUTracksErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type CloseCloudflareSFUTracksError = typeof CloseCloudflareSFUTracksErrorSchema.Type;
 
 export const CreateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7461,22 +6894,6 @@ export type LeaveSpacePublicInviteArrivalError = typeof LeaveSpacePublicInviteAr
 export const ListAPIKeysErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListAPIKeysError = typeof ListAPIKeysErrorSchema.Type;
 
-export const ListCloudflareSFUPublicationsErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ListCloudflareSFUPublicationsError = typeof ListCloudflareSFUPublicationsErrorSchema.Type;
-
 export const ListEpisodesErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7518,23 +6935,6 @@ export const ListRecordingsErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
-
-export const ListSFUSubscriptionsErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ListSFUSubscriptionsError = typeof ListSFUSubscriptionsErrorSchema.Type;
 
 export const ListSpaceActivityErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListSpaceActivityError = typeof ListSpaceActivityErrorSchema.Type;
@@ -7723,36 +7123,6 @@ export const RemoveEpisodeParticipantErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type RemoveEpisodeParticipantError = typeof RemoveEpisodeParticipantErrorSchema.Type;
-
-export const RenegotiateCloudflareSFUErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type RenegotiateCloudflareSFUError = typeof RenegotiateCloudflareSFUErrorSchema.Type;
-
-export const ReportConnectionFailureErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type ReportConnectionFailureError = typeof ReportConnectionFailureErrorSchema.Type;
 
 export const RequestRecordingExportErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
@@ -7951,24 +7321,6 @@ export const TestWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type TestWebhookEndpointError = typeof TestWebhookEndpointErrorSchema.Type;
 
-export const UpdateCloudflareSFUTracksErrorSchema = Schema.Union([
-  AccessForbiddenErrorSchema,
-  AccessUnauthenticatedErrorSchema,
-  EpisodeInvalidIdErrorSchema,
-  EpisodeNotFoundErrorSchema,
-  MediaConnectionNotFoundErrorSchema,
-  MediaUnavailableErrorSchema,
-  ParticipantInvalidIdErrorSchema,
-  RequestInvalidErrorSchema,
-  RequestPayloadTooLargeErrorSchema,
-  RequestRateLimitedErrorSchema,
-  ServiceInternalErrorSchema,
-  ServiceUnavailableErrorSchema,
-  SpaceInvalidIdErrorSchema,
-  TenantInvalidIdErrorSchema,
-]);
-export type UpdateCloudflareSFUTracksError = typeof UpdateCloudflareSFUTracksErrorSchema.Type;
-
 export const UpdateMembershipErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -8069,14 +7421,10 @@ export const UpdateWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
 
-export const UploadCallStatsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
-export type UploadCallStatsError = typeof UploadCallStatsErrorSchema.Type;
-
 export const UploadTelemetryErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
 
 export const ChalkOperationPolicies = {
-  addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8084,7 +7432,6 @@ export const ChalkOperationPolicies = {
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelEpisodeParticipantJoin: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   cancelSpaceRecordingPreparation: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  closeCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createEpisode: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   createMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8129,8 +7476,6 @@ export const ChalkOperationPolicies = {
   redeliverWebhookDelivery: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   refreshSpacePublicInviteAccess: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   removeEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  renegotiateCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  reportConnectionFailure: { maxBodyBytes: 32768, rateLimit: { limit: 6, policy: "connection_reports.participant", windowSeconds: 600 } },
   requestRecordingExport: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -8143,13 +7488,11 @@ export const ChalkOperationPolicies = {
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   signalCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  updateCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpace: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateSpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
-  uploadCallStats: { maxBodyBytes: 32768, rateLimit: { limit: 30, policy: "call_stats.participant", windowSeconds: 600 } },
   uploadTelemetry: { maxBodyBytes: 65536, rateLimit: { limit: 4194304, policy: "v1.telemetry.intake", windowSeconds: 8100 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];
