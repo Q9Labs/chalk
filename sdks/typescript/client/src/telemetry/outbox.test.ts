@@ -23,7 +23,7 @@ describe("recording", () => {
       { seq: 0, elapsed_ms: 0 },
       { seq: 1, elapsed_ms: 250 },
     ]);
-    expect(JSON.parse(test.requests[0]?.send.body ?? "{}")).toMatchObject({ version: 1, client_session_id: test.outbox.sessionId });
+    expect(JSON.parse(test.requests[0]?.send.body ?? "{}")).toMatchObject({ version: 2, source_id: test.outbox.sessionId, next_seq: 2 });
   });
 
   it("sends started events at once, routine events within 2 seconds and stats windows within 30", async () => {
@@ -63,7 +63,7 @@ describe("recording", () => {
     const test = createTestOutbox();
     await test.outbox.dispose();
     expect(() => test.outbox.record({ type: "platform_changed", platform_state: "visible" })).not.toThrow();
-    expect(test.requests).toHaveLength(0);
+    expect(test.requests.map((request) => [request.body.events.length, request.body.end, request.body.next_seq])).toEqual([[0, "closed", 0]]);
   });
 });
 

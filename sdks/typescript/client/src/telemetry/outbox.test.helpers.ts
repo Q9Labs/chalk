@@ -1,13 +1,15 @@
 import { expect } from "vitest";
 import { TelemetryOutbox } from "./outbox";
-import type { PlatformChange, TelemetryEvent, TelemetryPlatform, TelemetrySend, TelemetrySendResult } from "./types";
+import type { DeliveryStep, PlatformChange, SeqRange, TelemetryEvent, TelemetryJournal, TelemetryPlatform, TelemetryRequest, TelemetrySend, TelemetrySendResult } from "./types";
 
 type Answer = TelemetrySendResult | "network_error";
 
-/** A platform that runs on the test clock and answers each POST from a script. The default answer is a 200. */
-export function createTestTelemetryPlatform(options: { readonly now?: () => number } = {}) {
+const rangeOf = (seq: number): SeqRange => ({ from: seq, to: seq + 1 });
+
+/** A platform that runs on the test clock and answers each POST from a script. The default answer is a 200 that settles every seq of the batch. */
+export function createTestTelemetryPlatform(options: { readonly now?: () => number; readonly journal?: TelemetryJournal } = {}) {
   const listeners = new Set<(change: PlatformChange) => void>();
-  const requests: { readonly send: TelemetrySend; readonly events: TelemetryEvent[]; readonly status: number | "network_error" }[] = [];
+  const requests: { readonly send: TelemetrySend; readonly body: TelemetryRequest; readonly events: TelemetryEvent[]; readonly status: number | "network_error" }[] = [];
   const accepted: TelemetryEvent[] = [];
   const answers: Answer[] = [];
   let gate: Promise<void> | null = null;
@@ -23,14 +25,17 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
       return () => listeners.delete(listener);
     },
     send: async (send) => {
-      const body: { readonly events: TelemetryEvent[] } = JSON.parse(send.body);
+      const body: TelemetryRequest = JSON.parse(send.body);
       const answer = answers.shift() ?? { status: 200, retryAfterMs: 0 };
-      requests.push({ send, events: body.events, status: answer === "network_error" ? answer : answer.status });
+      requests.push({ send, body, events: body.events, status: answer === "network_error" ? answer : answer.status });
       await gate;
       if (answer === "network_error") throw new TypeError("network error");
-      if (answer.status >= 200 && answer.status < 300) accepted.push(...body.events);
-      return answer;
+      if (answer.status < 200 || answer.status >= 300) return answer;
+      const acks = answer.acks ?? body.events.map((event) => rangeOf(event.seq));
+      accepted.push(...body.events.filter((event) => acks.some((range) => event.seq >= range.from && event.seq < range.to)));
+      return { ...answer, acks };
     },
+    ...(options.journal ? { journal: options.journal } : {}),
   };
   return {
     platform,
@@ -60,9 +65,9 @@ export function createTestTelemetryPlatform(options: { readonly now?: () => numb
 }
 
 /** An outbox over the test platform, bound to a credential that stays valid. */
-export function createTestOutbox(options: { readonly now?: () => number; readonly random?: () => number; readonly bound?: boolean } = {}) {
+export function createTestOutbox(options: { readonly now?: () => number; readonly random?: () => number; readonly bound?: boolean; readonly journal?: TelemetryJournal; readonly trace?: (step: DeliveryStep) => void } = {}) {
   const harness = createTestTelemetryPlatform(options);
-  const outbox = new TelemetryOutbox({ platform: harness.platform, endpoint: (tenantId) => `https://api.test/v1/tenants/${tenantId}/telemetry`, random: options.random ?? (() => 0.5) });
+  const outbox = new TelemetryOutbox({ platform: harness.platform, endpoint: (tenantId) => `https://api.test/v1/tenants/${tenantId}/telemetry`, random: options.random ?? (() => 0.5), ...(options.trace ? { trace: options.trace } : {}), liveSources: new Set() });
   if (options.bound !== false) outbox.bind({ current: () => ({ tenantId: "tenant", subject: "tenant/episode/participant", token: "token", expiresAt: Date.now() + 3_600_000 }), refresh: async () => undefined });
   return { ...harness, outbox };
 }

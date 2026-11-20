@@ -106,12 +106,12 @@ describe("faults at the boundaries of a credential and of a request", () => {
     await seconds(17);
     expect(test.requests).toHaveLength(1);
     await seconds(3);
-    expect(test.requests).toHaveLength(2);
-    expect(bodyOf(test, 1)).toEqual([0, 1]);
+    expect([bodyOf(test, 1), bodyOf(test, 2)]).toEqual([[0], [1]]);
+    expect(test.requests[1]?.body.batch_id).toBe(test.requests[0]?.body.batch_id);
     expectUnbrokenSequence(test.accepted);
   });
 
-  it("sends a page_closed event while an earlier request is still in flight, and every request outlives the page", async () => {
+  it("holds a page_closed event while an earlier request is in flight, because one batch per source is in flight, and the journal keeps it", async () => {
     const test = createTestOutbox();
     test.outbox.onClosing(() => test.outbox.record({ type: "call_ended", end_reason: "page_closed" }));
     const release = test.hold();
@@ -119,11 +119,11 @@ describe("faults at the boundaries of a credential and of a request", () => {
     await seconds(2);
     expect(test.requests).toHaveLength(1);
     test.emit("closing");
-    expect(test.requests).toHaveLength(2);
-    expect(test.requests.map((request) => request.send.keepalive)).toEqual([true, true]);
-    expect(bodyOf(test, 1)).toEqual([1]);
+    expect(test.requests).toHaveLength(1);
     release();
     await seconds(0);
+    expect(test.requests.map((request) => request.send.keepalive)).toEqual([true, true]);
+    expect(bodyOf(test, 1)).toEqual([1]);
     expect(test.accepted.map((event) => event.seq).sort()).toEqual([0, 1]);
     expectUnbrokenSequence(test.accepted);
   });
