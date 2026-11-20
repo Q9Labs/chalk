@@ -17,6 +17,7 @@ try {
     const secret = inputSecrets[stack];
     const inputs = secret ? process.env[secret] : undefined;
     const env = { ...process.env, CHALK_INFRA_INPUTS: undefined };
+    for (const name of Object.values(inputSecrets)) delete env[name];
     if (secret && inputs) {
       env.CHALK_INFRA_INPUTS = join(directory, `${stack}-${stage}-inputs.json`);
       writeFileSync(env.CHALK_INFRA_INPUTS, inputs, { mode: 0o600 });
