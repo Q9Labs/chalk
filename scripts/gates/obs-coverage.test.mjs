@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { checkCoverage } from "./obs-coverage.mjs";
@@ -40,6 +41,41 @@ test("a positive fixture with no row of a witnessing event fails", async () => {
   const witnesses = example.witnesses.map((witness) => (witness.fact === "end.client_screen" ? { ...witness, events: witness.events.map((event) => ({ ...event, event: "client.screen_shown" })) } : witness));
   const { failures } = await checkCoverage({ root, graph: only({ ...example, witnesses }) });
   assert.match(failures.join("\n"), /positive fixture has no client\.screen_shown row for end\.client_screen/u);
+});
+
+test("a fault scenario that only names the symptom and the chain, and skips its test, fails because it is not the chain's first hop", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "obs-coverage-"));
+  writeFileSync(join(dir, "fake.fault.test.ts"), '// end.wrong_screen\n// observability/fixtures/end.wrong_screen/chain/\nit.skip("never runs", () => {});\n');
+  const { failures } = await checkCoverage({ root, graph: only({ ...example, fault_scenario: relative(root, join(dir, "fake.fault.test.ts")) }) });
+  assert.match(failures.join("\n"), /the first hop in observability\/fixtures\/end\.wrong_screen\/chain\/hops\.json must be the fault scenario/u);
+});
+
+/** A copy of the repository whose observability tree is its own, so a test can add a file to a chain. */
+function rootWithChainFile(name, text) {
+  const copy = mkdtempSync(join(tmpdir(), "obs-coverage-root-"));
+  for (const entry of readdirSync(root)) if (entry !== "observability") symlinkSync(join(root, entry), join(copy, entry));
+  cpSync(join(root, "observability"), join(copy, "observability"), { recursive: true });
+  writeFileSync(join(copy, "observability/fixtures/end.wrong_screen/chain", name), text);
+  return copy;
+}
+
+test("a chain file no declared hop writes fails, so a hand-written hand-off can't join the chain", async () => {
+  const rows = readFileSync(join(root, "observability/fixtures/end.wrong_screen/chain/api-rows.positive.json"), "utf8");
+  const { failures } = await checkCoverage({ root: rootWithChainFile("handwritten.positive.json", rows), graph: only(example) });
+  assert.match(failures.join("\n"), /chain file handwritten\.positive\.json is written by no hop/u);
+});
+
+test("a fixture whose rows are not its chain's rows fails, so a hop that renames a field cannot hide behind a hand-written fixture", async () => {
+  const positive = JSON.parse(readFileSync(join(root, example.fixtures.positive), "utf8"));
+  const edited = { ...positive, rows: positive.rows.map((row) => ({ ...row, est_server_ms: row.est_server_ms + 1 })) };
+  const unchained = { ...positive, chain: undefined };
+  const dir = mkdtempSync(join(tmpdir(), "obs-coverage-"));
+  writeFileSync(join(dir, "edited.json"), JSON.stringify(edited));
+  writeFileSync(join(dir, "unchained.json"), JSON.stringify(unchained));
+  const at = (name) => relative(root, join(dir, name));
+  const failuresFor = async (name) => (await checkCoverage({ root, graph: only({ ...example, fixtures: { ...example.fixtures, positive: at(name) } }) })).failures.join("\n");
+  assert.match(await failuresFor("edited.json"), /positive fixture rows are not the rows of its chain files/u);
+  assert.match(await failuresFor("unchained.json"), /positive fixture names no chain hand-off files/u);
 });
 
 test("an allow-listed symptom that is complete fails, so the list only shrinks", async () => {

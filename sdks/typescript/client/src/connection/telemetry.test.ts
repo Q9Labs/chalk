@@ -91,7 +91,7 @@ describe("a call tells the server how it ended", () => {
     );
     return telemetry;
   };
-  const endings = (telemetry: ReturnType<typeof createTestOutbox>) => telemetry.accepted.filter((event) => event.type === "call_ended").map((event) => event.end_reason);
+  const endings = (telemetry: ReturnType<typeof createTestOutbox>) => telemetry.accepted.filter((event) => event.name === "client.call_ended").map((event) => event.end_reason);
 
   it("says left after a leave", async () => {
     const telemetry = await run((lifecycle, outbox) =>
@@ -124,7 +124,7 @@ describe("a call tells the server how it ended", () => {
       Effect.gen(function* () {
         yield* lifecycle.join();
         yield* lifecycle.leave();
-        const request = outbox.requests.find((candidate) => candidate.events.some((event) => event.type === "call_ended"));
+        const request = outbox.requests.find((candidate) => candidate.events.some((event) => event.name === "client.call_ended"));
         sentAtLeave = request?.events.map((event) => event.end_reason) ?? [];
         keepalive = request?.send.keepalive ?? false;
       }),

@@ -5,13 +5,11 @@ package obs
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,38 +40,11 @@ type Config struct {
 	Trail func(context.Context) []slog.Attr
 }
 
-// Flags is the effective config switches, kill switches and caps: strings, booleans, integers or nil.
-type Flags map[string]any
-
 type state struct {
 	config    Config
 	closed    bool
 	sourceID  string
 	flagsHash string
-}
-
-type fieldSpec struct {
-	typ, group string
-	required   bool
-	values     []string
-}
-
-type fieldRule struct {
-	required bool
-	values   []string
-}
-
-type eventSpec struct {
-	kind, dataset string
-	testOnly      bool
-	decisions     []string
-	fields        map[string]fieldRule
-}
-
-type machineSpec struct {
-	states   []string
-	edges    [][2]string
-	triggers []string
 }
 
 var (
@@ -103,36 +74,6 @@ func Configure(config Config) {
 // Stats reports what open mode counted instead of panicking.
 func Stats() (violationCount, exportFailureCount int64) {
 	return violations.Load(), exportFailures.Load()
-}
-
-// Violation is the panic value of a closed-mode registry violation.
-type Violation struct{ Problems []string }
-
-func (v *Violation) Error() string { return "obs: " + strings.Join(v.Problems, "; ") }
-
-// Classified names an error's outcome inside an Op. Op records it and returns the wrapped error.
-type Classified struct {
-	Outcome, Code string
-	Err           error
-}
-
-func (c *Classified) Error() string {
-	if c.Err == nil {
-		return fmt.Sprintf("%s(%s)", c.Outcome, c.Code)
-	}
-	return fmt.Sprintf("%s(%s): %v", c.Outcome, c.Code, c.Err)
-}
-
-func (c *Classified) Unwrap() error { return c.Err }
-
-// Expected marks err as a known, legitimate stop named by an expected reason code.
-func Expected(code string, err error) error {
-	return &Classified{Outcome: "expected", Code: code, Err: err}
-}
-
-// Failure marks err as a failure named by an error reason code.
-func Failure(code string, err error) error {
-	return &Classified{Outcome: "error", Code: code, Err: err}
 }
 
 // F is an attribute for a registry field.
@@ -287,20 +228,6 @@ func Fact(ctx context.Context, name string, attrs ...slog.Attr) {
 	send(ctx, st, "fact", name, attrs, nil, false)
 }
 
-// SetFlags records the full flags map and stamps its hash on every later record. Call it at boot and on change.
-func SetFlags(ctx context.Context, flags Flags) {
-	st := current.Load()
-	hash, err := FlagsHash(flags)
-	if err != nil {
-		violate(st, []string{err.Error()})
-		return
-	}
-	next := *st
-	next.flagsHash = hash
-	current.Store(&next)
-	send(ctx, &next, "fact", EventObsFlagsSnapshot, []slog.Attr{slog.Any(FieldFlags, map[string]any(flags))}, nil, false)
-}
-
 func violate(st *state, problems []string) {
 	if len(problems) == 0 {
 		return
@@ -357,90 +284,4 @@ func send(ctx context.Context, st *state, kind, name string, attrs, own []slog.A
 		}()
 		logger.LogAttrs(ctx, level, name, record...)
 	}()
-}
-
-func eventProblems(name, kind string, attrs []slog.Attr) []string {
-	spec, ok := registryEvents[name]
-	if !ok {
-		return []string{"unknown event " + name}
-	}
-	if spec.kind != kind {
-		return []string{fmt.Sprintf("%s is declared as %s, not %s", name, spec.kind, kind)}
-	}
-	return fieldProblems(name, attrs, spec.fields)
-}
-
-func fieldProblems(name string, attrs []slog.Attr, rules map[string]fieldRule) []string {
-	problems := []string{}
-	present := map[string]bool{}
-	for _, attr := range attrs {
-		present[attr.Key] = true
-		spec, known := registryFields[attr.Key]
-		rule, declared := rules[attr.Key]
-		switch {
-		case !known:
-			problems = append(problems, fmt.Sprintf("%s: field %s is not in the registry", name, attr.Key))
-		case !declared && spec.group != "trail":
-			problems = append(problems, fmt.Sprintf("%s: field %s is not declared on this event", name, attr.Key))
-		default:
-			allowed := rule.values
-			if allowed == nil {
-				allowed = spec.values
-			}
-			if !valueFits(spec.typ, allowed, attr.Value.Resolve()) {
-				problems = append(problems, fmt.Sprintf("%s: field %s has %v, which is not a valid %s", name, attr.Key, attr.Value, spec.typ))
-			}
-		}
-	}
-	for field, rule := range rules {
-		if rule.required && !present[field] {
-			problems = append(problems, fmt.Sprintf("%s: required field %s is missing", name, field))
-		}
-	}
-	slices.Sort(problems)
-	return problems
-}
-
-func valueFits(typ string, allowed []string, value slog.Value) bool {
-	kind := value.Kind()
-	switch typ {
-	case "enum":
-		return kind == slog.KindString && slices.Contains(allowed, value.String())
-	case "string", "id":
-		return kind == slog.KindString && value.String() != ""
-	case "int":
-		return kind == slog.KindInt64 || kind == slog.KindUint64
-	case "number":
-		return kind == slog.KindInt64 || kind == slog.KindUint64 || kind == slog.KindFloat64
-	case "bool":
-		return kind == slog.KindBool
-	case "map":
-		switch value.Any().(type) {
-		case Flags, map[string]any:
-			return kind == slog.KindAny
-		}
-	}
-	return false
-}
-
-func reasonProblem(code, outcome string) string {
-	if code == "" {
-		return ""
-	}
-	known, ok := registryReasons[code]
-	if !ok {
-		return "unknown reason code " + code
-	}
-	if outcome != "" && known != outcome {
-		return fmt.Sprintf("reason %s is %s, not %s", code, known, outcome)
-	}
-	return ""
-}
-
-func newID() string {
-	var b [16]byte
-	_, _ = rand.Read(b[:])
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

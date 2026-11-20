@@ -11,112 +11,129 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// SinkWrite writes the sink rows of the records an admission calls new. A ledger calls it after
-// it has admitted a batch and before it commits, so a failure leaves the ledger as it was and
-// the retry writes the rows again.
-type SinkWrite func(context.Context, Admission) error
-
-// MemoryLedger is the ledger in memory, for tests and for a server with no database. It keeps
-// the contract of the Postgres ledger: a batch is admitted under one lock, every source it touches
-// is bound to its first participant, the sink is written before the rows change, and an error from
-// any step leaves every row and binding as it was.
+// MemoryLedger is the ledger in memory, for tests and for a server with no database. It keeps the
+// contract of the Postgres ledger: a batch is admitted under one lock, only for a participant that
+// is live, only into a source that participant owns or has budget for, and an error from any step
+// leaves every row as it was. Nothing is logged here; the caller logs after Admit returns.
 type MemoryLedger struct {
-	mu       sync.Mutex
-	rows     map[rowKey]SourceRow
-	bindings map[bindingKey]Binding
-	// Identities maps a participant to its User or Agent, the way participants.identity_id does
-	// for the Postgres ledger. A participant missing here is a guest.
-	Identities map[utilities.ID]utilities.ID
+	mu   sync.Mutex
+	rows map[sourceKey]SourceRow
+	live map[Identity]bool
 	// Fail, when set, makes every call fail before it touches anything.
 	Fail error
-	// CrashAfterSink, when set, makes Admit fail after the sink write and before the rows change,
-	// the way a crash between the two would.
-	CrashAfterSink error
+	// FailCommit, when set, makes Admit fail after it worked out the admission and before the rows
+	// change, the way a failed commit would.
+	FailCommit error
 }
 
-type rowKey struct{ tenant, source, participant utilities.ID }
+type sourceKey struct{ tenant, source utilities.ID }
 
-type bindingKey struct{ tenant, source utilities.ID }
+// Join makes the participant live, the way its row in participants does for the Postgres ledger.
+func (l *MemoryLedger) Join(identity Identity) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.live == nil {
+		l.live = map[Identity]bool{}
+	}
+	l.live[identity] = true
+}
+
+// Purge removes the tenant's participants and rows, the way a tenant purge does.
+func (l *MemoryLedger) Purge(tenant utilities.ID) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for identity := range l.live {
+		if identity.TenantID == tenant {
+			delete(l.live, identity)
+		}
+	}
+	for key := range l.rows {
+		if key.tenant == tenant {
+			delete(l.rows, key)
+		}
+	}
+}
 
 // Admit admits one batch for the participant the identity names. See telemetrydelivery.Admit.
-func (l *MemoryLedger) Admit(ctx context.Context, identity Identity, batch sdktelemetry.Request, received time.Time, write SinkWrite) (Admission, error) {
+func (l *MemoryLedger) Admit(_ context.Context, identity Identity, batch sdktelemetry.Request, received time.Time) (Admission, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.Fail != nil {
 		return Admission{}, l.Fail
 	}
-	sources, err := Sources(batch)
+	if !l.live[identity] {
+		return Admission{}, ErrParticipantGone
+	}
+	source, err := SourceID(batch)
 	if err != nil {
 		return Admission{}, err
 	}
-	claimant := Claimant{ParticipantID: identity.ParticipantID, IdentityID: l.Identities[identity.ParticipantID]}
-	bindings := make([]Binding, 0, len(sources))
-	for _, source := range sources {
-		binding, found := l.bindings[bindingKey{identity.TenantID, source}]
-		if !found {
-			binding = NewBinding(identity.TenantID, source, claimant, received)
-		}
-		bindings = append(bindings, binding)
+	var existing *SourceRow
+	if row, found := l.rows[sourceKey{identity.TenantID, source}]; found {
+		existing = &row
 	}
-	ownID, _ := utilities.ParseID(batch.SourceID)
-	barred, err := Authorize(bindings, claimant, ownID)
-	if err != nil {
-		return Admission{}, err
-	}
-	existing := make(map[utilities.ID]SourceRow, len(sources))
-	for _, source := range sources {
-		if row, found := l.rows[rowKey{identity.TenantID, source, identity.ParticipantID}]; found {
-			existing[source] = row
+	owned := 0
+	for _, row := range l.rows {
+		if row.TenantID == identity.TenantID && row.ParticipantID == identity.ParticipantID {
+			owned++
 		}
 	}
-	admission, err := Admit(identity, existing, barred, batch, received)
+	admission, err := Admit(identity, existing, owned, batch, received)
 	if err != nil {
 		return Admission{}, err
 	}
-	if err := write(ctx, admission); err != nil {
-		return Admission{}, err
-	}
-	if l.CrashAfterSink != nil {
-		return Admission{}, l.CrashAfterSink
+	if l.FailCommit != nil {
+		return Admission{}, l.FailCommit
 	}
 	if l.rows == nil {
-		l.rows = map[rowKey]SourceRow{}
-		l.bindings = map[bindingKey]Binding{}
+		l.rows = map[sourceKey]SourceRow{}
 	}
-	for _, binding := range bindings {
-		l.bindings[bindingKey{binding.TenantID, binding.SourceID}] = binding
-	}
-	for _, row := range admission.Rows {
-		l.rows[rowKey{row.TenantID, row.SourceID, row.ParticipantID}] = row
-	}
+	l.rows[sourceKey{identity.TenantID, source}] = admission.Row
 	return admission, nil
 }
 
-// Source returns the rows of one source, one per participant, ordered by participant.
-func (l *MemoryLedger) Source(_ context.Context, tenant, source utilities.ID) ([]SourceRow, error) {
-	return l.matching(func(key rowKey, _ SourceRow) bool { return key.tenant == tenant && key.source == source })
+// Live reports whether the identity's participant is live. See postgres.TelemetryLedger.Live.
+func (l *MemoryLedger) Live(_ context.Context, identity Identity) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.Fail != nil {
+		return l.Fail
+	}
+	if !l.live[identity] {
+		return ErrParticipantGone
+	}
+	return nil
 }
 
-// Episode returns the rows of every source that sent records for the Episode.
+// Source returns the row of one source, and whether the ledger has one.
+func (l *MemoryLedger) Source(_ context.Context, tenant, source utilities.ID) (SourceRow, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.Fail != nil {
+		return SourceRow{}, false, l.Fail
+	}
+	row, found := l.rows[sourceKey{tenant, source}]
+	if !found {
+		return SourceRow{}, false, nil
+	}
+	row.Ranges = row.Ranges.Normalized()
+	return row, true, nil
+}
+
+// Episode returns the row of every source the Episode's participants own, ordered by source id.
 func (l *MemoryLedger) Episode(_ context.Context, tenant, episode utilities.ID) ([]SourceRow, error) {
-	return l.matching(func(key rowKey, row SourceRow) bool { return key.tenant == tenant && row.EpisodeID == episode })
-}
-
-func (l *MemoryLedger) matching(keep func(rowKey, SourceRow) bool) ([]SourceRow, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.Fail != nil {
 		return nil, l.Fail
 	}
 	rows := []SourceRow{}
-	for key, row := range l.rows {
-		if keep(key, row) {
+	for _, row := range l.rows {
+		if row.TenantID == tenant && row.EpisodeID == episode {
 			row.Ranges = row.Ranges.Normalized()
 			rows = append(rows, row)
 		}
 	}
-	slices.SortFunc(rows, func(a, b SourceRow) int {
-		return strings.Compare(a.SourceID.String()+a.ParticipantID.String(), b.SourceID.String()+b.ParticipantID.String())
-	})
+	slices.SortFunc(rows, func(a, b SourceRow) int { return strings.Compare(a.SourceID.String(), b.SourceID.String()) })
 	return rows, nil
 }

@@ -14495,10 +14495,10 @@
               }
             },
             "required": ["expires_at", "token"],
-            "type": "object"
+            "type": ["object", "null"]
           }
         },
-        "required": ["media", "subject", "sync", "telemetry"],
+        "required": ["media", "subject", "sync"],
         "type": "object"
       },
       "AdmitEpisodeParticipantRequest": {
@@ -18169,9 +18169,6 @@
                   "maxItems": 64,
                   "type": "array"
                 },
-                "dropped_source_id": {
-                  "$ref": "#/components/schemas/UUID"
-                },
                 "duration_ms": {
                   "maximum": 2147483647,
                   "minimum": 0,
@@ -18573,6 +18570,9 @@
           "duplicates": {
             "type": "integer"
           },
+          "end_rejection": {
+            "type": "string"
+          },
           "rejected": {
             "type": "integer"
           },
@@ -18591,6 +18591,9 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "server_ms": {
+            "type": "integer"
           }
         },
         "required": ["accepted", "acks", "duplicates", "rejected", "rejections"],

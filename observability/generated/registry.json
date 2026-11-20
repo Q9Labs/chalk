@@ -1,5 +1,5 @@
 {
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "06a4092b8fb7",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -382,7 +382,7 @@
   "envelope": [
     {
       "group": "delivery",
-      "fields": ["event_id", "seq", "batch_id", "source_id", "next_seq", "end", "dropped_seqs", "drop_reason", "dropped_source_id"]
+      "fields": ["event_id", "seq", "batch_id", "source_id", "next_seq", "end", "dropped_seqs", "drop_reason"]
     },
     {
       "group": "trail",
@@ -618,7 +618,7 @@
       "required": false,
       "sensitivity": null,
       "owner": "envelope.trail",
-      "doc": "The SDK client session."
+      "doc": "The SDK client session: one client object's lifetime. The client kernel stamps it on every record, separate from source_id, because one client session opens a new source for each Participant it joins as."
     },
     {
       "name": "client_wall_ms",
@@ -702,15 +702,7 @@
       "required": false,
       "sensitivity": null,
       "owner": "envelope.delivery",
-      "doc": "On a drop record (C3): the half-open seq ranges [from, to) the client gave up on, at most 64."
-    },
-    {
-      "name": "dropped_source_id",
-      "type": "string",
-      "required": false,
-      "sensitivity": null,
-      "owner": "envelope.delivery",
-      "doc": "On a drop record (C3): the predecessor source the dropped seqs belong to, when they are not this source's."
+      "doc": "On a drop record (C3): the half-open seq ranges [from, to) of the record's own source that the client gave up on, all below the record's seq, at most 64."
     },
     {
       "name": "duration_ms",
@@ -727,7 +719,7 @@
       "required": false,
       "sensitivity": null,
       "owner": "envelope.delivery",
-      "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (a successor found it dead and reports the last high-water mark it persisted)."
+      "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (the next page load found it dead and reports the last high-water mark it persisted). The ledger refuses an end below a seq it settled or below a next_seq already reported, so the missing suffix stays a gap."
     },
     {
       "name": "end_reason",
@@ -1011,7 +1003,7 @@
       "required": true,
       "sensitivity": null,
       "owner": "envelope.delivery",
-      "doc": "The record's position in its source's stream, with no reuse. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
+      "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
     },
     {
       "name": "shown_ms",
@@ -1027,7 +1019,7 @@
       "required": true,
       "sensitivity": null,
       "owner": "envelope.delivery",
-      "doc": "The stream that owns seq. A client uses its client session id; a server uses its instance id."
+      "doc": "The stream that owns seq. On a client the outbox stamps it with seq. A client starts a new source for each page load and for each Participant it joins as, and only that Participant's credential may write it (C3); a server uses its instance id."
     },
     {
       "name": "space_id",
@@ -1176,7 +1168,7 @@
       "emit_sites": [
         {
           "path": "sdks/typescript/client/src/connection/lifecycle.ts",
-          "literal": "type: \"call_ended\""
+          "literal": "\"client.call_ended\""
         }
       ],
       "legacy": {
@@ -1185,7 +1177,7 @@
           "type": "call_ended"
         }
       },
-      "doc": "The SDK decided which end screen the call gets. Today it reaches Axiom as an sdk.telemetry row of type call_ended."
+      "doc": "The SDK decided which end screen the call gets. The client kernel records it where the connection chooses the end screen, and the API logs it as a kernel row. An SDK release before the client kernel sent it as an sdk.telemetry row of type call_ended, which the legacy match still reads."
     },
     {
       "name": "obs.clock_jump",
@@ -1599,7 +1591,7 @@
           "from": ["sync"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],
@@ -1624,7 +1616,7 @@
           "from": ["sync"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
@@ -1632,7 +1624,7 @@
           "from": ["client"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'call_ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
           "doc": "The end screen the seat's client chose."
         }
       ],

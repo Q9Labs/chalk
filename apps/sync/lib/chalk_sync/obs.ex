@@ -11,10 +11,14 @@ defmodule ChalkSync.Obs do
 
       config :chalk_sync, ChalkSync.Obs, mode: :auto, env: "production", release_sha: "...", source_id: "..."
 
+  A test may also set `clock`, a function that returns Unix milliseconds, to pin `est_server_ms`, and `event_id` and
+  `seq`, functions that return the next record's id and sequence number, so a recorded row is the same on every run.
+  `ChalkSync.Obs.LogSink` is the production subscriber: it writes each record as one log row.
+
   See observability/registry/README.md for how a slice declares and emits its events.
   """
 
-  alias ChalkSync.Obs.{Check, Flags, Registry}
+  alias ChalkSync.Obs.{Check, Flags, Registry, Violation}
 
   @event [:chalk_sync, :obs, :record]
   @op_stack {__MODULE__, :op_stack}
@@ -24,14 +28,6 @@ defmodule ChalkSync.Obs do
   @seq 1
   @violations 2
   @export_failures 3
-
-  defmodule Violation do
-    @moduledoc "Raised in closed mode when a call does not match the registry."
-    defexception problems: []
-
-    @impl true
-    def message(%{problems: problems}), do: "obs: " <> Enum.join(problems, "; ")
-  end
 
   @on_load :init_counters
   @doc false
@@ -247,15 +243,15 @@ defmodule ChalkSync.Obs do
 
     envelope =
       %{
-        "event_id" => uuid(),
-        "seq" => :atomics.add_get(counters, @seq, 1),
+        "event_id" => Keyword.get(config, :event_id, &uuid/0).(),
+        "seq" => Keyword.get(config, :seq, fn -> :atomics.add_get(counters, @seq, 1) end).(),
         "source_id" => Keyword.get(config, :source_id) || :persistent_term.get(@source_id),
         "schema_ver" => Registry.schema_ver(),
         "module" => "sync",
         "env" => env,
         "platform" => "server",
         "clock_state" => "server",
-        "est_server_ms" => System.system_time(:millisecond)
+        "est_server_ms" => Keyword.get(config, :clock, &system_ms/0).()
       }
       |> put_present("release_sha", Keyword.get(config, :release_sha))
       |> put_present("flags_hash", :persistent_term.get(@flags_hash, nil))
@@ -280,6 +276,8 @@ defmodule ChalkSync.Obs do
 
     :ok
   end
+
+  defp system_ms, do: System.system_time(:millisecond)
 
   defp normalize(fields), do: Map.new(fields, fn {field, value} -> {to_string(field), value} end)
 

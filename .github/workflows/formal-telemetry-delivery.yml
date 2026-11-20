@@ -44,7 +44,7 @@ jobs:
       - name: Record delivery traces of the real outbox
         env:
           TELEMETRY_TRACE_DIR: ${{ runner.temp }}/telemetry-traces
-        run: pnpm --dir sdks/typescript/client exec vitest run src/telemetry/outbox.delivery.test.ts
+        run: pnpm --dir sdks/typescript/client exec vitest run src/telemetry/outbox.delivery
 
       - name: Replay the traces against the model
         run: tools/formal/telemetry-delivery/run.sh --trace "$RUNNER_TEMP/telemetry-traces"

@@ -1603,14 +1603,6 @@ type TelemetrySource struct {
 	LastReceivedAt  pgtype.Timestamptz `json:"last_received_at"`
 }
 
-type TelemetrySourceBinding struct {
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	SourceID      pgtype.UUID        `json:"source_id"`
-	ParticipantID pgtype.UUID        `json:"participant_id"`
-	IdentityID    pgtype.UUID        `json:"identity_id"`
-	BoundAt       pgtype.Timestamptz `json:"bound_at"`
-}
-
 type Tenant struct {
 	RecordingRenderMode       string             `json:"recording_render_mode"`
 	ID                        pgtype.UUID        `json:"id"`

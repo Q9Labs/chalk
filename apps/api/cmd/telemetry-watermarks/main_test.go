@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -14,13 +13,12 @@ import (
 )
 
 const (
-	tenantID   = "11111111-1111-4111-8111-111111111111"
-	episodeID  = "22222222-2222-4222-8222-222222222222"
-	seatOne    = "33333333-3333-4333-8333-333333333333"
-	seatTwo    = "44444444-4444-4444-8444-444444444444"
-	closedID   = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-	openID     = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-	identityID = "55555555-5555-4555-8555-555555555555"
+	tenantID  = "11111111-1111-4111-8111-111111111111"
+	episodeID = "22222222-2222-4222-8222-222222222222"
+	seatOne   = "33333333-3333-4333-8333-333333333333"
+	seatTwo   = "44444444-4444-4444-8444-444444444444"
+	closedID  = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	openID    = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 )
 
 func id(t *testing.T, value string) utilities.ID {
@@ -50,13 +48,13 @@ func request(t *testing.T, source string, nextSeq int64, end string, events ...s
 	return decoded
 }
 
-func TestBuildGroupsRowsBySourceAndNamesEachSourcesGaps(t *testing.T) {
+func TestEpisodeReportGroupsRowsBySourceAndNamesEachSourcesGaps(t *testing.T) {
 	ledger := &telemetrydelivery.MemoryLedger{}
-	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
 	received := time.Date(2026, 11, 19, 1, 0, 0, 0, time.UTC)
 	admit := func(participant, source string, req sdktelemetry.Request) {
 		who := telemetrydelivery.Identity{TenantID: id(t, tenantID), EpisodeID: id(t, episodeID), ParticipantID: id(t, participant)}
-		if _, err := ledger.Admit(t.Context(), who, req, received, noSink); err != nil {
+		ledger.Join(who)
+		if _, err := ledger.Admit(t.Context(), who, req, received); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -64,7 +62,7 @@ func TestBuildGroupsRowsBySourceAndNamesEachSourcesGaps(t *testing.T) {
 	admit(seatOne, closedID, request(t, closedID, 2, "closed", event(0), event(1)))
 	admit(seatTwo, openID, request(t, openID, 3, "", event(0), event(2)))
 
-	got, err := build(t.Context(), ledger, id(t, tenantID), id(t, episodeID))
+	got, err := telemetrydelivery.EpisodeReport(t.Context(), ledger, id(t, tenantID), id(t, episodeID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +98,8 @@ func TestRunNamesNoDatabaseUserNameOrHostWhenItCannotConnect(t *testing.T) {
 	}
 }
 
-func TestBuildOfAnEpisodeWithNoRowsHasNoSources(t *testing.T) {
-	got, err := build(t.Context(), &telemetrydelivery.MemoryLedger{}, id(t, tenantID), id(t, episodeID))
+func TestEpisodeReportOfAnEpisodeWithNoRowsHasNoSources(t *testing.T) {
+	got, err := telemetrydelivery.EpisodeReport(t.Context(), &telemetrydelivery.MemoryLedger{}, id(t, tenantID), id(t, episodeID))
 	if err != nil || got.Sources == nil || len(got.Sources) != 0 {
 		t.Fatalf("got %+v, %v, want an empty list", got, err)
 	}

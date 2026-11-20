@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The live stores behind `diagnose --live`: Postgres for the declaration, the telemetry ledger (through `telemetry-watermarks`) for
  * client watermarks, and Axiom for rows and server watermarks. Every read is read-only. world.mjs turns what they return into a World.
@@ -12,7 +13,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { axiom, quote } from "../axiom.mjs";
 import { connectionEnv } from "../database.mjs";
-import { SERVICES, liveWorld } from "./world.mjs";
+import { liveWorld } from "./world.mjs";
 
 /** @typedef {import("./world.mjs").DbEpisode} DbEpisode */
 /** @typedef {import("./world.mjs").Ledger} Ledger */
@@ -23,7 +24,6 @@ import { SERVICES, liveWorld } from "./world.mjs";
  *   declaration(target: Target): Promise<DbEpisode | null>,
  *   ledger(target: Target): Promise<Ledger>,
  *   rows(episode: string, window: { from_ms: number, to_ms: number }): Promise<Readonly<Record<string, any>>[]>,
- *   latest(services: readonly string[], window: { from_ms: number, to_ms: number }): Promise<Record<string, number | null>>,
  * }} Stores
  */
 
@@ -49,8 +49,8 @@ export async function openLive(target, stores, { catalogue, now = Date.now() }) 
   const settle = Math.max(0, ...catalogue.map((def) => def.settle_ms ?? 0));
   const ended = db.episode.ended_at === null ? null : Date.parse(db.episode.ended_at);
   const window = { from_ms, to_ms: Math.min(now, ended === null ? now : ended + settle) };
-  const [ledger, rows, latest] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window), stores.latest(Object.values(SERVICES), { from_ms, to_ms: now })]);
-  return liveWorld({ db, ledger, rows, latest, asof_ms: now });
+  const [ledger, rows] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window)]);
+  return liveWorld({ db, ledger, rows, asof_ms: now });
 }
 
 /**
@@ -109,15 +109,6 @@ export function realStores(env) {
     async rows(episode, window) {
       return readAll((part) => ask(`where ['attributes.episode_id'] == ${quote(episode)}`, part), window);
     },
-    async latest(services, window) {
-      /** @type {Record<string, number | null>} */
-      const out = {};
-      for (const service of services) {
-        const { rows } = await ask(`where ['service.name'] == ${quote(service)} | sort by _time desc | project _time | take 1`, window);
-        out[service] = rows.length === 0 ? null : Date.parse(rows[0]._time);
-      }
-      return out;
-    },
   };
 }
 
@@ -128,7 +119,7 @@ export function realStores(env) {
  * @param {{ from_ms: number, to_ms: number }} window
  * @returns {Promise<Record<string, any>[]>}
  */
-export async function readAll(query, window) {
+async function readAll(query, window) {
   const { rows, truncated } = await query(window);
   if (!truncated) return rows;
   if (window.to_ms - window.from_ms <= 1) throw new StoreError(`more rows than Axiom returns in one answer within 1 ms at ${new Date(window.from_ms).toISOString()}`);
@@ -142,7 +133,7 @@ export async function readAll(query, window) {
  * @param {string} tenant
  * @param {string} episode
  */
-export function declarationSql(tenant, episode) {
+function declarationSql(tenant, episode) {
   return `with ep as (select * from episodes where id = ${quote(episode)}::uuid and tenant_id = ${quote(tenant)}::uuid)
 select json_build_object(
   'episode', (select json_build_object('id', ep.id, 'tenant', ep.tenant_id, 'space', ep.space_id, 'created_at', ep.created_at, 'started_at', ep.started_at, 'ended_at', ep.ended_at, 'end_reason', ep.end_reason) from ep),

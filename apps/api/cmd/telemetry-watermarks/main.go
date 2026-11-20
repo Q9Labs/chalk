@@ -14,8 +14,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"slices"
-	"strings"
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -24,22 +22,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
-
-type episodeReader interface {
-	Episode(ctx context.Context, tenant, episode utilities.ID) ([]telemetrydelivery.SourceRow, error)
-}
-
-type sourceReport struct {
-	SourceID  utilities.ID                      `json:"source_id"`
-	Watermark telemetrydelivery.SourceWatermark `json:"watermark"`
-	Gaps      []telemetrydelivery.EvidenceGap   `json:"gaps"`
-}
-
-type report struct {
-	TenantID  utilities.ID   `json:"tenant_id"`
-	EpisodeID utilities.ID   `json:"episode_id"`
-	Sources   []sourceReport `json:"sources"`
-}
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
@@ -82,7 +64,7 @@ func run(args []string, out io.Writer) error {
 		return errors.New("open telemetry ledger database")
 	}
 	defer pool.Close()
-	result, err := build(ctx, postgres.NewTelemetryLedger(pool), tenant, episode)
+	result, err := telemetrydelivery.EpisodeReport(ctx, postgres.NewTelemetryLedger(pool), tenant, episode)
 	if err != nil {
 		return redacted(err)
 	}
@@ -99,23 +81,4 @@ func redacted(err error) error {
 		return errors.New("connect to the telemetry ledger database failed")
 	}
 	return err
-}
-
-// build groups the Episode's rows by source and runs Gaps on each group.
-func build(ctx context.Context, ledger episodeReader, tenant, episode utilities.ID) (report, error) {
-	rows, err := ledger.Episode(ctx, tenant, episode)
-	if err != nil {
-		return report{}, err
-	}
-	bySource := map[utilities.ID][]telemetrydelivery.SourceRow{}
-	for _, row := range rows {
-		bySource[row.SourceID] = append(bySource[row.SourceID], row)
-	}
-	sources := make([]sourceReport, 0, len(bySource))
-	for id, group := range bySource {
-		gaps, mark := telemetrydelivery.Gaps(group)
-		sources = append(sources, sourceReport{SourceID: id, Watermark: mark, Gaps: gaps})
-	}
-	slices.SortFunc(sources, func(a, b sourceReport) int { return strings.Compare(a.SourceID.String(), b.SourceID.String()) })
-	return report{TenantID: tenant, EpisodeID: episode, Sources: sources}, nil
 }

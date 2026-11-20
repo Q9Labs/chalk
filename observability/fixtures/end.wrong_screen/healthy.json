@@ -1,5 +1,5 @@
 {
-  "description": "The Episode hit its maximum duration and every client showed an end screen for the Episode ending: one the time limit, one the Episode ended. Every source is complete, so both seats are checked and the Episode is healthy.",
+  "description": "The Episode hit its maximum duration. The seat's client read the ended status after its media credential was revoked and showed the Episode-ended screen 0.3 s after the end. The rows are the ones the chain's hops logged, so the seat is checked and passes.",
   "asof_ms": 1795600300000,
   "declaration": {
     "kind": "episode",
@@ -16,9 +16,7 @@
         "name": "Seat A",
         "role": "participant",
         "can_publish": true,
-        "generations": [
-          1
-        ],
+        "generations": [1],
         "connections": [],
         "window": {
           "from_ms": 1795596400000,
@@ -29,58 +27,53 @@
           "id": "b1000000-0000-4000-8000-000000000001",
           "name": "Seat A"
         }
-      },
-      {
-        "participant": "a1000000-0000-4000-8000-000000000002",
-        "name": "Seat B",
-        "role": "participant",
-        "can_publish": true,
-        "generations": [
-          1
-        ],
-        "connections": [],
-        "window": {
-          "from_ms": 1795596400000,
-          "to_ms": 1795600000000
-        },
-        "person": {
-          "kind": "user",
-          "id": "b1000000-0000-4000-8000-000000000002",
-          "name": "Seat B"
-        }
       }
     ]
   },
+  "chain": ["observability/fixtures/end.wrong_screen/chain/sync-rows.json", "observability/fixtures/end.wrong_screen/chain/api-rows.healthy.json"],
   "rows": [
     {
-      "event": "sync.episode.ended",
-      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0001",
-      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "clock_state": "server",
       "end_reason": "maximum_duration",
+      "env": "test",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "est_server_ms": 1795600000000,
-      "clock_state": "server"
+      "event_id": "7db7df2b-9dd7-420b-8bab-baaab9efe617",
+      "kind": "fact",
+      "module": "sync",
+      "name": "sync.episode.ended",
+      "platform": "server",
+      "schema_ver": "06a4092b8fb7",
+      "seq": 1,
+      "source_id": "e1000000-0000-4000-8000-000000000001",
+      "space_id": "d1000000-0000-4000-8000-000000000001",
+      "tenant_id": "c1000000-0000-4000-8000-000000000001"
     },
     {
-      "event": "client.call_ended",
-      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0002",
-      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
-      "participant_id": "a1000000-0000-4000-8000-000000000001",
-      "client_session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-      "end_reason": "time_limit",
-      "est_server_ms": 1795600000400,
-      "clock_err_ms": 40,
-      "clock_state": "synced"
-    },
-    {
-      "event": "client.call_ended",
-      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0003",
-      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
-      "participant_id": "a1000000-0000-4000-8000-000000000002",
-      "client_session_id": "9b2f3c1d-1111-4222-8333-944455556666",
-      "end_reason": "episode_ended",
-      "est_server_ms": 1795600000300,
+      "batch_id": "00000000-0000-4000-8000-000000000029",
+      "client_mono_ms": 1050,
+      "client_session_id": "00000000-0000-4000-8000-000000000004",
+      "client_wall_ms": 1795599001050,
+      "clock_epoch": 0,
       "clock_err_ms": 25,
-      "clock_state": "synced"
+      "clock_state": "synced",
+      "end_reason": "episode_ended",
+      "env": "test",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "est_server_ms": 1795600000300,
+      "event_id": "00000000-0000-4000-8000-000000000028",
+      "generation": 1,
+      "kind": "fact",
+      "module": "sdk",
+      "name": "client.call_ended",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "platform": "web",
+      "provider_media_id": "pm-chain-0001",
+      "schema_ver": "06a4092b8fb7",
+      "seq": 22,
+      "source_id": "00000000-0000-4000-8000-000000000001",
+      "space_id": "d1000000-0000-4000-8000-000000000001",
+      "tenant_id": "c1000000-0000-4000-8000-000000000001"
     }
   ]
 }

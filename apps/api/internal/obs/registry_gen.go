@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "72216cc081c8"
+const SchemaVer = "06a4092b8fb7"
 
 // Event names.
 const (
@@ -54,7 +54,6 @@ const (
 	FieldDeviceID           = "device_id"
 	FieldDropReason         = "drop_reason"
 	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDroppedSourceID    = "dropped_source_id"
 	FieldDurationMs         = "duration_ms"
 	FieldEnd                = "end"
 	FieldEndReason          = "end_reason"
@@ -124,7 +123,6 @@ var registryFields = map[string]fieldSpec{
 	"device_id":            {typ: "id", group: "trail", required: false},
 	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
 	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"dropped_source_id":    {typ: "string", group: "delivery", required: false},
 	"duration_ms":          {typ: "int", group: "record", required: false},
 	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
 	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
@@ -175,14 +173,14 @@ var registryFields = map[string]fieldSpec{
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
 }
 
 var registryMachines = map[string]machineSpec{

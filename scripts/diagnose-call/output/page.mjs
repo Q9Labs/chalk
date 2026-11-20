@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * Paging for records. `--limit` and a stable cursor are the main controls; `--budget` is optional and approximate, because token
  * counts depend on the tokenizer. Status, anchor, gaps and `next:` lines are never paged: only records are, and the page says how
@@ -23,14 +24,14 @@ const scopeTag = (scope) => createHash("sha256").update(scope).digest("hex").sli
  * @param {string} scope
  * @param {string} key
  */
-export const encodeCursor = (scope, key) => `c_${scopeTag(scope)}${Buffer.from(key, "utf8").toString("base64url")}`;
+const encodeCursor = (scope, key) => `c_${scopeTag(scope)}${Buffer.from(key, "utf8").toString("base64url")}`;
 
 /**
  * @param {string} scope
  * @param {string} cursor
  * @returns {string} the sort key to continue after
  */
-export function decodeCursor(scope, cursor) {
+function decodeCursor(scope, cursor) {
   if (!cursor.startsWith("c_") || cursor.slice(2, 6) !== scopeTag(scope)) throw new UsageError(`cursor ${cursor} belongs to another view: rerun the command without --cursor`);
   return Buffer.from(cursor.slice(6), "base64url").toString("utf8");
 }

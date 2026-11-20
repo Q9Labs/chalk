@@ -85,7 +85,7 @@ func TestLedgerEventsAreRejectedEachOnItsOwn(t *testing.T) {
 		{"drop without a reason", dropped(8, `,"dropped":3,"dropped_seqs":[{"from":2,"to":5}]`), "drop_reason_missing"},
 		{"drop count off by one", dropped(8, `,"dropped":4,"drop_reason":"queue_full","dropped_seqs":[{"from":2,"to":5}]`), "dropped_count"},
 		{"drop range reaching the record", dropped(8, `,"dropped":2,"drop_reason":"queue_full","dropped_seqs":[{"from":7,"to":9}]`), "dropped_seqs_range"},
-		{"drop range of an earlier source", dropped(2, `,"dropped":5,"drop_reason":"credential_expired","dropped_source_id":"`+testSource+`","dropped_seqs":[{"from":30,"to":35}]`), ""},
+		{"drop range above the record, which a drop of another source would need", dropped(2, `,"dropped":5,"drop_reason":"credential_expired","dropped_seqs":[{"from":30,"to":35}]`), "dropped_seqs_range"},
 		{"event that fails its own check keeps its reason", `{"event_id":"` + testEvent + `","seq":4,"elapsed_ms":5,"type":"call_ended"}`, "end_reason_missing"},
 	}
 	for _, tc := range cases {
@@ -128,7 +128,7 @@ func TestLogAnswersAVersionTwoBatchSeqBySeq(t *testing.T) {
 		t.Fatalf("frame reason = %q", frame)
 	}
 	logs := &bytes.Buffer{}
-	response := Log(context.Background(), slog.New(slog.NewJSONHandler(logs, nil)), request, time.Unix(0, 0))
+	response := Log(context.Background(), slog.New(slog.NewJSONHandler(logs, nil)), request, time.Unix(0, 0), Stamp{})
 	if response.Accepted != 2 || response.Rejected != 2 || response.Duplicates != 0 {
 		t.Fatalf("counts = %+v, want 2 accepted, 2 rejected", response)
 	}
@@ -154,7 +154,7 @@ func TestLogOfAVersionOneBatchHasNoLedgerAnswer(t *testing.T) {
 	if frame != "" {
 		t.Fatalf("frame reason = %q", frame)
 	}
-	response := Log(context.Background(), slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), request, time.Unix(0, 0))
+	response := Log(context.Background(), slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), request, time.Unix(0, 0), Stamp{})
 	if response.Accepted != 1 || response.Rejected != 1 || response.Acks == nil || len(response.Acks) != 0 || response.Rejections == nil || len(response.Rejections) != 0 {
 		t.Fatalf("response = %+v, want 1 accepted, 1 rejected and empty lists", response)
 	}

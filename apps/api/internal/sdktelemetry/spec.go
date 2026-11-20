@@ -60,7 +60,7 @@ var specs = map[string]spec{
 	"call_stats": {allowed: []string{"stats"}, required: []string{"stats"}},
 
 	// The outbox could not keep every event and says how many it lost.
-	"telemetry_dropped": {allowed: []string{"dropped", "dropped_seqs", "drop_reason", "dropped_source_id"}, required: []string{"dropped"}},
+	"telemetry_dropped": {allowed: []string{"dropped", "dropped_seqs", "drop_reason"}, required: []string{"dropped"}},
 
 	// Media operations: the click or call that asked for them, and what came of it.
 	"media_intent": {allowed: []string{"action", "source", "op_id"}, required: []string{"action", "op_id"}},

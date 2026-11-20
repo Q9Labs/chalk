@@ -174,7 +174,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       const telemetry = platform.telemetry;
       telemetry?.bind({ current: () => telemetryCredential(access.currentUnsafe()), refresh: () => toPromise(access.refresh("access_retry", false)).then(() => undefined) });
       const outage = createOutageClock(() => clock.currentTimeMillisUnsafe());
-      telemetry?.onClosing(() => (["joining", "live", "reconnecting"].includes(model.state) ? telemetry.record({ type: "call_ended", end_reason: "page_closed" }) : undefined));
+      telemetry?.onClosing(() => (["joining", "live", "reconnecting"].includes(model.state) ? telemetry.obs.fact("client.call_ended", { client_session_id: telemetry.clientSessionId, end_reason: "page_closed" }) : undefined));
       let grantedMedia: GrantedMedia = { granted_audio: "unknown", granted_video: "unknown" };
       let mediaFailure: ConnectionDiagnostic["media"];
       const diagnostics = new ConnectionDiagnostics({
@@ -272,7 +272,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           const from = model.state;
           model.state = state;
           if (state === "left" || state === "failed") {
-            telemetry?.record({ type: "call_ended", end_reason: callEndReason(from, state, model) });
+            if (telemetry) telemetry.obs.fact("client.call_ended", { client_session_id: telemetry.clientSessionId, end_reason: callEndReason(from, state, model) });
             void telemetry?.flush();
           }
           diagnostics.record({ event: "state_changed", state, epoch: model.epoch });

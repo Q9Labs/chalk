@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { CATALOGUE } from "./catalogue.mjs";
-import { judgeFixture, ruleResult } from "./rows.mjs";
+import { eventOf, judgeFixture, ruleResult } from "./rows.mjs";
 
 const CODE = "end.wrong_screen";
 /** @type {import("./rows.mjs").Fixture} */
 const positive = JSON.parse(readFileSync(new URL(`../../../observability/fixtures/${CODE}/positive.json`, import.meta.url), "utf8"));
-const end = /** @type {Record<string, any>} */ (positive.rows.find((row) => row.event === "sync.episode.ended"));
-const screen = /** @type {Record<string, any>} */ (positive.rows.find((row) => row.event === "client.call_ended" && row.end_reason === "connection_lost"));
+const end = /** @type {Record<string, any>} */ (positive.rows.find((row) => eventOf(row) === "sync.episode.ended"));
+const screen = /** @type {Record<string, any>} */ (positive.rows.find((row) => eventOf(row) === "client.call_ended" && row.end_reason === "connection_lost"));
 
 /**
  * The positive fixture with Sync's end row moved by `endShift` and the failure screen placed `offset` ms from that end.

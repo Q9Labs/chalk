@@ -1,0 +1,35 @@
+[
+  {
+    "version": 2,
+    "source_id": "00000000-0000-4000-8000-000000000001",
+    "batch_id": "00000000-0000-4000-8000-000000000029",
+    "next_seq": 23,
+    "events": [
+      {
+        "type": "state_changed",
+        "state": "leaving",
+        "seq": 21,
+        "event_id": "00000000-0000-4000-8000-000000000027",
+        "elapsed_ms": 50
+      },
+      {
+        "client_session_id": "00000000-0000-4000-8000-000000000004",
+        "end_reason": "episode_ended",
+        "module": "sdk",
+        "env": "test",
+        "platform": "web",
+        "client_mono_ms": 1050,
+        "client_wall_ms": 1795599001050,
+        "clock_epoch": 0,
+        "clock_state": "synced",
+        "est_server_ms": 1795600000300,
+        "clock_err_ms": 25,
+        "schema_ver": "06a4092b8fb7",
+        "kind": "fact",
+        "name": "client.call_ended",
+        "event_id": "00000000-0000-4000-8000-000000000028",
+        "seq": 22
+      }
+    ]
+  }
+]

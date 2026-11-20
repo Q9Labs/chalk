@@ -1,16 +1,28 @@
+import { EVENTS } from "../obs/registry";
 import { PRIORITY, type Priority } from "./priority";
-import type { TelemetryEvent } from "./types";
+import type { TelemetryEvent, WireEvent } from "./types";
 
 const MAX_MILLISECONDS = 2_147_483_647;
 
 /** `subject` names the credential the event may leave under, and never changes. It is null until the first grant of the session names one. */
-export type Entry = { readonly event: TelemetryEvent; readonly bytes: number; readonly priority: Priority; subject: string | null };
+export type Entry = { readonly event: WireEvent; readonly bytes: number; readonly priority: Priority; subject: string | null };
 
-export function entryOf(event: TelemetryEvent, subject: string | null): Entry {
-  return { event, bytes: sizeOf(event), priority: PRIORITY[event.type], subject };
+const DATASETS: ReadonlyMap<string, string> = new Map(Object.entries(EVENTS).map(([name, spec]) => [name, spec.dataset]));
+
+/** The record of the legacy vocabulary, or null for a kernel record. */
+export const legacyOf = (event: WireEvent): TelemetryEvent | null => ("kind" in event ? null : event);
+
+/** A kernel record of the lifecycle dataset says how a call went, so it is P0 like the legacy records that explain an end. */
+function priorityOf(event: WireEvent): Priority {
+  if (!("kind" in event)) return PRIORITY[event.type];
+  return DATASETS.get(event.name) === "lifecycle" ? "p0" : "routine";
 }
 
-export const isDropRecord = (entry: Entry): boolean => entry.event.type === "telemetry_dropped";
+export function entryOf(event: WireEvent, subject: string | null): Entry {
+  return { event, bytes: sizeOf(event), priority: priorityOf(event), subject };
+}
+
+export const isDropRecord = (entry: Entry): boolean => legacyOf(entry.event)?.type === "telemetry_dropped";
 
 /**
  * Holds events in `seq` order under a byte budget. Routine and stats events may use at most half of it, and never push out a P0 event.
@@ -141,15 +153,16 @@ export class EventQueue {
 
   #foldInto(older: Entry): void {
     const later = this.#entries.find((entry) => entry.priority === "stats" && entry.subject === older.subject && entry.event.seq > older.event.seq);
-    if (!later) return;
-    const windowMs = (older.event.stats?.window_ms ?? 0) + (later.event.stats?.window_ms ?? 0);
-    const folded: TelemetryEvent = { ...later.event, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
+    const newer = later ? legacyOf(later.event) : null;
+    if (!later || !newer) return;
+    const windowMs = (legacyOf(older.event)?.stats?.window_ms ?? 0) + (newer.stats?.window_ms ?? 0);
+    const folded: TelemetryEvent = { ...newer, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
     const index = this.#entries.indexOf(later);
     this.#remove(later);
     this.#insert(index, entryOf(folded, later.subject));
   }
 }
 
-export function sizeOf(event: TelemetryEvent): number {
+export function sizeOf(event: WireEvent): number {
   return JSON.stringify(event).length + 1;
 }

@@ -64,7 +64,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 
 	"github.com/q9labs/chalk/apps/api/internal/spiffe"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 
@@ -200,52 +199,10 @@ func run() error {
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, Rollout: mediaplaneprovideradapter.Rollout{Spaces: cfg.ChalkSFU.AllowedSpaces, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused, Switch: killSwitch, ClientSunset: cfg.ChalkSFU.ClientSunset}})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
-	var syncTokenService httpapi.SyncTokenIssuer
-	var syncTokenRefresh httpapi.SyncTokenRefreshIssuer
-	var participantMediaIssuer httpapi.ParticipantMediaIssuer
-
-	var participantMediaVerifier httpapi.ParticipantMediaVerifier
-	var participantTelemetryVerifier httpapi.TelemetryVerifier
-	var participantMediaRecoveryVerifier publicinviteapp.MediaProofRecoveryVerifier
-	var syncParticipantVerifier synctokens.Verifier
-	var syncParticipantVerifierConfigured bool
 	participantActiveAuthorizer := accessgrants.NewActiveAuthorizer(episodeRepository)
-	if len(cfg.SyncToken.PrivateKey) > 0 {
-		service, err := synctokens.NewService(synctokens.Config{
-			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
-			KeyID: cfg.SyncToken.KeyID, PrivateKey: cfg.SyncToken.PrivateKey,
-		})
-		if err != nil {
-			return fmt.Errorf("configure sync token issuer: %w", err)
-		}
-		broker := synctokens.NewBroker(episodeRepository, service)
-		syncTokenService = broker
-		syncTokenRefresh = broker
-		syncParticipantVerifier, err = synctokens.NewVerifier(synctokens.VerifierConfig{
-			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
-			VerificationKeys: cfg.SyncToken.VerificationKeys,
-		})
-		if err != nil {
-			return fmt.Errorf("configure Sync participant verifier: %w", err)
-		}
-		syncParticipantVerifierConfigured = true
-		mediaIssuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{
-			Issuer: cfg.SyncToken.Issuer, KeyID: cfg.SyncToken.KeyID, PrivateKey: cfg.SyncToken.PrivateKey,
-		})
-		if err != nil {
-			return fmt.Errorf("configure participant media issuer: %w", err)
-		}
-		mediaVerifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{
-			Issuer: cfg.SyncToken.Issuer, VerificationKeys: cfg.SyncToken.VerificationKeys,
-		})
-		if err != nil {
-			return fmt.Errorf("configure participant media verifier: %w", err)
-		}
-		participantMediaIssuer = observability.InstrumentAccessGrantIssuer(mediaIssuer, launchTelemetry)
-		instrumentedMediaVerifier := observability.InstrumentParticipantMediaVerifier(mediaVerifier, launchTelemetry)
-		participantMediaVerifier = instrumentedMediaVerifier
-		participantMediaRecoveryVerifier = instrumentedMediaVerifier
-		participantTelemetryVerifier = mediaVerifier
+	credentials, err := newParticipantCredentials(cfg.SyncToken, episodeRepository, launchTelemetry)
+	if err != nil {
+		return err
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
@@ -381,19 +338,19 @@ func run() error {
 		chatRepository := postgres.NewChatAttachmentRepository(pool)
 		chatCleanupWorker := chatattachments.NewCleanupWorker(chatRepository, storage)
 		chatCleanupScheduler = objectcleanup.NewScheduler(chatCleanupWorker, 0, logger)
-		if syncParticipantVerifierConfigured {
+		if credentials.syncVerifierConfigured {
 			chatService := chatattachments.NewService(chatRepository, storage)
 			chatAttachmentService = chatService
-			chatParticipantVerifier = syncParticipantVerifier
+			chatParticipantVerifier = credentials.syncVerifier
 		}
 		if cfg.Capabilities.WhiteboardFiles {
 			whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
 			whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, storage)
 			whiteboardCleanupScheduler = objectcleanup.NewScheduler(whiteboardCleanupWorker, 0, logger)
-			if syncParticipantVerifierConfigured {
+			if credentials.syncVerifierConfigured {
 				service := whiteboardfiles.NewService(whiteboardRepository, storage)
 				whiteboardFileService = service
-				whiteboardParticipantVerifier = syncParticipantVerifier
+				whiteboardParticipantVerifier = credentials.syncVerifier
 			}
 		}
 	}
@@ -503,7 +460,7 @@ func run() error {
 		}
 		recorderRenderAuthority = renderService
 	}
-	if publicInviteConfig.Enabled && (syncTokenRefresh == nil || participantMediaIssuer == nil) {
+	if publicInviteConfig.Enabled && (credentials.syncRefresh == nil || credentials.mediaIssuer == nil) {
 		if cfg.Observability.Environment != config.DefaultEnvironment {
 			return errors.New("public invite credentials are required outside local environments")
 		}
@@ -545,10 +502,10 @@ func run() error {
 			Spaces:             spaceService,
 			Tenants:            tenantService,
 			MediaResolver:      mediaPlaneRegistry,
-			SyncTokens:         syncTokenRefresh,
-			MediaTokens:        participantMediaIssuer,
-			MediaProof:         participantMediaVerifier,
-			MediaProofRecovery: participantMediaRecoveryVerifier,
+			SyncTokens:         credentials.syncRefresh,
+			MediaTokens:        credentials.mediaIssuer,
+			MediaProof:         credentials.mediaVerifier,
+			MediaProofRecovery: credentials.mediaRecovery,
 			ManagedTenantID:    managedTenantID,
 		})
 		if err != nil {
@@ -605,11 +562,11 @@ func run() error {
 
 		MediaPlane:             mediaPlaneRegistry,
 		MediaPublications:      mediaPublicationService,
-		ParticipantMediaIssuer: participantMediaIssuer,
+		ParticipantMediaIssuer: credentials.mediaIssuer,
 
 		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
-		ParticipantMediaVerify: participantMediaVerifier,
-		TelemetryVerify:        participantTelemetryVerifier,
+		ParticipantMediaVerify: credentials.mediaVerifier,
+		TelemetryVerify:        credentials.telemetryVerifier,
 		TelemetryLedger:        postgres.NewTelemetryLedger(pool),
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,
@@ -640,8 +597,8 @@ func run() error {
 		Episodes:                   episodeService,
 		EpisodeTalkTime:            newEpisodeTalkTime(cfg.Capabilities.Transcription, episodeService, postgres.NewEpisodeTalkTimeRepository(operationQueries), transcriptionStorage),
 		ParticipantJoins:           episodeService,
-		SyncTokens:                 syncTokenService,
-		SyncTokenRefresh:           syncTokenRefresh,
+		SyncTokens:                 credentials.syncTokens,
+		SyncTokenRefresh:           credentials.syncRefresh,
 		TenantAuthz:                tenantAuthz,
 		Tenants:                    tenantService,
 		// Synchronous application-node provider calls are intentionally absent. Transcription work

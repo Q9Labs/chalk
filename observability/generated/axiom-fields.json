@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "06a4092b8fb7",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 63,
+      "used": 62,
       "fields": [
         {
           "name": "admission_request_id",
@@ -78,10 +78,6 @@
         {
           "name": "dropped_seqs",
           "type": "array"
-        },
-        {
-          "name": "dropped_source_id",
-          "type": "string"
         },
         {
           "name": "duration_ms",
@@ -264,7 +260,7 @@
     {
       "dataset": "requests",
       "budget": 256,
-      "used": 61,
+      "used": 60,
       "fields": [
         {
           "name": "admission_request_id",
@@ -337,10 +333,6 @@
         {
           "name": "dropped_seqs",
           "type": "array"
-        },
-        {
-          "name": "dropped_source_id",
-          "type": "string"
         },
         {
           "name": "duration_ms",
@@ -515,7 +507,7 @@
     {
       "dataset": "media-stats",
       "budget": 256,
-      "used": 61,
+      "used": 60,
       "fields": [
         {
           "name": "admission_request_id",
@@ -588,10 +580,6 @@
         {
           "name": "dropped_seqs",
           "type": "array"
-        },
-        {
-          "name": "dropped_source_id",
-          "type": "string"
         },
         {
           "name": "duration_ms",
@@ -766,7 +754,7 @@
     {
       "dataset": "infra",
       "budget": 256,
-      "used": 62,
+      "used": 61,
       "fields": [
         {
           "name": "admission_request_id",
@@ -839,10 +827,6 @@
         {
           "name": "dropped_seqs",
           "type": "array"
-        },
-        {
-          "name": "dropped_source_id",
-          "type": "string"
         },
         {
           "name": "duration_ms",
@@ -1021,7 +1005,7 @@
     {
       "dataset": "logs",
       "budget": 256,
-      "used": 61,
+      "used": 60,
       "fields": [
         {
           "name": "admission_request_id",
@@ -1094,10 +1078,6 @@
         {
           "name": "dropped_seqs",
           "type": "array"
-        },
-        {
-          "name": "dropped_source_id",
-          "type": "string"
         },
         {
           "name": "duration_ms",

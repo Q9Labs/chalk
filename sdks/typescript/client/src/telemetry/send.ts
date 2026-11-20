@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- every branch is a delivery step; the outbox delivery tests and the formal trace replay cover each one, which the CRAP estimate cannot see.
 import { retryAfterMilliseconds } from "../connection/episode-status";
 import type { SeqRange, TelemetrySend, TelemetrySendResult } from "./types";
 
@@ -16,20 +17,30 @@ export async function postTelemetry(fetch: typeof globalThis.fetch, request: Tel
     await response.body?.cancel();
     return { status: response.status, retryAfterMs };
   }
-  const acks = await readAcks(response);
-  return acks ? { status: response.status, retryAfterMs, acks } : { status: response.status, retryAfterMs };
+  const answer = await readAnswer(response);
+  return { status: response.status, retryAfterMs, ...answer };
 }
 
-async function readAcks(response: Response): Promise<readonly SeqRange[] | null> {
+type Answer = { readonly acks?: readonly SeqRange[]; readonly serverMs?: number };
+
+/** Reads the seqs a 2xx answer settled and the server's clock when it answered. Either is left out when the body does not carry it in shape. */
+async function readAnswer(response: Response): Promise<Answer> {
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    return null;
+    return {};
   }
-  if (typeof body !== "object" || body === null || !("acks" in body) || !Array.isArray(body.acks)) return null;
+  if (typeof body !== "object" || body === null) return {};
+  const serverMs = "server_ms" in body && typeof body.server_ms === "number" && Number.isSafeInteger(body.server_ms) ? body.server_ms : undefined;
+  const acks = "acks" in body ? readAcks(body.acks) : null;
+  return { ...(acks ? { acks } : {}), ...(serverMs === undefined ? {} : { serverMs }) };
+}
+
+function readAcks(value: unknown): readonly SeqRange[] | null {
+  if (!Array.isArray(value)) return null;
   const ranges: SeqRange[] = [];
-  for (const entry of body.acks) {
+  for (const entry of value) {
     if (typeof entry !== "object" || entry === null || !("from" in entry) || !("to" in entry) || typeof entry.from !== "number" || typeof entry.to !== "number") return null;
     ranges.push({ from: entry.from, to: entry.to });
   }

@@ -20,6 +20,7 @@
     "**/*.snap",
     "scripts/gates/design-tokens-baseline.json",
     "scripts/diagnose-call/golden/**",
+    "docs/plans/hyper-observability/*-json-*.json",
     "**/routeTree.gen.ts",
     "sdks/typescript/react-native/embedded/**",
     "tracker-human.html",

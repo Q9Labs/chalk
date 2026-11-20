@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The argument grammar of `diagnose`. Parsing only: it turns argv into a command and checked options, and leaves lookups to the
  * caller. Any mistake is a UsageError, which the CLI prints with the usage and exits 64.

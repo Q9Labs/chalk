@@ -1,8 +1,11 @@
 -- +goose Up
 -- The telemetry ledger (docs/telemetry-delivery.md): which seqs of each SDK source the server has
--- stored, rejected or been told were dropped. One row per source and participant, so a batch signed
--- for one participant can never mark another participant's seqs as stored. The ranges are
--- half-open and capped in size by the API. A new table: the previous release never reads or writes it.
+-- stored, rejected or been told were dropped. One row per source, owned by the participant and
+-- Episode of the credential of its first admitted batch; only that credential may write the row
+-- again. The ranges are half-open and capped in size by the API, and the API caps the sources one
+-- participant owns, which the participant index serves. No foreign keys: the API checks inside the
+-- admission transaction that the participant and its tenant are live, and a tenant purge removes
+-- the rows by tenant_id. A new table: the previous release never reads or writes it.
 create table telemetry_sources (
     tenant_id uuid not null,
     source_id uuid not null,
@@ -15,10 +18,11 @@ create table telemetry_sources (
     end_next_seq bigint check (end_next_seq >= 0),
     first_received_at timestamptz not null,
     last_received_at timestamptz not null,
-    primary key (tenant_id, source_id, participant_id),
+    primary key (tenant_id, source_id),
     check ((end_state is null) = (end_next_seq is null))
 );
 create index telemetry_sources_episode_idx on telemetry_sources (tenant_id, episode_id);
+create index telemetry_sources_participant_idx on telemetry_sources (tenant_id, participant_id);
 
 -- +goose Down
 drop table telemetry_sources;

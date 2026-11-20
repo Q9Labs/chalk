@@ -6,20 +6,31 @@
       "doc": "Who sent a record and where it sits in that sender's stream.",
       "fields": [
         { "name": "event_id", "type": "id", "id_kind": "event", "required": true, "sensitivity": null, "doc": "One record. Minted by the kernel when the record is made." },
-        { "name": "seq", "type": "int", "required": true, "sensitivity": null, "doc": "The record's position in its source's stream, with no reuse. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger." },
+        {
+          "name": "seq",
+          "type": "int",
+          "required": true,
+          "sensitivity": null,
+          "doc": "The record's position in its source's stream, with no reuse. On a client the outbox stamps it, never the kernel. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
+        },
         { "name": "batch_id", "type": "id", "id_kind": "batch", "required": false, "sensitivity": null, "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel." },
-        { "name": "source_id", "type": "string", "required": true, "sensitivity": null, "doc": "The stream that owns seq. A client uses its client session id; a server uses its instance id." },
+        {
+          "name": "source_id",
+          "type": "string",
+          "required": true,
+          "sensitivity": null,
+          "doc": "The stream that owns seq. On a client the outbox stamps it with seq. A client starts a new source for each page load and for each Participant it joins as, and only that Participant's credential may write it (C3); a server uses its instance id."
+        },
         { "name": "next_seq", "type": "int", "sensitivity": null, "doc": "The source's high-water mark on every batch (C3): every seq below it has been assigned." },
         {
           "name": "end",
           "type": "enum",
           "sensitivity": null,
-          "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (a successor found it dead and reports the last high-water mark it persisted).",
+          "doc": "How a source ended (C3), on the batch that reports it: closed (the client said its last next_seq exactly) or abandoned (the next page load found it dead and reports the last high-water mark it persisted). The ledger refuses an end below a seq it settled or below a next_seq already reported, so the missing suffix stays a gap.",
           "values": ["closed", "abandoned"]
         },
-        { "name": "dropped_seqs", "type": "ranges", "sensitivity": null, "doc": "On a drop record (C3): the half-open seq ranges [from, to) the client gave up on, at most 64." },
-        { "name": "drop_reason", "type": "enum", "values": ["queue_full", "credential_expired", "refused"], "sensitivity": null, "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs." },
-        { "name": "dropped_source_id", "type": "string", "sensitivity": null, "doc": "On a drop record (C3): the predecessor source the dropped seqs belong to, when they are not this source's." }
+        { "name": "dropped_seqs", "type": "ranges", "sensitivity": null, "doc": "On a drop record (C3): the half-open seq ranges [from, to) of the record's own source that the client gave up on, all below the record's seq, at most 64." },
+        { "name": "drop_reason", "type": "enum", "values": ["queue_full", "credential_expired", "refused"], "sensitivity": null, "doc": "On a drop record (C3): why the client gave up on the seqs in dropped_seqs." }
       ]
     },
     {
@@ -35,7 +46,13 @@
         { "name": "agent_id", "type": "id", "id_kind": "agent", "sensitivity": null, "doc": "The tenant's identifier for the agent." },
         { "name": "device_id", "type": "id", "id_kind": "device", "sensitivity": null, "doc": "The persistent device." },
         { "name": "device_ephemeral", "type": "bool", "sensitivity": null, "doc": "True when device_id could not be stored and lives only for this client session." },
-        { "name": "client_session_id", "type": "id", "id_kind": "client_session", "sensitivity": null, "doc": "The SDK client session." },
+        {
+          "name": "client_session_id",
+          "type": "id",
+          "id_kind": "client_session",
+          "sensitivity": null,
+          "doc": "The SDK client session: one client object's lifetime. The client kernel stamps it on every record, separate from source_id, because one client session opens a new source for each Participant it joins as."
+        },
         { "name": "journey_id", "type": "id", "id_kind": "journey", "sensitivity": null, "doc": "The user-visible attempt this record belongs to." },
         { "name": "request_id", "type": "id", "id_kind": "request", "sensitivity": null, "doc": "The request attempt." },
         { "name": "trace_id", "type": "id", "id_kind": "trace", "sensitivity": null, "doc": "The W3C trace." },

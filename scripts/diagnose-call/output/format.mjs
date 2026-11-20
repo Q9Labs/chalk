@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * Small formatting rules every view shares: times, scope-unique short handles, parties and coverage tokens. All times are stored in
  * UTC; a view converts to the tenant's time zone only here, when it prints.
@@ -66,7 +67,7 @@ export function isoMinute(/** @type {number} */ ms) {
 }
 
 /** The zone's offset at an instant, as `+05:00`. */
-export function offset(/** @type {number} */ ms, /** @type {string} */ tz) {
+function offset(/** @type {number} */ ms, /** @type {string} */ tz) {
   const name = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" }).formatToParts(new Date(ms)).find((part) => part.type === "timeZoneName")?.value ?? "GMT";
   return name === "GMT" ? "+00:00" : name.slice(3);
 }

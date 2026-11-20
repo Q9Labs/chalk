@@ -3,6 +3,7 @@
 Code facts about what existed before the foundation come from the inventory at origin/master a09ae4232 ([inventory-ids.md](hyper-observability/inventory-ids.md)); names of the foundation's own code, files and commands are current. Inputs: a code inventory, model consults and two independent reviews, the founder's direction.
 
 Direction from the founder:
+
 - He wants a formal or verifiable proof of coverage, and a wrapper for every app.
 - One coherent ID scheme, with version, build and flags on every event.
 - Every server log and every successful operation reaches the store. Add release and rollback markers and database health. Email alerts are fine for now.
@@ -19,18 +20,19 @@ The honest claim is **verified coverage of the symptoms in the registry, for a n
 Chalk keeps its TLA+ models under `tools/formal/` (client recovery, Episode lifecycle, external operations, media control, public invite access, recording pipeline, screen-share lease, Sync entry and leave, and the telemetry delivery model of layer 3), each with anchors, broken variants and a run.sh. Layers 3 and 4 extend this practice instead of starting a new one.
 
 Corrections from the Sol judge, applied below:
+
 - The delivery model covers **durably enqueued** events, not everything emitted. A client that vanishes with no persisted high-water mark has an unknown tail, not an exact missing range.
 - Lifecycle agreement is two small obligations added to `ClientRecovery.tla`, not a new product model. Agreement on the end state alone would miss bug 1.
 - The verdict is three separate fields (outcome, evidence coverage, disagreement), not one precedence lattice.
 - Passing traces can refute conformance with the model, but they can't prove that the code refines it.
 
-| # | Layer | Invariant | Kind of proof | What it can't see |
-|---|---|---|---|---|
-| 1 | Coverage graph | Every symptom in the registry has the full chain: required witnesses, registry facts, events and fields, emit sites, a rule, a positive fixture, a healthy fixture and a fault scenario. | Graph totality checked in CI by `scripts/gates/obs-coverage.mjs`, which judges both fixtures through the diagnose kernel, plus a code search that confirms each emit site exists. | Symptoms that aren't in the registry. |
-| 2 | Kernel totality | Every boundary crossing, operation, state transition, server decision and user-visible surface emits exactly one typed terminal record. | By construction: generated types and the kernel API force an outcome, and lint bans any bypass. | Logic bugs that return `ok` with wrong behavior, and anything outside our code (OS, browser). |
-| 3 | Delivery conservation | Every durably enqueued record is either stored once (idempotent under retries, partial acceptance, eviction and reload) or covered by a stored drop record. A source that vanishes without a persisted high-water mark becomes an open evidence gap with an unknown tail, and the seat it covers is unchecked. | The TLA+ model in `tools/formal/telemetry-delivery`, checked. CI validates the traces of real integration tests against the model, so the model and the code can't drift apart. | Behavior the model doesn't include. |
-| 4 | Lifecycle agreement | Two obligations, added to the existing `ClientRecovery.tla`. First, a listen-only connection that never opened survives provider idle expiry and grant renewal against a dead binding, either by recovering or by degrading within a bound. Second, once the authoritative end reason is known, the screen that renders is never a false failure, even when the end notice is late or lost. | Model check, and the broken variants of today's code must produce counterexamples. This is the check that would have caught 18 Nov bugs 1 and 2. | Machines that aren't modeled. |
-| 5 | Verdict soundness | A missing, stale or wrong-identity witness never yields a healthy verdict, and deleting evidence never erases a `broken` finding that is already proven. | By construction: `healthy` can only be built from a sealed `ProofBundle` for a profile chosen independently of the telemetry. Missing board data must never mean "board unused". Metamorphic tests delete, age, swap and contradict witnesses. | A witness that is complete but wrong. Section 4 covers that. |
+| #   | Layer                 | Invariant                                                                                                                                                                                                                                                                                                                                                                                   | Kind of proof                                                                                                                                                                                                                                  | What it can't see                                                                             |
+| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1   | Coverage graph        | Every symptom in the registry has the full chain: required witnesses, registry facts, events and fields, emit sites, a rule, a positive fixture, a healthy fixture and a fault scenario.                                                                                                                                                                                                    | Graph totality checked in CI by `scripts/gates/obs-coverage.mjs`, which judges both fixtures through the diagnose kernel, plus a code search that confirms each emit site exists.                                                              | Symptoms that aren't in the registry.                                                         |
+| 2   | Kernel totality       | Every boundary crossing, operation, state transition, server decision and user-visible surface emits exactly one typed terminal record.                                                                                                                                                                                                                                                     | By construction: generated types and the kernel API force an outcome, and lint bans any bypass.                                                                                                                                                | Logic bugs that return `ok` with wrong behavior, and anything outside our code (OS, browser). |
+| 3   | Delivery conservation | Every durably enqueued record is either stored once (idempotent under retries, partial acceptance, eviction and reload) or covered by a stored drop record. A source that vanishes without a persisted high-water mark becomes an open evidence gap with an unknown tail, and the seat it covers is unchecked.                                                                              | The TLA+ model in `tools/formal/telemetry-delivery`, checked. CI validates the traces of real integration tests against the model, so the model and the code can't drift apart.                                                                | Behavior the model doesn't include.                                                           |
+| 4   | Lifecycle agreement   | Two obligations, added to the existing `ClientRecovery.tla`. First, a listen-only connection that never opened survives provider idle expiry and grant renewal against a dead binding, either by recovering or by degrading within a bound. Second, once the authoritative end reason is known, the screen that renders is never a false failure, even when the end notice is late or lost. | Model check, and the broken variants of today's code must produce counterexamples. This is the check that would have caught 18 Nov bugs 1 and 2.                                                                                               | Machines that aren't modeled.                                                                 |
+| 5   | Verdict soundness     | A missing, stale or wrong-identity witness never yields a healthy verdict, and deleting evidence never erases a `broken` finding that is already proven.                                                                                                                                                                                                                                    | By construction: `healthy` can only be built from a sealed `ProofBundle` for a profile chosen independently of the telemetry. Missing board data must never mean "board unused". Metamorphic tests delete, age, swap and contradict witnesses. | A witness that is complete but wrong. Section 4 covers that.                                  |
 
 On top of the five layers there is **empirical completeness**, which can't be a proof because reality isn't a closed model. We measure it instead.
 
@@ -47,12 +49,14 @@ We formally model only the two protocols in layers 3 and 4. Modeling the whole c
 ## 1. The observability kernel (the wrapper)
 
 **One registry** (`observability/registry/`) is the single source: `observability/registry/core.json` (kinds, outcomes, items, sources, fault components), `observability/registry/ids.json`, `observability/registry/envelope.json`, and one area file per slice under `observability/registry/areas/` with its facts, symptoms, fields, events, reasons and machines. `scripts/codegen/obs-registry.mjs` is wired into `pnpm run regen` and `pnpm run check:generated`, and it generates:
+
 - typed kernels: TypeScript (`createKernel` in `sdks/typescript/client/src/obs/kernel.ts`), Go (the `obs` package, from `observability/kernel/go` into `apps/api/internal/obs` and `features/media/sfu/internal/obs`) and Elixir (`ChalkSync.Obs` in `apps/sync/lib/chalk_sync/obs.ex`). The Lambda and the compositor have no kernel yet; slices 10 and 11, which own them, add a Node one from the same registry;
 - the Axiom field schema and field budget, the coverage graph, the CLI's symptom and reason tables and the full registry, all in `observability/generated/`.
 
 Every field carries a `sensitivity` slot, left `null` for now. That is "keep privacy empty": nothing gets redacted today, and redaction becomes a config change later.
 
 **Five kernel calls,** the same in every kernel (the per-language signatures are the table in `observability/registry/README.md`):
+
 - `op(name, fields, work, { classify })`: forces exactly one terminal outcome, which is `ok`, `expected(code)` or `error(code)`. An uncaught or unclassified error becomes `error(unclassified)` and is counted as unexplained.
 - `transition(machine, from, to, trigger, trail, { reason })`: checked against state machines declared as data in the area files. The machines cover connection lifecycle, publication, share, board follow, Episode lifecycle, recording job and transcription job.
 - `decision(name, decision, fields, reason)`: required on every server admission, refusal, timeout, close and limit, recorded after the commit. The same `decision_id` and `reason_code` travel back in the protocol payload, so the client logs the exact code the server used.
@@ -60,6 +64,7 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 - `fact(name, fields)` for point records.
 
 **Boundaries instrumented automatically,** with no work per feature:
+
 - **Go (API, SFU, recorder):** HTTP middleware that logs every request, 2xx included, as one wide event; the SFU signaling and WebSocket wrappers; a pgx tracer; R2 and Cloudflare API clients; the job runner; the compositor subprocess.
 - **Elixir (Sync):** Phoenix socket and channel telemetry, Ecto hooks, the reducer wrapper, and an OTLP Logger backend. The OTLP backend fixes Sync logs that today go only to stdout.
 - **TypeScript (SDK, web, mobile):**
@@ -75,6 +80,7 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 **The kernel is a shared vocabulary and generated schema, not a new runtime.** It sits on what each language already has: Go middleware, OTel and slog; Elixir Logger and Telemetry, including Sync's direct Postgrex calls (`apps/sync/lib/chalk_sync/stateholder/postgres/command_decision.ex:21`); TypeScript's transport and Effect boundaries; and a small Node job adapter. `transition` is emitted by the existing state owner and never duplicates a state machine in a table. `decision` fires at the authoritative commit, and `surface` fires at committed display. Logical operations are kept apart from retry attempts and cancellations. A caught error isn't automatically a fault.
 
 **Enforcement:**
+
 - CI checks that every declared boundary adopts the kernel, and it tracks operations left unfinished after a kill or hang.
 - Bypass lint applies to the named adapters.
 - A rule against silent catches, meaning a catch that neither rethrows nor reports through the kernel, applies at the named recovery boundaries. A deliberate one needs an adjacent justification.
@@ -85,6 +91,7 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 ## 2. One coherent trail of IDs
 
 **Today** (Luna, file:line in `docs/plans/hyper-observability/inventory-ids.md`):
+
 - `journey_id` is minted on every API request unless the client sends `x-chalk-journey-id`, which the SDK never does (`apps/api/internal/observability/journey.go:20`).
 - The SDK outbox makes one `traceparent` for the client's whole lifetime (`sdks/typescript/client/src/telemetry/outbox.ts:55`).
 - The outbox's client session id lives as long as one SDK client. The W3C baggage `session.id` on API requests and the Sync `hello` is a different UUID, one per browser tab or app launch, so the two never match. The baggage id is dropped before durable work; the client session id is the telemetry ledger's source key (`telemetry_sources.source_id`).
@@ -99,6 +106,7 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 - Telemetry carries an unkeyed SHA-256 of the Participant ID.
 
 **Domain facts that shape the design** (GLOSSARY, schema):
+
 - A Participant is a per-Episode seat. It keeps its ID across reconnects and gets a new one on rejoin. So the Participant already is the "attendance", and we don't need a new attendance ID.
 - The person behind Participants across Episodes is a User or Agent. They are keyed by `identities.external_id` and `display_name`, unique per tenant.
 - `participants.name` is nullable.
@@ -106,26 +114,26 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 
 **Design:**
 
-| Prefix | Meaning | Minted by | Lifetime |
-|---|---|---|---|
-| `ten_` | tenant | API | durable |
-| `spc_` | Space | API | durable |
-| `ep_` | Episode | API | one Episode |
-| `pt_` | Participant (seat) | API | one seat; a rejoin gets a new one, and `generation` fences the admission incarnation |
-| `usr_` / `agt_` | User or Agent behind a Participant | API | durable (`external_id`, `display_name` alongside) |
-| `dev_` | device: a persistent browser profile or app install | client | until storage is cleared; `device_ephemeral=true` when storage is unavailable (an iframe that partitions it, for example) |
-| `cs_` | client session: one SDK client object, from construction through disposal; the telemetry source (`source_id`) of its records | client (the outbox), before auth | one SDK client; owns `seq`; a join attempt is keyed by it |
-| `mc_` / `pm_` | media connection, with the provider's session id beside it as `provider_media_id` | API / provider | one connection |
-| `sc_` | Sync connection | Sync | one socket |
-| `jr_` | journey: one user action (join, unmute, share, refresh, report) | client, at action start | one action, carried on every event and request it causes, through Sync frames, SFU signaling, job rows and Lambda payloads; W3C trace and span IDs link to it |
-| `rq_`, `tr_`, `sp_` | request attempt, W3C trace and span | receiving server / OpenTelemetry | one attempt; a retry is a new request in the same journey |
-| `op_`, `dc_` | kernel op and server decision | kernel | one record |
-| `rec_`, `job_`, `whd_`, `adm_` | recording, job, webhook delivery and admission request | API | carry `ep_` and the `jr_` that caused them |
-| `ev_`, `bt_` | event row and delivery batch | the emitter / the batcher or ingest | durable |
-| `fl_` | flag set, the `flags_hash` | the kernel's flags snapshot | one flag map |
-| `dg_`, `ak_`, `wh_` | diagnostic upload, API key and webhook endpoint | API | durable |
-| `f_` | finding | checker | durable |
-| `CHK-XXXX` | human diagnostic code shown in Report a problem and a settings sheet | client | derived from the first 20 bits of the `cs_` id, so it is resolved only within a scope and every candidate is returned |
+| Prefix                         | Meaning                                                                                                                      | Minted by                           | Lifetime                                                                                                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ten_`                         | tenant                                                                                                                       | API                                 | durable                                                                                                                                                       |
+| `spc_`                         | Space                                                                                                                        | API                                 | durable                                                                                                                                                       |
+| `ep_`                          | Episode                                                                                                                      | API                                 | one Episode                                                                                                                                                   |
+| `pt_`                          | Participant (seat)                                                                                                           | API                                 | one seat; a rejoin gets a new one, and `generation` fences the admission incarnation                                                                          |
+| `usr_` / `agt_`                | User or Agent behind a Participant                                                                                           | API                                 | durable (`external_id`, `display_name` alongside)                                                                                                             |
+| `dev_`                         | device: a persistent browser profile or app install                                                                          | client                              | until storage is cleared; `device_ephemeral=true` when storage is unavailable (an iframe that partitions it, for example)                                     |
+| `cs_`                          | client session: one SDK client object, from construction through disposal; the telemetry source (`source_id`) of its records | client (the outbox), before auth    | one SDK client; owns `seq`; a join attempt is keyed by it                                                                                                     |
+| `mc_` / `pm_`                  | media connection, with the provider's session id beside it as `provider_media_id`                                            | API / provider                      | one connection                                                                                                                                                |
+| `sc_`                          | Sync connection                                                                                                              | Sync                                | one socket                                                                                                                                                    |
+| `jr_`                          | journey: one user action (join, unmute, share, refresh, report)                                                              | client, at action start             | one action, carried on every event and request it causes, through Sync frames, SFU signaling, job rows and Lambda payloads; W3C trace and span IDs link to it |
+| `rq_`, `tr_`, `sp_`            | request attempt, W3C trace and span                                                                                          | receiving server / OpenTelemetry    | one attempt; a retry is a new request in the same journey                                                                                                     |
+| `op_`, `dc_`                   | kernel op and server decision                                                                                                | kernel                              | one record                                                                                                                                                    |
+| `rec_`, `job_`, `whd_`, `adm_` | recording, job, webhook delivery and admission request                                                                       | API                                 | carry `ep_` and the `jr_` that caused them                                                                                                                    |
+| `ev_`, `bt_`                   | event row and delivery batch                                                                                                 | the emitter / the batcher or ingest | durable                                                                                                                                                       |
+| `fl_`                          | flag set, the `flags_hash`                                                                                                   | the kernel's flags snapshot         | one flag map                                                                                                                                                  |
+| `dg_`, `ak_`, `wh_`            | diagnostic upload, API key and webhook endpoint                                                                              | API                                 | durable                                                                                                                                                       |
+| `f_`                           | finding                                                                                                                      | checker                             | durable                                                                                                                                                       |
+| `CHK-XXXX`                     | human diagnostic code shown in Report a problem and a settings sheet                                                         | client                              | derived from the first 20 bits of the `cs_` id, so it is resolved only within a scope and every candidate is returned                                         |
 
 - **Journey, request attempt and trace stay distinct, but linked.** Today the outbox uses one traceparent for its whole lifetime on batch uploads, so treating journey and trace as the same ID would merge unrelated actions. Instead, the client mints an action context (journey) when each action starts and stamps every event and request with it. The API accepts that context instead of minting its own, and the ledger keeps its UUID contract.
 - **"Session" alone never names an id.** `observability/registry/ids.json` lists its four meanings: the dashboard's word for an Episode, the media provider's session (stored as `provider_media_id`), the SDK client session (`cs_`) and the dashboard sign-in, which is a credential that is never logged or looked up.
@@ -145,6 +153,7 @@ Every field carries a `sensitivity` slot, left `null` for now. That is "keep pri
 The v1 journey table still holds. v2 adds the following.
 
 **Client flight recorder (the biggest single gain):**
+
 - A 10-minute ring buffer in memory holds:
   - per-second `getStats` deltas per track;
   - the candidate pair and `qualityLimitationReason`;
@@ -167,6 +176,7 @@ The v1 journey table still holds. v2 adds the following.
 **Live introspection:** `diagnose live <who>` sends one Sync control message. The client uploads its state, flight recorder and surface tree right away, and the CLI prints the handle.
 
 **Server ground truth:**
+
 - The SFU writes per-second stats per track (rx/tx packets, voiced packets, PLI/NACK, loss, bitrate) to R2 for each Episode. It sends 15-second rollups and every state change or error, with codes, to Axiom.
 - Every Cloudflare SFU signaling request and response is logged with `mc_` and `tr_` as metadata (the call, its status, track names and error codes), never the full body or SDP.
 - While recording, the recorder emits per-second audio activity and video frame presence for each track, which makes it a third witness.
@@ -175,6 +185,7 @@ The v1 journey table still holds. v2 adds the following.
 **Every server log reaches Axiom:** the Sync Logger, the full SFU journal, on-demand recorder workers (their bootstrap environment is missing OTLP today), the transcription Lambda, and successful API requests.
 
 **Platform:**
+
 - Release and rollback markers from each Alchemy deploy and each worker start, read by checks as the `release` witness source; they also declare the platform's day for its checks.
 - The checker compares the version clients actually report with the deployed version.
 - A change stream for config and caps.
@@ -182,6 +193,7 @@ The v1 journey table still holds. v2 adds the following.
 - Cloudflare Worker edge logs, so a broken deploy can't look like "0 joins, 0 errors".
 
 **Journeys and failure classes Gemini added:**
+
 - The embed boundary: the iframe `allow` policy, partitioned storage, host CSP blocking ingest, `postMessage` handshake timeouts, and a host page that collapses the iframe to 0×0.
 - Boot and asset failures: a broken chunk after a deploy, an unsupported browser, or an ad blocker. These need a boot-level beacon on a first-party path. Today the ingest path contains "telemetry", which blocklists match.
 - The listening half of audio: autoplay `NotAllowedError`, a suspended AudioContext, a muted element, a dead Bluetooth sink, OS audio focus loss.
@@ -191,6 +203,7 @@ The v1 journey table still holds. v2 adds the following.
 - After the call: recording playback failures (an expired signed URL, a decode error) and SFU sessions that leak after the Episode ends.
 
 **Instead of a 30 s snapshot:**
+
 - An immediate event on every state change.
 - A 30 s heartbeat that carries rollups instead of point samples, such as `mic_rms_max_db_30s`, `freeze_ms_30s`, `min_rx_fps_30s`, `camera_auto_jumps_30s`, plus a state digest.
 - The per-second flight recorder for detail.
@@ -199,6 +212,7 @@ The v1 journey table still holds. v2 adds the following.
 - Server witnesses (Sync pong, SFU flow) tell a throttled tab apart from a dead one.
 
 **Cut:**
+
 - Continuous DOM replay. Video and canvas don't replay in rrweb, and recording the DOM costs CPU on cheap devices. The surfaces, tile geometry and board replay show more for much less.
 - Continuous profiling. Expose `pprof` on demand instead.
 - A 24/7 browser fleet. One periodic canary pair is enough: 2 scripted clients send a 440 Hz tone and test video, and the canary also checks that every field survives a round trip into Axiom.
@@ -231,7 +245,7 @@ The v1 journey table still holds. v2 adds the following.
   - Today the outbox uses the 5-minute media grant, which the SDK renews 60 s before expiry (`sdks/typescript/client/src/access/manager.ts:4`).
   - So events are lost only when renewal keeps failing past expiry, and those are exactly the calls that die.
 - **The telemetry ledger settles every batch (C3).** A client source is its client session; every batch names its `batch_id`, `source_id` and `next_seq`, and the ledger settles each record once by its source and `seq`, so a retried batch stores nothing twice. A source ends with `end=closed` or, when a successor finds it dead, `end=abandoned`. A drop record accounts for what the client gave up on: `dropped_seqs` as half-open `[from, to)` ranges (at most 64), a `drop_reason` of `queue_full`, `credential_expired` or `refused`, and `dropped_source_id` for a predecessor's seqs. A source that never closed, or a range it never accounted for, is an open gap, so the seat it covers is unchecked.
-- **Sources are bound to their first Participant** at the ledger (`apps/api/internal/telemetrydelivery/binding.go`). A later Participant of the same User or Agent (a rejoin) is a successor and may write; anyone else is refused with `source_bound`, so a Participant that learns another source's id can't hide its gaps. A guest has no successors.
+- **Each source has one owner**, the Participant and Episode of its first batch, at the ledger (`apps/api/internal/telemetrydelivery/admit.go`). A batch for a source another Participant owns is refused with `source_owned`, and a rejoin or reload sends a predecessor's records under that predecessor's own source and kept credential, so a Participant that learns another source's id can't hide its gaps.
 - **Half the outbox queue is reserved for priority-0 records.** Stats are dropped first.
 - **First-party ingest path.**
 - **Axiom Cloud with five datasets split by shape:**
@@ -242,6 +256,7 @@ The v1 journey table still holds. v2 adds the following.
   - `logs` (free-form, in map fields).
 
   The registry enforces the field budget.
+
 - **If Axiom Cloud isn't approved,** don't build on the free plan. Use structured Postgres tables plus R2, which is workable at tens of Episodes a day, or Honeycomb.
 - **Postgres** holds expected populations (it already does), findings with proof copies, problem reports and `CHK` codes.
 - **R2** holds flight recorders, SFU per-second stats and live dumps, indexed by trail IDs.
@@ -256,6 +271,7 @@ The v1 journey table still holds. v2 adds the following.
   - disagreement: a list of witness conflicts.
 
   `unchecked` and `stale` stay visible and never mean healthy.
+
 - **`check` judges more than ended Episodes.** Its items are Episodes (open ones included), attempts that never became an Episode (keyed by their client session `cs_`), post-call jobs, and one UTC day each of a Space, a Tenant and the platform. Each item's proof profile is chosen from the authority's declaration before any telemetry is read. It rechecks a stored result when its rows or rules change, and shows the result as stale until someone reruns it. Without a scheduler there's no guarantee of when a problem is detected, and that is the accepted trade.
 - **Fetching:**
   - Queries page by time until the source is exhausted, so nothing is silently truncated.
@@ -280,20 +296,20 @@ The v1 journey table still holds. v2 adds the following.
 
 - **Commands:**
 
-  | Command | Purpose |
-  |---|---|
-  | `<anything>` | universal resolver: a handle, raw id, session id, `CHK` code, tenant or person name |
-  | `day` | sweep a tenant's day of Episodes, attempts and jobs |
-  | `episode`, `attempt`, `job` | one item in depth |
-  | `space`, `tenant`, `platform` | one UTC day of a Space, a Tenant or an environment |
-  | `evidence` | why a finding's proof is sufficient |
-  | `participant`, `pattern` | patterns across Episodes |
-  | `window` | a tenant's items in a time window |
-  | `check` | run the checker |
-  | `report`, `live` | a problem report; ask a running client for its state (slice 13 adds both) |
-  | `trace` | raw Axiom rows and R2 slices (not built yet) |
-  | `coverage` | the five counts, blind spots and the last mutation score (not built yet) |
-  | `symptoms` | the registry's symptom table (not built yet) |
+  | Command                       | Purpose                                                                             |
+  | ----------------------------- | ----------------------------------------------------------------------------------- |
+  | `<anything>`                  | universal resolver: a handle, raw id, session id, `CHK` code, tenant or person name |
+  | `day`                         | sweep a tenant's day of Episodes, attempts and jobs                                 |
+  | `episode`, `attempt`, `job`   | one item in depth                                                                   |
+  | `space`, `tenant`, `platform` | one UTC day of a Space, a Tenant or an environment                                  |
+  | `evidence`                    | why a finding's proof is sufficient                                                 |
+  | `participant`, `pattern`      | patterns across Episodes                                                            |
+  | `window`                      | a tenant's items in a time window                                                   |
+  | `check`                       | run the checker                                                                     |
+  | `report`, `live`              | a problem report; ask a running client for its state (slice 13 adds both)           |
+  | `trace`                       | raw Axiom rows and R2 slices (not built yet)                                        |
+  | `coverage`                    | the five counts, blind spots and the last mutation score (not built yet)            |
+  | `symptoms`                    | the registry's symptom table (not built yet)                                        |
 
   [docs/diagnose.md](../diagnose.md) is the reference for the commands that exist.
 
@@ -334,19 +350,21 @@ The v1 journey table still holds. v2 adds the following.
   next: diagnose evidence f_5b55
   next: diagnose participant usr_th-1041 --since 30d
   ```
+
 - **Measured** with the o200k tokenizer on the same Episode content when the format was chosen (samples in `docs/plans/hyper-observability/`). The goldens are recounted with `uv run -q --no-project --with tiktoken python scripts/diagnose-call/golden/count_tokens.py`.
 
-  | Format | Tokens |
-  |---|---|
-  | Today's shape | 894 (full UUIDs and hashes dominate) |
-  | Fable's text | 270 |
-  | Compact grammar | 187 |
-  | Pretty JSON | 422 |
-  | Compact JSON | 265 |
+  | Format          | Tokens                               |
+  | --------------- | ------------------------------------ |
+  | Today's shape   | 894 (full UUIDs and hashes dominate) |
+  | Fable's text    | 270                                  |
+  | Compact grammar | 187                                  |
+  | Pretty JSON     | 422                                  |
+  | Compact JSON    | 265                                  |
 
 ## 9. How the work splits (no phases)
 
 **Foundation: four locked contracts, merged first.** Only the contracts block the slices, because without them parallel agents invent incompatible IDs and schemas. Each contract is a separate lane.
+
 - C1, IDs and envelope:
   - the trail table and action context;
   - host app version, build and SDK version;
@@ -367,6 +385,7 @@ The v1 journey table still holds. v2 adds the following.
 - C4, output: the line grammar above, with `--json` objects.
 
 Work that runs alongside the contracts and doesn't block them:
+
 - server log shipping, including 2xx;
 - the on-demand recorder OTLP;
 - Sync Logger export;

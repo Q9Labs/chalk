@@ -10,7 +10,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -44,11 +43,6 @@ type MediaResolver interface {
 
 type SyncIssuer interface {
 	IssueForParticipant(context.Context, synctokens.SubjectKey) (synctokens.Token, error)
-}
-
-type MediaIssuer interface {
-	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
-	IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error)
 }
 
 type MediaProofVerifier interface {
@@ -353,11 +347,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		Provider: provider,
 	}
 	mediaSubject.ConnectionID = providerSubject
-	mediaToken, err := a.mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, clients), mediaSubject)
-	if err != nil {
-		return publicinvites.PublicAccessGrant{}, err
-	}
-	telemetryToken, err := a.mediaTokens.IssueTelemetry(ctx, mediaSubject)
+	mediaToken, telemetryToken, err := issueGrantCredentials(ctx, a.mediaTokens, clients, mediaSubject)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -367,7 +357,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	}
 
 	return publicinvites.PublicAccessGrant{
-		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, TelemetryToken: telemetryToken.Token, TelemetryExpiresAt: telemetryToken.ExpiresAt, ExpiresAt: expiresAt,
+		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, Telemetry: telemetryToken, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,

@@ -1,84 +1,72 @@
-package telemetrydelivery
+package telemetrydelivery_test
 
 import (
-	"context"
 	"errors"
-	"reflect"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
+	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery/ledgertest"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestMemoryLedgerWritesTheSinkBeforeItCommitsAndRetriesWriteAgain(t *testing.T) {
-	ledger := &MemoryLedger{}
-	request := batch(t, sourceA, 2, "", ended(0), ended(1))
-	var written [][]int64
-	write := func(_ context.Context, admission Admission) error {
-		written = append(written, seqsOf(admission.New))
-		return nil
-	}
-
-	ledger.CrashAfterSink = errors.New("crash")
-	if _, err := ledger.Admit(t.Context(), identity(t), request, received, write); err == nil {
-		t.Fatal("a crash after the sink write must fail the call")
-	}
-	rows, _ := ledger.Source(t.Context(), identity(t).TenantID, id(t, sourceA))
-	if len(rows) != 0 {
-		t.Fatalf("rows = %v after a crash between the sink and the commit, want none", rows)
-	}
-
-	ledger.CrashAfterSink = nil
-	if _, err := ledger.Admit(t.Context(), identity(t), request, received, write); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ledger.Admit(t.Context(), identity(t), request, received, write); err != nil {
-		t.Fatal(err)
-	}
-	if want := [][]int64{{0, 1}, {0, 1}, {}}; !reflect.DeepEqual(written, want) {
-		t.Fatalf("sink writes = %v, want %v: the retry after the crash writes again, and the one after the commit writes nothing", written, want)
-	}
+type memoryWorld struct {
+	ledger   *telemetrydelivery.MemoryLedger
+	tenant   utilities.ID
+	episodes [2]utilities.ID
+	joined   int
 }
 
-func TestMemoryLedgerLeavesRowsAloneWhenTheSinkFails(t *testing.T) {
-	ledger := &MemoryLedger{}
-	failure := errors.New("sink down")
-	if _, err := ledger.Admit(t.Context(), identity(t), batch(t, sourceA, 1, "", ended(0)), received, func(context.Context, Admission) error { return failure }); !errors.Is(err, failure) {
-		t.Fatalf("error = %v, want the sink's", err)
+func newID(t *testing.T, prefix string, n int) utilities.ID {
+	t.Helper()
+	id, err := utilities.ParseID(fmt.Sprintf("%s-0000-4000-8000-%012d", prefix, n))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if rows, _ := ledger.Episode(t.Context(), identity(t).TenantID, identity(t).EpisodeID); len(rows) != 0 {
-		t.Fatalf("rows = %v, want none", rows)
-	}
+	return id
 }
 
-func TestMemoryLedgerKeepsRowsPerParticipantAndReadsThemBack(t *testing.T) {
-	noSink := func(context.Context, Admission) error { return nil }
-	first := identity(t)
-	second := first
-	second.ParticipantID = id(t, participantSecond)
-	// The second participant is the same User rejoined, so it may write to the source.
-	ledger := &MemoryLedger{Identities: map[utilities.ID]utilities.ID{first.ParticipantID: id(t, identityUser), second.ParticipantID: id(t, identityUser)}}
+func (w *memoryWorld) Ledger() ledgertest.Ledger { return w.ledger }
 
-	// The same seqs under another participant are new, not duplicates: a credential cannot mark
-	// another participant's seqs as stored.
-	for _, who := range []Identity{first, second} {
-		admission, err := ledger.Admit(t.Context(), who, batch(t, sourceA, 2, "", ended(0), ended(1)), received, noSink)
-		if err != nil || admission.Duplicates != 0 || len(admission.New) != 2 {
-			t.Fatalf("participant %s: duplicates = %d, new = %d, err = %v", who.ParticipantID, admission.Duplicates, len(admission.New), err)
+func (w *memoryWorld) Join(t *testing.T, episode int) telemetrydelivery.Identity {
+	w.joined++
+	identity := telemetrydelivery.Identity{TenantID: w.tenant, EpisodeID: w.episodes[episode], ParticipantID: newID(t, "33333333", w.joined)}
+	w.ledger.Join(identity)
+	return identity
+}
+
+func (w *memoryWorld) Purge(*testing.T) { w.ledger.Purge(w.tenant) }
+
+func TestMemoryLedgerKeepsTheLedgerContract(t *testing.T) {
+	ledgertest.Run(t, func(t *testing.T) ledgertest.World {
+		return &memoryWorld{
+			ledger: &telemetrydelivery.MemoryLedger{}, tenant: newID(t, "11111111", 1),
+			episodes: [2]utilities.ID{newID(t, "22222222", 1), newID(t, "22222222", 2)},
 		}
-	}
-	rows, err := ledger.Source(t.Context(), first.TenantID, id(t, sourceA))
-	if err != nil || len(rows) != 2 {
-		t.Fatalf("source rows = %v, %v, want one per participant", rows, err)
-	}
-	if byEpisode, _ := ledger.Episode(t.Context(), first.TenantID, first.EpisodeID); len(byEpisode) != 2 {
-		t.Fatalf("episode rows = %d, want 2", len(byEpisode))
-	}
-	if other, _ := ledger.Episode(t.Context(), first.TenantID, id(t, "55555555-5555-4555-8555-555555555555")); len(other) != 0 {
-		t.Fatalf("another Episode's rows = %v, want none", other)
-	}
+	})
+}
 
-	ledger.Fail = errors.New("down")
-	if _, err := ledger.Source(t.Context(), first.TenantID, id(t, sourceA)); err == nil {
+// A failed commit leaves the row as it was, so the retry finds its records new.
+func TestMemoryLedgerFailedCommitChangesNothing(t *testing.T) {
+	world := &memoryWorld{ledger: &telemetrydelivery.MemoryLedger{}, tenant: newID(t, "11111111", 1), episodes: [2]utilities.ID{newID(t, "22222222", 1)}}
+	owner := world.Join(t, 0)
+	request := ledgertest.Batch(t, ledgertest.SourceID(1), 2, "", ledgertest.Record(0), ledgertest.Record(1))
+	failure := errors.New("commit failed")
+	world.ledger.FailCommit = failure
+	if _, err := world.ledger.Admit(t.Context(), owner, request, time.Now()); !errors.Is(err, failure) {
+		t.Fatalf("err = %v, want the commit's", err)
+	}
+	if _, found, _ := world.ledger.Source(t.Context(), owner.TenantID, ledgertest.SourceID(1)); found {
+		t.Fatal("a row exists after a failed commit")
+	}
+	world.ledger.FailCommit = nil
+	admission, err := world.ledger.Admit(t.Context(), owner, request, time.Now())
+	if err != nil || len(admission.New) != 2 {
+		t.Fatalf("retry: new = %d, err = %v, want both records new", len(admission.New), err)
+	}
+	world.ledger.Fail = errors.New("down")
+	if _, _, err := world.ledger.Source(t.Context(), owner.TenantID, ledgertest.SourceID(1)); err == nil {
 		t.Fatal("a failing ledger must fail reads")
 	}
 }

@@ -5245,7 +5245,7 @@ create index participant_media_sessions_participant_idx
     on participant_media_sessions(tenant_id, episode_id, participant_id, generation);
 
 -- The telemetry ledger: which seqs of each SDK source the server has stored, rejected or been told
--- were dropped, one row per source and participant.
+-- were dropped, one row per source, owned by the participant and Episode of its first batch.
 create table telemetry_sources (
     tenant_id uuid not null,
     source_id uuid not null,
@@ -5258,19 +5258,8 @@ create table telemetry_sources (
     end_next_seq bigint check (end_next_seq >= 0),
     first_received_at timestamptz not null,
     last_received_at timestamptz not null,
-    primary key (tenant_id, source_id, participant_id),
+    primary key (tenant_id, source_id),
     check ((end_state is null) = (end_next_seq is null))
 );
 create index telemetry_sources_episode_idx on telemetry_sources (tenant_id, episode_id);
-
--- The participant each telemetry source is bound to: the first that sent a batch touching it.
--- identity_id is its User or Agent, null for a guest; a later participant of the same identity is a
--- successor and may write to the source too.
-create table telemetry_source_bindings (
-    tenant_id uuid not null,
-    source_id uuid not null,
-    participant_id uuid not null,
-    identity_id uuid,
-    bound_at timestamptz not null,
-    primary key (tenant_id, source_id)
-);
+create index telemetry_sources_participant_idx on telemetry_sources (tenant_id, participant_id);

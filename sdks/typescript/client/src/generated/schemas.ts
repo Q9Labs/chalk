@@ -110,10 +110,14 @@ export const AccessGrantSchema = /* @__PURE__ */ (() =>
       expires_at: DateTimeStringSchema,
       token: Schema.String,
     }),
-    telemetry: Schema.Struct({
-      expires_at: DateTimeStringSchema,
-      token: Schema.String,
-    }),
+    telemetry: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          expires_at: DateTimeStringSchema,
+          token: Schema.String,
+        }),
+      ),
+    ),
   }))();
 export type AccessGrant = typeof AccessGrantSchema.Type;
 
@@ -1719,7 +1723,6 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
             }),
           ).check(Schema.isMaxLength(64)),
         ),
-        dropped_source_id: Schema.optional(UUIDSchema),
         duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         elapsed_ms: Schema.Number,
         element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
@@ -1855,6 +1858,7 @@ export const TelemetryResponseSchema = /* @__PURE__ */ (() =>
       }),
     ),
     duplicates: Schema.Number,
+    end_rejection: Schema.optional(Schema.String),
     rejected: Schema.Number,
     rejections: Schema.Array(
       Schema.Struct({
@@ -1862,6 +1866,7 @@ export const TelemetryResponseSchema = /* @__PURE__ */ (() =>
         seq: Schema.Number,
       }),
     ),
+    server_ms: Schema.optional(Schema.Number),
   }))();
 export type TelemetryResponse = typeof TelemetryResponseSchema.Type;
 

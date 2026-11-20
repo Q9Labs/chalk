@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The profile: what one item (an Episode, an attempt that never became one, a post-call job, or one UTC day of a Space, a Tenant or
  * the platform) should have produced, given what
@@ -90,9 +91,14 @@
  *   expected: string,
  *   decide: (input: DecideInput) => Decision,
  *   settle_ms?: number,
+ *   healthy_absent?: readonly string[],
  * }} CheckDef
  * `settle_ms` extends an ended item's window for this check, because some records about an end arrive after it (a client's end
  * screen). The sources must cover the extended window before the check counts.
+ *
+ * A check fails closed: the kernel turns a `pass` into `unknown` unless every required witness is present. `healthy_absent` names
+ * the required facts whose proven absence is itself the healthy claim (no automatic board camera move, no ingress while muted), so
+ * a pass over their absence stands; a fact not named there must be witnessed before the check can pass.
  */
 
 /**
@@ -104,6 +110,8 @@
 export const ITEM = "*";
 /** @param {string} participant */
 export const seatKey = (participant) => `pt:${participant}`;
+/** The subject key of a per-seat source on an attempt, which has no seat yet: its client session. @param {string} attempt */
+export const sessionKey = (attempt) => `cs:${attempt}`;
 
 /**
  * Plans every check that applies to the item. An item that has not ended is judged up to `asof_ms` and stays open, so it can never be

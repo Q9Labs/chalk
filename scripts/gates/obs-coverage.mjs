@@ -4,15 +4,22 @@
 //
 //   witnesses -> facts -> events and fields -> emit sites in code -> rule -> positive and healthy fixtures -> fault scenario
 //
+// The fixtures must be the chain's output, not rows written by hand: each one names, in `chain`, the hand-off files under
+// observability/fixtures/<code>/chain/ its rows came from, and its rows must be exactly theirs. The chain's `hops.json` declares
+// each hop's test, its command and the files it writes; the first hop is the fault scenario, and every file in the chain and both
+// fixtures must be written by a hop. scripts/gates/obs-chain-replay.mjs runs the hops in write mode and fails on any difference,
+// which proves the files are current (observability/fixtures/end.wrong_screen/README.md).
+//
 // The rule is judged the one way the diagnose kernel judges it (scripts/diagnose-call/proof/rows.mjs): the positive fixture must
 // give a finding with the symptom's code, and the healthy fixture must check every eligible subject and give none.
 //
 // A symptom with a missing link fails, unless observability/registry/coverage-allowlist.json names it; the allow-list
 // is printed on every run so nobody mistakes an allow-listed symptom for a covered one. A listed symptom that is now
 // complete also fails, so the list only shrinks. See observability/registry/README.md.
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { checkFrom } from "../diagnose-call/proof/catalogue.mjs";
 import { eventOf, judgeFixture, ruleResult } from "../diagnose-call/proof/rows.mjs";
 
@@ -58,6 +65,56 @@ function fixtureLinks(kind, path, fixture, check, code) {
   return dropped;
 }
 
+/** Whether a fixture's rows are exactly the rows of the chain's hand-off files it names. */
+function chainLinks(root, kind, fixture, code) {
+  const dir = `observability/fixtures/${code}/chain/`;
+  const chain = Array.isArray(fixture.chain) ? fixture.chain : [];
+  if (chain.length === 0) return [`${kind} fixture names no chain hand-off files, so its rows are not the fault scenario's`];
+  const outside = chain.filter((path) => typeof path !== "string" || !path.startsWith(dir) || !existsSync(join(root, path)));
+  if (outside.length > 0) return [`${kind} fixture chain file ${outside.join(", ")} is not a hand-off file in ${dir}`];
+  const rows = chain.flatMap((path) => readJson(root, path));
+  return isDeepStrictEqual(rows, fixture.rows) ? [] : [`${kind} fixture rows are not the rows of its chain files ${chain.join(", ")}: run the chain with CHALK_CHAIN_WRITE=1`];
+}
+
+/** Whether the fault scenario starts the symptom's chain of declared hops. */
+function faultLinks(root, symptom) {
+  if (!symptom.fault_scenario) return ["a fault scenario"];
+  if (!existsSync(join(root, symptom.fault_scenario))) return [`fault scenario ${symptom.fault_scenario} (file not found)`];
+  return hopLinks(root, symptom);
+}
+
+/** The chain's declared hops, from `chain/hops.json`, with each written file as a path from the repository root. */
+export function chainHops(root, code) {
+  const dir = `observability/fixtures/${code}/chain/`;
+  if (!existsSync(join(root, dir, "hops.json"))) return null;
+  const { hops } = readJson(root, `${dir}hops.json`);
+  if (!Array.isArray(hops)) return [];
+  return hops.map((hop) => ({ ...hop, writes: (Array.isArray(hop.writes) ? hop.writes : []).map((file) => posix.normalize(`${dir}${file}`)) }));
+}
+
+/** Whether the chain's hops start at the fault scenario, can rewrite their files, and write every hand-off file and fixture. */
+function hopLinks(root, symptom) {
+  const dir = `observability/fixtures/${symptom.code}/chain/`;
+  const hops = chainHops(root, symptom.code);
+  if (hops === null) return [`chain hops ${dir}hops.json naming each hop's test, its command and the files it writes`];
+  if (hops.length === 0) return [`a hop in ${dir}hops.json`];
+  const missing = [];
+  if (hops[0].test !== symptom.fault_scenario) missing.push(`the first hop in ${dir}hops.json must be the fault scenario ${symptom.fault_scenario}, so the chain starts from it`);
+  for (const hop of hops) {
+    const test = typeof hop.test === "string" ? join(root, hop.test) : null;
+    if (test === null || !existsSync(test)) missing.push(`hop ${hop.hop} test ${hop.test} (file not found)`);
+    else if (!readFileSync(test, "utf8").includes("CHALK_CHAIN_WRITE")) missing.push(`hop ${hop.hop} test ${hop.test} never reads CHALK_CHAIN_WRITE, so it can't rewrite what it hands off`);
+    if (typeof hop.command !== "string" || hop.command === "") missing.push(`hop ${hop.hop} has no command, so the chain can't be replayed`);
+  }
+  const written = new Set(hops.flatMap((hop) => hop.writes));
+  for (const file of written) if (!existsSync(join(root, file))) missing.push(`hop hand-off ${file} (file not found)`);
+  const unwritten = readdirSync(join(root, dir)).filter((name) => name !== "hops.json" && !written.has(`${dir}${name}`));
+  if (unwritten.length > 0) missing.push(`chain file ${unwritten.join(", ")} is written by no hop in ${dir}hops.json, so it may be hand-written`);
+  const fixtures = Object.values(symptom.fixtures).filter((path) => !written.has(path));
+  if (fixtures.length > 0) missing.push(`fixture ${fixtures.join(", ")} is written by no hop in ${dir}hops.json`);
+  return missing;
+}
+
 async function ruleLinks(root, symptom, events, fields, declared) {
   const missing = [];
   if (!existsSync(join(root, symptom.rule))) return [`rule ${symptom.rule}`];
@@ -81,6 +138,7 @@ async function ruleLinks(root, symptom, events, fields, declared) {
       continue;
     }
     missing.push(...fixtureLinks(kind, path, fixture, check, symptom.code));
+    missing.push(...chainLinks(root, kind, fixture, symptom.code));
     if (kind === "positive") {
       for (const witness of symptom.witnesses) {
         for (const event of witness.events) {
@@ -108,9 +166,7 @@ async function symptomLinks(root, symptom, events, fields, declared) {
     }
   }
   missing.push(...(await ruleLinks(root, symptom, events, fields, declared)));
-  if (!symptom.fault_scenario) missing.push("a fault scenario");
-  else if (!existsSync(join(root, symptom.fault_scenario))) missing.push(`fault scenario ${symptom.fault_scenario} (file not found)`);
-  else if (!readFileSync(join(root, symptom.fault_scenario), "utf8").includes(symptom.code)) missing.push(`fault scenario ${symptom.fault_scenario} must name ${symptom.code}`);
+  missing.push(...faultLinks(root, symptom));
   return missing;
 }
 
@@ -134,7 +190,7 @@ export async function checkCoverage({ root = repositoryRoot, graph = readJson(ro
   return result;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.main) {
   const { failures, allowlisted, covered } = await checkCoverage();
   console.log(`Observability coverage: ${covered.length} symptom(s) covered end to end: ${covered.join(", ") || "none"}.`);
   if (allowlisted.length > 0) {

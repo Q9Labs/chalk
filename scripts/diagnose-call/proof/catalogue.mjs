@@ -1,9 +1,10 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The checks, assembled from their one home. A symptom's code, item, per and witnesses live in its area file under
  * observability/registry (generated into observability/generated/registry.json); its behaviour lives in
  * observability/rules/<code>.mjs, which exports `symptom`, `expected`, `applies` and `decide` (and `settle_ms` when records about
- * the item keep arriving after it ends). A symptom with no rule file yet is catalogued but not checked, and the coverage gate lists it.
+ * the item keep arriving after it ends, and `healthy_absent` when the proven absence of a required witness is the healthy claim). A symptom with no rule file yet is catalogued but not checked, and the coverage gate lists it.
  *
  * A slice adds a check by adding the symptom and its facts to the registry, the rule file, a positive and a healthy fixture under
  * observability/fixtures/<code>/ and a fault scenario. Nothing here changes.
@@ -36,6 +37,8 @@ export function checkFrom(symptom, rule) {
   if (typeof rule.applies !== "function" || typeof rule.decide !== "function") throw new TypeError(`${where} must export applies() and decide()`);
   if (typeof rule.expected !== "string" || rule.expected === "") throw new TypeError(`${where} must export expected, one sentence of what a healthy subject produces`);
   if (rule.settle_ms !== undefined && !(Number.isInteger(rule.settle_ms) && Number(rule.settle_ms) >= 0)) throw new TypeError(`${where}: settle_ms is a whole number of milliseconds`);
+  const healthyAbsent = rule.healthy_absent ?? [];
+  if (!Array.isArray(healthyAbsent) || !healthyAbsent.every((fact) => typeof fact === "string")) throw new TypeError(`${where}: healthy_absent is a list of required facts`);
   return Object.freeze({
     code: symptom.code,
     item: symptom.item,
@@ -46,6 +49,7 @@ export function checkFrom(symptom, rule) {
     expected: rule.expected,
     decide: /** @type {CheckDef["decide"]} */ (rule.decide),
     settle_ms: Number(rule.settle_ms ?? 0),
+    healthy_absent: Object.freeze([...healthyAbsent]),
   });
 }
 

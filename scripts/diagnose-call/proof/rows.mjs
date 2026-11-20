@@ -1,20 +1,24 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The row adapter: telemetry rows (registry envelope plus event fields, as Axiom returns them) to the kernel's observations, and the
  * one way a symptom's fixture is judged. The registry says which events witness which fact (an area file's `facts`), so this file
  * holds no per-symptom mapping: a slice that declares a fact and its events gets its rows read here.
  *
- * A row names its event in one of two ways: a kernel row (the Go, SFU and Sync kernels' `send`) carries its record `kind` and the
- * event in `name`, and an older emitter's row carries it in `event`. `eventOf` reads both, for fixtures and live rows alike.
+ * A row names its registry event one way: a kernel row (the Go, SFU and Sync kernels' `send`, and the API's row of a client
+ * kernel's record) carries its record `kind` and the event in `name`. A row an older emitter still writes is read only through
+ * its event's `legacy.match` in the registry, such as an `sdk.telemetry` row of type `call_ended` from an SDK release before the
+ * client kernel. `eventOf` is the one place a row's event is read, for fixtures and live rows alike.
  *
  * A row becomes one observation per fact whose events list it. A row that can't be placed is dropped and returned with the reason,
  * never guessed: no `event_id` means it can't be cited, and no `est_server_ms` means its time is unknown, so the subject it would
  * have witnessed stays unchecked.
  */
+import { readFileSync } from "node:fs";
 import { FACTS, RECORD_KINDS, SOURCE_TABLE } from "./facts.mjs";
 import { observation, origin } from "./evidence.mjs";
 import { openBundle } from "./bundle.mjs";
-import { ITEM, profileFor, seatKey } from "./profile.mjs";
+import { ITEM, profileFor, seatKey, sessionKey } from "./profile.mjs";
 import { judge, rulesVersion } from "./verdict.mjs";
 
 /** @typedef {import("./evidence.mjs").Observation} Observation */
@@ -50,18 +54,34 @@ const BY_EVENT = (() => {
   return map;
 })();
 
+const registry = JSON.parse(readFileSync(new URL("../../../observability/generated/registry.json", import.meta.url), "utf8"));
+/** Registry events an older emitter still writes under another shape, with the fields and values that pick its rows out. */
+const LEGACY = registry.events.flatMap((/** @type {{ name: string, legacy?: { match?: Record<string, string> } }} */ event) => (event.legacy?.match ? [{ name: event.name, match: Object.entries(event.legacy.match) }] : []));
+
 /**
- * The registry event a row records: `event` when the row has one, else `name` on a kernel row of a registry record kind.
+ * The registry event a row records: `name` on a kernel row of a registry record kind, else the event whose legacy match the row
+ * fits, else none.
  * @param {Row} row
  * @returns {string | undefined}
  */
 export function eventOf(row) {
-  if (typeof row.event === "string") return row.event;
-  return typeof row.name === "string" && RECORD_KINDS.includes(String(row.kind)) ? row.name : undefined;
+  if (typeof row.name === "string" && RECORD_KINDS.includes(String(row.kind))) return row.name;
+  return LEGACY.find((entry) => entry.match.every(([field, value]) => row[field] === value))?.name;
 }
 
 /** @param {string} eventId */
-export const rowQuery = (eventId) => `axiom chalk-logs | where event_id == '${eventId}'`;
+const rowQuery = (eventId) => `axiom chalk-logs | where event_id == '${eventId}'`;
+
+/**
+ * The sources a row witnesses for, from the registry: an empty list means no fact reads it.
+ * @param {Row} row
+ * @returns {string[]}
+ */
+export function rowSources(row) {
+  const event = eventOf(row);
+  const witnessed = event === undefined ? undefined : BY_EVENT.get(event);
+  return [...new Set((witnessed ?? []).map((entry) => entry.source))];
+}
 
 /**
  * @param {readonly Row[]} rows
@@ -76,44 +96,61 @@ export function observationsFromRows(rows) {
     const event = eventOf(row);
     const witnessed = event === undefined ? undefined : BY_EVENT.get(event);
     if (!witnessed) return;
-    if (typeof row.event_id !== "string" || row.event_id === "") return void dropped.push({ index, event, why: "no event_id, so it can't be cited" });
-    if (typeof row.est_server_ms !== "number") return void dropped.push({ index, event, why: "no est_server_ms, so its time is unknown" });
-    const err = typeof row.clock_err_ms === "number" ? row.clock_err_ms : 0;
-    const window = typeof row.duration_ms === "number" ? { from_ms: row.est_server_ms, to_ms: row.est_server_ms + row.duration_ms } : { from_ms: row.est_server_ms - err, to_ms: row.est_server_ms + err };
-    /** @type {Record<string, string | number>} */
-    const subject = {};
-    for (const [field, key] of SUBJECT_FIELDS) if (typeof row[field] === "string" || typeof row[field] === "number") subject[key] = /** @type {string | number} */ (row[field]);
-    /** @type {Record<string, string | number | boolean>} */
-    const value = {};
-    for (const [name, field] of Object.entries(row)) if (!NOT_VALUES.has(name) && (typeof field === "string" || typeof field === "number" || typeof field === "boolean")) value[name] = field;
-    for (const { fact, source, claim, failure_claims } of witnessed) {
-      const claimed = row[claim];
-      if (claimed === undefined || claimed === null) {
-        dropped.push({ index, event, why: `no ${claim}, the field ${fact} compares` });
-        continue;
-      }
-      observations.push(
-        observation({
-          id: row.event_id,
-          fact,
-          source,
-          origin: typeof row.decision_id === "string" ? origin.decision(row.decision_id) : origin.measured(source, typeof row.client_session_id === "string" ? row.client_session_id : undefined),
-          subject,
-          window,
-          claim: String(claimed),
-          value,
-          failure: failure_claims.includes(String(claimed)),
-          query: rowQuery(row.event_id),
-        }),
-      );
+    const unplaced = unplacedWhy(row);
+    if (unplaced !== null) return void dropped.push({ index, event, why: unplaced });
+    for (const entry of witnessed) {
+      const placed = observationOf(row, entry);
+      if (typeof placed === "string") dropped.push({ index, event, why: placed });
+      else observations.push(placed);
     }
   });
   return { observations, dropped };
 }
 
+/** Why a row can't be placed at all, or null. @param {Row} row */
+const unplacedWhy = (row) => {
+  if (typeof row.event_id !== "string" || row.event_id === "") return "no event_id, so it can't be cited";
+  if (typeof row.est_server_ms !== "number") return "no est_server_ms, so its time is unknown";
+  return null;
+};
+
+/**
+ * One row's observation of one fact, or why the row says nothing about it.
+ * @param {Row} row a row `unplacedWhy` accepted
+ * @param {{ fact: string, source: string, claim: string, failure_claims: readonly string[] }} entry
+ * @returns {Readonly<Observation> | string}
+ */
+function observationOf(row, { fact, source, claim, failure_claims }) {
+  const claimed = row[claim];
+  if (claimed === undefined || claimed === null) return `no ${claim}, the field ${fact} compares`;
+  const at = /** @type {number} */ (row.est_server_ms);
+  const err = typeof row.clock_err_ms === "number" ? row.clock_err_ms : 0;
+  const window = typeof row.duration_ms === "number" ? { from_ms: at, to_ms: at + row.duration_ms } : { from_ms: at - err, to_ms: at + err };
+  /** @type {Record<string, string | number>} */
+  const subject = {};
+  for (const [field, key] of SUBJECT_FIELDS) if (typeof row[field] === "string" || typeof row[field] === "number") subject[key] = /** @type {string | number} */ (row[field]);
+  /** @type {Record<string, string | number | boolean>} */
+  const value = {};
+  for (const [name, field] of Object.entries(row)) if (!NOT_VALUES.has(name) && (typeof field === "string" || typeof field === "number" || typeof field === "boolean")) value[name] = field;
+  const id = String(row.event_id);
+  return observation({
+    id,
+    fact,
+    source,
+    origin: typeof row.decision_id === "string" ? origin.decision(row.decision_id) : origin.measured(source, typeof row.client_session_id === "string" ? row.client_session_id : undefined),
+    subject,
+    window,
+    claim: String(claimed),
+    value,
+    failure: failure_claims.includes(String(claimed)),
+    query: rowQuery(id),
+  });
+}
+
 /**
  * The watermarks a fixture stands for when it gives none: every source the checks read is complete to `asof_ms` with no gap and
- * emits every fact the registry lets it emit, one per seat for a per-seat source.
+ * emits every fact the registry lets it emit, one per seat for a per-seat source (one per client session on an attempt, which has no
+ * seat yet).
  * @param {Declaration} declaration
  * @param {readonly CheckDef[]} catalogue
  * @param {number} asof_ms
@@ -122,7 +159,7 @@ export function observationsFromRows(rows) {
 export function completeWatermarks(declaration, catalogue, asof_ms) {
   const sources = new Set(catalogue.flatMap((def) => [...def.requires, ...def.optional].flatMap((requirement) => requirement.from)));
   const perSeat = new Set(SOURCE_TABLE.filter((entry) => entry.per_seat).map((entry) => entry.source));
-  const seats = declaration.kind === "episode" ? declaration.seats.map((seat) => seatKey(seat.participant)) : [];
+  const seats = declaration.kind === "episode" ? declaration.seats.map((seat) => seatKey(seat.participant)) : declaration.kind === "attempt" ? [sessionKey(declaration.id)] : [];
   return [...sources].sort().flatMap((source) => {
     const emits = Object.entries(FACTS)
       .filter(([, def]) => def.events.some((event) => event.source === source))

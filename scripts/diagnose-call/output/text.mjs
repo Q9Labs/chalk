@@ -1,8 +1,9 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The compact line grammar. Every line starts with a keyword or a handle, so an agent can grep it:
  *
- *   <view> <scope> outcome= coverage= checked=c/e asof= rules=     line 1, always
+ *   <view> <scope> outcome= coverage= checked=c/e [read=fresh] asof= rules=   line 1, always
  *   anchor=<utc> local=<tenant time> ...                            the one time anchor
  *   via: <query> as <what matched>                                   how a lookup resolved, when it did
  *   <records>                                                        paged by --limit, --cursor and --budget
@@ -61,19 +62,7 @@ const CONTROL = /[\u0000-\u001f\u007f]/gu;
 
 /** @param {Head} head */
 function headLine(head) {
-  const scope = head.scope;
-  const words = [head.view];
-  if (head.view === "episode" || head.view === "attempt" || head.view === "job") words.push(String(scope.item), `tenant=${scope.tenant}`);
-  else if (head.view === "space" || head.view === "tenant" || head.view === "platform") words.push(String(scope.item), String(scope.date));
-  else if (head.view === "evidence") words.push(String(scope.finding), String(scope.code), partyText(/** @type {any} */ (scope.party), handle), `of=${scope.item}`);
-  else if (head.view === "day") words.push(String(scope.tenant), String(scope.date), ...(scope.symptom ? [`symptom=${scope.symptom}`] : []));
-  else if (head.view === "resolve") words.push(JSON.stringify(scope.query), `matched=${scope.matched}`);
-  else {
-    for (const [key, value] of Object.entries(scope)) {
-      const shown = typeof value === "object" && value !== null ? partyText(/** @type {any} */ (value), handle) : String(value);
-      words.push(key === "who" || key === "code" ? shown : `${key}=${shown}`);
-    }
-  }
+  const words = [head.view, ...scopeWords(head)];
   if (head.outcome !== null) words.push(`outcome=${head.outcome}`);
   if (head.coverage !== null) {
     const counts = head.coverage.missing.filter((entry) => entry.includes("="));
@@ -82,9 +71,24 @@ function headLine(head) {
     if (head.checked !== null) words.push(`checked=${head.checked}/${head.eligible}`);
     words.push(...counts);
   }
+  if (head.read) words.push(`read=${head.read}`);
   words.push(`asof=${head.asof}`);
   if (head.rules !== null) words.push(`rules=${head.rules}`);
   return words.join(" ");
+}
+
+/** The head words that name what a view is about. @param {Head} head @returns {string[]} */
+function scopeWords(head) {
+  const scope = head.scope;
+  if (head.view === "episode" || head.view === "attempt" || head.view === "job") return [String(scope.item), `tenant=${scope.tenant}`];
+  if (head.view === "space" || head.view === "tenant" || head.view === "platform") return [String(scope.item), String(scope.date)];
+  if (head.view === "evidence") return [String(scope.finding), String(scope.code), partyText(/** @type {any} */ (scope.party), handle), `of=${scope.item}`];
+  if (head.view === "day") return [String(scope.tenant), String(scope.date), ...(scope.symptom ? [`symptom=${scope.symptom}`] : [])];
+  if (head.view === "resolve") return [JSON.stringify(scope.query), `matched=${scope.matched}`];
+  return Object.entries(scope).map(([key, value]) => {
+    const shown = typeof value === "object" && value !== null ? partyText(/** @type {any} */ (value), handle) : String(value);
+    return key === "who" || key === "code" ? shown : `${key}=${shown}`;
+  });
 }
 
 /** @param {import("./views.mjs").Anchor} anchor @param {boolean} detail relative-time views print the offset, not the zone name */
@@ -112,20 +116,7 @@ const at = (text, when) => (when ? `${text} ${when}` : text);
  */
 const RECORD_LINES = {
   finding: (r, h, party) => {
-    const words = [
-      h(r.f),
-      r.outcome,
-      r.code,
-      party(r.party),
-      r.when,
-      ...opt("hop", r.hop),
-      ...opt("module", r.module),
-      ...opt("upstream", r.upstream),
-      ...opt("reason", r.reason),
-      ...(r.ev ? [`ev=${h(r.ev)}`] : []),
-      ...(r.item ? [`of=${h(r.item)}`] : []),
-      ...(r.retained ? ["retained=yes"] : []),
-    ];
+    const words = [h(r.f), r.outcome, r.code, party(r.party), r.when, ...opt("hop", r.hop), ...opt("module", r.module), ...opt("upstream", r.upstream), ...opt("reason", r.reason), ...(r.ev ? [`ev=${h(r.ev)}`] : []), ...(r.item ? [`of=${h(r.item)}`] : []), ...(r.retained ? ["retained=yes"] : [])];
     const lines = [words.join(" ")];
     for (const fact of r.facts ?? []) lines.push(`fact: ${at(fact.text, fact.when)} ${fact.absent ? "[proven absent]" : cite(fact.ev)}`);
     if (r.hypothesis) lines.push(`hypothesis: ${r.hypothesis.text}`);
@@ -166,7 +157,7 @@ const RECORD_LINES = {
  * @param {Handle} h
  * @returns {string[]}
  */
-export function recordLines(r, h) {
+function recordLines(r, h) {
   const lines = Object.hasOwn(RECORD_LINES, r.t) ? RECORD_LINES[r.t] : null;
   if (lines === null) throw new TypeError(`no text form for record ${r.t}`);
   return lines(r, h, (value) => partyText(value, h));

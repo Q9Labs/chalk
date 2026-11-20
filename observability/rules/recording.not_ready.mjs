@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rule branches on every kind of evidence; its fixtures and the diagnose-call tests cover each branch, which the CRAP estimate cannot see.
 /**
  * recording.not_ready: a post-call recording job that failed, or is still pending long after the Episode ended.
  */

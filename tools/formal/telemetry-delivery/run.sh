@@ -4,7 +4,7 @@
 # Usage: tools/formal/telemetry-delivery/run.sh [--anchors | --tlc | --trace DIR]
 #   --anchors    only check that the code fragments in `anchors` still exist.
 #   --tlc        only run TLC (real code for safety and for liveness, then each broken variant).
-#   --trace DIR  replay every *.ndjson trace in DIR (written by outbox.delivery.test.ts when
+#   --trace DIR  replay every *.ndjson trace in DIR (written by the outbox.delivery tests when
 #                TELEMETRY_TRACE_DIR is set) and fail on the first line the model can't take.
 # Needs Java 11 or later, Node and curl. The TLA+ tools pin is in ../tla2tools.sh.
 set -euo pipefail
@@ -70,7 +70,7 @@ if [[ "$mode" == all || "$mode" == --tlc ]]; then
     verdict "$dir"
   }
 
-  for real in "safety TelemetryDelivery.cfg" "liveness TelemetryDeliveryLive.cfg"; do
+  for real in "safety TelemetryDelivery.cfg" "join-safety TelemetryDeliveryJoin.cfg" "liveness TelemetryDeliveryLive.cfg" "join-liveness TelemetryDeliveryLiveJoin.cfg"; do
     read -r name cfg <<<"$real"
     echo "== Real code: every $name rule holds"
     result="$(tlc "real-$name" "$cfg" none)"
@@ -82,10 +82,11 @@ if [[ "$mode" == all || "$mode" == --tlc ]]; then
   done
 
   echo "== Broken variants: each must break its rule"
-  while IFS=$'\t' read -r break rule edit; do
+  while IFS=$'\t' read -r break rule bounds edit; do
     [[ -z "$break" || "$break" == \#* ]] && continue
-    cfg=TelemetryDelivery.cfg expected="Invariant $rule is violated"
-    [[ "$temporal" == *" $rule "* ]] && cfg=TelemetryDeliveryLive.cfg expected="Temporal properties were violated"
+    expected="Invariant $rule is violated"
+    [[ "$temporal" == *" $rule "* ]] && expected="Temporal properties were violated"
+    cfg="TelemetryDelivery${bounds#main}.cfg"
     result="$(tlc "break-$break" "$cfg" "$break" "$rule")"
     if [[ "$result" == *"$expected"* ]]; then
       echo "ok   $break breaks $rule"
@@ -120,10 +121,11 @@ if [[ "$mode" == --trace ]]; then
       fail "$name: trace.mjs could not read the trace"
       continue
     fi
-    read -r steps boots records < <(node -e 'const s = JSON.parse(process.argv[1]); console.log(s.steps, s.boots, s.records)' "$shape")
+    read -r steps boots joins records < <(node -e 'const s = JSON.parse(process.argv[1]); console.log(s.steps, s.boots, s.joins, s.records)' "$shape")
     {
       echo "CONSTANTS"
       echo "    MaxBoots = $boots"
+      echo "    MaxJoins = $joins"
       echo "    MaxRecords = $records"
       echo "    Cap = 1"
       echo "    CheckCap = FALSE"

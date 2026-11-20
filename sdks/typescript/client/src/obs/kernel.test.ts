@@ -11,7 +11,6 @@ function setup(mode: KernelMode = "closed", extra: { clock?: ClockEstimator; sin
     mode,
     sink: extra.sink ?? ((record) => records.push(record)),
     build: { module: "sdk", env: "test", platform: "web", sdk_version: "5.5.0" },
-    sourceId: "cs-test",
     trail: () => ({ episode_id: "0f8fad5b-d9cb-469f-a165-70867728950e" }),
     uuid: () => `00000000-0000-4000-8000-${String(++next).padStart(12, "0")}`,
     now: () => 1_800_000_000_000,
@@ -30,8 +29,6 @@ describe("op", () => {
       name: "selftest.work",
       outcome: "ok",
       item_count: 2,
-      seq: 1,
-      source_id: "cs-test",
       schema_ver: SCHEMA_VER,
       module: "sdk",
       env: "test",
@@ -123,7 +120,7 @@ describe("the other four calls", () => {
     expect(() => kernel.fact("selftest.note", { note_kind: "b" })).toThrow("not a valid enum");
     // @ts-expect-error note_kind is required
     expect(() => kernel.fact("selftest.note", {})).toThrow("required field note_kind is missing");
-    // @ts-expect-error seq is stamped by the kernel
+    // @ts-expect-error seq is stamped by the delivery layer
     expect(() => kernel.fact("selftest.note", { note_kind: "a", seq: 9 })).toThrow("not declared on this event");
   });
 
@@ -175,6 +172,6 @@ describe("modes and the envelope", () => {
       ["selftest.note", "unsynced", 1],
     ]);
     expect(records[0]).toMatchObject({ est_server_ms: 1_800_000_000_050, clock_err_ms: 50 });
-    expect(records.map((record) => record.seq)).toEqual([1, 2, 3]);
+    expect(records.map((record) => "seq" in record || "source_id" in record)).toEqual([false, false, false]);
   });
 });

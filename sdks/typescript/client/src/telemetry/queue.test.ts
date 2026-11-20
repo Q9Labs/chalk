@@ -3,7 +3,8 @@ import { DropList } from "./drops";
 import { entryOf, EventQueue } from "./queue";
 import type { TelemetryDraft } from "./types";
 
-const entry = (seq: number, draft: TelemetryDraft, bytes = 100) => entryOf({ ...draft, seq, event_id: `id-${seq}`, elapsed_ms: 0, ...(bytes > 100 ? { code: "internal_error" as const, dropped_source_id: "x".repeat(bytes) } : {}) }, "subject");
+const entry = (seq: number, draft: TelemetryDraft, bytes = 100) =>
+  entryOf({ ...draft, seq, event_id: `id-${seq}`, elapsed_ms: 0, ...(bytes > 100 ? { code: "internal_error" as const, dropped_seqs: Array.from({ length: Math.ceil(bytes / 18) }, (_, index) => ({ from: index, to: index + 1 })) } : {}) }, "subject");
 const routine = { type: "platform_changed", platform_state: "visible" } as const;
 const stats = { type: "call_stats", stats: { window_ms: 10_000 } } as const;
 const p0 = { type: "call_ended", end_reason: "left" } as const;
@@ -41,25 +42,24 @@ describe("the queue's reservation", () => {
 });
 
 describe("the drop list", () => {
-  it("merges neighbours into half-open ranges and names one source and one reason at a time", () => {
+  it("merges neighbours into half-open ranges and names one reason at a time", () => {
     const drops = new DropList();
-    for (const seq of [4, 2, 3, 9]) drops.add("a", seq, "queue_full");
-    drops.add("b", 1, "refused");
+    for (const seq of [4, 2, 3, 9]) drops.add(seq, "queue_full");
+    drops.add(1, "refused");
     expect(drops.take(64)).toEqual({
-      source: "a",
       reason: "queue_full",
       ranges: [
         { from: 2, to: 5 },
         { from: 9, to: 10 },
       ],
     });
-    expect(drops.take(64)).toEqual({ source: "b", reason: "refused", ranges: [{ from: 1, to: 2 }] });
+    expect(drops.take(64)).toEqual({ reason: "refused", ranges: [{ from: 1, to: 2 }] });
     expect(drops.empty).toBe(true);
   });
 
   it("leaves ranges past 64 for the next record", () => {
     const drops = new DropList();
-    for (let seq = 0; seq < 200; seq += 2) drops.add("a", seq, "queue_full");
+    for (let seq = 0; seq < 200; seq += 2) drops.add(seq, "queue_full");
     expect(drops.take(64)?.ranges).toHaveLength(64);
     expect(drops.take(64)?.ranges).toHaveLength(36);
   });

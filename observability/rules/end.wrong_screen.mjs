@@ -4,8 +4,11 @@
  * or join failed) instead of the Episode-ended screen.
  *
  * The witnesses are in areas/end.json: `end.episode` from Sync (sync.episode.ended) and `end.client_screen` from the seat's client
- * (client.call_ended). A client screen counts when it is a failure screen and its time, widened by the row's clock error, falls in a
- * window around the end. A client row with no server time can't be placed, so the adapter drops it and the seat stays unchecked.
+ * (client.call_ended). A client screen counts when its time, widened by the row's clock error, falls in a window around the end. A
+ * seat passes only when both witnesses are present and its client showed an end screen in that window, none of them a failure
+ * screen: an end nobody witnessed, or a seat with no end screen, is unknown, never healthy. A client row with no server time can't
+ * be placed, so the adapter drops it and the seat stays unchecked. A seat that left well before the end never sees the end screen,
+ * so the check does not apply to it.
  */
 
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
@@ -27,7 +30,11 @@ export const settle_ms = AFTER_MS;
 export const expected = `when the Episode ends, every seat's client shows the Episode-ended screen, and none shows a failure screen from ${BEFORE_MS / 1000} s before the end to ${AFTER_MS / 1000} s after it`;
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
-export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null;
+export const applies = (declaration, seat) => {
+  const end = declaration.window.to_ms;
+  if (declaration.kind !== "episode" || end === null || seat === null) return false;
+  return seat.window.to_ms === null || seat.window.to_ms >= end - BEFORE_MS;
+};
 
 /**
  * @param {DecideInput} input
@@ -36,14 +43,13 @@ export const applies = (declaration, seat) => declaration.kind === "episode" && 
 export function decide({ readings }) {
   const end = readings["end.episode"];
   const screen = readings["end.client_screen"];
-  if (end.kind === "unknown") return { status: "unknown", reason: "the Episode's end is not witnessed" };
-  if (end.kind === "absent") return { status: "pass" };
+  if (end.kind !== "present") return { status: "unknown", reason: "the Episode's end is not witnessed" };
+  if (screen.kind !== "present") return { status: "unknown", reason: "the seat's end screen is not witnessed" };
   const [server] = [...end.observations].sort((a, b) => a.window.from_ms - b.window.from_ms);
-  if (screen.kind === "unknown") return { status: "unknown", reason: "the seat's end screen is not witnessed" };
-  if (screen.kind === "absent") return { status: "pass" };
   const at = server.window.from_ms;
-  const wrong = screen.observations.find((o) => FAILURE_SCREENS.has(o.claim) && o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
-  if (!wrong) return { status: "pass" };
+  const near = screen.observations.filter((o) => o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
+  const wrong = near.find((o) => FAILURE_SCREENS.has(o.claim));
+  if (!wrong) return near.length > 0 ? { status: "pass" } : { status: "unknown", reason: "the seat showed no end screen around the Episode's end" };
   return {
     status: "finding",
     outcome: "broken",

@@ -21,9 +21,15 @@ describe("the row adapter", () => {
     }
   });
 
-  it("reads `event` first, and no event from a name whose kind is not a registry record kind", () => {
-    assert.equal(eventOf({ event: "client.call_ended", kind: "fact", name: "sync.episode.ended" }), "client.call_ended");
+  it("reads a row's event from its name only, and from no name whose kind is not a registry record kind", () => {
+    assert.equal(eventOf({ event: "client.call_ended", kind: "fact", name: "sync.episode.ended" }), "sync.episode.ended");
+    assert.equal(eventOf({ event: "sync.episode.ended", end_reason: "maximum_duration" }), undefined);
     assert.equal(eventOf({ kind: "log", name: "sync.episode.ended" }), undefined);
     assert.deepEqual(observationsFromRows([{ ...kernelRow, kind: "log" }]).observations, []);
+  });
+
+  it("reads a row an older SDK still writes through its event's legacy match in the registry", () => {
+    assert.equal(eventOf({ event: "sdk.telemetry", type: "call_ended", end_reason: "left" }), "client.call_ended");
+    assert.equal(eventOf({ event: "sdk.telemetry", type: "call_stats" }), undefined);
   });
 });

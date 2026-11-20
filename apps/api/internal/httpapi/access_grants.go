@@ -31,35 +31,6 @@ type ParticipantGenerationAuthorizer interface {
 	CompleteParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, accessgrants.RefreshReplay) error
 }
 
-type accessGrantSubjectResponse struct {
-	TenantID              string `json:"tenant_id"`
-	SpaceID               string `json:"space_id"`
-	EpisodeID             string `json:"episode_id"`
-	ParticipantID         string `json:"participant_id"`
-	ParticipantGeneration int64  `json:"participant_generation"`
-}
-
-type accessGrantTokenResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-type accessGrantMediaResponse struct {
-	Token         string         `json:"token"`
-	ExpiresAt     string         `json:"expires_at"`
-	Provider      string         `json:"provider"`
-	ClientPayload map[string]any `json:"client_payload"`
-}
-
-type accessGrantResponse struct {
-	EpisodeStartedAt *string                    `json:"episode_started_at,omitempty"`
-	Subject          accessGrantSubjectResponse `json:"subject"`
-	Sync             accessGrantTokenResponse   `json:"sync"`
-	Media            accessGrantMediaResponse   `json:"media"`
-	// Telemetry is the credential for the telemetry route alone, valid for 24 hours.
-	Telemetry accessGrantTokenResponse `json:"telemetry"`
-}
-
 type issueAccessGrantBody struct {
 	ParticipantGeneration     int64   `json:"participant_generation"`
 	CurrentMediaToken         string  `json:"current_media_token,omitempty"`
@@ -245,14 +216,9 @@ func issueAccessGrantEndpoint(
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
-			stage = "media_credential"
-			mediaCredential, err := mediaIssuer.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
+			mediaCredential, telemetryCredential, failedStage, err := issueGrantCredentials(ctx, mediaIssuer, request.MediaClients, subject)
 			if err != nil {
-				return accessGrantResponse{}, err
-			}
-			stage = "telemetry_credential"
-			telemetryCredential, err := mediaIssuer.IssueTelemetry(ctx, subject)
-			if err != nil {
+				stage = failedStage
 				return accessGrantResponse{}, err
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, telemetryCredential, join)
@@ -393,25 +359,4 @@ func accessGrantScope(request issueAccessGrantRequest) mediaplane.Scope {
 		TenantID: request.TenantID.String(), EpisodeID: request.EpisodeID.String(),
 		ParticipantID: request.ParticipantID.String(), Generation: request.Body.ParticipantGeneration,
 	}
-}
-
-func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, telemetryCredential accessgrants.TelemetryCredential, join mediaplane.Join) accessGrantResponse {
-	return accessGrantResponse{
-		EpisodeStartedAt: episodeStartedAt(syncCredential.StartedAt),
-		Subject: accessGrantSubjectResponse{
-			TenantID: subject.TenantID.String(), SpaceID: subject.SpaceID.String(), EpisodeID: subject.EpisodeID.String(),
-			ParticipantID: subject.ParticipantID.String(), ParticipantGeneration: subject.ParticipantGeneration,
-		},
-		Sync:      accessGrantTokenResponse{Token: syncCredential.Value, ExpiresAt: syncCredential.ExpiresAt.UTC().Format(time.RFC3339)},
-		Media:     accessGrantMediaResponse{Token: mediaCredential.Token, ExpiresAt: mediaCredential.ExpiresAt.UTC().Format(time.RFC3339), Provider: subject.Provider, ClientPayload: join.ClientPayload},
-		Telemetry: accessGrantTokenResponse{Token: telemetryCredential.Token, ExpiresAt: telemetryCredential.ExpiresAt.UTC().Format(time.RFC3339)},
-	}
-}
-
-func episodeStartedAt(value *time.Time) *string {
-	if value == nil || value.IsZero() {
-		return nil
-	}
-	formatted := value.UTC().Format(time.RFC3339Nano)
-	return &formatted
 }

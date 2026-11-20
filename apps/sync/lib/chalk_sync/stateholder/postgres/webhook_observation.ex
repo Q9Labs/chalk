@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   @moduledoc false
 
   alias ChalkSync.Database
+  alias ChalkSync.Obs
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.ExternalOperationClaims
@@ -101,6 +102,19 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   defp ended_context(journey_id, trace_id, span_id),
     do: Observability.persisted_context(UUID.load!(journey_id), trace_id, span_id)
 
+  @doc """
+  Records the Episode's authoritative end as the registry fact sync.episode.ended, which diagnose reads as the end every
+  seat's end screen is judged against (observability/rules/end.wrong_screen.mjs).
+  """
+  def record_episode_ended(episode, end_reason) do
+    Obs.fact("sync.episode.ended", %{
+      tenant_id: episode.tenant_id,
+      space_id: episode.space_id,
+      episode_id: episode.episode_id,
+      end_reason: end_reason
+    })
+  end
+
   defp observe_ended_row(episode, external_operation_id) do
     Database.guard(
       fn ->
@@ -135,6 +149,8 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
                 end_reason: end_reason
               }
             )
+
+            record_episode_ended(episode, end_reason)
 
           _ ->
             :ok

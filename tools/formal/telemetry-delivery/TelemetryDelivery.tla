@@ -4,32 +4,39 @@
 (* docs/telemetry-delivery.md).                                            *)
 (*                                                                         *)
 (* One device runs client sessions one after another: a boot is one page  *)
-(* or app run, and each boot is one source with its own seq counter from   *)
-(* 0. The outbox (sdks/typescript/client/src/telemetry/outbox.ts) holds    *)
-(* every record in memory and keeps P0 records, the pending drop list and  *)
-(* the high-water mark in a journal that survives a reload (journal.ts).   *)
-(* After a reload the new boot sends what its predecessor left, under the  *)
-(* predecessor's source, and says how that source ended.                   *)
+(* or app run. Each join is one source with its own seq counter from 0: a *)
+(* boot starts a source, and a boot that joins as another Participant      *)
+(* retires its source (it closes at its exact high-water mark) and starts  *)
+(* a new one. The outbox (sdks/typescript/client/src/telemetry/outbox.ts)  *)
+(* holds every record in memory and keeps P0 records, the pending drop     *)
+(* list and the high-water mark in a journal that survives a reload        *)
+(* (journal.ts). After a reload the new boot sends what its predecessors   *)
+(* left, each under its own source and credential, and says how each       *)
+(* source ended. A closing source names its drop list in a record of its   *)
+(* own; an abandoned one cannot, because its saved high-water mark is only *)
+(* a lower bound, so its drop list is given up and those seqs stay a gap.  *)
 (*                                                                         *)
-(* The ingest route (apps/api/internal/httpapi/telemetry.go) writes the    *)
-(* rows of a batch to the sink, then commits the source ledger             *)
-(* (apps/api/internal/telemetrydelivery), then answers with the seqs it    *)
-(* settled. The sink is a set: two writes of the same record are one row   *)
-(* to the reader, which collapses copies by (source_id, seq).              *)
+(* The ingest route (apps/api/internal/httpapi/telemetry.go) admits a      *)
+(* batch against the source's row, commits the ledger                      *)
+(* (apps/api/internal/telemetrydelivery and the Postgres adapter), then    *)
+(* writes the committed rows to the sink and answers with the seqs it      *)
+(* settled. A failed commit writes nothing. A crash between the commit and *)
+(* the sink write loses those rows: the retry is a duplicate, and the      *)
+(* reader sees a stored seq with no row, which is a gap. A rejected record *)
+(* is settled but not stored, so it is a gap too. Only the row's owner may *)
+(* write a source, and an end below the committed history is refused.      *)
+(* Another Participant of the tenant that learned a source_id may send a   *)
+(* forged batch or end for it (Foreign); the owner check refuses it.       *)
 (*                                                                         *)
-(* The model covers durably enqueued records (P0 and drop records) for the *)
-(* strong rule, and every record the outbox accepted for accounting by     *)
-(* gaps. It assumes every lane holds a credential the server accepts (the  *)
-(* 24-hour telemetry token outlives delivery), that every boot's           *)
-(* participant may write every source it names (one User or Agent, so the  *)
-(* source bindings never bar it), and that the journal survives a reload.  *)
-(* A guest reload breaks the binding assumption: the server settles the    *)
-(* new boot's drop record for the old source as rejected and leaves that   *)
-(* source's gap open, which the model does not cover. It does not model    *)
-(* content rejection either (a rejected event writes a rejection row,      *)
-(* which settles it like a stored one), the byte budget (eviction is a     *)
-(* step, the reserve rule is checked), or a page restored from the         *)
-(* back-forward cache after pagehide.                                      *)
+(* Assumptions. The sink is lossless: a row it took stays, and copies of   *)
+(* one record collapse by (source_id, seq). Every source's credential is   *)
+(* valid while the client sends for it (the code abandons a source whose   *)
+(* credential expired, and its gap stays open; the model does not cover    *)
+(* that). The journal survives a reload. The tenant and Participant stay   *)
+(* live (the purge fence is checked in the ledger tests, not here). The    *)
+(* model does not cover the byte budget (eviction is a step under one cap  *)
+(* over every lane, and the reserve rule is checked), the source budget,   *)
+(* or a page restored from the back-forward cache after pagehide.          *)
 (*                                                                         *)
 (* Break selects one broken variant of the code. "none" is the real code.  *)
 (* Each other value names the code edit it mirrors, and `run.sh` proves    *)
@@ -39,18 +46,23 @@ EXTENDS Naturals, FiniteSets
 
 CONSTANTS
     MaxBoots,         \* client sessions on the device, so MaxBoots - 1 reloads
-    MaxRecords,       \* records each boot makes, besides drop records
+    MaxJoins,         \* joins as another Participant inside one boot, all boots together
+    MaxRecords,       \* records each join makes, besides drop records
     Cap,              \* records the queue holds before it evicts (drop records are exempt)
     CheckCap,         \* FALSE in trace validation: the code evicts by bytes, not by count
-    MaxFaults,        \* API crashes mid-batch, lost requests or answers, partial answers and
-                      \* timeouts of a request still on its way, all together
+    MaxFaults,        \* API crashes, lost requests or answers, partial answers, rejected
+                      \* records, stale ends and timeouts of a request still on its way, all together
     MayVanish,        \* the last boot may die and never come back
     Break             \* "none" or one broken variant, see BreakNames
 
 BreakNames == {
     "none",
-    "ack_before_store",          \* the handler answers before the sink write and ledger commit
-    "ledger_before_sink",        \* the handler commits the ledger before it writes the rows
+    "ack_before_store",          \* the handler answers before the ledger commit
+    "sink_before_ledger",        \* the handler writes the sink before the ledger commits
+    "rejected_as_stored",        \* the ledger counts a rejected record as stored
+    "accept_short_end",          \* the ledger applies an end below the committed history
+    "send_before_save",          \* a batch leaves before the journal saves its high-water mark
+    "one_source_across_joins",   \* a join as another Participant keeps the source
     "dedupe_on_seq_only",        \* the ledger keys dedupe on seq, not on (source_id, seq)
     "reuse_source_on_reload",    \* a reloaded client keeps its source_id and counts seq from 0 again
     "evict_without_drop_record", \* the queue evicts without adding the seq to the drop list
@@ -58,26 +70,35 @@ BreakNames == {
     "ack_whole_batch",           \* a 200 settles the whole batch, not only the seqs it names
     "no_p0_reserve",             \* eviction ignores priority, so routine records push out P0
     "abandoned_as_closed",       \* a successor reports a predecessor closed without its closing mark
-    "ignore_journal_on_reload"   \* a reloaded client keeps the journal but never sends what it holds
+    "ignore_journal_on_reload",  \* a reloaded client keeps the journal but never sends what it holds
+    "name_abandoned_drops",      \* a reload names an abandoned predecessor's drop list at its saved mark
+    "no_owner_check"             \* the ledger lets any Participant of the tenant write a source
 }
 
-ASSUME MaxBoots \in 1..3 /\ MaxRecords \in 1..8 /\ Cap \in 1..4 /\ MaxFaults \in 0..9
+ASSUME MaxBoots \in 1..3 /\ MaxJoins \in 0..2 /\ MaxRecords \in 1..8 /\ Cap \in 1..4 /\ MaxFaults \in 0..9
 ASSUME CheckCap \in BOOLEAN /\ MayVanish \in BOOLEAN
 ASSUME Break \in BreakNames
 
-Sources == 1..MaxBoots
+Sources == 1..(MaxBoots + MaxJoins)
 Keys == Sources \X Nat
 Ends == {"", "abandoned", "closed"}
 
-NoMsg == [src |-> 0, recs |-> {}, next |-> 0, end |-> "", boot |-> 0]
-Idle == [st |-> "idle", m |-> NoMsg, settle |-> {}, new |-> {}]
+NoMsg == [src |-> 0, recs |-> {}, next |-> 0, end |-> "", boot |-> 0, who |-> 0]
+Idle == [st |-> "idle", m |-> NoMsg, settle |-> {}, rejected |-> {}, new |-> {}]
+NoRow == [owner |-> 0, stored |-> {}, rejected |-> {}, dropped |-> {}, reported |-> 0, end |-> "", endNext |-> 0]
+\* A Participant of the tenant the client never joins as: client credentials name 1..MaxJoins + 1.
+Foreigner == MaxJoins + 2
 
 VARIABLES
     boot,      \* the client session running now (1..MaxBoots)
     alive,     \* whether that session is running
-    src,       \* the source it writes as: its own boot, unless a variant reuses one
+    src,       \* the source it writes as now
+    last,      \* the highest source any join has started
+    joins,     \* joins as another Participant so far
+    who,       \* the Participant the live credential speaks for
+    part,      \* part[s]: the Participant source s belongs to, whose credential sends it
     closed,    \* the session was disposed: its source takes no more records
-    made,      \* records this boot made, besides drop records
+    made,      \* records this join made, besides drop records
     next,      \* next[s]: the seq source s assigns next (memory)
     mem,       \* records the running session holds, settled ones removed
     jrecs,     \* journal: durable records not yet settled
@@ -94,12 +115,14 @@ VARIABLES
     assigned,  \* ghost: every record any boot made
     durable,   \* ghost: every record that was durably enqueued
     p0OverLow, \* ghost: a P0 record was evicted while a routine one was held
+    lostRows,  \* ghost: keys committed whose rows a crash kept out of the sink
+    gaveUp,    \* ghost: keys in the drop list of an abandoned source, never named
     faults     \* faults so far
 
-clientVars == <<boot, alive, src, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, out>>
+clientVars == <<boot, alive, src, last, joins, who, part, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, out>>
 netVars == <<reqs, resps>>
 serverVars == <<ledger, sink, srv>>
-ghostVars == <<assigned, durable, p0OverLow>>
+ghostVars == <<assigned, durable, p0OverLow, lostRows, gaveUp>>
 faultVars == <<faults>>
 vars == <<clientVars, netVars, serverVars, ghostVars, faultVars>>
 
@@ -108,9 +131,18 @@ Max(a, b) == IF a >= b THEN a ELSE b
 IsDrop(r) == r.covers # {}
 Counted(S) == {r \in S : ~IsDrop(r)}
 Lane(s) == {r \in mem : r.src = s}
+DropsOf(s) == {k \in pdrops : k[1] = s}
+\* One past the highest seq of a set, or 0.
+Past(S) == IF S = {} THEN 0 ELSE 1 + CHOOSE q \in S : \A p \in S : p <= q
+\* The committed history an end may not hide: past every stored or rejected seq, and at
+\* least every next_seq reported.
+Floor(L) == Max(Past(L.stored \cup L.rejected), L.reported)
+\* The high-water mark a batch carries: exact for the live source, the journal's otherwise.
+Mark(s) == IF s = src /\ alive THEN next[s] ELSE jnext[s]
 
 Init ==
-    /\ boot = 1 /\ alive = TRUE /\ src = 1 /\ closed = FALSE /\ made = 0
+    /\ boot = 1 /\ alive = TRUE /\ src = 1 /\ last = 1 /\ joins = 0 /\ who = 1 /\ closed = FALSE /\ made = 0
+    /\ part = [s \in Sources |-> IF s = 1 THEN 1 ELSE 0]
     /\ next = [s \in Sources |-> 0]
     /\ mem = {} /\ jrecs = {}
     /\ jnext = [s \in Sources |-> 0]
@@ -119,9 +151,9 @@ Init ==
     /\ toEnd = [s \in Sources |-> ""]
     /\ out = [s \in Sources |-> NoMsg]
     /\ reqs = {} /\ resps = {}
-    /\ ledger = [s \in Sources |-> [stored |-> {}, dropped |-> {}, reported |-> 0, end |-> "", endNext |-> 0]]
+    /\ ledger = [s \in Sources |-> NoRow]
     /\ sink = {} /\ srv = Idle
-    /\ assigned = {} /\ durable = {} /\ p0OverLow = FALSE
+    /\ assigned = {} /\ durable = {} /\ p0OverLow = FALSE /\ lostRows = {} /\ gaveUp = {}
     /\ faults = 0
 
 -----------------------------------------------------------------------------
@@ -142,60 +174,65 @@ Record(p0) ==
                 ELSE UNCHANGED <<durable, jrecs, jnext>>
     /\ next' = [next EXCEPT ![src] = @ + 1]
     /\ made' = made + 1
-    /\ UNCHANGED <<boot, alive, src, closed, jclosing, pdrops, toEnd, out, netVars, serverVars, p0OverLow, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, jclosing, pdrops, toEnd, out, netVars, serverVars, p0OverLow, lostRows, gaveUp, faultVars>>
 
 \* The queue gives up routine records first: a P0 record goes only when no routine one is left.
 Victim(v) ==
     /\ v \in mem /\ ~IsDrop(v)
     /\ Break = "no_p0_reserve" \/ (v.p0 => \A u \in Counted(mem) : u.p0)
 
-\* EventQueue eviction (and folding of stats windows, which evicts the older window).
-\* The evicted key joins the drop list, which is saved with the journal.
+\* EventQueue eviction (and folding of stats windows, which evicts the older window). Only the
+\* live source's queue takes new records, so only it evicts. The evicted key joins the drop
+\* list, which is saved with the journal.
 Evict(v) ==
-    /\ alive /\ ~closed
+    /\ alive /\ ~closed /\ v.src = src
     /\ ~CheckCap \/ Cardinality(Counted(mem)) > Cap
     /\ Victim(v)
     /\ mem' = mem \ {v}
     /\ jrecs' = jrecs \ {v}
     /\ pdrops' = IF Break = "evict_without_drop_record" THEN pdrops ELSE pdrops \cup {Key(v)}
     /\ p0OverLow' = (p0OverLow \/ (v.p0 /\ \E u \in Counted(mem) : ~u.p0))
-    /\ UNCHANGED <<boot, alive, src, closed, made, next, jnext, jclosing, toEnd, out, netVars, serverVars, assigned, durable, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, jnext, jclosing, toEnd, out, netVars, serverVars, assigned, durable, lostRows, gaveUp, faultVars>>
 
-\* A drain turns the drop list into a telemetry_dropped record of the current source, one
-\* named source at a time (dropped_source_id names a predecessor). The outbox emits a drop
-\* record only while no earlier one is unsettled, except as it disposes; the model lets it
+\* A drain turns a source's drop list into a telemetry_dropped record of that same source. The
+\* live source does it while it takes records; a retired source only while it is closing and
+\* has not sent its end, because only then is its high-water mark exact. The outbox emits a
+\* drop record only while no earlier one is unsettled, except as it closes; the model lets it
 \* emit at any time, which covers both. Drop records are never evicted.
-EmitDrop ==
-    /\ alive /\ ~closed /\ pdrops # {}
-    /\ \E s \in {k[1] : k \in pdrops} :
-         LET C == {k \in pdrops : k[1] = s}
-             d == [src |-> src, seq |-> next[src], eid |-> boot, p0 |-> TRUE, covers |-> C]
-         IN /\ mem' = mem \cup {d}
-            /\ jrecs' = jrecs \cup {d}
-            /\ assigned' = assigned \cup {d}
-            /\ durable' = durable \cup {d}
-            /\ pdrops' = pdrops \ C
-    /\ jnext' = [jnext EXCEPT ![src] = next[src] + 1]
-    /\ next' = [next EXCEPT ![src] = @ + 1]
-    /\ UNCHANGED <<boot, alive, src, closed, made, jclosing, toEnd, out, netVars, serverVars, p0OverLow, faultVars>>
+EmitDrop(s) ==
+    /\ alive /\ DropsOf(s) # {}
+    /\ IF s = src THEN ~closed ELSE (jclosing[s] \/ Break = "name_abandoned_drops") /\ toEnd[s] # "" /\ out[s] = NoMsg
+    /\ LET q == Mark(s)
+           d == [src |-> s, seq |-> q, eid |-> boot, p0 |-> TRUE, covers |-> DropsOf(s)]
+       IN /\ mem' = mem \cup {d}
+          /\ jrecs' = jrecs \cup {d}
+          /\ assigned' = assigned \cup {d}
+          /\ durable' = durable \cup {d}
+          /\ pdrops' = pdrops \ DropsOf(s)
+          /\ jnext' = [jnext EXCEPT ![s] = q + 1]
+          /\ next' = [next EXCEPT ![s] = q + 1]
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, jclosing, toEnd, out, netVars, serverVars, p0OverLow, lostRows, gaveUp, faultVars>>
 
 \* The throttled journal save that moves the high-water mark without a P0 record.
 Checkpoint ==
     /\ alive /\ jnext[src] # next[src]
     /\ jnext' = [jnext EXCEPT ![src] = next[src]]
-    /\ UNCHANGED <<boot, alive, src, closed, made, next, mem, jrecs, jclosing, pdrops, toEnd, out, netVars, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, mem, jrecs, jclosing, pdrops, toEnd, out, netVars, serverVars, ghostVars, faultVars>>
 
 \* One batch per source in flight, holding what the lane has (the code caps a batch at 100
-\* events, which the bounds here never reach). A batch carries the source's high-water mark
-\* (exact for the running source, the journal's for a predecessor) and the end the client
-\* owes for it.
+\* events, which the bounds here never reach), under the credential of the source's own
+\* Participant. A batch carries the source's high-water mark, which the journal saves before
+\* the batch leaves, and the end the client owes for it. A retired source names its drop list
+\* before it sends.
 Send(s) ==
     /\ alive /\ out[s] = NoMsg
     /\ Lane(s) # {} \/ toEnd[s] # ""
-    /\ LET m == [src |-> s, recs |-> Lane(s), next |-> IF s = src THEN next[s] ELSE jnext[s], end |-> toEnd[s], boot |-> boot]
+    /\ s # src => DropsOf(s) = {}
+    /\ LET m == [src |-> s, recs |-> Lane(s), next |-> Mark(s), end |-> toEnd[s], boot |-> boot, who |-> IF s = src THEN who ELSE part[s]]
        IN /\ reqs' = reqs \cup {m}
           /\ out' = [out EXCEPT ![s] = m]
-    /\ UNCHANGED <<boot, alive, src, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, resps, serverVars, ghostVars, faultVars>>
+    /\ jnext' = IF s = src /\ Break # "send_before_save" THEN [jnext EXCEPT ![s] = next[s]] ELSE jnext
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, mem, jrecs, jclosing, pdrops, toEnd, resps, serverVars, ghostVars, faultVars>>
 
 Answered(m) == \E a \in resps : a.req = m
 Lost(m) == m \notin reqs /\ srv.m # m /\ ~Answered(m)
@@ -209,7 +246,7 @@ Timeout(s) ==
        ELSE faults < MaxFaults /\ faults' = faults + 1
     /\ out' = [out EXCEPT ![s] = NoMsg]
     /\ resps' = {a \in resps : a.req # out[s]}
-    /\ UNCHANGED <<boot, alive, src, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, reqs, serverVars, ghostVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, reqs, serverVars, ghostVars>>
 
 \* The answer settles the seqs it names and nothing else. An answer that carried the end
 \* the client owed means the server has it.
@@ -222,7 +259,23 @@ Ack(a) ==
           /\ toEnd' = IF a.req.end # "" THEN [toEnd EXCEPT ![s] = ""] ELSE toEnd
           /\ out' = [out EXCEPT ![s] = NoMsg]
     /\ resps' = resps \ {a}
-    /\ UNCHANGED <<boot, alive, src, closed, made, next, jnext, jclosing, pdrops, reqs, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, jnext, jclosing, pdrops, reqs, serverVars, ghostVars, faultVars>>
+
+\* A credential of another Participant is another join. The live source retires: its exact
+\* high-water mark and closing mark are saved, it owes a closed end, and it still names its
+\* own drop list. The new join starts a new source that counts from 0.
+Rejoin ==
+    /\ alive /\ ~closed /\ joins < MaxJoins
+    /\ joins' = joins + 1 /\ who' = who + 1 /\ made' = 0
+    /\ IF Break = "one_source_across_joins"
+          THEN UNCHANGED <<src, last, part, next, jnext, jclosing, toEnd>>
+          ELSE /\ last' = last + 1 /\ src' = last + 1
+               /\ part' = [part EXCEPT ![last + 1] = who + 1]
+               /\ next' = [next EXCEPT ![last + 1] = 0]
+               /\ jnext' = [jnext EXCEPT ![src] = next[src]]
+               /\ jclosing' = [jclosing EXCEPT ![src] = TRUE]
+               /\ toEnd' = [toEnd EXCEPT ![src] = "closed"]
+    /\ UNCHANGED <<boot, alive, closed, mem, jrecs, pdrops, out, netVars, serverVars, ghostVars, faultVars>>
 
 \* Requests already sent still reach the API; their answers have no one to read them.
 Die ==
@@ -233,7 +286,7 @@ Die ==
 Crash ==
     /\ alive /\ (boot < MaxBoots \/ MayVanish)
     /\ Die
-    /\ UNCHANGED <<boot, src, closed, made, next, jrecs, jnext, jclosing, toEnd, reqs, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<boot, src, last, joins, who, part, closed, made, next, jrecs, jnext, jclosing, toEnd, reqs, serverVars, ghostVars, faultVars>>
 
 \* pagehide: the journal is saved with the exact high-water mark and the closing mark, then
 \* the page goes (its last flush is an ordinary Send before this step).
@@ -242,89 +295,134 @@ PageHide ==
     /\ jnext' = [jnext EXCEPT ![src] = next[src]]
     /\ jclosing' = [jclosing EXCEPT ![src] = TRUE]
     /\ Die
-    /\ UNCHANGED <<boot, src, closed, made, next, jrecs, toEnd, reqs, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<boot, src, last, joins, who, part, closed, made, next, jrecs, toEnd, reqs, serverVars, ghostVars, faultVars>>
 
 \* dispose(): no record follows, so the high-water mark is exact. The drop list is emitted first.
 Dispose ==
-    /\ alive /\ ~closed /\ pdrops = {}
+    /\ alive /\ ~closed /\ DropsOf(src) = {}
     /\ closed' = TRUE
     /\ toEnd' = [toEnd EXCEPT ![src] = "closed"]
     /\ jnext' = [jnext EXCEPT ![src] = next[src]]
     /\ jclosing' = [jclosing EXCEPT ![src] = TRUE]
-    /\ UNCHANGED <<boot, alive, src, made, next, mem, jrecs, pdrops, out, netVars, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, made, next, mem, jrecs, pdrops, out, netVars, serverVars, ghostVars, faultVars>>
 
-\* A reload: a new source, the predecessor's durable records and drop list taken over, and an
-\* end owed for the predecessor: closed when it saved its closing mark, abandoned otherwise.
+\* A reload: a new source, the predecessors' durable records taken over, and an end owed for
+\* the last live source: closed when it saved its closing mark, abandoned otherwise. An
+\* abandoned source's drop list is given up: a drop record minted at its saved high-water
+\* mark could take the seq of a record the dead page made and lost.
 Reboot ==
     /\ ~alive /\ boot < MaxBoots
     /\ LET nb == boot + 1
-           ns == IF Break = "reuse_source_on_reload" THEN src ELSE nb
-           ended == IF jclosing[src] \/ Break = "abandoned_as_closed" THEN "closed" ELSE "abandoned"
+           ns == IF Break = "reuse_source_on_reload" THEN src ELSE last + 1
+           closing == jclosing[src] \/ Break = "abandoned_as_closed"
+           ended == IF closing THEN "closed" ELSE "abandoned"
+           given == IF closing \/ Break = "name_abandoned_drops" THEN {} ELSE DropsOf(src)
        IN /\ boot' = nb
           /\ src' = ns
+          /\ last' = Max(last, ns)
+          /\ part' = [part EXCEPT ![ns] = who]
           /\ next' = [next EXCEPT ![ns] = 0]
           /\ toEnd' = IF ns # src THEN [toEnd EXCEPT ![src] = ended] ELSE toEnd
+          /\ pdrops' = pdrops \ given
+          /\ gaveUp' = gaveUp \cup given
     /\ alive' = TRUE /\ closed' = FALSE /\ made' = 0
     /\ mem' = IF Break = "ignore_journal_on_reload" THEN {} ELSE jrecs
-    /\ UNCHANGED <<jrecs, jnext, jclosing, pdrops, out, netVars, serverVars, ghostVars, faultVars>>
+    /\ UNCHANGED <<joins, who, jrecs, jnext, jclosing, out, netVars, serverVars, assigned, durable, p0OverLow, lostRows, faultVars>>
 
 -----------------------------------------------------------------------------
 (* The API: the ingest handler and the source ledger.                      *)
 
-\* Dedupe is against stored seqs of the batch's own source. A seq a drop record covers is
-\* still stored if its record arrives, so a late copy is not lost.
+\* Dedupe is against the seqs the batch's own source already stores or rejects. A seq a drop
+\* record covers is still stored if its record arrives, so a late copy is not lost.
 Fresh(r) ==
     IF Break = "dedupe_on_seq_only"
         THEN \A s \in Sources : r.seq \notin ledger[s].stored
-        ELSE r.seq \notin ledger[r.src].stored
+        ELSE r.seq \notin ledger[r.src].stored \cup ledger[r.src].rejected
 
-\* The handler takes one batch under the source's row lock. It settles all of it, except
-\* when a fault makes the answer settle only some of it.
-Receive(m, S) ==
-    /\ srv.st = "idle" /\ m \in reqs
-    /\ S \subseteq m.recs
+Owns(m) == Break = "no_owner_check" \/ ledger[m.src].owner \in {0, m.who}
+
+\* The handler takes one batch under the source's row lock. It settles all of it, except when
+\* a fault makes the answer settle only some of it, or makes the content check reject J.
+Receive(m, S, J) ==
+    /\ srv.st = "idle" /\ m \in reqs /\ Owns(m)
+    /\ S \subseteq m.recs /\ J \subseteq m.recs \ S
     /\ IF S = m.recs THEN UNCHANGED faults ELSE faults < MaxFaults /\ faults' = faults + 1
     /\ reqs' = reqs \ {m}
-    /\ srv' = [st |-> "admitted", m |-> m, settle |-> S, new |-> {r \in S : Fresh(r)}]
-    /\ resps' = IF Break = "ack_before_store" THEN resps \cup {[req |-> m, acks |-> {r.seq : r \in S}]} ELSE resps
+    /\ srv' = [st |-> "admitted", m |-> m, settle |-> S \cup J, rejected |-> {r \in J : Fresh(r)}, new |-> {r \in S : Fresh(r)}]
+    /\ resps' = IF Break = "ack_before_store" THEN resps \cup {[req |-> m, acks |-> {r.seq : r \in S \cup J}]} ELSE resps
     /\ UNCHANGED <<clientVars, ledger, sink, ghostVars>>
 
-\* The rows of new records (and drop records) go to the sink.
-Write ==
-    /\ srv.st = IF Break = "ledger_before_sink" THEN "ledgered" ELSE "admitted"
-    /\ sink' = sink \cup srv.new
-    /\ srv' = [srv EXCEPT !.st = IF Break = "ledger_before_sink" THEN "committed" ELSE "written"]
-    /\ UNCHANGED <<clientVars, netVars, ledger, ghostVars, faultVars>>
+\* A batch for a source another Participant owns is refused, and nothing of it is applied.
+Refuse(m) ==
+    /\ srv.st = "idle" /\ m \in reqs /\ ~Owns(m)
+    /\ reqs' = reqs \ {m}
+    /\ UNCHANGED <<clientVars, resps, serverVars, ghostVars, faultVars>>
 
-Applied(s, m, n) ==
-    LET L == ledger[s]
-        own == s = m.src
-        ending == own /\ m.end # "" /\ L.end # "closed"
-    IN [stored |-> IF own THEN L.stored \cup {r.seq : r \in n} ELSE L.stored,
-        dropped |-> L.dropped \cup {k[2] : k \in {k \in UNION {d.covers : d \in n} : k[1] = s}},
-        reported |-> IF own THEN Max(L.reported, m.next) ELSE L.reported,
-        end |-> IF ending THEN m.end ELSE L.end,
-        endNext |-> IF ending THEN m.next ELSE L.endNext]
+\* A stale or forged close below the committed history reaches the API (a fault). No client
+\* reads its answer.
+StaleEnd(s) ==
+    /\ faults < MaxFaults /\ ledger[s].owner # 0
+    /\ \E n \in 0..(Floor(ledger[s]) - 1) :
+         reqs' = reqs \cup {[src |-> s, recs |-> {}, next |-> n, end |-> "closed", boot |-> 0, who |-> ledger[s].owner]}
+    /\ faults' = faults + 1
+    /\ UNCHANGED <<clientVars, resps, serverVars, ghostVars>>
 
-\* One ledger transaction: stored seqs, seqs the new drop records cover, the high-water mark
-\* and the end.
+\* Another Participant's credential sends for a source it learned once the source was in use:
+\* a forged record at a seq the source may hold, or a forged end at any mark (a fault). No
+\* client reads its answer.
+Foreign(s) ==
+    /\ faults < MaxFaults /\ ledger[s].owner # 0
+    /\ \E q \in 0..MaxRecords, e \in {"", "closed"} :
+         LET forged == [src |-> s, seq |-> q, eid |-> 0, p0 |-> FALSE, covers |-> {}]
+         IN reqs' = reqs \cup {[src |-> s, recs |-> IF e = "" THEN {forged} ELSE {}, next |-> q, end |-> e, boot |-> 0, who |-> Foreigner]}
+    /\ faults' = faults + 1
+    /\ UNCHANGED <<clientVars, resps, serverVars, ghostVars>>
+
+\* The row after one batch: fresh valid records stored (a record at or past a closed end is
+\* rejected instead), fresh invalid ones rejected, the seqs a stored drop record names
+\* dropped, the end checked against the floor, then the high-water mark raised.
+Applied(L, m, new, rej) ==
+    LET after == IF L.end = "closed" THEN {r \in new : r.seq >= L.endNext} ELSE {}
+        kept == new \ after
+        stored == L.stored \cup {r.seq : r \in kept}
+        rejected == L.rejected \cup {r.seq : r \in rej \cup after}
+        R == [L EXCEPT !.owner = m.who, !.stored = IF Break = "rejected_as_stored" THEN stored \cup rejected ELSE stored, !.rejected = rejected,
+                       !.dropped = @ \cup {k[2] : k \in UNION {d.covers : d \in kept}}]
+        ending == m.end # "" /\ L.end # "closed" /\ (m.next >= Floor(R) \/ Break = "accept_short_end")
+    IN [R EXCEPT !.reported = Max(L.reported, m.next),
+                 !.end = IF ending THEN m.end ELSE L.end,
+                 !.endNext = IF ending THEN m.next ELSE L.endNext]
+
+\* The rows the commit stores, which the sink gets after it.
+Rows(m, new) == IF ledger[m.src].end = "closed" THEN {r \in new : r.seq < ledger[m.src].endNext} ELSE new
+
+\* One ledger transaction for the batch's source.
 Commit ==
-    /\ srv.st = IF Break = "ledger_before_sink" THEN "admitted" ELSE "written"
-    /\ ledger' = [s \in Sources |-> Applied(s, srv.m, srv.new)]
-    /\ srv' = [srv EXCEPT !.st = IF Break = "ledger_before_sink" THEN "ledgered" ELSE "committed"]
+    /\ srv.st = IF Break = "sink_before_ledger" THEN "sunk" ELSE "admitted"
+    /\ ledger' = [ledger EXCEPT ![srv.m.src] = Applied(@, srv.m, srv.new, srv.rejected)]
+    /\ srv' = [srv EXCEPT !.st = IF Break = "sink_before_ledger" THEN "written" ELSE "committed", !.new = Rows(srv.m, srv.new)]
     /\ UNCHANGED <<clientVars, netVars, sink, ghostVars, faultVars>>
 
+\* The committed rows go to the sink.
+Write ==
+    /\ srv.st = IF Break = "sink_before_ledger" THEN "admitted" ELSE "committed"
+    /\ sink' = sink \cup srv.new
+    /\ srv' = [srv EXCEPT !.st = IF Break = "sink_before_ledger" THEN "sunk" ELSE "written"]
+    /\ UNCHANGED <<clientVars, netVars, ledger, ghostVars, faultVars>>
+
 Respond ==
-    /\ srv.st = "committed"
-    /\ resps' = IF Break = "ack_before_store" THEN resps ELSE resps \cup {[req |-> srv.m, acks |-> {r.seq : r \in srv.settle}]}
+    /\ srv.st = "written"
+    /\ resps' = IF Break = "ack_before_store" \/ srv.m.boot = 0 THEN resps ELSE resps \cup {[req |-> srv.m, acks |-> {r.seq : r \in srv.settle}]}
     /\ srv' = Idle
     /\ UNCHANGED <<clientVars, reqs, ledger, sink, ghostVars, faultVars>>
 
-\* The API dies mid-batch: rows written stay, an uncommitted ledger change is gone.
+\* The API dies mid-batch: an uncommitted change is gone; rows committed but not yet written
+\* never reach the sink.
 ServerCrash ==
     /\ srv.st # "idle" /\ faults < MaxFaults
     /\ srv' = Idle /\ faults' = faults + 1
-    /\ UNCHANGED <<clientVars, netVars, ledger, sink, ghostVars>>
+    /\ lostRows' = IF srv.st = "committed" THEN lostRows \cup {Key(r) : r \in srv.new} ELSE lostRows
+    /\ UNCHANGED <<clientVars, netVars, ledger, sink, assigned, durable, p0OverLow, gaveUp>>
 
 LoseRequest(m) ==
     /\ m \in reqs /\ faults < MaxFaults
@@ -339,13 +437,16 @@ LoseAnswer(a) ==
 Next ==
     \/ \E p \in BOOLEAN : Record(p)
     \/ \E v \in mem : Evict(v)
-    \/ EmitDrop
+    \/ \E s \in Sources : EmitDrop(s)
     \/ Checkpoint
     \/ \E s \in Sources : Send(s)
     \/ \E s \in Sources : Timeout(s)
     \/ \E a \in resps : Ack(a)
-    \/ Crash \/ PageHide \/ Dispose \/ Reboot
-    \/ \E m \in reqs : \E S \in SUBSET m.recs : Receive(m, S)
+    \/ Rejoin \/ Crash \/ PageHide \/ Dispose \/ Reboot
+    \/ \E m \in reqs : \E S \in SUBSET m.recs : \E J \in SUBSET (m.recs \ S) : Receive(m, S, J)
+    \/ \E m \in reqs : Refuse(m)
+    \/ \E s \in Sources : StaleEnd(s)
+    \/ \E s \in Sources : Foreign(s)
     \/ Write \/ Commit \/ Respond \/ ServerCrash
     \/ \E m \in reqs : LoseRequest(m)
     \/ \E a \in resps : LoseAnswer(a)
@@ -357,9 +458,10 @@ Fairness ==
     /\ \A s \in Sources : WF_vars(Send(s))
     /\ \A s \in Sources : WF_vars(alive /\ out[s] # NoMsg /\ Lost(out[s]) /\ Timeout(s))
     /\ WF_vars(\E a \in resps : Ack(a))
-    /\ WF_vars(EmitDrop)
+    /\ \A s \in Sources : WF_vars(EmitDrop(s))
     /\ WF_vars(Reboot)
-    /\ WF_vars(\E m \in reqs : Receive(m, m.recs))
+    /\ WF_vars(\E m \in reqs : Receive(m, m.recs, {}))
+    /\ WF_vars(\E m \in reqs : Refuse(m))
     /\ WF_vars(Write) /\ WF_vars(Commit) /\ WF_vars(Respond)
 
 Spec == Init /\ [][Next]_vars
@@ -378,38 +480,70 @@ Held(r) ==
     \/ Key(r) \in pdrops
     \/ \E d \in HeldRecs : Key(r) \in d.covers
 
-\* The evidence_gap computation (telemetrydelivery.Gaps): below the high-water mark every
-\* seq that is neither stored nor dropped is missing; past it, the tail is unknown unless the
-\* source closed.
+\* A stored seq whose row is not in the sink: the reader sees it as missing.
+NoRowFor(k) == k[2] \in ledger[k[1]].stored /\ ~\E r \in sink : Key(r) = k
+\* Committed rows the sink has not taken yet, or never will.
+Unwritten(k) == k \in lostRows \/ (srv.st = "committed" /\ k \in {Key(r) : r \in srv.new})
+
+\* The evidence_gap computation (telemetrydelivery.Gaps) with the reader's row check: below
+\* the high-water mark every seq that is neither stored nor dropped is missing (a rejected
+\* seq included); past it, the tail is unknown unless the source closed. A stored seq with no
+\* row, and a seq named only by such a drop record, are missing to the reader too.
 High(s) == IF ledger[s].end = "closed" THEN ledger[s].endNext ELSE Max(ledger[s].reported, ledger[s].endNext)
 Missing(s) == {q \in 0..(High(s) - 1) : q \notin ledger[s].stored \cup ledger[s].dropped}
 TailUnknown(s) == ledger[s].end # "closed"
-InGap(r) == r.seq \in Missing(r.src) \/ (TailUnknown(r.src) /\ r.seq >= High(r.src))
+InGap(r) ==
+    \/ r.seq \in Missing(r.src)
+    \/ TailUnknown(r.src) /\ r.seq >= High(r.src)
+    \/ NoRowFor(Key(r))
+    \/ \E d \in assigned : IsDrop(d) /\ NoRowFor(Key(d)) /\ Key(r) \in d.covers
+
+\* A loss the server can name: a rejected record, a committed row a crash kept out of the sink,
+\* a seq named only by such a drop record, or the unnamed drop list of an abandoned source.
+Excused(k) ==
+    \/ k \in gaveUp
+    \/ k[2] \in ledger[k[1]].rejected
+    \/ k \in lostRows
+    \/ \E d \in assigned : IsDrop(d) /\ k \in d.covers /\ (Key(d) \in lostRows \/ d.seq \in ledger[d.src].rejected)
 
 TypeOK ==
-    /\ boot \in Sources /\ src \in Sources /\ alive \in BOOLEAN /\ closed \in BOOLEAN
+    /\ boot \in 1..MaxBoots /\ src \in Sources /\ last \in Sources /\ alive \in BOOLEAN /\ closed \in BOOLEAN
     /\ next \in [Sources -> Nat] /\ jnext \in [Sources -> Nat]
-    /\ pdrops \subseteq Keys
+    /\ pdrops \subseteq Keys /\ gaveUp \subseteq Keys /\ lostRows \subseteq Keys
     /\ toEnd \in [Sources -> Ends]
-    /\ srv.st \in {"idle", "admitted", "written", "ledgered", "committed"}
+    /\ srv.st \in {"idle", "admitted", "sunk", "committed", "written"}
 
-\* Nothing is acknowledged that the ledger has not committed as stored.
-AckSafe == \A a \in resps : \A q \in a.acks : q \in ledger[a.req.src].stored
+\* Nothing is acknowledged that the ledger has not committed as stored or rejected.
+AckSafe == \A a \in resps : \A q \in a.acks : q \in ledger[a.req.src].stored \cup ledger[a.req.src].rejected
 
-\* The ledger claims only what the sink holds: a stored seq has its row, a dropped seq is
-\* named by a stored drop record.
+\* The sink holds only committed rows, so a failed commit logs nothing.
+SinkCommitted == \A r \in sink : r.seq \in ledger[r.src].stored
+
+\* The ledger claims only what the sink holds or a crash visibly lost: a stored seq has its
+\* row, a dropped seq is named by a drop record that has its row.
 TruthfulLedger ==
     \A s \in Sources :
-        /\ \A q \in ledger[s].stored : \E r \in sink : Key(r) = <<s, q>>
-        /\ \A q \in ledger[s].dropped : Covered(<<s, q>>)
+        /\ \A q \in ledger[s].stored : (\E r \in sink : Key(r) = <<s, q>>) \/ Unwritten(<<s, q>>)
+        /\ \A q \in ledger[s].dropped : Covered(<<s, q>>) \/ \E d \in assigned : IsDrop(d) /\ <<s, q>> \in d.covers /\ Unwritten(Key(d))
+
+\* Only the source's own Participant writes it: the row's owner is the Participant whose
+\* credential sends the source, every stored or rejected seq is one the client minted for it,
+\* and every sink row is a record the client made.
+OwnerWrites ==
+    /\ \A s \in Sources : ledger[s].owner \in {0, part[s]}
+    /\ \A s \in Sources : \A q \in ledger[s].stored \cup ledger[s].rejected : \E r \in assigned : Key(r) = <<s, q>>
+    /\ sink \subseteq assigned
 
 \* One record per key: copies of a write collapse, but two different records never share
 \* (source_id, seq).
 OneRecordPerKey == \A r1, r2 \in sink : Key(r1) = Key(r2) => r1 = r2
 
+\* The client never mints two records at one (source_id, seq), even across a reload.
+SeqNeverReused == \A r1, r2 \in assigned : Key(r1) = Key(r2) => r1 = r2
+
 \* Every durably enqueued record is still with the client, stored, or named by a stored drop
-\* record. A gap never stands in for one.
-DurableAccounted == \A r \in durable : Held(r) \/ InSink(r) \/ Covered(Key(r))
+\* record. Otherwise its loss is one the server names, and it is in a gap.
+DurableAccounted == \A r \in durable : Held(r) \/ InSink(r) \/ Covered(Key(r)) \/ (Excused(Key(r)) /\ InGap(r))
 
 \* Every record the outbox accepted is accounted, a gap included.
 Conservation == \A r \in assigned : Held(r) \/ InSink(r) \/ Covered(Key(r)) \/ InGap(r)
@@ -421,11 +555,15 @@ GapsHonest == \A s \in Sources : \A q \in Missing(s) : \E r \in assigned : Key(r
 CloseHonest ==
     \A s \in Sources : ledger[s].end = "closed" => \A r \in assigned : r.src = s => r.seq < ledger[s].endNext
 
+\* A close never hides committed history: nothing stored or rejected lies at or past it.
+SuffixKept == \A s \in Sources : ledger[s].end = "closed" => ledger[s].endNext >= Past(ledger[s].stored \cup ledger[s].rejected)
+
 \* A flood of routine records never pushes out a P0 record.
 P0Reserved == ~p0OverLow
 
 \* Under Fairness: every durable record ends up stored or named by a stored drop record,
-\* and every predecessor source has its end on the server.
-DurableDelivered == <>[](\A r \in durable : InSink(r) \/ Covered(Key(r)))
+\* unless its loss is one the server names, and every source before the live one has its end
+\* on the server.
+DurableDelivered == <>[](\A r \in durable : InSink(r) \/ Covered(Key(r)) \/ Excused(Key(r)))
 EndsReported == <>[](\A s \in Sources : s < src => ledger[s].end # "")
 =============================================================================

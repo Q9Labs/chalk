@@ -49,12 +49,28 @@ type Rejection struct {
 // Response says how many events of the batch were kept. A rejected event is
 // logged with the reason; the client drops it and does not send it again. Acks
 // and Rejections are lists, never null; a version 1 batch has no ledger, so both are empty.
+// An acked seq is settled, stored or rejected, and only a stored one is evidence.
 type Response struct {
 	Accepted   int         `json:"accepted"`
 	Rejected   int         `json:"rejected"`
 	Duplicates int         `json:"duplicates"`
 	Acks       []SeqRange  `json:"acks"`
 	Rejections []Rejection `json:"rejections"`
+	// EndRejection names why the ledger did not apply the batch's end, when it did not: end_short
+	// for an end below the source's committed history, end_conflict for an end that disagrees with
+	// its closed end. The records are settled either way, and the client does not send the end again.
+	EndRejection string `json:"end_rejection,omitempty"`
+	// ServerMS is the server's clock, in Unix milliseconds, when it took a ledger batch. A client's
+	// kernel estimates server time from it and the request's round trip. A version 1 answer omits it.
+	ServerMS int64 `json:"server_ms,omitempty"`
+}
+
+// Stamp is what the server knows of who sent a batch, from its credential. Legacy goes on the rows
+// of the legacy vocabulary under the names those rows have always used; Record goes on the rows of
+// kernel records under registry field names (RecordOwned).
+type Stamp struct {
+	Legacy []any
+	Record []any
 }
 
 // DecodeStrict reads exactly one JSON value, refusing unknown fields and trailing data. The
@@ -100,6 +116,8 @@ func (r Request) checkLegacyFrame() string {
 		return "client_session_id"
 	case len(r.Events) == 0 || len(r.Events) > EventLimit:
 		return "event_count"
+	case slices.ContainsFunc(r.Events, Event.IsRecord):
+		return "version"
 	}
 	return ""
 }
@@ -108,6 +126,26 @@ func (r Request) checkLegacyFrame() string {
 // rule that needs the frame. It refuses the whole batch when it cannot name an event's seq,
 // because the answer could not say which events it settled.
 func (r *Request) checkLedgerFrame() string {
+	if reason := r.ledgerFrameField(); reason != "" {
+		return reason
+	}
+	seen := make(map[int64]bool, len(r.Events))
+	for index := range r.Events {
+		event := &r.Events[index]
+		if !event.seqRead || event.seqValue() < 0 || event.seqValue() > MaxMilliseconds {
+			return "seq"
+		}
+		if seen[event.seqValue()] {
+			return "duplicate_seq"
+		}
+		seen[event.seqValue()] = true
+		event.checkLedger(*r.NextSeq)
+	}
+	return ""
+}
+
+// ledgerFrameField names the first frame field of a version 2 batch that is wrong, or is empty.
+func (r Request) ledgerFrameField() string {
 	switch {
 	case r.ClientSessionID != "":
 		return "client_session_id"
@@ -121,18 +159,6 @@ func (r *Request) checkLedgerFrame() string {
 		return "end"
 	case len(r.Events) > EventLimit || (len(r.Events) == 0 && r.End == ""):
 		return "event_count"
-	}
-	seen := make(map[int64]bool, len(r.Events))
-	for index := range r.Events {
-		event := &r.Events[index]
-		if !event.seqRead || event.seqValue() < 0 || event.seqValue() > MaxMilliseconds {
-			return "seq"
-		}
-		if seen[event.seqValue()] {
-			return "duplicate_seq"
-		}
-		seen[event.seqValue()] = true
-		event.checkLedger(*r.NextSeq)
 	}
 	return ""
 }
@@ -164,10 +190,13 @@ func appendSet(attributes []any, value reflect.Value) []any {
 
 // Log writes one row per event, and one per rejected event, to the request's logger. The
 // client session (version 1) or source and batch (version 2), the participant and the server's
-// receive time go on every row. The response names the seqs of a version 2 batch that were
-// accepted or rejected; it has no ledger behind it, so it never reports a duplicate.
-func Log(ctx context.Context, logger *slog.Logger, request Request, received time.Time, stamp ...any) Response {
-	logger = logger.With(stamp...)
+// receive time go on every row of the legacy vocabulary. A kernel record's row is the record in
+// the registry row shape, under its event name, with the credential's ids and its source and
+// batch. The response names the seqs of a version 2 batch that were accepted or rejected; it has
+// no ledger behind it, so it never reports a duplicate.
+func Log(ctx context.Context, logger *slog.Logger, request Request, received time.Time, stamp Stamp) Response {
+	records := logger.With(stamp.Record...).With("source_id", request.SourceID, "batch_id", request.BatchID)
+	logger = logger.With(stamp.Legacy...)
 	if request.Version == LedgerVersion {
 		logger = logger.With("source_id", request.SourceID, "batch_id", request.BatchID)
 	} else {
@@ -175,6 +204,9 @@ func Log(ctx context.Context, logger *slog.Logger, request Request, received tim
 	}
 	logger = logger.With("received_at", received.UTC().Format(time.RFC3339Nano))
 	response := Response{Acks: []SeqRange{}, Rejections: []Rejection{}}
+	if request.Version == LedgerVersion {
+		response.ServerMS = received.UnixMilli()
+	}
 	var settled []int64
 	for _, event := range request.Events {
 		if reason := event.Rejection(); reason != "" {
@@ -188,7 +220,11 @@ func Log(ctx context.Context, logger *slog.Logger, request Request, received tim
 			continue
 		}
 		response.Accepted++
-		logger.InfoContext(ctx, "SDK telemetry", append([]any{"event", "sdk.telemetry"}, event.Attributes()...)...)
+		if event.record != nil {
+			records.LogAttrs(ctx, slog.LevelInfo, event.record.name, event.record.attrs()...)
+		} else {
+			logger.InfoContext(ctx, "SDK telemetry", append([]any{"event", "sdk.telemetry"}, event.Attributes()...)...)
+		}
 		if request.Version == LedgerVersion {
 			settled = append(settled, event.seqValue())
 		}

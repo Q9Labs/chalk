@@ -28,7 +28,7 @@ const TH = "1f0c3b2a-7d6e-4c5b-9a8f-2e1d0c9b8a7f";
 const AB = "a8b7c6d5-e4f3-4a2b-9c1d-0e9f8a7b6c5d";
 
 /** User ids are tenant-supplied tokens (C1 `user` is canonical `token`), so their handles print in full. */
-export const PEOPLE = Object.freeze({
+const PEOPLE = Object.freeze({
   haris: { kind: /** @type {const} */ ("user"), id: "th-1041", name: "Haris", tenant: TH },
   sana: { kind: /** @type {const} */ ("user"), id: "th-1042", name: "Sana", tenant: TH },
   zara: { kind: /** @type {const} */ ("user"), id: "th-1043", name: "Zara", tenant: TH },
@@ -99,6 +99,13 @@ const mic = (episode, participant, id, from, to, claim) =>
 const ingress = (episode, participant, id, from, to, packets, voiced) =>
   row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim: voiced > 0 ? "voiced" : "silent", value: { packets, voiced }, failure: false });
 
+/** @param {string} episode @param {string} id @param {number} when @param {string} claim */
+const ended = (episode, id, when, claim) => row(id, { fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode }, window: { from_ms: when, to_ms: when }, claim, value: {}, failure: false });
+
+/** @param {string} episode @param {string} participant @param {string} id @param {number} when @param {string} claim */
+const endScreen = (episode, participant, id, when, claim) =>
+  row(id, { fact: "end.client_screen", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: when, to_ms: when }, claim, value: {}, failure: false });
+
 /**
  * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
  * @param {readonly string[]} participants
@@ -114,7 +121,7 @@ const episodeWatermarks = (participants, complete_to_ms) => [
 ];
 
 /**
- * A healthy two-seat media Episode: both seats unmuted and voiced. `extra` adds rows to the current evidence only.
+ * A healthy two-seat media Episode: both seats unmuted and voiced, Sync saw it end, and both clients showed the end screen. `extra` adds rows to the current evidence only.
  * @param {string} id
  * @param {string} tenant
  * @param {number} from
@@ -127,7 +134,9 @@ function quietEpisode(id, tenant, from, minutes, people) {
   const observations = seats.flatMap((s, index) => [
     mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
     ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
+    endScreen(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-0000000000e${index + 1}`, to + 1_500, "episode_ended"),
   ]);
+  observations.push(ended(id, `${id.slice(0, 8)}-0000-4000-8000-0000000000e0`, to, "ended_by_participant"));
   return {
     declaration: { kind: /** @type {const} */ ("episode"), id, tenant, features: ["media"], window: { from_ms: from, to_ms: to }, seats },
     evidence: {
@@ -138,6 +147,17 @@ function quietEpisode(id, tenant, from, minutes, people) {
       ),
     },
   };
+}
+
+/**
+ * Every real row carries its Tenant (the API stamps `tenant_id` on the envelope), and binding refuses a row of no or another Tenant,
+ * so each item's rows name the item's Tenant.
+ * @param {{ observations: Observation[] }} evidence
+ * @param {string | null} tenant
+ */
+function stampTenant(evidence, tenant) {
+  if (tenant === null) return;
+  evidence.observations = evidence.observations.map((o) => ({ ...o, subject: { ...o.subject, tenant } }));
 }
 
 /** @returns {World} */
@@ -159,7 +179,8 @@ export function nov18() {
     mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),
     ingress(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), 176_000, 61_500),
     mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
-    row(IDS.evEnd, { fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "maximum_duration", value: {}, failure: false }),
+    ended(ep, IDS.evEnd, end, "maximum_duration"),
+    ...[IDS.ptHaris, IDS.ptSana, IDS.ptBilal, IDS.ptZara].map((participant, index) => endScreen(ep, participant, `9feb0e00-0000-4000-8000-00000000000${index + 1}`, end + 1_000, "time_limit")),
     row(IDS.evLeave, {
       fact: "join.leave",
       source: "client",
@@ -212,7 +233,7 @@ export function nov18() {
 
   const ep2d4e = quietEpisode(IDS.ep2d4e, TH, at("2026-11-11T10:00:00Z"), 40, [PEOPLE.haris, PEOPLE.sana]);
   const harisSeat = ep2d4e.declaration.seats[0].participant;
-  ep2d4e.evidence.observations = ep2d4e.evidence.observations.filter((o) => o.subject.participant !== harisSeat);
+  ep2d4e.evidence.observations = ep2d4e.evidence.observations.filter((o) => o.subject.participant !== harisSeat || !o.fact.startsWith("audio."));
   ep2d4e.evidence.observations.push(
     mic(IDS.ep2d4e, harisSeat, "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), "unmuted"),
     ingress(IDS.ep2d4e, harisSeat, "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6f", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), 4_500, 0),
@@ -246,6 +267,8 @@ export function nov18() {
   };
 
   const all = [ep9feb, ep7a21, ep5c0d, ep31aa, ep2d4e, epe0f1, attempt, job, spaceDay, tenantDay, platformDay];
+  for (const entry of all) stampTenant(entry.evidence, entry.declaration.tenant);
+  stampTenant(morning, ep31aa.declaration.tenant);
   return {
     asof_ms: ASOF,
     tenants: [

@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "06a4092b8fb7"
 
   @events %{
     "client.call_ended" => %{
@@ -211,12 +211,6 @@ defmodule ChalkSync.Obs.Registry do
     },
     "dropped_seqs" => %{
       "type" => "ranges",
-      "group" => "delivery",
-      "required" => false,
-      "values" => nil
-    },
-    "dropped_source_id" => %{
-      "type" => "string",
       "group" => "delivery",
       "required" => false,
       "values" => nil

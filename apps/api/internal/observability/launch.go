@@ -132,14 +132,6 @@ func (i AccessGrantIssuer) Issue(ctx context.Context, subject accessgrants.Subje
 	return credential, err
 }
 
-// IssueTelemetry passes through: the telemetry credential rides on an access grant that Issue already measures.
-func (i AccessGrantIssuer) IssueTelemetry(ctx context.Context, subject accessgrants.Subject) (accessgrants.TelemetryCredential, error) {
-	if i.next == nil {
-		return accessgrants.TelemetryCredential{}, accessgrants.ErrInvalidConfig
-	}
-	return i.next.IssueTelemetry(ctx, subject)
-}
-
 type accessGrantRefreshContextKey struct{}
 
 // ContextWithAccessGrantRefresh scopes expiry acceptance to credential telemetry.

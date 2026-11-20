@@ -44,36 +44,29 @@ func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(h
 	}
 }
 
-// requireTelemetryCredential accepts the telemetry token, or the media credential in its place. The
-// telemetry verifier is asked first and refuses a media credential by audience, so the media
-// verifier only sees what the telemetry one did not accept.
+// requireTelemetryCredential accepts the telemetry token, or the media credential in its place, and
+// answers like requireParticipantMediaCredential otherwise.
 func requireTelemetryCredential(telemetry TelemetryVerifier, media ParticipantMediaVerifier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if telemetry == nil || media == nil {
-				writeServiceUnavailable(w)
-				return
-			}
-			credential, ok := bearerToken(r.Header.Get("Authorization"))
-			if !ok {
-				writeUnauthenticated(w)
-				return
-			}
-			subject, err := telemetry.VerifyTelemetry(r.Context(), credential)
-			if err != nil && isParticipantMediaCredentialRejection(err) {
-				subject, err = media.Verify(r.Context(), credential)
-			}
-			if err != nil {
-				if isParticipantMediaCredentialRejection(err) {
-					writeUnauthenticated(w)
-					return
-				}
-				writeServiceUnavailable(w)
-				return
-			}
-			next.ServeHTTP(w, r.WithContext(accessgrants.WithSubject(r.Context(), subject)))
-		})
+	var verifier ParticipantMediaVerifier
+	if !missingService(telemetry) && !missingService(media) {
+		verifier = telemetryCredentialVerifier{telemetry: telemetry, media: media}
 	}
+	return requireParticipantMediaCredential(verifier)
+}
+
+// telemetryCredentialVerifier asks the telemetry verifier first. It refuses a media credential by
+// audience, so the media verifier only sees what the telemetry one did not accept.
+type telemetryCredentialVerifier struct {
+	telemetry TelemetryVerifier
+	media     ParticipantMediaVerifier
+}
+
+func (v telemetryCredentialVerifier) Verify(ctx context.Context, credential string) (accessgrants.Subject, error) {
+	subject, err := v.telemetry.VerifyTelemetry(ctx, credential)
+	if err != nil && isParticipantMediaCredentialRejection(err) {
+		return v.media.Verify(ctx, credential)
+	}
+	return subject, err
 }
 
 func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {

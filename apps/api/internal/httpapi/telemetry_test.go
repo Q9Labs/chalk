@@ -44,7 +44,18 @@ type telemetryFixture struct {
 
 func newTelemetryFixture(t *testing.T) telemetryFixture {
 	t.Helper()
-	subject := participantMediaSubject(t)
+	return newTelemetryFixtureFor(t, participantMediaSubject(t))
+}
+
+// newTelemetryFixtureFor serves the telemetry routes to real credentials of subject, with a memory ledger in which subject has joined.
+func newTelemetryFixtureFor(t *testing.T, subject accessgrants.Subject) telemetryFixture {
+	t.Helper()
+	return newTelemetryFixtureWith(t, subject, func(ledger *telemetrydelivery.MemoryLedger) TelemetryLedger { return ledger })
+}
+
+// newTelemetryFixtureWith is newTelemetryFixtureFor with the routes served by port, which wraps the fixture's memory ledger.
+func newTelemetryFixtureWith(t *testing.T, subject accessgrants.Subject, port func(*telemetrydelivery.MemoryLedger) TelemetryLedger) telemetryFixture {
+	t.Helper()
 	logs := &bytes.Buffer{}
 	router := chi.NewRouter()
 	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(logs, nil))))
@@ -69,9 +80,10 @@ func newTelemetryFixture(t *testing.T) telemetryFixture {
 		t.Fatal(err)
 	}
 	ledger := &telemetrydelivery.MemoryLedger{}
+	ledger.Join(telemetryIdentity(subject))
 	verifier := subjectVerifier{subject: subject}
 	limits := RateLimitOptions{Limiter: ratelimit.NewLocalLimiter()}
-	telemetryEndpoint(real, real, ledger).Mount(router, limits)
+	telemetryEndpoint(real, real, port(ledger)).Mount(router, limits)
 	connectionReportEndpoint(verifier).Mount(router, limits)
 	callStatsEndpoint(verifier).Mount(router, limits)
 	return telemetryFixture{router: router, logs: logs, path: "/tenants/" + subject.TenantID.String(), ledger: ledger, mediaToken: media.Token, telemetryToken: telemetry.Token, subject: subject, issuer: issuer}

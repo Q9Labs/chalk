@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,11 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -38,11 +32,12 @@ func ledgerBody(source, batch string, nextSeq int64, events ...string) string {
 }
 
 type ledgerAnswer struct {
-	Accepted   int                      `json:"accepted"`
-	Rejected   int                      `json:"rejected"`
-	Duplicates int                      `json:"duplicates"`
-	Acks       []sdktelemetry.SeqRange  `json:"acks"`
-	Rejections []sdktelemetry.Rejection `json:"rejections"`
+	Accepted     int                      `json:"accepted"`
+	Rejected     int                      `json:"rejected"`
+	Duplicates   int                      `json:"duplicates"`
+	Acks         []sdktelemetry.SeqRange  `json:"acks"`
+	Rejections   []sdktelemetry.Rejection `json:"rejections"`
+	EndRejection string                   `json:"end_rejection"`
 }
 
 func (f telemetryFixture) answer(t *testing.T, token, body string) ledgerAnswer {
@@ -138,26 +133,37 @@ func TestTelemetryV2DedupesBySourceAcrossAReload(t *testing.T) {
 	}
 }
 
-func TestTelemetryV2PredecessorDropRecordNamesTheLostSeqsOfTheOldSource(t *testing.T) {
+func TestTelemetryV2DropRecordNamesTheLostSeqsOfItsSource(t *testing.T) {
 	f := newTelemetryFixture(t)
-	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":4,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":10}],"dropped_source_id":%q}`, 0, ledgerSource)
-	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerReload, ledgerBatch, 1, drop)); answer.Accepted != 1 {
+	drop := `{"event_id":"9a4f0000-0000-4000-8000-000000000010","seq":10,"elapsed_ms":1,"type":"telemetry_dropped","dropped":4,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":10}]}`
+	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 11, drop)); answer.Accepted != 1 {
 		t.Fatalf("answer = %+v, want the drop record accepted", answer)
 	}
-	rows, err := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("predecessor rows = %v, %v, want one", rows, err)
+	row, found, err := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
+	if err != nil || !found {
+		t.Fatalf("source row found = %v, err = %v", found, err)
 	}
-	if want := telemetrydelivery.NewSet(sdktelemetry.SeqRange{From: 6, To: 10}); !reflect.DeepEqual(rows[0].Ranges.Dropped["queue_full"], want) {
-		t.Fatalf("predecessor dropped = %v, want %v", rows[0].Ranges.Dropped, want)
-	}
-	gaps, _ := telemetrydelivery.Gaps(rows)
+	gaps, _ := telemetrydelivery.Gaps(row)
 	var named bool
 	for _, gap := range gaps {
 		named = named || (gap.Cause == telemetrydelivery.GapDropped && gap.DropReason == "queue_full" && gap.FromSeq == 6 && gap.ToSeq != nil && *gap.ToSeq == 10)
 	}
 	if !named {
 		t.Fatalf("gaps = %+v, want [6,10) named as dropped for queue_full", gaps)
+	}
+}
+
+// A drop record can name only its own source: one naming another is an unknown field, so the
+// record is rejected and settled, and no other source changes.
+func TestTelemetryV2DropRecordNamingAnotherSourceIsRejected(t *testing.T) {
+	f := newTelemetryFixture(t)
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-000000000000","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":4,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":10}],"dropped_source_id":%q}`, ledgerSource)
+	answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerReload, ledgerBatch, 1, drop))
+	if answer.Rejected != 1 || !reflect.DeepEqual(answer.Acks, ranges(0, 1)) {
+		t.Fatalf("answer = %+v, want the drop record rejected and acked", answer)
+	}
+	if _, found, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); found {
+		t.Fatal("a drop record created a row for the source it named")
 	}
 }
 
@@ -188,18 +194,24 @@ func TestTelemetryV2LedgerFailureIs503WithRetryAfterAndAcksNothing(t *testing.T)
 	}
 }
 
-// A crash between the sink write and the commit acks nothing; the retry finds the records new and
-// writes them again with the same event ids.
-func TestTelemetryV2CrashAfterTheSinkWriteAcksNothingAndTheRetryWritesAgain(t *testing.T) {
+// The rows are logged only after the ledger commits, so a failed commit logs and acks nothing, and
+// the retry finds the records new and logs them once.
+func TestTelemetryV2FailedCommitLogsNothingAndTheRetryLogsOnce(t *testing.T) {
 	f := newTelemetryFixture(t)
 	body := ledgerBody(ledgerSource, ledgerBatch, 2, ledgerEvent(0), ledgerEvent(1))
-	f.ledger.CrashAfterSink = errors.New("crash")
+	f.ledger.FailCommit = errors.New("commit failed")
 	if code := f.postWith(f.telemetryToken, ledgerRoute, body).Code; code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", code)
 	}
-	f.ledger.CrashAfterSink = nil
+	if rows := f.sinkRows(t); rows != 0 {
+		t.Fatalf("sink rows = %d after a failed commit, want 0: a row the ledger never committed reaches the reader", rows)
+	}
+	f.ledger.FailCommit = nil
 	if retry := f.answer(t, f.telemetryToken, body); retry.Accepted != 2 || retry.Duplicates != 0 {
 		t.Fatalf("retry = %+v, want both records new", retry)
+	}
+	if rows := f.sinkRows(t); rows != 2 {
+		t.Fatalf("sink rows = %d after the retry, want 2", rows)
 	}
 }
 
@@ -227,171 +239,56 @@ func TestTelemetryV2RangeCapIsAMalformedBatchWithReasonLedgerFull(t *testing.T) 
 	}
 }
 
-// A participant of the tenant that knows another client's source_id cannot add claims to it: the
-// batch is refused whole with 400 and the reason source_bound, so the SDK drops it as refused and
-// never retries it, and the victim's ledger is unchanged.
-func TestTelemetryV2BatchOnASourceBoundToAnotherParticipantIsRefusedWithReasonSourceBound(t *testing.T) {
+// An end below the source's committed history is not applied: the records are still settled, the
+// answer names the end as end_short, a rejected row says so, and the suffix stays a gap.
+func TestTelemetryV2ShortCloseIsNamedAndNotApplied(t *testing.T) {
 	f := newTelemetryFixture(t)
-	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 4, ledgerEvent(0))); answer.Accepted != 1 {
-		t.Fatalf("answer = %+v, want the victim's record accepted", answer)
+	f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 5, ledgerEvent(0), ledgerEvent(1)))
+	short := f.answer(t, f.telemetryToken, `{"version":2,"source_id":"`+ledgerSource+`","batch_id":"`+ledgerOtherBatch+`","next_seq":2,"end":"closed","events":[]}`)
+	if short.EndRejection != telemetrydelivery.ReasonEndShort {
+		t.Fatalf("answer = %+v, want end_rejection end_short", short)
 	}
-	before, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
-
-	hostile := f.subject
-	hostile.ParticipantID = mustLedgerID(t, "55555555-5555-4555-8555-555555555555")
-	token, err := f.issuer.IssueTelemetry(t.Context(), hostile)
-	if err != nil {
-		t.Fatal(err)
+	if rows := f.rows(t, "sdk.telemetry.rejected"); len(rows) != 1 || rows[0]["reason"] != "end_short" || rows[0]["source_id"] != ledgerSource {
+		t.Fatalf("rejection rows = %v, want one with reason end_short naming the source", rows)
 	}
-	body := fmt.Sprintf(`{"version":2,"source_id":%q,"batch_id":%q,"next_seq":4,"end":"closed","events":[%s]}`, ledgerSource, ledgerOtherBatch, strings.Join([]string{ledgerEvent(1), ledgerEvent(2), ledgerEvent(3)}, ","))
-	recorder := f.postWith(token.Token, ledgerRoute, body)
-	if recorder.Code != http.StatusBadRequest || strings.Contains(recorder.Body.String(), "acks") {
-		t.Fatalf("status = %d, body = %s, want 400 with no acks", recorder.Code, recorder.Body.String())
-	}
-	if rows := f.rows(t, "sdk.telemetry.rejected"); len(rows) != 1 || rows[0]["reason"] != "source_bound" || rows[0]["source_id"] != ledgerSource {
-		t.Fatalf("rejection rows = %v, want one with reason source_bound naming the source", rows)
-	}
-	if rows := f.sinkRows(t); rows != 1 {
-		t.Fatalf("sink rows = %d, want only the victim's record", rows)
-	}
-	if after, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); !reflect.DeepEqual(after, before) {
-		t.Fatalf("victim rows = %+v, want them unchanged: %+v", after, before)
+	row, _, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
+	if row.End != telemetrydelivery.EndNone {
+		t.Fatalf("end = %q, want none applied", row.End)
 	}
 }
 
-// A guest reload: the new client is a new participant with no identity, so it is no successor of
-// the guest that bound the old source, yet its outbox sends the old source's drop record in its
-// live batch. The batch is answered 200: the live record is stored, the drop record is named as
-// rejected with source_bound and acked so the SDK stops sending it, and the old source is
-// unchanged, so its gap stays open.
-func TestTelemetryV2GuestReloadRejectsTheDropRecordForTheOldSourceAndStoresTheRest(t *testing.T) {
-	f := newTelemetryFixture(t)
-	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 4, ledgerEvent(0))); answer.Accepted != 1 {
-		t.Fatalf("answer = %+v, want the first guest's record accepted", answer)
-	}
-	before, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
+const ledgerV1Body = `{"version":1,"client_session_id":"` + telemetrySession + `","events":[{"type":"call_ended","seq":0,"elapsed_ms":1,"end_reason":"left"}]}`
 
-	reloaded := f.subject
-	reloaded.ParticipantID = mustLedgerID(t, "55555555-5555-4555-8555-555555555555")
-	token, err := f.issuer.IssueTelemetry(t.Context(), reloaded)
-	if err != nil {
-		t.Fatal(err)
-	}
-	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":1,"to":4}],"dropped_source_id":%q}`, 0, ledgerSource)
-	answer := f.answer(t, token.Token, ledgerBody(ledgerReload, ledgerOtherBatch, 2, drop, ledgerEvent(1)))
-	want := []sdktelemetry.Rejection{{Seq: 0, Reason: telemetrydelivery.SourceBound}}
-	if answer.Accepted != 1 || answer.Rejected != 1 || !reflect.DeepEqual(answer.Rejections, want) || !reflect.DeepEqual(answer.Acks, ranges(0, 2)) {
-		t.Fatalf("answer = %+v, want the live record accepted, the drop record rejected as source_bound and both acked", answer)
-	}
-	rows := f.rows(t, "sdk.telemetry.rejected")
-	if len(rows) != 1 || rows[0]["reason"] != "source_bound" || rows[0]["type"] != "telemetry_dropped" || rows[0]["source_id"] != ledgerReload {
-		t.Fatalf("rejection rows = %v, want one naming the drop record of the live source", rows)
-	}
-	if after, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); !reflect.DeepEqual(after, before) {
-		t.Fatalf("old source rows = %+v, want them unchanged: %+v", after, before)
-	}
-}
-
-func TestTelemetryV1IsUnchangedAndNeverTouchesTheLedger(t *testing.T) {
+func TestTelemetryV1IsUnchangedAndNeverWritesTheLedger(t *testing.T) {
 	f := newTelemetryFixture(t)
-	f.ledger.Fail = errors.New("database is down")
-	body := `{"version":1,"client_session_id":"` + telemetrySession + `","events":[{"type":"call_ended","seq":0,"elapsed_ms":1,"end_reason":"left"}]}`
-	recorder := f.post(ledgerRoute, body)
+	recorder := f.post(ledgerRoute, ledgerV1Body)
 	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"accepted":1,"rejected":0,"duplicates":0,"acks":[],"rejections":[]}` {
 		t.Fatalf("response = %d %s, want the version 1 answer with no acks", recorder.Code, recorder.Body.String())
 	}
+	if rows, _ := f.ledger.Episode(t.Context(), f.subject.TenantID, f.subject.EpisodeID); len(rows) != 0 {
+		t.Fatalf("ledger rows = %+v after a version 1 batch, want none", rows)
+	}
 }
 
-func TestTelemetryRouteAcceptsTheTelemetryTokenAndTheMediaCredentialOnly(t *testing.T) {
+// A version 1 batch whose fence can't be checked logs nothing and asks the client to retry.
+func TestTelemetryV1BatchIsRetriedWhenTheLedgerIsDown(t *testing.T) {
 	f := newTelemetryFixture(t)
+	f.ledger.Fail = errors.New("database is down")
+	if recorder := f.post(ledgerRoute, ledgerV1Body); recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, body = %s, want 503", recorder.Code, recorder.Body.String())
+	}
+	if rows := f.rows(t, "sdk.telemetry"); len(rows) != 0 {
+		t.Fatalf("logged %d rows while the fence was unchecked, want none", len(rows))
+	}
+}
+
+// A batch writes only its own source and the ledger bounds the sources of a participant, so the
+// budget charges bytes alone.
+func TestTelemetryChargeIsTheBytes(t *testing.T) {
 	body := ledgerBody(ledgerSource, ledgerBatch, 1, ledgerEvent(0))
-	for name, token := range map[string]string{"telemetry token": f.telemetryToken, "media credential": f.mediaToken} {
-		if code := f.postWith(token, ledgerRoute, body).Code; code != http.StatusOK {
-			t.Errorf("%s: status = %d, want 200", name, code)
-		}
-	}
-	if code := f.postWith("not-a-token", ledgerRoute, body).Code; code != http.StatusUnauthorized {
-		t.Errorf("junk token: status = %d, want 401", code)
-	}
-	request := httptest.NewRequest(http.MethodPost, f.path+ledgerRoute, strings.NewReader(body))
-	recorder := httptest.NewRecorder()
-	f.router.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusUnauthorized {
-		t.Errorf("no credential: status = %d, want 401", recorder.Code)
-	}
-}
-
-func TestTelemetryTokenIsRefusedByEveryOtherParticipantRoute(t *testing.T) {
-	f := newTelemetryFixture(t)
-	public, private, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private, Now: func() time.Time { return time.Now() }})
-	if err != nil {
-		t.Fatal(err)
-	}
-	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	telemetry, err := issuer.IssueTelemetry(t.Context(), f.subject)
-	if err != nil {
-		t.Fatal(err)
-	}
-	media, err := issuer.Issue(t.Context(), f.subject)
-	if err != nil {
-		t.Fatal(err)
-	}
-	router := chi.NewRouter()
-	callStatsEndpoint(verifier).Mount(router, RateLimitOptions{Limiter: ratelimit.NewLocalLimiter()})
-	post := func(token string) int {
-		request := httptest.NewRequest(http.MethodPost, f.path+"/call-stats", strings.NewReader(`{"version":1,"samples":[]}`))
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set("Content-Type", "application/json")
-		recorder := httptest.NewRecorder()
-		router.ServeHTTP(recorder, request)
-		return recorder.Code
-	}
-	if code := post(telemetry.Token); code != http.StatusUnauthorized {
-		t.Errorf("telemetry token on call-stats: status = %d, want 401", code)
-	}
-	if code := post(media.Token); code == http.StatusUnauthorized {
-		t.Errorf("media credential on call-stats: status = %d, want it accepted", code)
-	}
-}
-
-func TestTelemetryRefusesATokenOfAnotherTenant(t *testing.T) {
-	f := newTelemetryFixture(t)
-	other := f
-	other.path = "/tenants/" + strings.Replace(f.subject.TenantID.String(), "1", "9", -1)
-	if code := other.postWith(f.telemetryToken, ledgerRoute, ledgerBody(ledgerSource, ledgerBatch, 1, ledgerEvent(0))).Code; code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403 for a tenant the token does not name", code)
-	}
-}
-
-// Every source a batch names can create a ledger row, so each one costs the budget on top of the bytes.
-func TestTelemetryChargePricesEachPredecessorABatchNames(t *testing.T) {
-	drop := func(predecessor string) string {
-		return fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":1,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":7}],"dropped_source_id":%q}`, 0, predecessor)
-	}
-	for _, test := range []struct {
-		name         string
-		body         string
-		predecessors int
-	}{
-		{"its own source alone", ledgerBody(ledgerSource, ledgerBatch, 1, ledgerEvent(0)), 0},
-		{"a predecessor it names", ledgerBody(ledgerSource, ledgerBatch, 1, drop(ledgerReload)), 1},
-		{"its own source named again", ledgerBody(ledgerSource, ledgerBatch, 1, drop(ledgerSource)), 0},
-		{"a source id that is not an id", ledgerBody("nope", ledgerBatch, 1, ledgerEvent(0)), 0},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			batch, frame := sdktelemetry.Decode(strings.NewReader(test.body))
-			request := telemetryRequest{Batch: batch, Frame: frame, Bytes: len(test.body)}
-			policy, _ := telemetryCharge(request)
-			if want := len(test.body) + telemetrySourceCost*test.predecessors; policy.Cost != want {
-				t.Errorf("cost = %d (frame %q), want %d", policy.Cost, frame, want)
-			}
-		})
+	batch, frame := sdktelemetry.Decode(strings.NewReader(body))
+	policy, _ := telemetryCharge(telemetryRequest{Batch: batch, Frame: frame, Bytes: len(body)})
+	if policy.Cost != len(body) {
+		t.Fatalf("cost = %d, want %d", policy.Cost, len(body))
 	}
 }

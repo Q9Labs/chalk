@@ -1,4 +1,4 @@
-check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=8/8 partial=4 asof=2026-11-19T01:00Z rules=d7d52b11
+check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=8/8 partial=4 asof=2026-11-19T01:00Z rules=b35345f2
 anchor=2026-11-19T01:00Z local=2026-11-19T06:00+05:00 tz=Asia/Karachi
 checked ten_1f0c 11-18 05:00 outcome=unknown coverage=partial(empty)
 checked spc_5bac 11-18 05:00 outcome=unknown coverage=partial(empty)
@@ -12,4 +12,4 @@ gap: partial ten_1f0c 11-18 05:00 missing=empty
 gap: partial spc_5bac 11-18 05:00 missing=empty
 gap: partial ep_9feb 11-18 14:45 missing=board
 gap: partial job_4a3b 11-18 15:45 missing=open
-next: diagnose attempt cs_6d5e
+next: diagnose attempt cs_6d5e --fixture nov18

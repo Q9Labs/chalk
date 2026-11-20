@@ -3,9 +3,11 @@
 package obs
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"math"
 	"regexp"
 	"slices"
@@ -102,4 +104,21 @@ func jsonString(text string) string {
 	}
 	out.WriteByte('"')
 	return out.String()
+}
+
+// Flags is the effective config switches, kill switches and caps: strings, booleans, integers or nil.
+type Flags map[string]any
+
+// SetFlags records the full flags map and stamps its hash on every later record. Call it at boot and on change.
+func SetFlags(ctx context.Context, flags Flags) {
+	st := current.Load()
+	hash, err := FlagsHash(flags)
+	if err != nil {
+		violate(st, []string{err.Error()})
+		return
+	}
+	next := *st
+	next.flagsHash = hash
+	current.Store(&next)
+	send(ctx, &next, "fact", EventObsFlagsSnapshot, []slog.Attr{slog.Any(FieldFlags, map[string]any(flags))}, nil, false)
 }

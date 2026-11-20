@@ -1,7 +1,16 @@
 import type { components } from "../generated/openapi-types";
 
+import type { ObsRecord } from "../obs/kernel";
+
 export type TelemetryRequest = components["schemas"]["TelemetryRequest"];
+/** A record of the legacy vocabulary, named by `type` and checked by the API's own table. New telemetry is a kernel record instead. */
 export type TelemetryEvent = TelemetryRequest["events"][number];
+/** A kernel record as it leaves: the record the kernel made, with the seq the outbox gave it in its source. */
+export type TelemetryRecord = ObsRecord & { readonly seq: number };
+/** What one batch carries: kernel records and records of the legacy vocabulary, in one seq order. */
+export type WireEvent = TelemetryEvent | TelemetryRecord;
+/** The ledger frame as the outbox writes it: the API's request, with kernel records among its events. */
+export type LedgerFrame = Omit<TelemetryRequest, "events"> & { readonly events: readonly WireEvent[] };
 export type TelemetryEventType = TelemetryEvent["type"];
 /** A half-open range `[from, to)` of seqs of one source. */
 export type SeqRange = NonNullable<TelemetryEvent["dropped_seqs"]>[number];
@@ -40,7 +49,8 @@ export type TelemetrySend = {
 };
 
 /** `retryAfterMs` is 0 when the response names no delay. `acks` is what a 2xx answer settled, and absent when the answer could not be read. `send` rejects when the request never got a response. */
-export type TelemetrySendResult = { readonly status: number; readonly retryAfterMs: number; readonly acks?: readonly SeqRange[] };
+/** `serverMs` is the server's clock as it answered, which the client clock estimate samples. */
+export type TelemetrySendResult = { readonly status: number; readonly retryAfterMs: number; readonly acks?: readonly SeqRange[]; readonly serverMs?: number };
 
 /** Where the outbox keeps what must outlive a reload, as one text per source. Every call is synchronous. `save` says whether the text was kept, and a journal that fails is no durability, never an error. */
 export type TelemetryJournal = {
@@ -54,6 +64,8 @@ export type TelemetryJournal = {
 export type TelemetryPlatform = {
   /** Monotonic milliseconds. */
   readonly now: () => number;
+  /** Wall-clock Unix milliseconds. Date.now when absent. */
+  readonly wall?: () => number;
   readonly uuid: () => string;
   readonly online: () => boolean;
   readonly hidden: () => boolean;
@@ -74,7 +86,9 @@ export type DeliveryStep =
   | { readonly a: "ack"; readonly src: string; readonly batch: string; readonly acks: readonly number[] }
   | { readonly a: "pagehide" }
   | { readonly a: "dispose"; readonly src: string }
-  | { readonly a: "reboot"; readonly src: string };
+  | { readonly a: "reboot"; readonly src: string }
+  | { readonly a: "rejoin"; readonly src: string; readonly next: string }
+  | { readonly a: "abandon"; readonly src: string };
 
 /** A media operation the person or the call asked for. `op_id` is the id the Sync frame carries when there is one, and a fresh UUID otherwise. */
 export type MediaOperationStart = Pick<TelemetryEvent, "action" | "source"> & { readonly op_id?: string };

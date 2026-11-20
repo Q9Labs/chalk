@@ -42,7 +42,7 @@
       "dataset": "lifecycle",
       "side": "client",
       "modules": ["sdk"],
-      "doc": "The SDK decided which end screen the call gets. Today it reaches Axiom as an sdk.telemetry row of type call_ended.",
+      "doc": "The SDK decided which end screen the call gets. The client kernel records it where the connection chooses the end screen, and the API logs it as a kernel row. An SDK release before the client kernel sent it as an sdk.telemetry row of type call_ended, which the legacy match still reads.",
       "fields": {
         "client_session_id": {
           "required": true
@@ -55,7 +55,7 @@
       "emit_sites": [
         {
           "path": "sdks/typescript/client/src/connection/lifecycle.ts",
-          "literal": "type: \"call_ended\""
+          "literal": "\"client.call_ended\""
         }
       ],
       "legacy": {
@@ -130,14 +130,14 @@
           "fact": "end.episode",
           "from": ["sync"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
           "fact": "end.client_screen",
           "from": ["client"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'call_ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
           "doc": "The end screen the seat's client chose."
         }
       ],
@@ -154,7 +154,7 @@
           "fact": "end.episode",
           "from": ["sync"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],

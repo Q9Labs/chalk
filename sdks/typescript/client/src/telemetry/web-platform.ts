@@ -11,6 +11,7 @@ export function createWebTelemetryPlatform(fetch?: typeof globalThis.fetch): Tel
   const send = withRequestContext(fetch);
   return {
     now: () => performance.now(),
+    wall: () => Date.now(),
     uuid: () => {
       const random = globalThis.crypto;
       if (!random?.randomUUID) throw new TypeError("A secure browser identifier source is required");

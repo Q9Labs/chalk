@@ -414,7 +414,7 @@ describe("failed join admission cleanup", () => {
         expect(requests).toEqual(["join"]);
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: status === 503 ? "media_start_failed" : "invalid_access", recoverable: status === 503 } });
         yield* Effect.promise(() => telemetry.outbox.flush());
-        expect(telemetry.accepted).toContainEqual(expect.objectContaining({ type: "call_ended", end_reason: "join_failed" }));
+        expect(telemetry.accepted).toContainEqual(expect.objectContaining({ kind: "fact", name: "client.call_ended", end_reason: "join_failed" }));
         expect(telemetry.accepted).toContainEqual(
           expect.objectContaining({ type: "space_join_span", step: "start_media", outcome: "failed", media_error_kind: "CloudflareSFUError", media_error_step: "sfu_publications", http_status: status, granted_audio: "not_granted", granted_video: "not_granted" }),
         );

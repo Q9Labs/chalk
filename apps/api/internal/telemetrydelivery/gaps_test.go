@@ -5,23 +5,21 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type row struct {
-	participant string
-	stored      Set
-	rejected    Set
-	dropped     map[string]Set
-	reported    int64
-	end         EndState
-	endNext     int64
+	stored   Set
+	rejected Set
+	dropped  map[string]Set
+	reported int64
+	end      EndState
+	endNext  int64
 }
 
 func (r row) build(t *testing.T) SourceRow {
 	out := NewSourceRow(identity(t), id(t, sourceA))
-	if r.participant != "" {
-		out.ParticipantID = id(t, r.participant)
-	}
 	if r.stored != nil {
 		out.Ranges.Stored = r.stored
 	}
@@ -53,10 +51,9 @@ func (w want) gap(t *testing.T) EvidenceGap {
 }
 
 func TestGaps(t *testing.T) {
-	const otherParticipant = "44444444-4444-4444-8444-444444444444"
 	for _, test := range []struct {
 		name    string
-		rows    []row
+		row     row
 		gaps    []want
 		next    int64
 		end     EndState
@@ -64,110 +61,83 @@ func TestGaps(t *testing.T) {
 	}{
 		{
 			name: "a closed source with everything stored has no gaps",
-			rows: []row{{stored: set(0, 10), reported: 10, end: EndClosed, endNext: 10}},
+			row:  row{stored: set(0, 10), reported: 10, end: EndClosed, endNext: 10},
 			next: 10, end: EndClosed, endNext: ptr(10),
 		},
 		{
 			name: "a closed source names its holes exactly",
-			rows: []row{{stored: set(0, 3, 6, 8), reported: 10, end: EndClosed, endNext: 10}},
+			row:  row{stored: set(0, 3, 6, 8), reported: 10, end: EndClosed, endNext: 10},
 			gaps: []want{{3, 6, GapMissing, "", GapFinal}, {8, 10, GapMissing, "", GapFinal}},
 			next: 10, end: EndClosed, endNext: ptr(10),
 		},
 		{
 			name: "a closed end is exact even when more was reported before it",
-			rows: []row{{stored: set(0, 4), reported: 12, end: EndClosed, endNext: 6}},
+			row:  row{stored: set(0, 4), reported: 12, end: EndClosed, endNext: 6},
 			gaps: []want{{4, 6, GapMissing, "", GapFinal}},
 			next: 6, end: EndClosed, endNext: ptr(6),
 		},
 		{
 			name: "an abandoned source has an unknown tail and never an exact one",
-			rows: []row{{stored: set(0, 5), reported: 5, end: EndAbandoned, endNext: 5}},
+			row:  row{stored: set(0, 5), reported: 5, end: EndAbandoned, endNext: 5},
 			gaps: []want{{5, -1, GapTailUnknown, "", GapFinal}},
 			next: 5, end: EndAbandoned, endNext: ptr(5),
 		},
 		{
 			name: "an abandoned source uses the larger of its reports",
-			rows: []row{{stored: set(0, 5), reported: 9, end: EndAbandoned, endNext: 7}},
+			row:  row{stored: set(0, 5), reported: 9, end: EndAbandoned, endNext: 7},
 			gaps: []want{{5, 9, GapMissing, "", GapFinal}, {9, -1, GapTailUnknown, "", GapFinal}},
 			next: 9, end: EndAbandoned, endNext: ptr(7),
 		},
 		{
 			name: "an abandoned source that stored nothing is all missing below its mark",
-			rows: []row{{reported: 0, end: EndAbandoned, endNext: 4}},
+			row:  row{reported: 0, end: EndAbandoned, endNext: 4},
 			gaps: []want{{0, 4, GapMissing, "", GapFinal}, {4, -1, GapTailUnknown, "", GapFinal}},
 			next: 4, end: EndAbandoned, endNext: ptr(4),
 		},
 		{
 			name: "an open source has open gaps, and its tail is unknown",
-			rows: []row{{stored: set(0, 7), reported: 10}},
+			row:  row{stored: set(0, 7), reported: 10},
 			gaps: []want{{7, 10, GapMissing, "", GapOpen}, {10, -1, GapTailUnknown, "", GapOpen}},
 			next: 10,
 		},
 		{
 			name: "a source that reported nothing has only an open unknown tail",
-			rows: []row{{}},
+			row:  row{},
 			gaps: []want{{0, -1, GapTailUnknown, "", GapOpen}},
 		},
 		{
 			name: "dropped seqs are dropped gaps with their reason, not missing",
-			rows: []row{{stored: set(0, 2, 8, 10), dropped: map[string]Set{"queue_full": set(2, 5), "refused": set(5, 8)}, reported: 10, end: EndClosed, endNext: 10}},
+			row:  row{stored: set(0, 2, 8, 10), dropped: map[string]Set{"queue_full": set(2, 5), "refused": set(5, 8)}, reported: 10, end: EndClosed, endNext: 10},
 			gaps: []want{{2, 5, GapDropped, "queue_full", GapFinal}, {5, 8, GapDropped, "refused", GapFinal}},
 			next: 10, end: EndClosed, endNext: ptr(10),
 		},
 		{
 			name: "a late delivery shrinks a dropped gap",
-			rows: []row{{stored: set(0, 3, 4, 5), dropped: map[string]Set{"queue_full": set(2, 5)}, reported: 5, end: EndClosed, endNext: 5}},
+			row:  row{stored: set(0, 3, 4, 5), dropped: map[string]Set{"queue_full": set(2, 5)}, reported: 5, end: EndClosed, endNext: 5},
 			gaps: []want{{3, 4, GapDropped, "queue_full", GapFinal}},
 			next: 5, end: EndClosed, endNext: ptr(5),
 		},
 		{
 			name: "a seq dropped for two reasons is named once, under the first reason",
-			rows: []row{{dropped: map[string]Set{"credential_expired": set(0, 3), "queue_full": set(1, 4)}, reported: 4, end: EndClosed, endNext: 4}},
+			row:  row{dropped: map[string]Set{"credential_expired": set(0, 3), "queue_full": set(1, 4)}, reported: 4, end: EndClosed, endNext: 4},
 			gaps: []want{{0, 3, GapDropped, "credential_expired", GapFinal}, {3, 4, GapDropped, "queue_full", GapFinal}},
 			next: 4, end: EndClosed, endNext: ptr(4),
 		},
 		{
-			name: "a rejected seq is accounted for",
-			rows: []row{{stored: set(0, 1, 2, 3), rejected: set(1, 2), reported: 3, end: EndClosed, endNext: 3}},
+			name: "a rejected seq is settled but is a gap, never coverage",
+			row:  row{stored: set(0, 1, 2, 3), rejected: set(1, 2), reported: 3, end: EndClosed, endNext: 3},
+			gaps: []want{{1, 2, GapRejected, "", GapFinal}},
 			next: 3, end: EndClosed, endNext: ptr(3),
 		},
 		{
-			name: "a row made only by a predecessor's drop record names the dropped range and an unknown tail",
-			rows: []row{{dropped: map[string]Set{"queue_full": set(5, 8)}}},
-			gaps: []want{{5, 8, GapDropped, "queue_full", GapOpen}, {8, -1, GapTailUnknown, "", GapOpen}},
-		},
-		{
-			name: "the rows of one source are unioned across participants",
-			rows: []row{
-				{stored: set(0, 4), reported: 4},
-				{participant: otherParticipant, stored: set(4, 9), reported: 9, end: EndClosed, endNext: 9},
-			},
-			next: 9, end: EndClosed, endNext: ptr(9),
-		},
-		{
-			name: "a closed row wins over an abandoned one",
-			rows: []row{
-				{stored: set(0, 3), reported: 3, end: EndAbandoned, endNext: 3},
-				{participant: otherParticipant, stored: set(3, 5), reported: 5, end: EndClosed, endNext: 5},
-			},
-			next: 5, end: EndClosed, endNext: ptr(5),
-		},
-		{
-			name: "an ended row makes the whole source's gaps final",
-			rows: []row{
-				{stored: set(0, 3), reported: 6},
-				{participant: otherParticipant, reported: 6, end: EndAbandoned, endNext: 6},
-			},
-			gaps: []want{{3, 6, GapMissing, "", GapFinal}, {6, -1, GapTailUnknown, "", GapFinal}},
-			next: 6, end: EndAbandoned, endNext: ptr(6),
+			name: "a dropped seq that was later rejected is named once, as rejected",
+			row:  row{stored: set(0, 1), rejected: set(1, 2), dropped: map[string]Set{"queue_full": set(1, 3)}, reported: 3},
+			gaps: []want{{1, 2, GapRejected, "", GapOpen}, {2, 3, GapDropped, "queue_full", GapOpen}, {3, -1, GapTailUnknown, "", GapOpen}},
+			next: 3,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			var rows []SourceRow
-			for _, r := range test.rows {
-				rows = append(rows, r.build(t))
-			}
-			gaps, mark := Gaps(rows)
+			gaps, mark := Gaps(test.row.build(t))
 			wanted := []EvidenceGap{}
 			for _, w := range test.gaps {
 				wanted = append(wanted, w.gap(t))
@@ -203,7 +173,7 @@ func encode(t *testing.T, value any) string {
 // exactly for a tail of unknown length.
 func TestGapsNeverInventAnExactTail(t *testing.T) {
 	for _, end := range []EndState{EndNone, EndAbandoned} {
-		gaps, _ := Gaps([]SourceRow{row{stored: set(0, 5), reported: 5, end: end, endNext: 5}.build(t)})
+		gaps, _ := Gaps(row{stored: set(0, 5), reported: 5, end: end, endNext: 5}.build(t))
 		tails := 0
 		for _, g := range gaps {
 			if g.Cause == GapTailUnknown {
@@ -222,17 +192,12 @@ func TestGapsNeverInventAnExactTail(t *testing.T) {
 }
 
 func TestGapsWatermarkAndEncoding(t *testing.T) {
-	const otherParticipant = "44444444-4444-4444-8444-444444444444"
-	rows := []SourceRow{
-		row{stored: set(0, 3), dropped: map[string]Set{"queue_full": set(3, 4)}, reported: 4}.build(t),
-		row{participant: otherParticipant, stored: set(4, 6), reported: 6, end: EndClosed, endNext: 6}.build(t),
-	}
-	gaps, mark := Gaps(rows)
+	gaps, mark := Gaps(row{stored: set(0, 3, 4, 6), dropped: map[string]Set{"queue_full": set(3, 4)}, reported: 6, end: EndClosed, endNext: 6}.build(t))
 	if len(gaps) != 1 || gaps[0].Cause != GapDropped {
 		t.Fatalf("gaps = %s", encode(t, gaps))
 	}
-	if len(mark.Participants) != 2 || len(mark.Episodes) != 1 {
-		t.Errorf("participants = %v, episodes = %v, want 2 and 1", mark.Participants, mark.Episodes)
+	if !reflect.DeepEqual(mark.Participants, []utilities.ID{identity(t).ParticipantID}) || !reflect.DeepEqual(mark.Episodes, []utilities.ID{identity(t).EpisodeID}) {
+		t.Errorf("participants = %v, episodes = %v, want the one owner", mark.Participants, mark.Episodes)
 	}
 	if !mark.FirstReceivedAt.Equal(received) || !mark.LastReceivedAt.Equal(received.Add(time.Minute)) {
 		t.Errorf("received = %v to %v", mark.FirstReceivedAt, mark.LastReceivedAt)
@@ -241,7 +206,7 @@ func TestGapsWatermarkAndEncoding(t *testing.T) {
 	if err := json.Unmarshal([]byte(encode(t, mark)), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"source_id", "tenant_id", "participants", "episodes", "next_seq", "end", "end_next_seq", "stored", "rejected", "dropped", "first_received_at", "last_received_at"} {
+	for _, name := range []string{"source_id", "tenant_id", "participants", "episodes", "next_seq", "end", "end_next_seq", "stored", "rejected", "dropped", "missing", "first_received_at", "last_received_at"} {
 		if _, found := decoded[name]; !found {
 			t.Errorf("watermark has no %q: %v", name, decoded)
 		}
@@ -249,7 +214,7 @@ func TestGapsWatermarkAndEncoding(t *testing.T) {
 	if decoded["end"] != "closed" || decoded["next_seq"] != float64(6) {
 		t.Errorf("watermark = %v, want end closed at next_seq 6", decoded)
 	}
-	open, _ := Gaps([]SourceRow{row{reported: 2}.build(t)})
+	open, _ := Gaps(row{reported: 2}.build(t))
 	var tail map[string]any
 	if err := json.Unmarshal([]byte(encode(t, open[len(open)-1])), &tail); err != nil {
 		t.Fatal(err)
@@ -262,9 +227,9 @@ func TestGapsWatermarkAndEncoding(t *testing.T) {
 	}
 }
 
-func TestGapsOfNoRows(t *testing.T) {
-	gaps, mark := Gaps(nil)
-	if gaps == nil || len(gaps) != 0 || mark.NextSeq != 0 || mark.End != nil {
-		t.Fatalf("gaps = %v, mark = %+v, want none", gaps, mark)
+func TestGapsNameMissingSeqsInTheWatermark(t *testing.T) {
+	_, mark := Gaps(row{stored: set(0, 2, 5, 6), rejected: set(2, 3), reported: 8}.build(t))
+	if !reflect.DeepEqual(mark.Missing, set(3, 5, 6, 8)) {
+		t.Fatalf("missing = %v, want [3,5) and [6,8)", mark.Missing)
 	}
 }

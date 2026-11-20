@@ -11,61 +11,107 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const ensureTelemetrySource = `-- name: EnsureTelemetrySource :exec
-insert into telemetry_sources (tenant_id, source_id, participant_id, episode_id, first_received_at, last_received_at)
-values ($1, $2, $3, $4, $5, $5)
-on conflict (tenant_id, source_id, participant_id) do nothing
+const countTelemetryParticipantSources = `-- name: CountTelemetryParticipantSources :one
+select count(*) from telemetry_sources where tenant_id = $1 and participant_id = $2
 `
 
-type EnsureTelemetrySourceParams struct {
+type CountTelemetryParticipantSourcesParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+}
+
+func (q *Queries) CountTelemetryParticipantSources(ctx context.Context, arg CountTelemetryParticipantSourcesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTelemetryParticipantSources, arg.TenantID, arg.ParticipantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getTelemetrySource = `-- name: GetTelemetrySource :many
+select tenant_id, source_id, participant_id, episode_id, ranges, reported_next_seq, end_state, end_next_seq, first_received_at, last_received_at
+from telemetry_sources
+where tenant_id = $1 and source_id = $2
+`
+
+type GetTelemetrySourceParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	SourceID pgtype.UUID `json:"source_id"`
+}
+
+func (q *Queries) GetTelemetrySource(ctx context.Context, arg GetTelemetrySourceParams) ([]TelemetrySource, error) {
+	rows, err := q.db.Query(ctx, getTelemetrySource, arg.TenantID, arg.SourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TelemetrySource
+	for rows.Next() {
+		var i TelemetrySource
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.SourceID,
+			&i.ParticipantID,
+			&i.EpisodeID,
+			&i.Ranges,
+			&i.ReportedNextSeq,
+			&i.EndState,
+			&i.EndNextSeq,
+			&i.FirstReceivedAt,
+			&i.LastReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertTelemetrySource = `-- name: InsertTelemetrySource :execrows
+insert into telemetry_sources (tenant_id, source_id, participant_id, episode_id, ranges, reported_next_seq, end_state, end_next_seq, first_received_at, last_received_at)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+on conflict (tenant_id, source_id) do nothing
+`
+
+type InsertTelemetrySourceParams struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	SourceID        pgtype.UUID        `json:"source_id"`
 	ParticipantID   pgtype.UUID        `json:"participant_id"`
 	EpisodeID       pgtype.UUID        `json:"episode_id"`
+	Ranges          []byte             `json:"ranges"`
+	ReportedNextSeq int64              `json:"reported_next_seq"`
+	EndState        pgtype.Text        `json:"end_state"`
+	EndNextSeq      pgtype.Int8        `json:"end_next_seq"`
 	FirstReceivedAt pgtype.Timestamptz `json:"first_received_at"`
+	LastReceivedAt  pgtype.Timestamptz `json:"last_received_at"`
 }
 
-func (q *Queries) EnsureTelemetrySource(ctx context.Context, arg EnsureTelemetrySourceParams) error {
-	_, err := q.db.Exec(ctx, ensureTelemetrySource,
+func (q *Queries) InsertTelemetrySource(ctx context.Context, arg InsertTelemetrySourceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertTelemetrySource,
 		arg.TenantID,
 		arg.SourceID,
 		arg.ParticipantID,
 		arg.EpisodeID,
+		arg.Ranges,
+		arg.ReportedNextSeq,
+		arg.EndState,
+		arg.EndNextSeq,
 		arg.FirstReceivedAt,
+		arg.LastReceivedAt,
 	)
-	return err
-}
-
-const ensureTelemetrySourceBinding = `-- name: EnsureTelemetrySourceBinding :exec
-insert into telemetry_source_bindings (tenant_id, source_id, participant_id, identity_id, bound_at)
-values ($1, $2, $3, $4, $5)
-on conflict (tenant_id, source_id) do nothing
-`
-
-type EnsureTelemetrySourceBindingParams struct {
-	TenantID      pgtype.UUID        `json:"tenant_id"`
-	SourceID      pgtype.UUID        `json:"source_id"`
-	ParticipantID pgtype.UUID        `json:"participant_id"`
-	IdentityID    pgtype.UUID        `json:"identity_id"`
-	BoundAt       pgtype.Timestamptz `json:"bound_at"`
-}
-
-func (q *Queries) EnsureTelemetrySourceBinding(ctx context.Context, arg EnsureTelemetrySourceBindingParams) error {
-	_, err := q.db.Exec(ctx, ensureTelemetrySourceBinding,
-		arg.TenantID,
-		arg.SourceID,
-		arg.ParticipantID,
-		arg.IdentityID,
-		arg.BoundAt,
-	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listTelemetryEpisodeRows = `-- name: ListTelemetryEpisodeRows :many
 select tenant_id, source_id, participant_id, episode_id, ranges, reported_next_seq, end_state, end_next_seq, first_received_at, last_received_at
 from telemetry_sources
 where tenant_id = $1 and episode_id = $2
-order by source_id, participant_id
+order by source_id
 `
 
 type ListTelemetryEpisodeRowsParams struct {
@@ -104,37 +150,33 @@ func (q *Queries) ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetr
 	return items, nil
 }
 
-const listTelemetrySourceBindings = `-- name: ListTelemetrySourceBindings :many
-select tenant_id, source_id, participant_id, identity_id, bound_at
-from telemetry_source_bindings
-where tenant_id = $1 and source_id = any($2::uuid[])
-order by source_id
+const lockTelemetryParticipant = `-- name: LockTelemetryParticipant :many
+select id from participants
+where tenant_id = $1 and episode_id = $2 and id = $3
+for no key update
 `
 
-type ListTelemetrySourceBindingsParams struct {
-	TenantID  pgtype.UUID   `json:"tenant_id"`
-	SourceIds []pgtype.UUID `json:"source_ids"`
+type LockTelemetryParticipantParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	ID        pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) ListTelemetrySourceBindings(ctx context.Context, arg ListTelemetrySourceBindingsParams) ([]TelemetrySourceBinding, error) {
-	rows, err := q.db.Query(ctx, listTelemetrySourceBindings, arg.TenantID, arg.SourceIds)
+// The no key update lock serializes the source creations of one participant, so two concurrent
+// first batches cannot both pass the source budget.
+func (q *Queries) LockTelemetryParticipant(ctx context.Context, arg LockTelemetryParticipantParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockTelemetryParticipant, arg.TenantID, arg.EpisodeID, arg.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TelemetrySourceBinding
+	var items []pgtype.UUID
 	for rows.Next() {
-		var i TelemetrySourceBinding
-		if err := rows.Scan(
-			&i.TenantID,
-			&i.SourceID,
-			&i.ParticipantID,
-			&i.IdentityID,
-			&i.BoundAt,
-		); err != nil {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -142,20 +184,20 @@ func (q *Queries) ListTelemetrySourceBindings(ctx context.Context, arg ListTelem
 	return items, nil
 }
 
-const listTelemetrySourceRows = `-- name: ListTelemetrySourceRows :many
+const lockTelemetrySource = `-- name: LockTelemetrySource :many
 select tenant_id, source_id, participant_id, episode_id, ranges, reported_next_seq, end_state, end_next_seq, first_received_at, last_received_at
 from telemetry_sources
 where tenant_id = $1 and source_id = $2
-order by participant_id
+for update
 `
 
-type ListTelemetrySourceRowsParams struct {
+type LockTelemetrySourceParams struct {
 	TenantID pgtype.UUID `json:"tenant_id"`
 	SourceID pgtype.UUID `json:"source_id"`
 }
 
-func (q *Queries) ListTelemetrySourceRows(ctx context.Context, arg ListTelemetrySourceRowsParams) ([]TelemetrySource, error) {
-	rows, err := q.db.Query(ctx, listTelemetrySourceRows, arg.TenantID, arg.SourceID)
+func (q *Queries) LockTelemetrySource(ctx context.Context, arg LockTelemetrySourceParams) ([]TelemetrySource, error) {
+	rows, err := q.db.Query(ctx, lockTelemetrySource, arg.TenantID, arg.SourceID)
 	if err != nil {
 		return nil, err
 	}
@@ -185,77 +227,61 @@ func (q *Queries) ListTelemetrySourceRows(ctx context.Context, arg ListTelemetry
 	return items, nil
 }
 
-const lockTelemetrySources = `-- name: LockTelemetrySources :many
-select tenant_id, source_id, participant_id, episode_id, ranges, reported_next_seq, end_state, end_next_seq, first_received_at, last_received_at
-from telemetry_sources
-where tenant_id = $1 and participant_id = $2 and source_id = any($3::uuid[])
-order by source_id
-for update
+const lockTelemetrySourceTable = `-- name: LockTelemetrySourceTable :exec
+lock table telemetry_sources in row exclusive mode
 `
 
-type LockTelemetrySourcesParams struct {
-	TenantID      pgtype.UUID   `json:"tenant_id"`
-	ParticipantID pgtype.UUID   `json:"participant_id"`
-	SourceIds     []pgtype.UUID `json:"source_ids"`
+// Row exclusive is the lock every write takes anyway. Taking it first orders the admission against
+// a tenant purge, which holds share row exclusive on every table: the purge either waits for this
+// transaction, then deletes what it wrote, or has committed before the participant check below.
+func (q *Queries) LockTelemetrySourceTable(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockTelemetrySourceTable)
+	return err
 }
 
-func (q *Queries) LockTelemetrySources(ctx context.Context, arg LockTelemetrySourcesParams) ([]TelemetrySource, error) {
-	rows, err := q.db.Query(ctx, lockTelemetrySources, arg.TenantID, arg.ParticipantID, arg.SourceIds)
+const telemetryParticipantLive = `-- name: TelemetryParticipantLive :many
+select id from participants
+where tenant_id = $1 and episode_id = $2 and id = $3
+for key share
+`
+
+type TelemetryParticipantLiveParams struct {
+	TenantID  pgtype.UUID `json:"tenant_id"`
+	EpisodeID pgtype.UUID `json:"episode_id"`
+	ID        pgtype.UUID `json:"id"`
+}
+
+// The participant row implies a live tenant (participants.tenant_id references tenants). The key
+// share lock keeps the row from being deleted until the admission commits.
+func (q *Queries) TelemetryParticipantLive(ctx context.Context, arg TelemetryParticipantLiveParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, telemetryParticipantLive, arg.TenantID, arg.EpisodeID, arg.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []TelemetrySource
+	var items []pgtype.UUID
 	for rows.Next() {
-		var i TelemetrySource
-		if err := rows.Scan(
-			&i.TenantID,
-			&i.SourceID,
-			&i.ParticipantID,
-			&i.EpisodeID,
-			&i.Ranges,
-			&i.ReportedNextSeq,
-			&i.EndState,
-			&i.EndNextSeq,
-			&i.FirstReceivedAt,
-			&i.LastReceivedAt,
-		); err != nil {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return items, nil
-}
-
-const telemetryParticipantIdentity = `-- name: TelemetryParticipantIdentity :one
-select identity_id from participants where tenant_id = $1 and id = $2
-`
-
-type TelemetryParticipantIdentityParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) TelemetryParticipantIdentity(ctx context.Context, arg TelemetryParticipantIdentityParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, telemetryParticipantIdentity, arg.TenantID, arg.ID)
-	var identity_id pgtype.UUID
-	err := row.Scan(&identity_id)
-	return identity_id, err
 }
 
 const updateTelemetrySource = `-- name: UpdateTelemetrySource :exec
 update telemetry_sources
-set ranges = $4, reported_next_seq = $5, end_state = $6, end_next_seq = $7, last_received_at = $8
-where tenant_id = $1 and source_id = $2 and participant_id = $3
+set ranges = $3, reported_next_seq = $4, end_state = $5, end_next_seq = $6, last_received_at = $7
+where tenant_id = $1 and source_id = $2
 `
 
 type UpdateTelemetrySourceParams struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	SourceID        pgtype.UUID        `json:"source_id"`
-	ParticipantID   pgtype.UUID        `json:"participant_id"`
 	Ranges          []byte             `json:"ranges"`
 	ReportedNextSeq int64              `json:"reported_next_seq"`
 	EndState        pgtype.Text        `json:"end_state"`
@@ -267,7 +293,6 @@ func (q *Queries) UpdateTelemetrySource(ctx context.Context, arg UpdateTelemetry
 	_, err := q.db.Exec(ctx, updateTelemetrySource,
 		arg.TenantID,
 		arg.SourceID,
-		arg.ParticipantID,
 		arg.Ranges,
 		arg.ReportedNextSeq,
 		arg.EndState,

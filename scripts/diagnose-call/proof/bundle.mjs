@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * The ProofBundle: the sealed set of observations and watermarks one verdict is built from. A bundle is opened on a profile that was
  * chosen before any evidence was read, filled, then sealed: sealing binds every observation to a subject of the profile, freezes the
@@ -7,32 +8,56 @@
 import { createHash } from "node:crypto";
 import { observation as checkObservation, watermark as checkWatermark } from "./evidence.mjs";
 import { factDef } from "./facts.mjs";
-import { ITEM, deepFreeze, seatKey } from "./profile.mjs";
+import { ITEM, deepFreeze, seatKey, sessionKey } from "./profile.mjs";
 
 /** @typedef {import("./evidence.mjs").Observation} Observation */
 /** @typedef {import("./evidence.mjs").Watermark} Watermark */
 /** @typedef {import("./profile.mjs").Profile} Profile */
+/** @typedef {import("./profile.mjs").Declaration} Declaration */
 
 /**
- * @typedef {Readonly<Observation> & { readonly bound: string }} BoundObservation `bound` is the subject key: `*` or `pt:<id>`.
+ * @typedef {Readonly<Observation> & { readonly bound: string }} BoundObservation `bound` is the subject key: `*`, `pt:<id>` or `cs:<id>`.
  * @typedef {{ evidence: string, fact: string, why: string }} Unbound an observation whose identity does not match the authority
  * @typedef {{
  *   profile: Profile,
  *   observations: readonly BoundObservation[],
  *   unbound: readonly Unbound[],
- *   watermarks: ReadonlyMap<string, Readonly<Watermark>>,
+ *   watermarks: readonly Readonly<Watermark>[],
  *   digest: string,
  *   asof_ms: number,
  * }} SealedBundle
+ * Everything reachable from a sealed bundle is frozen, and `watermarks` is a frozen list in key order: a Map would stay writable
+ * through `set` after `Object.freeze`, so a sealed bundle could gain evidence its digest never saw. `watermarkOf` looks one up.
  */
 
-const SEALED = new WeakSet();
+/** Each sealed bundle's watermarks by key, kept outside the bundle so nothing reachable from it can change. */
+const SEALED = new WeakMap();
 
 /** @param {unknown} bundle @returns {bundle is SealedBundle} */
 export const isSealed = (bundle) => typeof bundle === "object" && bundle !== null && SEALED.has(bundle);
 
 /** @param {string} source @param {string} subject */
 export const watermarkKey = (source, subject) => `${source}|${subject}`;
+
+/**
+ * The watermark a sealed bundle holds for one source and subject.
+ * @param {SealedBundle} bundle
+ * @param {string} source
+ * @param {string} subject
+ * @returns {Readonly<Watermark> | undefined}
+ */
+export function watermarkOf(bundle, source, subject) {
+  const index = SEALED.get(bundle);
+  if (index === undefined) throw new TypeError("watermarkOf needs a sealed ProofBundle");
+  return index.get(watermarkKey(source, subject));
+}
+
+/**
+ * An observation is one row's claim about one fact, so a row that witnesses two facts is two observations under one event id. Two
+ * observations are duplicates only when they share both.
+ * @param {Readonly<Observation>} o
+ */
+const observationKey = (o) => `${o.id}|${o.fact}`;
 
 /**
  * @param {Profile} profile
@@ -76,70 +101,113 @@ export function openBundle(profile, { asof_ms }) {
  * @returns {SealedBundle}
  */
 function sealBundle(profile, raw, rawWatermarks, asof_ms) {
-  /** @type {Map<string, Readonly<Observation>>} */
-  const byId = new Map();
-  /** @type {Unbound[]} */
-  const unbound = [];
-  for (const o of [...raw].sort(byKey((candidate) => candidate.id))) {
-    const seen = byId.get(o.id);
-    if (seen === undefined) byId.set(o.id, o);
-    else if (canonical(seen) !== canonical(o)) unbound.push({ evidence: o.id, fact: o.fact, why: "two different rows share this event id" });
-  }
+  const { kept, unbound } = deduplicate(raw);
   /** @type {BoundObservation[]} */
   const observations = [];
-  for (const o of byId.values()) {
-    if (unbound.some((entry) => entry.evidence === o.id)) continue;
-    const binding = bind(profile, o);
+  for (const o of kept) {
+    const binding = bind(profile.declaration, o);
     if ("why" in binding) unbound.push({ evidence: o.id, fact: o.fact, why: binding.why });
     else observations.push(Object.freeze({ ...o, bound: binding.key }));
   }
-  /** @type {Map<string, Readonly<Watermark>>} */
-  const watermarks = new Map();
-  for (const w of rawWatermarks) {
-    const key = watermarkKey(w.source, w.subject);
-    if (watermarks.has(key)) throw new TypeError(`two watermarks for ${key}: fold a source's watermarks into one before adding it`);
-    watermarks.set(key, w);
-  }
-  unbound.sort(byKey((entry) => entry.evidence));
+  const index = indexWatermarks(profile.declaration, rawWatermarks);
+  const watermarks = [...index.keys()].sort().map((key) => /** @type {Readonly<Watermark>} */ (index.get(key)));
+  unbound.sort(byKey((entry) => `${entry.evidence}|${entry.fact}`));
   const digest = createHash("sha256")
-    .update(canonical({ item: [profile.declaration.kind, profile.declaration.id], observations: [...byId.values()], watermarks: [...watermarks.keys()].sort().map((key) => watermarks.get(key)) }))
+    .update(canonical({ item: [profile.declaration.kind, profile.declaration.id], asof_ms, observations: kept, watermarks }))
     .digest("hex");
-  const bundle = { profile, observations: deepFreeze(observations), unbound: deepFreeze(unbound), watermarks, digest, asof_ms };
-  Object.freeze(bundle);
-  SEALED.add(bundle);
+  const bundle = deepFreeze({ profile, observations, unbound, watermarks, digest, asof_ms });
+  SEALED.set(bundle, index);
   return bundle;
 }
 
 /**
- * Binds an observation to a subject of the profile by the authority's identity: the Episode, the seat, its admission generations and
- * its media connections. A row that names a seat the authority does not know, a generation the seat never had, or another seat's
- * connection is unbound: it counts for nobody, and the coverage says so. So is a row of a seat fact that names no seat at all.
- * @param {Profile} profile
+ * Keeps one observation per (event id, fact). Two that share both but differ are two rows claiming one id, so neither is kept.
+ * @param {readonly Readonly<Observation>[]} raw
+ */
+function deduplicate(raw) {
+  /** @type {Map<string, Readonly<Observation>>} */
+  const kept = new Map();
+  /** @type {Set<string>} */
+  const conflicting = new Set();
+  /** @type {Unbound[]} */
+  const unbound = [];
+  for (const o of [...raw].sort(byKey(observationKey))) {
+    const key = observationKey(o);
+    const seen = kept.get(key);
+    if (seen === undefined) kept.set(key, o);
+    else if (canonical(seen) !== canonical(o)) {
+      conflicting.add(key);
+      unbound.push({ evidence: o.id, fact: o.fact, why: "two different rows share this event id" });
+    }
+  }
+  return { kept: [...kept.values()].filter((o) => !conflicting.has(observationKey(o))), unbound };
+}
+
+/**
+ * One watermark per source and subject. A client session key belongs to an attempt, and only to the attempt it names.
+ * @param {Readonly<Declaration>} declaration
+ * @param {readonly Readonly<Watermark>[]} rawWatermarks
+ */
+function indexWatermarks(declaration, rawWatermarks) {
+  /** @type {Map<string, Readonly<Watermark>>} */
+  const index = new Map();
+  for (const w of rawWatermarks) {
+    const key = watermarkKey(w.source, w.subject);
+    if (index.has(key)) throw new TypeError(`two watermarks for ${key}: fold a source's watermarks into one before adding it`);
+    if (w.subject.startsWith("cs:") && w.subject !== sessionKey(declaration.id)) throw new TypeError(`watermark ${key} names another attempt: a client session key belongs to the attempt it names`);
+    if (w.subject.startsWith("cs:") && declaration.kind !== "attempt") throw new TypeError(`watermark ${key}: a client session key belongs to an attempt, not a ${declaration.kind}`);
+    index.set(key, w);
+  }
+  return index;
+}
+
+/** The subject field that names each non-Episode item, and how a row naming another one reads. */
+const ITEM_FIELDS = Object.freeze({
+  attempt: { field: /** @type {const} */ ("attempt"), other: "another attempt" },
+  job: { field: /** @type {const} */ ("job"), other: "another job" },
+  space: { field: /** @type {const} */ ("space"), other: "another Space" },
+  tenant: { field: /** @type {const} */ ("tenant"), other: "another Tenant" },
+  platform: { field: /** @type {const} */ ("environment"), other: "another environment" },
+});
+
+/**
+ * Binds an observation to a subject of the profile by the authority's identity: the tenant first, then the item, and on an Episode
+ * the seat, its admission generations and its media connections. A row of another tenant, or of none, binds to nothing, however its
+ * other ids match, because ids are only unique inside a tenant. A row that names a seat the authority does not know, a generation
+ * the seat never had, or another seat's connection is unbound: it counts for nobody, and the coverage says so. So is a row of a seat
+ * fact that names no seat at all.
+ * @param {Readonly<Declaration>} declaration
  * @param {Readonly<Observation>} o
  * @returns {{ key: string } | { why: string }}
  */
-function bind(profile, o) {
-  const declaration = profile.declaration;
+function bind(declaration, o) {
   const subject = o.subject;
-  if (declaration.kind === "attempt") return subject.attempt === declaration.id ? { key: ITEM } : { why: "names another attempt" };
-  if (declaration.kind === "job") return subject.job === declaration.id ? { key: ITEM } : { why: "names another job" };
-  if (declaration.kind === "space") return subject.space === declaration.id ? { key: ITEM } : { why: "names another Space" };
-  if (declaration.kind === "tenant") return subject.tenant === declaration.id ? { key: ITEM } : { why: "names another Tenant" };
-  if (declaration.kind === "platform") return subject.environment === declaration.id ? { key: ITEM } : { why: "names another environment" };
-  if (subject.episode !== declaration.id) return { why: subject.episode === undefined ? "names no Episode" : "names another Episode" };
-  if (subject.participant !== undefined) {
-    const seat = declaration.seats.find((candidate) => candidate.participant === subject.participant);
-    if (!seat) return { why: "names a Participant the Episode has no seat for" };
-    if (subject.generation !== undefined && !seat.generations.includes(subject.generation)) return { why: `names generation ${subject.generation}, which the seat never had` };
-    if (subject.connection !== undefined && !seat.connections.includes(subject.connection)) return { why: "names a connection that belongs to another seat" };
-    return { key: seatKey(seat.participant) };
+  if (declaration.tenant !== null && subject.tenant !== declaration.tenant) return { why: subject.tenant === undefined ? "names no Tenant" : "names another Tenant" };
+  if (declaration.kind !== "episode") {
+    const { field, other } = ITEM_FIELDS[declaration.kind];
+    return subject[field] === declaration.id ? { key: ITEM } : { why: `names ${other}` };
   }
+  if (subject.episode !== declaration.id) return { why: subject.episode === undefined ? "names no Episode" : "names another Episode" };
+  if (subject.participant !== undefined) return bindSeat(declaration, subject);
   if (subject.connection !== undefined) {
     const seats = declaration.seats.filter((candidate) => candidate.connections.includes(subject.connection ?? ""));
     return seats.length === 1 ? { key: seatKey(seats[0].participant) } : { why: "names a connection no seat holds" };
   }
   if (factDef(o.fact).per === "seat") return { why: "names no Participant or connection, and this fact is about one seat" };
   return { key: ITEM };
+}
+
+/**
+ * @param {Readonly<import("./profile.mjs").EpisodeDeclaration>} declaration
+ * @param {Readonly<import("./evidence.mjs").Subject>} subject
+ * @returns {{ key: string } | { why: string }}
+ */
+function bindSeat(declaration, subject) {
+  const seat = declaration.seats.find((candidate) => candidate.participant === subject.participant);
+  if (!seat) return { why: "names a Participant the Episode has no seat for" };
+  if (subject.generation !== undefined && !seat.generations.includes(subject.generation)) return { why: `names generation ${subject.generation}, which the seat never had` };
+  if (subject.connection !== undefined && !seat.connections.includes(subject.connection)) return { why: "names a connection that belongs to another seat" };
+  return { key: seatKey(seat.participant) };
 }
 
 /**

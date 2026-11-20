@@ -78,6 +78,7 @@ type Querier interface {
 	// A gap bundle holds no media: a capture whose committed bundles are all gaps recorded nothing.
 	CountCommittedCaptureBundles(ctx context.Context, jobID pgtype.UUID) (CountCommittedCaptureBundlesRow, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
+	CountTelemetryParticipantSources(ctx context.Context, arg CountTelemetryParticipantSourcesParams) (int64, error)
 	CountTenantLiveEpisodes(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountWebhookEndpoints(ctx context.Context, tenantID pgtype.UUID) (int32, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (CreateAPIKeyRow, error)
@@ -128,8 +129,6 @@ type Querier interface {
 	// existing row is never reactivated or rewritten here. These rows live apart from
 	// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
-	EnsureTelemetrySource(ctx context.Context, arg EnsureTelemetrySourceParams) error
-	EnsureTelemetrySourceBinding(ctx context.Context, arg EnsureTelemetrySourceBindingParams) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
 	// admission use that same lock, so an earlier reconnect cancels the old window.
@@ -229,6 +228,7 @@ type Querier interface {
 	GetSpacePublicInviteByCode(ctx context.Context, inviteCode string) (SpacePublicInvite, error)
 	GetSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	GetSyncTokenSubject(ctx context.Context, arg GetSyncTokenSubjectParams) (GetSyncTokenSubjectRow, error)
+	GetTelemetrySource(ctx context.Context, arg GetTelemetrySourceParams) ([]TelemetrySource, error)
 	GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, error)
 	GetTenantAPIKey(ctx context.Context, arg GetTenantAPIKeyParams) (GetTenantAPIKeyRow, error)
 	GetTenantCORSAllowedOrigins(ctx context.Context, id pgtype.UUID) ([]string, error)
@@ -266,6 +266,7 @@ type Querier interface {
 	InsertRecordingPresentationBaseline(ctx context.Context, arg InsertRecordingPresentationBaselineParams) (RecordingPresentationBaseline, error)
 	InsertRecordingPresentationSource(ctx context.Context, arg InsertRecordingPresentationSourceParams) (RecordingPresentationSource, error)
 	InsertRecordingRenderInput(ctx context.Context, arg InsertRecordingRenderInputParams) (RecordingRenderInput, error)
+	InsertTelemetrySource(ctx context.Context, arg InsertTelemetrySourceParams) (int64, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (WebhookEndpoint, error)
 	InsertWebhookEndpointRevision(ctx context.Context, arg InsertWebhookEndpointRevisionParams) (WebhookEndpointRevision, error)
@@ -307,8 +308,6 @@ type Querier interface {
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetryEpisodeRowsParams) ([]TelemetrySource, error)
-	ListTelemetrySourceBindings(ctx context.Context, arg ListTelemetrySourceBindingsParams) ([]TelemetrySourceBinding, error)
-	ListTelemetrySourceRows(ctx context.Context, arg ListTelemetrySourceRowsParams) ([]TelemetrySource, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
 	ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error)
@@ -366,7 +365,14 @@ type Querier interface {
 	LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error)
 	LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
-	LockTelemetrySources(ctx context.Context, arg LockTelemetrySourcesParams) ([]TelemetrySource, error)
+	// The no key update lock serializes the source creations of one participant, so two concurrent
+	// first batches cannot both pass the source budget.
+	LockTelemetryParticipant(ctx context.Context, arg LockTelemetryParticipantParams) ([]pgtype.UUID, error)
+	LockTelemetrySource(ctx context.Context, arg LockTelemetrySourceParams) ([]TelemetrySource, error)
+	// Row exclusive is the lock every write takes anyway. Taking it first orders the admission against
+	// a tenant purge, which holds share row exclusive on every table: the purge either waits for this
+	// transaction, then deletes what it wrote, or has committed before the participant check below.
+	LockTelemetrySourceTable(ctx context.Context) error
 	LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaLimits(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
@@ -451,7 +457,9 @@ type Querier interface {
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
-	TelemetryParticipantIdentity(ctx context.Context, arg TelemetryParticipantIdentityParams) (pgtype.UUID, error)
+	// The participant row implies a live tenant (participants.tenant_id references tenants). The key
+	// share lock keeps the row from being deleted until the admission commits.
+	TelemetryParticipantLive(ctx context.Context, arg TelemetryParticipantLiveParams) ([]pgtype.UUID, error)
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
 	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)

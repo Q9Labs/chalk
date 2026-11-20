@@ -26,7 +26,7 @@ describe("recording", () => {
       { seq: 0, elapsed_ms: 0 },
       { seq: 1, elapsed_ms: 250 },
     ]);
-    expect(JSON.parse(test.requests[0]?.send.body ?? "{}")).toMatchObject({ version: 2, source_id: test.outbox.sessionId, next_seq: 2 });
+    expect(JSON.parse(test.requests[0]?.send.body ?? "{}")).toMatchObject({ version: 2, source_id: test.outbox.sourceId, next_seq: 2 });
   });
 
   it("sends started events at once, routine events within 2 seconds and stats windows within 30", async () => {
@@ -249,8 +249,8 @@ describe("the journal", () => {
     test.state.online = false;
     const count = 700;
     for (let index = 0; index < count; index++) test.outbox.record({ type: "connection_failed", code: "media_start_failed", detail: "x".repeat(200) });
-    const text = storage.getItem(`chalk.telemetry.${test.outbox.sessionId}`) ?? "";
+    const text = storage.getItem(`chalk.telemetry.${test.outbox.sourceId}`) ?? "";
     expect(text.length).toBeGreaterThan(128 * 1024);
-    expect(readJournalText(text)?.records.map((record) => record.event.seq)).toEqual(Array.from({ length: count }, (_, index) => index));
+    expect(readJournalText(text)?.records.map((event) => event.seq)).toEqual(Array.from({ length: count }, (_, index) => index));
   });
 });

@@ -1,4 +1,4 @@
-space spc_5bac 2026-11-18 outcome=unknown coverage=unchecked checked=0/0 asof=2026-11-19T01:00Z rules=d7d52b11
+space spc_5bac 2026-11-18 outcome=unknown coverage=unchecked checked=0/0 asof=2026-11-19T01:00Z rules=b35345f2
 anchor=2026-11-18T00:00Z local=05:00+05:00 tz=Asia/Karachi
 gap: unchecked: no verdict yet
-next: diagnose check spc_5bac
+next: diagnose check spc_5bac --fixture nov18

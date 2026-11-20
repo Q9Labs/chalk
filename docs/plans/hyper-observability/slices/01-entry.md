@@ -12,24 +12,24 @@ The slice starts at the first byte of a Space page, an embed host page or a dash
 - **Embed:** `sdks/typescript/react/src/components/chalk/Chalk.tsx`; its in-repo host is `apps/web/src/components/dashboard/OwnerCall.tsx` (read only).
 - **API:** `apps/api/internal/publicinvites/service.go`, `apps/api/internal/publicinvites/admission_telemetry.go`, `apps/api/internal/httpapi/public_invites.go`, `apps/api/internal/adapters/postgres/public_episode_admission.go`.
 - **Host and dashboard:** `sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx`, and `apps/web/src/components/dashboard/AdmissionKnocks.tsx` and `apps/web/src/components/dashboard/CallPage.tsx`, `apps/web/server/application.ts` and `apps/web/server/session.ts`.
-- **Checks:** the one path every check takes (`docs/diagnose.md`, "Add a check"). The facts, symptoms, reason codes and new events go in `observability/registry/areas/entry.json`, the area file that owns this slice's prefixes; each symptom gets one rule at `observability/rules/<code>.mjs`, `observability/fixtures/<code>/positive.json` and `observability/fixtures/<code>/healthy.json`, and the section 6 scenario as its `fault_scenario`, and then comes off `observability/registry/coverage-allowlist.json`, so `node scripts/gates/obs-coverage.mjs` judges it. Each rule keeps the thresholds it uses as named constants in its own file, because the rules hash covers only the rule file and its registry entry: `boot_app_ms 20000`, `chunk_followup_ms 10000`, `call_ui_ms 20000`, `never_ran_min_visits 20`, `never_ran_window_ms 900000`, `embed_auth_ms 60000`, `embed_window_ms 300000`, `knock_shown_ms 10000`, `knock_seen_ms 5000`, `host_visible_ms 30000`, `poll_before_completed_ms 10000`, `unreadable_min_visitors 3`, `unreadable_window_ms 900000`. Each fact the rules read goes into the `emits` of the watermark that delivers it in `scripts/diagnose-call/fixtures/nov18.mjs`. The e2e journeys go in a `tests/entry.e2e.ts (new)`, added to the `tests` list in `e2e.config.ts`.
+- **Checks:** the one path every check takes (`docs/diagnose.md`, "Add a check"). The facts, symptoms, reason codes and new events go in `observability/registry/areas/entry.json`, the area file that owns this slice's prefixes; each symptom gets one rule at `observability/rules/<code>.mjs`, `observability/fixtures/<code>/positive.json` and `observability/fixtures/<code>/healthy.json`, and the section 6 scenario as its `fault_scenario`, and then comes off `observability/registry/coverage-allowlist.json`, so `node scripts/gates/obs-coverage.mjs` judges it. Each rule keeps the thresholds it uses as named constants in its own file, because the rules hash covers only the rule file and its registry entry: `boot_app_ms 20000`, `chunk_followup_ms 10000`, `call_ui_ms 20000`, `never_ran_min_visits 20`, `never_ran_window_ms 900000`, `embed_auth_ms 60000`, `embed_window_ms 300000`, `knock_shown_ms 10000`, `knock_seen_ms 5000`, `host_visible_ms 30000`, `poll_before_completed_ms 10000`, `unreadable_min_visitors 3`, `unreadable_window_ms 900000`. The e2e journeys go in a `tests/entry.e2e.ts (new)`, added to the `tests` list in `e2e.config.ts`.
 
 Pre-admission and dashboard client events go through C3's credential-free first-party path, written here as `ENTRY_PATH`, with `sendBeacon` and a `fetch` keepalive fallback. They can't use the SDK outbox, which waits for a credential that a pre-admission page never gets (`sdks/typescript/client/src/telemetry/outbox.ts:196-200`). Native mobile entry gets the api and db rules only; its client-only checks print a gap (`no native entry client`), and the React Native frame is out of scope.
 
 ## 2. Symptom catalogue
 
-| code | meaning | item | who is affected | severity |
-|---|---|---|---|---|
-| `boot.never_ran` | Space pages were served to browsers, but no script ran in any of them | `platform` | every visitor of the route in the window | high |
-| `boot.app_failed` | the beacon ran but the app never showed its first screen, a code chunk failed after the one allowed reload, or a page threw during render before the call UI mounted (the entrance or prejoin page, caught by the root route) | `attempt` | the visitor (`cs_`, also once admitted) | high |
-| `embed.blocked` | the embed got access grants, but nothing sent under them reached Chalk | `tenant` | Participant in a tenant app or a Dashboard Account's own call (`pt_`) | high |
-| `invite.refused` | the API refused an invite for a reason its own rows contradict | `attempt` | Guest (`cs_`, `spc_`) | high |
-| `admission.unresolved` | a join attempt never got an admission decision, so the visitor waited on a screen that never resolved | `attempt` | the visitor (`cs_`) | high |
-| `admission.unanswered` | a knock expired while a host was positioned but never saw it, or a host's answer never committed | `episode`, per seat | Guest (`pt_` from `sync_admission_requests.participant_id`) | high |
-| `admission.not_collected` | the host approved, but the Guest's waiting page never collected the approval | `episode`, per seat | Guest (`pt_`) | high |
-| `prejoin.devices_blocked` | the browser refused devices without the visitor refusing a prompt | `attempt` | Guest or Participant (`cs_`) | medium |
-| `prejoin.preview_failed` | a device failed to open for a reason other than refusal or absence | `attempt` | Guest or Participant (`cs_`) | medium |
-| `dashboard.request_failed` | a `/dashboard-api/*` request failed with 5xx, or valid sign-ins were rejected as unreadable | `platform` | Dashboard Account (`usr_`, or `cs_` when unreadable) | medium |
+| code                       | meaning                                                                                                                                                                                                                       | item                | who is affected                                                       | severity |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------- | -------- |
+| `boot.never_ran`           | Space pages were served to browsers, but no script ran in any of them                                                                                                                                                         | `platform`          | every visitor of the route in the window                              | high     |
+| `boot.app_failed`          | the beacon ran but the app never showed its first screen, a code chunk failed after the one allowed reload, or a page threw during render before the call UI mounted (the entrance or prejoin page, caught by the root route) | `attempt`           | the visitor (`cs_`, also once admitted)                               | high     |
+| `embed.blocked`            | the embed got access grants, but nothing sent under them reached Chalk                                                                                                                                                        | `tenant`            | Participant in a tenant app or a Dashboard Account's own call (`pt_`) | high     |
+| `invite.refused`           | the API refused an invite for a reason its own rows contradict                                                                                                                                                                | `attempt`           | Guest (`cs_`, `spc_`)                                                 | high     |
+| `admission.unresolved`     | a join attempt never got an admission decision, so the visitor waited on a screen that never resolved                                                                                                                         | `attempt`           | the visitor (`cs_`)                                                   | high     |
+| `admission.unanswered`     | a knock expired while a host was positioned but never saw it, or a host's answer never committed                                                                                                                              | `episode`, per seat | Guest (`pt_` from `sync_admission_requests.participant_id`)           | high     |
+| `admission.not_collected`  | the host approved, but the Guest's waiting page never collected the approval                                                                                                                                                  | `episode`, per seat | Guest (`pt_`)                                                         | high     |
+| `prejoin.devices_blocked`  | the browser refused devices without the visitor refusing a prompt                                                                                                                                                             | `attempt`           | Guest or Participant (`cs_`)                                          | medium   |
+| `prejoin.preview_failed`   | a device failed to open for a reason other than refusal or absence                                                                                                                                                            | `attempt`           | Guest or Participant (`cs_`)                                          | medium   |
+| `dashboard.request_failed` | a `/dashboard-api/*` request failed with 5xx, or valid sign-ins were rejected as unreadable                                                                                                                                   | `platform`          | Dashboard Account (`usr_`, or `cs_` when unreadable)                  | medium   |
 
 The item is what the symptom's registry entry declares. An `attempt` is keyed by its client session (`cs_`), the one id a visitor has before a seat, and covers the attempt whether or not it became an Episode seat. A `platform` item is one environment over one UTC day, which fits a route or a sign-in failure that no single Tenant owns, and `embed.blocked` judges one Tenant's day because its threshold counts grants across the Tenant. Only the two Guest seat symptoms run per seat, so every other finding's party is `all`, and the seat, grant or route it concerns prints in a `fact:` line or a related record such as `seat pt_4c1e grant=unused`. The registry already declares `admission.unresolved` with its fact `admission.decision`; the rest are this slice's to add.
 
@@ -66,33 +66,33 @@ Missing data never yields healthy. Each rule's `decide` returns `pass`, a findin
 
 Every op terminal code and decision reason below is a reason code declared in the area file under this slice's prefixes, and every new event is named under them.
 
-| kernel call | name | file:line | note |
-|---|---|---|---|
-| fact | `boot.started`, `boot.visible`, `boot.pagehide` | `apps/web/src/routes/__root.tsx:50` | inline beacon next to the theme script; mints `cs_` |
-| surface | `boot.app` | `apps/web/src/routes/__root.tsx:36` | `RootComponent`, through `<ObservedSurface>` |
-| fact, surface | `boot.render_failed`, `boot.error_page` | `apps/web/src/routes/__root.tsx:12` | new `onCatch` and `errorComponent` on `createRootRoute`; the fact goes out through `sendEntryEvent`, reports through `obs` and never rethrows, because the error page is the handling |
-| fact | `boot.chunk_failed` | `apps/web/src/lib/chunkReload.ts:45` | only when `matchesChunkLoadFailure` is true; `reloaded` is `shouldReloadOnce()` (guard at `:6-7`) |
-| op | `invite.arrive` | `apps/web/src/components/space/SpacePage.tsx:167` | `arriveAtSpace`; terminal `ok` or `error(<the decision's invite.* reason>)` |
-| fact | `admission.status_poll`, `admission.pagehide` | `apps/web/src/components/space/SpacePage.tsx:216` | each poll is an attempt, not an op; pagehide carries `phase` |
-| op | `boot.load_call_ui` | `apps/web/src/components/space/SpacePage.tsx:251` | ends `ok` at `callUiReady`, `error(boot.chunk_load)` or `error(boot.load_failed)` at `callUiFailed` |
-| transition | `admission.entrance` | `apps/web/src/components/space/entrance-machine.ts:93` | the reducer is the state owner |
-| surface | `invite.failure` | `apps/web/src/components/space/SpacePage.tsx:352` | proves display, not the cause |
-| transition | `prejoin.access` | `sdks/typescript/react/src/pre-join/usePreJoinDevices.ts:69` | setters at `:113`, `:121`, `:164`, `:213` |
-| fact | `prejoin.device_error` | `sdks/typescript/react/src/pre-join/usePreJoinDevices.ts:277` | `device` and `error_name` only, no constraints |
-| surface | `prejoin.access_card` | `apps/web/src/components/space/pre-join/PreJoin.tsx:69` | reason from `:51` |
-| op | `embed.get_access` | `sdks/typescript/react/src/components/chalk/Chalk.tsx:105` | wraps the host's `getAccess` |
-| surface | `embed.join_error` | `sdks/typescript/react/src/components/chalk/Chalk.tsx:224` | the `securitypolicyviolation` listener for `embed.csp_violation` goes here; it records the blocked origin and directive only |
-| decision | `invite.resolve` | `apps/api/internal/publicinvites/service.go:188` | `ResolveInviteToken`: `:193` and `:213` `invite.not_found`; `:199` and `:219` `invite.invalid_row` when `validateInvite` fails, else `invite.disabled`; `:222` `invite.disabled` when not enabled, else `invite.generation_mismatch` |
-| decision | `invite.resolve` | `apps/api/internal/publicinvites/service.go:933` | `Runtime.Arrive`: `:958` `invite.arrival_mismatch`; `:965` and `:1030` `invite.space_mismatch`; `:968` and `:1033` `invite.space_archived`; `:1040` `invite.members_only` |
-| fact | `public_invite.request` | `apps/api/internal/httpapi/public_invites.go:616` | existing log, read as a `legacy` event; add `arrival_handle` and keep the rest |
-| decision | `admission.requested` | `apps/api/internal/adapters/postgres/public_episode_admission.go:21` | after commit |
-| decision | `admission.decided` | `apps/api/internal/adapters/postgres/public_episode_admission.go:152` | after commit |
-| decision | `admission.outcome` | `apps/api/internal/publicinvites/admission_telemetry.go:16` | keeps the existing counter and log |
-| surface | `admission.knock_notice` | `sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx:208` | one per request handle |
-| op | `admission.decide` | `sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx:208` and `apps/web/src/components/dashboard/CallPage.tsx:69` | `onAdmit`/`onDeny` and `answerKnock`; `ok` is not proof, `decided_at` is |
-| surface | `dashboard.call_page` | `apps/web/src/components/dashboard/CallPage.tsx:19` | positions a dashboard host |
-| surface | `dashboard.knocks` | `apps/web/src/components/dashboard/AdmissionKnocks.tsx:4` | it returns null at `:5` when there are no knocks |
-| fact | `dashboard.request_failed` | `apps/web/server/application.ts:127` | extended, never renamed |
+| kernel call   | name                                            | file:line                                                                                                                          | note                                                                                                                                                                                                                                 |
+| ------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| fact          | `boot.started`, `boot.visible`, `boot.pagehide` | `apps/web/src/routes/__root.tsx:50`                                                                                                | inline beacon next to the theme script; mints `cs_`                                                                                                                                                                                  |
+| surface       | `boot.app`                                      | `apps/web/src/routes/__root.tsx:36`                                                                                                | `RootComponent`, through `<ObservedSurface>`                                                                                                                                                                                         |
+| fact, surface | `boot.render_failed`, `boot.error_page`         | `apps/web/src/routes/__root.tsx:12`                                                                                                | new `onCatch` and `errorComponent` on `createRootRoute`; the fact goes out through `sendEntryEvent`, reports through `obs` and never rethrows, because the error page is the handling                                                |
+| fact          | `boot.chunk_failed`                             | `apps/web/src/lib/chunkReload.ts:45`                                                                                               | only when `matchesChunkLoadFailure` is true; `reloaded` is `shouldReloadOnce()` (guard at `:6-7`)                                                                                                                                    |
+| op            | `invite.arrive`                                 | `apps/web/src/components/space/SpacePage.tsx:167`                                                                                  | `arriveAtSpace`; terminal `ok` or `error(<the decision's invite.* reason>)`                                                                                                                                                          |
+| fact          | `admission.status_poll`, `admission.pagehide`   | `apps/web/src/components/space/SpacePage.tsx:216`                                                                                  | each poll is an attempt, not an op; pagehide carries `phase`                                                                                                                                                                         |
+| op            | `boot.load_call_ui`                             | `apps/web/src/components/space/SpacePage.tsx:251`                                                                                  | ends `ok` at `callUiReady`, `error(boot.chunk_load)` or `error(boot.load_failed)` at `callUiFailed`                                                                                                                                  |
+| transition    | `admission.entrance`                            | `apps/web/src/components/space/entrance-machine.ts:93`                                                                             | the reducer is the state owner                                                                                                                                                                                                       |
+| surface       | `invite.failure`                                | `apps/web/src/components/space/SpacePage.tsx:352`                                                                                  | proves display, not the cause                                                                                                                                                                                                        |
+| transition    | `prejoin.access`                                | `sdks/typescript/react/src/pre-join/usePreJoinDevices.ts:69`                                                                       | setters at `:113`, `:121`, `:164`, `:213`                                                                                                                                                                                            |
+| fact          | `prejoin.device_error`                          | `sdks/typescript/react/src/pre-join/usePreJoinDevices.ts:277`                                                                      | `device` and `error_name` only, no constraints                                                                                                                                                                                       |
+| surface       | `prejoin.access_card`                           | `apps/web/src/components/space/pre-join/PreJoin.tsx:69`                                                                            | reason from `:51`                                                                                                                                                                                                                    |
+| op            | `embed.get_access`                              | `sdks/typescript/react/src/components/chalk/Chalk.tsx:105`                                                                         | wraps the host's `getAccess`                                                                                                                                                                                                         |
+| surface       | `embed.join_error`                              | `sdks/typescript/react/src/components/chalk/Chalk.tsx:224`                                                                         | the `securitypolicyviolation` listener for `embed.csp_violation` goes here; it records the blocked origin and directive only                                                                                                         |
+| decision      | `invite.resolve`                                | `apps/api/internal/publicinvites/service.go:188`                                                                                   | `ResolveInviteToken`: `:193` and `:213` `invite.not_found`; `:199` and `:219` `invite.invalid_row` when `validateInvite` fails, else `invite.disabled`; `:222` `invite.disabled` when not enabled, else `invite.generation_mismatch` |
+| decision      | `invite.resolve`                                | `apps/api/internal/publicinvites/service.go:933`                                                                                   | `Runtime.Arrive`: `:958` `invite.arrival_mismatch`; `:965` and `:1030` `invite.space_mismatch`; `:968` and `:1033` `invite.space_archived`; `:1040` `invite.members_only`                                                            |
+| fact          | `public_invite.request`                         | `apps/api/internal/httpapi/public_invites.go:616`                                                                                  | existing log, read as a `legacy` event; add `arrival_handle` and keep the rest                                                                                                                                                       |
+| decision      | `admission.requested`                           | `apps/api/internal/adapters/postgres/public_episode_admission.go:21`                                                               | after commit                                                                                                                                                                                                                         |
+| decision      | `admission.decided`                             | `apps/api/internal/adapters/postgres/public_episode_admission.go:152`                                                              | after commit                                                                                                                                                                                                                         |
+| decision      | `admission.outcome`                             | `apps/api/internal/publicinvites/admission_telemetry.go:16`                                                                        | keeps the existing counter and log                                                                                                                                                                                                   |
+| surface       | `admission.knock_notice`                        | `sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx:208`                                                         | one per request handle                                                                                                                                                                                                               |
+| op            | `admission.decide`                              | `sdks/typescript/react/src/components/admission-panel/KnockNotice.tsx:208` and `apps/web/src/components/dashboard/CallPage.tsx:69` | `onAdmit`/`onDeny` and `answerKnock`; `ok` is not proof, `decided_at` is                                                                                                                                                             |
+| surface       | `dashboard.call_page`                           | `apps/web/src/components/dashboard/CallPage.tsx:19`                                                                                | positions a dashboard host                                                                                                                                                                                                           |
+| surface       | `dashboard.knocks`                              | `apps/web/src/components/dashboard/AdmissionKnocks.tsx:4`                                                                          | it returns null at `:5` when there are no knocks                                                                                                                                                                                     |
+| fact          | `dashboard.request_failed`                      | `apps/web/server/application.ts:127`                                                                                               | extended, never renamed                                                                                                                                                                                                              |
 
 Sync gets no Elixir kernel adoption here; its existing spans are the `sync` witness.
 
@@ -101,13 +101,16 @@ Sync gets no Elixir kernel adoption here; its existing spans are the `sync` witn
 Handles, `ev_` handles and times vary per run. The header's `outcome` and `coverage`, each finding's outcome, code, party, `hop`, `module` and `upstream`, which facts read `[proven absent]`, and each `gap:` line's code and reason must match exactly. The samples follow the line grammar in [docs/diagnose.md](../../../diagnose.md): they leave out line 2 (the anchor) and the `next:` lines, and show only this slice's lines and the coverage its own checks give, because a view also carries other slices' checks. What each rule expected, its witnesses and the watermarks behind every `[proven absent]` print in `diagnose evidence f_x`. Each scenario below is the `fault_scenario` of its symptom. Local runs use `pnpm dev` (web 3070, api 8080, sync 4100), a Space from `pnpm web:proof` (`CHALK_E2E_INVITE`), and browsers launched the way `tests/pre-join.e2e.ts:18-21` launches them. Orb runs use `orb up chalk <branch>` and end with `orb down <orb>`. Preview runs deploy to the staging Pages project, never `chalk`: `pnpm exec wrangler pages deploy dist/client --project-name chalk-staging --branch obs-entry-fault` from `apps/web`, as `scripts/deploy/deploy-web-release.mjs:118` does for staging, so their findings land on the `staging` platform day. Times on a Space, Tenant or platform day are UTC `HH:MM`. A day item stays open until its UTC day ends, so the day samples below are read the next day; read on the day of the fault, the same lines print under `coverage=partial(open)` with a `gap: open` line.
 
 1. **Call UI chunk fails** (Orb). A Dashboard Account keeps an open-admission Space's call running. In the Guest browser, `page.route("**/SpaceCall*", r => r.abort())` runs before Join, and stays on after the reload; the Guest presses Join again after it. The first page's attempt reads `f_x expected boot.app_failed all +00:40 reason=boot.chunk_reloaded ev=ev_x`, and the reloaded page's attempt prints the finding below. Control: remove the route once the second document load starts; the first attempt must still print that expected line and the second must read `outcome=healthy coverage=complete`.
+
 ```
 attempt cs_7a20 tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_1a01 broken boot.app_failed all +00:22 hop=client_chunk module=web.boot upstream=unknown ev=ev_3b1c
 fact: boot.chunk_failed reloaded=false [ev_3b1c]
 fact: previous attempt cs_6c1f on the same device dev_5c2e ended boot.load_call_ui error(boot.chunk_load) after boot.chunk_failed reloaded=true [ev_2a0b,ev_1f9a]
 ```
+
 2. **No script runs** (preview). Visit one Space link once, then on a throwaway branch add `Content-Security-Policy: script-src 'none'` under `/:a-:b-:c` in `apps/web/public/_headers`, build and redeploy. e2e makes 20 visits to the link with a desktop Chrome user agent within 15 min, then one visit to `/privacy`.
+
 ```
 platform staging 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_2b02 broken boot.never_ran all 10:00..10:15 hop=edge_document module=web.boot upstream=witnessed ev=ev_4c2d
@@ -116,7 +119,9 @@ fact: no boot.started on /:a-:b-:c in the window [proven absent]
 fact: boot.started on /:a-:b-:c in the previous 24 h [ev_5d3e]
 fact: boot.started of the same build on /privacy after the window [ev_6e4f]
 ```
+
 3. **Host page blocks Chalk** (local). The Dashboard Account opens `/dashboard/call/<spaceId>/join`; `page.route` fetches that document and fulfills it with an added `Content-Security-Policy: connect-src 'self'`, which blocks the api (8080) and sync (4100) origins. It reloads the page once, 70 s later.
+
 ```
 tenant ten_3c1d 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_3c03 broken embed.blocked all 10:01..10:02 hop=host_csp module=react.embed upstream=unknown ev=ev_7f5a
@@ -125,20 +130,26 @@ fact: no sync.websocket.authenticated for either grant's Participant within 60 s
 fact: no api request under either grant within 60 s [proven absent]
 seat pt_4c1e grant=unused
 ```
+
 4. **Framed without device permission** (local). Chromium launched with `--use-fake-ui-for-media-stream --use-fake-device-for-media-stream` and no `webMediaFixture`. `page.route` fulfills `http://127.0.0.1:3999/host` with `<iframe src="http://localhost:3070/<code>"></iframe>` (no `allow`). If Chromium reads `prompt`, the e2e presses the card's allow button; the finding stays the same.
+
 ```
 attempt cs_8d14 tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_4d04 broken prejoin.devices_blocked all +00:03 hop=host_permissions_policy module=react.prejoin upstream=witnessed ev=ev_9b7c
 fact: boot.started framed=true policy_camera=false policy_microphone=false [ev_9b7c]
 fact: prejoin.access checking->blocked by permission_query [ev_0c8d]
 ```
+
 5. **Camera busy at prejoin** (local, top-level). The tablet context of `tests/pre-join.e2e.ts:17-21` with `webMediaFixture(2, { permission: "prompt" })`, then a second init script that makes `getUserMedia` with `video` reject with `new DOMException("Could not start video source", "NotReadableError")`. The e2e presses "Turn on".
+
 ```
 attempt cs_9e15 tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_5e05 broken prejoin.preview_failed all +00:02 hop=client_capture module=react.prejoin upstream=unknown ev=ev_1d9e
 fact: prejoin.device_error device=camera error_name=NotReadableError [ev_1d9e]
 ```
+
 6. **Dashboard drops knocks** (local, knock Space). The Dashboard Account sits on `/dashboard/call/<spaceId>` without joining. Its `page.route` for `**/dashboard-api/call?*` and `**/dashboard-api/call-status?*` fetches each response and fulfills it with `knocks: []`. The Guest knocks and waits 5 min. `dashboard.request_failed` must not appear, because every response is 200.
+
 ```
 episode ep_2b7e tenant=<T> outcome=broken coverage=partial(admission) checked=<c>/<e> asof=<t> rules=<hash>
 f_6f06 broken admission.unanswered pt_7a20 +00:05..+05:05 hop=dashboard_read module=web.dashboard upstream=witnessed ev=ev_2eaf
@@ -148,7 +159,9 @@ fact: usr_1b2c call page shown and visible [ev_4a1c]
 fact: no dashboard.knocks shown to usr_1b2c [proven absent]
 gap: admission.unanswered pt_7a20: edge not read
 ```
+
 7. **Guest offline at approval** (local, knock Space). The Guest knocks at +00:05, calls `context.setOffline(true)` at +00:39, the Dashboard Account approves at +00:40, and the Guest calls `setOffline(false)` at +07:00, after the sweeper ran.
+
 ```
 episode ep_4d2f tenant=<T> outcome=broken coverage=partial(admission) checked=<c>/<e> asof=<t> rules=<hash>
 f_7a07 broken admission.not_collected pt_7a20 +00:40..+05:40 hop=client_network module=web.entrance upstream=unknown ev=ev_5b2d
@@ -159,20 +172,26 @@ fact: not collected +05:40 [ev_7d4f]
 gap: admission.not_collected pt_7a20: client evidence_gap +00:39..+07:00 (missing seq 41..58 open)
 gap: admission.unanswered pt_7a20: edge not read
 ```
+
 8. **Unreadable sign-ins** (preview). Three fresh browser contexts each add the cookie `__Host-chalk_session=AAAA.AAAA` (name from `apps/web/server/cookies.ts:35-36`) and open `/dashboard`.
+
 ```
 platform staging 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_8b08 broken dashboard.request_failed all 10:02..10:03 hop=dashboard_auth module=web.dashboard_server upstream=witnessed ev=ev_8e5a
 fact: 401 auth_result=unreadable for 3 distinct cs_ within 15 min [ev_8e5a,ev_9f6b,ev_0a7c]
 ```
+
 9. **Invite row contradicts its refusal** (local). `update space_public_invites set enabled=false, disabled_at=null where space_id=<id>`, then open the Space's link. Control: `update space_public_invites set enabled=false, disabled_at=now(), state_epoch=state_epoch+1 where space_id=<id>` (the write `apps/api/db/queries/public_invites.sql:60-74` makes), then open the link; that attempt must print `outcome=expected coverage=complete` and the one finding `f_x expected invite.refused all +00:01 reason=invite.disabled ev=ev_x`.
+
 ```
 attempt cs_6a3b tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_9c09 broken invite.refused all +00:01 hop=invite_resolve module=api.public_invites upstream=witnessed ev=ev_1b8d
 fact: invite.resolve refused reason=invite.disabled for spc_2b7e [ev_1b8d]
 fact: invite enabled=false disabled_at=null at the decision's state_epoch [ev_2c9e]
 ```
+
 10. **Prejoin throws during render** (local, open-admission Space). In `PreJoin` (`apps/web/src/components/space/pre-join/PreJoin.tsx:46`), only when `import.meta.env.DEV`, the query `chalk_dev_fault=prejoin_render` is present and `displayName === "crash"`, throw `new Error("dev fault")` during render. The e2e opens `<invite>?chalk_dev_fault=prejoin_render`, waits for the "Your name" field (`apps/web/src/components/space/pre-join/PreJoin.tsx:86-87`), then fills it with `crash`, so `boot.app` is already shown when the page throws. Control: fill it with `Ada` and join; that run must print no `boot.` finding.
+
 ```
 attempt cs_7b31 tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_ab10 broken boot.app_failed all +00:04 hop=client_render module=web.entrance upstream=witnessed ev=ev_3daf
@@ -181,18 +200,23 @@ fact: boot.error_page shown +00:04 [ev_4eb0]
 fact: boot.app shown +00:01 [ev_5fc1]
 fact: no boot.load_call_ui [proven absent]
 ```
+
 11. **Arrival never decided** (local, open-admission Space). In dev Postgres: `create function chalk_fault_entry() returns trigger language plpgsql as $$ begin raise exception 'fault'; end $$;` and `create trigger chalk_fault_entry before insert on space_public_arrivals for each row execute function chalk_fault_entry();` (table at `apps/api/db/schema.sql:996`). Open the Space's link, wait 60 s, then drop the trigger and the function. The arrive transaction rolls back before any decision commits, so the attempt has API request records and no admission decision.
+
 ```
 attempt cs_6d5e tenant=<T> outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 f_bdef broken admission.unresolved all +00:00..+00:40 hop=api_admission module=api.admission upstream=unknown
 fact: no admission decision [proven absent]
 ```
+
 12. **Healthy control** (Orb). In a knock Space, the Dashboard Account joins through `/dashboard/call/<spaceId>/join`, the Guest (with `webMediaFixture`) knocks, the host approves from the knock notice within 10 s, and the Guest joins. The Guest's attempt reads healthy. The Episode can't: `admission.unanswered` needs edge, which an Orb doesn't have, so the Episode reads `unknown` with that one gap, and it reads `healthy coverage=complete` only where slice 14's edge feed covers the window.
+
 ```
 attempt cs_9a4b tenant=<T> outcome=healthy coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
 episode ep_5e3a tenant=<T> outcome=unknown coverage=partial(admission) checked=<c>/<e> asof=<t> rules=<hash>
 gap: admission.unanswered pt_7a20: edge not read
 ```
+
 No finding with any of this slice's prefixes may appear, no backstop (`UNEXPLAINED`, `BLIND_SPOT`, `WITNESS_DISAGREEMENT`), no item may read `unchecked` or `stale`, and no gap other than that edge gap.
 
 ## 7. Out of scope and traps

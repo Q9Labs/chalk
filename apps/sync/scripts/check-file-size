@@ -12,7 +12,7 @@ failed=0
 
 over=$(
   git ls-files 'lib/*.ex' 'lib/**/*.ex' 'test/*.ex' 'test/*.exs' 'test/**/*.ex' 'test/**/*.exs' |
-    grep -v -e '^lib/chalk_sync/contract/generated' -e '^lib/chalk_sync/obs/registry.ex$' |
+    grep -v -e '^lib/chalk_sync/contract/generated' -e '^lib/chalk_sync/obs/generated/' |
     xargs wc -l |
     awk -v limit="$limit" '$2 != "total" && $1 > limit { print $2 " " $1 }'
 )

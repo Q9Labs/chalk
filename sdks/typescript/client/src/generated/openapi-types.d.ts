@@ -1419,10 +1419,10 @@ export interface components {
         expires_at: components["schemas"]["DateTimeString"];
         token: string;
       };
-      telemetry: {
+      telemetry?: {
         expires_at: components["schemas"]["DateTimeString"];
         token: string;
-      };
+      } | null;
     };
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
@@ -2772,7 +2772,6 @@ export interface components {
           from: number;
           to: number;
         }[];
-        dropped_source_id?: components["schemas"]["UUID"];
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
@@ -2921,11 +2920,13 @@ export interface components {
         to: number;
       }[];
       duplicates: number;
+      end_rejection?: string;
       rejected: number;
       rejections: {
         reason: string;
         seq: number;
       }[];
+      server_ms?: number;
     };
     Tenant: {
       cors_allowed_origins: string[];

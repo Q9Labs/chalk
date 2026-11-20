@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * `pnpm diagnose`: the agent's front door to verdicts. It reads stored verdicts and their status, looks things up, and runs `check`
  * on demand; nothing schedules it. `diagnose call <uuid>` is the existing single-call report over today's rows (index.mjs).
@@ -11,17 +12,17 @@ import { existsSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CATALOGUE, RULES } from "./proof/catalogue.mjs";
-import { BACKSTOPS } from "./proof/verdict.mjs";
-import { check, standing, statusOf } from "./proof/check.mjs";
+import { standing, statusOf } from "./proof/check.mjs";
 import { openWorld } from "./proof/fixture-world.mjs";
 import { StoreError, openLive, realStores } from "./live/stores.mjs";
-import { localDate, localMidnight, ref } from "./output/format.mjs";
 import { renderJson } from "./output/json.mjs";
 import { UsageError } from "./output/page.mjs";
-import { USAGE, instant, parseQuery, realDate } from "./output/query.mjs";
-import { handleKind, indexWorld, isHandle, resolve } from "./output/resolve.mjs";
+import { USAGE, instant, parseQuery } from "./output/query.mjs";
+import { handleKind, indexWorld, resolve } from "./output/resolve.mjs";
 import { measureRecord, renderText } from "./output/text.mjs";
-import { checkView, dayView, evidenceView, itemView, quoteArg, rangeView, refKind, resolveView } from "./output/views.mjs";
+import { quoteArg, rangeView } from "./output/views.mjs";
+import { candidates, itemsIn, tenantNamed, rangeOf, rangeArgs, dateArg, need, personKey, describe } from "./scope.mjs";
+import { symptomCode, openItem, openEntry, runCheck, day, openDay } from "./commands.mjs";
 
 /** @typedef {import("./output/views.mjs").View} View */
 /** @typedef {import("./output/views.mjs").ViewContext} ViewContext */
@@ -31,18 +32,18 @@ import { checkView, dayView, evidenceView, itemView, quoteArg, rangeView, refKin
 /** @typedef {import("./proof/check.mjs").Item} Item */
 /** @typedef {import("./proof/check.mjs").Status} Status */
 /** @typedef {import("./proof/fixture-world.mjs").World} World */
+/** @typedef {{ catalogue: readonly import("./proof/profile.mjs").CheckDef[], rules: string }} Checks */
 
 const FIXTURES = { nov18: new URL("./fixtures/nov18.mjs", import.meta.url).href };
-const DAY_MS = 86_400_000;
-
 /**
  * Runs one command and returns its output instead of printing it, so tests call it directly.
  * @param {readonly string[]} argv
- * @param {{ cwd?: string, stores?: import("./live/stores.mjs").Stores, now?: number }} [options] `stores` and `now` replace the real
- *   stores and clock behind `--live`, for tests
+ * @param {{ cwd?: string, stores?: import("./live/stores.mjs").Stores, now?: number, checks?: Checks }} [options] `stores` and `now`
+ *   replace the real stores and clock behind `--live`, for tests; `checks` replaces the catalogue, so the CLI contract goldens judge
+ *   only the foundation's checks
  * @returns {Promise<{ code: number, out: string, err: string }>}
  */
-export async function run(argv, { cwd = process.cwd(), stores, now } = {}) {
+export async function run(argv, { cwd = process.cwd(), stores, now, checks = { catalogue: CATALOGUE, rules: RULES } } = {}) {
   if (argv[0] === "call") {
     const { main } = await import("./index.mjs");
     return { code: await main([...argv.slice(1)]), out: "", err: "" };
@@ -54,10 +55,15 @@ export async function run(argv, { cwd = process.cwd(), stores, now } = {}) {
     if (live === null && query.options.fixture === null) {
       return { code: 69, out: "", err: "diagnose: the verdict commands need a world; pass --fixture nov18, --live --tenant <uuid> --episode <uuid>, or run `diagnose call <episode uuid>` for the single-call report\n" };
     }
-    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { catalogue: CATALOGUE, now });
-    const session = await open(query, cwd, opened.world);
-    const view = await dispatch(query, session);
-    return { code: exitCode(view, query), out: query.options.json ? renderJson(view) : renderText(view), err: opened.notes.map((note) => `diagnose: live: ${note}\n`).join("") };
+    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { catalogue: checks.catalogue, now });
+    const session = await open(query, cwd, opened.world, checks);
+    const dispatched = await dispatch(query, session);
+    // A live read without --store keeps nothing, so its head says so and no line claims a verdict retained from an earlier run.
+    const fresh = live !== null && query.options.store === null;
+    const selector = worldSelector(live, query.options);
+    const view = { ...dispatched, head: fresh ? { ...dispatched.head, read: /** @type {const} */ ("fresh") } : dispatched.head, next: dispatched.next.map((command) => `${command} ${selector}`) };
+    const notes = [...opened.notes, ...(fresh ? ["fresh read: without --store nothing is retained across runs, so no verdict here rests on history"] : [])];
+    return { code: exitCode(view, query), out: query.options.json ? renderJson(view) : renderText(view), err: notes.map((note) => `diagnose: live: ${note}\n`).join("") };
   } catch (error) {
     if (error instanceof UsageError) return { code: 64, out: "", err: `diagnose: ${error.message}\n${USAGE}\n` };
     if (error instanceof SourceError || error instanceof StoreError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
@@ -88,6 +94,21 @@ function liveTarget(argv) {
   }
   if (target.tenant === undefined || target.episode === undefined) throw new UsageError("--live needs --tenant <uuid> and --episode <uuid>");
   return { live: { tenant: target.tenant, episode: target.episode }, rest };
+}
+
+/**
+ * The flags that name the world a view came from, so every printed `next:` command runs as printed against the same world.
+ * @param {{ tenant: string, episode: string } | null} live
+ * @param {Query["options"]} options
+ */
+function worldSelector(live, options) {
+  const world = live === null ? ["--fixture", quoteArg(String(options.fixture))] : ["--live", "--tenant", live.tenant, "--episode", live.episode];
+  for (const [flag, value] of /** @type {const} */ ([
+    ["--store", options.store],
+    ["--asof", options.asof],
+  ]))
+    if (value !== null) world.push(flag, quoteArg(value));
+  return world.join(" ");
 }
 
 /** A data source the command needs is missing: exit 69. */
@@ -123,11 +144,12 @@ async function fixtureWorld(query, cwd) {
  * @param {Query} query
  * @param {string} cwd
  * @param {World} world
+ * @param {Checks} checks
  */
-async function open(query, cwd, world) {
+async function open(query, cwd, world, { catalogue, rules }) {
   const store = query.options.store === null ? null : resolvePath(cwd, query.options.store);
   if (store !== null && !existsSync(dirname(store))) throw new UsageError(`--store ${store}: its directory does not exist`);
-  const { items, ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES, store });
+  const { items, ports } = await openWorld(world, { catalogue, rules, store });
   const asof_ms =
     query.options.asof === null
       ? world.asof_ms
@@ -135,8 +157,8 @@ async function open(query, cwd, world) {
           throw new UsageError("--asof is an instant with a zone, like 2026-11-19T01:00Z");
         });
   /** @type {ViewContext} */
-  const ctx = { asof_ms, rules: RULES, catalogue: CATALOGUE, paging: { limit: query.options.limit, cursor: query.options.cursor, budget: query.options.budget }, measure: measureRecord };
-  const statuses = new Map(await Promise.all(items.map(async (item) => /** @type {const} */ ([item, await statusOf(item, ports, RULES)]))));
+  const ctx = { asof_ms, rules, catalogue, paging: { limit: query.options.limit, cursor: query.options.cursor, budget: query.options.budget }, measure: measureRecord };
+  const statuses = new Map(await Promise.all(items.map(async (item) => /** @type {const} */ ([item, await statusOf(item, ports, rules)]))));
   const entries = indexWorld(
     world,
     items,
@@ -176,7 +198,7 @@ const COMMANDS = {
   },
   day: (query, session) => {
     const tenant = tenantNamed(session, need(query.args, "a tenant")[0]);
-    return day(session, tenant, dateArg(session, tenant, query.args[1] ?? "today"), query.options.symptom === null ? null : symptomCode(query.options.symptom));
+    return day(session, tenant, dateArg(session, tenant, query.args[1] ?? "today"), query.options.symptom === null ? null : symptomCode(session, query.options.symptom));
   },
   episode: openItem("episode"),
   attempt: openItem("attempt"),
@@ -200,7 +222,7 @@ const COMMANDS = {
   },
   pattern: (query, session, tenantScope) => {
     const { args, options } = query;
-    const code = symptomCode(need(args, "a symptom code")[0]);
+    const code = symptomCode(session, need(args, "a symptom code")[0]);
     const tz = tenantScope?.tz ?? "UTC";
     const range = rangeOf(session, options, tz, 30);
     const entries = itemsIn(session, tenantScope?.id ?? null, range);
@@ -213,7 +235,7 @@ const COMMANDS = {
     if (options.from === null || options.to === null) throw new UsageError("window needs --from and --to");
     const range = rangeOf(session, options, tenant.tz, 0);
     const entries = itemsIn(session, tenant.id, range);
-    const symptom = options.symptom === null ? null : symptomCode(options.symptom);
+    const symptom = options.symptom === null ? null : symptomCode(session, options.symptom);
     const scopeArgs = ["--from", options.from, "--to", options.to, ...(symptom ? ["--symptom", symptom] : [])];
     return rangeView({
       title: { view: "window", scope: { tenant: tenant.name, ...(symptom ? { symptom } : {}) } },
@@ -229,263 +251,7 @@ const COMMANDS = {
   check: (query, session, tenantScope) => runCheck(session, query, tenantScope),
 };
 
-/** A symptom is a check's code or a backstop; a misspelt one would read as a clean scope, so it is a usage error. */
-function symptomCode(/** @type {string} */ code) {
-  /** @type {readonly string[]} */
-  const known = [...CATALOGUE.map((def) => def.code), ...BACKSTOPS];
-  if (!known.includes(code)) throw new UsageError(`unknown symptom ${code}; known: ${known.join(", ")}`);
-  return code;
-}
-
-/**
- * `episode`, `attempt` and `job` open one item of that kind; a finding or session id that names the item resolves to it, and says so.
- * @param {"episode" | "attempt" | "job"} command
- * @returns {Command}
- */
-function openItem(command) {
-  return (query, session, tenantScope) => {
-    const text = need(query.args, `the ${command}`).join(" ");
-    const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null }).flatMap((entry) => ((entry.target.kind === "item" || entry.target.kind === "finding") && entry.target.item.kind === command ? [{ entry, item: entry.target.item }] : []));
-    const matches = [...new Map(found.map((match) => [match.item.id, match])).values()];
-    if (matches.length !== 1)
-      return candidates(
-        session,
-        text,
-        matches.map((match) => match.entry),
-      );
-    const { entry, item } = matches[0];
-    return itemView({ item, status: statusFor(session, item), tenant: tenantOf(session, item.tenant), ctx: session.ctx, via: entry.kind === refKind(command) ? null : { query: text, as: describe(entry) } });
-  };
-}
-
-/**
- * Opens what a single lookup match names.
- * @param {Session} session
- * @param {Entry} entry
- * @param {Query} query
- * @param {import("./output/views.mjs").Via | null} via
- * @returns {View}
- */
-function openEntry(session, entry, query, via) {
-  const target = entry.target;
-  if (target.kind === "item") return itemView({ item: target.item, status: statusFor(session, target.item), tenant: tenantOf(session, target.item.tenant), ctx: session.ctx, via });
-  if (target.kind === "finding") {
-    const status = statusFor(session, target.item);
-    const finding = standing(status).verdict?.findings.find((candidate) => candidate.id === target.finding);
-    if (!finding) throw new TypeError(`finding ${target.finding} is not in its item's stored verdict`);
-    return evidenceView({ item: target.item, status, finding, tenant: tenantOf(session, target.item.tenant), ctx: session.ctx, via });
-  }
-  if (target.kind === "tenant") {
-    const tenant = tenantOf(session, target.tenant);
-    return day(session, tenant, localDate(session.ctx.asof_ms, tenant.tz), query.options.symptom);
-  }
-  const tenant = tenantOf(session, target.tenant);
-  const range = rangeOf(session, query.options, tenant.tz, 30);
-  const person = target.person;
-  /** @type {(item: Item) => string[]} */
-  const seatsOf = (item) => {
-    const declaration = item.declaration;
-    if (declaration.kind !== "episode") return [];
-    if (person.kind === "seat") return person.item.id === item.id ? [person.participant] : [];
-    return declaration.seats.filter((seat) => seat.person.kind === person.kind && seat.person.id === person.id).map((seat) => seat.participant);
-  };
-  const entries = itemsIn(session, tenant.id, range).filter(({ item }) => seatsOf(item).length > 0);
-  const who = person.kind === "seat" ? { ref: ref("participant", person.participant), name: entry.name } : { ref: ref(person.kind, person.id), name: session.world.people.find((candidate) => candidate.kind === person.kind && candidate.id === person.id)?.name ?? null };
-  const scopeArgs = ["--tenant", tenant.name, ...rangeArgs(query.options, range)];
-  return rangeView({
-    title: { view: "participant", scope: { who, tenant: tenant.name } },
-    tenantTz: tenant.tz,
-    range,
-    entries,
-    keep: (finding, item) => seatsOf(item).some((participant) => finding.subject === `pt:${participant}`),
-    check: scopeArgs,
-    again: ["participant", who.ref, ...scopeArgs],
-    ctx: session.ctx,
-    via,
-  });
-}
-
-/**
- * @param {Session} session
- * @param {Query} query
- * @param {Tenant | null} tenantScope
- */
-async function runCheck(session, query, tenantScope) {
-  const target = checkTarget(session, query, tenantScope);
-  if ("view" in target) return target.view;
-  const results = await check(target.scope, session.ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: session.ctx.asof_ms });
-  return checkView({ scope: target.shown, tz: target.tz, results, ctx: session.ctx, again: checkAgain(query, tenantScope) });
-}
-
-/** @typedef {{ scope: import("./proof/check.mjs").Scope, shown: Record<string, unknown>, tz: string } | { view: View }} CheckTarget */
-
-/**
- * What `check` covers: one item named by any handle, a tenant's day, or a range. An item lookup that is not exactly one item returns candidates.
- * @param {Session} session
- * @param {Query} query
- * @param {Tenant | null} tenantScope
- * @returns {CheckTarget}
- */
-function checkTarget(session, query, tenantScope) {
-  const { args, options } = query;
-  const tenantArg = args.length > 0 ? resolve(session.entries, args[0], { kinds: ["tenant"] }) : [];
-  if (args.length > 0 && tenantArg.length === 0) return checkItem(session, args.join(" "), tenantScope);
-  const tenant = tenantArg.length === 1 ? tenantOf(session, tenantArg[0].id) : tenantScope;
-  const tz = tenant?.tz ?? "UTC";
-  if (args[1] !== undefined && tenant) {
-    const date = dateArg(session, tenant, args[1]);
-    return { scope: { tenant: tenant.id, from_ms: localMidnight(date, tenant.tz), to_ms: localMidnight(nextDate(date), tenant.tz) }, shown: { tenant: tenant.name, date }, tz };
-  }
-  const range = rangeOf(session, options, tz, 1);
-  return { scope: { tenant: tenant?.id ?? null, ...range }, shown: { tenant: tenant?.name ?? "all", since: options.since ?? (options.from ? `${options.from}..${options.to}` : "1d") }, tz };
-}
-
-/** @param {Session} session @param {string} text @param {Tenant | null} tenantScope @returns {CheckTarget} */
-function checkItem(session, text, tenantScope) {
-  const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null }).flatMap((entry) => (entry.target.kind === "item" || entry.target.kind === "finding" ? [{ entry, item: entry.target.item }] : []));
-  const matches = [...new Map(found.map((match) => [match.item.id, match])).values()];
-  if (matches.length !== 1)
-    return {
-      view: candidates(
-        session,
-        text,
-        matches.map((match) => match.entry),
-      ),
-    };
-  const { item } = matches[0];
-  return { scope: { item: { kind: item.kind, id: item.id } }, shown: { item: ref(refKind(item.kind), item.id) }, tz: tenantOf(session, item.tenant).tz };
-}
-
-/** The arguments that rerun this check, so its cursor `next:` reaches the same scope. @param {Query} query @param {Tenant | null} tenantScope */
-function checkAgain({ args, options }, tenantScope) {
-  return ["check", ...args.map(quoteArg), ...(tenantScope ? ["--tenant", tenantScope.name] : []), ...(options.since ? ["--since", options.since] : []), ...(options.from && options.to ? ["--from", quoteArg(options.from), "--to", quoteArg(options.to)] : [])];
-}
-
-/** @param {Session} session @param {Tenant} tenant @param {string} date @param {string | null} symptom */
-function day(session, tenant, date, symptom) {
-  const range = { from_ms: localMidnight(date, tenant.tz), to_ms: localMidnight(nextDate(date), tenant.tz) };
-  return dayView({ tenant, date, entries: itemsIn(session, tenant.id, range), ctx: session.ctx, symptom });
-}
-
-/**
- * Opens one UTC day of a Space, a Tenant or the platform: `space spc_x 2026-11-18`, `tenant ten_x 2026-11-18` or
- * `platform production 2026-11-18`. Unlike `day`, which sweeps a tenant's Episodes, this opens the day item itself and its checks.
- * @param {"space" | "tenant" | "platform"} command
- * @returns {Command}
- */
-function openDay(command) {
-  return (query, session, tenantScope) => {
-    const [what, date] = need(query.args, command === "platform" ? "an environment and a date" : `a ${command} and a date`);
-    if (date === undefined || !realDate(date)) throw new UsageError(`diagnose ${command} <${command === "platform" ? "environment" : command}> <YYYY-MM-DD>: the day is a UTC date like 2026-11-18`);
-    const named = command === "platform" ? [] : resolve(session.entries, what, { tenant: tenantScope?.id ?? null, kinds: [command] });
-    const ids = command === "platform" ? [what] : named.map((entry) => entry.id);
-    const found = session.items.filter((item) => item.declaration.kind === command && ids.includes(item.id) && item.declaration.day === date);
-    if (found.length !== 1) {
-      if (command === "platform") throw new UsageError(`no platform day ${what} ${date} in the world`);
-      return candidates(session, what, named);
-    }
-    const [item] = found;
-    const tenant = item.tenant === null ? UTC_TENANT : tenantOf(session, item.tenant);
-    return itemView({ item, status: statusFor(session, item), tenant, ctx: session.ctx });
-  };
-}
-
-/** The platform belongs to no tenant, so its day prints in UTC. */
-const UTC_TENANT = Object.freeze({ id: "", name: "platform", tz: "UTC" });
-
-/**
- * @param {Session} session
- * @param {string} query
- * @param {readonly Entry[]} found
- * @param {Query["options"] | null} [range] a range the query asked for, carried into each candidate's next command
- */
-function candidates(session, query, found, range = null) {
-  const elsewhere = found.length === 0 && isHandle(query) ? resolve(session.entries, query) : [];
-  if (elsewhere.length === 1) throw new UsageError(`${query} names ${describe(elsewhere[0])}, not what this command opens; run diagnose ${query}`);
-  const carry = range === null || (range.since === null && range.from === null) ? [] : rangeArgs(range, rangeOf(session, range, "UTC", 30));
-  return resolveView({ query, candidates: found, ctx: session.ctx, tz: "UTC", carry });
-}
-
-const SWEPT = new Set(["episode", "attempt", "job"]);
-
-/**
- * Episodes, attempts and jobs of a tenant (or every tenant) that started inside a range, with their status. A Space, Tenant or platform
- * day is an aggregate of those items, so a sweep leaves it out and its own command (`space`, `tenant`, `platform`) opens it.
- */
-function itemsIn(/** @type {Session} */ session, /** @type {string | null} */ tenant, /** @type {{ from_ms: number, to_ms: number }} */ range) {
-  return session.items.filter((item) => SWEPT.has(item.kind) && (tenant === null || item.tenant === tenant) && item.declaration.window.from_ms >= range.from_ms && item.declaration.window.from_ms < range.to_ms).map((item) => ({ item, status: statusFor(session, item) }));
-}
-
-/** @param {Session} session @param {Item} item @returns {Status} */
-const statusFor = (session, item) => /** @type {Status} */ (session.statuses.get(item));
-
-/** @param {Session} session @param {string} id @returns {Tenant} */
-function tenantOf(session, id) {
-  const tenant = session.world.tenants.find((candidate) => candidate.id === id);
-  if (!tenant) throw new TypeError(`no tenant ${id} in the world`);
-  return tenant;
-}
-
-/** @param {Session} session @param {string} text @returns {Tenant} */
-function tenantNamed(session, text) {
-  const found = resolve(session.entries, text, { kinds: ["tenant"] });
-  if (found.length !== 1) throw new UsageError(found.length === 0 ? `no tenant matches ${JSON.stringify(text)}` : `${JSON.stringify(text)} matches ${found.length} tenants: ${found.map((entry) => entry.label).join(", ")}`);
-  return tenantOf(session, found[0].id);
-}
-
-/**
- * The range a command covers: --from/--to, else --since, else the default number of days before asof.
- * @param {Session} session
- * @param {Query["options"]} options
- * @param {string} tz
- * @param {number} days
- */
-function rangeOf(session, options, tz, days) {
-  const midnight = (/** @type {string} */ date) => localMidnight(date, tz);
-  if (options.from !== null || options.to !== null) {
-    if (options.from === null || options.to === null) throw new UsageError("--from and --to go together");
-    const from_ms = instant(options.from, midnight);
-    const to_ms = /^\d{4}-\d{2}-\d{2}$/u.test(options.to) ? localMidnight(nextDate(options.to), tz) : instant(options.to, midnight);
-    if (to_ms <= from_ms) throw new UsageError("--to must be after --from");
-    return { from_ms, to_ms };
-  }
-  const n = options.since === null ? days : Number(options.since.slice(0, -1));
-  return { from_ms: session.ctx.asof_ms - n * DAY_MS, to_ms: session.ctx.asof_ms };
-}
-
-/** The arguments that name the same range again, for `next:` lines. */
-function rangeArgs(/** @type {Query["options"]} */ options, /** @type {{ from_ms: number, to_ms: number }} */ range) {
-  if (options.from !== null && options.to !== null) return ["--from", quoteArg(options.from), "--to", quoteArg(options.to)];
-  return ["--since", options.since ?? `${Math.round((range.to_ms - range.from_ms) / DAY_MS)}d`];
-}
-
-/** @param {Session} session @param {Tenant} tenant @param {string} value */
-function dateArg(session, tenant, value) {
-  if (value === "today") return localDate(session.ctx.asof_ms, tenant.tz);
-  if (value === "yesterday") return localDate(session.ctx.asof_ms - DAY_MS, tenant.tz);
-  if (!realDate(value)) throw new UsageError(`${value} is not a date like 2026-11-18`);
-  return value;
-}
-
-const nextDate = (/** @type {string} */ date) => new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
-
-/** @param {readonly string[]} args @param {string} what */
-function need(args, what) {
-  if (args.length === 0) throw new UsageError(`say ${what}`);
-  return args;
-}
-
-/** One person behind a lookup match, so a user named on two seats is one candidate. @param {Entry} entry */
-function personKey(entry) {
-  const target = entry.target;
-  if (target.kind !== "person") return `${entry.kind}:${entry.id}`;
-  return target.person.kind === "seat" ? `seat:${target.person.participant}` : `${target.person.kind}:${target.person.id}`;
-}
-
-/** @param {Entry} entry */
-const describe = (entry) => `${entry.kind}${entry.meaning && entry.meaning !== entry.kind ? `(${entry.meaning})` : ""} ${entry.label}`;
-
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (import.meta.main) {
   run(process.argv.slice(2)).then(
     ({ code, out, err }) => {
       process.stdout.write(out);

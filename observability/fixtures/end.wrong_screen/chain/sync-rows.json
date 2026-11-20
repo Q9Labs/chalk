@@ -1,0 +1,19 @@
+[
+  {
+    "clock_state": "server",
+    "end_reason": "maximum_duration",
+    "env": "test",
+    "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "est_server_ms": 1795600000000,
+    "event_id": "7db7df2b-9dd7-420b-8bab-baaab9efe617",
+    "kind": "fact",
+    "module": "sync",
+    "name": "sync.episode.ended",
+    "platform": "server",
+    "schema_ver": "06a4092b8fb7",
+    "seq": 1,
+    "source_id": "e1000000-0000-4000-8000-000000000001",
+    "space_id": "d1000000-0000-4000-8000-000000000001",
+    "tenant_id": "c1000000-0000-4000-8000-000000000001"
+  }
+]

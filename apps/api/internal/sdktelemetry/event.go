@@ -8,10 +8,7 @@ package sdktelemetry
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
 	"regexp"
-	"slices"
-	"strings"
 )
 
 // MIDPattern is the shape of a media id, which the SFU also logs for the same subscription.
@@ -49,8 +46,10 @@ var (
 	midPattern  = regexp.MustCompile(MIDPattern)
 )
 
-// Event is one thing a client saw. Type picks which of the other fields may be
-// set: a field that Type does not name makes the event invalid.
+// Event is one thing a client saw. A version 2 batch carries kernel records, which name their
+// registry event by kind and name and are checked against the registry, beside events of the
+// legacy vocabulary. In a legacy event, Type picks which of the other fields may be set: a field
+// that Type does not name makes the event invalid.
 type Event struct {
 	Type string `json:"type"`
 	// Seq counts the events of one client session (version 1) or source (version 2) from zero, in the
@@ -106,8 +105,6 @@ type Event struct {
 	DroppedSeqs []SeqRange `json:"dropped_seqs,omitempty"`
 	// DropReason says why the outbox gave them up. Version 2 requires it on a drop record.
 	DropReason string `json:"drop_reason,omitempty"`
-	// DroppedSourceID names the earlier source the dropped seqs belong to, when they are not this source's.
-	DroppedSourceID string `json:"dropped_source_id,omitempty"`
 
 	// rejection is why this event failed its own check, set while decoding.
 	rejection string
@@ -115,6 +112,8 @@ type Event struct {
 	seen seenEvent
 	// seqRead says the body gave a readable seq, so the seq can name the event in an answer.
 	seqRead bool
+	// record is the kernel record this event carries, or nil for an event of the legacy vocabulary.
+	record *record
 }
 
 type seenEvent struct {
@@ -152,8 +151,15 @@ func (e Event) Seen() (eventType string, seq int64) {
 	return e.seen.Type, e.seen.Seq
 }
 
+// IsRecord says the event is a kernel record that passed its registry check.
+func (e Event) IsRecord() bool { return e.record != nil }
+
 // UnmarshalJSON checks one event alone, so that one bad event cannot fail its batch.
 func (e *Event) UnmarshalJSON(data []byte) error {
+	if isRecordJSON(data) {
+		*e = decodeRecord(data)
+		return nil
+	}
 	type plain Event
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -232,11 +238,9 @@ func (e Event) ledgerRejection(nextSeq int64) string {
 	if e.Dropped == nil || total != *e.Dropped {
 		return "dropped_count"
 	}
-	if e.DroppedSourceID == "" {
-		for _, dropped := range e.DroppedSeqs {
-			if dropped.To > e.Seq {
-				return "dropped_seqs_range"
-			}
+	for _, dropped := range e.DroppedSeqs {
+		if dropped.To > e.Seq {
+			return "dropped_seqs_range"
 		}
 	}
 	return ""
@@ -255,138 +259,6 @@ func orderingMissing(data []byte) string {
 		return "seq_missing"
 	case given.ElapsedMS == nil:
 		return "elapsed_ms_missing"
-	}
-	return ""
-}
-
-// Check returns the reason the event is invalid, or an empty string. The reason is
-// a fixed label built from a field name and a rule.
-func (e Event) Check() string {
-	spec, ok := specs[e.Type]
-	if !ok {
-		return "type"
-	}
-	if e.Seq < 0 || e.Seq > MaxMilliseconds || e.ElapsedMS < 0 || e.ElapsedMS > MaxMilliseconds {
-		return "elapsed_range"
-	}
-	present := e.presentFields()
-	for _, name := range present {
-		if !slices.Contains(spec.allowed, name) {
-			return name + "_not_allowed"
-		}
-	}
-	for _, name := range spec.required {
-		if !slices.Contains(present, name) {
-			return name + "_missing"
-		}
-	}
-	if reason := checkValues(reflect.ValueOf(e), ""); reason != "" {
-		return reason
-	}
-	for _, dropped := range e.DroppedSeqs {
-		if dropped.From >= dropped.To {
-			return "dropped_seqs_order"
-		}
-	}
-	if e.Stats != nil {
-		return e.Stats.check()
-	}
-	return ""
-}
-
-// presentFields lists the JSON names of the optional fields the event sets.
-func (e Event) presentFields() []string {
-	var names []string
-	value := reflect.ValueOf(e)
-	for index := range value.NumField() {
-		field := reflect.TypeFor[Event]().Field(index)
-		name, optional := jsonName(field)
-		if optional && name != "event_id" && !value.Field(index).IsZero() {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-func jsonName(field reflect.StructField) (name string, optional bool) {
-	tag, ok := field.Tag.Lookup("json")
-	if !ok {
-		return "", false
-	}
-	name, options, _ := strings.Cut(tag, ",")
-	return name, options == "omitempty"
-}
-
-// checkValues checks every set field against its enum, its range and its pattern.
-func checkValues(value reflect.Value, prefix string) string {
-	for index := range value.NumField() {
-		field := value.Type().Field(index)
-		name, _ := jsonName(field)
-		if name == "" || value.Field(index).IsZero() {
-			continue
-		}
-		if reason := checkField(name, value.Field(index)); reason != "" {
-			return prefix + reason
-		}
-	}
-	return ""
-}
-
-func checkField(name string, value reflect.Value) string {
-	switch value.Kind() {
-	case reflect.Pointer:
-		return checkField(name, value.Elem())
-	case reflect.String:
-		return checkString(name, value.String())
-	case reflect.Int64:
-		return checkNumber(name, float64(value.Int()))
-	case reflect.Float64:
-		return checkNumber(name, value.Float())
-	case reflect.Struct:
-		return checkValues(value, name+".")
-	case reflect.Slice:
-		if value.Len() > sliceLimit(name) {
-			return name + "_count"
-		}
-		for index := range value.Len() {
-			if reason := checkValues(value.Index(index), name+"."); reason != "" {
-				return reason
-			}
-		}
-	}
-	return ""
-}
-
-// sliceLimit is the most items a list field may hold.
-func sliceLimit(name string) int {
-	if name == "dropped_seqs" {
-		return MaxDropRanges
-	}
-	return MaxTracks
-}
-
-func checkString(name, value string) string {
-	switch name {
-	case "op_id", "event_id", "dropped_source_id":
-		if !uuidPattern.MatchString(value) {
-			return name + "_label"
-		}
-	case "mid":
-		if !midPattern.MatchString(value) {
-			return name + "_label"
-		}
-	default:
-		if enum := FieldEnum(name); enum != nil && !slices.Contains(enum, value) {
-			return name + "_label"
-		}
-	}
-	return ""
-}
-
-func checkNumber(name string, value float64) string {
-	low, high, numeric := FieldRange(name)
-	if !numeric || value < low || value > high {
-		return name + "_range"
 	}
 	return ""
 }

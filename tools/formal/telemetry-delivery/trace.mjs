@@ -1,14 +1,20 @@
-// Turns one NDJSON delivery trace from outbox.delivery.test.ts into TraceData.tla, the
+// Turns one NDJSON delivery trace from the outbox.delivery tests into TraceData.tla, the
 // input of TelemetryDeliveryTrace.tla, and prints the model constants it needs as JSON.
 // Usage: node trace.mjs <trace.ndjson> <out dir>
-// Real ids become model ids: the source of boot n is n, and a batch id resolves to the
-// source and seqs of the send that carried it.
+// Real ids become model ids: sources are numbered in the order the trace starts them (the
+// first boot's source is 1, then each reboot and each rejoin starts the next one), and a
+// batch id resolves to the source and seqs of the send that carried it.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const [file, outDir] = process.argv.slice(2);
 if (!file || !outDir) {
   console.error("usage: node trace.mjs <trace.ndjson> <out dir>");
+  process.exit(2);
+}
+
+function fail(message) {
+  console.error(`${file}: ${message}`);
   process.exit(2);
 }
 
@@ -19,111 +25,115 @@ const lines = readFileSync(file, "utf8")
     try {
       return JSON.parse(line);
     } catch {
-      fail(`line ${index + 1} is not JSON`);
+      return fail(`line ${index + 1} is not JSON`);
     }
   });
-
-function fail(message) {
-  console.error(`${file}: ${message}`);
-  process.exit(2);
-}
 
 const sources = new Map();
 const batches = new Map();
 const made = [0];
 let boot = 1;
+let joins = 0;
+
+function start(id, at) {
+  if (sources.has(id)) fail(`line ${at}: source ${id} starts twice`);
+  sources.set(id, sources.size + 1);
+  made.push(0);
+  return sources.size;
+}
 
 function source(id, at) {
   if (id === undefined) fail(`line ${at} names no src`);
   if (sources.has(id)) return sources.get(id);
-  const used = new Set(sources.values());
-  for (let index = 1; index <= boot; index++) {
-    if (!used.has(index)) {
-      sources.set(id, index);
-      return index;
-    }
-  }
-  fail(`line ${at} names a source no boot owns`);
+  if (sources.size === 0) return start(id, at);
+  return fail(`line ${at} names a source no boot or join started`);
 }
 
 const set = (values) => `{${[...new Set(values)].sort((a, b) => a - b).join(", ")}}`;
 const keys = (pairs, at) => `{${pairs.map(([id, seq]) => `<<${source(id, at)}, ${seq}>>`).join(", ")}}`;
 
+function sent(line, at) {
+  const batch = batches.get(line.batch);
+  if (!batch) fail(`line ${at}: batch ${line.batch} was never sent`);
+  return batch;
+}
+
+// Each handler fills the fields its step needs. Steps with no fields are model steps that
+// name nothing; a step the model does not have fails the trace.
+const handlers = {
+  reboot: (line, step, at) => {
+    boot += 1;
+    step.src = start(line.src, at);
+  },
+  rejoin: (line, step, at) => {
+    joins += 1;
+    step.src = source(line.src, at);
+    step.next = start(line.next, at);
+  },
+  record: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.seq = line.seq;
+    step.p0 = line.p0 === true;
+    made[step.src] += 1;
+  },
+  evict: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.seq = line.seq;
+  },
+  emit_drop: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.seq = line.seq;
+    step.covers = keys(line.covers, at);
+  },
+  checkpoint: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.next = line.next;
+  },
+  send: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.seqs = set(line.seqs);
+    step.next = line.next;
+    step.end = line.end ?? "";
+    batches.set(line.batch, { src: step.src, seqs: step.seqs });
+  },
+  timeout: (line, step, at) => {
+    step.src = source(line.src, at);
+  },
+  dispose: (line, step, at) => {
+    step.src = source(line.src, at);
+  },
+  ack: (line, step, at) => {
+    step.src = source(line.src, at);
+    step.acks = set(line.acks);
+  },
+  receive: (line, step, at) => {
+    Object.assign(step, sent(line, at));
+    step.settle = set(line.settle);
+  },
+  refuse: (line, step, at) => Object.assign(step, sent(line, at)),
+  lose_request: (line, step, at) => Object.assign(step, sent(line, at)),
+  lose_answer: (line, step, at) => Object.assign(step, sent(line, at)),
+  crash: () => undefined,
+  pagehide: () => undefined,
+  commit: () => undefined,
+  write: () => undefined,
+  respond: () => undefined,
+  server_crash: () => undefined,
+};
+
 const steps = lines.map((line, index) => {
   const at = index + 1;
   const step = { a: line.a, src: 0, seq: -1, p0: false, covers: "{}", next: -1, end: "", seqs: "{}", acks: "{}", settle: "{}" };
-  switch (line.a) {
-    case "reboot":
-      boot += 1;
-      made[boot - 1] = 0;
-      if (sources.has(line.src)) fail(`line ${at}: a reboot reuses source ${line.src}`);
-      sources.set(line.src, boot);
-      step.src = boot;
-      break;
-    case "record":
-      step.src = source(line.src, at);
-      step.seq = line.seq;
-      step.p0 = line.p0 === true;
-      made[boot - 1] = (made[boot - 1] ?? 0) + 1;
-      break;
-    case "evict":
-      step.src = source(line.src, at);
-      step.seq = line.seq;
-      break;
-    case "emit_drop":
-      step.src = source(line.src, at);
-      step.seq = line.seq;
-      step.covers = keys(line.covers, at);
-      break;
-    case "checkpoint":
-      step.src = source(line.src, at);
-      step.next = line.next;
-      break;
-    case "send":
-      step.src = source(line.src, at);
-      step.seqs = set(line.seqs);
-      step.next = line.next;
-      step.end = line.end ?? "";
-      batches.set(line.batch, { src: step.src, seqs: step.seqs });
-      break;
-    case "timeout":
-    case "ack":
-    case "dispose":
-      step.src = source(line.src, at);
-      if (line.a === "ack") step.acks = set(line.acks);
-      break;
-    case "receive":
-    case "lose_request":
-    case "lose_answer": {
-      const batch = batches.get(line.batch);
-      if (!batch) fail(`line ${at}: batch ${line.batch} was never sent`);
-      step.src = batch.src;
-      step.seqs = batch.seqs;
-      if (line.a === "receive") step.settle = set(line.settle);
-      break;
-    }
-    case "crash":
-    case "pagehide":
-    case "write":
-    case "commit":
-    case "respond":
-    case "server_crash":
-      break;
-    default:
-      fail(`line ${at}: unknown step ${JSON.stringify(line.a)}`);
-  }
+  const handler = Object.hasOwn(handlers, line.a) ? handlers[line.a] : null;
+  if (!handler) fail(`line ${at}: the model has no step ${JSON.stringify(line.a)}`);
+  handler(line, step, at);
   return step;
 });
 
-const record = (step) =>
-  `[a |-> "${step.a}", src |-> ${step.src}, seq |-> ${step.seq}, p0 |-> ${step.p0 ? "TRUE" : "FALSE"}, covers |-> ${step.covers}, ` +
-  `next |-> ${step.next}, end |-> "${step.end}", seqs |-> ${step.seqs}, acks |-> ${step.acks}, settle |-> ${step.settle}]`;
+const record = (step) => `[a |-> "${step.a}", src |-> ${step.src}, seq |-> ${step.seq}, p0 |-> ${step.p0 ? "TRUE" : "FALSE"}, covers |-> ${step.covers}, ` + `next |-> ${step.next}, end |-> "${step.end}", seqs |-> ${step.seqs}, acks |-> ${step.acks}, settle |-> ${step.settle}]`;
 
-writeFileSync(
-  join(outDir, "TraceData.tla"),
-  `---- MODULE TraceData ----\nEXTENDS Integers\n\\* Generated by trace.mjs from ${file.split("/").pop()}.\nTrace == <<\n  ${steps.map(record).join(",\n  ")}\n>>\n====\n`,
-);
+writeFileSync(join(outDir, "TraceData.tla"), `---- MODULE TraceData ----\nEXTENDS Integers\n\\* Generated by trace.mjs from ${file.split("/").pop()}.\nTrace == <<\n  ${steps.map(record).join(",\n  ")}\n>>\n====\n`);
 
 const maxRecords = Math.max(1, ...made);
-if (boot > 3 || maxRecords > 8) fail(`the trace needs ${boot} boots and ${maxRecords} records per boot; the model allows 3 and 8`);
-console.log(JSON.stringify({ steps: steps.length, boots: boot, records: maxRecords }));
+if (boot > 3 || joins > 2 || maxRecords > 8) fail(`the trace needs ${boot} boots, ${joins} joins and ${maxRecords} records per join; the model allows 3, 2 and 8`);
+console.log(JSON.stringify({ steps: steps.length, boots: boot, joins, records: maxRecords }));

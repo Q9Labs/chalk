@@ -185,7 +185,7 @@ func TestAccessGrantRefreshReplayWithoutTelemetryRenews(t *testing.T) {
 		}, 0},
 		{"renews a body sealed before telemetry existed", func(r *accessGrantResponse) {
 			unexpired(r)
-			r.Telemetry = accessGrantTokenResponse{}
+			r.Telemetry = nil
 		}, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {

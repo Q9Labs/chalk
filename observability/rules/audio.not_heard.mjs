@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rule branches on every kind of evidence; its fixtures and the diagnose-call tests cover each branch, which the CRAP estimate cannot see.
 /**
  * audio.not_heard: a seat unmuted for long enough, with no voiced audio reaching SFU ingress. A per-seat chain across two independent
  * witnesses (client microphone state, SFU ingress), with an optional upstream witness (capture level) that turns "upstream unknown"
@@ -28,6 +29,9 @@ const sum = (list, name) => list.reduce((total, o) => total + Number(o.value[nam
 
 export const expected = `while the microphone is unmuted for ${SILENT_MIN_MS / 1000} s or more, voiced audio packets reach SFU ingress`;
 
+/** A seat that stayed muted sends no audio, so SFU ingress with no rollup for it is the healthy claim; an unmuted seat's missing ingress is the finding. */
+export const healthy_absent = ["audio.ingress"];
+
 /** @param {Declaration} declaration @param {Seat | null} seat */
 export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.features.includes("media") && seat !== null && seat.can_publish;
 
@@ -39,9 +43,9 @@ export function decide({ readings }) {
   const mic = readings["audio.mic_state"];
   const ingress = readings["audio.ingress"];
   const capture = readings["audio.capture"];
-  if (mic.kind !== "present") return mic.kind === "absent" ? { status: "pass" } : { status: "unknown", reason: "microphone state not witnessed" };
+  if (mic.kind !== "present") return { status: "unknown", reason: "microphone state not witnessed" };
   const unmuted = mic.observations.filter((o) => o.claim === "unmuted" && o.window.to_ms - o.window.from_ms >= SILENT_MIN_MS);
-  if (ingress.kind === "unknown") return unmuted.length === 0 ? { status: "pass" } : { status: "unknown", reason: "SFU ingress not witnessed for the unmuted time" };
+  if (ingress.kind === "unknown") return { status: "unknown", reason: "SFU ingress not witnessed" };
   const silent = unmuted.flatMap((u) => {
     const rollups = ingress.kind === "present" ? ingress.observations.filter((o) => overlaps(o.window, u.window)) : [];
     return rollups.length === 0 || sum(rollups, "voiced") === 0 ? [{ u, rollups }] : [];

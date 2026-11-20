@@ -11,7 +11,7 @@
           ~r"/deps/",
           "lib/chalk_sync/contract/generated.ex",
           "lib/chalk_sync/contract/generated_whiteboard_v1.ex",
-          "lib/chalk_sync/obs/registry.ex"
+          "lib/chalk_sync/obs/generated/registry.ex"
         ]
       }
     }

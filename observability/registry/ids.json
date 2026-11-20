@@ -26,7 +26,14 @@
       "companions": ["device_ephemeral"],
       "doc": "A persistent install or browser profile. device_ephemeral is true when storage was unavailable and the id lives only for this client session."
     },
-    { "kind": "client_session", "prefix": "cs", "field": "client_session_id", "canonical": "uuid", "authority": "SDK outbox", "doc": "One SDK client object's lifetime. Owns seq. The CHK- diagnostic code is derived from it." },
+    {
+      "kind": "client_session",
+      "prefix": "cs",
+      "field": "client_session_id",
+      "canonical": "uuid",
+      "authority": "SDK outbox",
+      "doc": "One SDK client object's lifetime. Every record the client makes carries it, separate from source_id, the stream that owns seq. The CHK- diagnostic code is derived from it."
+    },
     { "kind": "journey", "prefix": "jr", "field": "journey_id", "canonical": "uuid", "authority": "minted at the user action that starts it", "doc": "One user-visible attempt, such as a join, spanning many requests and traces. Never an alias for a trace." },
     { "kind": "request", "prefix": "rq", "field": "request_id", "canonical": "uuid", "authority": "minted per attempt by the receiving server", "scope": "journey", "doc": "One request attempt. A retry is a new request in the same journey." },
     { "kind": "trace", "prefix": "tr", "field": "trace_id", "canonical": "hex32", "authority": "OpenTelemetry", "doc": "A W3C trace. A journey links to one or more traces." },

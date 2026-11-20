@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * Observations, watermarks and readings: the three shapes every witness passes through.
  *
@@ -70,10 +71,13 @@ export function observation(o) {
 /**
  * What a source proves about itself for one subject, folded from C3's source watermarks and `evidence_gap` records.
  *
- * - `subject`: a seat key (`pt:<participant id>`) for a per-client source, or `*` when one stream serves the whole item (API, SFU,
- *   database). A client source is always per seat: one seat's complete client says nothing about another seat's client.
- * - `complete_to_ms`: every durably enqueued record with a time up to here was read; null when the source was not read at all.
- * - `evidence_gaps`: C3's `evidence_gap` ranges; `to_ms: null` is an unknown tail (a client vanished with no persisted high-water mark).
+ * - `subject`: a seat key (`pt:<participant id>`) for a per-client source on an Episode, a client session key (`cs:<client session
+ *   id>`) for a per-client source on an attempt, which has no seat yet, or `*` when one stream serves the whole item (API, SFU,
+ *   database). A client source is always per seat or per session: one seat's complete client says nothing about another seat's.
+ * - `complete_to_ms`: every durably enqueued record with a time up to and including here was read; null when the source was not
+ *   read, or when nothing proves how far its records reach.
+ * - `evidence_gaps`: C3's `evidence_gap` ranges, half-open (see `gapTouches`); `to_ms: null` is an unknown tail (a client vanished
+ *   with no persisted high-water mark).
  * - `emits`: the facts the build behind the source is registered to emit (C1 registry, by app version and schema version). A fact
  *   the build cannot emit is unknown, never absent, so missing board data never reads as "board unused".
  * - `build`: the build that produced the source, for the reader (`client 3.1.0`).
@@ -84,6 +88,8 @@ export function observation(o) {
 
 /** Sources each Participant's own device delivers (the registry's per-seat sources). One seat's complete stream says nothing about another seat's. */
 const PER_SEAT_SOURCES = new Set(SOURCE_TABLE.filter((entry) => entry.per_seat).map((entry) => entry.source));
+/** @param {string} source */
+export const perSeat = (source) => PER_SEAT_SOURCES.has(source);
 
 /**
  * @param {Watermark} w
@@ -94,7 +100,8 @@ export function watermark(w) {
   if (typeof w.source !== "string" || w.source === "" || typeof w.subject !== "string" || w.subject === "") throw new TypeError(`${where}: source and subject are required`);
   if (w.complete_to_ms !== null && !Number.isFinite(w.complete_to_ms)) throw new TypeError(`${where}: complete_to_ms must be a number or null`);
   if (!Array.isArray(w.emits) || !Array.isArray(w.evidence_gaps)) throw new TypeError(`${where}: emits and evidence_gaps are lists`);
-  if (PER_SEAT_SOURCES.has(w.source) && !w.subject.startsWith("pt:")) throw new TypeError(`${where}: a ${w.source} source is per seat, so its watermark names one seat (pt:<participant>), never the whole item`);
+  if (perSeat(w.source) && !w.subject.startsWith("pt:") && !w.subject.startsWith("cs:")) throw new TypeError(`${where}: a ${w.source} source is per seat, so its watermark names one seat (pt:<participant>) or, before a seat exists, one client session (cs:<id>), never the whole item`);
+  for (const gap of w.evidence_gaps) if (!Number.isFinite(gap.from_ms) || (gap.to_ms !== null && !(gap.to_ms > gap.from_ms))) throw new TypeError(`${where}: an evidence gap is [from_ms, to_ms) with to_ms after from_ms, or null for an unknown tail`);
   return Object.freeze({ ...w, emits: Object.freeze([...w.emits]), evidence_gaps: Object.freeze(w.evidence_gaps.map((gap) => Object.freeze({ ...gap }))) });
 }
 
@@ -108,6 +115,16 @@ export function watermark(w) {
  */
 
 /**
+ * Intervals, stated once. An evidence gap is half-open, [from_ms, to_ms), and `to_ms: null` runs forever. The window a check reads is
+ * closed, [from_ms, to_ms], because a record stamped at the check's end belongs to it. So a gap touches a window when it starts at or
+ * before the window's end and ends after the window's start: an open tail that starts exactly at the end is not covered, and a gap
+ * that ends exactly where the window starts is.
+ * @param {EvidenceGap} gap
+ * @param {Window} window
+ */
+const gapTouches = (gap, window) => gap.from_ms <= window.to_ms && (gap.to_ms === null || gap.to_ms > window.from_ms);
+
+/**
  * Whether one source's watermark proves that every record about `fact` in `window` was read.
  * @param {Readonly<Watermark> | undefined} w
  * @param {{ source: string, subject: string, fact: string, window: Window }} need
@@ -117,7 +134,7 @@ export function uncovered(w, { source, subject, fact, window }) {
   if (w === undefined || w.complete_to_ms === null) return { why: "not_read", source, subject, fact };
   if (!w.emits.includes(fact)) return { why: "not_emitted", source, subject, fact, build: w.build };
   if (w.complete_to_ms < window.to_ms) return { why: "behind", source, subject, fact, complete_to_ms: w.complete_to_ms };
-  const gap = w.evidence_gaps.find((candidate) => candidate.from_ms < window.to_ms && (candidate.to_ms === null || candidate.to_ms > window.from_ms));
+  const gap = w.evidence_gaps.find((candidate) => gapTouches(candidate, window));
   return gap ? { why: "evidence_gap", source, subject, fact, gap } : null;
 }
 

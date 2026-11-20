@@ -8,7 +8,7 @@ describe("app telemetry", () => {
     const app = appTelemetry(test.outbox);
     app.problemReported();
     await test.outbox.flush();
-    expect(app.sessionId).toBe(test.outbox.sessionId);
+    expect(app.sessionId).toBe(test.outbox.clientSessionId);
     expect(test.accepted.map((event) => event.type)).toEqual(["problem_reported"]);
   });
 

@@ -379,7 +379,7 @@
     {
       "id": "gate:diagnose-call",
       "owner": "Call",
-      "catches": "A change to the call diagnosis, its thresholds or the code that writes the rows it reads that stops it joining by id, naming stage, side and proof rows, or listing missing evidence.",
+      "catches": "A diagnosis change that stops it joining rows by id or naming stage, side and proof rows, or a symptom that loses a link from witness to fault scenario or a chain file that no hop writes.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
       "minutes": null,

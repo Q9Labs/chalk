@@ -3,8 +3,6 @@ package telemetrydelivery
 import (
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
@@ -18,7 +16,44 @@ var ErrLedgerFull = errors.New("telemetry ledger range cap exceeded")
 // ErrBatch says the batch is not a decoded version 2 batch.
 var ErrBatch = errors.New("telemetry batch is not a valid version 2 batch")
 
-// EndState is how a source ended, as its client or its successor reported.
+// ErrSourceOwned says the batch's source belongs to another participant or Episode. A source is
+// owned by the credential of its first admitted batch, so a client that learns a source_id cannot
+// write to it. The batch is refused as a whole and nothing is settled.
+var ErrSourceOwned = errors.New("telemetry source belongs to another participant")
+
+// ErrSourceBudget says the participant already owns MaxSourcesPerParticipant sources, so the
+// batch's new source would allocate one row too many. The batch is refused and nothing is settled.
+var ErrSourceBudget = errors.New("telemetry source budget of the participant is spent")
+
+// ErrParticipantGone says the credential names a participant whose row, or whose tenant, no longer
+// exists, the way a purge leaves it. The batch is refused so that no row is created again.
+var ErrParticipantGone = errors.New("telemetry participant is not live")
+
+// Reasons the answer and the rejected log rows give.
+const (
+	// ReasonSourceOwned refuses a batch whose source another participant or Episode owns.
+	ReasonSourceOwned = "source_owned"
+	// ReasonSourceBudget refuses a batch whose new source is past the participant's budget.
+	ReasonSourceBudget = "source_budget"
+	// ReasonParticipantGone refuses a batch for a purged tenant or a removed participant.
+	ReasonParticipantGone = "participant_gone"
+	// ReasonAfterEnd rejects a record at or past the next_seq of its source's closed end.
+	ReasonAfterEnd = "after_end"
+	// ReasonEndShort refuses an end whose next_seq is below what the ledger already holds: a seq
+	// it settled, or a next_seq an earlier batch reported.
+	ReasonEndShort = "end_short"
+	// ReasonEndConflict refuses an end that disagrees with the closed end the source already has.
+	ReasonEndConflict = "end_conflict"
+)
+
+// MaxSourcesPerParticipant is the most sources one participant may own. A client starts one
+// source per participant it joins as and one per page load, and a User keeps one participant per
+// Episode, so a long call with many reloads owns many sources; the cap sits well above that and
+// still bounds the rows a still-valid credential can allocate. A refused source never reaches the
+// ledger, so a reader treats time in the seat's window that no source covers as a gap.
+const MaxSourcesPerParticipant = 64
+
+// EndState is how a source ended, as its client or the client's next load reported.
 type EndState string
 
 const (
@@ -26,23 +61,23 @@ const (
 	EndNone EndState = ""
 	// EndClosed is a source whose client said its last next_seq exactly.
 	EndClosed EndState = "closed"
-	// EndAbandoned is a source a successor found dead, with the last high-water mark it persisted.
+	// EndAbandoned is a source a later load found dead, with the last next_seq it persisted.
 	EndAbandoned EndState = "abandoned"
 )
 
-// Ranges is what the ledger knows of the seqs of one source and participant.
+// Ranges is what the ledger knows of the seqs of one source.
 type Ranges struct {
-	// Stored seqs have a row in the sink.
+	// Stored seqs were committed as valid records and logged after the commit.
 	Stored Set `json:"stored"`
-	// Rejected seqs were refused for their content and logged as such. They are final.
+	// Rejected seqs were refused for their content and logged as such. They are settled and final,
+	// but they are not evidence.
 	Rejected Set `json:"rejected"`
 	// Dropped seqs were given up by the client, by reason, named by a stored drop record.
 	Dropped map[string]Set `json:"dropped"`
 }
 
-// SourceRow is one ledger row, keyed by (TenantID, SourceID, ParticipantID). A source spans
-// participants when its User or Agent rejoins as a successor (see Binding), so the watermark of a
-// source is the union of its rows.
+// SourceRow is the ledger row of one source, keyed by (TenantID, SourceID). Its owner is the
+// participant and Episode of the credential of its first admitted batch, and never changes.
 type SourceRow struct {
 	TenantID      utilities.ID
 	SourceID      utilities.ID
@@ -65,7 +100,7 @@ type Identity struct {
 	ParticipantID utilities.ID
 }
 
-// NewSourceRow is the empty row of a source the ledger has not seen for this participant.
+// NewSourceRow is the empty row of a source the ledger has not seen, owned by the identity.
 func NewSourceRow(identity Identity, source utilities.ID) SourceRow {
 	return SourceRow{
 		TenantID: identity.TenantID, SourceID: source, ParticipantID: identity.ParticipantID, EpisodeID: identity.EpisodeID,
@@ -73,128 +108,120 @@ func NewSourceRow(identity Identity, source utilities.ID) SourceRow {
 	}
 }
 
+// Owner is the identity whose credential alone may write the row.
+func (r SourceRow) Owner() Identity {
+	return Identity{TenantID: r.TenantID, EpisodeID: r.EpisodeID, ParticipantID: r.ParticipantID}
+}
+
 // Admission is what one batch does to the ledger.
 type Admission struct {
-	// Rows are the rows the batch changed or created, ordered by source id. The caller persists them.
-	Rows []SourceRow
+	// Row is the batch's source row after the batch. The caller persists it.
+	Row SourceRow
 	// New holds the events whose seq the ledger had not settled before, in batch order, valid and
-	// rejected alike. Only these are written to the sink.
+	// rejected alike. Only these are logged, and only after the row is committed.
 	New []sdktelemetry.Event
 	// Duplicates counts the events whose seq the ledger had already stored or rejected.
 	Duplicates int
 	// Settled is every seq of the batch the committed ledger names: the new ones and the duplicates.
 	// The reference server settles the whole batch or nothing.
 	Settled Set
+	// EndRejection names why the batch's end was not applied, or is empty. A refused end changes
+	// nothing, so the suffix it would have hidden stays a gap.
+	EndRejection string
 }
 
-// Sources lists the sources a batch touches, ordered: its own and the predecessors its valid drop
-// records name. The adapter locks their rows in this order, so two batches cannot deadlock.
-func Sources(batch sdktelemetry.Request) ([]utilities.ID, error) {
-	own, err := utilities.ParseID(batch.SourceID)
+// SourceID is the batch's source, the only source a batch may write.
+func SourceID(batch sdktelemetry.Request) (utilities.ID, error) {
+	source, err := utilities.ParseID(batch.SourceID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: source_id", ErrBatch)
+		return utilities.ID{}, fmt.Errorf("%w: source_id", ErrBatch)
 	}
-	sources := []utilities.ID{own}
-	for _, event := range batch.Events {
-		if event.Rejection() != "" || event.DroppedSourceID == "" {
-			continue
-		}
-		other, err := utilities.ParseID(event.DroppedSourceID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: dropped_source_id", ErrBatch)
-		}
-		sources = append(sources, other)
-	}
-	slices.SortFunc(sources, func(a, b utilities.ID) int { return strings.Compare(a.String(), b.String()) })
-	return slices.Compact(sources), nil
+	return source, nil
 }
 
-// Admit applies a decoded version 2 batch to the rows of the sources it touches (see Sources),
-// keyed by source id for the batch's participant. A source with no row starts empty.
+// Admit applies a decoded version 2 batch to its source's row. existing is that row, or nil when
+// the ledger has none, and owned is how many sources the identity already owns, which only
+// matters for a new row.
 //
-// barred are predecessor sources the participant may not write (see Authorize). Admit changes none
-// of them and returns no row for them. A valid drop record naming one is settled in the batch's
-// own source as rejected with SourceBound, and it is written to the sink as that rejection.
-//
-// A seq the row already stores or rejects is a duplicate: the first copy wins, whatever the
-// retry says. A new valid record is stored, a new invalid one is rejected, and a new valid drop
-// record also marks the seqs it names as dropped in the source it names. The batch's next_seq
-// raises the high-water mark, and its end is kept as the best the source has said of itself.
-func Admit(identity Identity, rows map[utilities.ID]SourceRow, barred []utilities.ID, batch sdktelemetry.Request, received time.Time) (Admission, error) {
+// Only the row's owner may write it. A seq the row already stores or rejects is a duplicate: the
+// first copy wins, whatever the retry says. A new valid record is stored and a new invalid one is
+// rejected. A record at or past a closed end is rejected, and a valid drop record marks the seqs
+// it names as dropped in the same source. The batch's end is checked against the committed
+// history (see applyEnd), then its next_seq raises the high-water mark.
+func Admit(identity Identity, existing *SourceRow, owned int, batch sdktelemetry.Request, received time.Time) (Admission, error) {
 	if batch.Version != sdktelemetry.LedgerVersion || batch.NextSeq == nil {
 		return Admission{}, ErrBatch
 	}
-	sources, err := Sources(batch)
+	source, err := SourceID(batch)
 	if err != nil {
 		return Admission{}, err
 	}
-	ownID, _ := utilities.ParseID(batch.SourceID)
-	touched := make(map[utilities.ID]*SourceRow, len(sources))
-	for _, source := range sources {
-		if slices.Contains(barred, source) {
-			continue
-		}
-		row, found := rows[source]
-		if !found {
-			row = NewSourceRow(identity, source)
-		}
-		row.Ranges = row.Ranges.Normalized()
-		touched[source] = &row
+	row, err := startRow(identity, existing, owned, source)
+	if err != nil {
+		return Admission{}, err
 	}
-
 	admission := Admission{}
-	own := touched[ownID]
-	batchSeqs := make([]sdktelemetry.SeqRange, 0, len(batch.Events))
+	closedAt := int64(-1)
+	if row.End == EndClosed {
+		closedAt = row.EndNextSeq
+	}
+	seqs := make([]sdktelemetry.SeqRange, 0, len(batch.Events))
 	for _, event := range batch.Events {
 		seq := eventSeq(event)
-		batchSeqs = append(batchSeqs, sdktelemetry.SeqRange{From: seq, To: seq + 1})
-		if own.Ranges.Stored.Contains(seq) || own.Ranges.Rejected.Contains(seq) {
+		seqs = append(seqs, sdktelemetry.SeqRange{From: seq, To: seq + 1})
+		if row.Ranges.Stored.Contains(seq) || row.Ranges.Rejected.Contains(seq) {
 			admission.Duplicates++
 			continue
 		}
-		single := Set{{From: seq, To: seq + 1}}
-		if event.Type == "telemetry_dropped" && event.Rejection() == "" && event.DroppedSourceID != "" {
-			if other, _ := utilities.ParseID(event.DroppedSourceID); slices.Contains(barred, other) {
-				admission.New = append(admission.New, event.Refused(SourceBound))
-				own.Ranges.Rejected = own.Ranges.Rejected.Union(single)
-				continue
-			}
+		if closedAt >= 0 && seq >= closedAt && event.Rejection() == "" {
+			event = event.Refused(ReasonAfterEnd)
 		}
 		admission.New = append(admission.New, event)
-		if event.Rejection() != "" {
-			own.Ranges.Rejected = own.Ranges.Rejected.Union(single)
-			continue
-		}
-		own.Ranges.Stored = own.Ranges.Stored.Union(single)
-		if event.Type != "telemetry_dropped" {
-			continue
-		}
-		target := own
-		if event.DroppedSourceID != "" {
-			other, _ := utilities.ParseID(event.DroppedSourceID)
-			target = touched[other]
-		}
-		target.Ranges.Dropped[event.DropReason] = target.Ranges.Dropped[event.DropReason].Union(NewSet(event.DroppedSeqs...))
+		row.Ranges.admit(event, seq)
 	}
-	own.ReportedNextSeq = max(own.ReportedNextSeq, *batch.NextSeq)
-	own.recordEnd(batch.End, *batch.NextSeq)
-
-	for _, source := range sources {
-		row, found := touched[source]
-		if !found {
-			continue
-		}
-		if row.FirstReceivedAt.IsZero() {
-			row.FirstReceivedAt = received
-		}
-		row.LastReceivedAt = received
-		if row.Ranges.oversized() {
-			return Admission{}, ErrLedgerFull
-		}
-		admission.Rows = append(admission.Rows, *row)
+	admission.EndRejection = row.applyEnd(batch.End, *batch.NextSeq)
+	row.ReportedNextSeq = max(row.ReportedNextSeq, *batch.NextSeq)
+	if row.FirstReceivedAt.IsZero() {
+		row.FirstReceivedAt = received
 	}
-	admission.Settled = NewSet(batchSeqs...)
+	row.LastReceivedAt = received
+	if row.Ranges.oversized() {
+		return Admission{}, ErrLedgerFull
+	}
+	admission.Row = row
+	admission.Settled = NewSet(seqs...)
 	return admission, nil
+}
+
+// startRow is the row a batch of the identity starts from: a copy of the existing row when the
+// identity owns it, or a new row when the identity has budget for one.
+func startRow(identity Identity, existing *SourceRow, owned int, source utilities.ID) (SourceRow, error) {
+	if existing == nil {
+		if owned >= MaxSourcesPerParticipant {
+			return SourceRow{}, ErrSourceBudget
+		}
+		return NewSourceRow(identity, source), nil
+	}
+	if existing.SourceID != source || existing.Owner() != identity {
+		return SourceRow{}, ErrSourceOwned
+	}
+	row := *existing
+	row.Ranges = row.Ranges.Normalized()
+	return row, nil
+}
+
+// admit settles one new seq: stored when the event is valid, rejected otherwise. A stored drop
+// record also marks the seqs it names as dropped, all of them below its own seq.
+func (r *Ranges) admit(event sdktelemetry.Event, seq int64) {
+	single := Set{{From: seq, To: seq + 1}}
+	if event.Rejection() != "" {
+		r.Rejected = r.Rejected.Union(single)
+		return
+	}
+	r.Stored = r.Stored.Union(single)
+	if event.Type == "telemetry_dropped" {
+		r.Dropped[event.DropReason] = r.Dropped[event.DropReason].Union(NewSet(event.DroppedSeqs...))
+	}
 }
 
 // Acks is every seq of the batch that the settled set names: the answer's acks. A server that
@@ -217,20 +244,29 @@ func eventSeq(event sdktelemetry.Event) int64 {
 	return event.Seq
 }
 
-// recordEnd keeps the best end the source has reported. A closed end is exact, so it replaces an
-// abandoned one and is never replaced by it; two ends of one kind keep the larger next_seq.
-func (r *SourceRow) recordEnd(end string, nextSeq int64) {
+// applyEnd applies a reported end after the batch's records are settled, or names why it does not.
+//
+// A closed end is final: the same close again changes nothing, and any other end conflicts with
+// it. Otherwise an end below the floor is short: the floor is one past the highest seq the row
+// stores or rejects, and at least the largest next_seq an earlier batch reported. Applying a
+// short end would hide the seqs between it and the floor, so it is refused and they stay a gap.
+// An end at or above the floor replaces an abandoned end, so a close settles what a later load
+// found dead, and a later abandoned end raises the next_seq.
+func (r *SourceRow) applyEnd(end string, nextSeq int64) string {
 	reported := EndState(end)
+	floor := max(r.Ranges.Stored.Union(r.Ranges.Rejected).End(), r.ReportedNextSeq)
 	switch {
 	case reported == EndNone:
-		return
-	case r.End == EndClosed && reported == EndAbandoned:
-		return
-	case r.End == reported:
-		r.EndNextSeq = max(r.EndNextSeq, nextSeq)
-	default:
-		r.End, r.EndNextSeq = reported, nextSeq
+		return ""
+	case r.End == EndClosed && nextSeq == r.EndNextSeq:
+		return ""
+	case r.End == EndClosed:
+		return ReasonEndConflict
+	case nextSeq < floor:
+		return ReasonEndShort
 	}
+	r.End, r.EndNextSeq = reported, nextSeq
+	return ""
 }
 
 // Normalized is a copy of the ranges in canonical form: every set sorted and merged and never nil,

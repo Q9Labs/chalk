@@ -11,7 +11,7 @@ test("the committed registry builds without errors and generates every output", 
   assert.deepEqual(buildModel(source).errors, []);
   const { errors, outputs } = await generate();
   assert.deepEqual(errors, []);
-  for (const path of ["observability/generated/registry.json", "sdks/typescript/client/src/obs/registry.ts", "apps/sync/lib/chalk_sync/obs/registry.ex", "apps/api/internal/obs/registry_gen.go", "features/media/sfu/internal/obs/kernel.go"]) {
+  for (const path of ["observability/generated/registry.json", "sdks/typescript/client/src/obs/registry.ts", "apps/sync/lib/chalk_sync/obs/generated/registry.ex", "apps/api/internal/obs/registry_gen.go", "features/media/sfu/internal/obs/kernel.go"]) {
     assert.ok(path in outputs, `${path} is not generated`);
   }
 });

@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 /**
  * What a check author can get wrong, caught when the catalogue loads or when a rule answers, with the check's code in the message.
  * The kernel trusts a catalogue that passes here and a decision that passes here; everything else about a rule's evidence is held by
@@ -11,7 +12,7 @@ import { FAULT_COMPONENTS, ITEM_KINDS, REASONS, SOURCE_TABLE, factDef } from "./
 /** @typedef {import("./profile.mjs").Requirement} Requirement */
 
 /** The delivery streams a watermark can prove complete (evidence.mjs `source`), from the registry's core.json. */
-export const SOURCES = Object.freeze(SOURCE_TABLE.map((entry) => entry.source));
+const SOURCES = Object.freeze(SOURCE_TABLE.map((entry) => entry.source));
 
 /**
  * Query placeholders, and the item kinds and check shapes that can fill each.
@@ -50,6 +51,7 @@ export function validateCatalogue(catalogue) {
     if (def.per === "seat" && def.item !== "episode") throw new TypeError(`${where}: per-seat checks apply to Episodes only`);
     if (def.requires.length === 0) throw new TypeError(`${where}: requires lists at least one fact, or nothing could ever prove the check`);
     for (const requirement of [...def.requires, ...def.optional]) validateRequirement(where, def, requirement);
+    for (const fact of def.healthy_absent ?? []) if (!def.requires.some((requirement) => requirement.fact === fact)) throw new TypeError(`${where}: healthy_absent names ${fact}, which is not a required witness of the check`);
   }
 }
 

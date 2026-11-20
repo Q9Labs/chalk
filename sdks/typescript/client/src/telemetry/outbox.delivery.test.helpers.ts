@@ -1,3 +1,5 @@
+// fallow-ignore-file complexity -- every branch is a delivery step; the outbox delivery tests and the formal trace replay cover each one, which the CRAP estimate cannot see.
+import { expect, vi } from "vitest";
 import { TelemetryOutbox } from "./outbox";
 import type { DeliveryStep, PlatformChange, SeqRange, TelemetryEvent, TelemetryPlatform, TelemetryRequest, TelemetrySendResult } from "./types";
 import { createSessionJournal } from "./web-platform";
@@ -7,17 +9,19 @@ export type TraceStep =
   | DeliveryStep
   | { readonly a: "crash" }
   | { readonly a: "receive"; readonly batch: string; readonly settle: readonly number[] }
-  | { readonly a: "write" }
+  | { readonly a: "refuse"; readonly batch: string }
   | { readonly a: "commit" }
+  | { readonly a: "write" }
   | { readonly a: "respond" }
   | { readonly a: "server_crash" }
   | { readonly a: "lose_request"; readonly batch: string }
   | { readonly a: "lose_answer"; readonly batch: string };
 
-/** What goes wrong with the next request that reaches the double. `settle` settles only those seqs of the batch. */
-export type Fault = "lose_request" | "lose_answer" | "crash" | "unavailable" | { readonly settle: readonly number[] };
+/** What goes wrong with the next request that reaches the double. `crash` dies before the commit, `crash_after_commit` between the commit and the sink write. `settle` settles only those seqs of the batch. */
+export type Fault = "lose_request" | "lose_answer" | "crash" | "crash_after_commit" | "unavailable" | { readonly settle: readonly number[] };
 
-type SourceLedger = { readonly stored: Set<number>; readonly dropped: Set<number>; reported: number; end: "" | "closed" | "abandoned"; endNext: number };
+/** One source row. `owner` is the token of its first batch: the double treats a token as the participant it speaks for. */
+type SourceLedger = { owner: string; readonly stored: Set<number>; readonly dropped: Set<number>; reported: number; end: "" | "closed" | "abandoned"; endNext: number; endRejection: string };
 
 /** A tab's sessionStorage, which a reload keeps. */
 export class MemoryStorage {
@@ -39,12 +43,16 @@ export class MemoryStorage {
   }
 }
 
-/** The server rules of docs/telemetry-delivery.md: a ledger keyed by source and seq, dedupe, answers that name the settled seqs, and a sink write before the ledger commit. */
+/**
+ * The server rules of docs/telemetry-delivery.md: one owner per source, a ledger keyed by source and seq, dedupe, an end checked against the committed history, the ledger commit before the sink write, and answers that name the settled seqs.
+ */
 export class ProtocolDouble {
   readonly ledgers = new Map<string, SourceLedger>();
-  /** Every row the sink got. A crash between the write and the commit makes the retry write a row twice. */
+  /** Every row the sink got, only after its commit. A crash between the commit and the write loses the row, and the retry is a duplicate. */
   readonly rows: { readonly source: string; readonly event: TelemetryEvent }[] = [];
   readonly requests: TelemetryRequest[] = [];
+  /** The token of each request, in the order of `requests`. */
+  readonly tokens: string[] = [];
   readonly faults: Fault[] = [];
   readonly #emit: (step: TraceStep) => void;
 
@@ -55,7 +63,7 @@ export class ProtocolDouble {
   ledger(source: string): SourceLedger {
     let found = this.ledgers.get(source);
     if (!found) {
-      found = { stored: new Set(), dropped: new Set(), reported: 0, end: "", endNext: 0 };
+      found = { owner: "", stored: new Set(), dropped: new Set(), reported: 0, end: "", endNext: 0, endRejection: "" };
       this.ledgers.set(source, found);
     }
     return found;
@@ -66,8 +74,9 @@ export class ProtocolDouble {
     return new Map(this.rows.map((row) => [`${row.source}/${row.event.seq}`, row.event]));
   }
 
-  handle(body: TelemetryRequest, signal: AbortSignal): Promise<TelemetrySendResult> {
+  handle(body: TelemetryRequest, signal: AbortSignal, token: string): Promise<TelemetrySendResult> {
     this.requests.push(body);
+    this.tokens.push(token);
     const fault = this.faults.shift();
     const batch = body.batch_id ?? "";
     const seqs = body.events.map((event) => event.seq);
@@ -83,23 +92,29 @@ export class ProtocolDouble {
     this.#emit({ a: "receive", batch, settle });
     const source = body.source_id ?? "";
     const ledger = this.ledger(source);
-    const fresh = body.events.filter((event) => settle.includes(event.seq) && !ledger.stored.has(event.seq));
-    this.rows.push(...fresh.map((event) => ({ source, event })));
-    this.#emit({ a: "write" });
+    if (ledger.owner !== "" && ledger.owner !== token) {
+      this.#emit({ a: "refuse", batch });
+      return Promise.resolve({ status: 400, retryAfterMs: 0 });
+    }
     if (fault === "crash") {
       this.#emit({ a: "server_crash" });
       return Promise.reject(new TypeError("the server died"));
     }
+    const fresh = body.events.filter((event) => settle.includes(event.seq) && !ledger.stored.has(event.seq));
+    ledger.owner = token;
     for (const event of fresh) {
       ledger.stored.add(event.seq);
-      for (const range of event.dropped_seqs ?? []) for (let seq = range.from; seq < range.to; seq++) this.ledger(event.dropped_source_id ?? source).dropped.add(seq);
+      for (const range of event.dropped_seqs ?? []) for (let seq = range.from; seq < range.to; seq++) ledger.dropped.add(seq);
     }
+    applyEnd(ledger, body);
     ledger.reported = Math.max(ledger.reported, body.next_seq ?? 0);
-    if (body.end && ledger.end !== "closed") {
-      ledger.end = body.end;
-      ledger.endNext = body.next_seq ?? 0;
-    }
     this.#emit({ a: "commit" });
+    if (fault === "crash_after_commit") {
+      this.#emit({ a: "server_crash" });
+      return Promise.reject(new TypeError("the server died"));
+    }
+    this.rows.push(...fresh.map((event) => ({ source, event })));
+    this.#emit({ a: "write" });
     this.#emit({ a: "respond" });
     if (fault === "lose_answer") {
       this.#emit({ a: "lose_answer", batch });
@@ -107,6 +122,23 @@ export class ProtocolDouble {
     }
     return Promise.resolve({ status: 200, retryAfterMs: 0, acks: settle.map((seq): SeqRange => ({ from: seq, to: seq + 1 })) });
   }
+}
+
+/** An end below the committed history (the highest stored seq + 1, or a `next_seq` already reported) is refused and the suffix stays a gap. A second close at another `next_seq` is refused too. */
+function applyEnd(ledger: SourceLedger, body: TelemetryRequest): void {
+  if (!body.end) return;
+  const next = body.next_seq ?? 0;
+  if (ledger.end === "closed") {
+    if (next !== ledger.endNext) ledger.endRejection = "end_conflict";
+    return;
+  }
+  const floor = Math.max(ledger.reported, ...[...ledger.stored].map((seq) => seq + 1));
+  if (next < floor) {
+    ledger.endRejection = "end_short";
+    return;
+  }
+  ledger.end = body.end;
+  ledger.endNext = next;
 }
 
 /** A request whose answer never comes: the outbox gives up when its send timeout aborts it. */
@@ -141,7 +173,7 @@ export function createWorld(scenario: string) {
       send: (request) => {
         if (state.dead) return new Promise(() => undefined);
         const body: TelemetryRequest = JSON.parse(request.body);
-        return server.handle(body, request.signal);
+        return server.handle(body, request.signal, request.token);
       },
       journal: {
         list: () => (state.dead ? [] : shared.list()),
@@ -185,3 +217,27 @@ export const bigStats = (windowMs = 10_000): { readonly type: "call_stats"; read
   type: "call_stats",
   stats: { window_ms: windowMs, connection_type: "udp", tracks: Array.from({ length: 1200 }, (_, index) => ({ mid: String(index), kind: "audio", packets: 1, lost: 0, audio_energy: 0, playout: "playing" })) },
 });
+
+export const seconds = (count: number) => vi.advanceTimersByTimeAsync(count * 1000);
+export const ended = { type: "call_ended", end_reason: "left" } as const;
+export const failed = { type: "connection_failed", code: "media_start_failed" } as const;
+export type World = ReturnType<typeof createWorld>;
+
+export const keyOf = (source: string, seq: number) => `${source}/${seq}`;
+
+/** The rule the model checks, read off the double: every P0 record the client made is stored or named by a stored drop record, and every seq below a source's high-water mark is stored, named, or one of the records the test knows died in memory. */
+export function expectConservation(world: World, lost: readonly string[] = []) {
+  const stored = world.server.stored();
+  const named = new Set<string>();
+  for (const [key, event] of stored) {
+    if (event.type !== "telemetry_dropped") continue;
+    const source = key.split("/")[0] ?? "";
+    for (const range of event.dropped_seqs ?? []) for (let seq = range.from; seq < range.to; seq++) named.add(keyOf(source, seq));
+  }
+  const p0 = world.steps.flatMap((step: TraceStep) => (step.a === "record" && step.p0 ? [keyOf(step.src, step.seq)] : step.a === "emit_drop" ? [keyOf(step.src, step.seq)] : []));
+  for (const key of p0) expect(stored.has(key) || named.has(key), `P0 record ${key} is neither stored nor named`).toBe(true);
+  for (const [source, ledger] of world.server.ledgers) {
+    const high = ledger.end === "closed" ? ledger.endNext : Math.max(ledger.reported, ledger.endNext);
+    for (let seq = 0; seq < high; seq++) expect(ledger.stored.has(seq) || ledger.dropped.has(seq) || lost.includes(keyOf(source, seq)), `seq ${keyOf(source, seq)} is unaccounted`).toBe(true);
+  }
+}

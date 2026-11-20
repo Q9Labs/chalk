@@ -1,7 +1,8 @@
 // @ts-check
 /**
  * end.time_limit: an item-wide `expected` rule with a tight causal precondition. It claims the client failures within a few
- * seconds of a time-limit end, because the end caused them.
+ * seconds of a time-limit end, because the end caused them. It applies because the declaration says the Episode hit its time
+ * limit, so a witnessed end with another reason contradicts the declaration: the rule can't say which is right, and never passes.
  */
 
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
@@ -30,9 +31,9 @@ export const applies = (declaration) => declaration.kind === "episode" && declar
  */
 export function decide({ readings, failures }) {
   const end = readings["end.episode"];
-  if (end.kind !== "present") return { status: "pass" };
+  if (end.kind !== "present") return { status: "unknown", reason: "the Episode's end is not witnessed" };
   const decision = end.observations.find((o) => o.claim === "maximum_duration");
-  if (!decision) return { status: "pass" };
+  if (!decision) return { status: "unknown", reason: `the declaration says the Episode hit its time limit, but Sync saw it end with ${end.observations.map((o) => o.claim).join(", ")}` };
   const at = decision.window.from_ms;
   const near = failures.filter((o) => Math.abs(o.window.from_ms - at) <= END_SLACK_MS);
   /** @type {Fact[]} */

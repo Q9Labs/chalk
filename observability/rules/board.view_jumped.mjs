@@ -1,4 +1,5 @@
 // @ts-check
+// fallow-ignore-file complexity -- the rule branches on every kind of evidence; its fixtures and the diagnose-call tests cover each branch, which the CRAP estimate cannot see.
 /**
  * board.view_jumped: a viewer's board camera jumping. Its witness is one older builds cannot emit, so its absence is unknown,
  * never "board unused".
@@ -16,6 +17,9 @@ export const symptom = "board.view_jumped";
 const JUMPS_PER_2S = 5;
 
 export const expected = `a viewer's board camera moves automatically at most ${JUMPS_PER_2S} times in any 2 s`;
+
+/** A viewer whose camera never moved on its own writes no camera rows, so board camera proven absent is the healthy claim. */
+export const healthy_absent = ["board.camera"];
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
 export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.features.includes("board") && seat !== null;

@@ -1,4 +1,4 @@
-day TH 2026-11-18 outcome=broken coverage=partial checked=4/6 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=d7d52b11
+day TH 2026-11-18 outcome=broken coverage=partial checked=4/6 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=b35345f2
 anchor=2026-11-17T19:00Z local=2026-11-18T00:00+05:00 tz=Asia/Karachi
 admission.unresolved broken attempts=1 cs_6d5e
 audio.not_heard broken episodes=1 people=1 ep_9feb
@@ -8,5 +8,5 @@ gap: stale ep_31aa 11:00 was=healthy
 gap: partial ep_9feb 14:45 missing=board
 gap: partial job_4a3b 15:45 missing=open
 gap: unchecked ep_7a21 16:00
-next: diagnose check TH 2026-11-18
-next: diagnose attempt cs_6d5e
+next: diagnose check TH 2026-11-18 --fixture nov18
+next: diagnose attempt cs_6d5e --fixture nov18

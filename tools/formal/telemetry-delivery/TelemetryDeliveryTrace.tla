@@ -24,8 +24,8 @@ Step(t) ==
     \/ /\ t.a = "evict"
        /\ \E v \in mem : Key(v) = <<t.src, t.seq>> /\ Evict(v)
     \/ /\ t.a = "emit_drop"
-       /\ src = t.src /\ next[src] = t.seq
-       /\ EmitDrop
+       /\ Mark(t.src) = t.seq
+       /\ EmitDrop(t.src)
        /\ \E d \in mem' : d.src = t.src /\ d.seq = t.seq /\ d.covers = t.covers
     \/ /\ t.a = "checkpoint"
        /\ src = t.src /\ next[src] = t.next
@@ -44,12 +44,15 @@ Step(t) ==
     \/ t.a = "pagehide" /\ PageHide
     \/ t.a = "dispose" /\ src = t.src /\ Dispose
     \/ t.a = "reboot" /\ Reboot /\ src' = t.src
+    \/ t.a = "rejoin" /\ src = t.src /\ Rejoin /\ src' = t.next
     \/ /\ t.a = "receive"
        /\ \E m \in reqs :
             /\ m.src = t.src /\ SeqsOf(m.recs) = t.seqs
-            /\ \E S \in SUBSET m.recs : SeqsOf(S) = t.settle /\ Receive(m, S)
-    \/ t.a = "write" /\ Write
+            /\ \E S \in SUBSET m.recs : SeqsOf(S) = t.settle /\ Receive(m, S, {})
+    \/ /\ t.a = "refuse"
+       /\ \E m \in reqs : m.src = t.src /\ SeqsOf(m.recs) = t.seqs /\ Refuse(m)
     \/ t.a = "commit" /\ Commit
+    \/ t.a = "write" /\ Write
     \/ t.a = "respond" /\ Respond
     \/ t.a = "server_crash" /\ ServerCrash
     \/ /\ t.a = "lose_request"
