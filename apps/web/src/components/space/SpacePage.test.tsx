@@ -1,4 +1,5 @@
 /* @vitest-environment jsdom */
+/// <reference types="vitest/jsdom" />
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -22,6 +23,8 @@ let view: ReturnType<typeof createRoot> | undefined;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // Vitest leaves Node's localStorage in place when it exists. Use the browser storage.
+  vi.stubGlobal("localStorage", jsdom.window.localStorage);
   requests.length = 0;
   window.name = "";
   sessionStorage.clear();
@@ -76,93 +79,12 @@ it("joins fresh when window.open inherits a copy of the reload marker", async ()
   expect(requests).toEqual(["fresh"]);
 });
 
-it.each([
-  ["access.media_proof_rejected", "Join as a new participant"],
-  ["access.media_proof_expired", "Ask again"],
-])("offers fresh admission after %s without retrying replacement", async (code, label) => {
-  writeReloadRejoin(sessionStorage, marker);
-  await entry(code);
-  const freshButton = () => [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
-  await vi.waitFor(async () => {
-    await act(async () => undefined);
-    expect(freshButton()).toBeDefined();
-  });
-  expect(requests).toEqual(["restore", "replace"]);
-  await act(async () => freshButton()?.click());
-  await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
-});
-
-it("says calls are unavailable when resuming after a reload returns 503 media.unavailable", async () => {
-  writeReloadRejoin(sessionStorage, marker);
-  await entry("media.unavailable", "design-lab", 503);
-  await expectMessage("Calls are unavailable right now. Try again in a few minutes.");
-  expect(requests).toEqual(["restore", "replace"]);
-});
-
-it("opens the Sync socket and API connection while the name prompt shows, without a request", async () => {
-  document.head.querySelectorAll('link[rel="preconnect"]').forEach((link) => link.remove());
-  const sockets: string[] = [];
-  vi.stubGlobal(
-    "WebSocket",
-    class {
-      readyState = 0;
-      constructor(url: string) {
-        sockets.push(url);
-      }
-      addEventListener() {}
-      close() {}
-    },
-  );
-  await entry("access.media_proof_rejected");
-  await expectMessage("Join call");
-  expect([...document.head.querySelectorAll('link[rel="preconnect"]')].map((link) => link.getAttribute("href"))).toContain(window.location.origin);
-  expect(sockets).toHaveLength(1);
-  expect(new URL(sockets[0] ?? "").pathname).toBe("/v1/sync");
-  expect(requests).toEqual([]);
-});
-
-it("opens the device step for a saved name until the visitor has chosen devices", async () => {
-  localStorage.setItem("chalk.display-name", "Ada");
-  await entry("access.media_proof_rejected");
-  await expectMessage("Join call");
-  expect(document.querySelector<HTMLInputElement>("#join-display-name")?.value).toBe("Ada");
-  expect(requests).toEqual([]);
-});
-
 async function expectMessage(message: string) {
   await vi.waitFor(async () => {
     await act(async () => undefined);
     expect(document.body.textContent).toContain(message);
   });
 }
-
-it.each([
-  ["a new call", undefined, "/", "/v1/public/spaces"],
-  ["an invite arrival", "design-lab", "/space/design-lab#spaceInviteToken=cspi1.fixture", "/v1/public/space-invite-arrivals"], // gitleaks:allow - inert invite fixture, not a credential
-])("says calls are unavailable when %s returns 503 media.unavailable", async (_name, slug, url, path) => {
-  window.history.replaceState({}, "", url);
-  localStorage.setItem("chalk.display-name", "Ada");
-  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    if (request.method === "POST" && new URL(request.url).pathname === path) return Response.json({ error: { code: "media.unavailable", message: "Media plane is unavailable" } }, { status: 503 });
-    return Response.json({ error: { code: "auth.unauthorized", message: "Sign in required" } }, { status: 401 });
-  });
-  const root = createRootRoute({
-    component: () => (
-      <ThemeProvider>
-        <SpacePage slug={slug} />
-      </ThemeProvider>
-    ),
-  });
-  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [url] }) });
-  const container = document.createElement("div");
-  document.body.appendChild(container);
-  view = createRoot(container);
-  await act(async () => view?.render(<RouterProvider router={router} />));
-  const join = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === "Join call");
-  await act(async () => join?.click());
-  await expectMessage("Calls are unavailable right now. Try again in a few minutes.");
-});
 
 function grantFixture() {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");

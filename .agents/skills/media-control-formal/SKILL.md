@@ -62,13 +62,13 @@ The subset covers: P1 to P3 on the decided rule for both SFUs, the `current` P2 
 
 ## Replay against the real code
 
-The existing tests drive the real media controller through the same orderings as the counterexamples:
+The retained Stop-wins test drives the real media controller through a late Enable result and a Sync recovery:
 
 ```sh
-cd sdks/typescript/client && pnpm exec vitest run src/space-client/media-off-owed.test.ts src/space-client/media-off-resend.test.ts src/space-client/media-off-ordering.test.ts
+cd sdks/typescript/client && pnpm exec vitest run src/space-client/media-convergence.test.ts
 ```
 
-A failing `decided` row is a finding. Replay its steps in a new case in those files with the fake Sync and SFU clients. If the replay does not show the bug, the model is wrong: find the step whose guard differs from the code.
+A failing `decided` row is a finding. Replay its steps in a focused case with the fake Sync and SFU clients. If the replay does not show the bug, the model is wrong: find the step whose guard differs from the code.
 
 ## Read a failure
 

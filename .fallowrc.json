@@ -22,7 +22,6 @@
     "tools/formal/external-operations/ExternalOperations.view.mjs",
     "tools/formal/client-recovery/ClientRecovery.view.mjs",
     "apps/web/src/call-states/camera-background-fixture.tsx",
-    "sdks/typescript/react/src/components/device-popover/CameraBackgroundPicker.test.tsx",
     "apps/web/src/call-states/main.tsx",
     "apps/web/src/call-states/pre-join-main.tsx",
     "apps/web/src/call-states/web-space-boundary.ts",
