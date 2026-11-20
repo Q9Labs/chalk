@@ -184,7 +184,10 @@ func Admit(identity Identity, existing *SourceRow, owned int, batch sdktelemetry
 	if row.FirstReceivedAt.IsZero() {
 		row.FirstReceivedAt = received
 	}
-	row.LastReceivedAt = received
+	// A closed source may still fill holes, but a receipt is not new activity.
+	if closedAt < 0 && received.After(row.LastReceivedAt) {
+		row.LastReceivedAt = received
+	}
 	if row.Ranges.oversized() {
 		return Admission{}, ErrLedgerFull
 	}
