@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/talktime"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -70,7 +71,22 @@ func getEpisodeTalkTimeEndpoint(service EpisodeTalkTimeService, authorizer Tenan
 		if err != nil {
 			return episodeTalkTimeResponse{}, err
 		}
-		return newEpisodeTalkTimeResponse(request.EpisodeID, outcome)
+		response, err := newEpisodeTalkTimeResponse(request.EpisodeID, outcome)
+		if err != nil {
+			return episodeTalkTimeResponse{}, err
+		}
+		inProgress := 0
+		switch outcome := outcome.(type) {
+		case talktime.Available:
+			inProgress = outcome.InProgress
+		case talktime.TranscriptPending:
+			inProgress = outcome.InProgress
+		}
+		obs.Fact(ctx, obs.EventTranscriptTalkTimeServed,
+			obs.F(obs.FieldEpisodeID, request.EpisodeID.String()),
+			obs.F(obs.FieldTranscriptTalkStatus, response.Status),
+			obs.F(obs.FieldTranscriptInProgress, inProgress))
+		return response, nil
 	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Description("Who spoke in an ended Episode and for how long, measured from its complete transcripts: talk time and share per Participant, speech runs, overlap and silence, and a fixed-bucket timeline. status says whether a measurement exists; talk_time is set only when it is \"available\". Speech runs are capped, and intervals_truncated says when they were left out. Requires episodes:read.").
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "EpisodeTalkTime", episodeTalkTimeResponse{}).

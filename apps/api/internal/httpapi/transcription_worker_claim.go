@@ -3,9 +3,11 @@ package httpapi
 import (
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -93,10 +95,13 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				break
 			}
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "repository_error", obs.ReasonTranscriptRepositoryError)
 				writeWorkerError(w, r, err)
 				return
 			}
+			claimTrail := []slog.Attr{obs.F(obs.FieldJobID, assignment.Job.ID.String()), obs.F(obs.FieldAttempt, assignment.Job.Attempt)}
 			if assignment.Chunk == nil || assignment.Source == nil || assignment.Job.LeaseExpiresAt == nil || assignment.Transcript.SourceManifestKey == nil {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "invalid_assignment", obs.ReasonTranscriptInvalidAssignment, claimTrail...)
 				writeError(w, http.StatusInternalServerError, "internal.error", "Invalid worker assignment")
 				return
 			}
@@ -105,21 +110,25 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				urlTTL = transcriptionWorkLeaseDuration
 			}
 			if urlTTL <= 0 {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "lease_stale", obs.ReasonTranscriptLeaseStale, claimTrail...)
 				writeError(w, http.StatusConflict, "lease.stale", "Transcription source authority expired")
 				return
 			}
 			inputURL, err := chunks.CreateChunkGETURL(r.Context(), ChunkURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.StorageKey, ExpiresIn: urlTTL})
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "url_failed", obs.ReasonTranscriptURLFailed, claimTrail...)
 				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
 			manifestURL, err := manifests.CreateManifestGETURL(r.Context(), ManifestURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: *assignment.Transcript.SourceManifestKey, ExpiresIn: urlTTL})
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "url_failed", obs.ReasonTranscriptURLFailed, claimTrail...)
 				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
 			outputURL, err := results.CreateResultPUTURL(r.Context(), ResultURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.ResultKey, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: urlTTL})
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptClaim, "url_failed", obs.ReasonTranscriptURLFailed, claimTrail...)
 				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
 				return
 			}
@@ -139,6 +148,10 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				Manifest:     workerManifestAssignment{InputURL: manifestURL, ExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), ContentType: "application/json", SizeBytes: derefInt64(assignment.Transcript.SourceManifestSize), SHA256: hex.EncodeToString(assignment.Transcript.SourceManifestSHA256)},
 				OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json",
 			})
+			obs.Decision(r.Context(), obs.EventTranscriptClaim, "leased", "", claimTrail...)
+		}
+		if len(assignments) == 0 {
+			obs.Decision(r.Context(), obs.EventTranscriptClaim, "none", obs.ReasonTranscriptNoClaimableJob)
 		}
 		writeJSON(w, http.StatusOK, workerClaimResponse{Assignments: assignments})
 	}

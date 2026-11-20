@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -107,14 +109,17 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 				break
 			}
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "repository_error", obs.ReasonTranscriptRepositoryError)
 				writeWorkerError(w, r, err)
 				return
 			}
+			claimTrail := []slog.Attr{obs.F(obs.FieldJobID, assignment.Job.ID.String()), obs.F(obs.FieldAttempt, assignment.Job.Attempt)}
 			const ttl = transcriptionWorkLeaseDuration
 			chunks := make([]finalizerChunkResponse, 0, len(assignment.Chunks))
 			for _, chunk := range assignment.Chunks {
 				url, urlErr := authority.CreateResultGETURL(r.Context(), FinalizerChunkGETURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: chunk.ResultKey, ExpiresIn: ttl})
 				if urlErr != nil {
+					obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "url_failed", obs.ReasonTranscriptURLFailed, claimTrail...)
 					writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
 					return
 				}
@@ -123,11 +128,13 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 			lease := transcripts.LeaseInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: assignment.LeaseToken, Now: now}
 			key, keyErr := service.FinalizerKey(r.Context(), lease)
 			if keyErr != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "repository_error", obs.ReasonTranscriptRepositoryError, claimTrail...)
 				writeWorkerError(w, r, keyErr)
 				return
 			}
 			outputURL, err := authority.CreateFinalArtifactPUTURL(r.Context(), FinalizerPUTURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
 			if err != nil {
+				obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "url_failed", obs.ReasonTranscriptURLFailed, claimTrail...)
 				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
 				return
 			}
@@ -136,6 +143,10 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 				leaseExpiresAt = utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt)
 			}
 			assignments = append(assignments, finalizerAssignmentResponse{JobID: assignment.Job.ID.String(), TranscriptID: assignment.Transcript.ID.String(), EpisodeID: assignment.Transcript.EpisodeID.String(), Attempt: assignment.Job.Attempt, LeaseToken: assignment.LeaseToken, LeaseExpiresAt: leaseExpiresAt, Chunks: chunks, OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json"})
+			obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "leased", "", claimTrail...)
+		}
+		if len(assignments) == 0 {
+			obs.Decision(r.Context(), obs.EventTranscriptFinalizeClaim, "none", obs.ReasonTranscriptNoClaimableJob)
 		}
 		writeJSON(w, http.StatusOK, finalizerClaimResponse{Assignments: assignments})
 	}
@@ -185,14 +196,20 @@ func finalizerCompleteHandler(service TranscriptFinalizerWorkerService, auth Wor
 			return
 		}
 		if err := authority.VerifyFinalArtifact(r.Context(), FinalizerObjectVerification{JobID: jobID, Attempt: body.Attempt, Key: key, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
+			obs.Decision(r.Context(), obs.EventTranscriptFinalizeAccept, "rejected", obs.ReasonTranscriptArtifactVerificationFailed,
+				obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 			writeError(w, http.StatusBadGateway, "artifact.verification_failed", "Final artifact verification failed")
 			return
 		}
 		transcript, err := service.CompleteFinalizer(r.Context(), transcripts.FinalizerCompleteInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Provider: body.Provider, Model: body.Model, VersionContract: body.VersionContract, ExecutionIdentity: body.ExecutionIdentity, ProviderRequestID: body.ProviderRequestID, Languages: body.Languages, ArtifactSHA256: checksum, ArtifactSize: body.ResultSizeBytes, ArtifactContentType: body.ContentType, Quality: body.Quality, Now: time.Now()})
 		if err != nil {
+			obs.Decision(r.Context(), obs.EventTranscriptFinalizeAccept, "error", obs.ReasonTranscriptAcceptFailed,
+				obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 			writeWorkerError(w, r, err)
 			return
 		}
+		obs.Decision(r.Context(), obs.EventTranscriptFinalizeAccept, "accepted", "",
+			obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 		writeJSON(w, http.StatusOK, newTranscriptArtifactResponse(transcript))
 	}
 }
@@ -235,6 +252,8 @@ func finalizerRetryHandler(service TranscriptFinalizerWorkerService, auth Worklo
 			writeWorkerError(w, r, err)
 			return
 		}
+		obs.Decision(r.Context(), obs.EventTranscriptFinalizeRetry, job.State, "",
+			obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt), obs.F(obs.FieldTranscriptErrorCode, body.ErrorCode))
 		writeJSON(w, http.StatusOK, workerJobResponse(job))
 	}
 }

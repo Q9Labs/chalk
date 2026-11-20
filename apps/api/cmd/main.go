@@ -44,6 +44,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
@@ -72,6 +73,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	goredis "github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func main() {
@@ -124,6 +126,31 @@ func run() error {
 	}, os.Stdout)
 	logger := diagnostics.Logger()
 	slog.SetDefault(logger)
+	obsEnv := cfg.Observability.Environment
+	switch obsEnv {
+	case "local", "test", "nightly", "staging", "production":
+	default:
+		obsEnv = "local"
+	}
+	obs.Configure(obs.Config{
+		Mode:       obs.ModeAuto,
+		Module:     "api",
+		Env:        obsEnv,
+		Platform:   "server",
+		ReleaseSHA: cfg.Observability.Version,
+		SourceID:   "",
+		Logger:     logger,
+		Trail: func(ctx context.Context) []slog.Attr {
+			var attrs []slog.Attr
+			if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
+				attrs = append(attrs, slog.String(obs.FieldJourneyID, journeyID.String()))
+			}
+			if spanContext := trace.SpanContextFromContext(ctx); spanContext.IsValid() {
+				attrs = append(attrs, slog.String(obs.FieldTraceID, spanContext.TraceID().String()), slog.String(obs.FieldSpanID, spanContext.SpanID().String()))
+			}
+			return attrs
+		},
+	})
 	launchTelemetry := observability.NewLaunchTelemetry(logger)
 	logger.Info("api starting",
 		"event", "api.starting",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -53,25 +54,35 @@ func readTranscriptDocument(ctx context.Context, service TranscriptArtifactServi
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err
 	}
-	if !transcript.DocumentReady() {
-		return transcripts.Transcript{}, transcripts.Document{}, apiErrorTranscriptNotReady
-	}
 
-	artifact, err := objects.GetObject(ctx, *transcript.ArtifactKey)
+	var document transcripts.Document
+	err = obs.Op(ctx, obs.EventTranscriptDocumentRead, func(ctx context.Context, scope *obs.Scope) error {
+		if !transcript.DocumentReady() {
+			return obs.Expected(obs.ReasonTranscriptNotReady, apiErrorTranscriptNotReady)
+		}
+
+		artifact, err := objects.GetObject(ctx, *transcript.ArtifactKey)
+		if err != nil {
+			return obs.Failure(obs.ReasonTranscriptObjectGet, err)
+		}
+		if artifact.Body == nil || !transcript.ArtifactMatches(artifact.Key, artifact.Size, artifact.ContentType) {
+			if artifact.Body != nil {
+				_ = artifact.Body.Close()
+			}
+			return obs.Failure(obs.ReasonTranscriptArtifactMismatch, apiErrorInternal)
+		}
+
+		var readErr error
+		document, readErr = transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
+		closeErr := artifact.Body.Close()
+		if readErr != nil || closeErr != nil {
+			return obs.Failure(obs.ReasonTranscriptDecode, apiErrorInternal)
+		}
+		scope.Set(obs.F(obs.FieldTranscriptCueCount, len(document.Cues)))
+		return nil
+	}, obs.F(obs.FieldTranscriptRoute, "document"))
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err
-	}
-	if artifact.Body == nil || !transcript.ArtifactMatches(artifact.Key, artifact.Size, artifact.ContentType) {
-		if artifact.Body != nil {
-			_ = artifact.Body.Close()
-		}
-		return transcripts.Transcript{}, transcripts.Document{}, apiErrorInternal
-	}
-
-	document, readErr := transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
-	closeErr := artifact.Body.Close()
-	if readErr != nil || closeErr != nil {
-		return transcripts.Transcript{}, transcripts.Document{}, apiErrorInternal
 	}
 
 	return transcript, document, nil

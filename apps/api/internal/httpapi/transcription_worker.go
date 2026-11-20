@@ -11,10 +11,18 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// init gives kernel records a valid envelope in test binaries, which never run
+// the API's obs.Configure; the API replaces it with the real environment at
+// startup.
+func init() {
+	obs.Configure(obs.Config{Mode: obs.ModeAuto, Module: "api", Env: "test"})
+}
 
 func mountTranscriptWorkerRoutes(r chi.Router, service TranscriptWorkerService, authorizer WorkloadAuthorizer, manifests ManifestAuthority, chunks ChunkAuthority, results ResultAuthority) {
 	if service == nil || authorizer == nil || manifests == nil || chunks == nil || results == nil {
@@ -98,6 +106,8 @@ func workerRetryHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 			writeWorkerError(w, r, err)
 			return
 		}
+		obs.Decision(r.Context(), obs.EventTranscriptJobRetry, job.State, "",
+			obs.F(obs.FieldJobID, id.String()), obs.F(obs.FieldAttempt, body.Attempt), obs.F(obs.FieldTranscriptErrorCode, body.ErrorCode))
 		writeJSON(w, http.StatusOK, workerJobResponse(job))
 	}
 }
@@ -166,6 +176,8 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 			return
 		}
 		if err := results.VerifyResult(r.Context(), ResultVerification{JobID: jobID, Attempt: body.Attempt, Key: resultKey, ContentType: body.ContentType, Size: body.ResultSizeBytes, SHA256: checksum}); err != nil {
+			obs.Decision(r.Context(), obs.EventTranscriptJobComplete, "rejected", obs.ReasonTranscriptResultVerificationFailed,
+				obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 			writeError(w, http.StatusBadGateway, "result.verification_failed", "Result object verification failed")
 			return
 		}
@@ -176,9 +188,13 @@ func workerCompleteHandler(service TranscriptWorkerService, auth WorkloadAuthori
 		}
 		result, err := service.AcceptResult(r.Context(), transcripts.ResultInput{JobID: jobID, Attempt: body.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: body.LeaseToken, Provider: body.Provider, Model: body.Model, ProviderVersion: body.VersionContract, ProviderRequestID: body.ProviderRequestID, ExecutionIdentity: body.ExecutionIdentity, MeasuredAudioMS: body.MeasuredAudioMS, ProviderObservedDurationMS: observedDurationMS, ResultSHA256: checksum, ResultSize: body.ResultSizeBytes, ResultContentType: body.ContentType, Language: body.Language, Quality: body.Quality, Now: time.Now()})
 		if err != nil {
+			obs.Decision(r.Context(), obs.EventTranscriptJobComplete, "error", obs.ReasonTranscriptAcceptFailed,
+				obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 			writeWorkerError(w, r, err)
 			return
 		}
+		obs.Decision(r.Context(), obs.EventTranscriptJobComplete, "accepted", "",
+			obs.F(obs.FieldJobID, jobID.String()), obs.F(obs.FieldAttempt, body.Attempt))
 		writeJSON(w, http.StatusOK, result)
 	}
 }

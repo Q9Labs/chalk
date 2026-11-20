@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -123,5 +124,7 @@ func (r TranscriptRepository) AcceptResult(ctx context.Context, input transcript
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Result{}, err
 	}
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: transcripts.JobStateCompleted, Trigger: "complete"},
+		obs.F(obs.FieldJobID, input.JobID.String()), obs.F(obs.FieldAttempt, input.Attempt))
 	return transcripts.Result{ID: utilities.IDFromBytes(row.ID.Bytes), ChunkID: utilities.IDFromBytes(row.ChunkID.Bytes), Generation: row.Generation, Accepted: true, Provider: row.Provider, Model: row.Model, ProviderVersion: row.ProviderVersion, ResultKey: row.ResultKey, ResultSHA256: row.ResultSha256, ResultSize: row.ResultSize, ResultContentType: row.ResultContentType, Language: nullableTextValue(row.Language), AcceptedAt: timestamp(row.AcceptedAt)}, nil
 }

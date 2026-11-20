@@ -4,14 +4,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// init gives kernel records a valid envelope in test binaries, which never run
+// the API's obs.Configure; the API replaces it with the real environment at
+// startup.
+func init() {
+	obs.Configure(obs.Config{Mode: obs.ModeAuto, Module: "api", Env: "test"})
+}
+
+// emitClaimedTranscriptJob records the lease a claim committed: a first attempt
+// was pending and every later one was retryable or an expired lease.
+func emitClaimedTranscriptJob(ctx context.Context, row sqlc.ArtifactJob) {
+	from := transcripts.JobStatePending
+	if row.AttemptCount > 1 {
+		from = transcripts.JobStateRetryable
+	}
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: from, To: row.State, Trigger: "claim"}, transcriptJobTrail(row)...)
+}
+
+// emitRecoveredTranscriptJobs records each recovery a commit carried: every
+// returned row was leased and is now retryable or dead_letter.
+func emitRecoveredTranscriptJobs(ctx context.Context, rows []sqlc.ArtifactJob) {
+	for _, row := range rows {
+		if row.ArtifactKind != "transcription_chunk" && row.ArtifactKind != "transcription_finalize" {
+			continue
+		}
+		obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: row.State, Trigger: "recover", Reason: obs.ReasonTranscriptLeaseExpired}, transcriptJobTrail(row)...)
+	}
+}
+
+func transcriptJobTrail(row sqlc.ArtifactJob) []slog.Attr {
+	return []slog.Attr{obs.F(obs.FieldJobID, utilities.IDFromBytes(row.ID.Bytes).String()), obs.F(obs.FieldAttempt, int(row.AttemptCount))}
+}
 
 func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.ClaimInput) (_ transcripts.Assignment, err error) {
 	defer func() { err = artifactRepositoryFailure(err) }()
@@ -40,6 +74,7 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.Assignment{}, err
 		}
+		emitRecoveredTranscriptJobs(ctx, recoveredJobs)
 		return transcripts.Assignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -61,6 +96,9 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.Assignment{}, err
 		}
+		emitRecoveredTranscriptJobs(ctx, recoveredJobs)
+		emitClaimedTranscriptJob(ctx, job)
+		obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: transcripts.JobStateCancelled, Trigger: "cancel"}, transcriptJobTrail(job)...)
 		return transcripts.Assignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
@@ -73,6 +111,8 @@ func (r TranscriptRepository) Claim(ctx context.Context, input transcripts.Claim
 	if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 		return transcripts.Assignment{}, err
 	}
+	emitRecoveredTranscriptJobs(ctx, recoveredJobs)
+	emitClaimedTranscriptJob(ctx, job)
 	metric.Record(ctx)
 	chunkInput := mapSourceChunk(sourceChunk)
 	chunkInput.ResultKey = chunkResultKey(
@@ -120,6 +160,7 @@ func (r TranscriptRepository) Retry(ctx context.Context, input transcripts.Retry
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Job{}, err
 	}
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: row.State, Trigger: "retry"}, transcriptJobTrail(row)...)
 	metric.Record(ctx)
 	return mapJob(row), nil
 }
@@ -131,9 +172,15 @@ func (r TranscriptRepository) Complete(ctx context.Context, input transcripts.Le
 }
 
 func (r TranscriptRepository) Cancel(ctx context.Context, input transcripts.CancelInput) (transcripts.Job, error) {
-	return r.mutateLease(ctx, input.LeaseInput, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
+	job, err := r.mutateLease(ctx, input.LeaseInput, func(q transcriptArtifactQuerier, hash []byte) (sqlc.ArtifactJob, error) {
 		return q.CancelArtifactJob(ctx, sqlc.CancelArtifactJobParams{ID: uuid(input.JobID), Attempt: int32(input.Attempt), LeaseOwner: text(&input.LeaseOwner), LeaseTokenHash: hash, ErrorCode: text(&input.ErrorCode), ErrorDetail: text(&input.ErrorDetail), Now: pgtype.Timestamptz{Time: input.Now, Valid: true}})
 	})
+	if err != nil {
+		return job, err
+	}
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: job.State, Trigger: "cancel"},
+		obs.F(obs.FieldJobID, job.ID.String()), obs.F(obs.FieldAttempt, job.Attempt))
+	return job, nil
 }
 
 func (r TranscriptRepository) Requeue(ctx context.Context, jobID utilities.ID, availableAt time.Time) (transcripts.Job, error) {

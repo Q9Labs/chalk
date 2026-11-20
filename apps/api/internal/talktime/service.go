@@ -8,9 +8,17 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// init gives kernel records a valid envelope in test binaries, which never run
+// the API's obs.Configure; the API replaces it with the real environment at
+// startup.
+func init() {
+	obs.Configure(obs.Config{Mode: obs.ModeAuto, Module: "api", Env: "test"})
+}
 
 // MaxRecordings bounds how many Recordings of one Episode feed talk time.
 const MaxRecordings = 50
@@ -55,6 +63,8 @@ type Available struct {
 	// Recordings are the Episode's Recordings, oldest first, with where each
 	// one's timeline sits on the Episode's.
 	Recordings []Placement
+	// InProgress counts Recordings whose transcripts are still being made.
+	InProgress int
 }
 
 // Placement is one Recording on the Episode timeline.
@@ -70,7 +80,10 @@ type Placement struct {
 type NoTranscript struct{}
 
 // TranscriptPending means a transcript is being made but is not complete.
-type TranscriptPending struct{}
+type TranscriptPending struct {
+	// InProgress counts Recordings whose transcripts are still being made.
+	InProgress int
+}
 
 // Live means the Episode has not ended.
 type Live struct{}
@@ -110,7 +123,7 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 	var cues []Cue
 	placements := make([]Placement, 0, len(recordings))
 	transcribed := 0
-	pending := false
+	inProgress := 0
 	for _, recording := range recordings {
 		placement := Placement{RecordingID: recording.ID, OffsetMS: recordingOffsetMS(start, recording.StartedAt)}
 		switch {
@@ -123,14 +136,14 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 			placement.Transcribed = true
 			cues = append(cues, episodeCues(document, placement.OffsetMS)...)
 		case transcriptInProgress(recording):
-			pending = true
+			inProgress++
 		}
 		placements = append(placements, placement)
 	}
 
 	if transcribed == 0 {
-		if pending {
-			return TranscriptPending{}, nil
+		if inProgress > 0 {
+			return TranscriptPending{InProgress: inProgress}, nil
 		}
 		return NoTranscript{}, nil
 	}
@@ -147,25 +160,34 @@ func (s Service) Get(ctx context.Context, tenantID, spaceID, episodeID utilities
 		end = episode.UpdatedAt
 	}
 	report := Compute(Input{DurationMS: end.Sub(start).Milliseconds(), Participants: participants, Cues: cues})
-	return Available{Report: report, Recordings: placements}, nil
+	return Available{Report: report, Recordings: placements, InProgress: inProgress}, nil
 }
 
 func (s Service) readDocument(ctx context.Context, transcript transcripts.Transcript) (transcripts.Document, error) {
-	artifact, err := s.objects.GetObject(ctx, *transcript.ArtifactKey)
+	var document transcripts.Document
+	err := obs.Op(ctx, obs.EventTranscriptDocumentRead, func(ctx context.Context, scope *obs.Scope) error {
+		artifact, err := s.objects.GetObject(ctx, *transcript.ArtifactKey)
+		if err != nil {
+			return obs.Failure(obs.ReasonTranscriptObjectGet, fmt.Errorf("read transcript %s artifact: %w", transcript.ID, err))
+		}
+		if artifact.Body == nil {
+			return obs.Failure(obs.ReasonTranscriptArtifactMismatch, fmt.Errorf("%w: transcript %s has no body", ErrTranscriptArtifact, transcript.ID))
+		}
+		if !transcript.ArtifactMatches(artifact.Key, artifact.Size, artifact.ContentType) {
+			_ = artifact.Body.Close()
+			return obs.Failure(obs.ReasonTranscriptArtifactMismatch, fmt.Errorf("%w: transcript %s artifact does not match its row", ErrTranscriptArtifact, transcript.ID))
+		}
+		var readErr error
+		document, readErr = transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
+		closeErr := artifact.Body.Close()
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return obs.Failure(obs.ReasonTranscriptDecode, fmt.Errorf("%w: transcript %s: %w", ErrTranscriptArtifact, transcript.ID, err))
+		}
+		scope.Set(obs.F(obs.FieldTranscriptCueCount, len(document.Cues)))
+		return nil
+	}, obs.F(obs.FieldTranscriptRoute, "talk_time"))
 	if err != nil {
-		return transcripts.Document{}, fmt.Errorf("read transcript %s artifact: %w", transcript.ID, err)
-	}
-	if artifact.Body == nil {
-		return transcripts.Document{}, fmt.Errorf("%w: transcript %s has no body", ErrTranscriptArtifact, transcript.ID)
-	}
-	if !transcript.ArtifactMatches(artifact.Key, artifact.Size, artifact.ContentType) {
-		_ = artifact.Body.Close()
-		return transcripts.Document{}, fmt.Errorf("%w: transcript %s artifact does not match its row", ErrTranscriptArtifact, transcript.ID)
-	}
-	document, readErr := transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
-	closeErr := artifact.Body.Close()
-	if err := errors.Join(readErr, closeErr); err != nil {
-		return transcripts.Document{}, fmt.Errorf("%w: transcript %s: %w", ErrTranscriptArtifact, transcript.ID, err)
+		return transcripts.Document{}, err
 	}
 	return document, nil
 }

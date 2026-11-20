@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -36,6 +37,7 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
+		emitRecoveredTranscriptJobs(ctx, recoveredJobs)
 		return transcripts.FinalizerAssignment{}, transcripts.ErrNoClaimableJob
 	}
 	if err != nil {
@@ -53,6 +55,9 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 		if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 			return transcripts.FinalizerAssignment{}, err
 		}
+		emitRecoveredTranscriptJobs(ctx, recoveredJobs)
+		emitClaimedTranscriptJob(ctx, job)
+		obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: transcripts.JobStateCancelled, Trigger: "cancel"}, transcriptJobTrail(job)...)
 		return transcripts.FinalizerAssignment{}, transcripts.ErrStaleLease
 	}
 	if err != nil {
@@ -73,6 +78,8 @@ func (r TranscriptRepository) ClaimFinalizer(ctx context.Context, input transcri
 	if err := commitRecoveredTranscriptJobsTx(ctx, tx, recoveredJobs); err != nil {
 		return transcripts.FinalizerAssignment{}, err
 	}
+	emitRecoveredTranscriptJobs(ctx, recoveredJobs)
+	emitClaimedTranscriptJob(ctx, job)
 	return assignment, nil
 }
 
@@ -140,6 +147,12 @@ func (r TranscriptRepository) CompleteFinalizer(ctx context.Context, input trans
 	if err := tx.Commit(ctx); err != nil {
 		return transcripts.Transcript{}, err
 	}
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptJob, From: transcripts.JobStateLeased, To: transcripts.JobStateCompleted, Trigger: "complete"},
+		obs.F(obs.FieldJobID, input.JobID.String()), obs.F(obs.FieldAttempt, input.Attempt))
+	obs.Transition(ctx, obs.Move{Machine: obs.MachineTranscriptStatus, From: transcripts.StatusVerifying, To: transcripts.StatusComplete, Trigger: "finalize_complete"},
+		obs.F(obs.FieldJobID, input.JobID.String()),
+		obs.F(obs.FieldEpisodeID, utilities.IDFromBytes(row.EpisodeID.Bytes).String()),
+		obs.F(obs.FieldRecordingID, utilities.IDFromBytes(row.RecordingID.Bytes).String()))
 	metric.Record(ctx)
 	return mapTranscript(row), nil
 }

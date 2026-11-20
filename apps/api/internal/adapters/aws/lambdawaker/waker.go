@@ -12,9 +12,17 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
+	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 )
+
+// init gives kernel records a valid envelope in test binaries, which never run
+// the API's obs.Configure; the API replaces it with the real environment at
+// startup.
+func init() {
+	obs.Configure(obs.Config{Mode: obs.ModeAuto, Module: "api", Env: "test"})
+}
 
 type invokeClient interface {
 	Invoke(context.Context, *lambda.InvokeInput, ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
@@ -55,6 +63,7 @@ func newWaker(client invokeClient, functionName string, logger *slog.Logger) Wak
 func (w Waker) Wake(ctx context.Context, input transcripts.DispatcherWakeInput) {
 	if w.client == nil || w.functionName == "" {
 		w.logger.Error("transcription wake unavailable", "event", "transcription.wake_failed")
+		obs.Decision(ctx, obs.EventTranscriptWake, "failed", obs.ReasonTranscriptWakeFailed, obs.F(obs.FieldJobID, input.JobID.String()))
 		return
 	}
 	journeyID := input.JourneyID
@@ -73,6 +82,7 @@ func (w Waker) Wake(ctx context.Context, input transcripts.DispatcherWakeInput) 
 	payload, err := json.Marshal(payloadValues)
 	if err != nil {
 		w.logger.Error("transcription wake encoding failed", "event", "transcription.wake_failed")
+		obs.Decision(ctx, obs.EventTranscriptWake, "failed", obs.ReasonTranscriptWakeFailed, obs.F(obs.FieldJobID, input.JobID.String()))
 		return
 	}
 	wakeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -80,8 +90,10 @@ func (w Waker) Wake(ctx context.Context, input transcripts.DispatcherWakeInput) 
 	output, err := w.client.Invoke(wakeCtx, &lambda.InvokeInput{FunctionName: aws.String(w.functionName), InvocationType: types.InvocationTypeEvent, Payload: payload})
 	if err != nil || output == nil || output.StatusCode != 202 {
 		w.logger.Error("transcription wake failed", "event", "transcription.wake_failed", "error", safeError(err), "status_code", statusCode(output))
+		obs.Decision(ctx, obs.EventTranscriptWake, "failed", obs.ReasonTranscriptWakeFailed, obs.F(obs.FieldJobID, input.JobID.String()))
 		return
 	}
+	obs.Decision(ctx, obs.EventTranscriptWake, "queued", "", obs.F(obs.FieldJobID, input.JobID.String()))
 	w.logger.Info("transcription wake queued", "event", "transcription.wake_queued", "job_id", input.JobID.String())
 }
 
