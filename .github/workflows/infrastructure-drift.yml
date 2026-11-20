@@ -38,5 +38,8 @@ jobs:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           CHALK_CAPTURE_DIGITALOCEAN_TOKEN: ${{ secrets.CHALK_CAPTURE_DIGITALOCEAN_TOKEN }}
           CHALK_RENDER_DIGITALOCEAN_TOKEN: ${{ secrets.CHALK_RENDER_DIGITALOCEAN_TOKEN }}
+          CHALK_SFU_INPUTS: ${{ secrets.CHALK_SFU_INPUTS }}
+          CHALK_SFU_STANDBY_INPUTS: ${{ secrets.CHALK_SFU_STANDBY_INPUTS }}
+          CHALK_RECORDER_INPUTS: ${{ secrets.CHALK_RECORDER_INPUTS }}
           ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
         run: pnpm --dir infrastructure exec tsx platform/check-drift.mjs
