@@ -160,7 +160,7 @@ func TestAdmitKeepsTheFirstCopyOfASeq(t *testing.T) {
 
 func TestAdmitDoesNotChangeTheRowsItWasGiven(t *testing.T) {
 	prior := rowOf(t, admit(t, nil, batch(t, sourceA, 2, "", ended(0), drop(1, 0, 1, "queue_full", sourceB))), sourceA)
-	before := prior.Ranges.clone()
+	before := prior.Ranges.Normalized()
 	admit(t, []SourceRow{prior}, batch(t, sourceA, 5, "closed", ended(2), drop(3, 1, 2, "refused", "")))
 	if !reflect.DeepEqual(prior.Ranges, before) {
 		t.Fatalf("Admit changed the caller's row: %v, want %v", prior.Ranges, before)

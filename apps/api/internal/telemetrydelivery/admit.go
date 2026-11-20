@@ -130,7 +130,7 @@ func Admit(identity Identity, rows map[utilities.ID]SourceRow, batch sdktelemetr
 		if !found {
 			row = NewSourceRow(identity, source)
 		}
-		row.Ranges = row.Ranges.clone()
+		row.Ranges = row.Ranges.Normalized()
 		touched[source] = &row
 	}
 
@@ -215,7 +215,9 @@ func (r *SourceRow) recordEnd(end string, nextSeq int64) {
 	}
 }
 
-func (r Ranges) clone() Ranges {
+// Normalized is a copy of the ranges in canonical form: every set sorted and merged and never nil,
+// and Dropped never nil. Ranges decoded from storage may be neither.
+func (r Ranges) Normalized() Ranges {
 	cloned := Ranges{Stored: NewSet(r.Stored...), Rejected: NewSet(r.Rejected...), Dropped: make(map[string]Set, len(r.Dropped))}
 	for reason, set := range r.Dropped {
 		cloned.Dropped[reason] = NewSet(set...)

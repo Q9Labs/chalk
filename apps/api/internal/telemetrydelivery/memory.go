@@ -86,7 +86,7 @@ func (l *MemoryLedger) matching(keep func(rowKey, SourceRow) bool) ([]SourceRow,
 	rows := []SourceRow{}
 	for key, row := range l.rows {
 		if keep(key, row) {
-			row.Ranges = row.Ranges.clone()
+			row.Ranges = row.Ranges.Normalized()
 			rows = append(rows, row)
 		}
 	}
