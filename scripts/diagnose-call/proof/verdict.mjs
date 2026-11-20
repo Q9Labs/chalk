@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { overlaps, reading, uncovered as uncoveredBy } from "./evidence.mjs";
 import { factKind } from "./facts.mjs";
+import { validateCatalogue, validateDecision } from "./rules.mjs";
 import { ITEM, deepFreeze } from "./profile.mjs";
 import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
 
@@ -37,7 +38,7 @@ import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
 
 /**
  * @typedef {"broken" | "degraded" | "expected" | "healthy" | "unknown"} Outcome
- * @typedef {"UNEXPLAINED" | "BLIND_SPOT"} Backstop
+ * @typedef {typeof BACKSTOPS[number]} Backstop
  * @typedef {{ kind: "check", code: string, subject: string, uncovered: readonly Uncovered[], reason: string | null }
  *   | { kind: "unbound", evidence: string, fact: string, why: string }
  *   | { kind: "open" }
@@ -86,15 +87,23 @@ import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
  * }} Verdict
  */
 
+/** The findings the kernel itself raises, beyond the catalogue's checks. */
+export const BACKSTOPS = /** @type {const} */ (["UNEXPLAINED", "BLIND_SPOT"]);
+
 /** The judging kernel's own source: a change to how readings, coverage or outcomes work changes every rules version. */
-const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "verdict.mjs"].map((name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).join("\n");
+const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "rules.mjs", "verdict.mjs"].map((name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).join("\n");
 
 /**
- * A version for a set of checks: it changes whenever a code, a requirement, a rule's source or the kernel changes, so a stored verdict
- * judged by other rules reads as stale and `check` judges it again.
+ * A version for a set of checks: it changes whenever a code, a requirement, a rule's source, the modules that define the rules (their
+ * thresholds and helpers, which a rule's own source names but does not contain) or the kernel changes, so a stored verdict judged by
+ * other rules reads as stale and `check` judges it again. Hashing whole files is deliberately coarse: a comment edit also makes every
+ * verdict stale, which costs a recheck, while a missed logic edit would serve old verdicts as current.
+ * @param {readonly CheckDef[]} catalogue
+ * @param {readonly string[]} sources the text of every module the catalogue's rules are defined in
  */
-export function rulesVersion(/** @type {readonly CheckDef[]} */ catalogue) {
-  const text = [KERNEL, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, String(def.applies), String(def.decide)]))].join("\n");
+export function rulesVersion(catalogue, sources) {
+  validateCatalogue(catalogue);
+  const text = [KERNEL, ...sources, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, String(def.applies), String(def.decide)]))].join("\n");
   return createHash("sha256").update(text).digest("hex").slice(0, 8);
 }
 
@@ -146,12 +155,8 @@ export function judge(bundle, catalogue, { rules, prior = null }) {
  * @returns {Map<string, CheckDef>}
  */
 function indexCatalogue(catalogue) {
-  const defs = new Map();
-  for (const def of catalogue) {
-    if (defs.has(def.code)) throw new TypeError(`two checks share the code ${def.code}`);
-    defs.set(def.code, def);
-  }
-  return defs;
+  validateCatalogue(catalogue);
+  return new Map(catalogue.map((def) => [def.code, def]));
 }
 
 /** @typedef {ReturnType<typeof runCheck>} Run */
@@ -250,7 +255,7 @@ function runCheck(bundle, planned, def, rules) {
     if (def.requires.includes(requirement)) for (const w of watermarks) used.set(watermarkKey(w.source, w.subject), w);
   }
   const failures = bundle.observations.filter((o) => o.failure && (planned.subject === ITEM || o.bound === planned.subject));
-  const decision = def.decide({ readings, failures, window: planned.window, declaration: bundle.profile.declaration, seat: planned.seat });
+  const decision = decideWith(where, def, { readings, failures, window: planned.window, declaration: bundle.profile.declaration, seat: planned.seat });
 
   const uncovered = uncoveredOf(def.requires, readings);
   const ready = uncovered.length === 0 && decision.status !== "unknown";
@@ -286,6 +291,25 @@ function runCheck(bundle, planned, def, rules) {
     retained: null,
   };
   return { planned, decision, ready, uncovered, finding };
+}
+
+/**
+ * Runs a rule and holds its answer to the decision shape. A rule that throws (a misspelt fact name reads as undefined) fails with the
+ * check's key in front of its own message.
+ * @param {string} where
+ * @param {CheckDef} def
+ * @param {import("./profile.mjs").DecideInput} input
+ * @returns {Decision}
+ */
+function decideWith(where, def, input) {
+  let decision;
+  try {
+    decision = def.decide(input);
+  } catch (error) {
+    throw new TypeError(`${where}: decide threw: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
+  validateDecision(where, decision);
+  return decision;
 }
 
 /**

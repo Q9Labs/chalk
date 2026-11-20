@@ -10,7 +10,8 @@
  * The ports are async because the real adapters read Postgres, Axiom and R2. The reference adapters in fixture-world.mjs resolve
  * at once; a slice that wires a real source implements the same four methods.
  */
-import { openBundle } from "./bundle.mjs";
+import { createHash } from "node:crypto";
+import { canonical, openBundle } from "./bundle.mjs";
 import { profileFor } from "./profile.mjs";
 import { judge } from "./verdict.mjs";
 
@@ -24,7 +25,7 @@ import { judge } from "./verdict.mjs";
 /**
  * @typedef {{ kind: Declaration["kind"], id: string, tenant: string, declaration: Declaration }} Item
  * @typedef {{ tenant: string | null, from_ms: number, to_ms: number } | { item: { kind: Declaration["kind"], id: string } }} Scope
- * @typedef {{ item: { kind: Declaration["kind"], id: string }, fingerprint: string, verdict: Verdict }} Stored
+ * @typedef {{ item: { kind: Declaration["kind"], id: string }, declaration: string, fingerprint: string, verdict: Verdict }} Stored
  * @typedef {{
  *   population: { items(scope: Scope): Promise<Item[]> },
  *   evidence: { fingerprint(item: Item): Promise<string>, read(item: Item): Promise<{ observations: Observation[], watermarks: Watermark[] }> },
@@ -39,9 +40,16 @@ import { judge } from "./verdict.mjs";
 
 /**
  * @typedef {{ state: "unchecked" }
- *   | { state: "stale", stored: Stored, why: "evidence" | "rules" }
+ *   | { state: "stale", stored: Stored, why: "declaration" | "evidence" | "rules" }
  *   | { state: "current", stored: Stored }} Status
  */
+
+/**
+ * The profile is planned from the declaration, so a verdict judged under another declaration (a seat added, a feature enabled, the
+ * window closed) planned other checks and is stale, whatever the evidence says.
+ * @param {Declaration} declaration
+ */
+export const declarationDigest = (declaration) => createHash("sha256").update(canonical(declaration)).digest("hex").slice(0, 16);
 
 /**
  * Whether an item's stored verdict is current, stale or missing. Reading this never writes.
@@ -53,6 +61,7 @@ import { judge } from "./verdict.mjs";
 export async function statusOf(item, ports, rules) {
   const stored = await ports.store.get(item);
   if (stored === null) return { state: "unchecked" };
+  if (stored.declaration !== declarationDigest(item.declaration)) return { state: "stale", stored, why: "declaration" };
   if (stored.fingerprint !== (await ports.evidence.fingerprint(item))) return { state: "stale", stored, why: "evidence" };
   if (stored.verdict.rules !== rules) return { state: "stale", stored, why: "rules" };
   return { state: "current", stored };
@@ -90,7 +99,7 @@ export async function check(scope, ports, { catalogue, rules, asof_ms }) {
     const prior = status.state === "stale" ? status.stored.verdict : null;
     const fingerprint = await ports.evidence.fingerprint(item);
     const verdict = await judgeItem(item, ports, { catalogue, rules, asof_ms, prior });
-    await ports.store.put({ item: { kind: item.kind, id: item.id }, fingerprint, verdict });
+    await ports.store.put({ item: { kind: item.kind, id: item.id }, declaration: declarationDigest(item.declaration), fingerprint, verdict });
     results.push({ item, action: prior ? /** @type {const} */ ("rechecked") : /** @type {const} */ ("checked"), was: prior?.outcome ?? null, verdict });
   }
   return results;

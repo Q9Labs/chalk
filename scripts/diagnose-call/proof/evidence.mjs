@@ -82,6 +82,9 @@ export function observation(o) {
  * @typedef {{ source: string, subject: string, complete_to_ms: number | null, evidence_gaps: readonly EvidenceGap[], emits: readonly string[], build: string }} Watermark
  */
 
+/** Sources each Participant's own device delivers. One seat's complete stream says nothing about another seat's. */
+const PER_SEAT_SOURCES = new Set(["client"]);
+
 /**
  * @param {Watermark} w
  * @returns {Readonly<Watermark>}
@@ -91,6 +94,7 @@ export function watermark(w) {
   if (typeof w.source !== "string" || w.source === "" || typeof w.subject !== "string" || w.subject === "") throw new TypeError(`${where}: source and subject are required`);
   if (w.complete_to_ms !== null && !Number.isFinite(w.complete_to_ms)) throw new TypeError(`${where}: complete_to_ms must be a number or null`);
   if (!Array.isArray(w.emits) || !Array.isArray(w.evidence_gaps)) throw new TypeError(`${where}: emits and evidence_gaps are lists`);
+  if (PER_SEAT_SOURCES.has(w.source) && !w.subject.startsWith("pt:")) throw new TypeError(`${where}: a ${w.source} source is per seat, so its watermark names one seat (pt:<participant>), never the whole item`);
   return Object.freeze({ ...w, emits: Object.freeze([...w.emits]), evidence_gaps: Object.freeze(w.evidence_gaps.map((gap) => Object.freeze({ ...gap }))) });
 }
 

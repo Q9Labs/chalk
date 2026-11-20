@@ -65,3 +65,15 @@ describe("check", () => {
     }
   });
 });
+
+describe("staleness follows the declaration", () => {
+  it("marks a stored verdict stale when the item gains a seat or a feature, because its profile plans other checks", async () => {
+    const { items, ports } = await openWorld(nov18(), { catalogue: CATALOGUE, rules: RULES });
+    const ep = items.find((item) => item.id === IDS.ep5c0d);
+    assert.ok(ep && ep.declaration.kind === "episode");
+    assert.equal((await statusOf(ep, ports, RULES)).state, "current");
+    const changed = { ...ep, declaration: { ...ep.declaration, features: [...ep.declaration.features, "board"] } };
+    const status = await statusOf(changed, ports, RULES);
+    assert.equal(status.state === "stale" && status.why, "declaration");
+  });
+});

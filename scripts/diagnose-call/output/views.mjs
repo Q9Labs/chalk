@@ -147,11 +147,18 @@ export function itemView({ item, status, tenant, ctx, via = null }) {
   const paged = page(records, `${item.kind}:${item.id}`, ctx.paging, ctx.measure);
 
   const gaps = verdict ? verdictGaps(verdict, declaration, at) : [];
-  if (status.state === "stale") gaps.unshift({ t: "gap", code: "stale", why: status.why === "evidence" ? "evidence changed after asof, so newer rows are unchecked" : `rules changed from ${verdict?.rules} to ${ctx.rules}` });
+  if (status.state === "stale") gaps.unshift({ t: "gap", code: "stale", why: STALE_WHY[status.why](verdict?.rules ?? "", ctx.rules) });
   if (status.state === "unchecked") gaps.unshift({ t: "gap", code: "unchecked", why: "no verdict yet" });
   const next = itemNext(item, status, verdict, paged.page.cursor);
   return finish({ view: item.kind, head, anchor: itemAnchor(declaration, tenant), via, records: paged.records, gaps, page: paged.page, next });
 }
+
+/** @type {Record<"declaration" | "evidence" | "rules", (was: string, now: string) => string>} */
+const STALE_WHY = {
+  declaration: () => "the item changed after asof (seats, features or its end), so the checks it now needs are unchecked",
+  evidence: () => "evidence changed after asof, so newer rows are unchecked",
+  rules: (was, now) => `rules changed from ${was} to ${now}`,
+};
 
 /** @typedef {{ key: string } & Record<string, unknown>} Keyed */
 /** @typedef {(ms: number) => string} At */
@@ -399,11 +406,13 @@ function groups(entries, keep) {
  */
 export function dayView({ tenant, date, entries, ctx, symptom = null, via = null }) {
   const midnight = localMidnight(date, tenant.tz);
-  const records = groups(entries, (finding) => symptom === null || finding.code === symptom).sort((a, b) => (a.key < b.key ? -1 : 1));
+  const records = groups(entries, (/** @type {Finding} */ finding) => symptom === null || finding.code === symptom).sort((a, b) => (a.key < b.key ? -1 : 1));
   const paged = page(records, `day:${tenant.id}:${date}:${symptom ?? ""}`, ctx.paging, ctx.measure);
   const gaps = itemGaps(entries, (ms) => localWhen(ms, tenant.tz));
   if (entries.length === 0) gaps.push(EMPTY);
-  const head = { view: "day", scope: { tenant: tenant.name, date, ...(symptom ? { symptom } : {}) }, ...aggregate(entries, ctx) };
+  const keep = (/** @type {Finding} */ finding) => symptom === null || finding.code === symptom;
+  const kept = symptom === null ? null : entries.flatMap(({ status }) => (standing(status).verdict?.findings ?? []).filter(keep).map((finding) => finding.outcome));
+  const head = { view: "day", scope: { tenant: tenant.name, date, ...(symptom ? { symptom } : {}) }, ...aggregate(entries, ctx, kept) };
   const next = [];
   if (gaps.some((gap) => "state" in gap && (gap.state === "unchecked" || gap.state === "stale"))) next.push(["check", tenant.name, date]);
   const firstGroup = paged.records[0];
@@ -459,11 +468,11 @@ export function rangeView({ title, tenantTz, range, entries, keep, check, again,
 
 /**
  * What one `check` run did: each item it checked, rechecked or found current.
- * @param {{ scope: Record<string, unknown>, tz: string, results: readonly { item: Item, action: string, was: Outcome | null, verdict: Verdict }[], ctx: ViewContext }} input
+ * @param {{ scope: Record<string, unknown>, tz: string, results: readonly { item: Item, action: string, was: Outcome | null, verdict: Verdict }[], ctx: ViewContext, again: readonly string[] }} input
  * @returns {View}
  */
-export function checkView({ scope, tz, results, ctx }) {
-  const entries = results.map(({ item, verdict }) => ({ item, status: /** @type {Status} */ ({ state: "current", stored: { item, fingerprint: "", verdict } }) }));
+export function checkView({ scope, tz, results, ctx, again }) {
+  const entries = results.map(({ item, verdict }) => ({ item, status: /** @type {Status} */ ({ state: "current", stored: { item, declaration: "", fingerprint: "", verdict } }) }));
   const records = results
     .map(({ item, action, was, verdict }) => ({
       key: `${pad(item.declaration.window.from_ms)}|${short(item.id)}`,
@@ -472,7 +481,7 @@ export function checkView({ scope, tz, results, ctx }) {
       item: itemRef(item),
       when: localWhen(item.declaration.window.from_ms, tz, true),
       outcome: verdict.outcome,
-      coverage: coverageOf(verdict, { state: "current", stored: { item, fingerprint: "", verdict } }),
+      coverage: coverageOf(verdict, { state: "current", stored: { item, declaration: "", fingerprint: "", verdict } }),
       codes: [...new Set(verdict.findings.map((finding) => finding.code))],
       was: action === "rechecked" ? was : null,
     }))
@@ -484,6 +493,7 @@ export function checkView({ scope, tz, results, ctx }) {
   const next = [];
   const worst = results.find(({ verdict }) => verdict.outcome === "broken" || verdict.outcome === "degraded");
   if (worst) next.push([worst.item.kind, itemRef(worst.item)]);
+  if (paged.page.cursor) next.push([...again, "--cursor", paged.page.cursor]);
   return finish({ view: "check", head, anchor: { utc: isoMinute(ctx.asof_ms), local: localAnchor(ctx.asof_ms, tz, true), tz }, via: null, records: paged.records, gaps, page: paged.page, next });
 }
 
@@ -493,10 +503,11 @@ export function checkView({ scope, tz, results, ctx }) {
 
 /**
  * The candidates for an ambiguous lookup. Never a silent pick: each candidate is a line, and the agent chooses.
- * @param {{ query: string, candidates: readonly Candidate[], ctx: ViewContext, tz: string }} input
+ * @param {{ query: string, candidates: readonly Candidate[], ctx: ViewContext, tz: string, carry?: readonly string[] }} input `carry` is
+ *   arguments the query gave (a date range) that each candidate's next command keeps
  * @returns {View}
  */
-export function resolveView({ query, candidates, ctx, tz }) {
+export function resolveView({ query, candidates, ctx, tz, carry = [] }) {
   const records = candidates
     .map((candidate) => ({
       key: `${candidate.kind}|${candidate.label}|${short(candidate.id)}`,
@@ -513,8 +524,8 @@ export function resolveView({ query, candidates, ctx, tz }) {
   /** @type {Head} */
   const head = { view: "resolve", scope: { query }, outcome: null, coverage: null, checked: null, eligible: null, asof: isoMinute(ctx.asof_ms), rules: null, stale: null };
   /** @type {unknown[][]} */
-  const next = paged.records.map((record) => [record.ref]);
-  if (paged.page.cursor) next.push(["resolve", quoteArg(query), "--cursor", paged.page.cursor]);
+  const next = paged.records.map((record) => [record.ref, ...carry]);
+  if (paged.page.cursor) next.push(["resolve", quoteArg(query), ...carry, "--cursor", paged.page.cursor]);
   return finish({ view: "resolve", head: { ...head, scope: { query, matched: candidates.length } }, anchor: null, via: null, records: paged.records, gaps: [], page: paged.page, next });
 }
 

@@ -87,11 +87,22 @@ export function parseQuery(argv) {
 }
 
 /**
+ * A calendar day that exists: 2026-02-30 parses in JavaScript (as 2 March), so the day must survive a round trip.
+ * @param {string} date
+ */
+export function realDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(date)) return false;
+  const ms = Date.parse(`${date}T00:00:00Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === date;
+}
+
+/**
  * The instant a `--from`/`--to` value names: an ISO instant as given, or a bare date at the tenant's local midnight.
  * @param {string} value
  * @param {(date: string) => number} midnight
  */
 export function instant(value, midnight) {
+  if (!realDate(value.slice(0, 10))) throw new UsageError(`${value} is not a date (2026-11-18) or an instant with a zone (2026-11-18T09:45Z)`);
   if (/^\d{4}-\d{2}-\d{2}$/u.test(value)) return midnight(value);
   const ms = Date.parse(value);
   if (!Number.isFinite(ms) || !/[zZ]|[+-]\d\d:?\d\d$/u.test(value)) throw new UsageError(`${value} is not a date (2026-11-18) or an instant with a zone (2026-11-18T09:45Z)`);

@@ -13,7 +13,7 @@ export const DEFAULT_LIMIT = 20;
 
 /**
  * @typedef {{ limit: number, cursor: string | null, budget: number | null }} PageOptions
- * @typedef {{ limit: number, shown: number, omitted: number, by: "limit" | "budget" | null, cursor: string | null }} Page
+ * @typedef {{ limit: number, budget: number | null, shown: number, omitted: number, by: "limit" | "budget" | null, cursor: string | null }} Page
  */
 
 /** @param {string} scope */
@@ -66,7 +66,7 @@ export function page(records, scope, { limit, cursor, budget }, measure) {
   }
   const omitted = rest.length - shown.length;
   const last = shown.at(-1);
-  return { records: shown.map(strip), page: { limit, shown: shown.length, omitted, by, cursor: omitted > 0 && last ? encodeCursor(scope, last.key) : null } };
+  return { records: shown.map(strip), page: { limit, budget, shown: shown.length, omitted, by, cursor: omitted > 0 && last ? encodeCursor(scope, last.key) : null } };
 }
 
 /**

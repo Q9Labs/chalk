@@ -433,6 +433,7 @@
         "apps/sync/lib/chalk_sync/observability",
         "apps/sync/lib/chalk_sync/observability.ex",
         "apps/sync/test/chalk_sync/observability_session_test.exs",
+        "docs/diagnose.md",
         "docs/observability.md",
         "infrastructure/cloudflare-egress-alert",
         "infrastructure/listener-audio-alert",

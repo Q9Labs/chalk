@@ -6,6 +6,7 @@
  */
 import { createHash } from "node:crypto";
 import { observation as checkObservation, watermark as checkWatermark } from "./evidence.mjs";
+import { factDef } from "./facts.mjs";
 import { ITEM, deepFreeze, seatKey } from "./profile.mjs";
 
 /** @typedef {import("./evidence.mjs").Observation} Observation */
@@ -112,7 +113,7 @@ function sealBundle(profile, raw, rawWatermarks, asof_ms) {
 /**
  * Binds an observation to a subject of the profile by the authority's identity: the Episode, the seat, its admission generations and
  * its media connections. A row that names a seat the authority does not know, a generation the seat never had, or another seat's
- * connection is unbound: it counts for nobody, and the coverage says so.
+ * connection is unbound: it counts for nobody, and the coverage says so. So is a row of a seat fact that names no seat at all.
  * @param {Profile} profile
  * @param {Readonly<Observation>} o
  * @returns {{ key: string } | { why: string }}
@@ -134,6 +135,7 @@ function bind(profile, o) {
     const seats = declaration.seats.filter((candidate) => candidate.connections.includes(subject.connection ?? ""));
     return seats.length === 1 ? { key: seatKey(seats[0].participant) } : { why: "names a connection no seat holds" };
   }
+  if (factDef(o.fact).per === "seat") return { why: "names no Participant or connection, and this fact is about one seat" };
   return { key: ITEM };
 }
 

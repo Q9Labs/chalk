@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { canonical } from "./bundle.mjs";
-import { judgeItem } from "./check.mjs";
+import { declarationDigest, judgeItem } from "./check.mjs";
 
 /** @typedef {import("./check.mjs").Item} Item */
 /** @typedef {import("./check.mjs").Ports} Ports */
@@ -92,7 +92,7 @@ export async function openWorld(world, { catalogue, rules, store = null }) {
     if (!item) throw new TypeError(`history names ${past.item}, which the world does not declare`);
     const frozen = { ...ports, evidence: { fingerprint: async () => fingerprintOf(past.evidence), read: async () => structuredClone(past.evidence) } };
     const verdict = await judgeItem(item, frozen, { catalogue, rules, asof_ms: past.asof_ms, prior: null });
-    stored.set(key(item), { item: { kind: item.kind, id: item.id }, fingerprint: fingerprintOf(past.evidence), verdict });
+    stored.set(key(item), { item: { kind: item.kind, id: item.id }, declaration: declarationDigest(item.declaration), fingerprint: fingerprintOf(past.evidence), verdict });
   }
   persist();
   return { world, items, ports };

@@ -45,10 +45,18 @@ export function renderText(view) {
   if (view.via) lines.push(`via: ${JSON.stringify(view.via.query)} as ${view.via.as}`);
   for (const record of view.records) lines.push(...recordLines(record, handle));
   for (const gap of view.gaps) lines.push(gapLine(gap));
-  if (view.page && view.page.omitted > 0) lines.push(`more: ${view.page.omitted} omitted by ${view.page.by} (limit=${view.page.limit})`);
+  if (view.page && view.page.omitted > 0) lines.push(`more: ${view.page.omitted} omitted by ${view.page.by} (${view.page.by === "budget" ? `budget=${view.page.budget}` : `limit=${view.page.limit}`})`);
   for (const command of view.next) lines.push(`next: ${command}`);
-  return `${lines.join("\n")}\n`;
+  return `${lines.map(oneLine).join("\n")}\n`;
 }
+
+/**
+ * Row values and labels come from telemetry, so a newline in one must not start a line an agent would read as status or a gap.
+ * @param {string} line
+ */
+const oneLine = (line) => line.replace(CONTROL, (char) => JSON.stringify(char).slice(1, -1));
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point: they are escaped, never printed raw
+const CONTROL = /[\u0000-\u001f\u007f]/gu;
 
 /** @param {Head} head */
 function headLine(head) {

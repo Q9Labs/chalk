@@ -7,15 +7,17 @@
  * The verdict layer reads through check.mjs's four ports. Until the slices wire live adapters (C1's envelope, C3's watermarks),
  * only a fixture world implements them, so every command except `call` needs `--fixture`. See docs/diagnose.md.
  */
-import { resolve as resolvePath } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 import { CATALOGUE, RULES } from "./proof/catalogue.mjs";
+import { BACKSTOPS } from "./proof/verdict.mjs";
 import { check, standing, statusOf } from "./proof/check.mjs";
 import { openWorld } from "./proof/fixture-world.mjs";
 import { localDate, localMidnight, ref } from "./output/format.mjs";
 import { renderJson } from "./output/json.mjs";
 import { UsageError } from "./output/page.mjs";
-import { USAGE, instant, parseQuery } from "./output/query.mjs";
+import { USAGE, instant, parseQuery, realDate } from "./output/query.mjs";
 import { parseHandle } from "./output/handle.mjs";
 import { indexWorld, resolve } from "./output/resolve.mjs";
 import { measureRecord, renderText } from "./output/text.mjs";
@@ -32,7 +34,6 @@ import { checkView, dayView, evidenceView, itemView, quoteArg, rangeView, refKin
 
 const FIXTURES = { nov18: new URL("./fixtures/nov18.mjs", import.meta.url).href };
 const DAY_MS = 86_400_000;
-const BACKSTOPS = ["UNEXPLAINED", "BLIND_SPOT"];
 
 /**
  * Runs one command and returns its output instead of printing it, so tests call it directly.
@@ -55,9 +56,13 @@ export async function run(argv, { cwd = process.cwd() } = {}) {
     return { code: exitCode(view, query), out: query.options.json ? renderJson(view) : renderText(view), err: "" };
   } catch (error) {
     if (error instanceof UsageError) return { code: 64, out: "", err: `diagnose: ${error.message}\n${USAGE}\n` };
+    if (error instanceof SourceError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
     throw error;
   }
 }
+
+/** A data source the command needs is missing: exit 69. */
+class SourceError extends Error {}
 
 /** 0 by default. With --strict: 3 when something is broken or degraded, 2 when coverage is not complete or a lookup did not resolve. */
 function exitCode(/** @type {View} */ view, /** @type {Query} */ query) {
@@ -72,14 +77,22 @@ function exitCode(/** @type {View} */ view, /** @type {Query} */ query) {
  * @param {string} cwd
  */
 async function open(query, cwd) {
-  const fixture = /** @type {string} */ (query.options.fixture);
-  const url = fixture in FIXTURES ? FIXTURES[/** @type {keyof typeof FIXTURES} */ (fixture)] : pathToFileURL(resolvePath(cwd, fixture)).href;
-  const module = await import(url);
+  const fixture = query.options.fixture ?? "";
+  const named = new Map(Object.entries(FIXTURES)).get(fixture);
+  const path = resolvePath(cwd, fixture);
+  if (named === undefined && !existsSync(path)) throw new SourceError(`no fixture world at ${path}; pass --fixture nov18 or a world module`);
+  const module = await import(named ?? pathToFileURL(path).href);
   /** @type {World} */
   const world = typeof module.default === "function" ? module.default() : module.default;
   const store = query.options.store === null ? null : resolvePath(cwd, query.options.store);
+  if (store !== null && !existsSync(dirname(store))) throw new UsageError(`--store ${store}: its directory does not exist`);
   const { items, ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES, store });
-  const asof_ms = query.options.asof === null ? world.asof_ms : instant(query.options.asof, () => Number.NaN);
+  const asof_ms =
+    query.options.asof === null
+      ? world.asof_ms
+      : instant(query.options.asof, () => {
+          throw new UsageError("--asof is an instant with a zone, like 2026-11-19T01:00Z");
+        });
   /** @type {ViewContext} */
   const ctx = { asof_ms, rules: RULES, catalogue: CATALOGUE, paging: { limit: query.options.limit, cursor: query.options.cursor, budget: query.options.budget }, measure: measureRecord };
   const statuses = new Map(await Promise.all(items.map(async (item) => /** @type {const} */ ([item, await statusOf(item, ports, RULES)]))));
@@ -122,7 +135,7 @@ const COMMANDS = {
   },
   day: (query, session) => {
     const tenant = tenantNamed(session, need(query.args, "a tenant")[0]);
-    return day(session, tenant, dateArg(session, tenant, query.args[1] ?? "today"), query.options.symptom);
+    return day(session, tenant, dateArg(session, tenant, query.args[1] ?? "today"), query.options.symptom === null ? null : symptomCode(query.options.symptom));
   },
   episode: openItem("episode"),
   attempt: openItem("attempt"),
@@ -134,17 +147,16 @@ const COMMANDS = {
   },
   participant: (query, session, tenantScope) => {
     const text = need(query.args, "a person").join(" ");
+    rangeOf(session, query.options, tenantScope?.tz ?? "UTC", 30);
     const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null, kinds: ["user", "agent", "participant"] });
     const people = [...new Map(found.map((entry) => [personKey(entry), entry])).values()];
-    if (people.length !== 1) return candidates(session, text, people);
+    if (people.length !== 1) return candidates(session, text, people, query.options);
     const viaSeat = people[0].kind === "participant" && found.length === 1 && people[0].meaning !== "guest";
     return openEntry(session, people[0], query, viaSeat ? { query: text, as: describe(people[0]) } : null);
   },
   pattern: (query, session, tenantScope) => {
     const { args, options } = query;
-    const code = need(args, "a symptom code")[0];
-    const known = [...CATALOGUE.map((def) => def.code), ...BACKSTOPS];
-    if (!known.includes(code)) throw new UsageError(`unknown symptom ${code}; known: ${known.join(", ")}`);
+    const code = symptomCode(need(args, "a symptom code")[0]);
     const tz = tenantScope?.tz ?? "UTC";
     const range = rangeOf(session, options, tz, 30);
     const entries = itemsIn(session, tenantScope?.id ?? null, range);
@@ -157,7 +169,7 @@ const COMMANDS = {
     if (options.from === null || options.to === null) throw new UsageError("window needs --from and --to");
     const range = rangeOf(session, options, tenant.tz, 0);
     const entries = itemsIn(session, tenant.id, range);
-    const symptom = options.symptom;
+    const symptom = options.symptom === null ? null : symptomCode(options.symptom);
     const scopeArgs = ["--from", options.from, "--to", options.to, ...(symptom ? ["--symptom", symptom] : [])];
     return rangeView({
       title: { view: "window", scope: { tenant: tenant.name, ...(symptom ? { symptom } : {}) } },
@@ -172,6 +184,14 @@ const COMMANDS = {
   },
   check: (query, session, tenantScope) => runCheck(session, query, tenantScope),
 };
+
+/** A symptom is a check's code or a backstop; a misspelt one would read as a clean scope, so it is a usage error. */
+function symptomCode(/** @type {string} */ code) {
+  /** @type {readonly string[]} */
+  const known = [...CATALOGUE.map((def) => def.code), ...BACKSTOPS];
+  if (!known.includes(code)) throw new UsageError(`unknown symptom ${code}; known: ${known.join(", ")}`);
+  return code;
+}
 
 /**
  * `episode`, `attempt` and `job` open one item of that kind; a finding or session id that names the item resolves to it, and says so.
@@ -226,7 +246,7 @@ function openEntry(session, entry, query, via) {
     return declaration.seats.filter((seat) => seat.person.kind === person.kind && seat.person.id === person.id).map((seat) => seat.participant);
   };
   const entries = itemsIn(session, tenant.id, range).filter(({ item }) => seatsOf(item).length > 0);
-  const who = person.kind === "seat" ? { ref: ref("participant", person.participant), name: entry.name } : { ref: ref(person.kind, person.id), name: entry.kind === "participant" ? null : entry.label };
+  const who = person.kind === "seat" ? { ref: ref("participant", person.participant), name: entry.name } : { ref: ref(person.kind, person.id), name: session.world.people.find((candidate) => candidate.kind === person.kind && candidate.id === person.id)?.name ?? null };
   const scopeArgs = ["--tenant", tenant.name, ...rangeArgs(query.options, range)];
   return rangeView({
     title: { view: "participant", scope: { who, tenant: tenant.name } },
@@ -247,37 +267,54 @@ function openEntry(session, entry, query, via) {
  * @param {Tenant | null} tenantScope
  */
 async function runCheck(session, query, tenantScope) {
+  const target = checkTarget(session, query, tenantScope);
+  if ("view" in target) return target.view;
+  const results = await check(target.scope, session.ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: session.ctx.asof_ms });
+  return checkView({ scope: target.shown, tz: target.tz, results, ctx: session.ctx, again: checkAgain(query, tenantScope) });
+}
+
+/** @typedef {{ scope: import("./proof/check.mjs").Scope, shown: Record<string, unknown>, tz: string } | { view: View }} CheckTarget */
+
+/**
+ * What `check` covers: one item named by any handle, a tenant's day, or a range. An item lookup that is not exactly one item returns candidates.
+ * @param {Session} session
+ * @param {Query} query
+ * @param {Tenant | null} tenantScope
+ * @returns {CheckTarget}
+ */
+function checkTarget(session, query, tenantScope) {
   const { args, options } = query;
-  /** @type {import("./proof/check.mjs").Scope} */
-  let scope;
-  /** @type {Record<string, unknown>} */
-  let shown;
-  let tz = tenantScope?.tz ?? "UTC";
   const tenantArg = args.length > 0 ? resolve(session.entries, args[0], { kinds: ["tenant"] }) : [];
-  if (args.length > 0 && tenantArg.length === 0) {
-    const text = args.join(" ");
-    const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null }).filter((entry) => entry.target.kind === "item" || entry.target.kind === "finding");
-    const items = [...new Map(found.map((entry) => [/** @type {{ item: Item }} */ (entry.target).item.id, entry])).values()];
-    if (items.length !== 1) return candidates(session, text, items);
-    const item = /** @type {{ item: Item }} */ (items[0].target).item;
-    scope = { item: { kind: item.kind, id: item.id } };
-    shown = { item: ref(refKind(item.kind), item.id) };
-    tz = tenantOf(session, item.tenant).tz;
-  } else {
-    const tenant = tenantArg.length === 1 ? tenantOf(session, tenantArg[0].id) : tenantScope;
-    tz = tenant?.tz ?? "UTC";
-    if (args[1] !== undefined && tenant) {
-      const date = dateArg(session, tenant, args[1]);
-      scope = { tenant: tenant.id, from_ms: localMidnight(date, tenant.tz), to_ms: localMidnight(nextDate(date), tenant.tz) };
-      shown = { tenant: tenant.name, date };
-    } else {
-      const range = rangeOf(session, options, tz, 1);
-      scope = { tenant: tenant?.id ?? null, ...range };
-      shown = { tenant: tenant?.name ?? "all", since: options.since ?? (options.from ? `${options.from}..${options.to}` : "1d") };
-    }
+  if (args.length > 0 && tenantArg.length === 0) return checkItem(session, args.join(" "), tenantScope);
+  const tenant = tenantArg.length === 1 ? tenantOf(session, tenantArg[0].id) : tenantScope;
+  const tz = tenant?.tz ?? "UTC";
+  if (args[1] !== undefined && tenant) {
+    const date = dateArg(session, tenant, args[1]);
+    return { scope: { tenant: tenant.id, from_ms: localMidnight(date, tenant.tz), to_ms: localMidnight(nextDate(date), tenant.tz) }, shown: { tenant: tenant.name, date }, tz };
   }
-  const results = await check(scope, session.ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: session.ctx.asof_ms });
-  return checkView({ scope: shown, tz, results, ctx: session.ctx });
+  const range = rangeOf(session, options, tz, 1);
+  return { scope: { tenant: tenant?.id ?? null, ...range }, shown: { tenant: tenant?.name ?? "all", since: options.since ?? (options.from ? `${options.from}..${options.to}` : "1d") }, tz };
+}
+
+/** @param {Session} session @param {string} text @param {Tenant | null} tenantScope @returns {CheckTarget} */
+function checkItem(session, text, tenantScope) {
+  const found = resolve(session.entries, text, { tenant: tenantScope?.id ?? null }).flatMap((entry) => (entry.target.kind === "item" || entry.target.kind === "finding" ? [{ entry, item: entry.target.item }] : []));
+  const matches = [...new Map(found.map((match) => [match.item.id, match])).values()];
+  if (matches.length !== 1)
+    return {
+      view: candidates(
+        session,
+        text,
+        matches.map((match) => match.entry),
+      ),
+    };
+  const { item } = matches[0];
+  return { scope: { item: { kind: item.kind, id: item.id } }, shown: { item: ref(refKind(item.kind), item.id) }, tz: tenantOf(session, item.tenant).tz };
+}
+
+/** The arguments that rerun this check, so its cursor `next:` reaches the same scope. @param {Query} query @param {Tenant | null} tenantScope */
+function checkAgain({ args, options }, tenantScope) {
+  return ["check", ...args.map(quoteArg), ...(tenantScope ? ["--tenant", tenantScope.name] : []), ...(options.since ? ["--since", options.since] : []), ...(options.from && options.to ? ["--from", quoteArg(options.from), "--to", quoteArg(options.to)] : [])];
 }
 
 /** @param {Session} session @param {Tenant} tenant @param {string} date @param {string | null} symptom */
@@ -286,9 +323,17 @@ function day(session, tenant, date, symptom) {
   return dayView({ tenant, date, entries: itemsIn(session, tenant.id, range), ctx: session.ctx, symptom });
 }
 
-/** @param {Session} session @param {string} query @param {readonly Entry[]} found */
-function candidates(session, query, found) {
-  return resolveView({ query, candidates: found, ctx: session.ctx, tz: "UTC" });
+/**
+ * @param {Session} session
+ * @param {string} query
+ * @param {readonly Entry[]} found
+ * @param {Query["options"] | null} [range] a range the query asked for, carried into each candidate's next command
+ */
+function candidates(session, query, found, range = null) {
+  const elsewhere = found.length === 0 && parseHandle(query) !== null ? resolve(session.entries, query) : [];
+  if (elsewhere.length === 1) throw new UsageError(`${query} names ${describe(elsewhere[0])}, not what this command opens; run diagnose ${query}`);
+  const carry = range === null || (range.since === null && range.from === null) ? [] : rangeArgs(range, rangeOf(session, range, "UTC", 30));
+  return resolveView({ query, candidates: found, ctx: session.ctx, tz: "UTC", carry });
 }
 
 /** Items of a tenant (or every tenant) that started inside a range, with their status. */
@@ -343,7 +388,7 @@ function rangeArgs(/** @type {Query["options"]} */ options, /** @type {{ from_ms
 function dateArg(session, tenant, value) {
   if (value === "today") return localDate(session.ctx.asof_ms, tenant.tz);
   if (value === "yesterday") return localDate(session.ctx.asof_ms - DAY_MS, tenant.tz);
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new UsageError(`${value} is not a date like 2026-11-18`);
+  if (!realDate(value)) throw new UsageError(`${value} is not a date like 2026-11-18`);
   return value;
 }
 

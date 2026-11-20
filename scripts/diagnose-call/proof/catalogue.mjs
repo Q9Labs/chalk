@@ -11,6 +11,7 @@
  * - `recording.not_ready`: a pending post-call job.
  * - `entry.unresolved`: an attempt that never became an Episode.
  */
+import { readFileSync } from "node:fs";
 import { overlaps } from "./evidence.mjs";
 import { rulesVersion } from "./verdict.mjs";
 
@@ -234,4 +235,6 @@ const entryUnresolved = {
 
 /** @type {readonly CheckDef[]} */
 export const CATALOGUE = Object.freeze([noVoiceDetected, endTimeLimit, boardViewJumped, recordingNotReady, entryUnresolved]);
-export const RULES = rulesVersion(CATALOGUE);
+/** Every module a rule above is defined in. A check moved into its own file adds that file here, so its thresholds change RULES. */
+const SOURCES = ["catalogue.mjs"].map((name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8"));
+export const RULES = rulesVersion(CATALOGUE, SOURCES);

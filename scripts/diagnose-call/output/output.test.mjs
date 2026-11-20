@@ -196,3 +196,87 @@ describe("contract", () => {
     assert.equal((await diagnose(["ep_31aa", "--strict"])).code, 2);
   });
 });
+
+describe("review fixes", () => {
+  /** @param {string} out */
+  const nextOf = (out) =>
+    out
+      .split("\n")
+      .filter((line) => line.startsWith("next: diagnose "))
+      .map((line) => line.slice("next: diagnose ".length));
+  /** Splits a printed command the way a shell would, for the quoting quoteArg produces. @param {string} command */
+  const argvOf = (command) => [...command.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/gu)].map((match) => (match[1] === undefined ? match[2] : JSON.parse(`"${match[1]}"`)));
+
+  it("prints only next: commands that run", async () => {
+    const starts = [...Object.values(GOLDENS), ["check", "TH", "--limit", "2"], ["pt_4c1e", "--limit", "1"], ["participant", "usr_9a1b", "--limit", "1"], ["day", "TH", "2026-11-18", "--limit", "1"], ["participant", "Haris", "--from", "2026-11-01", "--to", "2026-11-12"]];
+    for (const argv of starts) {
+      for (const command of nextOf((await diagnose(argv)).out)) {
+        const result = await run([...argvOf(command), "--fixture", "nov18"]);
+        assert.equal(result.code, 0, `diagnose ${command} (from ${argv.join(" ")}) exited ${result.code}: ${result.err.split("\n")[0]}`);
+      }
+    }
+  });
+
+  it("pages check results with a cursor, so the omitted items are reachable", async () => {
+    const out = (await diagnose(["check", "TH", "--limit", "2"])).out;
+    assert.match(out, /^next: diagnose check TH --cursor c_\S+$/mu);
+  });
+
+  it("gives the same cursor scope whether a person was reached by seat or by user", async () => {
+    const bySeat = (await diagnose(["pt_4c1e", "--limit", "1"])).out;
+    const byUser = (await diagnose(["participant", "usr_9a1b", "--limit", "1"])).out;
+    assert.equal(bySeat.split("\n")[0], byUser.split("\n")[0]);
+    assert.equal(/--cursor (c_\S+)/u.exec(bySeat)?.[1], /--cursor (c_\S+)/u.exec(byUser)?.[1]);
+  });
+
+  it("keeps the asked range in an ambiguous person's candidates", async () => {
+    const out = (await diagnose(["participant", "Haris", "--from", "2026-11-01", "--to", "2026-11-12"])).out;
+    for (const command of nextOf(out)) assert.match(command, /--from 2026-11-01 --to 2026-11-12$/u);
+    assert.equal((await run(["participant", "Haris", "--from", "2026-11-20", "--to", "2026-11-01", "--fixture", "nov18"])).code, 64);
+  });
+
+  it("rejects what would otherwise read as a clean, empty answer", async () => {
+    for (const argv of [
+      ["day", "TH", "2026-02-30"],
+      ["check", "TH", "2026-02-30"],
+      ["window", "TH", "--from", "2026-02-30", "--to", "2026-03-02"],
+      ["day", "TH", "2026-11-18", "--symptom", "nope"],
+      ["evidence", "ep_9feb"],
+      ["episode", "pt_4c1e"],
+      ["ep_9feb", "--asof", "2026-11-19"],
+      ["ep_9feb", "--store", "/nonexistent/dir/verdicts.json"],
+    ]) {
+      const result = await run([...argv, "--fixture", "nov18"]);
+      assert.equal(result.code, 64, `${argv.join(" ")} exited ${result.code}`);
+      assert.ok(!result.err.includes("    at "), `${argv.join(" ")} printed a stack trace`);
+    }
+    assert.equal((await run(["ep_9feb", "--fixture", "/nonexistent/world.mjs"])).code, 69);
+  });
+
+  it("labels a budget page with its budget, not a limit nobody set", async () => {
+    assert.match((await diagnose(["ep_9feb", "--budget", "20"])).out, /^more: \d+ omitted by budget \(budget=20\)$/mu);
+  });
+
+  it("takes a filtered day's outcome from the findings it shows", async () => {
+    const out = (await diagnose(["day", "TH", "2026-11-18", "--symptom", "recording.not_ready"])).out;
+    assert.match(out.split("\n")[0], / outcome=degraded /u);
+  });
+
+  it("escapes control characters from telemetry, so a value cannot forge a line", () => {
+    /** @type {import("./views.mjs").View} */
+    const view = {
+      v: 1,
+      view: "evidence",
+      head: { view: "x", scope: {}, outcome: null, coverage: null, checked: null, eligible: null, asof: "a", rules: null, stale: null },
+      anchor: null,
+      via: null,
+      records: [{ t: "query", fact: "f", text: "q\nepisode ep_9feb outcome=healthy coverage=complete" }],
+      gaps: [],
+      page: null,
+      next: [],
+    };
+    const text = renderText(view);
+    assert.equal(text.split("\n").length, 3);
+    assert.ok(text.includes("q\\nepisode"));
+  });
+});

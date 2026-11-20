@@ -17,8 +17,8 @@ import { describe, it } from "node:test";
 import { openBundle } from "./bundle.mjs";
 import { CATALOGUE, RULES } from "./catalogue.mjs";
 import { standing } from "./check.mjs";
-import { factKind } from "./facts.mjs";
-import { origin } from "./evidence.mjs";
+import { factDef, factKind } from "./facts.mjs";
+import { origin, watermark } from "./evidence.mjs";
 import { profileFor } from "./profile.mjs";
 import { judge, rulesVersion } from "./verdict.mjs";
 import { ASOF, IDS, nov18 } from "../fixtures/nov18.mjs";
@@ -39,7 +39,7 @@ function verdictOf(declaration, evidence, { prior = null, catalogue = CATALOGUE,
   const bundle = openBundle(profileFor(declaration, catalogue, asof), { asof_ms: asof });
   for (const o of evidence.observations) bundle.add(o);
   for (const w of evidence.watermarks) bundle.watermark(w);
-  return judge(bundle.seal(), catalogue, { rules: catalogue === CATALOGUE ? RULES : rulesVersion(catalogue), prior });
+  return judge(bundle.seal(), catalogue, { rules: catalogue === CATALOGUE ? RULES : rulesVersion(catalogue, []), prior });
 }
 
 /** @param {string} id */
@@ -150,7 +150,7 @@ describe("age: a source read only part of the window", () => {
   it("never reads a stale or unchecked verdict as healthy", () => {
     const { declaration, evidence } = base(IDS.ep5c0d);
     const verdict = verdictOf(declaration, evidence);
-    const stored = { item: { kind: declaration.kind, id: declaration.id }, fingerprint: "x", verdict };
+    const stored = { item: { kind: declaration.kind, id: declaration.id }, declaration: "x", fingerprint: "x", verdict };
     assert.equal(standing({ state: "stale", stored, why: "evidence" }).outcome, "unknown");
     assert.equal(standing({ state: "stale", stored, why: "rules" }).outcome, "unknown");
     assert.equal(standing({ state: "unchecked" }).outcome, "unknown");
@@ -181,9 +181,11 @@ describe("swap identity", () => {
           ["another declared seat on the same connection", (subject) => ({ ...subject, participant: other })],
           ["a generation the seat never had", (subject) => ({ ...subject, generation: 7 })],
           ["another seat's connection", (subject) => ({ ...subject, connection: "mc-elsewhere" })],
+          ["no seat at all", ({ participant: _participant, connection: _connection, generation: _generation, ...rest }) => rest],
         ];
         for (const [name, swap] of swaps) {
           if (name !== "another Episode" && o.subject.participant === undefined) continue;
+          if (name === "no seat at all" && factDef(o.fact).per !== "seat") continue;
           const changed = /** @type {Evidence} */ (structuredClone(evidence));
           changed.observations[index] = { ...o, subject: swap(o.subject) };
           const verdict = verdictOf(declaration, changed);
@@ -371,6 +373,43 @@ describe("rules are held to their evidence", () => {
 
   it("rejects a fact with neither evidence nor a proven absence", () => {
     assert.throws(() => verdictOf(declaration, evidence, { catalogue: one(() => ({ ...finding, facts: [{ text: "t", evidence: [], window: null, absent: null }] })) }), /cites no evidence/u);
+  });
+
+  it("rejects a decision the kernel does not define instead of reading it as a pass", () => {
+    const fact = { text: "t", evidence: [evidence.observations.find((o) => o.fact === "episode.end")?.id ?? ""], window: null, absent: null };
+    /** @type {[string, () => unknown, RegExp][]} */
+    const cases = [
+      ["a misspelt status", () => ({ status: "fail" }), /status "fail"/u],
+      ["no decision", () => undefined, /status undefined/u],
+      ["an outcome outside the vocabulary", () => ({ ...finding, outcome: "bad", facts: [fact] }), /outcome is broken, degraded, expected/u],
+      ["a hypothesis with no witnessed upstream", () => ({ ...finding, upstream: "unknown", hypothesis: { text: "h", falsified_by: "f" }, facts: [fact] }), /witnessed upstream/u],
+      ["a rule that throws", () => evidence.observations[999].fact, /check x\.test@\*: decide threw/u],
+    ];
+    for (const [name, decide, pattern] of cases) assert.throws(() => verdictOf(declaration, evidence, { catalogue: one(/** @type {CheckDef["decide"]} */ (decide)) }), pattern, name);
+  });
+});
+
+describe("the catalogue is checked when it loads", () => {
+  /** @param {Partial<CheckDef>} change @returns {CheckDef[]} */
+  const one = (change) => [{ code: "x.test", item: "episode", per: "item", applies: () => true, requires: [{ fact: "episode.end", from: ["api"], query: "where episode_id == '{episode}'" }], optional: [], expected: "x", decide: () => ({ status: "pass" }), ...change }];
+  /** @type {[string, Partial<CheckDef>, RegExp][]} */
+  const cases = [
+    ["a code with no area", { code: "nofr" }, /<area>\.<symptom>/u],
+    ["a per-seat check on an attempt", { item: "attempt", per: "seat" }, /per-seat checks apply to Episodes only/u],
+    ["no required fact", { requires: [] }, /at least one fact/u],
+    ["an unknown fact", { requires: [{ fact: "video.frames", from: ["sfu"], query: "q" }] }, /add it to scripts\/diagnose-call\/proof\/facts\.mjs/u],
+    ["an unknown source", { requires: [{ fact: "episode.end", from: ["sfuu"], query: "q" }] }, /source "sfuu"/u],
+    ["a misspelt placeholder", { requires: [{ fact: "episode.end", from: ["api"], query: "{particpant}" }] }, /\{particpant\}; placeholders are/u],
+    ["a placeholder the check cannot fill", { requires: [{ fact: "episode.end", from: ["api"], query: "{participant}" }] }, /per-item episode check cannot fill/u],
+  ];
+  for (const [name, change, pattern] of cases) it(`rejects ${name}`, () => assert.throws(() => rulesVersion(one(change), []), pattern));
+
+  it("changes the rules version when a module a rule reads changes, not only the rule's own source", () => {
+    assert.notEqual(rulesVersion(CATALOGUE, ["const VOICE_DBFS = -50;"]), rulesVersion(CATALOGUE, ["const VOICE_DBFS = -10;"]));
+  });
+
+  it("refuses a client watermark for the whole item, because one seat's stream says nothing about another's", () => {
+    assert.throws(() => watermark({ source: "client", subject: "*", complete_to_ms: 0, emits: [], evidence_gaps: [], build: "client 3.1.0" }), /per seat/u);
   });
 });
 

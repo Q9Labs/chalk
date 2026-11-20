@@ -2,12 +2,12 @@
 
 `pnpm diagnose` answers "what went wrong, for whom, and how sure are we" about Episodes, join attempts and jobs. It is built for agents: the default output is a compact line grammar that costs a few hundred tokens, every line starts with a keyword or a handle you can grep or pass back, and `--json` gives the same view as one versioned object. `pnpm diagnose:call <episode-id>` is the older single-call report over today's rows; `diagnose call` runs it too.
 
-It reads a world module today (`--fixture nov18` is the 18 Nov example). Reading production rows needs C1's IDs and C3's watermarks, so without `--fixture` it exits 69.
+It reads a world module today (`--fixture nov18` is the 18 Nov example). Reading production rows needs C1's IDs and C3's watermarks, so without `--fixture`, or with a fixture path that doesn't exist, it exits 69.
 
 ## Read a verdict
 
 ```text
-episode ep_9feb tenant=TH outcome=broken coverage=partial(board) checked=5/9 asof=2026-11-19T01:00Z rules=c3470b2d
+episode ep_9feb tenant=TH outcome=broken coverage=partial(board) checked=5/9 asof=2026-11-19T01:00Z rules=b992ec71
 anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4
 f_98d4 broken audio.no_voice_detected pt_4c1e(Haris) +07:10..+10:40 hop=sfu_ingress upstream=unknown ev=ev_a1f3
 fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]
@@ -53,11 +53,13 @@ Handles are a kind prefix and the shortest id prefix that is unique in the view:
 
 ## Add a check
 
-A check is one entry in `scripts/diagnose-call/proof/catalogue.mjs` (`CheckDef` in `scripts/diagnose-call/proof/profile.mjs`):
+A check is one entry in `scripts/diagnose-call/proof/catalogue.mjs` (`CheckDef` in `scripts/diagnose-call/proof/profile.mjs`), and the catalogue is validated when it loads, so a malformed check fails every command with its code in the message.
 
-1. Name the symptom `code`, the `item` kind it applies to, whether it runs once per item or `per` seat, and an `applies` predicate that reads only the declaration, so the plan never depends on what the telemetry happens to contain.
-2. List the facts it `requires` (and `optional` ones), each with the sources that witness it, how many independent origins it needs, and the query that reproduces it.
-3. Write `decide`: it gets three-state readings (`present`, `absent`, `unknown`) and returns `pass`, `unknown` with a reason, or a finding whose facts cite only rows from its readings. The kernel throws if a fact cites anything else, so a rule cannot overclaim.
-4. Add a soundness case in `scripts/diagnose-call/proof/soundness.test.mjs`, then rewrite the goldens with `DIAGNOSE_GOLDEN=write node --test scripts/diagnose-call/output/output.test.mjs` and recount tokens with `uv run -q --no-project --with tiktoken python scripts/diagnose-call/golden/count_tokens.py`.
+1. Register each new fact in `scripts/diagnose-call/proof/facts.mjs` with its `kind` (state, aggregate, event or once) and whether it is about one seat or one item. A row of a per-seat fact that names no Participant or connection never binds to a seat.
+2. Name the symptom `code` (`<area>.<symptom>`), the `item` kind it applies to, whether it runs once per item or `per` seat, and an `applies` predicate that reads only the declaration, so the plan never depends on what the telemetry happens to contain.
+3. List the facts it `requires` (and `optional` ones), each with the sources that witness it, how many independent origins it needs, and the query that reproduces it. Query placeholders are `{episode}`, `{participant}`, `{attempt}`, `{job}`, `{from}` and `{to}`, and each must be one the check's item can fill.
+4. Write `decide`: it gets three-state readings (`present`, `absent`, `unknown`) and returns `pass`, `unknown` with a reason, or a finding whose facts cite only rows from its readings. The kernel throws if a fact cites anything else, if the answer has a shape it does not define, or if a hypothesis comes without a witnessed upstream hop, so a rule cannot overclaim.
+5. Add the fact to the `emits` of the watermark that delivers it in `scripts/diagnose-call/fixtures/nov18.mjs`, with observations for it, or every Episode the check applies to reads as unknown in the goldens. Then add a fixture where the check passes, one where it finds the fault, and one where its evidence is missing; the metamorphic tests in `scripts/diagnose-call/proof/soundness.test.mjs` run over its `BASES` list.
+6. Rewrite the goldens with `DIAGNOSE_GOLDEN=write node --test scripts/diagnose-call/output/output.test.mjs` and recount tokens with `uv run -q --no-project --with tiktoken python scripts/diagnose-call/golden/count_tokens.py`.
 
-Changing a check changes the rules hash (`rules=`), so stored verdicts read as stale until `check` reruns them.
+The rules hash (`rules=`) covers the kernel files and the catalogue source byte for byte, so any edit there, even a comment, makes stored verdicts read as stale until `check` reruns them. A check that moves into its own file must add that file to `SOURCES` in the catalogue, or edits to it would not change the hash.
