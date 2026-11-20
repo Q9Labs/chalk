@@ -1520,7 +1520,7 @@
       "id": "workflow:windows.yml#windows",
       "owner": "Gate",
       "catches": "A script, path or line ending that works on Linux and macOS but breaks a developer on native Windows.",
-      "runs": ["pull_request", "merge_queue", "push", "manual"],
+      "runs": ["pull_request", "push", "manual"],
       "blocks": "advisory",
       "minutes": null,
       "record": "unmeasured",

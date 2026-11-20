@@ -11,7 +11,6 @@ on:
       - "**/*.md"
       - "**/*.mdx"
       - "scratchpad/**"
-  merge_group:
   push:
     branches: [master]
     paths-ignore:
@@ -54,7 +53,9 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          cache-dependency-path: |
+            apps/api/go.sum
+            features/media/sfu/go.sum
 
       # Every step runs even when an earlier one failed, so one run reports every Windows break.
       - name: Test native Windows dev orchestration
@@ -83,7 +84,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run gate:fast -- --base "$env:GATE_BASE_REF"
         env:
-          GATE_BASE_REF: ${{ github.event.merge_group.base_sha || (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.base_ref || 'master') }}
+          GATE_BASE_REF: ${{ (github.event_name == 'push' && github.event.before) || format('origin/{0}', github.base_ref || 'master') }}
           # A manual run on master changes no files, and an empty scope is not a failure there.
           GATE_ALLOW_EMPTY: "1"
 
@@ -112,8 +113,23 @@ jobs:
           go test -short ./...
 
       # The packed web consumer test drives Chromium and fails in CI when the browser is missing.
-      - name: Install Chromium
+      - name: Resolve Windows Playwright cache key
+        id: playwright-key
         if: ${{ !cancelled() }}
+        run: |
+          $version = (pnpm --dir sdks/typescript/client exec playwright --version).Trim().Split(" ")[-1]
+          "key=playwright-$version-chromium-windows-$env:RUNNER_ARCH" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Cache Chromium for Windows
+        id: playwright-cache
+        if: ${{ !cancelled() }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/AppData/Local/ms-playwright
+          key: ${{ steps.playwright-key.outputs.key }}
+
+      - name: Install Chromium
+        if: ${{ !cancelled() && steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: pnpm --dir sdks/typescript/client exec playwright install chromium
 
       - name: Run unit tests

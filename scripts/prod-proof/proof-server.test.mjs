@@ -14,13 +14,17 @@ async function holdPort() {
 }
 const runOn = (port) => ({ config: { proof_origin: `http://127.0.0.1:${port}` }, resources: [] });
 
-test("a proof origin that is already in use fails with the named reason proof-origin-busy", async () => {
+test("a proof origin that is already in use fails with the named reason proof-origin-busy", async (t) => {
   const held = await holdPort();
+  const run = runOn(held.port);
+  t.after(async () => {
+    for (const resource of run.resources) await resource.dispose();
+    await held.release();
+  });
   const lines = [];
-  await assert.rejects(proofServer(runOn(held.port)), (error) => {
+  await assert.rejects(proofServer(run), (error) => {
     publicFailure("setup-or-capture", error, (line) => lines.push(line));
     return error instanceof ProofError;
   });
   assert.deepEqual(lines, ["PROOF setup-or-capture: failed (proof-origin-busy)"]);
-  await held.release();
 });
