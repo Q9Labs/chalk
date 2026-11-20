@@ -17,6 +17,10 @@ export type AccessSubject = {
   readonly participantId: string;
   readonly participantGeneration: number;
 };
+export type ParticipantTelemetryAccess = {
+  readonly token: string;
+  readonly expiresAt: string;
+};
 export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
   readonly expiresAt: string;
@@ -69,6 +73,8 @@ export type ParsedAccessGrant = {
   readonly episodeStartedAt?: string | null;
   readonly sync: ParticipantSyncAccess;
   readonly media: ParticipantMediaAccess;
+  /** The credential for the telemetry route alone. Absent from a server that predates it, and then telemetry leaves under the media credential. */
+  readonly telemetry?: ParticipantTelemetryAccess;
 };
 /** Opaque signed envelope minted by the server SDK and consumed by SpaceClient. */
 export type AccessGrant = {
@@ -115,6 +121,7 @@ export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
     episodeStartedAt,
     sync: parseSyncAccess(value.sync),
     media: parseMediaAccess(value.media),
+    ...optionalTelemetry(value.telemetry),
   };
 }
 export function parseAccessGrant(value: unknown): AccessGrant {
@@ -137,6 +144,7 @@ function accessGrantFromParsed(value: ParsedAccessGrant): AccessGrant {
       provider: value.media.provider,
       client_payload: mediaClientPayload(value.media),
     },
+    ...(value.telemetry ? { telemetry: { token: value.telemetry.token, expires_at: value.telemetry.expiresAt } } : {}),
     [accessGrantBrand]: "AccessGrant" as const,
   });
 }
@@ -172,6 +180,15 @@ function parseSyncAccess(value: unknown): ParticipantSyncAccess {
     token: requireCredential(value.token, "chalk-sync") as ParticipantSyncCredential,
     expiresAt: requireDateTime(value.expires_at ?? value.expiresAt),
   };
+}
+/** Telemetry is not worth a failed join: a missing or malformed credential means telemetry falls back to the media credential. */
+function optionalTelemetry(value: unknown): { readonly telemetry?: ParticipantTelemetryAccess } {
+  if (!isRecord(value)) return {};
+  try {
+    return { telemetry: { token: requireCredential(value.token, "chalk-telemetry"), expiresAt: requireDateTime(value.expires_at ?? value.expiresAt) } };
+  } catch {
+    return {};
+  }
 }
 function parseMediaAccess(value: unknown): ParticipantMediaAccess {
   if (!isRecord(value)) throw new AccessGrantError();
@@ -240,7 +257,7 @@ function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<stri
       };
   }
 }
-function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {
+function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media" | "chalk-telemetry"): string {
   const token = requireNonEmptyString(value);
   const segments = token.split(".");
   if (segments.length !== 3) throw new AccessGrantError();
