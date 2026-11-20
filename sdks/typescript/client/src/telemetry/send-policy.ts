@@ -15,7 +15,9 @@ export function judge(result: TelemetrySendResult | null, canRefresh: boolean, c
   if (result === null) return "retry";
   if (result.status >= 200 && result.status < 300) return result.acks ? "accepted" : "retry";
   if (result.status === 401) return !current ? "lost" : canRefresh ? "refresh" : "retry";
-  return result.status === 429 || result.status >= 500 ? "retry" : "lost";
+  // V1-only APIs use request.invalid for a V2 frame. A downgrade cannot
+  // preserve kernel records or seq ACKs, so keep the original frame.
+  return result.retryAfterUpgrade || result.status === 429 || result.status >= 500 ? "retry" : "lost";
 }
 
 /** How long the drain waits before it sends a new record. */

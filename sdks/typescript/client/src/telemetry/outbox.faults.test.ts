@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestOutbox, expectUnbrokenSequence } from "./outbox.test.helpers";
+import { postTelemetry } from "./send";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -22,6 +23,25 @@ describe("faults at the boundaries of a credential and of a request", () => {
     return [old, all.find((source) => source !== old)];
   };
   const of = (test: ReturnType<typeof createTestOutbox>, source: string | undefined) => test.requests.filter((request) => request.body.source_id === source);
+
+  it("retries the same V2 frame when an old API refuses its schema", async () => {
+    const test = createTestOutbox();
+    const legacyRefusal: typeof fetch = async () => Response.json(
+      { error: { code: "request.invalid", message: "Invalid request body" } },
+      { status: 400 },
+    );
+    test.answer(await postTelemetry(legacyRefusal, {
+      url: "https://api.test/telemetry", token: "synthetic", traceparent: "",
+      body: "{}", keepalive: true, signal: new AbortController().signal,
+    }));
+    test.outbox.record(failed);
+    await test.outbox.flush();
+    await seconds(2);
+    expect(test.requests.map(({ status }) => status)).toEqual([400, 200]);
+    expect(test.requests[1]?.send.body).toBe(test.requests[0]?.send.body);
+    expect(test.accepted.map(({ seq }) => seq)).toEqual([0]);
+    test.outbox.dispose();
+  });
 
   it.each([
     { name: "another tenant", second: credential("tenant-b/episode/participant", "token-b", "tenant-b"), url: "tenant-b" },
