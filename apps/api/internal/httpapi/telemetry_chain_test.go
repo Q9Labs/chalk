@@ -119,8 +119,13 @@ func TestTelemetryChainEndWrongScreen(t *testing.T) {
 			axiom.mu.Lock()
 			var rows []map[string]any
 			for _, row := range axiom.rows {
-				if row.Service.Name == "chalk-api" && row.Attributes["kind"] != nil {
-					rows = append(rows, row.Attributes)
+				var fields map[string]any
+				body, packed := strings.CutPrefix(row.Body, "chalk-evidence-v2:")
+				if !packed || json.Unmarshal([]byte(body), &fields) != nil {
+					t.Fatal("relay did not export a readable evidence body")
+				}
+				if row.Service.Name == "chalk-api" && fields["kind"] != nil {
+					rows = append(rows, fields)
 				}
 			}
 			axiom.mu.Unlock()
@@ -234,6 +239,7 @@ type chainRow struct {
 		Name string `json:"name"`
 	} `json:"service"`
 	Attributes map[string]any `json:"attributes"`
+	Body       string         `json:"body"`
 }
 
 // chainAxiom only serves rows it received through actual ingest requests.

@@ -63,7 +63,7 @@ A source it cannot read is a gap, never a silent omission. When no rule finds a 
 
 ## Evidence relay
 
-The API ships accepted V2 SDK records and Episode-scoped Sync kernel records from the shared Postgres outbox. The relay reuses the log ingest grant and dataset from `OTEL_EXPORTER_OTLP_LOGS_HEADERS`, on the Axiom base URL in `CHALK_API_OTLP_ENDPOINT`. Sync needs no Axiom grant. Ordinary service logs continue to use OTLP.
+The API ships accepted V2 SDK records and Episode-scoped Sync kernel records from the shared Postgres outbox. The relay reuses the log ingest grant and dataset from `OTEL_EXPORTER_OTLP_LOGS_HEADERS`, on the Axiom base URL in `CHALK_API_OTLP_ENDPOINT`. Sync needs no Axiom grant. Ordinary service logs continue to use OTLP. The relay indexes the Episode and other existing log fields, and puts the validated evidence in the log body; new registry fields don't consume one Axiom column each. `diagnose` unpacks the body on read. Search by event ID to find a raw packed row.
 
 An incomplete Axiom receipt leaves the pending payload in Postgres and emits `telemetry.relay_retry`. Check for repeated retries and the age of the oldest pending batch after an outage or configuration change. The shared outbox caps queued bytes and backpressures new V2 uploads instead of expiring accepted evidence. The proof reader collapses copies with the same event ID. It can certify the Episode's one terminal reason when the exported Sync witness agrees with Postgres. This does not make the rest of the Sync stream complete or prove Sync cannot stop before enqueue.
 

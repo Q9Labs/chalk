@@ -78,7 +78,8 @@ export function realStores(env, fetchImpl = fetch) {
   const ask = (/** @type {string} */ apl, /** @type {{ from_ms: number, to_ms: number }} */ window) =>
     axiom({ token: need("AXIOM_TOKEN"), org: env.AXIOM_ORG_ID, dataset: need("CHALK_LOG_DATASET"), apl, start: window.from_ms, end: window.to_ms, signal: AbortSignal.timeout(60_000) }, fetchImpl).catch((error) => {
       if (error instanceof StoreError) throw error;
-      throw new StoreError(`Axiom refused the read: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+      const status = error instanceof Error ? /^Axiom answered HTTP (\d{3})\b/u.exec(error.message)?.[1] : null;
+      throw new StoreError(status ? `Axiom refused the read (HTTP ${status})` : "Axiom log read failed");
     });
   return {
     async declaration({ tenant, episode }) {

@@ -54,9 +54,9 @@ func NewAxiomEvidence(endpoint, logHeaders string) (AxiomEvidence, error) {
 	if !axiomDatasetName.MatchString(dataset) || dataset == "." || dataset == ".." || !strings.HasPrefix(sink.authorization, "Bearer ") {
 		return AxiomEvidence{}, errors.New("Axiom evidence needs a log dataset and ingest grant")
 	}
-	ingestURL, err := url.JoinPath(endpoint, "/v1/ingest", dataset)
+	ingestURL, err := axiomIngestURL(endpoint, dataset)
 	if err != nil {
-		return AxiomEvidence{}, errors.New("invalid Axiom evidence endpoint")
+		return AxiomEvidence{}, err
 	}
 	sink.ingestURL = ingestURL
 	sink.client = &http.Client{
@@ -67,10 +67,21 @@ func NewAxiomEvidence(endpoint, logHeaders string) (AxiomEvidence, error) {
 	return sink, nil
 }
 
+func axiomIngestURL(endpoint, dataset string) (string, error) {
+	base, err := url.Parse(endpoint)
+	if err != nil || base.Hostname() == "" {
+		return "", errors.New("invalid Axiom evidence endpoint")
+	}
+	if strings.EqualFold(base.Hostname(), "api.axiom.co") {
+		return base.JoinPath("v1", "datasets", dataset, "ingest").String(), nil
+	}
+	return base.JoinPath("v1", "ingest", dataset).String(), nil
+}
+
 func (s AxiomEvidence) Enabled() bool { return s.client != nil }
 
 func (s AxiomEvidence) Export(ctx context.Context, rows []json.RawMessage) error {
-	payload, err := json.Marshal(rows)
+	payload, err := axiomEvidencePayload(rows)
 	if err != nil {
 		return errors.New("encode telemetry ingest request")
 	}
@@ -102,6 +113,40 @@ func (s AxiomEvidence) Export(ctx context.Context, rows []json.RawMessage) error
 		return errors.New("incomplete telemetry ingest receipt")
 	}
 	return nil
+}
+
+// Keep a fixed set of indexes in the shared logs schema. Axiom flattens maps
+// into columns; new registry fields otherwise compete with service logs for
+// columns and may silently disappear from a successful ingest.
+func axiomEvidencePayload(rows []json.RawMessage) ([]byte, error) {
+	type row struct {
+		Service    json.RawMessage            `json:"service"`
+		Attributes map[string]json.RawMessage `json:"attributes"`
+		Body       string                     `json:"body"`
+	}
+	indexed := []string{"episode_id", "tenant_id", "event", "provider_session_id", "journey_id", "trace_id"}
+	out := make([]row, 0, len(rows))
+	for _, raw := range rows {
+		var stored struct {
+			Service    json.RawMessage `json:"service"`
+			Attributes json.RawMessage `json:"attributes"`
+		}
+		if err := json.Unmarshal(raw, &stored); err != nil {
+			return nil, err
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(stored.Attributes, &fields); err != nil {
+			return nil, err
+		}
+		wire := row{Service: stored.Service, Attributes: make(map[string]json.RawMessage), Body: "chalk-evidence-v2:" + string(stored.Attributes)}
+		for _, key := range indexed {
+			if value, exists := fields[key]; exists {
+				wire.Attributes[key] = value
+			}
+		}
+		out = append(out, wire)
+	}
+	return json.Marshal(out)
 }
 
 // Run drains ready groups and backs off between idle or failed reads.
