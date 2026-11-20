@@ -1,14 +1,11 @@
 // @ts-check
 // fallow-ignore-file complexity -- each branch is a case of this test; the CRAP estimate reads a test's own branches as untested.
-// Hop (d) of the end.wrong_screen chain (observability/fixtures/end.wrong_screen/README.md): the rows the API logged for the
-// client's frames (hop b) and the row Sync logged for the Episode's end (hop c) become the symptom's positive and healthy fixtures
-// unchanged, and the kernel judges them through the row adapter. The positive run gives the finding; the healthy control checks
-// every eligible seat and gives none. The same rows, with the ledger report hop (b) handed off, also go through the live reader
-// (live/world.mjs) the way `diagnose --live` reads them from Axiom. CHALK_CHAIN_WRITE=1 rewrites the fixtures.
+// The saved hand-offs test proof semantics. The separate live readback uses
+// real stores backed by the same Postgres database and the relay's Axiom fake.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { SERVICES, liveWorld } from "../live/world.mjs";
+import { openLive, realStores } from "../live/stores.mjs";
 import { CATALOGUE, RULES } from "./catalogue.mjs";
 import { check } from "./check.mjs";
 import { origin } from "./evidence.mjs";
@@ -91,45 +88,6 @@ function assertFactFields(fixture) {
   }
 }
 
-const iso = (/** @type {number} */ at) => new Date(at).toISOString();
-
-/** The Episode as Postgres declares it to the live reader: the same seat, ended at its maximum duration. @type {import("../live/world.mjs").DbEpisode} */
-const DB = {
-  episode: { id: EPISODE, tenant: TENANT, space: "d1000000-0000-4000-8000-000000000001", created_at: iso(WINDOW.from_ms), started_at: iso(WINDOW.from_ms), ended_at: iso(WINDOW.to_ms), end_reason: "maximum_duration" },
-  tenant: { id: TENANT, name: "Chain" },
-  seats: [
-    {
-      participant: SEAT,
-      name: "Seat A",
-      role: "participant",
-      capabilities: ["publishAudio"],
-      generation: 1,
-      connection: null,
-      created_at: iso(WINDOW.from_ms),
-      joined_at: iso(WINDOW.from_ms),
-      left_at: iso(WINDOW.to_ms),
-      account: null,
-      identity: { id: "b1000000-0000-4000-8000-000000000001", kind: "user", name: "Seat A" },
-    },
-  ],
-};
-
-/**
- * A run's chain read the live way: each hand-off row as Axiom returns it (fields under `attributes`, the service that logged it),
- * the ledger report hop (b) handed off, and the verdict `check` gives on the World the live reader builds.
- * @param {"positive" | "healthy"} run
- */
-async function liveVerdict(run) {
-  const service = (/** @type {string} */ path) => (path.includes("sync-rows") ? SERVICES.sync : SERVICES.api);
-  const fixture = chainFixture(run);
-  const rows = fixture.chain.flatMap((path) => read(path).map((/** @type {Row} */ attributes) => ({ attributes, service: { name: service(path) } })));
-  const { world } = liveWorld({ db: DB, ledger: read(`${FIXTURES}/chain/ledger.${run}.json`), rows, asof_ms: fixture.asof_ms });
-  const { ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES });
-  const [checked] = await check({ item: { kind: "episode", id: EPISODE } }, ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: fixture.asof_ms });
-  assert.ok(checked);
-  return { world, verdict: checked.verdict };
-}
-
 /** The client session the client's kernel stamped on its end record, as hop (a) handed it off. @param {"positive" | "healthy"} run */
 const frameSession = (run) => {
   const records = read(`${FIXTURES}/chain/client-frames.${run}.json`).flatMap((/** @type {{ events: Row[] }} */ frame) => frame.events);
@@ -158,22 +116,41 @@ describe("end.wrong_screen's chain ends in the kernel's verdict", () => {
     assert.deepEqual(ruleResult(verdict, CODE), { findings: 0, checked: 1, eligible: 1 });
   });
 
-  it("live: the positive chain gives the finding through the live reader, from the client session the frames carry", async () => {
-    const { world, verdict } = await liveVerdict("positive");
-    const [finding] = verdict.findings.filter((entry) => entry.code === CODE);
-    assert.equal(finding?.hop, "client_end");
-    const session = frameSession("positive");
-    const screen = world.evidence[EPISODE]?.observations.filter((observation) => observation.fact === "end.client_screen") ?? [];
-    assert.deepEqual(
-      screen.map((observation) => [observation.origin, observation.subject.attempt]),
-      [[origin.measured("client", session), session]],
-    );
-    assert.deepEqual(world.sessions, [{ id: session, meaning: "client_session", episode: EPISODE, participant: SEAT }]);
-  });
+  it("live readback uses the real relay and Axiom query boundary", { skip: !process.env.CHALK_CHAIN_AXIOM_URL }, async () => {
+    const run = process.env.CHALK_CHAIN_SCENARIO;
+    assert.ok(run === "positive" || run === "healthy");
+    const axiomURL = process.env.CHALK_CHAIN_AXIOM_URL;
+    assert.ok(axiomURL);
+    const stores = realStores({ ...process.env, AXIOM_TOKEN: "synthetic", CHALK_LOG_DATASET: "chain" }, (input, init) => {
+      const url = new URL(String(input));
+      return fetch(new URL(url.pathname + url.search, axiomURL), init);
+    });
+    const asof = chainFixture(run).asof_ms;
+    const { world, notes } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { catalogue: CATALOGUE, now: asof });
+    assert.ok(!notes.some((note) => note.includes("telemetry ledger unread")), notes.join("\n"));
+    const { ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES });
+    const [checked] = await check({ item: { kind: "episode", id: EPISODE } }, ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: asof });
+    assert.ok(checked);
 
-  it("live: the healthy chain stays unchecked, because Sync has no delivery ledger and the ledger misses the client's earlier records", async () => {
-    const { verdict } = await liveVerdict("healthy");
-    assert.notEqual(verdict.outcome, "healthy");
-    assert.deepEqual(ruleResult(verdict, CODE), { findings: 0, checked: 0, eligible: 1 });
+    const observations = world.evidence[EPISODE]?.observations ?? [];
+    const session = frameSession(run);
+    const screen = observations.filter((observation) => observation.fact === "end.client_screen");
+    assert.deepEqual(
+      screen.map((observation) => [observation.origin, observation.subject.attempt, observation.claim]),
+      [[origin.measured("client", session), session, run === "positive" ? "connection_lost" : "episode_ended"]],
+    );
+    assert.equal(observations.find((observation) => observation.fact === "end.episode")?.claim, "maximum_duration");
+    assert.deepEqual(world.sessions, [{ id: session, meaning: "client_session", episode: EPISODE, participant: SEAT }]);
+
+    const { verdict } = checked;
+    if (run === "positive") {
+      const [finding] = verdict.findings.filter((entry) => entry.code === CODE);
+      assert.equal(finding?.hop, "client_end");
+    } else {
+      // Actual witnesses are present, but an open client tail and no complete
+      // Sync watermark cannot certify that no competing screen was missed.
+      assert.notEqual(verdict.outcome, "healthy");
+      assert.deepEqual(ruleResult(verdict, CODE), { findings: 0, checked: 0, eligible: 1 });
+    }
   });
 });

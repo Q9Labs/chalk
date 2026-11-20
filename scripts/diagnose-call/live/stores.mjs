@@ -73,9 +73,10 @@ export function psqlFailure(error) {
 
 /**
  * @param {NodeJS.ProcessEnv} env
+ * @param {typeof fetch} [fetchImpl]
  * @returns {Stores}
  */
-export function realStores(env) {
+export function realStores(env, fetchImpl = fetch) {
   const need = (/** @type {string} */ name) => {
     const value = env[name];
     if (!value) throw new StoreError(`--live needs ${name}`);
@@ -83,7 +84,7 @@ export function realStores(env) {
   };
   const databaseUrl = () => need("CHALK_DATABASE_URL");
   const ask = (/** @type {string} */ apl, /** @type {{ from_ms: number, to_ms: number }} */ window) =>
-    axiom({ token: need("AXIOM_TOKEN"), org: env.AXIOM_ORG_ID, dataset: need("CHALK_LOG_DATASET"), apl, start: window.from_ms, end: window.to_ms, signal: AbortSignal.timeout(60_000) }, fetch).catch((error) => {
+    axiom({ token: need("AXIOM_TOKEN"), org: env.AXIOM_ORG_ID, dataset: need("CHALK_LOG_DATASET"), apl, start: window.from_ms, end: window.to_ms, signal: AbortSignal.timeout(60_000) }, fetchImpl).catch((error) => {
       if (error instanceof StoreError) throw error;
       throw new StoreError(`Axiom refused the read: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
     });

@@ -241,6 +241,8 @@ The v1 journey table still holds. v2 adds the following.
 
 ## 5. Delivery and storage
 
+A V2 upload settles its seqs and accepted payload in one Postgres transaction. A relay ships those rows and Episode-scoped Sync kernel records to the existing Axiom log dataset. It retains pending payloads until Axiom gives a full receipt. A crash or lost receipt can replay rows with the same event IDs. This foundation does not require a new dataset or plan.
+
 - **A telemetry token separate from the media grant:** send-only, 24-hour, scoped to ingest and R2 upload.
   - Today the outbox uses the 5-minute media grant, which the SDK renews 60 s before expiry (`sdks/typescript/client/src/access/manager.ts:4`).
   - So events are lost only when renewal keeps failing past expiry, and those are exactly the calls that die.
