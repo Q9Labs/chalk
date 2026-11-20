@@ -14,6 +14,7 @@ import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
+import { checkMediaLink, observeContinuity, type GrantCheck } from "./continuity";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
@@ -27,6 +28,7 @@ type SyncRecoveryAttempt = {
   expiresAt: number | null;
   started: boolean;
 };
+type FailedGrantCheck = Extract<GrantCheck, "expired" | "invalid">;
 type MediaRecoveryAttempt = {
   expiresAt: number | null;
 };
@@ -172,6 +174,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       const context = yield* Effect.context<ConnectionAccessService | ConnectionPlatformService | Clock.Clock>();
       const serviceScope = yield* Effect.scope;
       const telemetry = platform.telemetry;
+      const continuity = observeContinuity(telemetry);
       telemetry?.bind({ current: () => telemetryCredential(access.currentUnsafe()), refresh: () => toPromise(access.refresh("access_retry", false)).then(() => undefined) });
       const outage = createOutageClock(() => clock.currentTimeMillisUnsafe());
       telemetry?.onClosing(() => (["joining", "live", "reconnecting"].includes(model.state) ? telemetry.record({ type: "call_ended", end_reason: "page_closed" }) : undefined));
@@ -198,7 +201,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       let emittedPorts: ConnectionPorts | null = null;
       let foregroundRecoveryDeadline = 0;
       let pendingEpisodeEnd: Deferred.Deferred<void> | null = null;
-      let rejectionCheck: { readonly epoch: number; readonly binding: string | undefined; failure: ConnectionLifecycleFailure } | null = null;
+      let rejectionCheck: { readonly epoch: number; readonly binding: string | undefined; failure: ConnectionLifecycleFailure; grant?: FailedGrantCheck } | null = null;
       const model: Model = {
         state: "idle",
         sync: null,
@@ -327,14 +330,16 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                     model.refreshInFlight = false;
                     if (failure) {
                       diagnostics.record({ event: "access_refresh_failed", state: model.state, epoch, code: failure.code === "access.invalid" ? "invalid_access" : "access_unavailable" });
-                      if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure));
+                      if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure), "invalid");
                       model.refreshFailures = Math.min(model.refreshFailures + 1, 5);
                       const expiresIn = yield* access.millisecondsUntilExpiry;
-                      if (expiresIn !== null && expiresIn <= 0) return yield* failForSnapshot(lifecycleFailure("access_unavailable", true, "Your access expired before it could be renewed. Check your network and rejoin.", failure));
+                      if (expiresIn !== null && expiresIn <= 0) return yield* failForSnapshot(lifecycleFailure("access_unavailable", true, "Your access expired before it could be renewed. Check your network and rejoin.", failure), "expired");
+                      continuity.grant("retrying");
                       const retryIn = Math.min(BACKGROUND_RETRY_MAX_MS, REFRESH_RETRY_MS * 2 ** (model.refreshFailures - 1));
                       yield* scheduleRefresh(expiresIn === null ? retryIn : Math.min(retryIn, expiresIn));
                       return;
                     }
+                    continuity.grant("verified");
                     model.refreshFailures = 0;
                     diagnostics.record({ event: "access_refreshed", state: model.state, epoch });
                     yield* publish();
@@ -349,6 +354,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
       const stopPorts = (): Effect.Effect<void> =>
         Effect.gen(function* () {
+          continuity.reset();
           yield* stopRefresh();
           const scope = model.activeScope;
           model.activeScope = null;
@@ -492,7 +498,26 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         });
         return media;
       };
-      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: telemetry?.traceparent, telemetry });
+      const makeSyncClient = (grant: ParsedAccessGrant, media: ConnectionMediaClient): ConnectionSyncClient => {
+        const sync = platform.createSyncClient({
+          access: grant,
+          token: () => toPromise(access.getSyncToken()),
+          media,
+          onTransportDiagnostic,
+          onTransportPath,
+          traceparent: telemetry?.traceparent,
+          telemetry,
+          onLinkCheck: (result) => {
+            const resume = telemetry?.resumeCount;
+            enqueueBackground(
+              Effect.sync(() => {
+                if (model.sync === sync && active(model) && telemetry?.resumeCount === resume) continuity.sync(result);
+              }),
+            );
+          },
+        });
+        return sync;
+      };
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
         const confirmEntered = sync.confirmEntered?.bind(sync);
         return confirmEntered ? trace("confirm_entered", foreign(confirmEntered, "sync_start_failed", "Entry could not be confirmed")) : Effect.void;
@@ -738,6 +763,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             model.recoveryQueued = "media";
             return;
           }
+          continuity.exhausted();
           const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
           const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
           diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, media: mediaFailure, grantedMedia });
@@ -1057,26 +1083,30 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           Effect.timeout(60000),
           Effect.catch(() => Effect.succeed(episodeHasEnded() ? episodeEndedFailure() : lifecycleFailure("access_unavailable", true, "Could not confirm Episode status. Rejoin to try again."))),
         );
-      const commitSnapshotFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
+      const commitSnapshotFailure = (failure: ConnectionLifecycleFailure, grant?: FailedGrantCheck): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (failure.code === "episode_ended") return yield* finishEpisodeEnded();
           model.failure = toFailure(failure);
+          if (grant) continuity.grant(grant);
           yield* recordFailure(failure);
           yield* stopPorts();
           yield* transition("failed");
         });
-      const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> => {
-        if (!needsEpisodeCheck(failure)) return commitSnapshotFailure(failure);
+      const failForSnapshot = (failure: ConnectionLifecycleFailure, grant?: FailedGrantCheck): Effect.Effect<void> => {
+        if (!needsEpisodeCheck(failure)) return commitSnapshotFailure(failure, grant);
         if (failure.code === "invalid_access") stopRejectedMedia();
         const scope = model.activeScope;
         const epoch = model.epoch;
         const binding = access.currentUnsafe()?.media.clientPayload.connectionId;
         if (!scope) return Effect.void;
         if (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding) {
-          if (failure.code === "invalid_access") rejectionCheck.failure = failure;
+          if (failure.code === "invalid_access") {
+            rejectionCheck.failure = failure;
+            rejectionCheck.grant = grant;
+          }
           return publish();
         }
-        const check = { epoch, binding, failure };
+        const check = { epoch, binding, failure, grant };
         rejectionCheck = check;
         // The callback can run while join owns the queue. Fence replacement now.
         const releaseBinding = binding ? Effect.runSync(access.holdMediaBinding(binding)) : Effect.void;
@@ -1096,7 +1126,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
                       rejectionCheck = null;
                       return recover("media");
                     }
-                    return commitSnapshotFailure(finalFailure);
+                    return commitSnapshotFailure(finalFailure, finalFailure === check.failure ? check.grant : undefined);
                   }),
                 ),
               ),
@@ -1119,6 +1149,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) onTransportDiagnostic({ event: "media_state", phase });
           model.mediaSnapshot = snapshot;
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
+          if (active(model)) continuity.media(checkMediaLink(snapshot, model.recoveryQueued !== null));
           yield* publish();
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
@@ -1192,7 +1223,11 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
       const foregroundUnsubscribe =
         platform.subscribeForeground?.(() => {
           foregroundRecoveryDeadline = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
-          enqueueBackground(refreshAccess());
+          enqueueBackground(
+            Effect.sync(() => {
+              if (active(model)) continuity.resume();
+            }).pipe(Effect.andThen(refreshAccess())),
+          );
         }) ?? null;
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {

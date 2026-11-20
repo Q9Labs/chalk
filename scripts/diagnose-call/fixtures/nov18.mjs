@@ -64,7 +64,26 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CONTINUITY = ["access.grant_check", "reconnect.sync_check", "reconnect.media_check", "background.resume_check"];
+const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen", ...CONTINUITY]);
+
+/** @param {string} episode @param {readonly Seat[]} seats @param {number} checkedAt */
+function continuity(episode, seats, checkedAt) {
+  return seats.flatMap(({ participant }, seatIndex) =>
+    CONTINUITY.map((fact, checkIndex) =>
+      row(`${episode.slice(0, 8)}-ca0e-4000-8000-${String(seatIndex * CONTINUITY.length + checkIndex + 1).padStart(12, "0")}`, {
+        fact,
+        source: "client",
+        origin: origin.measured("client", participant),
+        subject: { episode, participant, generation: 1, connection: connectionOf(participant) },
+        window: { from_ms: checkedAt, to_ms: checkedAt },
+        claim: "verified",
+        value: {},
+        failure: false,
+      }),
+    ),
+  );
+}
 
 /**
  * @param {string} participant
@@ -108,7 +127,7 @@ const ingress = (episode, participant, id, from, to, packets, voiced) =>
 const episodeWatermarks = (participants, complete_to_ms) => [
   { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
   { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
-  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
+  { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "access.presence_renewal"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
   ...participants.map((participant) => ({ source: "client", subject: `pt:${participant}`, complete_to_ms, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD })),
 ];
@@ -124,10 +143,10 @@ const episodeWatermarks = (participants, complete_to_ms) => [
 function quietEpisode(id, tenant, from, minutes, people) {
   const to = from + minutes * 60_000;
   const seats = people.map((person, index) => seat(`${id.replaceAll("-", "").slice(0, 8)}${String(index).repeat(24)}`, person.name, user(person), { from_ms: from, to_ms: to }));
-  const observations = seats.flatMap((s, index) => [
-    mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
-    ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
-  ]);
+  const observations = [
+    ...continuity(id, seats, from + 120_000),
+    ...seats.flatMap((s, index) => [mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"), ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000)]),
+  ];
   return {
     declaration: { kind: /** @type {const} */ ("episode"), id, tenant, features: ["media"], window: { from_ms: from, to_ms: to }, seats },
     evidence: {
@@ -154,6 +173,7 @@ export function nov18() {
   ];
   /** @type {Observation[]} */
   const observations = [
+    ...continuity(ep, seats, start + 120_000),
     mic(ep, IDS.ptHaris, IDS.evMic, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), "unmuted"),
     ingress(ep, IDS.ptHaris, IDS.evIngress, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), 10_480, 0),
     mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),

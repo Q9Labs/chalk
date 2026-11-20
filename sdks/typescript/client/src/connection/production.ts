@@ -59,9 +59,11 @@ function subscribeBrowserForeground(listener: () => void): () => void {
     if (documentTarget.visibilityState === "visible") listener();
   };
   documentTarget.addEventListener("visibilitychange", onVisibility);
+  documentTarget.addEventListener("resume", onVisibility);
   windowTarget.addEventListener("pageshow", listener);
   return () => {
     documentTarget.removeEventListener("visibilitychange", onVisibility);
+    documentTarget.removeEventListener("resume", onVisibility);
     windowTarget.removeEventListener("pageshow", listener);
   };
 }
@@ -153,6 +155,7 @@ function createSyncClient(syncURL: string, syncDirectURL: string | null | undefi
   return createV1SyncClient({
     url: syncURL,
     onDiagnostic: input.onTransportDiagnostic,
+    onLinkCheck: input.onLinkCheck,
     traceparent: input.traceparent,
     telemetry: input.telemetry,
     token: input.token,

@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "c7beca1c6033"
 
   @events %{
     "client.call_ended" => %{
@@ -17,6 +17,54 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      }
+    },
+    "client.grant_check" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "continuity_result" => %{
+          "required" => true,
+          "values" => ["verified", "retrying", "expired", "invalid"]
+        }
+      }
+    },
+    "client.media_link_check" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "continuity_result" => %{
+          "required" => true,
+          "values" => ["verified", "recovering", "dead_live", "unverified"]
+        }
+      }
+    },
+    "client.resume_check" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "continuity_result" => %{
+          "required" => true,
+          "values" => ["verified", "dead_live", "exhausted", "pending"]
+        }
+      }
+    },
+    "client.sync_link_check" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "continuity_result" => %{
+          "required" => true,
+          "values" => ["verified", "recovering", "dead_live"]
         }
       }
     },
@@ -95,6 +143,21 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
+        }
+      }
+    },
+    "sync.presence_renewal" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "presence_renewal" => %{
+          "required" => true,
+          "values" => ["renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"]
+        },
+        "participant_id" => %{
+          "required" => true
         }
       }
     }
@@ -178,6 +241,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "clock",
       "required" => true,
       "values" => ["server", "synced", "unsynced"]
+    },
+    "continuity_result" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["verified", "retrying", "expired", "invalid", "recovering", "dead_live", "unverified", "exhausted", "pending"]
     },
     "decision" => %{
       "type" => "string",
@@ -382,6 +451,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "build",
       "required" => false,
       "values" => ["web", "ios", "android", "server", "lambda", "node"]
+    },
+    "presence_renewal" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"]
     },
     "provider_media_id" => %{
       "type" => "id",

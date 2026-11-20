@@ -93,14 +93,15 @@ export class LinkWatch implements LinkJudge {
   }
 
   /** Call as a pong is received. It answers the oldest ping in flight, and proves contact only if the round trip was short. */
-  ponged(): void {
+  ponged(): LinkReading | null {
     const sent = this.#pings.shift();
-    if (sent === undefined) return;
+    if (sent === undefined) return null;
     const now = this.#read();
     const wall = now.wall - sent.wall;
     const mono = now.mono - sent.mono;
-    if (wall < 0 || wall > ROUND_TRIP_MS || mono < 0 || mono > ROUND_TRIP_MS || now.suspends !== sent.suspends) return;
+    if (wall < 0 || wall > ROUND_TRIP_MS || mono < 0 || mono > ROUND_TRIP_MS || now.suspends !== sent.suspends) return null;
     this.#proof = sent;
+    return sent;
   }
 
   proof(): LinkReading | null {

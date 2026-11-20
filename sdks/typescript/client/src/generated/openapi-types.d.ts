@@ -2764,6 +2764,8 @@ export interface components {
           | "retry_exhausted"
           | "not_live";
         /** @enum {string} */
+        continuity_result?: "verified" | "retrying" | "expired" | "invalid" | "recovering" | "dead_live" | "unverified" | "exhausted" | "pending";
+        /** @enum {string} */
         device_kind?: "microphone" | "camera" | "speaker" | "screen";
         /** @enum {string} */
         drop_reason?: "queue_full" | "credential_expired" | "refused";
@@ -2803,7 +2805,7 @@ export interface components {
         /** @enum {string} */
         phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
         /** @enum {string} */
-        platform_state?: "online" | "offline" | "hidden" | "visible" | "background" | "foreground";
+        platform_state?: "online" | "offline" | "hidden" | "visible" | "background" | "foreground" | "frozen" | "resumed";
         /** @enum {string} */
         play_result?: "ok" | "NotAllowedError" | "AbortError" | "unknown";
         /** @enum {string} */
@@ -2886,8 +2888,10 @@ export interface components {
           | "cleanup_unconfirmed"
           | "connection_failed"
           | "device_failed"
+          | "grant_check"
           | "media_http_error"
           | "media_intent"
+          | "media_link_check"
           | "media_projection_mismatch"
           | "media_result"
           | "media_state"
@@ -2898,11 +2902,13 @@ export interface components {
           | "recovery_exhausted"
           | "recovery_succeeded"
           | "render_crashed"
+          | "resume_check"
           | "space_join_span"
           | "state_changed"
           | "sync_connect_failed"
           | "sync_dial_timeout"
           | "sync_heartbeat_gap"
+          | "sync_link_check"
           | "sync_socket_close"
           | "sync_socket_open"
           | "telemetry_dropped";

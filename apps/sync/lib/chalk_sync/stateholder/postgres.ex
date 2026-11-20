@@ -83,9 +83,17 @@ defmodule ChalkSync.Stateholder.Postgres do
     Database.guard(
       fn ->
         case Transaction.run(identity.episode, &Presence.transaction(&1, identity)) do
-          {:ok, :ok} -> :ok
-          {:error, {:error, reason}} -> {:error, reason}
-          {:error, _reason} -> {:retryable, :dependency_unavailable}
+          {:ok, result} ->
+            Presence.observe(identity, result)
+            :ok
+
+          {:error, {:error, reason}} ->
+            Presence.observe(identity, "unconfirmed")
+            {:error, reason}
+
+          {:error, _reason} ->
+            Presence.observe(identity, "unconfirmed")
+            {:retryable, :dependency_unavailable}
         end
       end,
       {:retryable, :dependency_unavailable}

@@ -1,3 +1,6 @@
+import { ClockEstimator } from "../obs/clock";
+import { createKernel } from "../obs/kernel";
+import { FIELDS, type EventFields } from "../obs/registry";
 import { countOf, DropList, seqsOf } from "./drops";
 import { readJournalText, writeJournalText } from "./journal";
 import { startOperation } from "./operation";
@@ -35,6 +38,15 @@ const MAX_DISPOSE_ROUNDS = 8;
 const MAX_BATCH_BYTES = 48 * 1024;
 const MAX_QUEUE_BYTES = 256 * 1024;
 const SEND_TIMEOUT_MS = 10_000;
+const CONTINUITY_EVENTS = {
+  "client.grant_check": "grant_check",
+  "client.sync_link_check": "sync_link_check",
+  "client.media_link_check": "media_link_check",
+  "client.resume_check": "resume_check",
+} as const;
+type ContinuityEvent = keyof typeof CONTINUITY_EVENTS;
+const isContinuityEvent = (name: string): name is ContinuityEvent => Object.hasOwn(CONTINUITY_EVENTS, name);
+
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
 const MAX_MILLISECONDS = 2_147_483_647;
@@ -89,6 +101,7 @@ const newStream = (id: string, live: boolean): Stream => ({ id, live, queue: new
  */
 export class TelemetryOutbox implements TelemetrySink {
   readonly #platform: TelemetryPlatform;
+  readonly fact: <N extends ContinuityEvent>(name: N, fields: EventFields[N]) => void;
   readonly #endpoint: (tenantId: string) => string;
   readonly #random: () => number;
   readonly #trace: ((step: DeliveryStep) => void) | undefined;
@@ -113,6 +126,9 @@ export class TelemetryOutbox implements TelemetrySink {
   #durable = false;
   /** The subject whose credential was refreshed and has not been accepted since. One call's rejection never stops a later call from refreshing. */
   #refreshedSubject: string | null = null;
+  #observedSuspension = false;
+  #resumeCount = 0;
+  #resumedAt = -Infinity;
   #disposing = false;
   #disposed = false;
 
@@ -124,11 +140,32 @@ export class TelemetryOutbox implements TelemetrySink {
     this.#realm = options.liveSources ?? liveInThisRealm;
     this.#live = newStream(options.platform.uuid(), true);
     this.#realm.add(this.#live.id);
+    this.fact = createKernel({
+      build: { module: "sdk", env: "local" },
+      mode: "open",
+      sourceId: this.#live.id,
+      uuid: options.platform.uuid,
+      clock: new ClockEstimator({ mono: options.platform.now, wall: Date.now }),
+      sink: ({ name, continuity_result, event_id }) => {
+        if (!isContinuityEvent(name)) return;
+        const result = FIELDS.continuity_result.values.find((value) => value === continuity_result);
+        if (result) this.#record({ type: CONTINUITY_EVENTS[name], continuity_result: result }, event_id);
+      },
+    }).fact;
     this.traceparent = `00-${hex(options.platform.uuid())}-${hex(options.platform.uuid()).slice(0, 16)}-01`;
     this.#startedAt = options.platform.now();
     this.#takeOver();
     this.#unsubscribe = options.platform.subscribe((change) => this.#changed(change));
     if (this.#predecessors.length > 0) this.#schedule(0);
+  }
+
+  /** Counts paired suspensions and returns. Repeated visible and active notifications are not new resumes. */
+  get resumeCount(): number {
+    return this.#resumeCount;
+  }
+
+  contactSinceResume(pingSentMono: number): boolean {
+    return !this.#observedSuspension && pingSentMono >= this.#resumedAt;
   }
 
   get sessionId(): string {
@@ -149,6 +186,10 @@ export class TelemetryOutbox implements TelemetrySink {
   }
 
   record(draft: TelemetryDraft): void {
+    this.#record(draft);
+  }
+
+  #record(draft: TelemetryDraft, eventId?: string): void {
     if (this.#disposed) return;
     const stream = this.#live;
     this.#remember();
@@ -156,7 +197,7 @@ export class TelemetryOutbox implements TelemetrySink {
       stream.closing = false;
       this.#persist(true);
     }
-    const entry = entryOf(this.#stamp(draft), this.#subject);
+    const entry = entryOf(this.#stamp(draft, eventId), this.#subject);
     this.#step({ a: "record", src: stream.id, seq: entry.event.seq, p0: entry.priority === "p0" });
     this.#giveUp(stream, stream.queue.push(entry), "queue_full", true);
     if (entry.priority === "p0") {
@@ -229,9 +270,9 @@ export class TelemetryOutbox implements TelemetrySink {
     return this.#streams().some((stream) => stream.queue.length > 0 || stream.inflight !== null || stream.end !== null);
   }
 
-  #stamp(draft: TelemetryDraft): TelemetryEvent {
+  #stamp(draft: TelemetryDraft, eventId = this.#platform.uuid()): TelemetryEvent {
     const stream = this.#live;
-    const event: TelemetryEvent = { ...draft, seq: stream.next, event_id: this.#platform.uuid(), elapsed_ms: this.#elapsed() };
+    const event: TelemetryEvent = { ...draft, seq: stream.next, event_id: eventId, elapsed_ms: this.#elapsed() };
     stream.next += 1;
     return event;
   }
@@ -254,9 +295,14 @@ export class TelemetryOutbox implements TelemetrySink {
     this.record({ type: "platform_changed", platform_state: change });
     if (change === "online") this.#resume();
     else if (change === "offline") this.#lastInterruption = { reason: "offline", at: this.#platform.now() };
-    else if (change === "hidden" || change === "background") {
+    else if (change === "hidden" || change === "background" || change === "frozen") {
+      this.#observedSuspension = true;
       this.#lastInterruption = { reason: "hidden", at: this.#platform.now() };
       void this.flush();
+    } else if ((change === "visible" || change === "foreground" || change === "resumed") && this.#observedSuspension && !this.#platform.hidden()) {
+      this.#observedSuspension = false;
+      this.#resumeCount += 1;
+      this.#resumedAt = this.#platform.now();
     }
   }
 

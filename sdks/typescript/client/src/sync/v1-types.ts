@@ -241,7 +241,9 @@ export type V1CollaborationClient = {
   readonly markChatRead: (sequence: string) => Promise<ChalkChatReadReceipt>;
   readonly readChatPage: (input: { readonly beforeSequence?: string; readonly afterSequence?: string; readonly limit: number }) => Promise<ChalkChatPageResult>;
 };
+export type SyncLinkCheck = { readonly result: "verified"; readonly pingSentMono: number } | { readonly result: "recovering" | "dead_live" };
 export type V1SyncClientOptions = {
+  readonly onLinkCheck?: (result: SyncLinkCheck) => void;
   readonly traceparent?: string;
   readonly telemetry?: TelemetrySink;
   readonly onDiagnostic?: (event: TransportDiagnostic) => void;

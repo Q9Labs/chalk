@@ -36,7 +36,7 @@ ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	return ended || 
 ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (removed) model.removedByHost = true;
 ProcessSnapS	sdks/typescript/client/src/connection/lifecycle.ts	if (reason === "participant_inactive" || reason === "participant_removed" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
 ProcessSnapM	sdks/typescript/client/src/connection/lifecycle.ts	if (mediaNeedsRecovery(snapshot)) yield* recover("media");
-ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure));
+ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	if (failure.code === "access.invalid") return yield* failForSnapshot(accessFailure(failure), "invalid");
 ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	if (expiresIn !== null && expiresIn <= 0) return yield* failForSnapshot(lifecycleFailure("access_unavailable", true,
 ProcessRefr	sdks/typescript/client/src/connection/lifecycle.ts	yield* scheduleRefresh(expiresIn === null ? retryIn : Math.min(retryIn, expiresIn));
 RefreshStarts	sdks/typescript/client/src/connection/lifecycle.ts	model.refreshFiber = yield* Effect.forkIn(Effect.sleep(Math.max(0, milliseconds)).pipe(Effect.andThen(enqueue(refreshAccess())), Effect.ignore), scope);

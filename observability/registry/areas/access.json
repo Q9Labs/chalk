@@ -3,8 +3,151 @@
   "slice": 7,
   "title": "Access, reconnection and background",
   "prefixes": ["access", "reconnect", "background"],
-  "fields": [],
-  "events": [],
+  "fields": [
+    {
+      "name": "continuity_result",
+      "type": "enum",
+      "values": ["verified", "retrying", "expired", "invalid", "recovering", "dead_live", "unverified", "exhausted", "pending"],
+      "sensitivity": null,
+      "doc": "The result of an access, link or resume checkpoint."
+    },
+    {
+      "name": "presence_renewal",
+      "type": "enum",
+      "values": ["renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"],
+      "sensitivity": null,
+      "doc": "Whether a Participant lease write committed."
+    }
+  ],
+  "events": [
+    {
+      "name": "client.grant_check",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The lifecycle settled an access check for an entered seat.",
+      "fields": {
+        "continuity_result": {
+          "required": true,
+          "values": ["verified", "retrying", "expired", "invalid"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/continuity.ts",
+          "literal": "\"client.grant_check\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "grant_check"
+        }
+      }
+    },
+    {
+      "name": "client.sync_link_check",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The current Sync link proved contact or handled an unanswered ping.",
+      "fields": {
+        "continuity_result": {
+          "required": true,
+          "values": ["verified", "recovering", "dead_live"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/continuity.ts",
+          "literal": "\"client.sync_link_check\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "sync_link_check"
+        }
+      }
+    },
+    {
+      "name": "client.media_link_check",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The lifecycle compared the current peer connection state with its media phase and queued recovery.",
+      "fields": {
+        "continuity_result": {
+          "required": true,
+          "values": ["verified", "recovering", "dead_live", "unverified"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/continuity.ts",
+          "literal": "\"client.media_link_check\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "media_link_check"
+        }
+      }
+    },
+    {
+      "name": "client.resume_check",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The lifecycle settled the transport check following an observed suspend and return.",
+      "fields": {
+        "continuity_result": {
+          "required": true,
+          "values": ["verified", "dead_live", "exhausted", "pending"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/continuity.ts",
+          "literal": "\"client.resume_check\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "resume_check"
+        }
+      }
+    },
+    {
+      "name": "sync.presence_renewal",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sync"],
+      "doc": "Whether the Participant lease was renewed, whether it had lapsed, or whether the store could not confirm renewal.",
+      "fields": {
+        "presence_renewal": {
+          "required": true,
+          "values": ["renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"]
+        },
+        "participant_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/stateholder/postgres/presence.ex",
+          "literal": "\"sync.presence_renewal\""
+        }
+      ]
+    }
+  ],
   "reasons": [],
   "machines": [],
   "symptoms": [
@@ -12,10 +155,136 @@
       "code": "access.connection_lost",
       "item": "episode",
       "per": "seat",
-      "doc": "The client lost its connection and did not recover within the recovery window.",
-      "user_words": ["it keeps saying connection lost"],
-      "witnesses": [],
-      "fault_scenario": null
+      "doc": "The SDK failed the connection after an unusable grant could not be renewed.",
+      "user_words": ["I got kicked out"],
+      "witnesses": [
+        {
+          "fact": "access.grant_check",
+          "from": ["client"],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sdk.telemetry' and type == 'grant_check'",
+          "doc": "The SDK settled a refresh or determined that access could no longer be used."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
+    },
+    {
+      "code": "reconnect.dead_live",
+      "item": "episode",
+      "per": "seat",
+      "doc": "A hard-dead transport still advertised live after its recovery checkpoint.",
+      "user_words": ["it froze and never came back"],
+      "witnesses": [
+        {
+          "fact": "reconnect.sync_check",
+          "from": ["client"],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sdk.telemetry' and type == 'sync_link_check'",
+          "doc": "Fresh Sync contact or the advertised transport phase after the hard watchdog dispatched recovery."
+        },
+        {
+          "fact": "reconnect.media_check",
+          "from": ["client"],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sdk.telemetry' and type == 'media_link_check'",
+          "doc": "Current peer connection state compared with the SDK phase and queued recovery."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
+    },
+    {
+      "code": "background.resume_stalled",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The SDK could not restore its transports after a witnessed suspend and return.",
+      "user_words": ["it stayed frozen when I came back"],
+      "witnesses": [
+        {
+          "fact": "background.resume_check",
+          "from": ["client"],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sdk.telemetry' and type == 'resume_check'",
+          "doc": "Transport recovery following a witnessed suspend and return."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
+    }
+  ],
+  "facts": [
+    {
+      "name": "access.grant_check",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.grant_check",
+          "source": "client",
+          "claim": "continuity_result",
+          "failure_claims": ["expired", "invalid"],
+          "fields": ["continuity_result"]
+        }
+      ],
+      "doc": "The lifecycle settled an access check for an entered seat."
+    },
+    {
+      "name": "reconnect.sync_check",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.sync_link_check",
+          "source": "client",
+          "claim": "continuity_result",
+          "failure_claims": ["dead_live"],
+          "fields": ["continuity_result"]
+        }
+      ],
+      "doc": "The current Sync link proved contact or handled an unanswered ping."
+    },
+    {
+      "name": "reconnect.media_check",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.media_link_check",
+          "source": "client",
+          "claim": "continuity_result",
+          "failure_claims": ["dead_live"],
+          "fields": ["continuity_result"]
+        }
+      ],
+      "doc": "The lifecycle compared the current peer connection state with its media phase and queued recovery."
+    },
+    {
+      "name": "background.resume_check",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "client.resume_check",
+          "source": "client",
+          "claim": "continuity_result",
+          "failure_claims": ["dead_live", "exhausted"],
+          "fields": ["continuity_result"]
+        }
+      ],
+      "doc": "The lifecycle settled the transport check following an observed suspend and return."
+    },
+    {
+      "name": "access.presence_renewal",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "sync.presence_renewal",
+          "source": "sync",
+          "claim": "presence_renewal",
+          "failure_claims": ["unconfirmed"],
+          "fields": ["presence_renewal"]
+        }
+      ],
+      "doc": "Whether the Participant lease was renewed, whether it had lapsed, or whether the store could not confirm renewal."
     }
   ]
 }

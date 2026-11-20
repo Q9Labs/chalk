@@ -1,22 +1,46 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "c7beca1c6033",
   "symptoms": [
     {
       "code": "access.connection_lost",
       "area": "access",
       "slice": 7,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
-      "witnesses": [],
-      "events": [],
+      "witnesses": [
+        {
+          "fact": "access.grant_check",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.grant_check",
+              "source": "client",
+              "fields": ["continuity_result"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.grant_check",
+          "fields": ["continuity_result"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/continuity.ts",
+              "literal": "\"client.grant_check\""
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/access.connection_lost.mjs",
       "fixtures": {
         "positive": "observability/fixtures/access.connection_lost/positive.json",
         "healthy": "observability/fixtures/access.connection_lost/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
     },
     {
       "code": "admission.unresolved",
@@ -91,6 +115,46 @@
         "healthy": "observability/fixtures/audio.not_heard/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "background.resume_stalled",
+      "area": "access",
+      "slice": 7,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "background.resume_check",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.resume_check",
+              "source": "client",
+              "fields": ["continuity_result"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.resume_check",
+          "fields": ["continuity_result"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/continuity.ts",
+              "literal": "\"client.resume_check\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/background.resume_stalled.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/background.resume_stalled/positive.json",
+        "healthy": "observability/fixtures/background.resume_stalled/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
     },
     {
       "code": "board.view_jumped",
@@ -248,6 +312,68 @@
         "healthy": "observability/fixtures/page.crashed/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "reconnect.dead_live",
+      "area": "access",
+      "slice": 7,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "reconnect.sync_check",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.sync_link_check",
+              "source": "client",
+              "fields": ["continuity_result"]
+            }
+          ]
+        },
+        {
+          "fact": "reconnect.media_check",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "client.media_link_check",
+              "source": "client",
+              "fields": ["continuity_result"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "client.sync_link_check",
+          "fields": ["continuity_result"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/continuity.ts",
+              "literal": "\"client.sync_link_check\""
+            }
+          ]
+        },
+        {
+          "name": "client.media_link_check",
+          "fields": ["continuity_result"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/connection/continuity.ts",
+              "literal": "\"client.media_link_check\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/reconnect.dead_live.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/reconnect.dead_live/positive.json",
+        "healthy": "observability/fixtures/reconnect.dead_live/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/src/connection/continuity.fault.test.ts"
     },
     {
       "code": "recording.not_ready",

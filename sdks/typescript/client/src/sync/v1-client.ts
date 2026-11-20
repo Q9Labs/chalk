@@ -618,7 +618,8 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "pong":
         this.#requireLive();
-        this.#watch.ponged();
+        const contact = this.#watch.ponged();
+        if (contact) this.#linkCheck({ result: "verified", pingSentMono: contact.mono });
         this.#missedHeartbeats = 0;
         this.#lastHeartbeatReplyAt = this.#now();
         this.#observeHealth(() => this.#health.observePong(this.#now()));
@@ -851,7 +852,9 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
     if (!this.#started || this.#phase.phase === "terminal") return;
+    const wasLive = this.#phase.phase === "live";
     this.#phase = { phase: "connecting" };
+    if (wasLive) this.#linkCheck({ result: "recovering" });
     this.#emit();
     if (!this.#transportAvailable) return;
     this.#timers.cancel("reconnect");
@@ -1009,6 +1012,13 @@ export class V1SyncClient implements V1CollaborationClient {
       /* Observers cannot interrupt the transport. */
     }
   }
+  #linkCheck(result: import("./v1-types").SyncLinkCheck): void {
+    try {
+      this.#options.onLinkCheck?.(result);
+    } catch {
+      /* Observers cannot interrupt the transport. */
+    }
+  }
   #startHeartbeat(): void {
     this.#timers.schedule(
       "heartbeat",
@@ -1052,6 +1062,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #sendPing(): boolean {
     if (!this.#watch.pinged()) {
       this.#recover("ping unanswered for 60 s");
+      if (this.#phase.phase === "live") this.#linkCheck({ result: "dead_live" });
       return false;
     }
     this.#send({ type: "ping" });

@@ -52,6 +52,12 @@ var specs = map[string]spec{
 	"receivers_closed":          connection("receivers_stopped", "bundle_tag_held"),
 	"chat_upload_failed":        connection("upload_failure"),
 
+	// Bounded checkpoints from the access and transport state owners.
+	"grant_check":      continuity(),
+	"sync_link_check":  continuity(),
+	"media_link_check": continuity(),
+	"resume_check":     continuity(),
+
 	// The end of a call, and what the platform did to the client around it.
 	"call_ended":       {allowed: []string{"end_reason"}, required: []string{"end_reason"}},
 	"platform_changed": {allowed: []string{"platform_state"}, required: []string{"platform_state"}},
@@ -72,6 +78,10 @@ var specs = map[string]spec{
 
 	// A person filed a problem report: the report row and these rows share a client session.
 	"problem_reported": {},
+}
+
+func continuity() spec {
+	return spec{allowed: []string{"continuity_result"}, required: []string{"continuity_result"}}
 }
 
 // EventTypes lists every type a client may send, sorted.
@@ -104,7 +114,8 @@ var fieldEnums = map[string][]string{
 	"permission_state":      {"granted", "denied", "prompt", "unknown"},
 	"render_cause":          {"render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"},
 	"end_reason":            {"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"},
-	"platform_state":        {"online", "offline", "hidden", "visible", "background", "foreground"},
+	"platform_state":        {"online", "offline", "hidden", "visible", "background", "foreground", "frozen", "resumed"},
+	"continuity_result":     {"verified", "retrying", "expired", "invalid", "recovering", "dead_live", "unverified", "exhausted", "pending"},
 	"gap":                   {"offline", "hidden", "poll_failed", "dropped"},
 	"connection_type":       {"udp", "tcp", "turn", "unknown"},
 	"local_candidate_type":  {"host", "srflx", "prflx", "relay"},

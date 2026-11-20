@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "c7beca1c6033",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 63,
+      "used": 65,
       "fields": [
         {
           "name": "admission_request_id",
@@ -53,6 +53,10 @@
         },
         {
           "name": "clock_state",
+          "type": "string"
+        },
+        {
+          "name": "continuity_result",
           "type": "string"
         },
         {
@@ -177,6 +181,10 @@
         },
         {
           "name": "platform",
+          "type": "string"
+        },
+        {
+          "name": "presence_renewal",
           "type": "string"
         },
         {

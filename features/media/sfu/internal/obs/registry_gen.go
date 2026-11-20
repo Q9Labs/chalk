@@ -3,18 +3,23 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "72216cc081c8"
+const SchemaVer = "c7beca1c6033"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded      = "client.call_ended"
+	EventClientGrantCheck     = "client.grant_check"
+	EventClientMediaLinkCheck = "client.media_link_check"
+	EventClientResumeCheck    = "client.resume_check"
+	EventClientSyncLinkCheck  = "client.sync_link_check"
+	EventObsClockJump         = "obs.clock_jump"
+	EventObsFlagsSnapshot     = "obs.flags_snapshot"
+	EventSelftestAdmit        = "selftest.admit"
+	EventSelftestBanner       = "selftest.banner"
+	EventSelftestNote         = "selftest.note"
+	EventSelftestWork         = "selftest.work"
+	EventSyncEpisodeEnded     = "sync.episode.ended"
+	EventSyncPresenceRenewal  = "sync.presence_renewal"
 )
 
 // Machine names.
@@ -48,6 +53,7 @@ const (
 	FieldClockEpoch         = "clock_epoch"
 	FieldClockErrMs         = "clock_err_ms"
 	FieldClockState         = "clock_state"
+	FieldContinuityResult   = "continuity_result"
 	FieldDecision           = "decision"
 	FieldDecisionID         = "decision_id"
 	FieldDeviceEphemeral    = "device_ephemeral"
@@ -82,6 +88,7 @@ const (
 	FieldParentOpID         = "parent_op_id"
 	FieldParticipantID      = "participant_id"
 	FieldPlatform           = "platform"
+	FieldPresenceRenewal    = "presence_renewal"
 	FieldProviderMediaID    = "provider_media_id"
 	FieldReasonCode         = "reason_code"
 	FieldRecordingID        = "recording_id"
@@ -118,6 +125,7 @@ var registryFields = map[string]fieldSpec{
 	"clock_epoch":          {typ: "int", group: "clock", required: false},
 	"clock_err_ms":         {typ: "int", group: "clock", required: false},
 	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"continuity_result":    {typ: "enum", group: "event", required: false, values: []string{"verified", "retrying", "expired", "invalid", "recovering", "dead_live", "unverified", "exhausted", "pending"}},
 	"decision":             {typ: "string", group: "record", required: false},
 	"decision_id":          {typ: "id", group: "record", required: false},
 	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
@@ -152,6 +160,7 @@ var registryFields = map[string]fieldSpec{
 	"parent_op_id":         {typ: "id", group: "record", required: false},
 	"participant_id":       {typ: "id", group: "trail", required: false},
 	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"presence_renewal":     {typ: "enum", group: "event", required: false, values: []string{"renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"}},
 	"provider_media_id":    {typ: "id", group: "trail", required: false},
 	"reason_code":          {typ: "string", group: "record", required: false},
 	"recording_id":         {typ: "id", group: "trail", required: false},
@@ -175,14 +184,19 @@ var registryFields = map[string]fieldSpec{
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":       {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"client.grant_check":      {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"continuity_result": {required: true, values: []string{"verified", "retrying", "expired", "invalid"}}}},
+	"client.media_link_check": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"continuity_result": {required: true, values: []string{"verified", "recovering", "dead_live", "unverified"}}}},
+	"client.resume_check":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"continuity_result": {required: true, values: []string{"verified", "dead_live", "exhausted", "pending"}}}},
+	"client.sync_link_check":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"continuity_result": {required: true, values: []string{"verified", "recovering", "dead_live"}}}},
+	"obs.clock_jump":          {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":      {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":          {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":         {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":           {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":           {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":      {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"sync.presence_renewal":   {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"presence_renewal": {required: true, values: []string{"renewed", "renewed_after_expiry", "not_renewed", "unconfirmed"}}, "participant_id": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{

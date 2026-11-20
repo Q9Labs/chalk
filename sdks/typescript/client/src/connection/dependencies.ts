@@ -100,6 +100,7 @@ export type ConnectionMediaFactoryInput = {
   readonly onScreenEnded: () => void;
 };
 export type ConnectionSyncFactoryInput = {
+  readonly onLinkCheck?: (result: import("../sync/v1-types").SyncLinkCheck) => void;
   readonly access: ParsedAccessGrant;
   readonly token: () => Promise<string>;
   readonly media: ConnectionMediaClient;

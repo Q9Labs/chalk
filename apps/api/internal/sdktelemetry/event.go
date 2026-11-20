@@ -97,6 +97,7 @@ type Event struct {
 	RenderCause      string         `json:"render_cause,omitempty"`
 	ErrorName        string         `json:"error_name,omitempty"`
 	PlatformState    string         `json:"platform_state,omitempty"`
+	ContinuityResult string         `json:"continuity_result,omitempty"`
 	EndReason        string         `json:"end_reason,omitempty"`
 	Stats            *StatsWindow   `json:"stats,omitempty"`
 	// Dropped is how many events the client's outbox lost to its byte bound.

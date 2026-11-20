@@ -1,0 +1,100 @@
+{
+  "description": "background.resume_stalled: positive for Seat A and healthy controls for Seat B.",
+  "asof_ms": 1795600300000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": [],
+    "window": {
+      "from_ms": 1795596400000,
+      "to_ms": 1795600000000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat A",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795600000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat A"
+        }
+      },
+      {
+        "participant": "a1000000-0000-4000-8000-000000000002",
+        "name": "Seat B",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795600000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000002",
+          "name": "Seat B"
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "event": "client.resume_check",
+      "event_id": "a4500000-0000-4000-8000-000000000001",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "client_session_id": "c4500000-0000-4000-8000-000000000001",
+      "est_server_ms": 1795596640000,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "continuity_result": "pending"
+    },
+    {
+      "event": "client.resume_check",
+      "event_id": "a4500000-0000-4000-8000-000000000002",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "client_session_id": "c4500000-0000-4000-8000-000000000001",
+      "est_server_ms": 1795596641000,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "continuity_result": "dead_live"
+    },
+    {
+      "event": "client.resume_check",
+      "event_id": "a4500000-0000-4000-8000-000000000017",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "client_session_id": "c4500000-0000-4000-8000-000000000002",
+      "est_server_ms": 1795596640000,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "continuity_result": "pending"
+    },
+    {
+      "event": "client.resume_check",
+      "event_id": "a4500000-0000-4000-8000-000000000018",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "client_session_id": "c4500000-0000-4000-8000-000000000002",
+      "est_server_ms": 1795596641000,
+      "clock_err_ms": 25,
+      "clock_state": "synced",
+      "continuity_result": "verified"
+    }
+  ]
+}

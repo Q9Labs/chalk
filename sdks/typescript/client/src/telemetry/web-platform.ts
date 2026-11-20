@@ -53,15 +53,21 @@ function subscribeBrowser(listener: (change: PlatformChange) => void): () => voi
   const online = () => listener("online");
   const offline = () => listener("offline");
   const visibility = () => listener(documentTarget.visibilityState === "hidden" ? "hidden" : "visible");
+  const freeze = () => listener("frozen");
+  const resume = () => listener("resumed");
   const closing = () => listener("closing");
   windowTarget.addEventListener("online", online);
   windowTarget.addEventListener("offline", offline);
   windowTarget.addEventListener("pagehide", closing);
   documentTarget.addEventListener("visibilitychange", visibility);
+  documentTarget.addEventListener("freeze", freeze);
+  documentTarget.addEventListener("resume", resume);
   return () => {
     windowTarget.removeEventListener("online", online);
     windowTarget.removeEventListener("offline", offline);
     windowTarget.removeEventListener("pagehide", closing);
     documentTarget.removeEventListener("visibilitychange", visibility);
+    documentTarget.removeEventListener("freeze", freeze);
+    documentTarget.removeEventListener("resume", resume);
   };
 }

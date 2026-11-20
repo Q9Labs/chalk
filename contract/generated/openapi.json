@@ -18135,6 +18135,10 @@
                   ],
                   "type": "string"
                 },
+                "continuity_result": {
+                  "enum": ["verified", "retrying", "expired", "invalid", "recovering", "dead_live", "unverified", "exhausted", "pending"],
+                  "type": "string"
+                },
                 "device_kind": {
                   "enum": ["microphone", "camera", "speaker", "screen"],
                   "type": "string"
@@ -18248,7 +18252,7 @@
                   "type": "string"
                 },
                 "platform_state": {
-                  "enum": ["online", "offline", "hidden", "visible", "background", "foreground"],
+                  "enum": ["online", "offline", "hidden", "visible", "background", "foreground", "frozen", "resumed"],
                   "type": "string"
                 },
                 "play_result": {
@@ -18497,8 +18501,10 @@
                     "cleanup_unconfirmed",
                     "connection_failed",
                     "device_failed",
+                    "grant_check",
                     "media_http_error",
                     "media_intent",
+                    "media_link_check",
                     "media_projection_mismatch",
                     "media_result",
                     "media_state",
@@ -18509,11 +18515,13 @@
                     "recovery_exhausted",
                     "recovery_succeeded",
                     "render_crashed",
+                    "resume_check",
                     "space_join_span",
                     "state_changed",
                     "sync_connect_failed",
                     "sync_dial_timeout",
                     "sync_heartbeat_gap",
+                    "sync_link_check",
                     "sync_socket_close",
                     "sync_socket_open",
                     "telemetry_dropped"

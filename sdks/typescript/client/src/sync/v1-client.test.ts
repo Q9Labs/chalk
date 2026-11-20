@@ -964,6 +964,24 @@ describe("V1SyncClient", () => {
       send.mockRestore();
     }
   });
+  it("witnesses a hard-dead socket handling recovery, but never counts a late pong as contact", async () => {
+    const clock = new TestClock();
+    const results: string[] = [];
+    const { client, socket } = await liveClient({ clock, onLinkCheck: ({ result }) => results.push(result), monotonic: () => clock.now() });
+    try {
+      clock.advance(6000);
+      socket.receive({ type: "pong" });
+      await settle();
+      expect(results).toEqual([]);
+      // Losing the native close notification must not leave the watchdog thinking the socket is live.
+      vi.spyOn(socket, "close").mockImplementation(() => undefined);
+      clock.advance(61_000);
+      expect(results).toEqual(["recovering"]);
+      expect(client.getSnapshot().connection.phase).not.toBe("live");
+    } finally {
+      client.stop();
+    }
+  });
   it("keeps one-in-four pong loss non-blocking and clears degradation only after stable pongs", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
