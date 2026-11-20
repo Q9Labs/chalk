@@ -1,6 +1,7 @@
 import type * as AWS from "@alchemy.run/aws";
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import type * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Redacted from "effect/Redacted";
 import { canonicalSetJson } from "../providers/aws-bucket-policy.ts";
 import { contextKeys, type RecorderConfig } from "./config.ts";
 
@@ -128,3 +129,17 @@ export const bucketProps = (config: RecorderConfig): Cloudflare.R2.BucketProps =
       },
     ],
   });
+
+type Capacity = Pick<RecorderConfig, "desired_capture_nodes" | "desired_render_nodes" | "global_recorder_compute_nodes" | "bucket_name">;
+type Owned = { readonly keyArn: string; readonly captureFirewallId: string; readonly renderFirewallId: string };
+// The seed writes the same output a deploy writes, so both build it here. Empty
+// Droplet lists confer no runtime ownership: the external reconciler owns hosts.
+export const stackOutput = (capacity: Capacity, owned: Owned | undefined) => ({
+  desired_capture_nodes: capacity.desired_capture_nodes,
+  desired_render_nodes: capacity.desired_render_nodes,
+  global_recorder_compute_nodes: capacity.global_recorder_compute_nodes,
+  recording_bucket_name: capacity.bucket_name,
+  recording_kms_key_arn: owned ? Redacted.make(owned.keyArn) : null,
+  capture: { droplet_ids: [], droplet_names: [], firewall_id: owned?.captureFirewallId ?? null },
+  render: { droplet_ids: [], droplet_names: [], firewall_id: owned?.renderFirewallId ?? null },
+});

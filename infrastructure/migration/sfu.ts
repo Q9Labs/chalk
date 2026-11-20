@@ -3,7 +3,7 @@ import * as DO from "@distilled.cloud/digitalocean";
 import { deepEqual } from "alchemy/Diff";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { parseConfig, renderCloudInit, firewallConfig, nodeTable } from "../sfu/config.ts";
+import { parseConfig, renderCloudInit, firewallConfig, nodeTable, stackOutput } from "../sfu/config.ts";
 import { SfuDroplet } from "../providers/digitalocean-sfu-droplet.ts";
 import { expectResources, getResource, observe, row, type TofuState } from "./opentofu.ts";
 
@@ -34,29 +34,36 @@ export const firewallProps = (value: Schema.Schema.Type<typeof tofuFirewall>): D
     });
   return { name: value.name, dropletIds: [...value.droplet_ids], tags: [...(value.tags ?? [])], inboundRules: rules(value.inbound_rule), outboundRules: rules(value.outbound_rule) };
 };
+const normalizeRules = (rules: DigitalOcean.FirewallRule[] = []) =>
+  rules
+    .map((rule) =>
+      JSON.stringify({
+        protocol: rule.protocol,
+        ports: rule.protocol === "icmp" || rule.ports === "1-65535" ? "0" : rule.ports,
+        addresses: [...(rule.addresses ?? [])].sort(),
+        dropletIds: [...(rule.dropletIds ?? [])].sort(),
+        loadBalancerUids: [...(rule.loadBalancerUids ?? [])].sort(),
+        kubernetesIds: [...(rule.kubernetesIds ?? [])].sort(),
+        tags: [...(rule.tags ?? [])].sort(),
+        action: rule.action ?? "allow",
+      }),
+    )
+    .sort();
+// Names the rules one side has and the other lacks, by direction, protocol and ports only: addresses stay private.
+export const firewallDifference = (props: DigitalOcean.FirewallProps, attr: DigitalOcean.FirewallAttributes): string[] => {
+  const identity = [...(props.name === attr.name ? [] : ["name"]), ...(deepEqual([...(props.dropletIds ?? [])].sort(), [...attr.dropletIds].sort()) ? [] : ["attached Droplets"]), ...(deepEqual([...(props.tags ?? [])].sort(), [...attr.tags].sort()) ? [] : ["tags"])];
+  const rules = (direction: string, declared: string[], live: string[]) => {
+    const label = (rule: string) => {
+      const { protocol, ports } = JSON.parse(rule) as { protocol: string; ports: string };
+      return `${direction} ${protocol}/${ports}`;
+    };
+    return [...declared.filter((rule) => !live.includes(rule)).map((rule) => `${label(rule)} not live`), ...live.filter((rule) => !declared.includes(rule)).map((rule) => `${label(rule)} not declared`)];
+  };
+  return [...identity, ...rules("inbound", normalizeRules(props.inboundRules), normalizeRules(attr.inboundRules)), ...rules("outbound", normalizeRules(props.outboundRules), normalizeRules(attr.outboundRules))];
+};
 export const checkFirewall = (props: DigitalOcean.FirewallProps, attr: DigitalOcean.FirewallAttributes) => {
-  const normalize = (rules: DigitalOcean.FirewallRule[] = []) =>
-    rules
-      .map((rule) =>
-        JSON.stringify({
-          protocol: rule.protocol,
-          ports: rule.protocol === "icmp" || rule.ports === "1-65535" ? "0" : rule.ports,
-          addresses: [...(rule.addresses ?? [])].sort(),
-          dropletIds: [...(rule.dropletIds ?? [])].sort(),
-          loadBalancerUids: [...(rule.loadBalancerUids ?? [])].sort(),
-          kubernetesIds: [...(rule.kubernetesIds ?? [])].sort(),
-          tags: [...(rule.tags ?? [])].sort(),
-          action: rule.action ?? "allow",
-        }),
-      )
-      .sort();
-  const hasFirewallDrift = () =>
-    props.name !== attr.name ||
-    !deepEqual([...(props.dropletIds ?? [])].sort(), [...attr.dropletIds].sort()) ||
-    !deepEqual([...(props.tags ?? [])].sort(), [...attr.tags].sort()) ||
-    !deepEqual(normalize(props.inboundRules), normalize(attr.inboundRules)) ||
-    !deepEqual(normalize(props.outboundRules), normalize(attr.outboundRules));
-  if (hasFirewallDrift()) throw new Error("Live firewall differs from tofu state; resolve drift before seeding.");
+  const difference = firewallDifference(props, attr);
+  if (difference.length) throw new Error(`Live firewall differs (${difference.join("; ")}); resolve drift before seeding.`);
 };
 
 export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, stack: string) {
@@ -116,14 +123,14 @@ export const seedSfu = Effect.fn(function* (source: TofuState, stage: string, st
   const attr = yield* observe(DigitalOcean.Droplet, props, "Node");
   const hasDropletDrift = () => attr.dropletId !== Number(node.id) || attr.createdAt !== node.created_at || attr.ipv4 !== node.ipv4_address || attr.sizeSlug !== node.size || attr.region !== node.region || !deepEqual([...attr.tags].sort(), [...node.tags].sort());
   if (hasDropletDrift()) return yield* Effect.die("Live SFU identity or configuration differs from state.");
-  const fwProps = firewallConfig(config, firewall.name, Number(node.id));
-  const fwAttr = yield* observe(DigitalOcean.Firewall, fwProps, "Firewall");
+  const declared = firewallConfig(config, firewall.name, Number(node.id));
+  const fwAttr = yield* observe(DigitalOcean.Firewall, declared, "Firewall");
   if (fwAttr.firewallId !== firewall.id) return yield* Effect.die("Live firewall identity differs from state.");
   checkFirewall(firewallProps(firewall), fwAttr);
-  try {
-    checkFirewall(fwProps, fwAttr);
-  } catch {
-    return yield* Effect.die("Live SFU firewall matches source state but differs from the current definition; resolve the rule change before seeding.");
-  }
-  return [row(SfuDroplet.Type, "Node", node.id, props, attr, ["Firewall"], "protect"), row(DigitalOcean.Firewall.Type, "Firewall", firewall.id, fwProps, fwAttr, [], "protect")];
+  // The seed records the firewall as it is live. When the definition differs, the
+  // first plan shows that difference as an in-place firewall update to review.
+  const pending = firewallDifference(declared, fwAttr);
+  if (pending.length) yield* Effect.logWarning(`SFU firewall differs from the current definition (${pending.join("; ")}); seeded as live, so the first plan updates it in place.`);
+  const rows = [row(SfuDroplet.Type, "Node", node.id, props, attr, ["Firewall"], "protect"), row(DigitalOcean.Firewall.Type, "Firewall", firewall.id, pending.length ? firewallProps(firewall) : declared, fwAttr, [], "protect")];
+  return { rows, output: stackOutput(attr) };
 });
