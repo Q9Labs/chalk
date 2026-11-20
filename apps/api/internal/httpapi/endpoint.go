@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -35,10 +36,10 @@ type Endpoint[Request any, Response any] struct {
 	// operations from one URL uses it so each operation keeps its own policy.
 	limitFor func(Request) (ratelimit.Policy, bool)
 	limits   RateLimitOptions
-	// needs are the services the route cannot run without, and authorizer
-	// enforces contract.Permission. Both answer 503 when absent.
-	needs      []any
-	authorizer TenantAuthorizer
+	// missingDependency is computed when Needs is declared, so a route
+	// with missing services can answer 503 without checking each request.
+	missingDependency bool
+	authorizer        TenantAuthorizer
 }
 
 func Get[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
@@ -90,7 +91,7 @@ func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
 // Needs lists the services the route cannot run without. When one is nil, the
 // route answers 503 once the request decodes and passes its rate limit.
 func (e Endpoint[Request, Response]) Needs(services ...any) Endpoint[Request, Response] {
-	e.needs = append(e.needs, services...)
+	e.missingDependency = e.missingDependency || slices.ContainsFunc(services, missingService)
 	return e
 }
 
@@ -264,10 +265,8 @@ func (e Endpoint[Request, Response]) guarded(ctx context.Context, tenantID utili
 // guard rejects a call whose services are missing or whose caller lacks the
 // declared permission on tenantID.
 func (e Endpoint[Request, Response]) guard(ctx context.Context, tenantID utilities.ID) error {
-	for _, service := range e.needs {
-		if missingService(service) {
-			return apiErrorServiceUnavailable
-		}
+	if e.missingDependency {
+		return apiErrorServiceUnavailable
 	}
 	if e.contract.Permission == nil {
 		return nil

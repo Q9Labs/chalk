@@ -112,7 +112,7 @@ func TestMCPEvalHost(t *testing.T) {
 		RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService),
 		Recordings:            recordings.NewService(NewRecordingRepository(q)),
 		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)),
-		TranscriptArtifacts:   transcripts.NewArtifactService(transcriptRepo, transcriptRepo),
+		TranscriptArtifacts:   transcripts.NewService(transcriptRepo),
 		RecordingObjects:      evalObjects{pool: pool}, TranscriptTextMetadata: NewTranscriptTextRepository(q),
 		Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions(),
 	}

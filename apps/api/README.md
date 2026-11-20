@@ -8,7 +8,7 @@ Run `apps/api/scripts/gate.sh describe` from the repository root to inspect the 
 
 ## Runtime config
 
-Config is env-only. [`internal/config/config.go`](internal/config/config.go) owns every variable, default and startup validation, so read it instead of a list here. The notes below are the parts the code cannot explain.
+The API reads its settings from environment variables. Find the variables, defaults, and startup validation in [the config package](internal/config).
 
 **Capabilities.** `CHALK_RECORDING_ENABLED` and `CHALK_TRANSCRIPTION_ENABLED` default to `true` outside `local` and `false` in `local`. Missing provider credentials never disable a capability: a deployment that does not want one must set its flag to `false`. A disabled capability returns `503 service_unavailable` on its public routes, and `/readyz` reports each capability as `enabled` or `disabled`.
 

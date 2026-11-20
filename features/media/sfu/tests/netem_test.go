@@ -73,12 +73,6 @@ func (l *link) shape(rate float64, queueBytes int, delay time.Duration, inLoss, 
 	l.rate, l.queueBytes, l.delay, l.inLoss, l.outLoss = rate, queueBytes, delay, inLoss, outLoss
 }
 
-func (l *link) dropped() (in, out int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.inDropped, l.outDropped
-}
-
 func (l *link) receive() {
 	defer close(l.wake)
 	buffer := make([]byte, 1500)

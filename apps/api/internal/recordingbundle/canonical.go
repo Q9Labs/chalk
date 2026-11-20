@@ -189,20 +189,6 @@ func decodeLegacy(encoded []byte) (Bundle, error) {
 // CanonicalBytes is a method form useful at worker call sites.
 func (b Bundle) CanonicalBytes() ([]byte, error) { return Encode(b) }
 
-// ContentChecksum returns the SHA-256 checksum of the canonical content body,
-// excluding the manifest and envelope digest fields.
-func ContentChecksum(b Bundle) (string, error) {
-	encoded, err := Encode(b)
-	if err != nil {
-		return "", err
-	}
-	decoded, err := Decode(encoded)
-	if err != nil {
-		return "", err
-	}
-	return decoded.ContentDigest, nil
-}
-
 func digestHex(value []byte) string {
 	sum := sha256.Sum256(value)
 	return hex.EncodeToString(sum[:])

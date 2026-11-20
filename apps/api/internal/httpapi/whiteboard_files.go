@@ -73,30 +73,7 @@ func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[down
 }
 
 func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-			if verifier == nil {
-				writeServiceUnavailable(response)
-				return
-			}
-			token, ok := bearerToken(request.Header.Get("Authorization"))
-			if !ok {
-				writeUnauthenticated(response)
-				return
-			}
-			subject, valid, err := verifier.VerifyParticipant(request.Context(), token)
-			if err != nil {
-				writeServiceUnavailable(response)
-				return
-			}
-			if !valid {
-				writeUnauthenticated(response)
-				return
-			}
-			ctx := context.WithValue(request.Context(), whiteboardSubjectContextKey{}, subject)
-			next.ServeHTTP(response, request.WithContext(ctx))
-		})
-	}
+	return requireSyncParticipant(verifier, whiteboardSubjectContextKey{})
 }
 
 func decodeDownloadWhiteboardFileRequest(request *http.Request) (downloadWhiteboardFileRequest, error) {
