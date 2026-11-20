@@ -96,18 +96,26 @@ To compare providers after a cutover step, or when a failure points at one provi
 
 ```apl
 ['<api-log-dataset>']
-| where ['attributes.event'] == "sdk.telemetry" and ['attributes.type'] == "call_stats" and isnull(['attributes.gap'])
-| extend provider = iff(tostring(['attributes.provider']) in ("cloudflare_sfu", "chalk_sfu"), tostring(['attributes.provider']), "unknown")
+| where ['attributes.event'] == "sdk.telemetry"
+| extend evidence = parse_json(iff(body startswith "chalk-evidence-v2:", substring(body, 18), '{}'))
+| extend kind = coalesce(tostring(evidence.type), tostring(column_ifexists('attributes.type', ''))),
+    gap = coalesce(tostring(evidence.gap), tostring(column_ifexists('attributes.gap', ''))),
+    provider_hint = coalesce(tostring(evidence.provider), tostring(column_ifexists('attributes.provider', '')))
+| where kind == "call_stats" and isempty(gap)
+| extend provider = iff(provider_hint in ("cloudflare_sfu", "chalk_sfu"), provider_hint, "unknown"),
+    rtt_ms = todouble(coalesce(tostring(evidence.rtt_ms), tostring(column_ifexists('attributes.rtt_ms', '')))),
+    recv_loss_pct = todouble(coalesce(tostring(evidence.recv_loss_pct), tostring(column_ifexists('attributes.recv_loss_pct', '')))),
+    freeze_count = todouble(coalesce(tostring(evidence.freeze_count), tostring(column_ifexists('attributes.freeze_count', ''))))
 | summarize
     samples = count(),
-    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
-    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
-    recv_loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
-    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count()
+    rtt_p50 = percentile(rtt_ms, 50),
+    rtt_p95 = percentile(rtt_ms, 95),
+    recv_loss_p95 = percentile(recv_loss_pct, 95),
+    freeze_rate = sumif(freeze_count, isnotnull(freeze_count)) / count()
   by provider
 ```
 
-Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Nothing pages on this query.
+Use the same packed-field fallback for `connection_type` to separate relayed calls from direct ones, or add `bin(_time, 1h)` for a trend. Nothing pages on this query.
 
 **Completeness of one client session.** The telemetry ledger keeps a watermark per source: the seqs stored, rejected and dropped (with each drop's `drop_reason`), the high-water mark and the `end`. Below the high-water mark, a seq that is none of those is a missing gap with exact bounds. Past it, a source that never closed has an unknown tail. While the source has no `end` its gaps are open, and an open gap leaves the seat it covers unchecked, never healthy: `pnpm diagnose` prints it as a `gap:` line and the coverage reads partial. A version 1 session has no watermark, so read it by its rows: the first `seq` should be 0, the `seq` values should have no gap, and the last event of a clean session is `call_ended`. A session with `join` `started` and no later join event is an abandoned join. After a leave, the client may still send until its credential expires, so wait five minutes before you call a session cut short.
 
