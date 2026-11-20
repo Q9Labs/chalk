@@ -47,9 +47,10 @@ export function decide({ readings }) {
   const gap = first === undefined ? asof - created : first.window.to_ms - created;
   if (gap <= WAKE_LOST_MS) return { status: "pass" };
   const seconds = Math.round(gap / 1000);
-  const claimFacts = first === undefined
-    ? [{ text: `no claim in ${seconds} s after created_at`, evidence: [jobRow.id], window: { from_ms: created, to_ms: asof }, absent: "transcript.claim_decision" }]
-    : [{ text: `first claim ${seconds} s after created_at`, evidence: [first.id, jobRow.id], window: { from_ms: created, to_ms: first.window.to_ms }, absent: null }];
+  const claimFacts =
+    first === undefined
+      ? [{ text: `no claim in ${seconds} s after created_at`, evidence: [jobRow.id], window: { from_ms: created, to_ms: asof }, absent: "transcript.claim_decision" }]
+      : [{ text: `first claim ${seconds} s after created_at`, evidence: [first.id, jobRow.id], window: { from_ms: created, to_ms: first.window.to_ms }, absent: null }];
   return {
     status: "finding",
     outcome: "degraded",

@@ -348,7 +348,15 @@ async function cmdSeed(config, flags) {
 // ---------------------------------------------------------------------------
 
 const FAKE_PROVIDER_BODIES = {
-  ok: { text: "hello there", segments: [{ start: 0.1, end: 1.0, text: "hello there" }], words: [{ word: "hello", start: 0.1, end: 0.5 }, { word: "there", start: 0.5, end: 1.0 }], usage: { cost: 0 } },
+  ok: {
+    text: "hello there",
+    segments: [{ start: 0.1, end: 1.0, text: "hello there" }],
+    words: [
+      { word: "hello", start: 0.1, end: 0.5 },
+      { word: "there", start: 0.5, end: 1.0 },
+    ],
+    usage: { cost: 0 },
+  },
   empty: { text: "", segments: [], words: [], usage: { cost: 0 } },
 };
 

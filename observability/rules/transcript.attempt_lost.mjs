@@ -46,8 +46,7 @@ export function decide({ readings }) {
   const attempts = obs(readings["transcript.attempts"]);
   const apiRead = readings["transcript.claim_decision"]?.kind !== "unknown";
 
-  const answered = (/** @type {number} */ n) =>
-    completes.some((o) => o.claim === "accepted" && field(o, "attempt", 0) === n) || retries.some((o) => field(o, "attempt", 0) === n);
+  const answered = (/** @type {number} */ n) => completes.some((o) => o.claim === "accepted" && field(o, "attempt", 0) === n) || retries.some((o) => field(o, "attempt", 0) === n);
   const candidates = new Set();
   for (const o of claims.filter((entry) => entry.claim === "leased")) candidates.add(/** @type {number} */ (field(o, "attempt", 0)));
   for (const o of attempts.filter((entry) => entry.claim === "started")) candidates.add(/** @type {number} */ (field(o, "attempt", 0)));
@@ -81,9 +80,7 @@ export function decide({ readings }) {
     upstream: "unknown",
     observed: `attempt${lost.length > 1 ? "s" : ""} ${lost.map((entry) => entry.attempt).join(", ")} claimed and lost: no accepted result or retry, lease ${expiredNow ? "expired" : "recovered"}`,
     facts,
-    hypothesis: handlerFault
-      ? { text: "the claim handler leased the job and then failed the response (issue #1510), orphaning the lease for the work lease duration", falsified_by: "a commit that undoes the lease when the assignment fails" }
-      : null,
+    hypothesis: handlerFault ? { text: "the claim handler leased the job and then failed the response (issue #1510), orphaning the lease for the work lease duration", falsified_by: "a commit that undoes the lease when the assignment fails" } : null,
     falsify: { absence: null, attribution: "an accepted result or retry decision for each lost attempt" },
   };
 }

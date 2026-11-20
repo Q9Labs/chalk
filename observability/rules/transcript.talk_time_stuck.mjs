@@ -54,7 +54,11 @@ export function decide({ readings }) {
   const at = Math.max(dbTalk.window.to_ms, ...rows.map((o) => o.window.to_ms), ...preps.map((o) => o.window.to_ms));
 
   const rowFor = (/** @type {string} recId */ recId) => rows.find((o) => field(o, "recording_id", "") === recId && field(o, "transcript_exists", true) === true && o.claim !== "none");
-  const prepFor = (/** @type {string} recId */ recId) => preps.filter((o) => field(o, "recording_id", "") === recId && field(o, "transcript_exists", true) === true && o.claim !== "none").sort((a, b) => a.window.to_ms - b.window.to_ms).at(-1);
+  const prepFor = (/** @type {string} recId */ recId) =>
+    preps
+      .filter((o) => field(o, "recording_id", "") === recId && field(o, "transcript_exists", true) === true && o.claim !== "none")
+      .sort((a, b) => a.window.to_ms - b.window.to_ms)
+      .at(-1);
 
   const inProgress = (/** @type {Readonly<Observation>} rec */ rec) => {
     const recId = /** @type {string} */ (field(rec, "recording_id", rec.subject.job ?? ""));
@@ -93,7 +97,12 @@ export function decide({ readings }) {
     const row = rowFor(recId);
     const prep = prepFor(recId);
     const why = row === undefined ? (prep !== undefined ? `preparation ${prep.claim}` : `completed ${Math.round((at - /** @type {number} */ (field(rec, "transcript_completed_ms", at))) / 60000)} min ago, no transcription`) : `transcription ${row.claim}, no open job`;
-    return { text: `Recording ${recId}: ${why}, dead ${Math.round((at - Math.min(/** @type {number} */ (field(row ?? prep ?? rec, row === undefined ? (prep === undefined ? "transcript_completed_ms" : "transcript_terminal_ms") : "transcript_updated_ms", at)), at)) / 60000)} min`, evidence: [rec.id, ...(row ? [row.id] : []), ...(prep ? [prep.id] : [])], window: rec.window, absent: null };
+    return {
+      text: `Recording ${recId}: ${why}, dead ${Math.round((at - Math.min(/** @type {number} */ (field(row ?? prep ?? rec, row === undefined ? (prep === undefined ? "transcript_completed_ms" : "transcript_terminal_ms") : "transcript_updated_ms", at)), at)) / 60000)} min`,
+      evidence: [rec.id, ...(row ? [row.id] : []), ...(prep ? [prep.id] : [])],
+      window: rec.window,
+      absent: null,
+    };
   });
   return {
     status: "finding",

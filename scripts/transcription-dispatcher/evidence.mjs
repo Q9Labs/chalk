@@ -274,13 +274,8 @@ function validateDocument(document) {
     return nonNegative(q.segmentCount) && nonNegative(q.wordCount) && (q.meanConfidence === undefined || (typeof q.meanConfidence === "number" && q.meanConfidence >= 0 && q.meanConfidence <= 1));
   };
   const language = doc.transcriptLanguage;
-  const languageOk =
-    language === undefined ||
-    language === null ||
-    (typeof language === "object" &&
-      language !== null &&
-      ((/** @type {Record<string, unknown>} */ (language).mode === "auto" && !nonEmpty(/** @type {Record<string, unknown>} */ (language).language)) ||
-        (/** @type {Record<string, unknown>} */ (language).mode === "fixed" && nonEmpty(/** @type {Record<string, unknown>} */ (language).language) && /** @type {Record<string, unknown>} */ (language).language !== "auto")));
+  const lang = typeof language === "object" && language !== null ? /** @type {Record<string, unknown>} */ (language) : null;
+  const languageOk = language === undefined || language === null || (lang !== null && ((lang.mode === "auto" && !nonEmpty(lang.language)) || (lang.mode === "fixed" && nonEmpty(lang.language) && lang.language !== "auto")));
   const documentOk =
     languageOk &&
     doc.schemaVersion === "transcript.v1" &&
@@ -309,8 +304,7 @@ function validateDocument(document) {
     const who = c.identity;
     if (who === null || typeof who !== "object") return null;
     const identity = /** @type {Record<string, unknown>} */ (who);
-    const identityOk =
-      identity.kind === "participant" && nonEmpty(identity.participantRef) && typeof identity.participantGeneration === "number" && identity.participantGeneration >= 1 && nonEmpty(identity.trackId) && nonEmpty(identity.trackEpoch);
+    const identityOk = identity.kind === "participant" && nonEmpty(identity.participantRef) && typeof identity.participantGeneration === "number" && identity.participantGeneration >= 1 && nonEmpty(identity.trackId) && nonEmpty(identity.trackEpoch);
     const cueOk =
       nonNegative(c.startMs) &&
       typeof c.endMs === "number" &&
@@ -333,7 +327,11 @@ function validateDocument(document) {
 }
 
 /** S3 URI encoding: RFC 3986 unreserved characters stay, everything else is percent-encoded, slashes separate segments. */
-const s3Encode = (/** @type {string} */ key) => key.split("/").map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)).join("/");
+const s3Encode = (/** @type {string} */ key) =>
+  key
+    .split("/")
+    .map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`))
+    .join("/");
 
 /**
  * A SigV4 GET on an R2 (S3-compatible) object, built with `node:crypto` alone — no SDK. Returns the HTTP status, body bytes
@@ -345,7 +343,10 @@ const s3Encode = (/** @type {string} */ key) => key.split("/").map((segment) => 
 async function sigv4Get(remote, key) {
   const host = new URL(remote.endpoint).host;
   const path = `/${remote.bucket}/${s3Encode(key)}`;
-  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const stamp = new Date()
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}Z$/, "Z");
   const date = stamp.slice(0, 8);
   const emptySha = createHash("sha256").update("").digest("hex");
   const region = "auto";
@@ -503,7 +504,13 @@ async function jobDbReads(config, id) {
     config,
     `select row_to_json(j) from (select j.id, j.tenant_id, j.episode_id, j.recording_id, j.transcript_id, j.chunk_id, j.artifact_kind, j.state, j.error_code, j.attempt_count, j.attempt_limit, ${msOf("j.terminal_at")} as terminal_ms, ${msOf("j.available_at")} as available_ms, ${msOf("j.lease_expires_at")} as lease_expiry_ms, ${msOf("j.created_at")} as created_ms, ${msOf("j.updated_at")} as updated_ms, (select count(*)::int from artifact_jobs s where s.transcript_id = j.transcript_id and s.state in (${OPEN_JOB_STATES})) as open_jobs, (select count(*)::int from artifact_jobs s where s.transcript_id = j.transcript_id and s.state = 'dead_letter') as dead_letter_jobs, (j.id = (select s.id from artifact_jobs s where s.transcript_id = j.transcript_id order by s.created_at desc, s.id desc limit 1)) as latest_job, (select row_to_json(r) from (select s.artifact_kind, s.error_code from artifact_jobs s where s.transcript_id = j.transcript_id and s.attempt_count > 1 order by s.created_at, s.id limit 1) r) as first_retry from artifact_jobs j where j.id = '${id}') j`,
   );
-  const render = job === null ? await readDb(config, `select row_to_json(p) from (select p.id, p.tenant_id, p.episode_id, p.recording_id, p.kind, p.state, p.error_code, p.attempt_count, ${msOf("p.terminal_at")} as terminal_ms, ${msOf("p.available_at")} as available_ms, ${msOf("p.created_at")} as created_ms, ${msOf("p.updated_at")} as updated_ms from recording_jobs p where p.id = '${id}') p`) : null;
+  const render =
+    job === null
+      ? await readDb(
+          config,
+          `select row_to_json(p) from (select p.id, p.tenant_id, p.episode_id, p.recording_id, p.kind, p.state, p.error_code, p.attempt_count, ${msOf("p.terminal_at")} as terminal_ms, ${msOf("p.available_at")} as available_ms, ${msOf("p.created_at")} as created_ms, ${msOf("p.updated_at")} as updated_ms from recording_jobs p where p.id = '${id}') p`,
+        )
+      : null;
   if (job === null && render === null) return null;
   const at = Date.now();
   const row = job ?? render;
@@ -511,17 +518,19 @@ async function jobDbReads(config, id) {
   const transcriptId = job === null ? null : /** @type {string | null} */ (job.transcript_id);
   const attemptWhere = job !== null && job.artifact_kind === "transcription_chunk" && typeof job.chunk_id === "string" ? `a.chunk_id = '${job.chunk_id}'` : transcriptId !== null ? `a.transcript_id = '${transcriptId}'` : null;
   const [transcript, recording, prep, episode, attempts, tenant, version] = await Promise.all([
-    transcriptId !== null
-      ? readDb(config, transcriptionBy(`t.id = '${transcriptId}'`))
-      : recordingId !== null
-        ? readDb(config, transcriptionBy(`t.recording_id = '${recordingId}'`))
-        : Promise.resolve(null),
+    transcriptId !== null ? readDb(config, transcriptionBy(`t.id = '${transcriptId}'`)) : recordingId !== null ? readDb(config, transcriptionBy(`t.recording_id = '${recordingId}'`)) : Promise.resolve(null),
     recordingId !== null ? readDb(config, `select row_to_json(r) from (select r.id, r.status, ${msOf("r.completed_at")} as completed_ms, ${msOf("r.updated_at")} as updated_ms, ${msOf("r.created_at")} as created_ms from recordings r where r.id = '${recordingId}') r`) : Promise.resolve(null),
     recordingId !== null
-      ? readDb(config, `select row_to_json(p) from (select p.id, p.recording_id, p.state, p.error_code, p.attempt_count, ${msOf("p.terminal_at")} as terminal_ms, ${msOf("p.available_at")} as available_ms, ${msOf("p.lease_expires_at")} as lease_expiry_ms, ${msOf("p.created_at")} as created_ms, ${msOf("p.updated_at")} as updated_ms from recording_jobs p where p.recording_id = '${recordingId}' and p.kind = 'transcription' order by p.created_at desc, p.id desc limit 1) p`)
+      ? readDb(
+          config,
+          `select row_to_json(p) from (select p.id, p.recording_id, p.state, p.error_code, p.attempt_count, ${msOf("p.terminal_at")} as terminal_ms, ${msOf("p.available_at")} as available_ms, ${msOf("p.lease_expires_at")} as lease_expiry_ms, ${msOf("p.created_at")} as created_ms, ${msOf("p.updated_at")} as updated_ms from recording_jobs p where p.recording_id = '${recordingId}' and p.kind = 'transcription' order by p.created_at desc, p.id desc limit 1) p`,
+        )
       : Promise.resolve(null),
     typeof row.episode_id === "string"
-      ? readDb(config, `select row_to_json(e) from (select e.id, e.tenant_id, e.space_id, e.status, e.end_reason, case when e.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand','automatic') then e.config_snapshot #>> '{artifact_policy,transcription,mode}' else 'disabled' end as transcript_mode, ${msOf("e.started_at")} as started_ms, ${msOf("e.ended_at")} as ended_ms, ${msOf("e.created_at")} as created_ms from episodes e where e.id = '${row.episode_id}') e`)
+      ? readDb(
+          config,
+          `select row_to_json(e) from (select e.id, e.tenant_id, e.space_id, e.status, e.end_reason, case when e.config_snapshot #>> '{artifact_policy,transcription,mode}' in ('on_demand','automatic') then e.config_snapshot #>> '{artifact_policy,transcription,mode}' else 'disabled' end as transcript_mode, ${msOf("e.started_at")} as started_ms, ${msOf("e.ended_at")} as ended_ms, ${msOf("e.created_at")} as created_ms from episodes e where e.id = '${row.episode_id}') e`,
+        )
       : Promise.resolve(null),
     attemptWhere !== null
       ? readDb(
@@ -530,7 +539,10 @@ async function jobDbReads(config, id) {
         )
       : Promise.resolve([]),
     readDb(config, `select row_to_json(t) from (select t.id, t.name from tenants t where t.id = '${row.tenant_id}') t`),
-    readDb(config, "select row_to_json(v) from (select max(version_id) as version from goose_db_version) v").then((result) => (result === null || typeof result !== "object" ? null : result.version ?? null), () => null),
+    readDb(config, "select row_to_json(v) from (select max(version_id) as version from goose_db_version) v").then(
+      (result) => (result === null || typeof result !== "object" ? null : (result.version ?? null)),
+      () => null,
+    ),
   ]);
   return { job, render, transcript, recording, prep, episode, attempts: /** @type {Row[]} */ (attempts ?? []), tenant, version, at };
 }
@@ -550,14 +562,20 @@ async function episodeDbReads(config, id) {
   if (episode === null) return null;
   const at = Date.now();
   const [recordings, transcriptions, preps, tenant, version] = await Promise.all([
-    readDb(config, `select coalesce(json_agg(row_to_json(r) order by r.created_ms, r.id), '[]'::json) from (select r.id, r.status, ${msOf("r.completed_at")} as completed_ms, ${msOf("r.updated_at")} as updated_ms, ${msOf("r.created_at")} as created_ms from recordings r where r.episode_id = '${id}' and r.tenant_id = '${episode.tenant_id}') r`),
+    readDb(
+      config,
+      `select coalesce(json_agg(row_to_json(r) order by r.created_ms, r.id), '[]'::json) from (select r.id, r.status, ${msOf("r.completed_at")} as completed_ms, ${msOf("r.updated_at")} as updated_ms, ${msOf("r.created_at")} as created_ms from recordings r where r.episode_id = '${id}' and r.tenant_id = '${episode.tenant_id}') r`,
+    ),
     readDb(config, transcriptionsBy(`t.episode_id = '${id}' and t.tenant_id = '${episode.tenant_id}'`)),
     readDb(
       config,
       `select coalesce(json_agg(row_to_json(p) order by p.recording_id), '[]'::json) from (select distinct on (p.recording_id) p.id, p.recording_id, p.state, p.error_code, p.attempt_count, ${msOf("p.terminal_at")} as terminal_ms, ${msOf("p.available_at")} as available_ms, ${msOf("p.lease_expires_at")} as lease_expiry_ms, ${msOf("p.created_at")} as created_ms, ${msOf("p.updated_at")} as updated_ms from recording_jobs p where p.episode_id = '${id}' and p.tenant_id = '${episode.tenant_id}' and p.kind = 'transcription' order by p.recording_id, p.created_at desc, p.id desc) p`,
     ),
     readDb(config, `select row_to_json(t) from (select t.id, t.name from tenants t where t.id = '${episode.tenant_id}') t`),
-    readDb(config, "select row_to_json(v) from (select max(version_id) as version from goose_db_version) v").then((result) => (result === null || typeof result !== "object" ? null : result.version ?? null), () => null),
+    readDb(config, "select row_to_json(v) from (select max(version_id) as version from goose_db_version) v").then(
+      (result) => (result === null || typeof result !== "object" ? null : (result.version ?? null)),
+      () => null,
+    ),
   ]);
   return { episode, recordings: /** @type {Row[]} */ (recordings ?? []), transcriptions: /** @type {Row[]} */ (transcriptions ?? []), preps: /** @type {Row[]} */ (preps ?? []), tenant, version, at };
 }
@@ -686,7 +704,10 @@ export async function buildWorld(item, env = process.env) {
   if (logsDir === null) {
     notes.push("CHALK_DIAGNOSE_LOCAL_LOGS is not set: api and lambda are not read");
   } else {
-    for (const [source, file] of /** @type {const} */ ([["api", "api.log"], ["lambda", "dispatcher.jsonl"]])) {
+    for (const [source, file] of /** @type {const} */ ([
+      ["api", "api.log"],
+      ["lambda", "dispatcher.jsonl"],
+    ])) {
       try {
         logs[source] = loadLog(join(logsDir, file), source);
       } catch (error) {
@@ -763,7 +784,7 @@ async function jobWorld(id, read, logs, store, notes) {
     const retry = row.first_retry;
     if (retry !== null && typeof retry === "object") {
       jobValue.transcript_first_retry_kind = /** @type {string} */ (/** @type {Row} */ (retry).artifact_kind);
-      if (typeof /** @type {Row} */ (retry).error_code === "string") jobValue.transcript_first_retry_code = /** @type {string} */ (/** @type {Row} */ (retry).error_code);
+      if (typeof (/** @type {Row} */ (retry).error_code) === "string") jobValue.transcript_first_retry_code = /** @type {string} */ (/** @type {Row} */ (retry).error_code);
     }
     observations.push(
       dbObservation({
@@ -1168,12 +1189,7 @@ async function episodeWorld(id, read, logs, notes) {
   notes.push(`db: read the episode, ${recordings.length} recordings, ${transcriptions.length} transcriptions, ${preps.length} latest prep rows`);
 
   /** @type {Watermark[]} */
-  const watermarks = [
-    sourceWatermark("db", at, [], buildLabel(version)),
-    sourceWatermark("api", logs.api?.read_ms ?? null, [], "api dev"),
-    sourceWatermark("lambda", logs.lambda?.read_ms ?? null, [], "lambda dev"),
-    sourceWatermark("r2", null, [], "r2 not read"),
-  ];
+  const watermarks = [sourceWatermark("db", at, [], buildLabel(version)), sourceWatermark("api", logs.api?.read_ms ?? null, [], "api dev"), sourceWatermark("lambda", logs.lambda?.read_ms ?? null, [], "lambda dev"), sourceWatermark("r2", null, [], "r2 not read")];
   /** @type {Evidence} */
   const evidence = { observations, watermarks };
   return {
@@ -1208,15 +1224,7 @@ function replayTalkTime(ended, recordings, rowsByRecording, mode) {
   let inProgress = 0;
   for (const recording of recordings) {
     const row = rowsByRecording.get(/** @type {string} */ (recording.id));
-    const documentReady =
-      row !== undefined &&
-      row.status === "complete" &&
-      row.deleted !== true &&
-      typeof row.artifact_key === "string" &&
-      typeof row.artifact_size === "number" &&
-      row.artifact_size > 0 &&
-      row.artifact_size <= MAX_DOCUMENT_BYTES &&
-      row.artifact_content_type === "application/json";
+    const documentReady = row !== undefined && row.status === "complete" && row.deleted !== true && typeof row.artifact_key === "string" && typeof row.artifact_size === "number" && row.artifact_size > 0 && row.artifact_size <= MAX_DOCUMENT_BYTES && row.artifact_content_type === "application/json";
     if (documentReady) {
       transcribed += 1;
       continue;

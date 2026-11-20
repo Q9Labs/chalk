@@ -13,24 +13,24 @@ chains under `observability/fixtures/transcript.<code>/`.
 
 ## Checks
 
-| Check | Fault run | Verdict | Hop / module | Proof |
-|---|---|---|---|---|
-| `transcript.failed` | provider `rejected` -> attempt terminal_failure, job `dead_letter` (`provider_rejected`) | broken | provider / dispatcher.provider | chain-inputs/transcript.failed.positive.mjs |
-| `transcript.unreadable` | accepted transcript whose stored document is deleted from R2 (readback 404 `not_found`) | broken | store / storage.r2 | chain-inputs/transcript.unreadable.positive.mjs |
-| `transcript.speech_dropped` | provider `empty` words; accept/finalize still land (`speech_ms` 2300, 0 words) | broken | provider / dispatcher.provider | chain-inputs/transcript.speech_dropped.positive.mjs |
-| `transcript.attempt_lost` | dispatcher claimed (`attempt 1`), process killed, lease expired; no result, no retry | degraded | chunk / dispatcher.runtime | chain-inputs/transcript.attempt_lost.positive.mjs (also emits the `lambda evidence_gap ... tail` line: claimed, no `transcript.chunk` terminal op observed) |
-| `transcript.stuck` | `pending` chunk job with `available_at` backdated 6 min | broken | claim / dispatcher.schedule | chain-inputs/transcript.stuck.positive.mjs |
-| `transcript.talk_time_stuck` | `--prep-failed` seed: automatic-mode Episode, prep `terminal_failure` 15 min, no transcription; talk-time serves `transcript_pending` | broken | serve / api.talktime | chain-inputs/transcript.talk_time_stuck.positive.mjs |
-| `transcript.wake_lost` | wake `failed`, first claim lands 125 s after job creation (> 90 s) | degraded | wake / api.lambdawaker | chain-inputs/transcript.wake_lost.positive.mjs |
-| `transcript.late` | finalize completes 65 min after the job was created (> 60 min) | degraded | claim / dispatcher.queue | chain-inputs/transcript.late.positive.mjs |
+| Check                        | Fault run                                                                                                                             | Verdict  | Hop / module                   | Proof                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transcript.failed`          | provider `rejected` -> attempt terminal_failure, job `dead_letter` (`provider_rejected`)                                              | broken   | provider / dispatcher.provider | chain-inputs/transcript.failed.positive.mjs                                                                                                                 |
+| `transcript.unreadable`      | accepted transcript whose stored document is deleted from R2 (readback 404 `not_found`)                                               | broken   | store / storage.r2             | chain-inputs/transcript.unreadable.positive.mjs                                                                                                             |
+| `transcript.speech_dropped`  | provider `empty` words; accept/finalize still land (`speech_ms` 2300, 0 words)                                                        | broken   | provider / dispatcher.provider | chain-inputs/transcript.speech_dropped.positive.mjs                                                                                                         |
+| `transcript.attempt_lost`    | dispatcher claimed (`attempt 1`), process killed, lease expired; no result, no retry                                                  | degraded | chunk / dispatcher.runtime     | chain-inputs/transcript.attempt_lost.positive.mjs (also emits the `lambda evidence_gap ... tail` line: claimed, no `transcript.chunk` terminal op observed) |
+| `transcript.stuck`           | `pending` chunk job with `available_at` backdated 6 min                                                                               | broken   | claim / dispatcher.schedule    | chain-inputs/transcript.stuck.positive.mjs                                                                                                                  |
+| `transcript.talk_time_stuck` | `--prep-failed` seed: automatic-mode Episode, prep `terminal_failure` 15 min, no transcription; talk-time serves `transcript_pending` | broken   | serve / api.talktime           | chain-inputs/transcript.talk_time_stuck.positive.mjs                                                                                                        |
+| `transcript.wake_lost`       | wake `failed`, first claim lands 125 s after job creation (> 90 s)                                                                    | degraded | wake / api.lambdawaker         | chain-inputs/transcript.wake_lost.positive.mjs                                                                                                              |
+| `transcript.late`            | finalize completes 65 min after the job was created (> 60 min)                                                                        | degraded | claim / dispatcher.queue       | chain-inputs/transcript.late.positive.mjs                                                                                                                   |
 
 Healthy controls, no finding, complete coverage:
 
-| Item | World |
-|---|---|
-| chunk job `712aa20d` (+ Episode `fc53da9b`) — full ok-provider run | chain-inputs/transcript.stuck.healthy.mjs et al. |
-| finalize job `449afad6` — healthy document stored + r2 `ok` | chain-inputs/transcript.late.healthy.mjs, transcript.unreadable.healthy.mjs, transcript.speech_dropped.healthy.mjs |
-| Episode `fc53da9b` — talk-time serves rows | chain-inputs/transcript.talk_time_stuck.healthy.mjs |
+| Item                                                               | World                                                                                                              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| chunk job `712aa20d` (+ Episode `fc53da9b`) — full ok-provider run | chain-inputs/transcript.stuck.healthy.mjs et al.                                                                   |
+| finalize job `449afad6` — healthy document stored + r2 `ok`        | chain-inputs/transcript.late.healthy.mjs, transcript.unreadable.healthy.mjs, transcript.speech_dropped.healthy.mjs |
+| Episode `fc53da9b` — talk-time serves rows                         | chain-inputs/transcript.talk_time_stuck.healthy.mjs                                                                |
 
 Note: `wake_lost` correctly does not fire on the healthy run where the local wake
 fails but the claim lands ~28 s later — the spec's "do not report merely because a

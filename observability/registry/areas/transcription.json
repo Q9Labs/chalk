@@ -2,165 +2,89 @@
   "area": "transcription",
   "slice": 11,
   "title": "Transcription: chunk claim, dispatch, provider, accept, finalize, store and serve, plus the talk-time view.",
-  "prefixes": [
-    "transcript"
-  ],
+  "prefixes": ["transcript"],
   "fields": [
     {
       "name": "transcript_state",
       "type": "enum",
-      "values": [
-        "not_requested",
-        "preparing",
-        "transcribing",
-        "verifying",
-        "complete",
-        "retryable_failure",
-        "terminal_failure",
-        "deleted",
-        "none"
-      ],
+      "values": ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "none"],
       "sensitivity": null,
       "doc": "The transcriptions.status the checker read, or none when the Recording has no row."
     },
     {
       "name": "transcript_job_state",
       "type": "enum",
-      "values": [
-        "pending",
-        "leased",
-        "retryable",
-        "completed",
-        "dead_letter",
-        "cancelled"
-      ],
+      "values": ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"],
       "sensitivity": null,
       "doc": "The artifact_jobs.state the checker read."
     },
     {
       "name": "transcript_job_kind",
       "type": "enum",
-      "values": [
-        "transcription_chunk",
-        "transcription_finalize",
-        "render",
-        "transcription",
-        "recording"
-      ],
+      "values": ["transcription_chunk", "transcription_finalize", "render", "transcription", "recording"],
       "sensitivity": null,
       "doc": "Which job row the item is: an artifact_jobs kind, or render for the Recording's export job."
     },
     {
       "name": "transcript_recording_state",
       "type": "enum",
-      "values": [
-        "recording",
-        "processing",
-        "finalizing",
-        "completed",
-        "failed",
-        "deleted"
-      ],
+      "values": ["recording", "processing", "finalizing", "completed", "failed", "deleted"],
       "sensitivity": null,
       "doc": "The recordings.status the checker read."
     },
     {
       "name": "transcript_prep_state",
       "type": "enum",
-      "values": [
-        "pending",
-        "leased",
-        "succeeded",
-        "retryable_failure",
-        "terminal_failure",
-        "cancelled",
-        "none"
-      ],
+      "values": ["pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled", "none"],
       "sensitivity": null,
       "doc": "The recording_jobs row's state (kind transcription for audio preparation, render for export), or none when absent."
     },
     {
       "name": "transcript_attempt_state",
       "type": "enum",
-      "values": [
-        "started",
-        "retryable_failure",
-        "accepted",
-        "rejected",
-        "cancelled"
-      ],
+      "values": ["started", "retryable_failure", "accepted", "rejected", "cancelled"],
       "sensitivity": null,
       "doc": "A transcription_attempts row's state."
     },
     {
       "name": "transcript_mode",
       "type": "enum",
-      "values": [
-        "automatic",
-        "on_demand",
-        "disabled"
-      ],
+      "values": ["automatic", "on_demand", "disabled"],
       "sensitivity": null,
       "doc": "The Episode's transcription mode from its config snapshot."
     },
     {
       "name": "transcript_dispatch_source",
       "type": "enum",
-      "values": [
-        "wake",
-        "finalize",
-        "cleanup",
-        "reconcile",
-        "eventbridge.scheduler"
-      ],
+      "values": ["wake", "finalize", "cleanup", "reconcile", "eventbridge.scheduler"],
       "sensitivity": null,
       "doc": "What invoked the dispatcher (dispatcher.ts QUEUES_BY_SOURCE)."
     },
     {
       "name": "transcript_queue",
       "type": "enum",
-      "values": [
-        "transcription",
-        "finalize",
-        "cleanup"
-      ],
+      "values": ["transcription", "finalize", "cleanup"],
       "sensitivity": null,
       "doc": "Which dispatcher queue drained."
     },
     {
       "name": "transcript_route",
       "type": "enum",
-      "values": [
-        "document",
-        "talk_time"
-      ],
+      "values": ["document", "talk_time"],
       "sensitivity": null,
       "doc": "Which read path a transcript.document_read op measured."
     },
     {
       "name": "transcript_talk_status",
       "type": "enum",
-      "values": [
-        "available",
-        "transcript_pending",
-        "no_transcript",
-        "live"
-      ],
+      "values": ["available", "transcript_pending", "no_transcript", "live"],
       "sensitivity": null,
       "doc": "The status the talk-time endpoint served."
     },
     {
       "name": "transcript_r2_result",
       "type": "enum",
-      "values": [
-        "ok",
-        "not_found",
-        "error",
-        "size_mismatch",
-        "sha_mismatch",
-        "type_mismatch",
-        "invalid"
-      ],
+      "values": ["ok", "not_found", "error", "size_mismatch", "sha_mismatch", "type_mismatch", "invalid"],
       "sensitivity": null,
       "doc": "What the checker's readback of the stored document found."
     },
@@ -365,10 +289,7 @@
     {
       "name": "transcript_first_retry_kind",
       "type": "enum",
-      "values": [
-        "transcription_chunk",
-        "transcription_finalize"
-      ],
+      "values": ["transcription_chunk", "transcription_finalize"],
       "sensitivity": null,
       "doc": "The kind of the transcription's first job with attempt_count > 1."
     }
@@ -379,14 +300,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "The API's wake call to the dispatcher for a job: queued (accepted) or failed (unavailable, encoding, invoke or rejected status), always with the job it was for.",
-      "decisions": [
-        "queued",
-        "failed"
-      ],
+      "decisions": ["queued", "failed"],
       "fields": {
         "job_id": {
           "required": true
@@ -404,18 +320,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "One decision per claimed job, plus none (nothing claimable) or repository_error per call. The lease commits before URL signing, so url_failed, invalid_assignment and lease_stale name the orphaned-lease fault of issue #1510.",
-      "decisions": [
-        "leased",
-        "invalid_assignment",
-        "lease_stale",
-        "url_failed",
-        "none",
-        "repository_error"
-      ],
+      "decisions": ["leased", "invalid_assignment", "lease_stale", "url_failed", "none", "repository_error"],
       "fields": {
         "job_id": {
           "required": false
@@ -436,16 +343,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "One decision per claimed finalizer job, plus none or repository_error per call; url_failed when chunk GET or output PUT signing fails after the lease committed.",
-      "decisions": [
-        "leased",
-        "none",
-        "url_failed",
-        "repository_error"
-      ],
+      "decisions": ["leased", "none", "url_failed", "repository_error"],
       "fields": {
         "job_id": {
           "required": false
@@ -466,14 +366,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "After the retry service commits: retryable or dead_letter, with the dispatcher's safe error code and the attempt it ended.",
-      "decisions": [
-        "retryable",
-        "dead_letter"
-      ],
+      "decisions": ["retryable", "dead_letter"],
       "fields": {
         "job_id": {
           "required": true
@@ -497,15 +392,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "The result-accept decision: accepted, rejected (result verification failed) or error (the accept call failed).",
-      "decisions": [
-        "accepted",
-        "rejected",
-        "error"
-      ],
+      "decisions": ["accepted", "rejected", "error"],
       "fields": {
         "job_id": {
           "required": true
@@ -526,15 +415,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "The finalizer-accept decision: accepted, rejected (artifact verification failed) or error.",
-      "decisions": [
-        "accepted",
-        "rejected",
-        "error"
-      ],
+      "decisions": ["accepted", "rejected", "error"],
       "fields": {
         "job_id": {
           "required": true
@@ -555,14 +438,9 @@
       "kind": "decision",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "After RetryFinalizer commits: retryable or dead_letter, with the error code.",
-      "decisions": [
-        "retryable",
-        "dead_letter"
-      ],
+      "decisions": ["retryable", "dead_letter"],
       "fields": {
         "job_id": {
           "required": true
@@ -586,9 +464,7 @@
       "kind": "op",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "Reading a stored transcript document, on the document route or inside talk-time: ok, expected(transcript.not_ready), or error(object_get, artifact_mismatch, decode). Never the body.",
       "fields": {
         "transcript_route": {
@@ -617,9 +493,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "api"
-      ],
+      "modules": ["api"],
       "doc": "The status the Episode talk-time endpoint served and how many Recordings it counted as still transcribing.",
       "fields": {
         "episode_id": {
@@ -644,9 +518,7 @@
       "kind": "op",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "transcription_dispatcher"
-      ],
+      "modules": ["transcription_dispatcher"],
       "doc": "One dispatcher invocation: a wake, a scheduled reconcile, or a targeted drain. Field transcript_dispatch_source names what called it; job_id is set on wake dispatches.",
       "fields": {
         "transcript_dispatch_source": {
@@ -668,9 +540,7 @@
       "kind": "op",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "transcription_dispatcher"
-      ],
+      "modules": ["transcription_dispatcher"],
       "doc": "One chunk assignment's terminal: ok after the control plane accepted the result, expected(transcript.late_completion) on the 409 path, or error(transcript.<safe error code>).",
       "fields": {
         "job_id": {
@@ -692,9 +562,7 @@
       "kind": "op",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "transcription_dispatcher"
-      ],
+      "modules": ["transcription_dispatcher"],
       "doc": "One finalizer assignment's terminal: ok, expected(transcript.late_completion), or error(transcript.<safe error code>), with the merged document's cue count.",
       "fields": {
         "job_id": {
@@ -1198,139 +1066,42 @@
     {
       "name": "transcript.job",
       "doc": "The artifact_jobs.state of a transcription job (chunk or finalize), committed by the worker repository.",
-      "states": [
-        "pending",
-        "leased",
-        "retryable",
-        "completed",
-        "dead_letter",
-        "cancelled"
-      ],
+      "states": ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"],
       "initial": "pending",
       "edges": [
-        [
-          "pending",
-          "leased"
-        ],
-        [
-          "retryable",
-          "leased"
-        ],
-        [
-          "leased",
-          "completed"
-        ],
-        [
-          "leased",
-          "retryable"
-        ],
-        [
-          "leased",
-          "dead_letter"
-        ],
-        [
-          "leased",
-          "pending"
-        ],
-        [
-          "leased",
-          "cancelled"
-        ],
-        [
-          "pending",
-          "cancelled"
-        ],
-        [
-          "retryable",
-          "dead_letter"
-        ],
-        [
-          "dead_letter",
-          "pending"
-        ]
+        ["pending", "leased"],
+        ["retryable", "leased"],
+        ["leased", "completed"],
+        ["leased", "retryable"],
+        ["leased", "dead_letter"],
+        ["leased", "pending"],
+        ["leased", "cancelled"],
+        ["pending", "cancelled"],
+        ["retryable", "dead_letter"],
+        ["dead_letter", "pending"]
       ],
-      "triggers": [
-        "claim",
-        "retry",
-        "complete",
-        "cancel",
-        "recover",
-        "requeue"
-      ]
+      "triggers": ["claim", "retry", "complete", "cancel", "recover", "requeue"]
     },
     {
       "name": "transcript.status",
       "doc": "The transcriptions.status of a transcript. Only verifying to complete is emitted today (the finalizer's completion commit).",
-      "states": [
-        "not_requested",
-        "preparing",
-        "transcribing",
-        "verifying",
-        "complete",
-        "retryable_failure",
-        "terminal_failure",
-        "deleted"
-      ],
+      "states": ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted"],
       "initial": "not_requested",
       "edges": [
-        [
-          "not_requested",
-          "preparing"
-        ],
-        [
-          "preparing",
-          "transcribing"
-        ],
-        [
-          "preparing",
-          "terminal_failure"
-        ],
-        [
-          "transcribing",
-          "verifying"
-        ],
-        [
-          "transcribing",
-          "retryable_failure"
-        ],
-        [
-          "transcribing",
-          "terminal_failure"
-        ],
-        [
-          "retryable_failure",
-          "transcribing"
-        ],
-        [
-          "retryable_failure",
-          "terminal_failure"
-        ],
-        [
-          "verifying",
-          "complete"
-        ],
-        [
-          "verifying",
-          "retryable_failure"
-        ],
-        [
-          "verifying",
-          "terminal_failure"
-        ],
-        [
-          "complete",
-          "deleted"
-        ]
+        ["not_requested", "preparing"],
+        ["preparing", "transcribing"],
+        ["preparing", "terminal_failure"],
+        ["transcribing", "verifying"],
+        ["transcribing", "retryable_failure"],
+        ["transcribing", "terminal_failure"],
+        ["retryable_failure", "transcribing"],
+        ["retryable_failure", "terminal_failure"],
+        ["verifying", "complete"],
+        ["verifying", "retryable_failure"],
+        ["verifying", "terminal_failure"],
+        ["complete", "deleted"]
       ],
-      "triggers": [
-        "request",
-        "prepare",
-        "claim",
-        "retry",
-        "fail",
-        "finalize_complete",
-        "delete"
-      ]
+      "triggers": ["request", "prepare", "claim", "retry", "fail", "finalize_complete", "delete"]
     }
   ],
   "facts": [
@@ -1406,13 +1177,7 @@
           "event": "transcript.db.recording",
           "source": "db",
           "claim": "transcript_recording_state",
-          "fields": [
-            "recording_id",
-            "transcript_recording_state",
-            "transcript_completed_ms",
-            "transcript_mode",
-            "est_server_ms"
-          ]
+          "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode", "est_server_ms"]
         }
       ]
     },
@@ -1427,17 +1192,7 @@
           "event": "transcript.db.prep",
           "source": "db",
           "claim": "transcript_prep_state",
-          "fields": [
-            "recording_id",
-            "transcript_exists",
-            "transcript_prep_state",
-            "transcript_error_code",
-            "transcript_terminal_ms",
-            "transcript_attempt_count",
-            "transcript_available_ms",
-            "transcript_lease_expiry_ms",
-            "est_server_ms"
-          ]
+          "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms", "est_server_ms"]
         }
       ]
     },
@@ -1451,18 +1206,7 @@
           "event": "transcript.db.attempt",
           "source": "db",
           "claim": "transcript_attempt_state",
-          "fields": [
-            "transcript_attempt_state",
-            "attempt",
-            "transcript_generation",
-            "transcript_provider",
-            "transcript_observed_ms",
-            "transcript_error_code",
-            "transcript_finished_ms",
-            "transcript_chunk_index",
-            "transcript_speech_ms",
-            "est_server_ms"
-          ]
+          "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms", "est_server_ms"]
         }
       ]
     },
@@ -1476,14 +1220,7 @@
           "event": "transcript.db.render",
           "source": "db",
           "claim": "transcript_prep_state",
-          "fields": [
-            "job_id",
-            "transcript_prep_state",
-            "transcript_terminal_ms",
-            "transcript_available_ms",
-            "transcript_created_ms",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "transcript_prep_state", "transcript_terminal_ms", "transcript_available_ms", "transcript_created_ms", "est_server_ms"]
         }
       ]
     },
@@ -1497,12 +1234,7 @@
           "event": "transcript.db.episode",
           "source": "db",
           "claim": "transcript_mode",
-          "fields": [
-            "episode_id",
-            "transcript_mode",
-            "transcript_recordings",
-            "est_server_ms"
-          ]
+          "fields": ["episode_id", "transcript_mode", "transcript_recordings", "est_server_ms"]
         }
       ]
     },
@@ -1516,14 +1248,7 @@
           "event": "transcript.r2.object",
           "source": "r2",
           "claim": "transcript_r2_result",
-          "fields": [
-            "transcript_r2_result",
-            "transcript_size_bytes",
-            "transcript_sha_match",
-            "transcript_cue_count",
-            "transcript_provider",
-            "est_server_ms"
-          ]
+          "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider", "est_server_ms"]
         }
       ]
     },
@@ -1537,12 +1262,7 @@
           "event": "transcript.wake",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1556,13 +1276,7 @@
           "event": "transcript.claim",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1576,13 +1290,7 @@
           "event": "transcript.finalize_claim",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1596,14 +1304,7 @@
           "event": "transcript.job_retry",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "transcript_error_code",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1617,13 +1318,7 @@
           "event": "transcript.job_complete",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1637,13 +1332,7 @@
           "event": "transcript.finalize_accept",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1657,14 +1346,7 @@
           "event": "transcript.finalize_retry",
           "source": "api",
           "claim": "decision",
-          "fields": [
-            "job_id",
-            "attempt",
-            "transcript_error_code",
-            "reason_code",
-            "decision",
-            "est_server_ms"
-          ]
+          "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
         }
       ]
     },
@@ -1678,18 +1360,8 @@
           "event": "transcript.document_read",
           "source": "api",
           "claim": "outcome",
-          "failure_claims": [
-            "error"
-          ],
-          "fields": [
-            "transcript_route",
-            "episode_id",
-            "job_id",
-            "transcript_cue_count",
-            "reason_code",
-            "outcome",
-            "est_server_ms"
-          ]
+          "failure_claims": ["error"],
+          "fields": ["transcript_route", "episode_id", "job_id", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
         }
       ]
     },
@@ -1703,23 +1375,13 @@
           "event": "transcript.talk_time_served",
           "source": "api",
           "claim": "transcript_talk_status",
-          "fields": [
-            "episode_id",
-            "transcript_talk_status",
-            "transcript_in_progress",
-            "est_server_ms"
-          ]
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
         },
         {
           "event": "transcript.db.talk",
           "source": "db",
           "claim": "transcript_talk_status",
-          "fields": [
-            "episode_id",
-            "transcript_talk_status",
-            "transcript_in_progress",
-            "est_server_ms"
-          ]
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
         }
       ]
     },
@@ -1733,16 +1395,8 @@
           "event": "transcript.chunk",
           "source": "lambda",
           "claim": "outcome",
-          "failure_claims": [
-            "error"
-          ],
-          "fields": [
-            "job_id",
-            "attempt",
-            "reason_code",
-            "outcome",
-            "est_server_ms"
-          ]
+          "failure_claims": ["error"],
+          "fields": ["job_id", "attempt", "reason_code", "outcome", "est_server_ms"]
         }
       ]
     },
@@ -1756,17 +1410,8 @@
           "event": "transcript.finalize",
           "source": "lambda",
           "claim": "outcome",
-          "failure_claims": [
-            "error"
-          ],
-          "fields": [
-            "job_id",
-            "attempt",
-            "transcript_cue_count",
-            "reason_code",
-            "outcome",
-            "est_server_ms"
-          ]
+          "failure_claims": ["error"],
+          "fields": ["job_id", "attempt", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
         }
       ]
     },
@@ -1780,15 +1425,8 @@
           "event": "transcript.dispatcher.invoke",
           "source": "lambda",
           "claim": "outcome",
-          "failure_claims": [
-            "error"
-          ],
-          "fields": [
-            "transcript_dispatch_source",
-            "job_id",
-            "outcome",
-            "est_server_ms"
-          ]
+          "failure_claims": ["error"],
+          "fields": ["transcript_dispatch_source", "job_id", "outcome", "est_server_ms"]
         }
       ]
     }
@@ -1799,60 +1437,46 @@
       "item": "job",
       "per": "item",
       "doc": "A transcription job reached dead_letter, or the transcription reached terminal_failure.",
-      "user_words": [
-        "my transcript never came"
-      ],
+      "user_words": ["my transcript never came"],
       "witnesses": [
         {
           "fact": "transcript.job_state",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
           "doc": "The job row: state, error code, attempts and terminal time."
         },
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "The transcription's status."
         },
         {
           "fact": "transcript.retry_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.job_retry\"' api.log | grep {job}",
           "doc": "The dispatcher's error code reaching the control plane."
         },
         {
           "fact": "transcript.finalize_retry_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.finalize_retry\"' api.log | grep {job}",
           "doc": "The finalizer's error code reaching the control plane."
         },
         {
           "fact": "transcript.chunk_op",
-          "from": [
-            "lambda"
-          ],
+          "from": ["lambda"],
           "required": true,
           "query": "grep '\"name\":\"transcript.chunk\"' dispatcher.jsonl | grep {job}",
           "doc": "The dispatcher's terminal for the chunk."
         },
         {
           "fact": "transcript.finalize_op",
-          "from": [
-            "lambda"
-          ],
+          "from": ["lambda"],
           "required": true,
           "query": "grep '\"name\":\"transcript.finalize\"' dispatcher.jsonl | grep {job}",
           "doc": "The dispatcher's terminal for the finalizer."
@@ -1865,33 +1489,25 @@
       "item": "job",
       "per": "item",
       "doc": "The transcription is complete but its stored document is missing, differs from the recorded metadata, fails validation, or the API failed to read a document that is in fact readable.",
-      "user_words": [
-        "the transcript won't open"
-      ],
+      "user_words": ["the transcript won't open"],
       "witnesses": [
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "The status and recorded artifact metadata."
         },
         {
           "fact": "transcript.object",
-          "from": [
-            "r2"
-          ],
+          "from": ["r2"],
           "required": true,
           "query": "r2 get <artifact_key>",
           "doc": "The checker's own readback of the stored document."
         },
         {
           "fact": "transcript.doc",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.document_read\"' api.log | grep {episode}",
           "doc": "Document reads the API attempted in the window."
@@ -1904,60 +1520,46 @@
       "item": "job",
       "per": "item",
       "doc": "A claimed chunk attempt's lease expired with no accepted result and no accepted retry, so the work was silently dropped and waits for lease recovery.",
-      "user_words": [
-        "transcription restarted itself"
-      ],
+      "user_words": ["transcription restarted itself"],
       "witnesses": [
         {
           "fact": "transcript.job_state",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
           "doc": "The job row: leased with an expired lease, or a recovered row with error_code lease_expired."
         },
         {
           "fact": "transcript.attempts",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcription_attempts where chunk_id = (select chunk_id from artifact_jobs where id = '{job}')\"",
           "doc": "The attempts the control plane recorded."
         },
         {
           "fact": "transcript.claim_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
           "doc": "How the attempt's lease committed: leased, or the claim-handler failure decisions of issue #1510."
         },
         {
           "fact": "transcript.complete_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.job_complete\"' api.log | grep {job}",
           "doc": "Whether an accepted result exists for the attempt."
         },
         {
           "fact": "transcript.retry_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.job_retry\"' api.log | grep {job}",
           "doc": "Whether the attempt was reported retryable or dead."
         },
         {
           "fact": "transcript.chunk_op",
-          "from": [
-            "lambda"
-          ],
+          "from": ["lambda"],
           "required": true,
           "query": "grep '\"name\":\"transcript.chunk\"' dispatcher.jsonl | grep {job}",
           "doc": "The dispatcher's terminal for the attempt; its absence after a claim is the open gap."
@@ -1970,69 +1572,53 @@
       "item": "job",
       "per": "item",
       "doc": "A transcription stopped moving: a job waits unclaimed, a lease outlived its expiry with no work recorded, a transcription sits mid-pipeline with no open job, or an automatic Recording never got a transcription.",
-      "user_words": [
-        "the transcript never appeared"
-      ],
+      "user_words": ["the transcript never appeared"],
       "witnesses": [
         {
           "fact": "transcript.job_state",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
           "doc": "The job's state, available_at and lease expiry."
         },
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "The transcription's status and last update."
         },
         {
           "fact": "transcript.recording",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from recordings where id = (select recording_id from artifact_jobs where id = '{job}')\"",
           "doc": "The Recording's status and completion time."
         },
         {
           "fact": "transcript.prep",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from recording_jobs where recording_id = '<rec>' and kind = 'transcription'\"",
           "doc": "The audio-preparation job slice 10 owns."
         },
         {
           "fact": "transcript.render",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from recording_jobs where id = '{job}'\"",
           "doc": "The item's own row when it is the Recording's export job."
         },
         {
           "fact": "transcript.claim_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
           "doc": "Chunk claims in the last five minutes pick the schedule-vs-worker attribution."
         },
         {
           "fact": "transcript.finalize_claim_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.finalize_claim\"' api.log | grep {job}",
           "doc": "Finalizer claims in the last five minutes pick the schedule-vs-worker attribution."
@@ -2045,24 +1631,18 @@
       "item": "job",
       "per": "item",
       "doc": "The transcript completed more than 60 minutes after the transcription row was created.",
-      "user_words": [
-        "the transcript took over an hour"
-      ],
+      "user_words": ["the transcript took over an hour"],
       "witnesses": [
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "created_at and completed_at."
         },
         {
           "fact": "transcript.job_state",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
           "doc": "The finalize job's row: attempts and latest error code for attribution."
@@ -2075,33 +1655,25 @@
       "item": "job",
       "per": "item",
       "doc": "The dispatcher measured at least 2000 ms of speech in the audio, but the stored document has zero cues.",
-      "user_words": [
-        "the transcript is empty"
-      ],
+      "user_words": ["the transcript is empty"],
       "witnesses": [
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "The transcription is complete."
         },
         {
           "fact": "transcript.attempts",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcription_attempts a join transcript_chunks c on a.chunk_id = c.id where a.transcript_id = (select transcript_id from artifact_jobs where id = '{job}')\"",
           "doc": "Each chunk's accepted attempt and the speech the provider measured."
         },
         {
           "fact": "transcript.object",
-          "from": [
-            "r2"
-          ],
+          "from": ["r2"],
           "required": true,
           "query": "r2 get <artifact_key>",
           "doc": "The checker's readback: the stored document's cue count."
@@ -2114,52 +1686,39 @@
       "item": "episode",
       "per": "item",
       "doc": "Talk-time answers transcript_pending for an Episode where no transcript can arrive.",
-      "user_words": [
-        "talk time still says processing"
-      ],
+      "user_words": ["talk time still says processing"],
       "witnesses": [
         {
           "fact": "transcript.episode",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select config_snapshot from episodes where id = '{episode}'\"; reader: config_snapshot.artifact_policy.transcription.mode",
           "doc": "The Episode's transcription mode and Recording count."
         },
         {
           "fact": "transcript.recording",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from recordings where episode_id = '{episode}'\"",
           "doc": "Every Recording's status and completion time."
         },
         {
           "fact": "transcript.row",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from transcriptions where episode_id = '{episode}'\"",
           "doc": "Every transcription row of the Episode."
         },
         {
           "fact": "transcript.prep",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from recording_jobs where episode_id = '{episode}' and kind = 'transcription'\"",
           "doc": "Every preparation row of the Episode."
         },
         {
           "fact": "transcript.talk",
-          "from": [
-            "api",
-            "db"
-          ],
+          "from": ["api", "db"],
           "required": true,
           "query": "grep '\"name\":\"transcript.talk_time_served\"' api.log | grep {episode}",
           "doc": "The live answer the endpoint served."
@@ -2176,36 +1735,28 @@
       "witnesses": [
         {
           "fact": "transcript.wake_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.wake\"' api.log | grep {job}",
           "doc": "The wake decisions for this job."
         },
         {
           "fact": "transcript.claim_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
           "doc": "The first leased claim's time."
         },
         {
           "fact": "transcript.finalize_claim_decision",
-          "from": [
-            "api"
-          ],
+          "from": ["api"],
           "required": true,
           "query": "grep '\"name\":\"transcript.finalize_claim\"' api.log | grep {job}",
           "doc": "Finalizer claims are the pickup for finalize jobs."
         },
         {
           "fact": "transcript.job_state",
-          "from": [
-            "db"
-          ],
+          "from": ["db"],
           "required": true,
           "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
           "doc": "The job's created_at is the 90-second clock's start."

@@ -31,8 +31,7 @@ export const settle_ms = 60_000;
 export const healthy_absent = ["transcript.claim_decision", "transcript.finalize_claim_decision"];
 
 /** @param {Declaration} declaration */
-export const applies = (declaration, seat) =>
-  seat === null && declaration.kind === "job" && (TRANSCRIPTION_JOB_KINDS.has(declaration.job_kind) || declaration.job_kind === "render");
+export const applies = (declaration, seat) => seat === null && declaration.kind === "job" && (TRANSCRIPTION_JOB_KINDS.has(declaration.job_kind) || declaration.job_kind === "render");
 
 /** @param {DecideInput} input @returns {Decision} */
 export function decide({ readings, declaration }) {
