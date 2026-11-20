@@ -26,6 +26,7 @@ export const GOLDENS = {
   "resolve-haris": ["Haris"],
   "attempt-unresolved": ["attempt", "cs_6d5e"],
   "space-day": ["space", "spc_5bac", "2026-11-18"],
+  "tenant-day": ["tenant", "ten_1f0c", "2026-11-18"],
   "platform-day": ["platform", "production", "2026-11-18"],
   "job-recording": ["job", "job_4a3b"],
 };
@@ -129,7 +130,7 @@ describe("paging", () => {
   it("stops at a budget, says so, and still prints every gap", async () => {
     const out = (await diagnose(["day", "TH", "2026-11-18", "--budget", "10"])).out;
     assert.match(out, /^more: \d+ omitted by budget/mu);
-    assert.equal(out.split("\n").filter((line) => line.startsWith("gap: ")).length, 5);
+    assert.equal(out.split("\n").filter((line) => line.startsWith("gap: ")).length, 4);
   });
 });
 

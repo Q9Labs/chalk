@@ -39,6 +39,7 @@ export const PEOPLE = Object.freeze({
 });
 
 export const IDS = Object.freeze({
+  tenant: TH,
   space: "5bace000-1c2d-4e3f-8a4b-5c6d7e8f9a01",
   ep9feb: "9feb0ff6-3c1a-4e7b-9a52-0d4c8e1f2a77",
   ep7a21: "7a21c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
@@ -228,11 +229,15 @@ export function nov18() {
     evidence: { observations: [], watermarks: [{ source: "db", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["recording.job_state"], build: "postgres" }] },
   };
 
-  // One UTC day of a Space and of the platform. No check judges them yet (the slices add Space, Tenant and platform checks), so
+  // One UTC day of a Space, of the tenant and of the platform. No check judges them yet (the slices add Space, Tenant and platform checks), so
   // they read as unchecked, never healthy.
   const utcDay = { from_ms: at("2026-11-18T00:00:00Z"), to_ms: at("2026-11-19T00:00:00Z") };
   const spaceDay = {
     declaration: { kind: /** @type {const} */ ("space"), id: IDS.space, tenant: TH, day: "2026-11-18", window: utcDay, episodes: [ep, IDS.ep7a21, IDS.ep5c0d, IDS.ep31aa] },
+    evidence: { observations: [], watermarks: [] },
+  };
+  const tenantDay = {
+    declaration: { kind: /** @type {const} */ ("tenant"), id: TH, tenant: TH, day: "2026-11-18", window: utcDay },
     evidence: { observations: [], watermarks: [] },
   };
   const platformDay = {
@@ -240,7 +245,7 @@ export function nov18() {
     evidence: { observations: [], watermarks: [] },
   };
 
-  const all = [ep9feb, ep7a21, ep5c0d, ep31aa, ep2d4e, epe0f1, attempt, job, spaceDay, platformDay];
+  const all = [ep9feb, ep7a21, ep5c0d, ep31aa, ep2d4e, epe0f1, attempt, job, spaceDay, tenantDay, platformDay];
   return {
     asof_ms: ASOF,
     tenants: [

@@ -364,9 +364,14 @@ function candidates(session, query, found, range = null) {
   return resolveView({ query, candidates: found, ctx: session.ctx, tz: "UTC", carry });
 }
 
-/** Items of a tenant (or every tenant) that started inside a range, with their status. */
+const SWEPT = new Set(["episode", "attempt", "job"]);
+
+/**
+ * Episodes, attempts and jobs of a tenant (or every tenant) that started inside a range, with their status. A Space, Tenant or platform
+ * day is an aggregate of those items, so a sweep leaves it out and its own command (`space`, `tenant`, `platform`) opens it.
+ */
 function itemsIn(/** @type {Session} */ session, /** @type {string | null} */ tenant, /** @type {{ from_ms: number, to_ms: number }} */ range) {
-  return session.items.filter((item) => (tenant === null || item.tenant === tenant) && item.declaration.window.from_ms >= range.from_ms && item.declaration.window.from_ms < range.to_ms).map((item) => ({ item, status: statusFor(session, item) }));
+  return session.items.filter((item) => SWEPT.has(item.kind) && (tenant === null || item.tenant === tenant) && item.declaration.window.from_ms >= range.from_ms && item.declaration.window.from_ms < range.to_ms).map((item) => ({ item, status: statusFor(session, item) }));
 }
 
 /** @param {Session} session @param {Item} item @returns {Status} */
