@@ -12,10 +12,10 @@ Participant with the owner role, a "student" is a guest or collaborator, the
 product vocabulary is role-neutral (owner, collaborator, observer); the
 personas only make the charts readable. See [GLOSSARY.md](../../GLOSSARY.md).
 
-| Flow | Model |
-| ---- | ----- |
-| [1: a teacher starts a class](1-teacher-starts-class/README.md) | `StartClass.tla` |
-| [2: a student joins](2-student-joins/README.md) | `StudentJoins.tla` |
-| [3: the network drops mid-class and recovers](3-network-drops/README.md) | `NetworkDrops.tla` |
-| [4: the class ends and the recording is finalised](4-class-ends-recording/README.md) | `ClassEnds.tla` |
-| [5: the host removes or demotes a student](5-host-removes-student/README.md) | `HostActsOnStudent.tla` |
+| Flow                                                                                 | Model                   |
+| ------------------------------------------------------------------------------------ | ----------------------- |
+| [1: a teacher starts a class](1-teacher-starts-class/README.md)                      | `StartClass.tla`        |
+| [2: a student joins](2-student-joins/README.md)                                      | `StudentJoins.tla`      |
+| [3: the network drops mid-class and recovers](3-network-drops/README.md)             | `NetworkDrops.tla`      |
+| [4: the class ends and the recording is finalised](4-class-ends-recording/README.md) | `ClassEnds.tla`         |
+| [5: the host removes or demotes a student](5-host-removes-student/README.md)         | `HostActsOnStudent.tla` |
