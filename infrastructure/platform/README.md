@@ -16,29 +16,31 @@ Do not reuse a deploy role. It needs the following access for each future seeded
 | Boundary                                   | Actions                                                                                                                                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Caller identity                            | `sts:GetCallerIdentity`                                                                                                                                                          |
-| Existing `alchemy-state` table             | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query`                                                                                                                   |
-| Stage leases on that table                 | `dynamodb:PutItem`, `dynamodb:DeleteItem` for the registered `STAGE#<stack>#production` partition; Alchemy uses conditional writes to acquire, renew and release the `LEASE` row |
-| Existing state overflow bucket             | `s3:ListBucket` (the state backend checks existence with HeadBucket)                                                                                                             |
+| Existing `alchemy-state` table             | `dynamodb:DescribeTable`, `dynamodb:GetItem`, `dynamodb:Query`, limited by `dynamodb:LeadingKeys` to the registered stage partitions and `CATALOG`                              |
+| Stage leases on that table                 | `dynamodb:PutItem` for the registered `STAGE#<stack>#production` partitions, limited to the attributes `PK`, `SK`, `token` and `expiresAt`; `dynamodb:DeleteItem` for the same partitions. No `UpdateItem` or `BatchWriteItem` |
+| Existing state overflow bucket             | `s3:ListBucket`, `s3:GetBucketLocation` (the state backend checks existence with HeadBucket)                                                                                     |
 | Existing state overflow objects            | `s3:GetObject` on the registered stack/stage prefixes in the existing Alchemy overflow bucket                                                                                    |
 | Dispatcher IAM roles                       | `iam:GetRole`, `iam:ListRolePolicies`, `iam:GetRolePolicy`, `iam:ListAttachedRolePolicies`, `iam:ListRoleTags`                                                                   |
 | Dispatcher queues                          | `sqs:GetQueueAttributes`, `sqs:ListQueueTags`                                                                                                                                    |
 | Dispatcher logs                            | `logs:DescribeLogGroups`, `logs:ListTagsForResource`                                                                                                                             |
-| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy`                                                                                                  |
+| Dispatcher function and invoke permissions | `lambda:GetFunction`, `lambda:GetFunctionEventInvokeConfig`, `lambda:GetPolicy`, `lambda:ListTags` on the dispatcher function only                                               |
 | Dispatcher schedule                        | `scheduler:GetSchedule`                                                                                                                                                          |
 | Dispatcher alarms                          | `cloudwatch:DescribeAlarms`, `cloudwatch:ListTagsForResource`                                                                                                                    |
-| Recorder download distribution             | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource` on that distribution                                                         |
+| Recorder download distributions            | `cloudfront:GetDistribution`, `cloudfront:GetDistributionConfig`, `cloudfront:ListTagsForResource` on the runtime downloads distribution and the recorder archives distribution |
 | Recorder download distribution parts       | `cloudfront:GetOriginAccessControl(Config)`, `GetPublicKey(Config)`, `GetKeyGroup(Config)` on `*`, because the scan reads them through ids stored in state                      |
-| Recorder download bucket                   | `s3:GetBucketPolicy`, `s3:ListBucket`, `s3:GetBucketLocation` on the existing artifact bucket                                                                                    |
+| Recorder download buckets                  | `s3:GetBucketPolicy`, `s3:GetBucketLocation` on the production releases bucket and the recorder artifacts bucket                                                                 |
 
 Provider state reads use existing recorded identities, not account-wide adoption
 or list/inventory operations. No workload mutation, state bootstrap, state
 resource/output write, overflow write or `drift --repair` permission is needed.
 The state table and bucket must already be bootstrapped by an operator; CI
 refuses missing infrastructure rather than creating it. Lease writes are the
-only intended writes and share the DynamoDB API actions with resource-state
-writes. A partition condition limits the registered stages but cannot restrict the
-sort key with `dynamodb:LeadingKeys`; grant this role only to this workflow and
-keep the explicit read-only command boundary.
+only intended writes. `PutItem` is limited to the lease attributes, but
+`DeleteItem` shares its API action with resource-state rows and `LeadingKeys` cannot
+restrict the sort key, so the role could delete a registered stage's state rows.
+That residual risk is accepted: the role trusts only the master ref of this repository,
+the workflow runs the read-only drift command, and a deleted row shows up as drift
+at the next run. Grant this role only to this workflow.
 
 Also configure the existing `ONCALL_WEBHOOK_URL` secret. Detailed provider logs
 are kept only in a mode-0700 temporary directory and deleted at the end; CI
