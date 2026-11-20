@@ -6,7 +6,7 @@ Each file here is the spec for one vertical slice of the [hyper-observability pl
 |---|---|---|---|---|---|
 | 1 | Entry: dashboard, invite, admission, prejoin, embed, boot | [01-entry.md](01-entry.md) | SWE-2 | `observability/registry/areas/entry.json` | `boot.` `embed.` `invite.` `admission.` `prejoin.` `dashboard.` |
 | 2 | Join and media connection, listen-only | (Opus) | Opus | `observability/registry/areas/join.json` | `join.` `media.` |
-| 3 | Audio chain | (Opus) | Opus | `observability/registry/areas/audio.json` | `audio.` |
+| 3 | Audio chain | [03-audio.md](03-audio.md) | Sol | `observability/registry/areas/audio.json` | `audio.` |
 | 4 | Video | [04-video.md](04-video.md) | SWE-2 | `observability/registry/areas/video.json` | `video.` |
 | 5 | Screen share | [05-screen-share.md](05-screen-share.md) | SWE-2 | `observability/registry/areas/share.json` | `share.` |
 | 6 | Whiteboard | (Opus) | Opus | `observability/registry/areas/board.json` | `board.` |

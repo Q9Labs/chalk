@@ -4,6 +4,7 @@ import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
 import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
 import { cameraEffectFailure } from "../media/camera-effects";
+import { recordAudio } from "../media/audio-observation";
 import { describeMediaCaptureError, failCapture } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionMediaDevices } from "../connection/dependencies";
@@ -492,6 +493,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const controlRevision = Math.max(state.serverSequence, this.#ports?.sync.getSnapshot().control?.revision ?? -1);
     const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
+    if (source === "microphone") recordAudio(this.#connection.telemetry, enabled ? "local_on" : "local_off");
     state.capturePause = "none";
     if (source !== "screen") this.#cancelIdleRelease(source);
     if (!enabled) {
@@ -1403,6 +1405,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     state.forcedRevision = revision;
     state.localEnabled = false;
     this.#pauseTracks(source);
+    if (source === "microphone" && cause === "moderation_pause") recordAudio(this.#connection.telemetry, "forced_off");
     if (cause === "capture_cleanup" && source !== "screen" && ports.media.pauseLocalCapture) {
       state.capturePause = "pending";
       this.#notifyCapturePauses(ports);

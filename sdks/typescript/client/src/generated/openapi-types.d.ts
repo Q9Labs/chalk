@@ -2732,6 +2732,39 @@ export interface components {
         /** @enum {string} */
         action?: "mute" | "unmute" | "publish" | "unpublish" | "subscribe" | "unsubscribe" | "share_start" | "share_stop";
         attempt?: number | null;
+        /** @enum {string} */
+        audio_observation?:
+          | "default_input"
+          | "selected_input"
+          | "capture_live"
+          | "capture_denied"
+          | "input_unavailable"
+          | "capture_missing"
+          | "capture_failed"
+          | "local_on"
+          | "local_off"
+          | "forced_off"
+          | "published"
+          | "publish_failed"
+          | "remote_off"
+          | "pull_failed"
+          | "subscribed"
+          | "inbound_flat"
+          | "inbound_flowing"
+          | "playing"
+          | "autoplay_blocked"
+          | "playback_paused"
+          | "capture_signal_no_outbound"
+          | "outbound_flowing"
+          | "output_selected"
+          | "output_failed"
+          | "surface_muted"
+          | "surface_unmuted"
+          | "surface_speaking"
+          | "surface_quiet";
+        audio_peer_id?: components["schemas"]["UUID"];
+        audio_sample_ms?: number | null;
+        audio_track_key?: string;
         bundle_tag_held?: boolean | null;
         close_code?: number | null;
         /** @enum {string} */
@@ -2877,6 +2910,7 @@ export interface components {
           | "access_refresh_failed"
           | "access_refreshed"
           | "access_retry"
+          | "audio_observed"
           | "audio_receive_stuck"
           | "audio_receive_summary"
           | "call_ended"

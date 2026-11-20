@@ -47,6 +47,7 @@ var specs = map[string]spec{
 	"media_http_error":          connection(),
 	"media_projection_mismatch": connection(),
 	"access_retry":              connection(),
+	"audio_observed":            {allowed: []string{"audio_observation", "audio_peer_id", "audio_track_key", "audio_sample_ms"}, required: []string{"audio_observation"}},
 	"audio_receive_stuck":       connection(),
 	"audio_receive_summary":     connection("receive_counts"),
 	"receivers_closed":          connection("receivers_stopped", "bundle_tag_held"),
@@ -80,12 +81,42 @@ func EventTypes() []string {
 }
 
 var fieldEnums = map[string][]string{
-	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
-	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
-	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
-	"granted_audio":         {"granted", "not_granted", "unknown"},
-	"granted_video":         {"granted", "not_granted", "unknown"},
-	"upload_failure":        {"initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"},
+	"media_error_kind": {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
+	"error_name":       {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
+	"media_error_step": {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
+	"granted_audio":    {"granted", "not_granted", "unknown"},
+	"granted_video":    {"granted", "not_granted", "unknown"},
+	"upload_failure":   {"initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"},
+	"audio_observation": {
+		"default_input",
+		"selected_input",
+		"capture_live",
+		"capture_denied",
+		"input_unavailable",
+		"capture_missing",
+		"capture_failed",
+		"local_on",
+		"local_off",
+		"forced_off",
+		"published",
+		"publish_failed",
+		"remote_off",
+		"pull_failed",
+		"subscribed",
+		"inbound_flat",
+		"inbound_flowing",
+		"playing",
+		"autoplay_blocked",
+		"playback_paused",
+		"capture_signal_no_outbound",
+		"outbound_flowing",
+		"output_selected",
+		"output_failed",
+		"surface_muted",
+		"surface_unmuted",
+		"surface_speaking",
+		"surface_quiet",
+	},
 	"source":                {"microphone", "camera", "screen_audio", "screen_video"},
 	"receive_state":         {"announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"},
 	"track_state":           {"live", "muted", "ended"},
@@ -131,6 +162,8 @@ func FieldEnum(field string) []string {
 // at all. A stats window longer than MaxWindowMS is a gap window, which Check bounds alone.
 func FieldRange(field string) (low, high float64, numeric bool) {
 	switch field {
+	case "audio_sample_ms":
+		return MinWindowMS, MaxWindowMS, true
 	case "seq", "next_seq", "from", "to", "elapsed_ms", "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "dropped", "audio_energy":
 		return 0, MaxMilliseconds, true
 	case "window_ms":

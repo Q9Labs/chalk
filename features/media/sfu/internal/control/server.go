@@ -15,6 +15,7 @@ import (
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
+	"github.com/q9labs/chalk/features/media/sfu/internal/obs"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
@@ -30,6 +31,11 @@ type Server struct {
 
 // Start binds the media and control sockets and begins serving.
 func Start(cfg config.Config, log *slog.Logger) (*Server, error) {
+	env := cfg.Telemetry.Environment
+	if env == "" {
+		env = "local"
+	}
+	obs.Configure(obs.Config{Logger: log, Module: "sfu", Env: env, ReleaseSHA: cfg.Telemetry.Version})
 	tlsConfig, err := serverTLS(cfg)
 	if err != nil {
 		return nil, err

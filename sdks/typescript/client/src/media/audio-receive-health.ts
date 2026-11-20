@@ -1,4 +1,6 @@
+import type { TelemetryEvent, TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
+import { recordAudio, remoteAudioTrack } from "./audio-observation";
 import { audioStats, increased, readStats, type AudioStats } from "./audio-stats";
 import type { MediaPublication } from "./plane";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
@@ -12,6 +14,8 @@ type Observation = { element: HTMLAudioElement; result?: PlayResult; started: bo
 type Entry = {
   source: AudioSource;
   projectionKey: string;
+  observedTrack: ReturnType<typeof remoteAudioTrack>;
+  hop?: TelemetryEvent["audio_observation"];
   since: number;
   pull: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded";
   failure?: FailureKind;
@@ -19,6 +23,8 @@ type Entry = {
   projectionOff: boolean;
   trackId?: string;
   bytes?: number;
+  sampledAt?: number;
+  paused?: boolean;
 };
 type Snapshot = Pick<TransportDiagnostic, "receive_state" | "track_state" | "element_state" | "play_result">;
 
@@ -29,6 +35,7 @@ export type AudioReceiveHealthOptions = {
   connection: () => RTCPeerConnection | null;
   tracks: () => Iterable<CloudflareSFURemoteTrack>;
   onEvent: (event: TransportDiagnostic) => void;
+  audioTelemetry?: Pick<TelemetrySink, "record">;
 };
 
 export class AudioReceiveHealth {
@@ -78,6 +85,8 @@ export class AudioReceiveHealth {
       entry.reported = false;
       entry.trackId = undefined;
       entry.bytes = undefined;
+      entry.sampledAt = undefined;
+      entry.hop = undefined;
     }
   }
 
@@ -99,8 +108,19 @@ export class AudioReceiveHealth {
     for (const publication of publications) {
       if (publication.source !== "microphone" && publication.source !== "screen_audio") continue;
       desired.add(publication.publicationId);
-      if (!this.#entries.has(publication.publicationId)) {
-        this.#entries.set(publication.publicationId, { source: publication.source, projectionKey: projectionKey(publication.participantId, publication.source), since: this.#options.now(), pull: "announced", reported: false, projectionOff: false });
+      const existing = this.#entries.get(publication.publicationId);
+      if (existing) existing.paused = publication.paused;
+      else {
+        this.#entries.set(publication.publicationId, {
+          source: publication.source,
+          projectionKey: projectionKey(publication.participantId, publication.source),
+          paused: publication.paused,
+          observedTrack: publication.source === "microphone" && this.#options.audioTelemetry ? remoteAudioTrack(publication.participantId, publication.publicationId) : undefined,
+          since: this.#options.now(),
+          pull: "announced",
+          reported: false,
+          projectionOff: false,
+        });
       }
     }
     for (const id of this.#entries.keys()) {
@@ -182,6 +202,7 @@ export class AudioReceiveHealth {
     this.#resetPlayback();
     for (const entry of this.#entries.values()) {
       entry.bytes = undefined;
+      entry.sampledAt = undefined;
     }
   }
 
@@ -200,6 +221,9 @@ export class AudioReceiveHealth {
       const track = tracks.get(id);
       if (!this.#enabled(entry, track)) {
         entry.projectionOff = true;
+        entry.bytes = undefined;
+        entry.sampledAt = undefined;
+        this.#recordHop(entry, "remote_off");
         increment(counts, "projection_off");
         continue;
       }
@@ -207,7 +231,12 @@ export class AudioReceiveHealth {
         entry.since = now;
         entry.projectionOff = false;
       }
+      const bytes = track ? inbound.get(track.id)?.bytesReceived : undefined;
+      const comparable = track && entry.trackId === track.id && entry.bytes !== undefined && bytes !== undefined && bytes >= entry.bytes;
+      const elapsed = comparable && entry.sampledAt !== undefined ? Math.floor(now - entry.sampledAt) : 0;
+      entry.sampledAt = now;
       const snapshot = this.#snapshot(entry, track, inbound);
+      this.#recordAudioSample(entry, snapshot, elapsed >= 1000 && elapsed <= 60_000 ? elapsed : undefined, now);
       const state = snapshot.receive_state ?? "announced";
       increment(counts, state);
       this.#reportStuck(entry, snapshot, now);
@@ -215,6 +244,23 @@ export class AudioReceiveHealth {
     if (this.#entries.size > 0 && ++this.#samples % 12 === 0) {
       this.#options.onEvent({ event: "audio_receive_summary", receive_counts: counts });
     }
+  }
+
+  #recordAudioSample(entry: Entry, snapshot: Snapshot, sampleMs: number | undefined, now: number): void {
+    if (sampleMs !== undefined && snapshot.receive_state === "playing") this.#recordHop(entry, "playing");
+    else if (sampleMs !== undefined && (snapshot.receive_state === "element_bound" || snapshot.receive_state === "bytes_flowing")) {
+      if (snapshot.play_result === "NotAllowedError") this.#recordHop(entry, "autoplay_blocked");
+      else if (snapshot.element_state === "paused" && snapshot.play_result === "ok") this.#recordHop(entry, "playback_paused");
+      else this.#recordHop(entry, "inbound_flowing");
+    } else if (now - entry.since > 10_000 && snapshot.receive_state === "pull_failed") this.#recordHop(entry, "pull_failed");
+    else if (now - entry.since > 10_000 && sampleMs !== undefined && snapshot.track_state === "live" && snapshot.receive_state === "track_received") this.#recordHop(entry, "inbound_flat", sampleMs);
+    else if (entry.pull === "pull_succeeded") this.#recordHop(entry, "subscribed");
+  }
+
+  #recordHop(entry: Entry, hop: NonNullable<TelemetryEvent["audio_observation"]>, sampleMs?: number): void {
+    if (!entry.observedTrack || (entry.hop === hop && hop !== "inbound_flat")) return;
+    entry.hop = hop;
+    recordAudio(this.#options.audioTelemetry, hop, entry.observedTrack, sampleMs);
   }
 
   /** What the page does with the audio of one remote track, for the stats window that names it. */
@@ -228,6 +274,7 @@ export class AudioReceiveHealth {
   }
 
   #enabled(entry: Entry, track: MediaStreamTrack | undefined): boolean {
+    if (entry.paused) return false;
     if (this.#projection === undefined) return track?.enabled !== false;
     return this.#projection.has(entry.projectionKey);
   }

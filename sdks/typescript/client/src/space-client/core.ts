@@ -74,7 +74,7 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
       if (space.length === 0) return yield* Effect.die(new TypeError("A Space slug is required"));
       if (typeof options.getAccess !== "function") return yield* Effect.die(new TypeError("getAccess is required"));
       const apiBaseUrl = normalizeBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
-      const selection = new MediaDeviceSelection(dependencies.mediaDevices);
+      const selection = new MediaDeviceSelection(dependencies.mediaDevices, dependencies.telemetry);
       const controllers = yield* makeControllerEffects({
         offlineActionsStorage: options.offlineActionsStorage,
         offlineActionsStorageKey: `chalk:offline-actions:${JSON.stringify([apiBaseUrl, space])}`,

@@ -1,4 +1,5 @@
 import { EpisodeStatusError, episodeStatusRetryDelay } from "./episode-status";
+import { observeMicrophoneCapture } from "../media/audio-observation";
 import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
@@ -210,7 +211,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
         startInitialMedia: null,
         initialMedia: (intent) =>
           Effect.tryPromise({
-            try: () => (intent.microphone || intent.camera ? platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera }) : Promise.resolve(streamFromTracks([]))),
+            try: () => (intent.microphone || intent.camera ? observeMicrophoneCapture(platform.telemetry, { audio: intent.microphone, video: intent.camera }, () => platform.mediaDevices.getUserMedia({ audio: intent.microphone, video: intent.camera })) : Promise.resolve(streamFromTracks([]))),
             catch: (cause) => cause,
           }),
         initialMediaIntent: null,

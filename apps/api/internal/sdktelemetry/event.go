@@ -45,8 +45,9 @@ const (
 )
 
 var (
-	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	midPattern  = regexp.MustCompile(MIDPattern)
+	uuidPattern          = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	midPattern           = regexp.MustCompile(MIDPattern)
+	audioTrackKeyPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 // Event is one thing a client saw. Type picks which of the other fields may be
@@ -87,6 +88,10 @@ type Event struct {
 	TrackState       string         `json:"track_state,omitempty"`
 	ElementState     string         `json:"element_state,omitempty"`
 	PlayResult       string         `json:"play_result,omitempty"`
+	AudioObservation string         `json:"audio_observation,omitempty"`
+	AudioPeerID      string         `json:"audio_peer_id,omitempty"`
+	AudioSampleMS    *int64         `json:"audio_sample_ms,omitempty"`
+	AudioTrackKey    string         `json:"audio_track_key,omitempty"`
 	ReceiveCounts    *ReceiveCounts `json:"receive_counts,omitempty"`
 	ReceiversStopped *int64         `json:"receivers_stopped,omitempty"`
 	BundleTagHeld    *bool          `json:"bundle_tag_held,omitempty"`
@@ -367,8 +372,12 @@ func sliceLimit(name string) int {
 
 func checkString(name, value string) string {
 	switch name {
-	case "op_id", "event_id", "dropped_source_id":
+	case "op_id", "event_id", "dropped_source_id", "audio_peer_id":
 		if !uuidPattern.MatchString(value) {
+			return name + "_label"
+		}
+	case "audio_track_key":
+		if !audioTrackKeyPattern.MatchString(value) {
 			return name + "_label"
 		}
 	case "mid":

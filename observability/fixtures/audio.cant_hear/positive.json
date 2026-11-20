@@ -1,0 +1,97 @@
+{
+  "description": "The listener has incoming RTP but autoplay is blocked. The other seat plays a different track normally.",
+  "asof_ms": 1795596470000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": ["media"],
+    "window": {
+      "from_ms": 1795596400000,
+      "to_ms": 1795596460000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat 1",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [1],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795596460000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat 1"
+        }
+      },
+      {
+        "participant": "a1000000-0000-4000-8000-000000000002",
+        "name": "Seat 2",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [1],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795596460000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000002",
+          "name": "Seat 2"
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000001",
+      "est_server_ms": 1795596406000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "playing",
+      "audio_track_key": "036d2fdee8d98aec44067a575eba6f22021488d8250507bbf65f686103fb5469",
+      "audio_peer_id": "a1000000-0000-4000-8000-000000000002"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000002",
+      "est_server_ms": 1795596404000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "generation": 1,
+      "audio_observation": "subscribed",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4",
+      "audio_peer_id": "a1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000003",
+      "est_server_ms": 1795596409000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "generation": 1,
+      "audio_observation": "autoplay_blocked",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4",
+      "audio_peer_id": "a1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "event": "audio.sfu_forward",
+      "event_id": "f1000000-0000-4000-8000-000000000004",
+      "est_server_ms": 1795596411000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "generation": 1,
+      "audio_observation": "forwarded",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4",
+      "audio_peer_id": "a1000000-0000-4000-8000-000000000001",
+      "audio_sample_ms": 10000
+    }
+  ]
+}

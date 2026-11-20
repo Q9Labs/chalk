@@ -122,7 +122,7 @@ func TestEveryTypeHasEnumsForItsLabelFields(t *testing.T) {
 		for _, field := range append(spec.allowed, spec.required...) {
 			switch field {
 			case "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "close_code", "http_status", "receive_counts",
-				"receivers_stopped", "bundle_tag_held", "stats", "dropped", "op_id", "dropped_seqs", "dropped_source_id":
+				"receivers_stopped", "bundle_tag_held", "stats", "dropped", "op_id", "dropped_seqs", "dropped_source_id", "audio_peer_id", "audio_track_key", "audio_sample_ms":
 				continue
 			}
 			if FieldEnum(field) == nil {
@@ -155,4 +155,20 @@ func keys(values map[string]any) []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+func TestAudioObservationsAcceptOnlyBoundedClaimsAndTrackIdentity(t *testing.T) {
+	e := Event{Type: "audio_observed", AudioObservation: "autoplay_blocked", AudioPeerID: "12345678-0000-4000-8000-000000000001",
+		AudioTrackKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+	if got := e.Check(); got != "" {
+		t.Fatalf("valid observation rejected: %s", got)
+	}
+	e.AudioTrackKey = "raw-track-name"
+	if got := e.Check(); got != "audio_track_key_label" {
+		t.Fatalf("raw track name: got %q", got)
+	}
+	e.AudioTrackKey, e.AudioPeerID = "", "raw-device-name"
+	if got := e.Check(); got != "audio_peer_id_label" {
+		t.Fatalf("raw peer identity: got %q", got)
+	}
 }

@@ -1,0 +1,120 @@
+{
+  "description": "The Participant tries to open the selected microphone and the runtime denies the request.",
+  "asof_ms": 1795596470000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": ["media"],
+    "window": {
+      "from_ms": 1795596400000,
+      "to_ms": 1795596460000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat 1",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [1],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795596460000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat 1"
+        }
+      },
+      {
+        "participant": "a1000000-0000-4000-8000-000000000002",
+        "name": "Seat 2",
+        "role": "participant",
+        "can_publish": false,
+        "generations": [1],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795596460000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000002",
+          "name": "Seat 2"
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000001",
+      "est_server_ms": 1795596403000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "selected_input"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000002",
+      "est_server_ms": 1795596404000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "capture_denied"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000003",
+      "est_server_ms": 1795596405000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "capture_live"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000004",
+      "est_server_ms": 1795596406000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "published",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4"
+    },
+    {
+      "event": "audio.sfu_ingress",
+      "event_id": "f1000000-0000-4000-8000-000000000005",
+      "est_server_ms": 1795596420000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "ingress_packets",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4",
+      "audio_sample_ms": 10000
+    },
+    {
+      "event": "audio.sync_stopped",
+      "event_id": "f1000000-0000-4000-8000-000000000006",
+      "est_server_ms": 1795596424000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "generation": 1,
+      "audio_observation": "server_off"
+    },
+    {
+      "event": "audio.client_observed",
+      "event_id": "f1000000-0000-4000-8000-000000000007",
+      "est_server_ms": 1795596425000,
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000002",
+      "generation": 1,
+      "audio_observation": "remote_off",
+      "audio_peer_id": "a1000000-0000-4000-8000-000000000001",
+      "audio_track_key": "61f8018970ab901572918f5ff8708d65f6facb147e81f1625e8da44dc4d78fd4"
+    }
+  ]
+}

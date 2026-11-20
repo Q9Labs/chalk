@@ -72,13 +72,13 @@ describe("goldens", () => {
     });
   }
 
-  it("renders the reviewer's corrected 18 Nov example: partial coverage that names the board, no cause from zero voiced packets", async () => {
+  it("renders the audio finding and names the checks with partial coverage", async () => {
     const text = (await diagnose(["ep_9feb"])).out;
     const [first, anchor, finding, fact] = text.split("\n");
-    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=9\/13 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
+    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=13\/17 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
     assert.equal(anchor, "anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4");
-    assert.match(finding, /^f_5b55 broken audio\.not_heard pt_4c1e\(Haris\) \+07:10\.\.\+10:40 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3$/u);
-    assert.equal(fact, "fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]");
+    assert.match(finding, /^f_5b55 broken audio\.not_heard pt_4c1e\(Haris\) \+07:10 hop=mic_permission module=sdk\.audio\.capture upstream=unknown ev=ev_c9d0$/u);
+    assert.equal(fact, "fact: the runtime denied a microphone-only capture request [ev_c9d0]");
     assert.ok(!text.includes("hypothesis:"), "no hypothesis without an upstream witness");
     assert.ok(text.includes("gap: board.view_jumped all 4 seats: board.camera not emitted by client 3.1.0"));
     assert.ok(text.includes("next: diagnose evidence f_5b55"));
@@ -224,7 +224,7 @@ describe("contract", () => {
     assert.equal((await diagnose(["ep_9feb", "--strict"])).code, 3);
     assert.equal((await diagnose(["ep_31aa", "--strict"])).code, 2);
     assert.equal((await diagnose(["ep_5c0d", "--strict"])).code, 0);
-    // A world where an independent witness contradicts one seat's microphone state: coverage stays complete, the outcome unknown.
+    // Independent witnesses disagree on the end reason: coverage stays complete, the outcome unknown.
     const dir = mkdtempSync(join(tmpdir(), "diagnose-strict-"));
     const world = join(dir, "disagree.mjs");
     writeFileSync(
@@ -233,8 +233,12 @@ describe("contract", () => {
 export default function world() {
   const w = nov18();
   const evidence = structuredClone(w.evidence[IDS.ep5c0d]);
-  const o = evidence.observations.find((x) => x.fact === "audio.mic_state");
-  evidence.observations.push({ ...o, id: o.id.slice(0, -4) + "ffff", origin: o.origin + ":other", claim: o.claim === "unmuted" ? "muted" : "unmuted" });
+  const end = w.declarations.find((d) => d.id === IDS.ep5c0d).window.to_ms;
+  const row = { fact: "end.episode", source: "sync", subject: { episode: IDS.ep5c0d }, window: { from_ms: end, to_ms: end }, value: {}, failure: false, query: "fixture" };
+  evidence.observations.push(
+    { ...row, id: "5c0d0000-0000-4000-8000-000000000090", origin: "measured:sync:1", claim: "linger_expired" },
+    { ...row, id: "5c0d0000-0000-4000-8000-000000000091", origin: "measured:sync:2", claim: "ended_by_participant" },
+  );
   w.evidence[IDS.ep5c0d] = evidence;
   w.history = w.history.map((h) => (h.item === IDS.ep5c0d ? { ...h, evidence } : h));
   return w;
@@ -356,14 +360,14 @@ describe("day item times", () => {
 
       const view = renderText(itemView({ item: day, status, tenant, ctx }));
       assert.match(view, header);
-      assert.match(view, /^f_5b55 broken audio\.not_heard all 09:52\.\.09:55 /mu);
+      assert.match(view, /^f_5b55 broken audio\.not_heard all 09:52 /mu);
       assert.match(view, /^report ev_2b3c all 09:56 /mu);
 
       const finding = verdict.findings.find((candidate) => candidate.code === "audio.not_heard");
       assert.ok(finding);
       const evidence = renderText(evidenceView({ item: day, status, finding, tenant, ctx }));
-      assert.match(evidence, /^fact: SFU ingress 10480 packets, 0 voiced 09:52\.\.09:55 \[ev_a1f3\]$/mu);
-      assert.match(evidence, /^watermark: sfu all complete_to=11-19 01:00 /mu);
+      assert.match(evidence, /^fact: the runtime denied a microphone-only capture request 09:52 \[ev_c9d0\]$/mu);
+      assert.match(evidence, /^watermark: client .* complete_to=10:47 /mu);
       const timed = [view, evidence].flatMap((text) => text.split("\n")).filter((line) => !/^(anchor=|query:)/u.test(line));
       assert.deepEqual(
         timed.filter((line) => / [+-]\d\d:\d\d\b/u.test(line)),

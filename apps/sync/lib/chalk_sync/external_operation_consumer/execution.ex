@@ -5,6 +5,7 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
 
   require Logger
   alias ChalkSync.ExternalOperationConsumer.Dispatch
+  alias ChalkSync.Obs
   alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
@@ -81,10 +82,32 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
 
   defp finalize_confirmed(episode, operation, authority, finalize) do
     case finalize.(episode, operation.external_operation_id, {:confirmed, authority}) do
-      {:ok, _decision} -> :confirmed
+      {:ok, %{result: :applied, delivery: :original}} ->
+        observe_microphone_stop(episode, operation)
+        :confirmed
+
+      {:ok, _decision} ->
+        :confirmed
       result -> finalization_failure(operation.name, result)
     end
   end
+
+  defp observe_microphone_stop(episode, %{
+         name: :mute_participant,
+         target_participant_id: participant,
+         target_participant_generation: generation
+       })
+       when is_binary(participant) and is_integer(generation) do
+    Obs.fact("audio.sync_stopped",
+      tenant_id: episode.tenant_id,
+      episode_id: episode.episode_id,
+      participant_id: participant,
+      generation: generation,
+      audio_observation: "server_off"
+    )
+  end
+
+  defp observe_microphone_stop(_episode, _operation), do: :ok
 
   defp finalize_terminal_failure(episode, operation, reason, finalize) do
     case finalize.(episode, operation.external_operation_id, {:failed, reason}) do

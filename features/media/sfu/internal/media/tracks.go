@@ -64,8 +64,9 @@ type publication struct {
 	order uint64
 	plan  uint8 // the Episode plan level of a camera
 	// statsPackets and statsIdle are the media event's last count and whether it was flat (see due).
-	statsPackets uint64
-	statsIdle    bool
+	statsPackets  uint64
+	statsIdle     bool
+	audioSampleAt int64
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {

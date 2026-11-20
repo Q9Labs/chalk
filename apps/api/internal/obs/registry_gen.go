@@ -3,18 +3,22 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "72216cc081c8"
+const SchemaVer = "9bc7309f3cf3"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventAudioClientObserved = "audio.client_observed"
+	EventAudioSfuForward     = "audio.sfu_forward"
+	EventAudioSfuIngress     = "audio.sfu_ingress"
+	EventAudioSyncStopped    = "audio.sync_stopped"
+	EventClientCallEnded     = "client.call_ended"
+	EventObsClockJump        = "obs.clock_jump"
+	EventObsFlagsSnapshot    = "obs.flags_snapshot"
+	EventSelftestAdmit       = "selftest.admit"
+	EventSelftestBanner      = "selftest.banner"
+	EventSelftestNote        = "selftest.note"
+	EventSelftestWork        = "selftest.work"
+	EventSyncEpisodeEnded    = "sync.episode.ended"
 )
 
 // Machine names.
@@ -40,6 +44,10 @@ const (
 	FieldAppBuild           = "app_build"
 	FieldAppVersion         = "app_version"
 	FieldAttempt            = "attempt"
+	FieldAudioObservation   = "audio_observation"
+	FieldAudioPeerID        = "audio_peer_id"
+	FieldAudioSampleMs      = "audio_sample_ms"
+	FieldAudioTrackKey      = "audio_track_key"
 	FieldBannerKind         = "banner_kind"
 	FieldBatchID            = "batch_id"
 	FieldClientMonoMs       = "client_mono_ms"
@@ -110,6 +118,10 @@ var registryFields = map[string]fieldSpec{
 	"app_build":            {typ: "string", group: "build", required: false},
 	"app_version":          {typ: "string", group: "build", required: false},
 	"attempt":              {typ: "int", group: "trail", required: false},
+	"audio_observation":    {typ: "enum", group: "event", required: false, values: []string{"default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "ingress_not_forwarded"}},
+	"audio_peer_id":        {typ: "id", group: "event", required: false},
+	"audio_sample_ms":      {typ: "int", group: "event", required: false},
+	"audio_track_key":      {typ: "string", group: "event", required: false},
 	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
 	"batch_id":             {typ: "id", group: "delivery", required: false},
 	"client_mono_ms":       {typ: "number", group: "clock", required: false},
@@ -175,14 +187,18 @@ var registryFields = map[string]fieldSpec{
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"audio.client_observed": {kind: "fact", dataset: "media-stats", testOnly: false, fields: map[string]fieldRule{"audio_observation": {required: true}, "audio_peer_id": {required: false}, "audio_track_key": {required: false}, "audio_sample_ms": {required: false}}},
+	"audio.sfu_forward":     {kind: "fact", dataset: "media-stats", testOnly: false, fields: map[string]fieldRule{"audio_observation": {required: true}, "audio_peer_id": {required: false}, "audio_track_key": {required: false}, "audio_sample_ms": {required: false}}},
+	"audio.sfu_ingress":     {kind: "fact", dataset: "media-stats", testOnly: false, fields: map[string]fieldRule{"audio_observation": {required: true}, "audio_track_key": {required: false}, "audio_sample_ms": {required: false}}},
+	"audio.sync_stopped":    {kind: "fact", dataset: "media-stats", testOnly: false, fields: map[string]fieldRule{"audio_observation": {required: true}}},
+	"client.call_ended":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"obs.clock_jump":        {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":    {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":        {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":       {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":         {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":         {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":    {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
 }
 
 var registryMachines = map[string]machineSpec{

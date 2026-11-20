@@ -92,9 +92,9 @@ describe("baseline", () => {
     assert.equal(verdict.coverage.state, "partial");
     assert.deepEqual(verdict.coverage.by_code["board.view_jumped"], { checked: 0, eligible: 4 });
     const silent = verdict.findings.find((finding) => finding.code === "audio.not_heard");
-    assert.equal(silent?.hop, "sfu_ingress");
+    assert.equal(silent?.hop, "mic_permission");
     assert.equal(silent?.upstream, "unknown");
-    assert.equal(silent?.hypothesis, null, "zero voiced packets alone must not become a cause");
+    assert.equal(silent?.hypothesis, null, "a denial label does not say what caused the refusal");
     assert.equal(verdict.findings.find((finding) => finding.code === "end.time_limit")?.outcome, "expected");
     assert.equal(verdict.findings.filter((finding) => finding.backstop === "UNEXPLAINED").length, 0, "the time-limit end claims Zara's failed leave");
     assert.equal(verdict.reports[0].explained_by, silent?.id);
@@ -223,7 +223,7 @@ describe("swap identity", () => {
 
 describe("contradict", () => {
   /** @param {Observation} o */
-  const flipped = (o) => ({ "audio.mic_state": o.claim === "unmuted" ? "muted" : "unmuted", "audio.ingress": o.claim === "voiced" ? "silent" : "voiced" })[o.fact] ?? `not_${o.claim}`;
+  const flipped = (o) => `not_${o.claim}`;
   for (const id of [...HEALTHY, IDS.ep9feb]) {
     it(`never leaves ${id.slice(0, 4)} healthy and lists the disagreement`, () => {
       const { declaration, evidence } = base(id);
@@ -242,10 +242,10 @@ describe("contradict", () => {
     });
   }
 
-  it("compares aggregates only over identical windows, so two rollups of different spans never disagree", () => {
+  it("does not treat separate audio progress samples as a disagreement", () => {
     const { declaration, evidence } = base(IDS.ep5c0d);
     const rollup = /** @type {Observation} */ (evidence.observations.find((o) => o.fact === "audio.ingress"));
-    evidence.observations.push({ ...rollup, id: `${rollup.id.slice(0, -4)}eeee`, window: { from_ms: rollup.window.from_ms, to_ms: rollup.window.from_ms + 60_000 }, claim: "silent", value: { packets: 10, voiced: 0 } });
+    evidence.observations.push({ ...rollup, id: `${rollup.id.slice(0, -4)}eeee`, window: { from_ms: rollup.window.from_ms, to_ms: rollup.window.from_ms + 60_000 }, claim: "ingress_flat", value: { ...rollup.value, audio_sample_ms: 5000 } });
     const verdict = verdictOf(declaration, evidence);
     assert.equal(verdict.disagreement.length, 0);
   });
@@ -276,9 +276,13 @@ describe("retention: deleting evidence never erases a proven broken finding", ()
 
   it("keeps it and lists a disagreement when a complete re-read now passes", () => {
     const changed = /** @type {Evidence} */ (structuredClone(evidence));
-    const rollup = /** @type {Observation} */ (changed.observations.find((o) => o.id === IDS.evIngress));
-    rollup.claim = "voiced";
-    rollup.value = { packets: 10_480, voiced: 4_200 };
+    const denied = /** @type {Observation} */ (changed.observations.find((o) => o.id === IDS.evMic));
+    denied.claim = "capture_live";
+    const track = "replacement-microphone";
+    changed.observations.push(
+      { ...denied, id: "9feb0000-0000-4000-8000-000000000004", claim: "published", value: { audio_track_key: track } },
+      { ...denied, id: "9feb0000-0000-4000-8000-000000000005", fact: "audio.ingress", source: "sfu", claim: "ingress_packets", value: { audio_track_key: track } },
+    );
     const verdict = verdictOf(declaration, changed, { prior });
     assert.equal(verdict.outcome, "broken");
     assert.ok(verdict.disagreement.some((d) => d.kind === "finding" && d.finding === silent.id));

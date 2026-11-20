@@ -31,14 +31,19 @@ const (
 // publication's layers to forward and translates that layer into one
 // continuous stream for its own sender.
 type subscription struct {
-	pub         *publication
-	transport   *transport // the subscriber session's
-	pauseLogged bool       // the control loop has logged this subscription's congestion pause
-	transceiver *webrtc.RTPTransceiver
-	sender      *webrtc.RTPSender
-	track       *egressTrack
-	mid         string
-	closed      atomic.Bool
+	audioPackets       atomic.Uint64
+	audioAttempts      atomic.Uint64
+	audioStatsAttempts uint64
+	audioSampleAt      int64
+	audioStatsPackets  uint64 // owned by the node control loop
+	pub                *publication
+	transport          *transport // the subscriber session's
+	pauseLogged        bool       // the control loop has logged this subscription's congestion pause
+	transceiver        *webrtc.RTPTransceiver
+	sender             *webrtc.RTPSender
+	track              *egressTrack
+	mid                string
+	closed             atomic.Bool
 	// owner is the session that pulled the track. lease is what a capture owner holds for it
 	// against the node budget, nil for a Participant; detach returns it.
 	owner   *Session
@@ -363,7 +368,15 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 		}
 		packet.payload = w.payload[:offset+n]
 	}
-	return s.transport.send(&packet, w)
+	if class == classAudio {
+		s.audioAttempts.Add(1)
+	}
+	sent := s.transport.send(&packet, w)
+	// Audio is written synchronously; video may only have been enqueued.
+	if sent && class == classAudio {
+		s.audioPackets.Add(1)
+	}
+	return sent
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe

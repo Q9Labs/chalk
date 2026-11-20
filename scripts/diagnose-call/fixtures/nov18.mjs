@@ -3,15 +3,14 @@
  * The 18 Nov world: the worked example from docs/plans/hyper-observability (c-compact.txt as the reviewer corrected it), and the
  * items around it that `day`, `check`, `participant` and lookup need. Every name, id and number is invented.
  *
- * - ep_9feb (TH, 14:45 local, 60 min, 4 seats): Haris unmuted at +07:10 for 3.5 min while SFU ingress counted 10480 packets and
- *   0 voiced; Sana reported "Haris's audio not audible" at +11:30; the time limit ended the Episode and Zara's leave failed 2 s later;
+ * - ep_9feb (TH, 14:45 local, 60 min, 4 seats): Haris tried to unmute at +07:10 and the browser denied microphone capture; Sana reported "Haris's audio not audible" at +11:30; the time limit ended the Episode and Zara's leave failed 2 s later;
  *   the clients (3.1.0) cannot emit board camera evidence. Checked, current, broken, coverage partial(board).
  * - ep_7a21: never checked. Healthy once someone checks it.
  * - ep_31aa: checked healthy in the morning; a problem report arrived later, so it is stale, and a recheck finds a BLIND_SPOT.
  * - ep_5c0d: checked, healthy.
  * - an attempt that never got an admission decision (admission.unresolved, broken).
  * - ep_9feb's recording job, still pending 14 h later (recording.not_ready, degraded, open).
- * - ep_2d4e on 11 Nov: Haris silent again, so `participant` shows a pattern across days.
+ * - ep_2d4e on 11 Nov: Haris has another capture denial, so `participant` shows a pattern across days.
  * - a second Haris in tenant AB, so the name alone is ambiguous.
  */
 import { origin } from "../proof/evidence.mjs";
@@ -64,7 +63,7 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CLIENT_EMITS = Object.freeze(["audio.client", "join.leave", "end.client_screen"]);
 
 /**
  * @param {string} participant
@@ -91,13 +90,13 @@ const user = (p) => ({ kind: p.kind, id: p.id, name: p.name });
  */
 const row = (id, rest) => ({ id, ...rest, query: `axiom chalk-logs | where event_id == '${id}'` });
 
-/** @param {string} episode @param {string} participant @param {string} id @param {number} from @param {number} to @param {"unmuted" | "muted"} claim */
-const mic = (episode, participant, id, from, to, claim) =>
-  row(id, { fact: "audio.mic_state", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim, value: {}, failure: false });
+/** @param {string} episode @param {string} participant @param {string} id @param {number} at @param {string} claim @param {Observation["value"]} [value] */
+const audio = (episode, participant, id, at, claim, value = {}) =>
+  row(id, { fact: "audio.client", source: "client", origin: origin.measured("client", participant), subject: { episode, participant, generation: 1, connection: connectionOf(participant) }, window: { from_ms: at, to_ms: at }, claim, value, failure: false });
 
-/** @param {string} episode @param {string} participant @param {string} id @param {number} from @param {number} to @param {number} packets @param {number} voiced */
-const ingress = (episode, participant, id, from, to, packets, voiced) =>
-  row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim: voiced > 0 ? "voiced" : "silent", value: { packets, voiced }, failure: false });
+/** @param {string} episode @param {string} participant @param {string} id @param {number} at @param {string} track */
+const ingress = (episode, participant, id, at, track) =>
+  row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: at, to_ms: at }, claim: "ingress_packets", value: { audio_track_key: track, audio_sample_ms: 10000 }, failure: false });
 
 /**
  * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
@@ -107,7 +106,7 @@ const ingress = (episode, participant, id, from, to, packets, voiced) =>
  */
 const episodeWatermarks = (participants, complete_to_ms) => [
   { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
-  { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
+  { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress", "audio.forward"], build: "sfu 2026.11.12" },
   { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
   ...participants.map((participant) => ({ source: "client", subject: `pt:${participant}`, complete_to_ms, evidence_gaps: [], emits: [...CLIENT_EMITS], build: CLIENT_BUILD })),
@@ -124,10 +123,16 @@ const episodeWatermarks = (participants, complete_to_ms) => [
 function quietEpisode(id, tenant, from, minutes, people) {
   const to = from + minutes * 60_000;
   const seats = people.map((person, index) => seat(`${id.replaceAll("-", "").slice(0, 8)}${String(index).repeat(24)}`, person.name, user(person), { from_ms: from, to_ms: to }));
-  const observations = seats.flatMap((s, index) => [
-    mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
-    ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
-  ]);
+  const observations = seats.flatMap((s, index) => {
+    const peer = seats[1 - index].participant;
+    const event = (/** @type {number} */ offset) => `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 4 + offset}`;
+    return [
+      audio(id, s.participant, event(1), from + 3_000, "capture_live"),
+      audio(id, s.participant, event(2), from + 5_000, "published", { audio_track_key: s.participant }),
+      ingress(id, s.participant, event(3), from + 30_000, s.participant),
+      audio(id, s.participant, event(4), from + 30_000, "playing", { audio_peer_id: peer, audio_track_key: peer }),
+    ];
+  });
   return {
     declaration: { kind: /** @type {const} */ ("episode"), id, tenant, features: ["media"], window: { from_ms: from, to_ms: to }, seats },
     evidence: {
@@ -154,11 +159,16 @@ export function nov18() {
   ];
   /** @type {Observation[]} */
   const observations = [
-    mic(ep, IDS.ptHaris, IDS.evMic, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), "unmuted"),
-    ingress(ep, IDS.ptHaris, IDS.evIngress, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), 10_480, 0),
-    mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),
-    ingress(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), 176_000, 61_500),
-    mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
+    audio(ep, IDS.ptHaris, IDS.evMic, at("2026-11-18T09:52:10Z"), "capture_denied"),
+    audio(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", start + 3000, "capture_live"),
+    audio(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", start + 5000, "published", { audio_track_key: IDS.ptSana }),
+    ingress(ep, IDS.ptSana, IDS.evIngress, start + 30000, IDS.ptSana),
+    audio(ep, IDS.ptBilal, "9feb0ff6-0000-4000-8000-000000000006", start + 3000, "capture_live"),
+    audio(ep, IDS.ptBilal, "9feb0ff6-0000-4000-8000-000000000007", start + 6000, "published", { audio_track_key: IDS.ptBilal }),
+    ingress(ep, IDS.ptBilal, "9feb0ff6-0000-4000-8000-000000000008", start + 20000, IDS.ptBilal),
+    audio(ep, IDS.ptSana, "9feb0ff6-0000-4000-8000-000000000009", start + 20000, "playing", { audio_peer_id: IDS.ptBilal, audio_track_key: IDS.ptBilal }),
+    audio(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", start + 40000, "local_off"),
+    ...seats.filter((seat) => seat.participant !== IDS.ptSana).map((seat, index) => audio(ep, seat.participant, `9feb0ff6-0000-4000-8000-00000000000${index}`, start + 30_000, "playing", { audio_peer_id: IDS.ptSana, audio_track_key: IDS.ptSana })),
     row(IDS.evEnd, { fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "maximum_duration", value: {}, failure: false }),
     row(IDS.evLeave, {
       fact: "join.leave",
@@ -213,10 +223,7 @@ export function nov18() {
   const ep2d4e = quietEpisode(IDS.ep2d4e, TH, at("2026-11-11T10:00:00Z"), 40, [PEOPLE.haris, PEOPLE.sana]);
   const harisSeat = ep2d4e.declaration.seats[0].participant;
   ep2d4e.evidence.observations = ep2d4e.evidence.observations.filter((o) => o.subject.participant !== harisSeat);
-  ep2d4e.evidence.observations.push(
-    mic(IDS.ep2d4e, harisSeat, "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), "unmuted"),
-    ingress(IDS.ep2d4e, harisSeat, "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6f", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), 4_500, 0),
-  );
+  ep2d4e.evidence.observations.push(audio(IDS.ep2d4e, harisSeat, "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e", at("2026-11-11T10:05:00Z"), "capture_denied"));
   const epe0f1 = quietEpisode(IDS.epe0f1, AB, at("2026-11-17T08:00:00Z"), 30, [PEOPLE.harisAB, PEOPLE.lina]);
 
   const attemptWindow = { from_ms: at("2026-11-18T10:02:00Z"), to_ms: at("2026-11-18T10:02:40Z") };

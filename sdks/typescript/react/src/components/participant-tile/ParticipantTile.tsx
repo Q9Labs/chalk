@@ -1,6 +1,7 @@
 import { Facehash } from "@q9labsai/facehash/react";
-import React, { useMemo, useRef } from "react";
+import React, { useContext, useEffect, useMemo, useRef } from "react";
 
+import { SpaceClientContext } from "../../bindings/context";
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import { cn } from "../../utils/cn";
@@ -124,6 +125,22 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
 
+  const reportAudio = useContext(SpaceClientContext)?.telemetry.audioIndicator;
+  const speaking = Boolean(mediaVisible && participant.isSpeaking && !participant.isMuted);
+  const displayMute = showStatus ? Boolean(participant.isMuted) : undefined;
+  const observed = useRef<{ id: string; muted: boolean | undefined; speaking: boolean } | undefined>(undefined);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Report the mute badge and speaking ring only after they commit.
+  useEffect(() => {
+    if (!reportAudio || hidden) {
+      observed.current = undefined;
+      return;
+    }
+    const previous = observed.current?.id === participant.id ? observed.current : undefined;
+    if (displayMute !== undefined && displayMute !== previous?.muted) reportAudio(participant.id, displayMute ? "surface_muted" : "surface_unmuted");
+    if (speaking !== previous?.speaking) reportAudio(participant.id, speaking ? "surface_speaking" : "surface_quiet");
+    observed.current = { id: participant.id, muted: displayMute, speaking };
+  }, [displayMute, hidden, participant.id, reportAudio, speaking]);
+
   return (
     <TileShell
       label={`Video tile for ${participant.displayName}`}
@@ -132,7 +149,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       pinned={pinned}
       ring={following}
       lift={!primary}
-      speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
+      speaking={speaking}
       audioLevel={participant.audioLevel}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
@@ -203,7 +220,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 following
               </span>
             ) : null}
-            {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[var(--chalk-overlay-danger)]" aria-label="Muted" />}
+            {displayMute && <StageIcon name="mute" size={14} className="shrink-0 text-[var(--chalk-overlay-danger)]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[var(--chalk-overlay-warning)]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
                 <StageIcon name="hand" size={14} />

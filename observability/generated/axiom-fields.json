@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "9bc7309f3cf3",
   "datasets": [
     {
       "dataset": "lifecycle",
@@ -515,7 +515,7 @@
     {
       "dataset": "media-stats",
       "budget": 256,
-      "used": 61,
+      "used": 65,
       "fields": [
         {
           "name": "admission_request_id",
@@ -536,6 +536,22 @@
         {
           "name": "attempt",
           "type": "integer"
+        },
+        {
+          "name": "audio_observation",
+          "type": "string"
+        },
+        {
+          "name": "audio_peer_id",
+          "type": "string"
+        },
+        {
+          "name": "audio_sample_ms",
+          "type": "integer"
+        },
+        {
+          "name": "audio_track_key",
+          "type": "string"
         },
         {
           "name": "batch_id",

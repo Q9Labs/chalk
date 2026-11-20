@@ -3,31 +3,219 @@
   "slice": 3,
   "title": "The audio chain: being heard and hearing",
   "prefixes": ["audio"],
-  "fields": [],
-  "events": [],
+  "fields": [
+    {
+      "name": "audio_observation",
+      "type": "enum",
+      "sensitivity": null,
+      "doc": "The boundary and result the audio observer saw.",
+      "values": [
+        "default_input",
+        "selected_input",
+        "capture_live",
+        "capture_denied",
+        "input_unavailable",
+        "capture_missing",
+        "capture_failed",
+        "local_on",
+        "local_off",
+        "forced_off",
+        "server_off",
+        "published",
+        "publish_failed",
+        "ingress_packets",
+        "ingress_flat",
+        "forwarded",
+        "forwarding_flat",
+        "remote_off",
+        "pull_failed",
+        "subscribed",
+        "inbound_flat",
+        "inbound_flowing",
+        "playing",
+        "autoplay_blocked",
+        "playback_paused",
+        "output_selected",
+        "output_failed",
+        "surface_muted",
+        "surface_unmuted",
+        "surface_speaking",
+        "surface_quiet",
+        "capture_signal_no_outbound",
+        "outbound_flowing",
+        "ingress_not_forwarded"
+      ]
+    },
+    {
+      "name": "audio_peer_id",
+      "type": "id",
+      "sensitivity": null,
+      "doc": "The remote Participant whose microphone the listener observes.",
+      "id_kind": "participant"
+    },
+    {
+      "name": "audio_track_key",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "A SHA-256 fingerprint of the provider connection and track name."
+    },
+    {
+      "name": "audio_sample_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "The lookback interval of this counter delta, ending at the record time."
+    }
+  ],
+  "events": [
+    {
+      "name": "audio.client_observed",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The SDK measured an audio boundary.",
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_peer_id": {},
+        "audio_track_key": {},
+        "audio_sample_ms": {}
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/audio-observation.ts",
+          "literal": "type: \"audio_observed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "audio_observed"
+        }
+      }
+    },
+    {
+      "name": "audio.sfu_ingress",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "doc": "The SFU measured RTP progress for a microphone publication.",
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_track_key": {},
+        "audio_sample_ms": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/audio_observation.go",
+          "literal": "obs.EventAudioSfuIngress"
+        }
+      ]
+    },
+    {
+      "name": "audio.sfu_forward",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "doc": "The SFU measured RTP writes for a microphone subscription.",
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_peer_id": {},
+        "audio_track_key": {},
+        "audio_sample_ms": {}
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/audio_observation.go",
+          "literal": "obs.EventAudioSfuForward"
+        }
+      ]
+    },
+    {
+      "name": "audio.sync_stopped",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sync"],
+      "doc": "Sync committed a host stop of a microphone.",
+      "fields": {
+        "audio_observation": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex",
+          "literal": "\"audio.sync_stopped\""
+        }
+      ]
+    }
+  ],
   "reasons": [],
   "machines": [],
   "facts": [
     {
-      "name": "audio.mic_state",
-      "kind": "state",
+      "name": "audio.client",
+      "kind": "event",
       "per": "seat",
-      "events": [],
-      "doc": "Whether a seat's microphone was muted or unmuted, held over a window. Claim: muted or unmuted."
+      "doc": "A capture, mute, publication, subscription, playback, or display observation.",
+      "events": [
+        {
+          "event": "audio.client_observed",
+          "source": "client",
+          "claim": "audio_observation",
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+        }
+      ]
     },
     {
       "name": "audio.ingress",
-      "kind": "aggregate",
+      "kind": "event",
       "per": "seat",
-      "events": [],
-      "doc": "A rollup of a seat's audio packets at SFU ingress over exactly its window. Values: packets, voiced."
+      "doc": "A microphone publication's ingress packet progress.",
+      "events": [
+        {
+          "event": "audio.sfu_ingress",
+          "source": "sfu",
+          "claim": "audio_observation",
+          "fields": ["audio_observation", "audio_track_key"]
+        }
+      ]
     },
     {
-      "name": "audio.capture",
-      "kind": "aggregate",
+      "name": "audio.forward",
+      "kind": "event",
       "per": "seat",
-      "events": [],
-      "doc": "A rollup of a seat's microphone level before WebRTC over exactly its window. Values: rms_max_dbfs."
+      "doc": "A listener's remote microphone subscription packet progress.",
+      "events": [
+        {
+          "event": "audio.sfu_forward",
+          "source": "sfu",
+          "claim": "audio_observation",
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+        }
+      ]
+    },
+    {
+      "name": "audio.forced_stop",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A committed host stop.",
+      "events": [
+        {
+          "event": "audio.sync_stopped",
+          "source": "sync",
+          "claim": "audio_observation",
+          "fields": ["audio_observation"]
+        }
+      ]
     }
   ],
   "symptoms": [
@@ -35,41 +223,61 @@
       "code": "audio.not_heard",
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant's microphone is on but others can't hear them.",
-      "user_words": ["nobody can hear me"],
+      "doc": "The Participant's microphone did not reach the media plane.",
+      "user_words": ["They can't hear me"],
       "witnesses": [
         {
-          "fact": "audio.mic_state",
+          "fact": "audio.client",
           "from": ["client"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
-          "doc": "When the seat's microphone was unmuted."
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'audio_observed' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A capture, mute, publication, subscription, playback, or display observation."
         },
         {
           "fact": "audio.ingress",
           "from": ["sfu"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
-          "doc": "Whether voiced packets reached the SFU while it was unmuted."
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sfu_ingress' or name == 'audio.sfu_ingress') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A microphone publication's ingress packet progress."
         },
         {
-          "fact": "audio.capture",
-          "from": ["client"],
+          "fact": "audio.forced_stop",
+          "from": ["sync"],
           "required": false,
-          "query": "r2 flight-recorder/{episode}/{participant} mic_rms {from}..{to}",
-          "doc": "The capture level, which attributes a silent ingress to a client hop."
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sync_stopped' or name == 'audio.sync_stopped') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A committed host stop."
         }
       ],
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     },
     {
       "code": "audio.cant_hear",
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant can't hear someone who is speaking.",
-      "user_words": ["I can't hear anyone"],
-      "witnesses": [],
-      "fault_scenario": null
+      "doc": "The Participant could not play audio from another Participant.",
+      "user_words": ["I can't hear them"],
+      "witnesses": [
+        {
+          "fact": "audio.client",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'audio_observed' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A capture, mute, publication, subscription, playback, or display observation."
+        },
+        {
+          "fact": "audio.forward",
+          "from": ["sfu"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sfu_forward' or name == 'audio.sfu_forward') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A listener's remote microphone subscription packet progress."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     }
   ]
 }

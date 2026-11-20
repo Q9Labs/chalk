@@ -1,4 +1,6 @@
 import type { ConnectionMediaDevices } from "../connection/dependencies";
+import { observeMicrophoneCapture, recordAudio } from "../media/audio-observation";
+import type { TelemetrySink } from "../telemetry/types";
 import { SpaceClientError } from "./errors";
 
 type CaptureSource = "microphone" | "camera";
@@ -8,12 +10,16 @@ export class MediaDeviceSelection implements ConnectionMediaDevices {
   #microphoneId: string | null = null;
   #cameraId: string | null = null;
 
-  constructor(devices: ConnectionMediaDevices) {
+  constructor(
+    devices: ConnectionMediaDevices,
+    private readonly telemetry?: Pick<TelemetrySink, "record">,
+  ) {
     this.#devices = devices;
   }
 
   getUserMedia(constraints: MediaStreamConstraints, signal?: AbortSignal): Promise<MediaStream> {
-    return this.#devices.getUserMedia(applyDeviceSelection(constraints, this.#microphoneId, this.#cameraId), signal);
+    const selected = applyDeviceSelection(constraints, this.#microphoneId, this.#cameraId);
+    return observeMicrophoneCapture(this.telemetry, selected, () => this.#devices.getUserMedia(selected, signal), signal);
   }
 
   getDisplayMedia(constraints: DisplayMediaStreamOptions): Promise<MediaStream> {
@@ -43,7 +49,13 @@ export class MediaDeviceSelection implements ConnectionMediaDevices {
         message: "This runtime does not provide an audio-output selection seam",
       });
     }
-    await this.#devices.selectSpeaker(deviceId);
+    try {
+      await this.#devices.selectSpeaker(deviceId);
+      recordAudio(this.telemetry, "output_selected");
+    } catch (error) {
+      recordAudio(this.telemetry, "output_failed");
+      throw error;
+    }
   }
 }
 

@@ -17,6 +17,7 @@ export const PRIORITY: Record<TelemetryEventType, Priority> = {
   call_stats: "stats",
   access_refreshed: "routine",
   access_retry: "routine",
+  audio_observed: "routine",
   audio_receive_stuck: "routine",
   audio_receive_summary: "routine",
   chat_upload_failed: "routine",

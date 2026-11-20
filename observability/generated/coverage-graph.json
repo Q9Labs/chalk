@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "9bc7309f3cf3",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -45,52 +45,147 @@
       "code": "audio.cant_hear",
       "area": "audio",
       "slice": 3,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
-      "witnesses": [],
-      "events": [],
+      "witnesses": [
+        {
+          "fact": "audio.client",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "audio.client_observed",
+              "source": "client",
+              "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+            }
+          ]
+        },
+        {
+          "fact": "audio.forward",
+          "from": ["sfu"],
+          "required": false,
+          "events": [
+            {
+              "event": "audio.sfu_forward",
+              "source": "sfu",
+              "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "audio.client_observed",
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key", "audio_sample_ms"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/audio-observation.ts",
+              "literal": "type: \"audio_observed\""
+            }
+          ]
+        },
+        {
+          "name": "audio.sfu_forward",
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key", "audio_sample_ms"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/audio_observation.go",
+              "literal": "obs.EventAudioSfuForward"
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/audio.cant_hear.mjs",
       "fixtures": {
         "positive": "observability/fixtures/audio.cant_hear/positive.json",
         "healthy": "observability/fixtures/audio.cant_hear/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     },
     {
       "code": "audio.not_heard",
       "area": "audio",
       "slice": 3,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
       "witnesses": [
         {
-          "fact": "audio.mic_state",
+          "fact": "audio.client",
           "from": ["client"],
           "required": true,
-          "events": []
+          "events": [
+            {
+              "event": "audio.client_observed",
+              "source": "client",
+              "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+            }
+          ]
         },
         {
           "fact": "audio.ingress",
           "from": ["sfu"],
           "required": true,
-          "events": []
+          "events": [
+            {
+              "event": "audio.sfu_ingress",
+              "source": "sfu",
+              "fields": ["audio_observation", "audio_track_key"]
+            }
+          ]
         },
         {
-          "fact": "audio.capture",
-          "from": ["client"],
+          "fact": "audio.forced_stop",
+          "from": ["sync"],
           "required": false,
-          "events": []
+          "events": [
+            {
+              "event": "audio.sync_stopped",
+              "source": "sync",
+              "fields": ["audio_observation"]
+            }
+          ]
         }
       ],
-      "events": [],
+      "events": [
+        {
+          "name": "audio.client_observed",
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key", "audio_sample_ms"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/audio-observation.ts",
+              "literal": "type: \"audio_observed\""
+            }
+          ]
+        },
+        {
+          "name": "audio.sfu_ingress",
+          "fields": ["audio_observation", "audio_track_key", "audio_sample_ms"],
+          "emit_sites": [
+            {
+              "path": "features/media/sfu/internal/media/audio_observation.go",
+              "literal": "obs.EventAudioSfuIngress"
+            }
+          ]
+        },
+        {
+          "name": "audio.sync_stopped",
+          "fields": ["audio_observation"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex",
+              "literal": "\"audio.sync_stopped\""
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/audio.not_heard.mjs",
       "fixtures": {
         "positive": "observability/fixtures/audio.not_heard/positive.json",
         "healthy": "observability/fixtures/audio.not_heard/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     },
     {
       "code": "board.view_jumped",

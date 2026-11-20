@@ -1,8 +1,7 @@
-episode ep_9feb tenant=TH outcome=broken coverage=partial(board) checked=9/13 asof=2026-11-19T01:00Z rules=d7d52b11
+episode ep_9feb tenant=TH outcome=broken coverage=partial(board) checked=13/17 asof=2026-11-19T01:00Z rules=35d992a5
 anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4
-f_5b55 broken audio.not_heard pt_4c1e(Haris) +07:10..+10:40 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3
-fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]
-fact: microphone unmuted [ev_c9d0]
+f_5b55 broken audio.not_heard pt_4c1e(Haris) +07:10 hop=mic_permission module=sdk.audio.capture upstream=unknown ev=ev_c9d0
+fact: the runtime denied a microphone-only capture request [ev_c9d0]
 f_d2a1 expected end.time_limit all +60:00 reason=end.time_limit ev=ev_0b9e
 report ev_2b3c pt_b2d4(Sana) +11:30 "Haris's audio not audible" explained_by=f_5b55
 gap: board.view_jumped all 4 seats: board.camera not emitted by client 3.1.0

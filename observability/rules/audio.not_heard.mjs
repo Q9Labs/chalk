@@ -1,91 +1,53 @@
 // @ts-check
-/**
- * audio.not_heard: a seat unmuted for long enough, with no voiced audio reaching SFU ingress. A per-seat chain across two independent
- * witnesses (client microphone state, SFU ingress), with an optional upstream witness (capture level) that turns "upstream unknown"
- * into an attributed hop and a hypothesis.
- */
-import { overlaps } from "../../scripts/diagnose-call/proof/evidence.mjs";
+import { broken, containsProgress, records, sameTrack, withUpstream } from "./audio-evidence.mjs";
 
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Seat} Seat */
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").DecideInput} DecideInput */
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Decision} Decision */
-/** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Fact} Fact */
-/** @typedef {import("../../scripts/diagnose-call/proof/evidence.mjs").Observation} Observation */
-
-/** @param {Readonly<Observation>} o */
-const cite = (o) => [o.id];
 
 export const symptom = "audio.not_heard";
-
-/** Unmuted for less than this is too short to call silent. */
-const SILENT_MIN_MS = 5_000;
-/** A capture level above this is a voice, not the noise floor. */
-const VOICE_DBFS = -50;
-
-/** @param {readonly Readonly<Observation>[]} list @param {string} name */
-const sum = (list, name) => list.reduce((total, o) => total + Number(o.value[name] ?? 0), 0);
-
-export const expected = `while the microphone is unmuted for ${SILENT_MIN_MS / 1000} s or more, voiced audio packets reach SFU ingress`;
+export const expected = "microphone capture and publication succeed, and the same track reaches SFU ingress";
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
-export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.features.includes("media") && seat !== null && seat.can_publish;
+export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.features.includes("media") && seat?.can_publish === true;
 
-/**
- * @param {DecideInput} input
- * @returns {Decision}
- */
+const failures = new Map([
+  ["capture_denied", ["mic_permission", "sdk.audio.capture", "the runtime denied a microphone-only capture request"]],
+  ["input_unavailable", ["mic_device", "sdk.audio.capture", "the runtime could not open the requested microphone"]],
+  ["capture_missing", ["mic_capture", "sdk.audio.capture", "capture returned without a live microphone track"]],
+  ["capture_failed", ["mic_capture", "sdk.audio.capture", "the microphone-only capture request failed"]],
+  ["capture_signal_no_outbound", ["client_send", "sdk.audio.send", "the microphone had input signal but outbound audio bytes did not advance"]],
+  ["publish_failed", ["audio_publication", "sdk.audio.publish", "the microphone publication did not settle after the SDK's retries"]],
+]);
+
+/** @param {DecideInput} input @returns {Decision} */
 export function decide({ readings }) {
-  const mic = readings["audio.mic_state"];
-  const ingress = readings["audio.ingress"];
-  const capture = readings["audio.capture"];
-  if (mic.kind !== "present") return mic.kind === "absent" ? { status: "pass" } : { status: "unknown", reason: "microphone state not witnessed" };
-  const unmuted = mic.observations.filter((o) => o.claim === "unmuted" && o.window.to_ms - o.window.from_ms >= SILENT_MIN_MS);
-  if (ingress.kind === "unknown") return unmuted.length === 0 ? { status: "pass" } : { status: "unknown", reason: "SFU ingress not witnessed for the unmuted time" };
-  const silent = unmuted.flatMap((u) => {
-    const rollups = ingress.kind === "present" ? ingress.observations.filter((o) => overlaps(o.window, u.window)) : [];
-    return rollups.length === 0 || sum(rollups, "voiced") === 0 ? [{ u, rollups }] : [];
-  });
-  if (silent.length === 0) return { status: "pass" };
+  const client = records(readings["audio.client"]);
+  const ingress = records(readings["audio.ingress"]);
+  for (const row of client) {
+    const failure = failures.get(row.claim);
+    if (failure) {
+      const finding = broken(row, failure[0], failure[1], failure[2], "a successful result for the same capture or publication attempt");
+      return row.claim === "capture_signal_no_outbound" ? { ...finding, upstream: "witnessed" } : finding;
+    }
+  }
 
-  /** @type {Fact[]} */
-  const facts = silent.flatMap(({ u, rollups }) => [
-    rollups.length === 0 ? { text: "no audio packets at SFU ingress", evidence: [], window: u.window, absent: "audio.ingress" } : { text: `SFU ingress ${sum(rollups, "packets")} packets, 0 voiced`, evidence: rollups.map((o) => o.id), window: u.window, absent: null },
-    { text: "microphone unmuted", evidence: cite(u), window: u.window, absent: null },
-  ]);
-  const window = { from_ms: silent[0].u.window.from_ms, to_ms: /** @type {{ u: Readonly<Observation> }} */ (silent.at(-1)).u.window.to_ms };
-  const levels = capture.kind === "present" && capture.complete ? capture.observations.filter((o) => overlaps(o.window, window)) : [];
-  const packets = sum(
-    silent.flatMap(({ rollups }) => rollups),
-    "packets",
-  );
-  const base = { status: /** @type {const} */ ("finding"), outcome: /** @type {const} */ ("broken"), window, observed: `unmuted, ${packets} packets and 0 voiced at SFU ingress` };
-  const falsifyAbsence = "a voiced audio rollup at SFU ingress inside the window";
-  if (levels.length === 0) {
-    return { ...base, hop: "sfu_ingress", module: "unknown", reason: null, upstream: "unknown", facts, hypothesis: null, falsify: { absence: falsifyAbsence, attribution: "audio.capture (the microphone level before WebRTC) is not witnessed, so which client hop failed is unproved" } };
+  for (const flat of ingress.filter((row) => row.claim === "ingress_flat")) {
+    const sending = client.find((row) => row.claim === "outbound_flowing" && sameTrack(flat, row) && containsProgress(flat, row));
+    if (!sending) continue;
+    return withUpstream(broken(flat, "sfu_ingress", "unknown", "SFU ingress did not advance while the same publication sent RTP", "ingress progress for this microphone during the sampled interval"), sending, "outbound microphone RTP advanced in the interval");
   }
-  const loudest = Math.max(...levels.map((o) => Number(o.value.rms_max_dbfs ?? -Infinity)));
-  const level = { text: `capture level peaked at ${loudest} dBFS`, evidence: levels.map((o) => o.id), window, absent: null };
-  if (loudest > VOICE_DBFS) {
-    return {
-      ...base,
-      hop: "client_send",
-      module: "sdk.audio",
-      reason: null,
-      upstream: "witnessed",
-      facts: [...facts, level],
-      hypothesis: { text: "the sender dropped or replaced the captured track", falsified_by: "outbound RTP with voiced packets in the window" },
-      falsify: { absence: falsifyAbsence, attribution: `a capture level at or below ${VOICE_DBFS} dBFS` },
-    };
+
+  if (readings["audio.client"].kind !== "present" || !readings["audio.client"].complete) {
+    return { status: "unknown", reason: "microphone capture and publication are not fully witnessed" };
   }
-  return {
-    ...base,
-    hop: "client_capture",
-    module: "sdk.audio.capture",
-    reason: null,
-    upstream: "witnessed",
-    facts: [...facts, level],
-    hypothesis: { text: "a wrong or muted input device", falsified_by: "the active input device label matching the one the Participant spoke into" },
-    falsify: { absence: falsifyAbsence, attribution: `a capture level above ${VOICE_DBFS} dBFS` },
-  };
+  const published = client.filter((row) => row.claim === "published");
+  if (published.length === 0 || !published.every((row) => client.some((capture) => capture.claim === "capture_live" && capture.origin === row.origin && capture.window.from_ms <= row.window.to_ms))) {
+    return { status: "unknown", reason: "no matched live capture and microphone publication" };
+  }
+  if (readings["audio.ingress"].kind !== "present" || !readings["audio.ingress"].complete || !published.every((row) => ingress.some((packet) => packet.claim === "ingress_packets" && sameTrack(row, packet) && packet.window.to_ms >= row.window.from_ms))) {
+    return { status: "unknown", reason: "no SFU ingress progress witnessed for every microphone publication" };
+  }
+  return { status: "pass" };
 }

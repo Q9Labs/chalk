@@ -2,9 +2,77 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "9bc7309f3cf3"
 
   @events %{
+    "audio.client_observed" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "audio_observation" => %{
+          "required" => true
+        },
+        "audio_peer_id" => %{
+          "required" => false
+        },
+        "audio_track_key" => %{
+          "required" => false
+        },
+        "audio_sample_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "audio.sfu_forward" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "audio_observation" => %{
+          "required" => true
+        },
+        "audio_peer_id" => %{
+          "required" => false
+        },
+        "audio_track_key" => %{
+          "required" => false
+        },
+        "audio_sample_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "audio.sfu_ingress" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "audio_observation" => %{
+          "required" => true
+        },
+        "audio_track_key" => %{
+          "required" => false
+        },
+        "audio_sample_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "audio.sync_stopped" => %{
+      "kind" => "fact",
+      "dataset" => "media-stats",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "audio_observation" => %{
+          "required" => true
+        }
+      }
+    },
     "client.call_ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -128,6 +196,30 @@ defmodule ChalkSync.Obs.Registry do
     "attempt" => %{
       "type" => "int",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "audio_observation" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "ingress_not_forwarded"]
+    },
+    "audio_peer_id" => %{
+      "type" => "id",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "audio_sample_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "audio_track_key" => %{
+      "type" => "string",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },

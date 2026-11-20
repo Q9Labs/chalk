@@ -2,6 +2,8 @@ import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnection
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { validateBootstrap, validateClientOptions, validateTrackSource } from "./client-validation";
 import { ReceiveStallRecovery } from "./receive-stall";
+import { recordAudio } from "./audio-observation";
+import { AudioSendObservation } from "./audio-send-observation";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
@@ -235,6 +237,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       clearInterval: (timer) => globalThis.clearInterval(timer),
       connection: () => this.#connection,
       tracks: () => this.#remoteTracks.values(),
+      audioTelemetry: options.telemetry,
       onEvent: (event) => this.#invokeListener(() => this.#onReceiveHealth?.(event)),
     });
     this.#snapshot = freezeSnapshot({
@@ -1249,6 +1252,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           await this.#publishPreparedTracksSerialized(this.#tracksToPublish(states), generation, this.#connection, this.#bootstrap.connectionId);
         }
       });
+    } catch (error) {
+      if (generation === this.#generation && !this.#stopped && states.every((state) => state.source === "microphone")) recordAudio(this.#telemetry, "publish_failed");
+      throw error;
     } finally {
       // Cleanup reports its own failures; another source cannot revoke this enable.
       await this.#retirement.catch(() => {});
@@ -1317,6 +1323,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       this.#settleLocalPublications(publications);
+      for (const publication of publications) {
+        if (publication.state.source === "microphone" && publication.state.enabled) recordAudio(this.#telemetry, "published", publication);
+      }
       this.#publishSnapshot();
       this.#emitLocal();
     } catch (error) {
@@ -2262,6 +2271,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     let cameraTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     let disconnectedTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const cameraPolicy = new CameraUplinkPolicy();
+    const audioSend = new AudioSendObservation(this.#telemetry);
     const viewerLayers = new ViewerLayerSelector({ followsNetwork: !this.#capabilities().serverLayerAdaptation });
     let observedCamera: LocalTrackState | undefined;
     const owned = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped;
@@ -2278,6 +2288,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         }
         const report = await connection.getStats();
         if (!current() || connection.signalingState !== "stable") return;
+        const microphone = this.#localTracks.get("microphone");
+        const publication = microphone?.enabled ? [...this.#ownedPublications].find((owned) => owned.state === microphone && owned.connection === connection && owned.lifecycle.kind === "confirmed") : undefined;
+        audioSend.sample(report, publication?.state.track, publication);
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
         this.#callStats.observe(report, { hiddenVideos: this.#hiddenVideos, playout: (trackId) => this.#receiveHealth.playout(trackId), ...(this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : {}) });

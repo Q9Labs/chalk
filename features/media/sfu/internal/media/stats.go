@@ -236,13 +236,25 @@ func (s *Session) traceMedia(final bool) {
 	for _, mid := range slices.Sorted(maps.Keys(published)) {
 		s.traceIngress(mid, published[mid], now, final)
 	}
+	if !final {
+		for _, sub := range subscribed {
+			s.traceMicrophoneForward(sub, now)
+		}
+	}
 	s.traceDownlink(subscribed, now, final)
 }
 
 func (s *Session) traceIngress(mid string, p *publication, now int64, final bool) {
 	stats := p.ingressStats(now)
-	if !final && !due(&p.statsPackets, &p.statsIdle, stats.packets) {
-		return
+	if !final {
+		previous := p.statsPackets
+		progress := due(&p.statsPackets, &p.statsIdle, stats.packets)
+		if p.source == "microphone" {
+			s.traceMicrophoneIngress(p, stats.packets, previous, now)
+		}
+		if !progress {
+			return
+		}
 	}
 	s.trail(slog.LevelInfo, EventMediaIngress, "source", p.source, "media_kind", p.kind.String(), "mid", mid,
 		"packets", stats.packets, "bytes", stats.bytes, "lost", stats.lost, "repaired", stats.repaired,

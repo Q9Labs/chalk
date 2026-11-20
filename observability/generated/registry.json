@@ -1,5 +1,5 @@
 {
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "9bc7309f3cf3",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -586,6 +586,75 @@
       "doc": "Which run of a job or which try of an op this is, starting at 1."
     },
     {
+      "name": "audio_observation",
+      "type": "enum",
+      "values": [
+        "default_input",
+        "selected_input",
+        "capture_live",
+        "capture_denied",
+        "input_unavailable",
+        "capture_missing",
+        "capture_failed",
+        "local_on",
+        "local_off",
+        "forced_off",
+        "server_off",
+        "published",
+        "publish_failed",
+        "ingress_packets",
+        "ingress_flat",
+        "forwarded",
+        "forwarding_flat",
+        "remote_off",
+        "pull_failed",
+        "subscribed",
+        "inbound_flat",
+        "inbound_flowing",
+        "playing",
+        "autoplay_blocked",
+        "playback_paused",
+        "output_selected",
+        "output_failed",
+        "surface_muted",
+        "surface_unmuted",
+        "surface_speaking",
+        "surface_quiet",
+        "capture_signal_no_outbound",
+        "outbound_flowing",
+        "ingress_not_forwarded"
+      ],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/audio",
+      "doc": "The boundary and result the audio observer saw."
+    },
+    {
+      "name": "audio_peer_id",
+      "type": "id",
+      "id_kind": "participant",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/audio",
+      "doc": "The remote Participant whose microphone the listener observes."
+    },
+    {
+      "name": "audio_sample_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/audio",
+      "doc": "The lookback interval of this counter delta, ending at the record time."
+    },
+    {
+      "name": "audio_track_key",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/audio",
+      "doc": "A SHA-256 fingerprint of the provider connection and track name."
+    },
+    {
       "name": "banner_kind",
       "type": "enum",
       "values": ["info", "warning"],
@@ -1157,6 +1226,120 @@
   ],
   "events": [
     {
+      "name": "audio.client_observed",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "audio",
+      "test_only": false,
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_peer_id": {
+          "required": false
+        },
+        "audio_track_key": {
+          "required": false
+        },
+        "audio_sample_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/audio-observation.ts",
+          "literal": "type: \"audio_observed\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "audio_observed"
+        }
+      },
+      "doc": "The SDK measured an audio boundary."
+    },
+    {
+      "name": "audio.sfu_forward",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "audio",
+      "test_only": false,
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_peer_id": {
+          "required": false
+        },
+        "audio_track_key": {
+          "required": false
+        },
+        "audio_sample_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/audio_observation.go",
+          "literal": "obs.EventAudioSfuForward"
+        }
+      ],
+      "doc": "The SFU measured RTP writes for a microphone subscription."
+    },
+    {
+      "name": "audio.sfu_ingress",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sfu"],
+      "area": "audio",
+      "test_only": false,
+      "fields": {
+        "audio_observation": {
+          "required": true
+        },
+        "audio_track_key": {
+          "required": false
+        },
+        "audio_sample_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "features/media/sfu/internal/media/audio_observation.go",
+          "literal": "obs.EventAudioSfuIngress"
+        }
+      ],
+      "doc": "The SFU measured RTP progress for a microphone publication."
+    },
+    {
+      "name": "audio.sync_stopped",
+      "kind": "fact",
+      "dataset": "media-stats",
+      "side": "server",
+      "modules": ["sync"],
+      "area": "audio",
+      "test_only": false,
+      "fields": {
+        "audio_observation": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/external_operation_consumer/execution.ex",
+          "literal": "\"audio.sync_stopped\""
+        }
+      ],
+      "doc": "Sync committed a host stop of a microphone."
+    },
+    {
       "name": "client.call_ended",
       "kind": "fact",
       "dataset": "lifecycle",
@@ -1373,28 +1556,68 @@
       "doc": "The API's admission decision for a join attempt. Claim: admitted, or the refusal reason."
     },
     {
-      "name": "audio.capture",
+      "name": "audio.client",
       "area": "audio",
-      "kind": "aggregate",
+      "kind": "event",
       "per": "seat",
-      "events": [],
-      "doc": "A rollup of a seat's microphone level before WebRTC over exactly its window. Values: rms_max_dbfs."
+      "events": [
+        {
+          "event": "audio.client_observed",
+          "source": "client",
+          "claim": "audio_observation",
+          "failure_claims": [],
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+        }
+      ],
+      "doc": "A capture, mute, publication, subscription, playback, or display observation."
+    },
+    {
+      "name": "audio.forced_stop",
+      "area": "audio",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "audio.sync_stopped",
+          "source": "sync",
+          "claim": "audio_observation",
+          "failure_claims": [],
+          "fields": ["audio_observation"]
+        }
+      ],
+      "doc": "A committed host stop."
+    },
+    {
+      "name": "audio.forward",
+      "area": "audio",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "audio.sfu_forward",
+          "source": "sfu",
+          "claim": "audio_observation",
+          "failure_claims": [],
+          "fields": ["audio_observation", "audio_peer_id", "audio_track_key"]
+        }
+      ],
+      "doc": "A listener's remote microphone subscription packet progress."
     },
     {
       "name": "audio.ingress",
       "area": "audio",
-      "kind": "aggregate",
+      "kind": "event",
       "per": "seat",
-      "events": [],
-      "doc": "A rollup of a seat's audio packets at SFU ingress over exactly its window. Values: packets, voiced."
-    },
-    {
-      "name": "audio.mic_state",
-      "area": "audio",
-      "kind": "state",
-      "per": "seat",
-      "events": [],
-      "doc": "Whether a seat's microphone was muted or unmuted, held over a window. Claim: muted or unmuted."
+      "events": [
+        {
+          "event": "audio.sfu_ingress",
+          "source": "sfu",
+          "claim": "audio_observation",
+          "failure_claims": [],
+          "fields": ["audio_observation", "audio_track_key"]
+        }
+      ],
+      "doc": "A microphone publication's ingress packet progress."
     },
     {
       "name": "board.camera",
@@ -1509,15 +1732,32 @@
       "slice": 3,
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant can't hear someone who is speaking.",
-      "user_words": ["I can't hear anyone"],
-      "witnesses": [],
+      "doc": "The Participant could not play audio from another Participant.",
+      "user_words": ["I can't hear them"],
+      "witnesses": [
+        {
+          "fact": "audio.client",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'audio_observed' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A capture, mute, publication, subscription, playback, or display observation."
+        },
+        {
+          "fact": "audio.forward",
+          "from": ["sfu"],
+          "required": false,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sfu_forward' or name == 'audio.sfu_forward') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A listener's remote microphone subscription packet progress."
+        }
+      ],
       "rule": "observability/rules/audio.cant_hear.mjs",
       "fixtures": {
         "positive": "observability/fixtures/audio.cant_hear/positive.json",
         "healthy": "observability/fixtures/audio.cant_hear/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     },
     {
       "code": "audio.not_heard",
@@ -1525,32 +1765,32 @@
       "slice": 3,
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant's microphone is on but others can't hear them.",
-      "user_words": ["nobody can hear me"],
+      "doc": "The Participant's microphone did not reach the media plane.",
+      "user_words": ["They can't hear me"],
       "witnesses": [
         {
-          "fact": "audio.mic_state",
+          "fact": "audio.client",
           "from": ["client"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
-          "doc": "When the seat's microphone was unmuted."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'audio_observed' | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A capture, mute, publication, subscription, playback, or display observation."
         },
         {
           "fact": "audio.ingress",
           "from": ["sfu"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
-          "doc": "Whether voiced packets reached the SFU while it was unmuted."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sfu_ingress' or name == 'audio.sfu_ingress') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A microphone publication's ingress packet progress."
         },
         {
-          "fact": "audio.capture",
-          "from": ["client"],
+          "fact": "audio.forced_stop",
+          "from": ["sync"],
           "required": false,
           "independent": 1,
-          "query": "r2 flight-recorder/{episode}/{participant} mic_rms {from}..{to}",
-          "doc": "The capture level, which attributes a silent ingress to a client hop."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (event == 'audio.sync_stopped' or name == 'audio.sync_stopped') | where _time between (datetime({from}) .. datetime({to}))",
+          "doc": "A committed host stop."
         }
       ],
       "rule": "observability/rules/audio.not_heard.mjs",
@@ -1558,7 +1798,7 @@
         "positive": "observability/fixtures/audio.not_heard/positive.json",
         "healthy": "observability/fixtures/audio.not_heard/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/audio-chain.fault.test.ts"
     },
     {
       "code": "board.view_jumped",
@@ -1757,14 +1997,6 @@
     {
       "code": "admission.unresolved",
       "slice": 1
-    },
-    {
-      "code": "audio.cant_hear",
-      "slice": 3
-    },
-    {
-      "code": "audio.not_heard",
-      "slice": 3
     },
     {
       "code": "board.view_jumped",
