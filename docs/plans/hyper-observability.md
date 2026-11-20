@@ -16,7 +16,7 @@ Direction from the founder:
 
 The honest claim is **verified coverage of a named catalogue, build, environment and observation window, under stated assumptions**. It is not coverage of reality. Coverage is proven in five layers. Each layer closes a different class of gap, so no single layer is enough on its own.
 
-Chalk already has eight TLA+ models under `tools/formal/` (client recovery, Episode lifecycle, external operations, media control, public invite access, recording pipeline, screen-share lease, Sync entry and leave), each with anchors, broken variants and a `run.sh`. Layers 3 and 4 extend this practice instead of starting a new one.
+Chalk already has eight TLA+ models under `tools/formal/` (client recovery, Episode lifecycle, external operations, media control, public invite access, recording pipeline, screen-share lease, Sync entry and leave), each with anchors, broken variants and a run.sh. Layers 3 and 4 extend this practice instead of starting a new one.
 
 Corrections from the Sol judge, applied below:
 - The delivery model covers **durably enqueued** events, not everything emitted. A client that vanishes with no persisted high-water mark has an unknown tail, not an exact missing range.
@@ -74,7 +74,7 @@ Every field carries a `sensitivity` slot, left empty for now. That is "keep priv
 
 **Runtime rule:** the kernel fails open in production. An export failure increments counters and never throws into call code or fails startup. In CI and tests it fails closed.
 
-**The kernel is a shared vocabulary and generated schema, not a new runtime.** It sits on what each language already has: Go middleware, OTel and slog; Elixir Logger and Telemetry, including Sync's direct Postgrex calls (`command_decision.ex:21`); TypeScript's transport and Effect boundaries; and a small Node job adapter. `transition` is emitted by the existing state owner and never duplicates a state machine in a table. `decision` fires at the authoritative commit, and `surface` fires at committed display. Logical operations are kept apart from retry attempts and cancellations. A caught error isn't automatically a fault.
+**The kernel is a shared vocabulary and generated schema, not a new runtime.** It sits on what each language already has: Go middleware, OTel and slog; Elixir Logger and Telemetry, including Sync's direct Postgrex calls (`apps/sync/lib/chalk_sync/stateholder/postgres/command_decision.ex:21`); TypeScript's transport and Effect boundaries; and a small Node job adapter. `transition` is emitted by the existing state owner and never duplicates a state machine in a table. `decision` fires at the authoritative commit, and `surface` fires at committed display. Logical operations are kept apart from retry attempts and cancellations. A caught error isn't automatically a fault.
 
 **Enforcement:**
 - CI checks that every declared boundary adopts the kernel, and it tracks operations left unfinished after a kill or hang.
@@ -86,9 +86,9 @@ Every field carries a `sensitivity` slot, left empty for now. That is "keep priv
 
 ## 2. One coherent trail of IDs
 
-**Today** (Luna, file:line in `inventory-ids.md`):
-- `journey_id` is minted on every API request unless the client sends `x-chalk-journey-id`, which the SDK never does (`journey.go:20`).
-- The SDK outbox makes one `traceparent` for the client's whole lifetime (`outbox.ts:55`).
+**Today** (Luna, file:line in `docs/plans/hyper-observability/inventory-ids.md`):
+- `journey_id` is minted on every API request unless the client sends `x-chalk-journey-id`, which the SDK never does (`apps/api/internal/observability/journey.go:20`).
+- The SDK outbox makes one `traceparent` for the client's whole lifetime (`sdks/typescript/client/src/telemetry/outbox.ts:55`).
 - `client_session_id`, also sent as the baggage `session.id`, lives as long as one SDK client and is dropped before durable work.
 - Other IDs:
   - `operation_id`, seq and event IDs;
@@ -174,7 +174,7 @@ The v1 journey table still holds. v2 adds the following.
 - Release and rollback markers from each Alchemy deploy and each worker start.
 - The checker compares the version clients actually report with the deployed version.
 - A change stream for config and caps.
-- A Postgres health poller every 30 s: `pg_stat_activity`, lock waits, pool saturation from pgxpool `Stat()`, `pg_stat_statements` deltas, and a backup and restore marker. Today there is only a pool ping and a reachability check from the collector (`readiness.go:20`, `collector_health.go:36`).
+- A Postgres health poller every 30 s: `pg_stat_activity`, lock waits, pool saturation from pgxpool `Stat()`, `pg_stat_statements` deltas, and a backup and restore marker. Today there is only a pool ping and a reachability check from the collector (`apps/api/internal/adapters/postgres/readiness.go:20`, `infrastructure/observability/production-alerts/collector_health.go:36`).
 - Cloudflare Worker edge logs, so a broken deploy can't look like "0 joins, 0 errors".
 
 **Journeys and failure classes Gemini added:**
@@ -224,7 +224,7 @@ The v1 journey table still holds. v2 adds the following.
 ## 5. Delivery and storage
 
 - **A telemetry token separate from the media grant:** send-only, 24-hour, scoped to ingest and R2 upload.
-  - Today the outbox uses the 5-minute media grant, which the SDK renews 60 s before expiry (`manager.ts:4`).
+  - Today the outbox uses the 5-minute media grant, which the SDK renews 60 s before expiry (`sdks/typescript/client/src/access/manager.ts:4`).
   - So events are lost only when renewal keeps failing past expiry, and those are exactly the calls that die.
 - **Half the outbox queue is reserved for priority-0 records.** Stats are dropped first.
 - **First-party ingest path.**
