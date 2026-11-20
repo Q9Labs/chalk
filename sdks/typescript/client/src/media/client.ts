@@ -1253,7 +1253,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         }
       });
     } catch (error) {
-      if (generation === this.#generation && !this.#stopped && states.every((state) => state.source === "microphone")) recordAudio(this.#telemetry, "publish_failed");
+      // A dead transport or a failed multi-source retry does not isolate the microphone.
+      if (generation === this.#generation && !this.#stopped && connectionIsLive(this.#connection) && states.every((state) => state.source === "microphone") && this.#tracksToPublish(states).every((state) => state.source === "microphone")) {
+        recordAudio(this.#telemetry, "publish_failed");
+      }
       throw error;
     } finally {
       // Cleanup reports its own failures; another source cannot revoke this enable.

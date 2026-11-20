@@ -2,6 +2,7 @@ import type { TelemetryEvent, TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { recordAudio, remoteAudioTrack } from "./audio-observation";
 import { audioStats, increased, readStats, type AudioStats } from "./audio-stats";
+import { connectionIsLive } from "./peer-connection";
 import type { MediaPublication } from "./plane";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
 
@@ -192,7 +193,7 @@ export class AudioReceiveHealth {
       this.#resetConnection(connection);
       const stats = await readStats(connection);
       if (this.#disposed || revision !== this.#connectionRevision || connection !== this.#options.connection()) return;
-      this.#recordSample(stats);
+      this.#recordSample(stats, connection !== null && connectionIsLive(connection));
     } finally {
       this.#sampling = false;
     }
@@ -215,7 +216,7 @@ export class AudioReceiveHealth {
     }
   }
 
-  #recordSample(stats: RTCStatsReport | undefined): void {
+  #recordSample(stats: RTCStatsReport | undefined, connected: boolean): void {
     const tracks = new Map(Array.from(this.#options.tracks(), (publication) => [publication.publicationId, publication.track]));
     const inbound = audioStats(stats);
     const counts: Counts = {};
@@ -241,7 +242,7 @@ export class AudioReceiveHealth {
       const previousSample = entry.sampledAt;
       entry.sampledAt = now;
       const snapshot = this.#snapshot(entry, track, inbound);
-      this.#recordAudioSample(entry, snapshot, elapsed >= 1000 && elapsed <= 60_000 ? previousSample : undefined, now);
+      this.#recordAudioSample(entry, snapshot, elapsed >= 1000 && elapsed <= 60_000 ? previousSample : undefined, now, connected);
       const state = snapshot.receive_state ?? "announced";
       increment(counts, state);
       this.#reportStuck(entry, snapshot, now);
@@ -251,7 +252,7 @@ export class AudioReceiveHealth {
     }
   }
 
-  #recordAudioSample(entry: Entry, snapshot: Snapshot, previousSample: number | undefined, now: number): void {
+  #recordAudioSample(entry: Entry, snapshot: Snapshot, previousSample: number | undefined, now: number, connected: boolean): void {
     if (!entry.observedTrack) return;
     if (previousSample !== undefined && snapshot.receive_state === "track_received") {
       entry.flatSince ??= previousSample;
@@ -269,7 +270,7 @@ export class AudioReceiveHealth {
       if (snapshot.play_result === "NotAllowedError") this.#recordHop(entry, "autoplay_blocked");
       else if (snapshot.element_state === "paused" && snapshot.play_result === "ok") this.#recordHop(entry, "playback_paused");
       else this.#recordHop(entry, "inbound_flowing");
-    } else if (now - entry.since > 10_000 && snapshot.receive_state === "pull_failed") this.#recordHop(entry, "pull_failed");
+    } else if (connected && now - entry.since > 10_000 && snapshot.receive_state === "pull_failed") this.#recordHop(entry, "pull_failed");
     else if (entry.pull === "pull_succeeded") this.#recordHop(entry, "subscribed");
   }
 
