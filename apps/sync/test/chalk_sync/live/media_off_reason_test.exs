@@ -28,15 +28,35 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
   end
 
   test "a host mute shows the revision of its stop event even with no publication", ctx do
+    guest_id = ctx.guest.participant_id
+    episode_id = ctx.episode.episode_id
+    handler = "audio-stop-#{guest_id}"
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :obs, :record],
+      fn _event, _measurements, record, test -> send(test, {:obs_record, record}) end,
+      self()
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
     observe(ctx, [])
 
     assert [] = items(ctx.episode)
 
     revision = mute(ctx)
 
+    assert_receive {:obs_record,
+                    %{
+                      "name" => "audio.sync_stopped",
+                      "audio_observation" => "server_off",
+                      "episode_id" => ^episode_id,
+                      "participant_id" => ^guest_id
+                    }}
+
     assert [
              %{
-               "participant_id" => guest_id,
+               "participant_id" => ^guest_id,
                "source" => "microphone",
                "enabled" => false,
                "publication_id" => nil,
@@ -44,8 +64,6 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
                "off_revision" => ^revision
              }
            ] = items(ctx.episode)
-
-    assert guest_id == ctx.guest.participant_id
   end
 
   test "a fresh Sync process still shows the host mute from the stateholder", ctx do

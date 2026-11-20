@@ -97,16 +97,22 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
   defp observe_microphone_stop(episode, %{
          name: :mute_participant,
          target_participant_id: participant,
-         target_participant_generation: generation
+         target_participant_generation: generation,
+         journey_id: journey_id,
+         producing_trace_id: trace_id
        })
        when is_binary(participant) and is_integer(generation) do
-    Obs.fact("audio.sync_stopped",
+    fields = [
       tenant_id: episode.tenant_id,
       episode_id: episode.episode_id,
       participant_id: participant,
       generation: generation,
-      audio_observation: "server_off"
-    )
+      audio_observation: "server_off",
+      journey_id: journey_id,
+      trace_id: trace_id
+    ]
+
+    Obs.fact("audio.sync_stopped", Enum.reject(fields, fn {_name, value} -> is_nil(value) end))
   end
 
   defp observe_microphone_stop(_episode, _operation), do: :ok
