@@ -17,7 +17,7 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-// The staging soak in docs/sfu/capacity-calibration.md: five hours at three classes against the
+// The staging soak in docs/plans/sfu-capacity-calibration.md: five hours at three classes against the
 // 22,000 packets/s budget, covering the :00 and :30 marks, with no microphone stall over 500 ms.
 const (
 	soakHold      = 5 * time.Hour

@@ -1,5 +1,7 @@
 # Flow 1: a teacher starts a class
 
+> Persona note: "teacher", "student", "class" and "the host" are an illustrative classroom scenario; the product roles are owner, collaborator and observer. See [the statecharts index](../README.md).
+
 A person presses Start call on the home page and lands in a call. `StartClass.tla` is the TLA+ model, `StartClass.cfg` lists the rules TLC checks, `StartClass.view.mjs` gives the chart its words, `chart.mmd` is the Mermaid text and `chart.svg` is the rendered chart. The header of `StartClass.tla` names the code that each step mirrors.
 
 Make the files again with the `/statechart` skill from this folder, then render `chart.mmd` with `pele@1.9.0` as the skill's render reference describes. Use a new `OUT` folder outside the repo and copy `chart.mmd` here.

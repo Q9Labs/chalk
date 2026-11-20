@@ -103,7 +103,6 @@
         "apps/web/public/camera-effects",
         "apps/web/src/lib/camera-effect-assets.ts",
         "apps/web/src/lib/camera-effects.ts",
-        "docs/sfu",
         "features/media/sfu",
         "infrastructure/media-relay-access",
         "infrastructure/managed-episode",

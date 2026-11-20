@@ -68,7 +68,7 @@ export function changedFraction(before, after, region) {
   }
   return changed / pixels;
 }
-export function cameraEvidence(frames, phase, guest) {
+function cameraEvidence(frames, phase, guest) {
   const regions = frames.map((frame) => cameraRegion(frame, colors[phase][guest]));
   const visible = frames.length === 3 && regions.every(({ count }) => count >= width * height * 0.03);
   const changes = visible ? frames.slice(1).map((frame, index) => changedFraction(frames[index], frame, regions[index + 1])) : [];

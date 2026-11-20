@@ -1,3 +1,5 @@
+> **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
+
 # Production transcription release
 
 This runbook keeps the rules for releasing transcript-first transcription to production. It holds no account identifiers, secret values, provider payloads or operational evidence. Keep those in the protected release workspace.

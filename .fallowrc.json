@@ -36,6 +36,7 @@
     "scripts/web-proof/connection-lost.mjs",
     "scripts/web-proof/student-first.mjs",
     "scripts/web-proof/board-local.mjs",
+    "apps/api/scripts/check-additive-migrations.mjs",
     "apps/api/scripts/smoke-lifecycle.mjs",
     "apps/api/tests/recording-sdk-compatibility/published-clients.mjs",
     "packages/whiteboard/src/embedded/renderer-entry.ts",
@@ -53,6 +54,7 @@
     "scripts/gates/*.mjs",
     "scripts/ensure-playwright-browsers.mjs",
     "scripts/prod-proof/integrator.mjs",
+    "scripts/prod-proof/integrator-browser.mjs",
     "scripts/deploy/deploy-web-release.mjs",
     "features/media/sfu/tests/browser/capture-offer.mjs",
     "scripts/gates/doclint.mjs",
@@ -82,6 +84,8 @@
     "apps/mobile/plugins/with-ios-scene-lifecycle.js",
     "apps/recording-renderer/src/compose-cli.ts",
     "apps/recording-renderer/src/compose-fixture.ts",
+    "infrastructure/recorder/images/cpu/check-runtime-imports.mjs",
+    "infrastructure/recorder/images/cpu/relocate-renderer.mjs",
     "infrastructure/migration/seed.ts",
     "infrastructure/releases/driver.ts",
     "infrastructure/releases/deploy.ts",
@@ -178,6 +182,7 @@
   },
   "health": {
     "ignore": [
+      "scripts/npm-release.mjs",
       "features/scorecard/**",
       "tools/formal/**/*.view.mjs",
       "scripts/prod-proof/**",

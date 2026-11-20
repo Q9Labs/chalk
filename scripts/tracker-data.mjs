@@ -129,7 +129,7 @@ const validateWishlist = (wishlist, ids) => {
   wishlist.forEach((item) => validateOutcome(item, ids));
 };
 
-export const validateTracker = (tracker) => {
+const validateTracker = (tracker) => {
   object(tracker, "tracker.yaml", trackerFields);
   if (tracker.schema_version !== 7) fail("schema_version", "expected 7");
   string(tracker.principle, "principle");
@@ -183,7 +183,7 @@ const checkAnchor = async (absolute, file, anchor, reference) => {
   if (!headings.includes(anchor)) fail(reference, "heading does not exist");
 };
 
-export const checkReference = async (root, reference) => {
+const checkReference = async (root, reference) => {
   const { file, anchor } = parseReference(reference);
   const absoluteRoot = await realpath(root);
   const absolute = await realpath(path.join(absoluteRoot, file));

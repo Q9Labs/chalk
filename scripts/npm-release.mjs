@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
+import { parseArgs } from "node:util";
 import { gitLines } from "./lib/git.mjs";
 import { sha256 } from "./lib/hash.mjs";
 import { chalkReleaseVersion, releasePackages } from "./lib/release-packages.mjs";
@@ -17,7 +18,7 @@ const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-worksp
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));
 
-export function usage() {
+function usage() {
   return `Usage:
   pnpm run package:release                 Build, validate, and pack only (default)
   pnpm run package:release -- --publish   Build, validate, and publish after confirmation
@@ -37,91 +38,35 @@ workspace package is included; private apps and tools are excluded. Publish
 confirmation includes the exact eight-character commit SHA.`;
 }
 
-function selectMode(context, mode) {
-  if (context.mode && context.mode !== mode) throw new Error("Choose one mode: --dry-run or --publish");
-  context.mode = mode;
-  context.options.mode = mode;
-}
-
-function parseArtifactDirectory(context, argumentsList, index, argument) {
-  const value = argumentsList[index + 1];
-  if (!value) throw new Error(`${argument} requires a directory path`);
-  if (value.startsWith("--")) throw new Error(`${argument} requires a directory path`);
-  context.options.artifactDirectory = value;
-  return 1;
-}
-
-function parseInlineArtifactDirectory(context, argument) {
-  const value = argument.slice(argument.indexOf("=") + 1);
-  if (!value) throw new Error(`${argument.split("=")[0]} requires a directory path`);
-  context.options.artifactDirectory = value;
-  return 0;
-}
-
-function parseBumpVersion(context, argumentsList, index, argument) {
-  const value = argumentsList[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`${argument} requires a version`);
-  context.options.bump = value;
-  return 1;
-}
-
-function parseInlineBumpVersion(context, _argumentsList, _index, argument) {
-  const value = argument.slice(argument.indexOf("=") + 1);
-  if (!value) throw new Error("--bump requires a version");
-  context.options.bump = value;
-  return 0;
-}
-
-const argumentHandlers = [
-  { matches: (argument) => argument === "--", apply: () => 0 },
-  {
-    matches: (argument) => argument === "--help" || argument === "-h",
-    apply: ({ options }) => {
-      options.help = true;
-      return 0;
-    },
-  },
-  {
-    matches: (argument) => argument === "--dry-run",
-    apply: (context) => {
-      selectMode(context, "dry-run");
-      context.options.dryRun = true;
-      return 0;
-    },
-  },
-  {
-    matches: (argument) => argument === "--publish",
-    apply: (context) => {
-      selectMode(context, "publish");
-      return 0;
-    },
-  },
-  {
-    matches: (argument) => argument === "--skip-install",
-    apply: ({ options }) => {
-      options.skipInstall = true;
-      return 0;
-    },
-  },
-  { matches: (argument) => argument === "--bump", apply: parseBumpVersion },
-  { matches: (argument) => argument.startsWith("--bump="), apply: parseInlineBumpVersion },
-  { matches: (argument) => argument === "--artifact-dir" || argument === "--artifact-directory", apply: parseArtifactDirectory },
-  { matches: (argument) => argument.startsWith("--artifact-dir=") || argument.startsWith("--artifact-directory="), apply: parseInlineArtifactDirectory },
-];
-
-function findArgumentHandler(argument) {
-  return argumentHandlers.find(({ matches }) => matches(argument));
-}
-
-export function parseArguments(argumentsList) {
-  const context = { options: { mode: "dry-run", skipInstall: false, artifactDirectory: null, help: false, bump: null, dryRun: false }, mode: null };
-  for (let index = 0; index < argumentsList.length; index += 1) {
-    const argument = argumentsList[index];
-    const handler = findArgumentHandler(argument);
-    if (!handler) throw new Error(`Unknown option: ${argument}\n\n${usage()}`);
-    index += handler.apply(context, argumentsList, index, argument);
+function parseArguments(argumentsList) {
+  let values;
+  try {
+    // pnpm forwards the "--" that separates its own flags; parseArgs would read everything after it as positional.
+    ({ values } = parseArgs({
+      args: argumentsList.filter((argument) => argument !== "--"),
+      options: {
+        help: { type: "boolean", short: "h" },
+        "dry-run": { type: "boolean" },
+        publish: { type: "boolean" },
+        "skip-install": { type: "boolean" },
+        bump: { type: "string" },
+        "artifact-dir": { type: "string" },
+      },
+    }));
+  } catch (error) {
+    throw new Error(`${error.message}\n\n${usage()}`);
   }
-  return context.options;
+  if (values["dry-run"] && values.publish) throw new Error("Choose one mode: --dry-run or --publish");
+  if (values.bump === "") throw new Error("--bump requires a version");
+  if (values["artifact-dir"] === "") throw new Error("--artifact-dir requires a directory path");
+  return {
+    mode: values.publish ? "publish" : "dry-run",
+    skipInstall: Boolean(values["skip-install"]),
+    artifactDirectory: values["artifact-dir"] ?? null,
+    help: Boolean(values.help),
+    bump: values.bump ?? null,
+    dryRun: Boolean(values["dry-run"]),
+  };
 }
 
 function readJson(relativePath) {
@@ -138,119 +83,52 @@ function releaseSourcePath(relativePath) {
   return releaseRootFiles.has(normalizedPath) || releasePackages.some(({ directory }) => normalizedPath === directory || normalizedPath.startsWith(`${directory}/`));
 }
 
-export function changedReleaseSources(changedFiles) {
-  return changedFiles.filter(releaseSourcePath).sort();
-}
-
-export function assertCleanReleaseSources() {
+function assertCleanReleaseSources() {
   const changedFiles = [...new Set([...gitLines(["diff", "--name-only", "HEAD"]), ...gitLines(["ls-files", "--others", "--exclude-standard"])])];
-  const dirtyFiles = changedReleaseSources(changedFiles);
+  const dirtyFiles = changedFiles.filter(releaseSourcePath).sort();
   if (dirtyFiles.length > 0) {
     throw new Error(`Release sources are not clean. Commit or remove these files before packaging:\n${dirtyFiles.map((file) => `- ${file}`).join("\n")}`);
   }
 }
 
-function dependencySections(packageManifest) {
-  return ["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"].flatMap((section) => Object.entries(packageManifest[section] ?? {}));
-}
-
-export function isPlainWorkspaceRange(range) {
-  return ["workspace:^", "workspace:~", "workspace:*"].includes(String(range));
-}
-
-function localDependencies(packageManifest, allowedPackages = packageByName) {
-  return dependencySections(packageManifest)
-    .filter(([name]) => allowedPackages.has(name))
+function localDependencies(packageManifest) {
+  return ["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"]
+    .flatMap((section) => Object.entries(packageManifest[section] ?? {}))
+    .filter(([name]) => packageByName.has(name))
     .map(([name, range]) => ({ name, range: String(range) }));
 }
 
-function packageDependencyNames(packageManifest, packageNames) {
-  return localDependencies(packageManifest, packageNames)
-    .map(({ name }) => name)
-    .filter((name) => packageNames.has(name));
-}
-
-function packageDependencyMap(packages, manifests) {
-  const packageNames = new Map(packages.map((releasePackage) => [releasePackage.name, releasePackage]));
-  const dependencies = new Map();
-  for (const releasePackage of packages) {
-    const packageManifest = manifests.get(releasePackage.name) ?? {};
-    dependencies.set(releasePackage.name, new Set(packageDependencyNames(packageManifest, packageNames)));
-  }
-  return { packageNames, dependencies };
-}
-
-function allDependenciesResolved(name, remaining, dependencies) {
-  return [...dependencies.get(name)].every((dependency) => !remaining.has(dependency));
-}
-
-function readyPackageNames(remaining, dependencies) {
-  return [...remaining].filter((name) => allDependenciesResolved(name, remaining, dependencies)).sort((left, right) => left.localeCompare(right));
-}
-
-function nextPackage(ready, remaining) {
-  if (ready.length === 0) throw new Error(`Workspace dependency cycle detected among: ${[...remaining].sort().join(", ")}`);
-  return ready[0];
-}
-
-export function topologicalOrder(packages, manifests = new Map()) {
-  const { packageNames, dependencies } = packageDependencyMap(packages, manifests);
-  const remaining = new Set(packageNames.keys());
+function topologicalOrder(manifests) {
+  const dependencies = new Map(releasePackages.map(({ name }) => [name, localDependencies(manifests.get(name) ?? {}).map((dependency) => dependency.name)]));
+  const remaining = new Set(dependencies.keys());
   const order = [];
   while (remaining.size > 0) {
-    const next = nextPackage(readyPackageNames(remaining, dependencies), remaining);
-    remaining.delete(next);
-    order.push(packageNames.get(next));
+    const ready = [...remaining].filter((name) => dependencies.get(name).every((dependency) => !remaining.has(dependency))).sort((left, right) => left.localeCompare(right));
+    if (ready.length === 0) throw new Error(`Workspace dependency cycle detected among: ${[...remaining].sort().join(", ")}`);
+    remaining.delete(ready[0]);
+    order.push(packageByName.get(ready[0]));
   }
   return order;
 }
 
-function manifestValue(value) {
-  return value ?? "missing";
-}
-
-function fieldMismatch(field, actual, expected) {
-  if (actual === expected) return null;
-  return `${field} is ${manifestValue(actual)}, expected ${expected}`;
-}
-
-function manifestFieldErrors(releasePackage, packageManifest) {
-  return [
-    ["name", packageManifest.name, releasePackage.name],
-    ["version", packageManifest.version, releasePackage.independent ? releasePackage.version : chalkReleaseVersion],
-    ["license", packageManifest.license, "MIT"],
-  ]
-    .map(([field, actual, expected]) => fieldMismatch(field, actual, expected))
-    .filter(Boolean);
-}
-
-function privatePackageError(packageManifest) {
-  return packageManifest.private === true ? "package is private" : null;
-}
-
-function publishedFilesError(packageManifest) {
-  return Array.isArray(packageManifest.files) && packageManifest.files.length > 0 ? null : "files must list the published build output";
-}
-
-function publishConfigErrors(packageManifest) {
-  return [fieldMismatch("publishConfig.access", packageManifest.publishConfig?.access, "public"), fieldMismatch("publishConfig.registry", packageManifest.publishConfig?.registry, registry), privatePackageError(packageManifest), publishedFilesError(packageManifest)].filter(Boolean);
-}
-
-function workspaceDependencyError({ name, range }) {
-  if (isPlainWorkspaceRange(range)) return null;
-  return `workspace dependency ${name} uses ${range}, expected workspace:^ so a release edits no dependent`;
-}
-
-function workspaceDependencyErrors(packageManifest) {
-  return localDependencies(packageManifest).map(workspaceDependencyError).filter(Boolean);
-}
-
 function assertPackageManifest(releasePackage, packageManifest) {
-  const errors = [...manifestFieldErrors(releasePackage, packageManifest), ...publishConfigErrors(packageManifest), ...workspaceDependencyErrors(packageManifest)];
+  const mismatch = (field, actual, expected) => (actual === expected ? null : `${field} is ${actual ?? "missing"}, expected ${expected}`);
+  const errors = [
+    mismatch("name", packageManifest.name, releasePackage.name),
+    mismatch("version", packageManifest.version, releasePackage.independent ? releasePackage.version : chalkReleaseVersion),
+    mismatch("license", packageManifest.license, "MIT"),
+    mismatch("publishConfig.access", packageManifest.publishConfig?.access, "public"),
+    mismatch("publishConfig.registry", packageManifest.publishConfig?.registry, registry),
+    packageManifest.private === true ? "package is private" : null,
+    Array.isArray(packageManifest.files) && packageManifest.files.length > 0 ? null : "files must list the published build output",
+    ...localDependencies(packageManifest)
+      .filter(({ range }) => !["workspace:^", "workspace:~", "workspace:*"].includes(range))
+      .map(({ name, range }) => `workspace dependency ${name} uses ${range}, expected workspace:^ so a release edits no dependent`),
+  ].filter(Boolean);
   if (errors.length > 0) throw new Error(`${releasePackage.directory}/package.json: ${errors.join("; ")}`);
 }
 
-export function loadReleaseManifests() {
+function loadReleaseManifests() {
   const manifests = new Map();
   for (const releasePackage of releasePackages) {
     const manifestPath = path.join(releasePackage.directory, "package.json");
@@ -300,30 +178,16 @@ function runCaptured(command, argumentsList, env = {}) {
   };
 }
 
-function registryNotFound(result) {
-  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
-  return ["e404", "404 not found", "is not in this registry"].some((message) => output.includes(message));
-}
-
-function registrySuccessVersion(result, releasePackage) {
-  const version = result.stdout.trim();
-  if (!version) throw new Error(`Registry returned no version for ${releasePackage.name}@${releasePackage.version}`);
-  return version;
-}
-
-function firstErrorLine(value) {
-  return value.trim().split(/\r?\n/)[0] || "unknown registry error";
-}
-
-function registryFailure(releasePackage, result) {
-  return new Error(`Could not check ${releasePackage.name}@${releasePackage.version} on npm (${firstErrorLine(result.stderr)})`);
-}
-
 function registryVersion(releasePackage) {
   const result = runCaptured("npm", ["view", `${releasePackage.name}@${releasePackage.version}`, "version", "--json", "--registry", registry]);
-  if (result.status === 0) return registrySuccessVersion(result, releasePackage);
-  if (registryNotFound(result)) return null;
-  throw registryFailure(releasePackage, result);
+  if (result.status === 0) {
+    const version = result.stdout.trim();
+    if (!version) throw new Error(`Registry returned no version for ${releasePackage.name}@${releasePackage.version}`);
+    return version;
+  }
+  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
+  if (["e404", "404 not found", "is not in this registry"].some((message) => output.includes(message))) return null;
+  throw new Error(`Could not check ${releasePackage.name}@${releasePackage.version} on npm (${result.stderr.trim().split(/\r?\n/)[0] || "unknown registry error"})`);
 }
 
 function assertRegistryVersionsAvailable() {
@@ -383,14 +247,10 @@ function writeArtifactManifest(artifactDirectory, order, archives) {
   return manifestPath;
 }
 
-export function publishConfirmationPhrase(releaseVersion, shortRevision) {
-  return `PUBLISH CHALK ${releaseVersion} FROM ${shortRevision}`;
-}
-
 async function confirmPublish(releaseVersion, shortRevision) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("--publish requires an interactive terminal so the release confirmation cannot be skipped");
   const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const confirmationPhrase = publishConfirmationPhrase(releaseVersion, shortRevision);
+  const confirmationPhrase = `PUBLISH CHALK ${releaseVersion} FROM ${shortRevision}`;
   try {
     const answer = await prompt.question(`Type ${confirmationPhrase} to publish all packages: `);
     if (answer.trim() !== confirmationPhrase) throw new Error("Publish confirmation did not match; no package was published");
@@ -399,38 +259,10 @@ async function confirmPublish(releaseVersion, shortRevision) {
   }
 }
 
-function remoteMasterLine(output) {
-  const line = String(output)
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .find(Boolean);
-  if (!line) throw new Error("Live origin/master did not return a valid commit SHA");
-  return line;
-}
-
-function remoteMasterFields(output) {
-  const fields = remoteMasterLine(output).split(/\s+/);
-  if (fields.length < 2) throw new Error("Live origin/master did not return a valid commit SHA");
-  return fields;
-}
-
-function validRemoteSha(value) {
-  return /^[0-9a-f]{40}$/i.test(value);
-}
-
-function validRemoteMaster(fields) {
-  if (!validRemoteSha(fields[0])) return false;
-  return fields[1] === "refs/heads/master";
-}
-
-export function parseRemoteMasterSha(output) {
-  const fields = remoteMasterFields(output);
-  if (!validRemoteMaster(fields)) throw new Error("Live origin/master did not return a valid commit SHA");
+function parseRemoteMasterSha(output) {
+  const fields = (output.split(/\r?\n/).find((line) => line.trim()) ?? "").trim().split(/\s+/);
+  if (fields.length < 2 || !/^[0-9a-f]{40}$/i.test(fields[0]) || fields[1] !== "refs/heads/master") throw new Error("Live origin/master did not return a valid commit SHA");
   return fields[0].toLowerCase();
-}
-
-function assertMasterBranch(branch) {
-  if (branch !== "master") throw new Error(`Publish dispatch requires the master branch, found ${branch || "detached HEAD"}`);
 }
 
 function readLiveMasterRevision() {
@@ -443,22 +275,14 @@ function readLiveMasterRevision() {
   return parseRemoteMasterSha(output);
 }
 
-function assertLocalOriginRevision(localRevision, liveRevision) {
-  if (localRevision !== liveRevision) throw new Error(`Local origin/master is stale (local ${localRevision.slice(0, 12)}, live ${liveRevision.slice(0, 12)}); fetch and retry`);
-}
-
-function assertReleaseRevision(head, liveRevision) {
-  if (head !== liveRevision) throw new Error(`Publish dispatch requires HEAD to equal live origin/master (HEAD ${head.slice(0, 12)}, origin/master ${liveRevision.slice(0, 12)})`);
-}
-
 function releaseHead() {
   const branch = gitLines(["branch", "--show-current"])[0];
-  assertMasterBranch(branch);
+  if (branch !== "master") throw new Error(`Publish dispatch requires the master branch, found ${branch || "detached HEAD"}`);
   const head = gitLines(["rev-parse", "HEAD"])[0];
   const originHead = gitLines(["rev-parse", "origin/master"])[0];
   const liveOriginHead = readLiveMasterRevision();
-  assertLocalOriginRevision(originHead, liveOriginHead);
-  assertReleaseRevision(head, liveOriginHead);
+  if (originHead !== liveOriginHead) throw new Error(`Local origin/master is stale (local ${originHead.slice(0, 12)}, live ${liveOriginHead.slice(0, 12)}); fetch and retry`);
+  if (head !== liveOriginHead) throw new Error(`Publish dispatch requires HEAD to equal live origin/master (HEAD ${head.slice(0, 12)}, origin/master ${liveOriginHead.slice(0, 12)})`);
   return { head, shortRevision: head.slice(0, 8) };
 }
 
@@ -468,7 +292,7 @@ function assertGitHubAuth() {
   console.log("GitHub auth check passed.");
 }
 
-export function publishWorkflowArguments(head) {
+function publishWorkflowArguments(head) {
   return ["workflow", "run", ".github/workflows/npm-publish.yml", "--repo", githubRepository, "--ref", "master", "-f", "dry_run=false", "-f", `release_sha=${head}`];
 }
 
@@ -483,7 +307,7 @@ function prepareReleasePlan(options) {
   console.log(`Chalk npm release (${options.mode})`);
   assertCleanReleaseSources();
   const manifests = loadReleaseManifests();
-  const order = topologicalOrder(releasePackages, manifests);
+  const order = topologicalOrder(manifests);
   console.log(`Publish order: ${order.map(({ name }) => name).join(" -> ")}`);
   assertRegistryVersionsAvailable();
   return order;
@@ -535,13 +359,9 @@ function bumpManifestText(text, fromVersion, toVersion) {
 }
 
 // Takes a map of relative path to file text for every workspace package.json.
-function assertBumpTarget(fromVersion, toVersion) {
+function planVersionBump(files, fromVersion, toVersion) {
   if (!semverPattern.test(toVersion)) throw new Error(`--bump requires a version like 4.2.0, got ${toVersion}`);
   if (toVersion === fromVersion) throw new Error(`Release version is already ${fromVersion}`);
-}
-
-export function planVersionBump(files, fromVersion, toVersion) {
-  assertBumpTarget(fromVersion, toVersion);
   const changes = new Map();
   for (const [relativePath, text] of files) {
     const next = bumpManifestText(text, fromVersion, toVersion);
@@ -569,7 +389,7 @@ function bumpReleaseVersion(toVersion, { dryRun }) {
   if (!dryRun) applyVersionBump(changes);
 }
 
-export async function main(argumentsList = process.argv.slice(2)) {
+async function main(argumentsList = process.argv.slice(2)) {
   const options = parseArguments(argumentsList);
   if (options.help) return console.log(usage());
   if (options.bump) return bumpReleaseVersion(options.bump, { dryRun: options.dryRun });

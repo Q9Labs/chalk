@@ -134,7 +134,7 @@ type Guard struct {
 // module read the same file, so a node is described once. A size's packet budget admits only as many
 // classes as keep the node's own CPU under about 65% of what its vCPUs deliver at the worst steal
 // seen (52% over 10 s): a 3-person, 2-camera class reserves 7170 packets/s and costs about 11% of
-// one vCPU, so 22000 admits 3 classes on 1 vCPU and 36000 admits 5 on 2 (docs/sfu/capacity-calibration.md).
+// one vCPU, so 22000 admits 3 classes on 1 vCPU and 36000 admits 5 on 2 (docs/plans/sfu-capacity-calibration.md).
 // Production closes admission to new Episodes at 40% steal; the other environments keep 25 so the
 // guard stays easy to exercise there.
 //
