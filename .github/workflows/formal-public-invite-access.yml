@@ -5,6 +5,7 @@ name: Public invite access model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/api/db/queries/sync_lifecycle.sql
       - apps/api/db/queries/episode_live.sql
@@ -27,6 +28,7 @@ concurrency:
 jobs:
   check:
     name: Public invite access model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

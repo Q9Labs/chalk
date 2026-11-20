@@ -168,12 +168,6 @@ pnpm gate
 
 Run `pnpm regen` after changing generator inputs, then run `pnpm check:generated`. Go and Sync checks use their pinned tools. Read [gate operations](../scripts/gates/README.md) for the full Linux gate and database checks.
 
-Open one draft PR for the related change. Drafts skip the main Gate, Mobile CI, and Release contracts. Finish local checks and self-review before marking it ready. Check the ready cap:
-
-```sh
-node scripts/gates/ready-cap.mjs --pr <number>
-```
-
-If the cap is full, keep the PR in draft. Mark it ready once and batch fixes into one push. Each push to a ready PR reruns the Gate. Follow [CODING_STANDARDS.md](../CODING_STANDARDS.md).
+Open one draft PR for the related change. Drafts skip the main Gate, Mobile CI, and Release contracts. Finish local checks and self-review before marking it ready. Mark it ready once and batch fixes into one push. Each push to a ready PR reruns the Gate. Follow [CODING_STANDARDS.md](../CODING_STANDARDS.md).
 
 Orbs and Instabox are Q9-internal tools. Outside engineers rely on GitHub CI and ask a Q9 member or agent for an Orb when a change needs product UI proof. Do not put private credentials, production identifiers, or raw debug evidence in this public repository.

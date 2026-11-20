@@ -4,6 +4,7 @@ name: Media control model
 # CI runs a bounded subset of rows; the full set (about 15 minutes) runs locally.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - sdks/typescript/client/src/space-client/media-controller.ts
       - tools/formal/media-control/**
@@ -21,6 +22,7 @@ concurrency:
 jobs:
   check:
     name: Media control model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

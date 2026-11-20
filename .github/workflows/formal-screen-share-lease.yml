@@ -5,6 +5,7 @@ name: Screen-share lease model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex
       - apps/sync/lib/chalk_sync/live/episode.ex
@@ -26,6 +27,7 @@ concurrency:
 jobs:
   check:
     name: Screen-share lease model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

@@ -140,8 +140,6 @@
     "apps/api/internal/spaces/service.go": 770,
     "apps/api/internal/webhooks/events.go": 337,
     "apps/sync/lib/chalk_sync/chat/sql.ex": 358,
-    "apps/sync/lib/chalk_sync/contract/generated.ex": 1621,
-    "apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex": 990,
     "apps/sync/lib/chalk_sync/episodes/reducer.ex": 446,
     "apps/sync/lib/chalk_sync/protocol.ex": 393,
     "apps/sync/lib/chalk_sync/provider_bridge/codec.ex": 376,

@@ -5,6 +5,7 @@ name: Sync external-operation model
 # the skill's coverage record.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - apps/sync/lib/chalk_sync/external_operation_consumer.ex
       - apps/sync/lib/chalk_sync/external_operation_consumer/**
@@ -32,6 +33,7 @@ concurrency:
 jobs:
   check:
     name: Sync external-operation model
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

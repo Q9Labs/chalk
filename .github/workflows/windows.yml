@@ -6,9 +6,18 @@ name: Windows
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.mdx"
+      - "scratchpad/**"
   merge_group:
   push:
     branches: [master]
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.mdx"
+      - "scratchpad/**"
   workflow_dispatch:
 
 permissions:
@@ -27,6 +36,7 @@ env:
 jobs:
   windows:
     name: Windows
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: windows-latest
     timeout-minutes: 60
     defaults:

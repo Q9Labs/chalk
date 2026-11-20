@@ -600,6 +600,7 @@
         ".gitleaks.toml",
         ".gitleaksignore",
         ".oxfmtrc.json",
+        ".oxlintrc.json",
         ".syncpackrc.json",
         ".tool-versions",
         "AGENTS.md",

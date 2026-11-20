@@ -15,9 +15,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   languages:
     name: Select CodeQL languages
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -45,7 +50,7 @@ jobs:
     name: Analyze (${{ matrix.language }})
     needs: languages
     # A failed selection analyses every language.
-    if: ${{ !cancelled() && (needs.languages.result != 'success' || needs.languages.outputs.languages != '[]') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && (needs.languages.result != 'success' || needs.languages.outputs.languages != '[]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
