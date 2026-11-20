@@ -207,7 +207,7 @@
     "sdks/typescript/client/src/connection/lifecycle.ts": 1528,
     "sdks/typescript/client/src/media/audio-receive-health.test.ts": 481,
     "sdks/typescript/client/src/media/audio-receive-health.ts": 338,
-    "sdks/typescript/client/src/media/client.ts": 2724,
+    "sdks/typescript/client/src/media/client.ts": 2291,
     "sdks/typescript/client/src/media/cloudflare-sfu-replacement.test.ts": 1182,
     "sdks/typescript/client/src/media/cloudflare-sfu.test.helpers.ts": 321,
     "sdks/typescript/client/src/media/cloudflare-sfu.test.ts": 7275,
