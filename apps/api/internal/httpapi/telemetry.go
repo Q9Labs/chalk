@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
+	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -63,10 +64,24 @@ func decodeTelemetry(r *http.Request) (telemetryRequest, error) {
 	return request, nil
 }
 
+// TelemetryVerifier verifies the telemetry token, which only the telemetry route accepts.
+type TelemetryVerifier interface {
+	VerifyTelemetry(context.Context, string) (accessgrants.Subject, error)
+}
+
+// TelemetryLedger admits a version 2 batch against the stored ledger. It calls write with the
+// records that are new after it has admitted the batch and before it commits, so an error from
+// either leaves the ledger as it was. See telemetrydelivery.MemoryLedger and
+// postgres.TelemetryLedger.
+type TelemetryLedger interface {
+	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, write telemetrydelivery.SinkWrite) (telemetrydelivery.Admission, error)
+}
+
 // A still-valid signed credential is enough, and it keeps being enough after the
 // participant leaves: the last events are sent as the client goes, and the
-// credential only stamps rows, so the byte budget is all it needs to be safe.
-func telemetryEndpoint(verifier ParticipantMediaVerifier) Endpoint[telemetryRequest, sdktelemetry.Response] {
+// credential only stamps rows, so the byte budget is all it needs to be safe. The credential is the
+// telemetry token, or the media credential for a client that has no telemetry token yet.
+func telemetryEndpoint(telemetry TelemetryVerifier, media ParticipantMediaVerifier, ledger TelemetryLedger) Endpoint[telemetryRequest, sdktelemetry.Response] {
 	return Post("/v1/tenants/{tenant_id}/telemetry", "uploadTelemetry", decodeTelemetry,
 		func(ctx context.Context, request telemetryRequest) (sdktelemetry.Response, error) {
 			subject, ok := accessgrants.SubjectFromContext(ctx)
@@ -79,12 +94,46 @@ func telemetryEndpoint(verifier ParticipantMediaVerifier) Endpoint[telemetryRequ
 			if request.Frame != "" {
 				return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, request.Frame)
 			}
+			if request.Batch.Version == sdktelemetry.LedgerVersion {
+				return admitTelemetry(ctx, ledger, subject, request)
+			}
 			return logTelemetry(ctx, subject, request.Batch, request.Origin), nil
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimitFor(telemetryBudget, telemetryCharge).
+		}).Auth(APIAuthParticipantTelemetry).Middleware(requireTelemetryCredential(telemetry, media)).RateLimitFor(telemetryBudget, telemetryCharge).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("TelemetryRequest", sdktelemetry.Request{}, sdktelemetry.BodyLimit).
 		Responds(http.StatusOK, "TelemetryResponse", sdktelemetry.Response{}).
 		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+}
+
+// admitTelemetry settles a version 2 batch in the ledger. The sink rows of the records the ledger
+// calls new are written inside the ledger's transaction, so a retry of a batch whose answer was
+// lost writes nothing again. When the ledger fails nothing is acked and the client retries the
+// same batch.
+func admitTelemetry(ctx context.Context, ledger TelemetryLedger, subject accessgrants.Subject, request telemetryRequest) (sdktelemetry.Response, error) {
+	if ledger == nil {
+		return sdktelemetry.Response{}, apiErrorServiceUnavailableRetry
+	}
+	identity := telemetrydelivery.Identity{TenantID: subject.TenantID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID}
+	written := sdktelemetry.Response{Acks: []sdktelemetry.SeqRange{}, Rejections: []sdktelemetry.Rejection{}}
+	admission, err := ledger.Admit(ctx, identity, request.Batch, time.Now(), func(ctx context.Context, admission telemetrydelivery.Admission) error {
+		fresh := request.Batch
+		fresh.Events = admission.New
+		written = logTelemetry(ctx, subject, fresh, request.Origin)
+		return nil
+	})
+	switch {
+	case errors.Is(err, telemetrydelivery.ErrLedgerFull):
+		return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, "ledger_full")
+	case errors.Is(err, telemetrydelivery.ErrBatch):
+		return sdktelemetry.Response{}, rejectTelemetry(ctx, subject, "schema")
+	case err != nil:
+		observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).ErrorContext(ctx, "Telemetry ledger failed",
+			"event", "sdk.telemetry.ledger_failed", "source_id", request.Batch.SourceID, "batch_id", request.Batch.BatchID, "error", err)
+		return sdktelemetry.Response{}, apiErrorServiceUnavailableRetry
+	}
+	written.Duplicates = admission.Duplicates
+	written.Acks = telemetrydelivery.Acks(request.Batch, admission.Settled)
+	return written, nil
 }
 
 // logTelemetry writes the rows of a batch. The credential names the tenant, Space, Episode,

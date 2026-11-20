@@ -110,6 +110,10 @@ export const AccessGrantSchema = /* @__PURE__ */ (() =>
       expires_at: DateTimeStringSchema,
       token: Schema.String,
     }),
+    telemetry: Schema.Struct({
+      expires_at: DateTimeStringSchema,
+      token: Schema.String,
+    }),
   }))();
 export type AccessGrant = typeof AccessGrantSchema.Type;
 

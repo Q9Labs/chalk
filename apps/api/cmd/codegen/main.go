@@ -112,6 +112,12 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 						"bearerFormat": "JWT",
 						"description":  "Short-lived participant media credential bound to one live participant generation and media-provider connection.",
 					},
+					"participantTelemetryBearer": map[string]any{
+						"type":         "http",
+						"scheme":       "bearer",
+						"bearerFormat": "JWT",
+						"description":  "Participant telemetry token, valid for 24 hours and accepted only by the telemetry route. The participant media credential is accepted there too. It cannot call any other route.",
+					},
 					"participantSyncBearer": map[string]any{
 						"type":         "http",
 						"scheme":       "bearer",
@@ -179,6 +185,11 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 		}
 	case httpapi.APIAuthParticipantMedia:
 		operation["security"] = []map[string][]string{
+			{"participantMediaBearer": {}},
+		}
+	case httpapi.APIAuthParticipantTelemetry:
+		operation["security"] = []map[string][]string{
+			{"participantTelemetryBearer": {}},
 			{"participantMediaBearer": {}},
 		}
 	case httpapi.APIAuthParticipantSync:

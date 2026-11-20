@@ -11387,6 +11387,9 @@
         },
         "security": [
           {
+            "participantTelemetryBearer": []
+          },
+          {
             "participantMediaBearer": []
           }
         ],
@@ -14242,6 +14245,12 @@
         "scheme": "bearer",
         "type": "http"
       },
+      "participantTelemetryBearer": {
+        "bearerFormat": "JWT",
+        "description": "Participant telemetry token, valid for 24 hours and accepted only by the telemetry route. The participant media credential is accepted there too. It cannot call any other route.",
+        "scheme": "bearer",
+        "type": "http"
+      },
       "sessionOrBearer": {
         "description": "Tenant-scoped API key or local system bearer credential. User sessions are not accepted.",
         "scheme": "bearer",
@@ -14474,9 +14483,22 @@
             },
             "required": ["expires_at", "token"],
             "type": "object"
+          },
+          "telemetry": {
+            "additionalProperties": false,
+            "properties": {
+              "expires_at": {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": ["expires_at", "token"],
+            "type": "object"
           }
         },
-        "required": ["media", "subject", "sync"],
+        "required": ["media", "subject", "sync", "telemetry"],
         "type": "object"
       },
       "AdmitEpisodeParticipantRequest": {

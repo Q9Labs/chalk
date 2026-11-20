@@ -1419,6 +1419,10 @@ export interface components {
         expires_at: components["schemas"]["DateTimeString"];
         token: string;
       };
+      telemetry: {
+        expires_at: components["schemas"]["DateTimeString"];
+        token: string;
+      };
     };
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */

@@ -44,6 +44,38 @@ func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(h
 	}
 }
 
+// requireTelemetryCredential accepts the telemetry token, or the media credential in its place. The
+// telemetry verifier is asked first and refuses a media credential by audience, so the media
+// verifier only sees what the telemetry one did not accept.
+func requireTelemetryCredential(telemetry TelemetryVerifier, media ParticipantMediaVerifier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if telemetry == nil || media == nil {
+				writeServiceUnavailable(w)
+				return
+			}
+			credential, ok := bearerToken(r.Header.Get("Authorization"))
+			if !ok {
+				writeUnauthenticated(w)
+				return
+			}
+			subject, err := telemetry.VerifyTelemetry(r.Context(), credential)
+			if err != nil && isParticipantMediaCredentialRejection(err) {
+				subject, err = media.Verify(r.Context(), credential)
+			}
+			if err != nil {
+				if isParticipantMediaCredentialRejection(err) {
+					writeUnauthenticated(w)
+					return
+				}
+				writeServiceUnavailable(w)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(accessgrants.WithSubject(r.Context(), subject)))
+		})
+	}
+}
+
 func requireParticipantMedia(verifier ParticipantMediaVerifier, authorizer ActiveParticipantAuthorizer) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return requireParticipantMediaCredential(verifier)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
