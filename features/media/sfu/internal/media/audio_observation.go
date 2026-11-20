@@ -51,9 +51,9 @@ func (s *Session) traceMicrophoneForward(sub *subscription, now int64) {
 	if sub.pub.source != "microphone" || s.scope.ParticipantID == "" {
 		return
 	}
-	packets, attempts := sub.audioPackets.Load(), sub.audioAttempts.Load()
-	previousPackets, previousAttempts := sub.audioStatsPackets, sub.audioStatsAttempts
-	sub.audioStatsPackets, sub.audioStatsAttempts = packets, attempts
+	packets, failures := sub.audioPackets.Load(), sub.audioWriteFailures.Load()
+	previousPackets, previousFailures := sub.audioStatsPackets, sub.audioStatsFailures
+	sub.audioStatsPackets, sub.audioStatsFailures = packets, failures
 	elapsed := audioSampleElapsed(&sub.audioSampleAt, now)
 	if elapsed == 0 || sub.closed.Load() || sub.pub.held.Load() {
 		return
@@ -61,7 +61,7 @@ func (s *Session) traceMicrophoneForward(sub *subscription, now int64) {
 	switch {
 	case packets > previousPackets:
 		s.audioFact(obs.EventAudioSfuForward, "forwarded", sub.pub, sub.pub.session.scope.ParticipantID, elapsed)
-	case attempts > previousAttempts && sub.pub.authority.allows(now, now):
+	case failures > previousFailures:
 		s.audioFact(obs.EventAudioSfuForward, "ingress_not_forwarded", sub.pub, sub.pub.session.scope.ParticipantID, elapsed)
 	default:
 		s.audioFact(obs.EventAudioSfuForward, "forwarding_flat", sub.pub, sub.pub.session.scope.ParticipantID, elapsed)

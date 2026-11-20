@@ -201,5 +201,13 @@ func (w *packetWriter) transmit(p *egressPacket, transportSeq uint16) bool {
 		_ = w.header.SetExtensionWithProfile(binding.audioLevelID, w.level[:], profile)
 	}
 	n, err := binding.writer.WriteRTP(&w.header, p.payload)
-	return err == nil && n > 0
+	sent := err == nil && n > 0
+	if p.class == classAudio && p.sub != nil && p.sub.pub.source == "microphone" {
+		if sent {
+			p.sub.audioPackets.Add(1)
+		} else {
+			p.sub.audioWriteFailures.Add(1)
+		}
+	}
+	return sent
 }

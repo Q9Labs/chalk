@@ -15,6 +15,7 @@ import (
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
+	"github.com/q9labs/chalk/features/media/sfu/internal/obs"
 )
 
 // exportSink is a log store that keeps every OTLP request body it receives.
@@ -141,6 +142,28 @@ func TestOnlyListedEventsAndFieldsLeaveTheNode(t *testing.T) {
 		if strings.Contains(exported, rejected) {
 			t.Errorf("exported %q", rejected)
 		}
+	}
+}
+
+func TestMicrophoneFactKeepsItsDiagnoseEnvelopeOnExport(t *testing.T) {
+	sink := newExportSink(t)
+	log, shutdown := newExportLogger(t, sink, slog.NewJSONHandler(io.Discard, nil))
+	obs.Configure(obs.Config{Logger: log, Module: "sfu", Env: "test", SourceID: "sfu-test-source"})
+	obs.Fact(context.Background(), obs.EventAudioSfuForward,
+		obs.F(obs.FieldTenantID, "tenant-1"), obs.F(obs.FieldEpisodeID, "episode-1"), obs.F(obs.FieldParticipantID, "bob"),
+		obs.F(obs.FieldGeneration, 1), obs.F(obs.FieldMediaConnectionID, "connection-b"), obs.F(obs.FieldAudioPeerID, "alice"),
+		obs.F(obs.FieldAudioObservation, "forwarded"), obs.F(obs.FieldAudioTrackKey, strings.Repeat("a", 64)), obs.F(obs.FieldAudioSampleMs, 10_000))
+	log.Info("not a listed kernel record", "name", "unlisted-kernel-marker", "kind", "fact")
+	shutdown()
+
+	exported := sink.exported()
+	for _, want := range []string{obs.EventAudioSfuForward, "event_id", "est_server_ms", "sfu-test-source", "episode-1", "connection-b", "alice", "forwarded", strings.Repeat("a", 64)} {
+		if !strings.Contains(exported, want) {
+			t.Errorf("the forwarded microphone fact lost %q", want)
+		}
+	}
+	if strings.Contains(exported, "unlisted-kernel-marker") {
+		t.Fatal("an unlisted kernel name left the node")
 	}
 }
 

@@ -12,13 +12,16 @@ import (
 // The node writes many lines that must stay on the node: the standard library's own diagnostics
 // (a TLS handshake error names the peer address), parser errors that quote SDP, control-request
 // lines. Only the diagnosis trail leaves, and only through this table. A record leaves when its
-// `event` attribute names a row, with the row's fields and no others, rewritten to carry the event
+// legacy `event` or kernel `name` attribute names a row, with the row's fields and no others, rewritten to carry the event
 // name as its body. The journal keeps every line unfiltered.
 
 // ExportedEvents lists the events that may leave the node.
 func ExportedEvents() []string {
-	names := make([]string, 0, len(media.EventFields))
+	names := make([]string, 0, len(media.EventFields)+len(media.KernelEventFields))
 	for name := range media.EventFields {
+		names = append(names, name)
+	}
+	for name := range media.KernelEventFields {
 		names = append(names, name)
 	}
 	return names
@@ -26,11 +29,13 @@ func ExportedEvents() []string {
 
 // ExportedFields lists the fields an event may export, or nil when the event may not leave.
 func ExportedFields(event string) []string {
-	extra, ok := media.EventFields[event]
-	if !ok {
-		return nil
+	if extra, ok := media.EventFields[event]; ok {
+		return append(append([]string(nil), media.IDFields...), extra...)
 	}
-	return append(append([]string(nil), media.IDFields...), extra...)
+	if extra, ok := media.KernelEventFields[event]; ok {
+		return append(append(append([]string(nil), media.IDFields...), media.KernelFields...), extra...)
+	}
+	return nil
 }
 
 // token is the shape of every exported string: an enum value, an id or a candidate-type path. It
@@ -68,16 +73,16 @@ func (h *exportOnly) Handle(ctx context.Context, record slog.Record) error {
 		values[attr.Key] = attr.Value.Resolve()
 		return true
 	})
-	event, ok := eventName(values["event"])
-	if !ok {
-		return nil
-	}
-	extra, ok := media.EventFields[event]
-	if !ok {
-		return nil
+	event, _ := eventName(values["event"])
+	if _, legacy := media.EventFields[event]; !legacy {
+		event, _ = eventName(values["name"])
+		if _, kernel := media.KernelEventFields[event]; !kernel {
+			return nil
+		}
+		values["event"] = slog.StringValue(event)
 	}
 	exported := slog.NewRecord(record.Time, record.Level, event, record.PC)
-	for _, name := range append(append([]string(nil), media.IDFields...), extra...) {
+	for _, name := range ExportedFields(event) {
 		value, present := values[name]
 		if !present {
 			continue

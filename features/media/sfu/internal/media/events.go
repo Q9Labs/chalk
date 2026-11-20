@@ -1,5 +1,7 @@
 package media
 
+import "github.com/q9labs/chalk/features/media/sfu/internal/obs"
+
 // The node's diagnosis trail is the only log that leaves the node, and this file is its contract:
 // each event's name, the fields it may carry and where each field's value comes from. The emitters
 // name events by these constants, and the telemetry exporter reads the same tables, so a new field
@@ -75,12 +77,28 @@ var FieldSources = map[string]FieldSource{
 	"trend": Enum, "decrease_cause": Enum, "decrease_ago_ms": Number, "decrease_from_bps": Number,
 	"decrease_to_bps": Number, "decrease_acked_bps": Number,
 	"unmute_seq": Number, "since_unmute_ms": Number, "since_voiced_ms": Number,
+	obs.FieldKind: Enum, obs.FieldEventID: ServerAssigned, obs.FieldSourceID: ServerAssigned,
+	obs.FieldSeq: Number, obs.FieldSchemaVer: Enum, obs.FieldModule: Enum, obs.FieldEnv: Enum,
+	obs.FieldReleaseSHA: ServerAssigned, obs.FieldClockState: Enum, obs.FieldEstServerMs: Number, obs.FieldMediaConnectionID: RestrictedID,
+	obs.FieldAudioObservation: Enum, obs.FieldAudioTrackKey: ServerAssigned, obs.FieldAudioSampleMs: Number, obs.FieldAudioPeerID: RestrictedID,
 }
 
 // IDFields name who and where an event happened. Every event may carry them.
 var IDFields = []string{
 	"event", "tenant_id", "episode_id", "participant_id", "generation",
 	"connection_id", "session_kind", "node_incarnation", "trace_id", "journey_id",
+}
+
+// KernelFields keep the envelope the diagnose reader uses to bind, time and cite facts.
+var KernelFields = []string{
+	obs.FieldKind, obs.FieldEventID, obs.FieldSourceID, obs.FieldSeq, obs.FieldSchemaVer,
+	obs.FieldModule, obs.FieldEnv, obs.FieldReleaseSHA, obs.FieldClockState, obs.FieldEstServerMs, obs.FieldMediaConnectionID,
+}
+
+// KernelEventFields only admits explicitly listed kernel records, not arbitrary names.
+var KernelEventFields = map[string][]string{
+	obs.EventAudioSfuIngress: {obs.FieldAudioObservation, obs.FieldAudioTrackKey, obs.FieldAudioSampleMs},
+	obs.EventAudioSfuForward: {obs.FieldAudioObservation, obs.FieldAudioTrackKey, obs.FieldAudioSampleMs, obs.FieldAudioPeerID},
 }
 
 // EventFields maps each exportable event to the fields it adds to IDFields. Every field has a row

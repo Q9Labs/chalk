@@ -32,8 +32,8 @@ const (
 // continuous stream for its own sender.
 type subscription struct {
 	audioPackets       atomic.Uint64
-	audioAttempts      atomic.Uint64
-	audioStatsAttempts uint64
+	audioWriteFailures atomic.Uint64
+	audioStatsFailures uint64
 	audioSampleAt      int64
 	audioStatsPackets  uint64 // owned by the node control loop
 	pub                *publication
@@ -368,15 +368,7 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 		}
 		packet.payload = w.payload[:offset+n]
 	}
-	if class == classAudio {
-		s.audioAttempts.Add(1)
-	}
-	sent := s.transport.send(&packet, w)
-	// Audio is written synchronously; video may only have been enqueued.
-	if sent && class == classAudio {
-		s.audioPackets.Add(1)
-	}
-	return sent
+	return s.transport.send(&packet, w)
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
