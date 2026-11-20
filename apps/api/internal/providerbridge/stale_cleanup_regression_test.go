@@ -14,7 +14,17 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+func testExecutorID(t *testing.T, raw string) utilities.ID {
+	t.Helper()
+	id, err := utilities.ParseID(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
 
 func TestObservedInternalCleanupRequiresTerminalSessionError(t *testing.T) {
 	data, err := os.ReadFile("testdata/end-cleanup-2026-10-29.json")

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -106,3 +108,166 @@ type readinessRoundTripFunc func(*http.Request) (*http.Response, error)
 func (function readinessRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)
 }
+
+type captureAttemptFactoryFunc func(context.Context, ClaimResult) (CaptureAttempt, error)
+
+func (f captureAttemptFactoryFunc) NewCaptureAttempt(ctx context.Context, claim ClaimResult) (CaptureAttempt, error) {
+	return f(ctx, claim)
+}
+
+type captureAttemptStub struct {
+	run        func(context.Context) error
+	renew      func(capturesignaling.WorkerLease) error
+	close      func(context.Context) error
+	closeCalls int
+}
+
+func (s *captureAttemptStub) Run(ctx context.Context) error { return s.run(ctx) }
+
+func (s *captureAttemptStub) RenewLease(lease capturesignaling.WorkerLease) error {
+	if s.renew == nil {
+		return nil
+	}
+	return s.renew(lease)
+}
+
+func (s *captureAttemptStub) Close(ctx context.Context) error {
+	s.closeCalls++
+	if s.close != nil {
+		return s.close(ctx)
+	}
+	return nil
+}
+
+type captureControlStub struct {
+	claim           func(context.Context, utilities.ID, time.Duration) (ClaimResult, error)
+	complete        func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	heartbeat       func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	relinquish      func(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	heartbeatJob    recordingpipeline.Job
+	heartbeatCalls  int
+	relinquishCalls int
+	completeCalls   atomic.Int32
+	failCalls       int
+	completed       recordingpipeline.LeaseInput
+	completeContext context.Context
+	failed          recordingpipeline.FailureInput
+}
+
+func (s *captureControlStub) ClaimJob(ctx context.Context, claimRequestID utilities.ID, lease time.Duration) (ClaimResult, error) {
+	if s.claim != nil {
+		return s.claim(ctx, claimRequestID, lease)
+	}
+	return ClaimResult{}, ErrNoWork
+}
+
+func (s *captureControlStub) Heartbeat(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	s.heartbeatCalls++
+	if s.heartbeat != nil {
+		return s.heartbeat(ctx, input)
+	}
+	if s.heartbeatJob.ID.IsZero() {
+		return captureJobFromLease(input, time.Now().UTC().Add(DefaultCaptureLease)), nil
+	}
+	return s.heartbeatJob, nil
+}
+
+func (s *captureControlStub) RelinquishCapture(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	s.relinquishCalls++
+	if s.relinquish != nil {
+		return s.relinquish(ctx, input)
+	}
+	return relinquishedCaptureJob(input), nil
+}
+
+func (s *captureControlStub) Fail(_ context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
+	s.failCalls++
+	s.failed = input
+	return captureJobFromLease(input.LeaseInput, time.Now().UTC().Add(DefaultCaptureLease)), nil
+}
+
+func (s *captureControlStub) Complete(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	s.completeCalls.Add(1)
+	s.completed = input
+	s.completeContext = ctx
+	if s.complete != nil {
+		return s.complete(ctx, input)
+	}
+	return captureJobFromLease(input, time.Now().UTC().Add(DefaultCaptureLease)), nil
+}
+
+func captureDaemonForTest(t *testing.T, control CaptureControlPlane, factory CaptureAttemptFactory, now func() time.Time) *CaptureDaemon {
+	t.Helper()
+	if now == nil {
+		now = time.Now
+	}
+	daemon, err := NewCaptureDaemon(control, factory, CaptureDaemonConfig{Now: now})
+	if err != nil {
+		t.Fatalf("new capture daemon: %v", err)
+	}
+	return daemon
+}
+
+func captureDaemonClaim(t *testing.T, epoch int64) ClaimResult {
+	t.Helper()
+	envelope := testEnvelope(t)
+	envelope.CaptureEpoch = epoch
+	return ClaimResult{
+		ClaimRequestID: testID(t, "11111111-1111-4111-8111-111111111111"),
+		Envelope:       envelope,
+		EnvelopeDigest: bytesOf(0x42),
+		LeaseToken:     "lease-token",
+		LeaseOwner:     "capture/worker-1",
+		LeaseExpiresAt: time.Now().UTC().Add(DefaultCaptureLease),
+	}
+}
+
+func captureHeartbeatJob(t *testing.T, claim ClaimResult) recordingpipeline.Job {
+	t.Helper()
+	lease, err := captureLeaseInput(claim, DefaultCaptureLease)
+	if err != nil {
+		t.Fatalf("capture lease: %v", err)
+	}
+	return captureJobFromLease(lease, time.Now().UTC().Add(DefaultCaptureLease))
+}
+
+func captureJobFromLease(lease recordingpipeline.LeaseInput, expiresAt time.Time) recordingpipeline.Job {
+	token := lease.LeaseToken
+	owner := lease.LeaseOwner
+	return recordingpipeline.Job{
+		ID: lease.JobID, AttemptCount: lease.AttemptCount, FencingGeneration: lease.FencingGeneration,
+		CaptureEpoch: lease.CaptureEpoch, LeaseToken: &token, LeaseOwner: &owner, LeaseExpiresAt: &expiresAt,
+	}
+}
+
+func relinquishedCaptureJob(lease recordingpipeline.LeaseInput) recordingpipeline.Job {
+	return recordingpipeline.Job{
+		ID: lease.JobID, Kind: recordingpipeline.JobKindCapture, State: recordingpipeline.JobStatePending,
+		AttemptCount: lease.AttemptCount - 1, FencingGeneration: lease.FencingGeneration, CaptureEpoch: lease.CaptureEpoch,
+	}
+}
+
+var _ CaptureAttempt = (*captureAttemptStub)(nil)
+var _ CaptureControlPlane = (*captureControlStub)(nil)
+
+type multislotControl struct {
+	claim func(context.Context, utilities.ID, time.Duration) (ClaimResult, error)
+}
+
+func (c *multislotControl) ClaimJob(ctx context.Context, id utilities.ID, lease time.Duration) (ClaimResult, error) {
+	return c.claim(ctx, id, lease)
+}
+func (*multislotControl) Heartbeat(_ context.Context, lease recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	return captureJobFromLease(lease, time.Now().Add(lease.LeaseFor)), nil
+}
+func (*multislotControl) RelinquishCapture(_ context.Context, lease recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	return relinquishedCaptureJob(lease), nil
+}
+func (*multislotControl) Complete(_ context.Context, lease recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	return captureJobFromLease(lease, time.Now()), nil
+}
+func (*multislotControl) Fail(_ context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
+	return captureJobFromLease(input.LeaseInput, time.Now()), nil
+}
+
+func (*captureAttemptStub) Observed() *recordingpipeline.CaptureObservations { return nil }
