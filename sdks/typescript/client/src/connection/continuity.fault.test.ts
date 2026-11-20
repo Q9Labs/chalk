@@ -63,7 +63,7 @@ async function join({ denyRefresh = false }: { denyRefresh?: boolean } = {}) {
   return {
     client,
     emit: platform.outbox.emit,
-    freshContact: () => checkSync?.({ result: "verified", pingSentMono: Date.now() }),
+    contact: (pingSentMono = Date.now()) => checkSync?.({ result: "verified", pingSentMono }),
     peer: (state: "connected" | "failed") => {
       const previous = platform.media.getSnapshot();
       platform.media.emit({ ...previous, connection: { phase: "live", peerConnectionState: state, iceConnectionState: state } });
@@ -180,11 +180,19 @@ describe("continuity observations", () => {
   ] as const)("judges reconnect.dead_live and background.resume_stalled after $wake with a $state peer", async ({ state, suspend, wake }) => {
     const test = await join();
     try {
+      test.contact();
+      test.peer("connected");
+      await test.records("media_link_check", "verified");
       test.emit(suspend);
       if (suspend === "hidden") test.emit("frozen");
       test.emit(wake);
-      test.freshContact();
+      test.contact(Date.now() - 1);
       test.peer(state);
+      if (state === "connected") {
+        const pending = await test.records("resume_check", "pending");
+        expect(pending).not.toContainEqual(expect.objectContaining({ type: "resume_check", continuity_result: "verified" }));
+        test.contact();
+      }
       const events = await test.records("resume_check", state === "failed" ? "dead_live" : "verified");
       const arm = state === "failed" ? "positive" : "healthy";
       await runRule("reconnect.dead_live", arm, events);
