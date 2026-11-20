@@ -18095,8 +18095,44 @@
                   "minimum": 0,
                   "type": ["integer", "null"]
                 },
+                "board_correlation_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "board_element_count": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "board_failure": {
+                  "enum": ["local_store", "permission_denied", "storage_unavailable", "unavailable", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "other"],
+                  "type": "string"
+                },
+                "board_follow_target": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "board_previous_revision": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "board_revision": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "board_scene_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "board_step": {
+                  "enum": ["store_saved", "store_failed", "sent", "committed", "refused", "allowed", "blocked", "denied", "update", "gap", "snapshot", "independent", "manual", "automatic"],
+                  "type": "string"
+                },
                 "bundle_tag_held": {
                   "type": ["boolean", "null"]
+                },
+                "clock_err_ms": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 },
                 "close_code": {
                   "maximum": 4999,
@@ -18193,6 +18229,11 @@
                 "error_name": {
                   "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
                   "type": "string"
+                },
+                "est_server_ms": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 },
                 "event_id": {
                   "$ref": "#/components/schemas/UUID"
@@ -18490,6 +18531,11 @@
                     "access_retry",
                     "audio_receive_stuck",
                     "audio_receive_summary",
+                    "board_delivery",
+                    "board_draw",
+                    "board_edit",
+                    "board_follow",
+                    "board_snapshot",
                     "call_ended",
                     "call_stats",
                     "chat_upload_failed",

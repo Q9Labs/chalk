@@ -28,7 +28,7 @@ export const makeControllerEffects = (input: {
   readonly connection: ConnectionLifecycleCapability;
   readonly store: SpaceStore;
   readonly mediaDeviceSelection: MediaDeviceSelection;
-  readonly featureFactories?: Pick<ConnectionDependencies, "createChatFileTransport" | "createWhiteboardClient">;
+  readonly featureFactories?: Pick<ConnectionDependencies, "createChatFileTransport" | "createWhiteboardClient" | "telemetry">;
   readonly fetch?: typeof globalThis.fetch;
 }): Effect.Effect<ControllerEffects, never, Clock.Clock | Scope.Scope> =>
   Effect.gen(function* () {
@@ -38,6 +38,6 @@ export const makeControllerEffects = (input: {
     const participants = yield* makeParticipantsController(input.connection, input.store, offlineActions);
     const reactions = yield* makeReactionsController(input.connection, input.store);
     const recording = yield* makeRecordingController(input.connection, input.store);
-    const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient);
+    const whiteboard = yield* makeWhiteboardController(input.connection, input.store, input.featureFactories?.createWhiteboardClient, input.featureFactories?.telemetry);
     return { media, offline: offlineActions, chat, participants, reactions, recording, whiteboard };
   });

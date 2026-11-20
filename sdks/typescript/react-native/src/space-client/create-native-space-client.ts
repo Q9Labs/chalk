@@ -198,6 +198,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
     lifecycle,
     webSocket,
     dialTimeoutMs,
+    observations: input.observations,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: (summary) => {
       input.onSummary(summary);

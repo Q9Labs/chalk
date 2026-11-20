@@ -109,6 +109,7 @@ export type ConnectionSyncFactoryInput = {
   readonly onTransportPath?: (path: TransportPath) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
+  readonly observations?: ChalkWhiteboardV1ClientOptions["observations"];
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];
   readonly token: () => Promise<string>;
   readonly onSummary: (summary: ChalkWhiteboardSummary) => void;

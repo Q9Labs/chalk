@@ -72,6 +72,12 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
   const canFollow = boardOpen && Boolean(whiteboard?.sendView);
   const target = following === undefined ? whiteboard?.presenterId : following;
   const followed = canFollow && tiles.some((tile) => tile.id === target && !tile.isLocal) ? (target ?? null) : null;
+  const observeFollow = whiteboard?.observeFollow;
+  const followMode = !followed ? "independent" : following === undefined ? "automatic" : "manual";
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Observe the effective committed board follow state.
+  useEffect(() => {
+    if (boardOpen) observeFollow?.(followMode, followed ?? undefined);
+  }, [boardOpen, observeFollow, followMode, followed]);
   const activePin = items.some((item) => item.id === pin) ? pin : null;
   const shares = items.filter((item) => item.kind === "screen-share");
   const activeShare = selectedShare && shares.some((item) => item.id === selectedShare) ? selectedShare : null;

@@ -116,6 +116,11 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
     }),
     [mini, phone, landscapeControlsVisible, view.following, selfId, roster, sceneId, status, connectionStatus, capabilities.viewsAvailable, canManage, access, transport, colors],
   );
+  const following = view.following;
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Observe the committed native board follow state.
+  useEffect(() => {
+    transport?.observeFollow?.(following ? "manual" : "independent", following ?? undefined);
+  }, [transport, following]);
   const onClose = useCallback(() => {
     void (async () => {
       if (canManage) await transport?.setPresentation?.(false);

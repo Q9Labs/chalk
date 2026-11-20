@@ -26,6 +26,13 @@ func connection(extra ...string) spec {
 	return spec{allowed: slices.Concat(connectionFields, extra)}
 }
 
+func boardEvent(required []string, optional ...string) spec {
+	return spec{
+		allowed:  slices.Concat(required, optional, []string{"est_server_ms", "clock_err_ms"}),
+		required: required,
+	}
+}
+
 var specs = map[string]spec{
 	// Join, state and recovery steps.
 	"space_join_span":           {allowed: connectionFields, required: []string{"outcome"}},
@@ -51,6 +58,12 @@ var specs = map[string]spec{
 	"audio_receive_summary":     connection("receive_counts"),
 	"receivers_closed":          connection("receivers_stopped", "bundle_tag_held"),
 	"chat_upload_failed":        connection("upload_failure"),
+
+	"board_edit":     boardEvent([]string{"board_step", "board_correlation_id", "board_scene_id"}, "board_revision", "board_failure"),
+	"board_delivery": boardEvent([]string{"board_step", "board_correlation_id", "board_scene_id", "board_revision"}, "board_previous_revision"),
+	"board_draw":     boardEvent([]string{"board_step"}, "board_scene_id"),
+	"board_snapshot": boardEvent([]string{"board_step", "board_correlation_id", "board_scene_id", "board_revision", "board_element_count"}),
+	"board_follow":   boardEvent([]string{"board_step"}, "board_follow_target"),
 
 	// The end of a call, and what the platform did to the client around it.
 	"call_ended":       {allowed: []string{"end_reason"}, required: []string{"end_reason"}},
@@ -80,6 +93,8 @@ func EventTypes() []string {
 }
 
 var fieldEnums = map[string][]string{
+	"board_step":            {"store_saved", "store_failed", "sent", "committed", "refused", "allowed", "blocked", "denied", "update", "gap", "snapshot", "independent", "manual", "automatic"},
+	"board_failure":         {"local_store", "permission_denied", "storage_unavailable", "unavailable", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "other"},
 	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
 	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
 	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},
@@ -131,6 +146,12 @@ func FieldEnum(field string) []string {
 // at all. A stats window longer than MaxWindowMS is a gap window, which Check bounds alone.
 func FieldRange(field string) (low, high float64, numeric bool) {
 	switch field {
+	case "est_server_ms":
+		return 0, 1<<53 - 1, true
+	case "clock_err_ms":
+		return 0, MaxMilliseconds, true
+	case "board_element_count":
+		return 0, 1_000_000, true
 	case "seq", "next_seq", "from", "to", "elapsed_ms", "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "dropped", "audio_energy":
 		return 0, MaxMilliseconds, true
 	case "window_ms":

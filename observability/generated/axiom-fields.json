@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "df5dba2e4b7f",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 63,
+      "used": 71,
       "fields": [
         {
           "name": "admission_request_id",
@@ -29,6 +29,38 @@
         },
         {
           "name": "batch_id",
+          "type": "string"
+        },
+        {
+          "name": "board_correlation_id",
+          "type": "string"
+        },
+        {
+          "name": "board_element_count",
+          "type": "integer"
+        },
+        {
+          "name": "board_failure",
+          "type": "string"
+        },
+        {
+          "name": "board_follow_target",
+          "type": "string"
+        },
+        {
+          "name": "board_previous_revision",
+          "type": "string"
+        },
+        {
+          "name": "board_revision",
+          "type": "string"
+        },
+        {
+          "name": "board_scene_id",
+          "type": "string"
+        },
+        {
+          "name": "board_step",
           "type": "string"
         },
         {

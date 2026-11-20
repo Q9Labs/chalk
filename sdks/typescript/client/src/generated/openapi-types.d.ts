@@ -2732,7 +2732,18 @@ export interface components {
         /** @enum {string} */
         action?: "mute" | "unmute" | "publish" | "unpublish" | "subscribe" | "unsubscribe" | "share_start" | "share_stop";
         attempt?: number | null;
+        board_correlation_id?: components["schemas"]["UUID"];
+        board_element_count?: number | null;
+        /** @enum {string} */
+        board_failure?: "local_store" | "permission_denied" | "storage_unavailable" | "unavailable" | "invalid_payload" | "stale_scene" | "cursor_reset_required" | "rate_limited" | "overloaded" | "other";
+        board_follow_target?: string;
+        board_previous_revision?: string;
+        board_revision?: string;
+        board_scene_id?: components["schemas"]["UUID"];
+        /** @enum {string} */
+        board_step?: "store_saved" | "store_failed" | "sent" | "committed" | "refused" | "allowed" | "blocked" | "denied" | "update" | "gap" | "snapshot" | "independent" | "manual" | "automatic";
         bundle_tag_held?: boolean | null;
+        clock_err_ms?: number | null;
         close_code?: number | null;
         /** @enum {string} */
         code?:
@@ -2781,6 +2792,7 @@ export interface components {
         end_reason?: "left" | "episode_ended" | "time_limit" | "removed" | "connection_lost" | "join_failed" | "page_closed";
         /** @enum {string} */
         error_name?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "TypeError" | "unknown";
+        est_server_ms?: number | null;
         event_id?: components["schemas"]["UUID"];
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
@@ -2879,6 +2891,11 @@ export interface components {
           | "access_retry"
           | "audio_receive_stuck"
           | "audio_receive_summary"
+          | "board_delivery"
+          | "board_draw"
+          | "board_edit"
+          | "board_follow"
+          | "board_snapshot"
           | "call_ended"
           | "call_stats"
           | "chat_upload_failed"

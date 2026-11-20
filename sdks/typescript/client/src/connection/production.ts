@@ -172,6 +172,7 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
     url,
     token: input.token,
     files,
+    observations: input.observations,
     onWatchdogReplacement: input.onWatchdogReplacement,
     onSummary: input.onSummary,
   });

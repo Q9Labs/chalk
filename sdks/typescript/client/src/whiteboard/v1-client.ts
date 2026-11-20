@@ -289,6 +289,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   submitUpdate(input: ChalkWhiteboardV1UpdateInput): Promise<ChalkWhiteboardV1Commit> {
     if (!this.#started || !this.#sceneId) this.#assertLive("submit_update");
     if (!this.#canDraw) {
+      this.#observeDraw("denied");
       throw error(failure("submit_update", "permission_denied", false, "Whiteboard draw permission is required."));
     }
     const operationId = this.#nextId();
@@ -299,6 +300,15 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       sync_all: input.syncAll,
       elements: input.elements.map(elementToFrame),
     });
+  }
+
+  observeFollow = (mode: "independent" | "manual" | "automatic", target?: string): void => {
+    if (!this.#started) return;
+    this.#options.observations?.fact("board.follow", { board_step: mode, ...(target ? { board_follow_target: target } : {}) });
+  };
+
+  #observeDraw(step: "allowed" | "blocked" | "denied"): void {
+    this.#options.observations?.fact("board.client_draw", { board_step: step, ...(this.#sceneId ? { board_scene_id: this.#sceneId } : {}) });
   }
 
   sendCursor(input: { readonly x: number; readonly y: number }): void {
@@ -554,7 +564,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #drawAccess(frame: ServerFrame<"draw_access">): void {
+    const changed = this.#canDraw !== frame.can_draw;
     this.#canDraw = frame.can_draw;
+    if (changed) this.#observeDraw(frame.can_draw ? "allowed" : "blocked");
     this.#capabilities = [...frame.capabilities];
     this.#drawPolicy = frame.policy;
     this.#drawPermissions = frame.grants.map((grant) => ({ participantId: grant.participant_id, canDraw: grant.can_draw }));
@@ -576,6 +588,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #update(frame: ServerFrame<"update">): void {
+    const previous = this.#sceneId === frame.scene_id && this.#summaryStatus === "ready" ? this.#revision : null;
     this.#sceneId = frame.scene_id;
     this.#revision = frame.revision;
     this.#publishSummary("ready", null);
@@ -585,6 +598,16 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       revision: frame.revision,
       elements: frame.elements.map(elementFromFrame),
     });
+    if (this.#options.observations) {
+      const gap = previous !== null && BigInt(frame.revision) > BigInt(previous) + 1n;
+      this.#options.observations.fact("board.client_delivery", {
+        board_step: gap ? "gap" : "update",
+        board_scene_id: frame.scene_id,
+        board_revision: frame.revision,
+        board_correlation_id: frame.operation_id,
+        ...(previous === null ? {} : { board_previous_revision: previous }),
+      });
+    }
   }
 
   #updatePart(frame: ServerFrame<"update_part">): void {
@@ -621,6 +644,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#moveToScene(frame.scene_id, frame.revision);
     this.#capabilities = [...frame.capabilities];
     this.#canDraw = frame.can_draw;
+    this.#observeDraw(frame.can_draw ? "allowed" : "blocked");
     // Sync sends draw_access right after welcome when it accepted draw_policy_v1.
     this.#drawPolicy = null;
     this.#drawPermissions = [];
@@ -725,6 +749,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
       elements,
       ...(assembly.appState ? { appState: assembly.appState } : {}),
     });
+    this.#options.observations?.fact("board.client_snapshot", {
+      board_step: "snapshot",
+      board_correlation_id: frame.request_id,
+      board_scene_id: frame.scene_id,
+      board_revision: frame.revision,
+      board_element_count: elements.length,
+    });
     resolveDeferred(assembly.deferred, undefined);
     if (this.#initialSnapshot) {
       resolveDeferred(this.#initialSnapshot, undefined);
@@ -756,6 +787,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   async #saveOperation(entry: OperationEntry, deferred: Deferred<ChalkWhiteboardV1Commit>): Promise<void> {
     const { pending } = entry;
     const saveFailure = await this.#persist(pending);
+    if (pending.frame.type === "submit_update") {
+      this.#options.observations?.fact("board.client_edit", {
+        board_step: saveFailure ? "store_failed" : "store_saved",
+        board_correlation_id: pending.operationId,
+        board_scene_id: pending.frame.scene_id,
+        ...(saveFailure ? { board_failure: "local_store" } : {}),
+      });
+    }
     this.#savingOperations.delete(pending.operationId);
     if (saveFailure) {
       rejectDeferred(deferred, saveFailure);
@@ -824,6 +863,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #commit(frame: ServerFrame<"commit">): void {
     const entry = this.#sentEntry(frame.operation_id);
     if (!entry) return;
+    if (entry.pending.frame.type === "submit_update") {
+      this.#options.observations?.fact("board.client_edit", {
+        board_step: "committed",
+        board_correlation_id: frame.operation_id,
+        board_scene_id: frame.scene_id,
+        board_revision: frame.revision,
+      });
+    }
     this.#forgetOperation(frame.operation_id);
     this.#clearTimer(this.#operationRetryTimers, frame.operation_id);
     this.#moveToScene(frame.scene_id, frame.revision);
@@ -854,6 +901,15 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (frame.recoverable && retryableOperationCode(frame.code)) {
       this.#scheduleOperationRetry(frame.correlation_id, entry);
       return;
+    }
+    if (entry.pending.frame.type === "submit_update") {
+      if (frame.code === "permission_denied") this.#observeDraw("denied");
+      else this.#options.observations?.fact("board.client_edit", {
+        board_step: "refused",
+        board_correlation_id: frame.correlation_id,
+        board_scene_id: entry.pending.frame.scene_id,
+        board_failure: frame.code,
+      });
     }
     this.#forgetOperation(frame.correlation_id);
     this.#clearTimer(this.#operationRetryTimers, frame.correlation_id);
@@ -1096,6 +1152,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         return;
       }
       if (socket !== this.#socket || this.#phase !== "live") return;
+    }
+    if (frame.type === "submit_update") {
+      this.#options.observations?.fact("board.client_edit", {
+        board_step: "sent",
+        board_correlation_id: frame.operation_id,
+        board_scene_id: frame.scene_id,
+      });
     }
   }
 

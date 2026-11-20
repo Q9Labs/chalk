@@ -4,6 +4,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Delivery do
   """
 
   alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
+  alias ChalkSync.Transport.SocketWhiteboardV1.Observation
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.Transport.SocketWhiteboardV1.Views
   alias ChalkSync.WhiteboardV1.Episode
@@ -82,7 +83,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Delivery do
           send(self(), :whiteboard_drain)
         end
 
-        {:push, {:text, Protocol.encode!(presenter_frame(state, frame))},
+        payload = Protocol.encode!(presenter_frame(state, frame))
+        Observation.delivery(state, frame)
+        {:push, {:text, payload},
          %{state | outbound: queue}}
 
       :empty ->

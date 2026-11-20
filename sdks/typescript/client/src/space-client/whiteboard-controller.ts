@@ -2,6 +2,8 @@ import { Effect } from "effect";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import type { ConnectionWhiteboardFactoryInput } from "../connection/dependencies";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { TelemetryOutbox } from "../telemetry/outbox";
+import { createWhiteboardObservations } from "../whiteboard/observations";
 import { SpaceStore } from "./store";
 import type { WhiteboardSlice } from "./types";
 
@@ -10,13 +12,14 @@ const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscri
 export type WhiteboardControllerEffects = { readonly transport: () => ChalkWhiteboardV1Transport | null; readonly dispose: () => void };
 
 /** The whiteboard transport is a foreign port; lifecycle and cleanup stay scoped. */
-export const makeWhiteboardController = (connection: ConnectionLifecycleCapability, store: SpaceStore, create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null): Effect.Effect<WhiteboardControllerEffects, never, import("effect").Scope.Scope> =>
+export const makeWhiteboardController = (connection: ConnectionLifecycleCapability, store: SpaceStore, create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null, telemetry?: TelemetryOutbox): Effect.Effect<WhiteboardControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<never>();
     const controller = yield* Effect.sync(() => {
       let instance: WhiteboardControllerRuntime | null = null;
       const transport =
         create?.({
+          observations: telemetry && createWhiteboardObservations(telemetry),
           token: () => Effect.runPromiseWith(context)(connection.getSyncToken()),
           onSummary: (summary) => instance?.observe(summary),
         }) ?? null;

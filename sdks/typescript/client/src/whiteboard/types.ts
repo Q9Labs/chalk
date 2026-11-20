@@ -114,6 +114,7 @@ export type ChalkWhiteboardV1FileTransport = {
 };
 
 export type ChalkWhiteboardV1Transport = {
+  readonly observeFollow?: (mode: "independent" | "manual" | "automatic", target?: string) => void;
   readonly startSceneSubscription: () => Promise<void>;
   readonly stopSceneSubscription: () => void | Promise<void>;
   readonly subscribeSummary?: (listener: (summary: ChalkWhiteboardSummary) => void) => () => void;
@@ -148,6 +149,7 @@ export type ChalkWhiteboardV1PendingOperationStore = {
 };
 
 export type ChalkWhiteboardV1ClientOptions = {
+  readonly observations?: Pick<import("../obs/kernel").Kernel, "fact">;
   readonly url: string;
   readonly token: () => Promise<string>;
   readonly webSocket: SyncWebSocketFactory;

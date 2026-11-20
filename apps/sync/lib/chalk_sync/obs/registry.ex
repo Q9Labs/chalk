@@ -2,9 +2,180 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "df5dba2e4b7f"
 
   @events %{
+    "board.client_delivery" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_scene_id" => %{
+          "required" => true
+        },
+        "board_revision" => %{
+          "required" => true
+        },
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_previous_revision" => %{
+          "required" => false
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["update", "gap"]
+        }
+      }
+    },
+    "board.client_draw" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_scene_id" => %{
+          "required" => false
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["allowed", "blocked", "denied"]
+        }
+      }
+    },
+    "board.client_edit" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_scene_id" => %{
+          "required" => true
+        },
+        "board_revision" => %{
+          "required" => false
+        },
+        "board_failure" => %{
+          "required" => false
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["store_saved", "store_failed", "sent", "committed", "refused"]
+        }
+      }
+    },
+    "board.client_snapshot" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_scene_id" => %{
+          "required" => true
+        },
+        "board_revision" => %{
+          "required" => true
+        },
+        "board_element_count" => %{
+          "required" => true
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["snapshot"]
+        }
+      }
+    },
+    "board.follow" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_follow_target" => %{
+          "required" => false
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["independent", "manual", "automatic"]
+        }
+      }
+    },
+    "board.sync_delivery" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_scene_id" => %{
+          "required" => true
+        },
+        "board_revision" => %{
+          "required" => true
+        },
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["update"]
+        }
+      }
+    },
+    "board.sync_edit" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_scene_id" => %{
+          "required" => false
+        },
+        "board_revision" => %{
+          "required" => false
+        },
+        "board_failure" => %{
+          "required" => false
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["committed", "duplicate", "refused"]
+        }
+      }
+    },
+    "board.sync_snapshot" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "board_correlation_id" => %{
+          "required" => true
+        },
+        "board_scene_id" => %{
+          "required" => true
+        },
+        "board_revision" => %{
+          "required" => true
+        },
+        "board_element_count" => %{
+          "required" => true
+        },
+        "board_step" => %{
+          "required" => true,
+          "values" => ["snapshot"]
+        }
+      }
+    },
     "client.call_ended" => %{
       "kind" => "fact",
       "dataset" => "lifecycle",
@@ -142,6 +313,54 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "delivery",
       "required" => false,
       "values" => nil
+    },
+    "board_correlation_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_element_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_failure" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["local_store", "permission_denied", "storage_unavailable", "unavailable", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "other"]
+    },
+    "board_follow_target" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_previous_revision" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_revision" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_scene_id" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "board_step" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["store_saved", "store_failed", "sent", "committed", "duplicate", "refused", "denied", "allowed", "blocked", "update", "gap", "snapshot", "independent", "manual", "automatic"]
     },
     "client_mono_ms" => %{
       "type" => "number",
@@ -548,6 +767,7 @@ defmodule ChalkSync.Obs.Registry do
   }
 
   @reasons %{
+    "board.draw_denied" => "expected",
     "cancelled" => "expected",
     "end.time_limit" => "expected",
     "selftest.broken" => "error",

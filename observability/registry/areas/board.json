@@ -2,12 +2,567 @@
   "area": "board",
   "slice": 6,
   "title": "Whiteboard",
-  "prefixes": ["board"],
-  "fields": [],
-  "events": [],
-  "reasons": [],
-  "machines": [],
+  "prefixes": [
+    "board"
+  ],
+  "fields": [
+    {
+      "name": "board_step",
+      "type": "enum",
+      "sensitivity": null,
+      "doc": "Whiteboard boundary and outcome.",
+      "values": [
+        "store_saved",
+        "store_failed",
+        "sent",
+        "committed",
+        "duplicate",
+        "refused",
+        "denied",
+        "allowed",
+        "blocked",
+        "update",
+        "gap",
+        "snapshot",
+        "independent",
+        "manual",
+        "automatic"
+      ]
+    },
+    {
+      "name": "board_scene_id",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Opaque ID of the durable board scene."
+    },
+    {
+      "name": "board_revision",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Exact decimal revision within a board scene."
+    },
+    {
+      "name": "board_previous_revision",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Exact revision of the same-scene baseline before receiving an update."
+    },
+    {
+      "name": "board_correlation_id",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Whiteboard wire operation or snapshot request UUID."
+    },
+    {
+      "name": "board_element_count",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "Number of elements in an assembled board snapshot."
+    },
+    {
+      "name": "board_follow_target",
+      "type": "string",
+      "sensitivity": null,
+      "doc": "Participant ID whose board view is followed."
+    },
+    {
+      "name": "board_failure",
+      "type": "enum",
+      "sensitivity": null,
+      "doc": "Bounded reason for a failed whiteboard edit.",
+      "values": [
+        "local_store",
+        "permission_denied",
+        "storage_unavailable",
+        "unavailable",
+        "invalid_payload",
+        "stale_scene",
+        "cursor_reset_required",
+        "rate_limited",
+        "overloaded",
+        "other"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "board.client_edit",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The author SDK's observations of a local edit.",
+      "fields": {
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_scene_id": {
+          "required": true
+        },
+        "board_revision": {},
+        "board_failure": {},
+        "board_step": {
+          "required": true,
+          "values": [
+            "store_saved",
+            "store_failed",
+            "sent",
+            "committed",
+            "refused"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+          "literal": "\"board.client_edit\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "board_edit"
+        }
+      }
+    },
+    {
+      "name": "board.sync_edit",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "Sync's edit result, after the repository returned.",
+      "fields": {
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_scene_id": {},
+        "board_revision": {},
+        "board_failure": {},
+        "board_step": {
+          "required": true,
+          "values": [
+            "committed",
+            "duplicate",
+            "refused"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+          "literal": "\"board.sync_edit\""
+        }
+      ]
+    },
+    {
+      "name": "board.client_delivery",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "An entire update received and emitted to subscribers.",
+      "fields": {
+        "board_scene_id": {
+          "required": true
+        },
+        "board_revision": {
+          "required": true
+        },
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_previous_revision": {},
+        "board_step": {
+          "required": true,
+          "values": [
+            "update",
+            "gap"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+          "literal": "\"board.client_delivery\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "board_delivery"
+        }
+      }
+    },
+    {
+      "name": "board.sync_delivery",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "An entire update handed to the recipient socket for sending.",
+      "fields": {
+        "board_scene_id": {
+          "required": true
+        },
+        "board_revision": {
+          "required": true
+        },
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_step": {
+          "required": true,
+          "values": [
+            "update"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+          "literal": "\"board.sync_delivery\""
+        }
+      ]
+    },
+    {
+      "name": "board.client_draw",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "Resolved draw access or a draw specifically refused for permission.",
+      "fields": {
+        "board_scene_id": {},
+        "board_step": {
+          "required": true,
+          "values": [
+            "allowed",
+            "blocked",
+            "denied"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+          "literal": "\"board.client_draw\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "board_draw"
+        }
+      }
+    },
+    {
+      "name": "board.client_snapshot",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "A full snapshot assembled by the recipient SDK.",
+      "fields": {
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_scene_id": {
+          "required": true
+        },
+        "board_revision": {
+          "required": true
+        },
+        "board_element_count": {
+          "required": true
+        },
+        "board_step": {
+          "required": true,
+          "values": [
+            "snapshot"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+          "literal": "\"board.client_snapshot\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "board_snapshot"
+        }
+      }
+    },
+    {
+      "name": "board.sync_snapshot",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [
+        "sync"
+      ],
+      "doc": "A snapshot prepared from the durable scene for the recipient.",
+      "fields": {
+        "board_correlation_id": {
+          "required": true
+        },
+        "board_scene_id": {
+          "required": true
+        },
+        "board_revision": {
+          "required": true
+        },
+        "board_element_count": {
+          "required": true
+        },
+        "board_step": {
+          "required": true,
+          "values": [
+            "snapshot"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+          "literal": "\"board.sync_snapshot\""
+        }
+      ]
+    },
+    {
+      "name": "board.follow",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": [
+        "sdk"
+      ],
+      "doc": "The effective follow state committed by the board view.",
+      "fields": {
+        "board_follow_target": {},
+        "board_step": {
+          "required": true,
+          "values": [
+            "independent",
+            "manual",
+            "automatic"
+          ]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+          "literal": "\"board.follow\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "board_follow"
+        }
+      }
+    }
+  ],
   "facts": [
+    {
+      "name": "board.client_edit",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The author SDK's observations of a local edit.",
+      "events": [
+        {
+          "event": "board.client_edit",
+          "source": "client",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_correlation_id",
+            "board_scene_id",
+            "board_revision",
+            "board_failure",
+            "board_step"
+          ],
+          "failure_claims": [
+            "store_failed",
+            "refused"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.sync_edit",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Sync's edit result, after the repository returned.",
+      "events": [
+        {
+          "event": "board.sync_edit",
+          "source": "sync",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_correlation_id",
+            "board_scene_id",
+            "board_revision",
+            "board_failure",
+            "board_step"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.client_delivery",
+      "kind": "event",
+      "per": "seat",
+      "doc": "An entire update received and emitted to subscribers.",
+      "events": [
+        {
+          "event": "board.client_delivery",
+          "source": "client",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_scene_id",
+            "board_revision",
+            "board_correlation_id",
+            "board_previous_revision",
+            "board_step"
+          ],
+          "failure_claims": [
+            "gap"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.sync_delivery",
+      "kind": "event",
+      "per": "seat",
+      "doc": "An entire update handed to the recipient socket for sending.",
+      "events": [
+        {
+          "event": "board.sync_delivery",
+          "source": "sync",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_scene_id",
+            "board_revision",
+            "board_correlation_id",
+            "board_step"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.client_draw",
+      "kind": "event",
+      "per": "seat",
+      "doc": "Resolved draw access or a draw specifically refused for permission.",
+      "events": [
+        {
+          "event": "board.client_draw",
+          "source": "client",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_scene_id",
+            "board_step"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.client_snapshot",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A full snapshot assembled by the recipient SDK.",
+      "events": [
+        {
+          "event": "board.client_snapshot",
+          "source": "client",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_correlation_id",
+            "board_scene_id",
+            "board_revision",
+            "board_element_count",
+            "board_step"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.sync_snapshot",
+      "kind": "event",
+      "per": "seat",
+      "doc": "A snapshot prepared from the durable scene for the recipient.",
+      "events": [
+        {
+          "event": "board.sync_snapshot",
+          "source": "sync",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_correlation_id",
+            "board_scene_id",
+            "board_revision",
+            "board_element_count",
+            "board_step"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "board.follow",
+      "kind": "event",
+      "per": "seat",
+      "doc": "The effective follow state committed by the board view.",
+      "events": [
+        {
+          "event": "board.follow",
+          "source": "client",
+          "claim": "board_step",
+          "fields": [
+            "episode_id",
+            "participant_id",
+            "est_server_ms",
+            "board_follow_target",
+            "board_step"
+          ]
+        }
+      ]
+    },
     {
       "name": "board.camera",
       "kind": "event",
@@ -18,21 +573,143 @@
   ],
   "symptoms": [
     {
+      "code": "board.edit_not_committed",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The SDK definitively failed a local edit before sending or after a terminal refusal.",
+      "user_words": [
+        "my drawing didn't show up for them"
+      ],
+      "witnesses": [
+        {
+          "fact": "board.client_edit",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_edit'",
+          "doc": "The author SDK's observations of a local edit."
+        },
+        {
+          "fact": "board.sync_edit",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_edit'",
+          "doc": "Sync's edit result, after the repository returned."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.out_of_sync",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The recipient SDK skipped at least one same-scene revision.",
+      "user_words": [
+        "the board is out of sync"
+      ],
+      "witnesses": [
+        {
+          "fact": "board.client_delivery",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_delivery'",
+          "doc": "An entire update received and emitted to subscribers."
+        },
+        {
+          "fact": "board.sync_delivery",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_delivery'",
+          "doc": "An entire update handed to the recipient socket for sending."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.draw_denied",
+      "item": "episode",
+      "per": "seat",
+      "doc": "The resolved whiteboard access does not let this Participant draw.",
+      "user_words": [
+        "I can't draw"
+      ],
+      "witnesses": [
+        {
+          "fact": "board.client_draw",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_draw'",
+          "doc": "Resolved draw access or a draw specifically refused for permission."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.snapshot_mismatch",
+      "item": "episode",
+      "per": "seat",
+      "doc": "A snapshot's assembled metadata disagrees with the corresponding durable read.",
+      "user_words": [
+        "the drawing wasn't there when I joined"
+      ],
+      "witnesses": [
+        {
+          "fact": "board.client_snapshot",
+          "from": [
+            "client"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_snapshot'",
+          "doc": "A full snapshot assembled by the recipient SDK."
+        },
+        {
+          "fact": "board.sync_snapshot",
+          "from": [
+            "sync"
+          ],
+          "required": true,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_snapshot'",
+          "doc": "A snapshot prepared from the durable scene for the recipient."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
       "code": "board.view_jumped",
       "item": "episode",
       "per": "seat",
       "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
-      "user_words": ["the board keeps jumping"],
+      "user_words": [
+        "the board keeps jumping"
+      ],
       "witnesses": [
         {
           "fact": "board.camera",
-          "from": ["client"],
+          "from": [
+            "client"
+          ],
           "required": true,
           "query": "r2 flight-recorder/{episode}/{participant} board_camera {from}..{to}",
           "doc": "Every camera move, so a burst of automatic moves shows."
         }
       ],
       "fault_scenario": null
+    }
+  ],
+  "reasons": [
+    {
+      "code": "board.draw_denied",
+      "outcome": "expected",
+      "doc": "The Participant does not have draw access under the resolved board policy."
     }
   ]
 }

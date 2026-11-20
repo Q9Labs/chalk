@@ -1,3 +1,4 @@
+import type { ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
@@ -65,6 +66,7 @@ export interface SpaceViewWhiteboard {
   readonly presenterId?: string | null;
   readonly props: WhiteboardViewProps;
   /** Shares this person's board view so others can follow it; answers false when the board service can't. */
+  readonly observeFollow?: ChalkWhiteboardV1Transport["observeFollow"];
   readonly sendView?: (view: ChalkWhiteboardView) => boolean;
 }
 

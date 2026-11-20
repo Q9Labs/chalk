@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "df5dba2e4b7f",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -91,6 +91,232 @@
         "healthy": "observability/fixtures/audio.not_heard/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "board.draw_denied",
+      "area": "board",
+      "slice": 6,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "board.client_draw",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.client_draw",
+              "source": "client",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_step"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "board.client_draw",
+          "fields": ["board_scene_id", "board_step"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+              "literal": "\"board.client_draw\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/board.draw_denied.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/board.draw_denied/positive.json",
+        "healthy": "observability/fixtures/board.draw_denied/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.edit_not_committed",
+      "area": "board",
+      "slice": 6,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "board.client_edit",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.client_edit",
+              "source": "client",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"]
+            }
+          ]
+        },
+        {
+          "fact": "board.sync_edit",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.sync_edit",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "board.client_edit",
+          "fields": ["board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+              "literal": "\"board.client_edit\""
+            }
+          ]
+        },
+        {
+          "name": "board.sync_edit",
+          "fields": ["board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+              "literal": "\"board.sync_edit\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/board.edit_not_committed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/board.edit_not_committed/positive.json",
+        "healthy": "observability/fixtures/board.edit_not_committed/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.out_of_sync",
+      "area": "board",
+      "slice": 6,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "board.client_delivery",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.client_delivery",
+              "source": "client",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_revision", "board_correlation_id", "board_previous_revision", "board_step"]
+            }
+          ]
+        },
+        {
+          "fact": "board.sync_delivery",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.sync_delivery",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_revision", "board_correlation_id", "board_step"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "board.client_delivery",
+          "fields": ["board_scene_id", "board_revision", "board_correlation_id", "board_previous_revision", "board_step"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+              "literal": "\"board.client_delivery\""
+            }
+          ]
+        },
+        {
+          "name": "board.sync_delivery",
+          "fields": ["board_scene_id", "board_revision", "board_correlation_id", "board_step"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+              "literal": "\"board.sync_delivery\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/board.out_of_sync.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/board.out_of_sync/positive.json",
+        "healthy": "observability/fixtures/board.out_of_sync/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
+    },
+    {
+      "code": "board.snapshot_mismatch",
+      "area": "board",
+      "slice": 6,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "seat",
+      "witnesses": [
+        {
+          "fact": "board.client_snapshot",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.client_snapshot",
+              "source": "client",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"]
+            }
+          ]
+        },
+        {
+          "fact": "board.sync_snapshot",
+          "from": ["sync"],
+          "required": true,
+          "events": [
+            {
+              "event": "board.sync_snapshot",
+              "source": "sync",
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "board.client_snapshot",
+          "fields": ["board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/whiteboard/v1-client.ts",
+              "literal": "\"board.client_snapshot\""
+            }
+          ]
+        },
+        {
+          "name": "board.sync_snapshot",
+          "fields": ["board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/transport/socket_whiteboard_v1/observation.ex",
+              "literal": "\"board.sync_snapshot\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/board.snapshot_mismatch.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/board.snapshot_mismatch/positive.json",
+        "healthy": "observability/fixtures/board.snapshot_mismatch/healthy.json"
+      },
+      "fault_scenario": "sdks/typescript/client/tests/board-observability.fault.ts"
     },
     {
       "code": "board.view_jumped",

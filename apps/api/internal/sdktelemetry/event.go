@@ -45,8 +45,9 @@ const (
 )
 
 var (
-	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	midPattern  = regexp.MustCompile(MIDPattern)
+	uuidPattern          = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	boardRevisionPattern = regexp.MustCompile(`^(0|[1-9][0-9]{0,18})$`)
+	midPattern           = regexp.MustCompile(MIDPattern)
 )
 
 // Event is one thing a client saw. Type picks which of the other fields may be
@@ -63,6 +64,17 @@ type Event struct {
 	EventID string `json:"event_id,omitempty"`
 	// OpID joins the intent and the result of one operation, and the SFU's view of it.
 	OpID string `json:"op_id,omitempty"`
+
+	BoardStep             string `json:"board_step,omitempty"`
+	BoardSceneID          string `json:"board_scene_id,omitempty"`
+	BoardRevision         string `json:"board_revision,omitempty"`
+	BoardPreviousRevision string `json:"board_previous_revision,omitempty"`
+	BoardCorrelationID    string `json:"board_correlation_id,omitempty"`
+	BoardElementCount     *int64 `json:"board_element_count,omitempty"`
+	BoardFailure          string `json:"board_failure,omitempty"`
+	BoardFollowTarget     string `json:"board_follow_target,omitempty"`
+	EstServerMS           *int64 `json:"est_server_ms,omitempty"`
+	ClockErrMS            *int64 `json:"clock_err_ms,omitempty"`
 
 	State            string         `json:"state,omitempty"`
 	Step             string         `json:"step,omitempty"`
@@ -367,8 +379,12 @@ func sliceLimit(name string) int {
 
 func checkString(name, value string) string {
 	switch name {
-	case "op_id", "event_id", "dropped_source_id":
+	case "op_id", "event_id", "dropped_source_id", "board_scene_id", "board_correlation_id", "board_follow_target":
 		if !uuidPattern.MatchString(value) {
+			return name + "_label"
+		}
+	case "board_revision", "board_previous_revision":
+		if !boardRevisionPattern.MatchString(value) {
 			return name + "_label"
 		}
 	case "mid":

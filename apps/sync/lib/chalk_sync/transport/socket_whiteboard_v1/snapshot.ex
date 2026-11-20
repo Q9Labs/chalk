@@ -6,6 +6,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Snapshot do
   alias ChalkSync.Transport.SocketWhiteboardV1.Access
   alias ChalkSync.Transport.SocketWhiteboardV1.Delivery
   alias ChalkSync.Transport.SocketWhiteboardV1.Failure
+  alias ChalkSync.Transport.SocketWhiteboardV1.Observation
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.Transport.SocketWhiteboardV1.Views
   alias ChalkSync.WhiteboardV1.Episode
@@ -92,7 +93,8 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Snapshot do
     }
 
     case Episode.snapshot(identity, request_id) do
-      {:ok, [first | remaining]} ->
+      {:ok, [first | remaining] = pages} ->
+        Observation.snapshot(state, pages)
         snapshot = %{
           request_id: request_id,
           scene_id: first["scene_id"],

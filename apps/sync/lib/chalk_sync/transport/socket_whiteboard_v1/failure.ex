@@ -3,6 +3,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Failure do
   Operation failures and close reasons a whiteboard-v1 peer sees.
   """
 
+  alias ChalkSync.Transport.SocketWhiteboardV1.Observation
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.WhiteboardV1.Protocol
 
@@ -15,6 +16,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Failure do
       end
 
     code = normalize_error(reason)
+    if operation == :submit_update, do: Observation.refusal(state, correlation_id, code)
 
     state = Lifecycle.observe_operation(state, operation, Atom.to_string(code))
 

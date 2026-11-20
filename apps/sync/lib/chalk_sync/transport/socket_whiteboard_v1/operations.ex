@@ -10,6 +10,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Operations do
   alias ChalkSync.Transport.SocketWhiteboardV1.Delivery
   alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1.Failure
+  alias ChalkSync.Transport.SocketWhiteboardV1.Observation
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
@@ -86,6 +87,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Operations do
   defp write_update(operation, %{identity: identity} = state) do
     case Episode.submit_update(identity, operation) do
       {:ok, commit, updates} ->
+        Observation.commit(state, commit)
         Enum.each(updates, &Fanout.broadcast_local(identity.episode, &1))
         state = Lifecycle.observe_operation(state, "submit_update", "committed")
         {:push, {:text, Protocol.encode!(commit)}, acknowledge_contiguous_commit(state, commit)}
