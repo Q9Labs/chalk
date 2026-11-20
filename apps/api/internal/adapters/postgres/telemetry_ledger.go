@@ -72,11 +72,14 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 // telemetrydelivery.ErrParticipantGone unless the participant's row exists in the credential's
 // tenant and Episode.
 //
-// The table lock comes first so that a tenant purge and an admission never interleave (see the
-// LockTelemetrySourceTable query). The participant row is then held against deletion, and for a
+// Take both table locks in Tenant purge order, before the participant row. An admission
+// cannot wait on the outbox while a purge holds it and is waiting on the sources. For a
 // new source it is locked for update, which queues the source creations of one participant: the
 // one that waited reads the row again, since a creation it waited for may have made it.
 func lockForAdmission(ctx context.Context, queries *sqlc.Queries, identity telemetrydelivery.Identity, source utilities.ID) (*telemetrydelivery.SourceRow, int, error) {
+	if err := queries.LockTelemetryOutbox(ctx); err != nil {
+		return nil, 0, fmt.Errorf("lock the telemetry outbox: %w", err)
+	}
 	if err := queries.LockTelemetrySourceTable(ctx); err != nil {
 		return nil, 0, fmt.Errorf("lock the telemetry source table: %w", err)
 	}

@@ -19,6 +19,11 @@ func (l TelemetryLedger) RelayEvidence(ctx context.Context, export func(context.
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := sqlc.New(tx)
+	// Take the write lock before claiming rows. A Tenant purge cannot take its
+	// table fence in between and then block the deletion of a row it needs.
+	if err := queries.LockTelemetryOutbox(ctx); err != nil {
+		return 0, fmt.Errorf("lock the telemetry relay outbox: %w", err)
+	}
 	batches, err := queries.LockReadyTelemetryOutbox(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("claim telemetry relay batches: %w", err)
@@ -37,7 +42,7 @@ func (l TelemetryLedger) RelayEvidence(ctx context.Context, export func(context.
 		ids = append(ids, batch.ID)
 	}
 	if err := export(ctx, rows); err != nil {
-		// A refused group must not prevent newer groups from reaching the sink.
+		// Retry refused batches separately: one bad payload must not hold up its neighbours.
 		delayErr := queries.DelayTelemetryOutbox(ctx, ids)
 		if delayErr == nil {
 			delayErr = tx.Commit(ctx)

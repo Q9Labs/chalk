@@ -13,7 +13,7 @@ import (
 
 const delayTelemetryOutbox = `-- name: DelayTelemetryOutbox :exec
 update telemetry_outbox
-set available_at = now() + interval '1 minute'
+set available_at = now() + interval '1 minute', retry = true
 where id = any($1::bigint[])
 `
 
@@ -46,12 +46,19 @@ func (q *Queries) InsertTelemetryOutbox(ctx context.Context, arg InsertTelemetry
 }
 
 const lockReadyTelemetryOutbox = `-- name: LockReadyTelemetryOutbox :many
-select id, payload
-from telemetry_outbox
-where available_at <= now()
-order by available_at, id
+with head as (
+    select id, retry from telemetry_outbox
+    where available_at <= now()
+    order by available_at, id
+    limit 1 for update skip locked
+)
+select queue.id, queue.payload
+from telemetry_outbox as queue cross join head
+where queue.available_at <= now()
+  and (queue.id = head.id or (not head.retry and not queue.retry))
+order by queue.available_at, queue.id
 limit 16
-for update skip locked
+for update of queue skip locked
 `
 
 type LockReadyTelemetryOutboxRow struct {
@@ -77,4 +84,13 @@ func (q *Queries) LockReadyTelemetryOutbox(ctx context.Context) ([]LockReadyTele
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockTelemetryOutbox = `-- name: LockTelemetryOutbox :exec
+lock table telemetry_outbox in row exclusive mode
+`
+
+func (q *Queries) LockTelemetryOutbox(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockTelemetryOutbox)
+	return err
 }

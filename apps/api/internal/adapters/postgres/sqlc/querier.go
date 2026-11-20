@@ -369,6 +369,7 @@ type Querier interface {
 	LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error)
 	LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
+	LockTelemetryOutbox(ctx context.Context) error
 	// The no key update lock serializes the source creations of one participant, so two concurrent
 	// first batches cannot both pass the source budget.
 	LockTelemetryParticipant(ctx context.Context, arg LockTelemetryParticipantParams) ([]pgtype.UUID, error)
