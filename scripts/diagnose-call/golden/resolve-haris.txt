@@ -1,0 +1,5 @@
+resolve "Haris" matched=2 asof=2026-11-19T01:00Z
+cand usr_9a1b user "Haris" tenant=TH
+cand usr_9a7e user "Haris" tenant=AB
+next: diagnose usr_9a1b
+next: diagnose usr_9a7e

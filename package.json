@@ -70,6 +70,7 @@
     "clean": "turbo clean && node scripts/fs.mjs rm node_modules",
     "generate:tracker": "node scripts/generate-tracker.mjs",
     "check:tracker": "node scripts/generate-tracker.mjs --check",
+    "diagnose": "node scripts/diagnose-call/diagnose.mjs",
     "diagnose:call": "node scripts/diagnose-call/index.mjs",
     "prod:proof": "node scripts/prod-proof/index.mjs",
     "prod:canary": "node scripts/prod-proof/sfu-canary.mjs",

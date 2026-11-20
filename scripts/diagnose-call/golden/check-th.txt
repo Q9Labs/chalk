@@ -1,0 +1,11 @@
+check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=6/6 partial=2 asof=2026-11-19T01:00Z rules=51d54aba
+anchor=2026-11-19T01:00Z local=2026-11-19T06:00+05:00 tz=Asia/Karachi
+current ep_5c0d 11-18 09:00 outcome=healthy coverage=complete
+rechecked ep_31aa 11-18 11:00 outcome=unknown coverage=complete codes=BLIND_SPOT was=healthy
+current ep_9feb 11-18 14:45 outcome=broken coverage=partial(board) codes=audio.no_voice_detected,end.time_limit
+current jr_6d5e 11-18 15:02 outcome=broken coverage=complete codes=entry.unresolved
+current job_4a3b 11-18 15:45 outcome=degraded coverage=partial(open) codes=recording.not_ready
+checked ep_7a21 11-18 16:00 outcome=healthy coverage=complete
+gap: partial ep_9feb 11-18 14:45 missing=board
+gap: partial job_4a3b 11-18 15:45 missing=open
+next: diagnose attempt jr_6d5e

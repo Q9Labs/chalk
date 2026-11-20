@@ -1,0 +1,7 @@
+participant usr_9a1b(Haris) tenant=TH range=10-20..11-19 outcome=broken coverage=partial checked=2/2 partial=1 asof=2026-11-19T01:00Z rules=51d54aba
+anchor=2026-10-20T01:00Z local=2026-10-20T06:00+05:00 tz=Asia/Karachi
+audio.no_voice_detected broken episodes=2 people=1 ep_9feb ep_2d4e
+f_77c7 broken audio.no_voice_detected ep_2d4e 11-11 15:05 hop=sfu_ingress upstream=unknown ev=ev_2a3b
+f_98d4 broken audio.no_voice_detected ep_9feb 11-18 14:52 hop=sfu_ingress upstream=unknown ev=ev_a1f3
+gap: partial ep_9feb 11-18 14:45 missing=board
+next: diagnose evidence f_98d4
