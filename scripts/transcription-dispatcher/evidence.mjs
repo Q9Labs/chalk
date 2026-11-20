@@ -446,20 +446,20 @@ const stableId = (/** @type {string} */ seed) => {
  * One db observation for a registered fact's db event. Only the event's declared fields reach the value — anything else the
  * row carried (artifact keys, error details, lease tokens) is dropped here even if the SQL selected it for the reader's own
  * use.
- * @param {{ event: string, fact: string, key: string, subject: Subject, window: { from_ms: number, to_ms: number }, claim: string, value: Record<string, string | number | boolean>, query: string, at: number }} input
+ * @param {{ event: string, fact: string, key: string, subject: Subject, window: { from_ms: number, to_ms: number }, claim: string, value: Record<string, string | number | boolean>, query: string, at: number, source?: string }} input
  * @returns {Observation}
  */
-function dbObservation({ event, fact, key, subject, window, claim, value, query, at }) {
-  const entry = (BY_EVENT.get(event) ?? []).find((candidate) => candidate.fact === fact && candidate.source === "db");
-  if (entry === undefined) throw new EvidenceError(`registry names no db event ${event} for ${fact}`);
+function dbObservation({ event, fact, key, subject, window, claim, value, query, at, source = "db" }) {
+  const entry = (BY_EVENT.get(event) ?? []).find((candidate) => candidate.fact === fact && candidate.source === source);
+  if (entry === undefined) throw new EvidenceError(`registry names no ${source} event ${event} for ${fact}`);
   /** @type {Record<string, string | number | boolean>} */
   const declared = {};
   for (const [name, fieldValue] of Object.entries(value)) if (entry.fields.has(name)) declared[name] = fieldValue;
   return observation({
-    id: stableId(`db|${event}|${key}`),
+    id: stableId(`${source}|${event}|${key}`),
     fact,
-    source: "db",
-    origin: origin.measured("db"),
+    source: /** @type {Observation["source"]} */ (source),
+    origin: origin.measured(source),
     subject,
     window,
     claim,
@@ -985,19 +985,19 @@ async function jobWorld(id, read, logs, store, notes) {
       r2Complete = readAt;
       const value = r2Value(answer, transcript, readAt);
       observations.push(
-        observation({
-          id: stableId(`r2|transcript.r2.object|${transcript.id}`),
+        dbObservation({
+          event: "transcript.r2.object",
           fact: "transcript.object",
+          key: String(transcript.id),
           source: "r2",
-          origin: origin.measured("r2"),
           subject,
           // The stored document's life starts when the finalize wrote it: the readback's claim is about the object as it
           // stands now, and a point at read time would land outside the window of any job that ended over a settle ago.
           window: { from_ms: timeOf(transcript, "completed_ms") ?? /** @type {number} */ (transcript.created_ms), to_ms: readAt },
           claim: /** @type {string} */ (value.transcript_r2_result),
           value,
-          failure: false,
           query: `r2 get "$(psql -At -c "select artifact_key from transcriptions where id = '${transcript.id}'")"`,
+          at: readAt,
         }),
       );
       notes.push(`r2: readback of the transcription's artifact answered ${value.transcript_r2_result} (status ${answer.status})`);
