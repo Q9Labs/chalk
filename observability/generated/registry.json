@@ -1,5 +1,5 @@
 {
-  "schema_ver": "df5dba2e4b7f",
+  "schema_ver": "971ce9cd8d5e",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1865,7 +1865,7 @@
           "source": "sync",
           "claim": "board_step",
           "failure_claims": [],
-          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_step"]
         }
       ],
       "doc": "Sync's edit result, after the repository returned."

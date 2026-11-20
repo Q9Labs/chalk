@@ -1,0 +1,72 @@
+{
+  "description": "Draw permission changes and the Participant's next attempt is refused.",
+  "asof_ms": 1800000400000,
+  "declaration": {
+    "kind": "episode",
+    "id": "e6100000-0000-4000-8000-000000000000",
+    "tenant": "f6100000-0000-4000-8000-000000000000",
+    "features": [
+      "board"
+    ],
+    "window": {
+      "from_ms": 1800000000000,
+      "to_ms": 1800000001000
+    },
+    "seats": [
+      {
+        "participant": "b6100000-0000-4000-8000-000000000000",
+        "name": null,
+        "role": "collaborator",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1800000000000,
+          "to_ms": 1800000001000
+        },
+        "person": {
+          "kind": "guest",
+          "name": null,
+          "device": null
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "event": "board.client_draw",
+      "board_step": "allowed",
+      "board_scene_id": "d6100000-0000-4000-8000-000000000000",
+      "tenant_id": "f6100000-0000-4000-8000-000000000000",
+      "episode_id": "e6100000-0000-4000-8000-000000000000",
+      "participant_id": "b6100000-0000-4000-8000-000000000000",
+      "generation": 1,
+      "est_server_ms": 1800000000020,
+      "event_id": "e6010000-0000-4000-8000-000000000000"
+    },
+    {
+      "event": "board.client_draw",
+      "board_step": "blocked",
+      "board_scene_id": "d6100000-0000-4000-8000-000000000000",
+      "tenant_id": "f6100000-0000-4000-8000-000000000000",
+      "episode_id": "e6100000-0000-4000-8000-000000000000",
+      "participant_id": "b6100000-0000-4000-8000-000000000000",
+      "generation": 1,
+      "est_server_ms": 1800000000040,
+      "event_id": "e6020000-0000-4000-8000-000000000000"
+    },
+    {
+      "event": "board.client_draw",
+      "board_step": "denied",
+      "board_scene_id": "d6100000-0000-4000-8000-000000000000",
+      "tenant_id": "f6100000-0000-4000-8000-000000000000",
+      "episode_id": "e6100000-0000-4000-8000-000000000000",
+      "participant_id": "b6100000-0000-4000-8000-000000000000",
+      "generation": 1,
+      "est_server_ms": 1800000000060,
+      "event_id": "e6030000-0000-4000-8000-000000000000"
+    }
+  ]
+}

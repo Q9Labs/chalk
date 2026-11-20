@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "df5dba2e4b7f",
+  "schema_ver": "971ce9cd8d5e",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -160,7 +160,7 @@
             {
               "event": "board.sync_edit",
               "source": "sync",
-              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"]
+              "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_step"]
             }
           ]
         }

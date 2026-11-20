@@ -2,32 +2,14 @@
   "area": "board",
   "slice": 6,
   "title": "Whiteboard",
-  "prefixes": [
-    "board"
-  ],
+  "prefixes": ["board"],
   "fields": [
     {
       "name": "board_step",
       "type": "enum",
       "sensitivity": null,
       "doc": "Whiteboard boundary and outcome.",
-      "values": [
-        "store_saved",
-        "store_failed",
-        "sent",
-        "committed",
-        "duplicate",
-        "refused",
-        "denied",
-        "allowed",
-        "blocked",
-        "update",
-        "gap",
-        "snapshot",
-        "independent",
-        "manual",
-        "automatic"
-      ]
+      "values": ["store_saved", "store_failed", "sent", "committed", "duplicate", "refused", "denied", "allowed", "blocked", "update", "gap", "snapshot", "independent", "manual", "automatic"]
     },
     {
       "name": "board_scene_id",
@@ -70,18 +52,7 @@
       "type": "enum",
       "sensitivity": null,
       "doc": "Bounded reason for a failed whiteboard edit.",
-      "values": [
-        "local_store",
-        "permission_denied",
-        "storage_unavailable",
-        "unavailable",
-        "invalid_payload",
-        "stale_scene",
-        "cursor_reset_required",
-        "rate_limited",
-        "overloaded",
-        "other"
-      ]
+      "values": ["local_store", "permission_denied", "storage_unavailable", "unavailable", "invalid_payload", "stale_scene", "cursor_reset_required", "rate_limited", "overloaded", "other"]
     }
   ],
   "events": [
@@ -90,9 +61,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": [
-        "sdk"
-      ],
+      "modules": ["sdk"],
       "doc": "The author SDK's observations of a local edit.",
       "fields": {
         "board_correlation_id": {
@@ -105,13 +74,7 @@
         "board_failure": {},
         "board_step": {
           "required": true,
-          "values": [
-            "store_saved",
-            "store_failed",
-            "sent",
-            "committed",
-            "refused"
-          ]
+          "values": ["store_saved", "store_failed", "sent", "committed", "refused"]
         }
       },
       "emit_sites": [
@@ -132,9 +95,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "sync"
-      ],
+      "modules": ["sync"],
       "doc": "Sync's edit result, after the repository returned.",
       "fields": {
         "board_correlation_id": {
@@ -145,11 +106,7 @@
         "board_failure": {},
         "board_step": {
           "required": true,
-          "values": [
-            "committed",
-            "duplicate",
-            "refused"
-          ]
+          "values": ["committed", "duplicate", "refused"]
         }
       },
       "emit_sites": [
@@ -164,9 +121,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": [
-        "sdk"
-      ],
+      "modules": ["sdk"],
       "doc": "An entire update received and emitted to subscribers.",
       "fields": {
         "board_scene_id": {
@@ -181,10 +136,7 @@
         "board_previous_revision": {},
         "board_step": {
           "required": true,
-          "values": [
-            "update",
-            "gap"
-          ]
+          "values": ["update", "gap"]
         }
       },
       "emit_sites": [
@@ -205,9 +157,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "sync"
-      ],
+      "modules": ["sync"],
       "doc": "An entire update handed to the recipient socket for sending.",
       "fields": {
         "board_scene_id": {
@@ -221,9 +171,7 @@
         },
         "board_step": {
           "required": true,
-          "values": [
-            "update"
-          ]
+          "values": ["update"]
         }
       },
       "emit_sites": [
@@ -238,19 +186,13 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": [
-        "sdk"
-      ],
+      "modules": ["sdk"],
       "doc": "Resolved draw access or a draw specifically refused for permission.",
       "fields": {
         "board_scene_id": {},
         "board_step": {
           "required": true,
-          "values": [
-            "allowed",
-            "blocked",
-            "denied"
-          ]
+          "values": ["allowed", "blocked", "denied"]
         }
       },
       "emit_sites": [
@@ -271,9 +213,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": [
-        "sdk"
-      ],
+      "modules": ["sdk"],
       "doc": "A full snapshot assembled by the recipient SDK.",
       "fields": {
         "board_correlation_id": {
@@ -290,9 +230,7 @@
         },
         "board_step": {
           "required": true,
-          "values": [
-            "snapshot"
-          ]
+          "values": ["snapshot"]
         }
       },
       "emit_sites": [
@@ -313,9 +251,7 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "server",
-      "modules": [
-        "sync"
-      ],
+      "modules": ["sync"],
       "doc": "A snapshot prepared from the durable scene for the recipient.",
       "fields": {
         "board_correlation_id": {
@@ -332,9 +268,7 @@
         },
         "board_step": {
           "required": true,
-          "values": [
-            "snapshot"
-          ]
+          "values": ["snapshot"]
         }
       },
       "emit_sites": [
@@ -349,19 +283,13 @@
       "kind": "fact",
       "dataset": "lifecycle",
       "side": "client",
-      "modules": [
-        "sdk"
-      ],
+      "modules": ["sdk"],
       "doc": "The effective follow state committed by the board view.",
       "fields": {
         "board_follow_target": {},
         "board_step": {
           "required": true,
-          "values": [
-            "independent",
-            "manual",
-            "automatic"
-          ]
+          "values": ["independent", "manual", "automatic"]
         }
       },
       "emit_sites": [
@@ -389,20 +317,8 @@
           "event": "board.client_edit",
           "source": "client",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_correlation_id",
-            "board_scene_id",
-            "board_revision",
-            "board_failure",
-            "board_step"
-          ],
-          "failure_claims": [
-            "store_failed",
-            "refused"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_failure", "board_step"],
+          "failure_claims": ["store_failed", "refused"]
         }
       ]
     },
@@ -416,16 +332,7 @@
           "event": "board.sync_edit",
           "source": "sync",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_correlation_id",
-            "board_scene_id",
-            "board_revision",
-            "board_failure",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_step"]
         }
       ]
     },
@@ -439,19 +346,8 @@
           "event": "board.client_delivery",
           "source": "client",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_scene_id",
-            "board_revision",
-            "board_correlation_id",
-            "board_previous_revision",
-            "board_step"
-          ],
-          "failure_claims": [
-            "gap"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_revision", "board_correlation_id", "board_previous_revision", "board_step"],
+          "failure_claims": ["gap"]
         }
       ]
     },
@@ -465,15 +361,7 @@
           "event": "board.sync_delivery",
           "source": "sync",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_scene_id",
-            "board_revision",
-            "board_correlation_id",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_revision", "board_correlation_id", "board_step"]
         }
       ]
     },
@@ -487,13 +375,7 @@
           "event": "board.client_draw",
           "source": "client",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_scene_id",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_scene_id", "board_step"]
         }
       ]
     },
@@ -507,16 +389,7 @@
           "event": "board.client_snapshot",
           "source": "client",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_correlation_id",
-            "board_scene_id",
-            "board_revision",
-            "board_element_count",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"]
         }
       ]
     },
@@ -530,16 +403,7 @@
           "event": "board.sync_snapshot",
           "source": "sync",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_correlation_id",
-            "board_scene_id",
-            "board_revision",
-            "board_element_count",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_correlation_id", "board_scene_id", "board_revision", "board_element_count", "board_step"]
         }
       ]
     },
@@ -553,13 +417,7 @@
           "event": "board.follow",
           "source": "client",
           "claim": "board_step",
-          "fields": [
-            "episode_id",
-            "participant_id",
-            "est_server_ms",
-            "board_follow_target",
-            "board_step"
-          ]
+          "fields": ["episode_id", "participant_id", "est_server_ms", "board_follow_target", "board_step"]
         }
       ]
     },
@@ -577,24 +435,18 @@
       "item": "episode",
       "per": "seat",
       "doc": "The SDK definitively failed a local edit before sending or after a terminal refusal.",
-      "user_words": [
-        "my drawing didn't show up for them"
-      ],
+      "user_words": ["my drawing didn't show up for them"],
       "witnesses": [
         {
           "fact": "board.client_edit",
-          "from": [
-            "client"
-          ],
+          "from": ["client"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_edit'",
           "doc": "The author SDK's observations of a local edit."
         },
         {
           "fact": "board.sync_edit",
-          "from": [
-            "sync"
-          ],
+          "from": ["sync"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_edit'",
           "doc": "Sync's edit result, after the repository returned."
@@ -607,24 +459,18 @@
       "item": "episode",
       "per": "seat",
       "doc": "The recipient SDK skipped at least one same-scene revision.",
-      "user_words": [
-        "the board is out of sync"
-      ],
+      "user_words": ["the board is out of sync"],
       "witnesses": [
         {
           "fact": "board.client_delivery",
-          "from": [
-            "client"
-          ],
+          "from": ["client"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_delivery'",
           "doc": "An entire update received and emitted to subscribers."
         },
         {
           "fact": "board.sync_delivery",
-          "from": [
-            "sync"
-          ],
+          "from": ["sync"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_delivery'",
           "doc": "An entire update handed to the recipient socket for sending."
@@ -637,15 +483,11 @@
       "item": "episode",
       "per": "seat",
       "doc": "The resolved whiteboard access does not let this Participant draw.",
-      "user_words": [
-        "I can't draw"
-      ],
+      "user_words": ["I can't draw"],
       "witnesses": [
         {
           "fact": "board.client_draw",
-          "from": [
-            "client"
-          ],
+          "from": ["client"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_draw'",
           "doc": "Resolved draw access or a draw specifically refused for permission."
@@ -658,24 +500,18 @@
       "item": "episode",
       "per": "seat",
       "doc": "A snapshot's assembled metadata disagrees with the corresponding durable read.",
-      "user_words": [
-        "the drawing wasn't there when I joined"
-      ],
+      "user_words": ["the drawing wasn't there when I joined"],
       "witnesses": [
         {
           "fact": "board.client_snapshot",
-          "from": [
-            "client"
-          ],
+          "from": ["client"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and type == 'board_snapshot'",
           "doc": "A full snapshot assembled by the recipient SDK."
         },
         {
           "fact": "board.sync_snapshot",
-          "from": [
-            "sync"
-          ],
+          "from": ["sync"],
           "required": true,
           "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and name == 'board.sync_snapshot'",
           "doc": "A snapshot prepared from the durable scene for the recipient."
@@ -688,15 +524,11 @@
       "item": "episode",
       "per": "seat",
       "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
-      "user_words": [
-        "the board keeps jumping"
-      ],
+      "user_words": ["the board keeps jumping"],
       "witnesses": [
         {
           "fact": "board.camera",
-          "from": [
-            "client"
-          ],
+          "from": ["client"],
           "required": true,
           "query": "r2 flight-recorder/{episode}/{participant} board_camera {from}..{to}",
           "doc": "Every camera move, so a burst of automatic moves shows."

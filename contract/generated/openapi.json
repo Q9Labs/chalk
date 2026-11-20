@@ -18109,14 +18109,17 @@
                 },
                 "board_follow_target": {
                   "minLength": 1,
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                   "type": "string"
                 },
                 "board_previous_revision": {
                   "minLength": 1,
+                  "pattern": "^(0|[1-9][0-9]{0,18})$",
                   "type": "string"
                 },
                 "board_revision": {
                   "minLength": 1,
+                  "pattern": "^(0|[1-9][0-9]{0,18})$",
                   "type": "string"
                 },
                 "board_scene_id": {

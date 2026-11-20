@@ -1,10 +1,9 @@
-import type { ChalkWhiteboardV1Transport } from "@q9labsai/chalk-client";
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
-import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
+import { callCountdown, callLimitMessage, type CallLimitWarning, type ChalkWhiteboardV1Transport, type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";

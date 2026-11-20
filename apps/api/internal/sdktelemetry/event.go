@@ -377,24 +377,33 @@ func sliceLimit(name string) int {
 	return MaxTracks
 }
 
-func checkString(name, value string) string {
+// FieldPattern describes fields that may carry an ID or a decimal revision, but not arbitrary text.
+func FieldPattern(name string) string {
+	if pattern := fieldPattern(name); pattern != nil {
+		return pattern.String()
+	}
+	return ""
+}
+
+func fieldPattern(name string) *regexp.Regexp {
 	switch name {
 	case "op_id", "event_id", "dropped_source_id", "board_scene_id", "board_correlation_id", "board_follow_target":
-		if !uuidPattern.MatchString(value) {
-			return name + "_label"
-		}
+		return uuidPattern
 	case "board_revision", "board_previous_revision":
-		if !boardRevisionPattern.MatchString(value) {
-			return name + "_label"
-		}
+		return boardRevisionPattern
 	case "mid":
-		if !midPattern.MatchString(value) {
-			return name + "_label"
-		}
+		return midPattern
 	default:
-		if enum := FieldEnum(name); enum != nil && !slices.Contains(enum, value) {
-			return name + "_label"
-		}
+		return nil
+	}
+}
+
+func checkString(name, value string) string {
+	if pattern := fieldPattern(name); pattern != nil && !pattern.MatchString(value) {
+		return name + "_label"
+	}
+	if enum := FieldEnum(name); enum != nil && !slices.Contains(enum, value) {
+		return name + "_label"
 	}
 	return ""
 }

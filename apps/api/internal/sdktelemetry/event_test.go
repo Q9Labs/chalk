@@ -121,8 +121,10 @@ func TestEveryTypeHasEnumsForItsLabelFields(t *testing.T) {
 	for eventType, spec := range specs {
 		for _, field := range append(spec.allowed, spec.required...) {
 			switch field {
-			case "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "close_code", "http_status", "receive_counts",
-				"receivers_stopped", "bundle_tag_held", "stats", "dropped", "op_id", "dropped_seqs", "dropped_source_id":
+			case "receive_counts", "stats", "dropped_seqs", "bundle_tag_held":
+				continue
+			}
+			if _, _, numeric := FieldRange(field); numeric || FieldPattern(field) != "" {
 				continue
 			}
 			if FieldEnum(field) == nil {

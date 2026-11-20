@@ -540,7 +540,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #permissionUpdated(frame: ServerFrame<"permission_updated">): void {
-    if (frame.participant_id === this.#participantId) this.#canDraw = frame.can_draw;
+    if (frame.participant_id === this.#participantId) this.#setDrawAccess(frame.can_draw);
     this.#publishSummary("ready", null);
   }
 
@@ -563,10 +563,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     this.#emit(frame.origin_participant_id ? { ...event, originParticipantId: frame.origin_participant_id, originSequence: frame.origin_sequence, ...(frame.origin_epoch ? { originEpoch: frame.origin_epoch } : {}) } : event);
   }
 
+  #setDrawAccess(canDraw: boolean): void {
+    if (canDraw === this.#canDraw) return;
+    this.#canDraw = canDraw;
+    this.#observeDraw(canDraw ? "allowed" : "blocked");
+  }
+
   #drawAccess(frame: ServerFrame<"draw_access">): void {
-    const changed = this.#canDraw !== frame.can_draw;
-    this.#canDraw = frame.can_draw;
-    if (changed) this.#observeDraw(frame.can_draw ? "allowed" : "blocked");
+    this.#setDrawAccess(frame.can_draw);
     this.#capabilities = [...frame.capabilities];
     this.#drawPolicy = frame.policy;
     this.#drawPermissions = frame.grants.map((grant) => ({ participantId: grant.participant_id, canDraw: grant.can_draw }));
@@ -904,12 +908,13 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     if (entry.pending.frame.type === "submit_update") {
       if (frame.code === "permission_denied") this.#observeDraw("denied");
-      else this.#options.observations?.fact("board.client_edit", {
-        board_step: "refused",
-        board_correlation_id: frame.correlation_id,
-        board_scene_id: entry.pending.frame.scene_id,
-        board_failure: frame.code,
-      });
+      else
+        this.#options.observations?.fact("board.client_edit", {
+          board_step: "refused",
+          board_correlation_id: frame.correlation_id,
+          board_scene_id: entry.pending.frame.scene_id,
+          board_failure: frame.code,
+        });
     }
     this.#forgetOperation(frame.correlation_id);
     this.#clearTimer(this.#operationRetryTimers, frame.correlation_id);

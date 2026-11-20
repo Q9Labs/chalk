@@ -14,7 +14,7 @@ An Episode's whiteboard has its own Sync socket, a durable Postgres scene and re
 |---|---|---|---|
 | `board.edit_not_committed` | “My drawing didn't show up for them” | Author | Broken when the SDK definitively fails this edit before it can send or after a terminal refusal other than access denial. |
 | `board.out_of_sync` | “The board is out of sync” | Recipient | Broken when a same-scene update skips a revision at the SDK after a baseline. |
-| `board.draw_denied` | “I can't draw” | The Participant without access | Expected when the SDK resolved draw access to blocked or a draw was refused for lack of permission. |
+| `board.draw_denied` | “I can't draw” | The Participant without access | Expected when a draw attempt was refused for lack of permission. |
 | `board.snapshot_mismatch` | “The board was missing when I joined” | Snapshot recipient | Broken when the assembled snapshot differs in revision or element count from the same Sync snapshot request. |
 
 Follow state is an observed transition between independent, manual and automatic following. It is not a finding by itself: current auto-follow is intentional behavior, and changing it is out of scope.
@@ -38,8 +38,8 @@ Every client witness is scoped by the SDK telemetry credential and outbox source
 A finding needs positive evidence even if the enclosing source has incomplete delivery. Passing needs the required positive rows and the kernel's completeness checks. In particular:
 
 - A locally failed store or a terminal non-access refusal gives `board.edit_not_committed`. For a stored or sent edit, require the positively observed successful author receipt and the matching durable Sync commit (a duplicate receipt is allowed). A policy refusal is handled by `board.draw_denied`, not reported as storage loss.
-- A skipped revision is a recipient replica observation. A matching Sync push supplies upstream evidence; a missing push does not prove Sync lost it. Do not infer a drop from the absence of an update. To pass, require observed updates with the same scene/revision on both sides of the recipient socket.
-- A measured blocked draw state or a permission refusal gives `board.draw_denied`. Open, closed and read-only boards are not conflated. To pass, require an affirmative allowed state.
+- A skipped revision is a recipient replica observation. A matching Sync push supplies upstream evidence; a missing push does not prove Sync lost it. Do not infer a drop from the absence of an update. To pass, require observed updates with the same scene/revision on Sync and the client for the same Participant.
+- A permission refusal gives `board.draw_denied`. A measured read-only state explains access but is not a finding without a refused draw. To pass, require a positive allowed or blocked state.
 - A pair of snapshot witnesses for the same Participant and request ID must agree on scene, revision and count. A mismatch is a finding. An incomplete or missing pair remains unknown. Equal metadata does not prove exact element content.
 
 ## 5. Boundaries to adopt the kernel at

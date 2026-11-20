@@ -12,7 +12,12 @@ const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscri
 export type WhiteboardControllerEffects = { readonly transport: () => ChalkWhiteboardV1Transport | null; readonly dispose: () => void };
 
 /** The whiteboard transport is a foreign port; lifecycle and cleanup stay scoped. */
-export const makeWhiteboardController = (connection: ConnectionLifecycleCapability, store: SpaceStore, create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null, telemetry?: TelemetryOutbox): Effect.Effect<WhiteboardControllerEffects, never, import("effect").Scope.Scope> =>
+export const makeWhiteboardController = (
+  connection: ConnectionLifecycleCapability,
+  store: SpaceStore,
+  create?: (input: ConnectionWhiteboardFactoryInput) => ChalkWhiteboardV1Transport | null,
+  telemetry?: TelemetryOutbox,
+): Effect.Effect<WhiteboardControllerEffects, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<never>();
     const controller = yield* Effect.sync(() => {

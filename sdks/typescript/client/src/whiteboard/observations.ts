@@ -1,5 +1,5 @@
 import { ClockEstimator } from "../obs/clock";
-import { createKernel } from "../obs/kernel";
+import { createKernel, type KernelMode } from "../obs/kernel";
 import type { TelemetryDraft } from "../telemetry/types";
 
 const telemetryTypes = {
@@ -16,10 +16,11 @@ type WhiteboardTelemetry = {
 };
 
 /** The existing outbox owns the client stream and assigns the wire event ID and sequence. */
-export function createWhiteboardObservations(telemetry: WhiteboardTelemetry, clock = new ClockEstimator({ mono: () => performance.now(), wall: Date.now })) {
+export function createWhiteboardObservations(telemetry: WhiteboardTelemetry, options: { readonly clock?: ClockEstimator; readonly mode?: KernelMode } = {}) {
+  const clock = options.clock ?? new ClockEstimator({ mono: () => performance.now(), wall: Date.now });
   return createKernel({
     sourceId: telemetry.sessionId,
-    mode: "open",
+    mode: options.mode ?? "open",
     build: { module: "sdk", env: "local" },
     clock,
     sink(record) {

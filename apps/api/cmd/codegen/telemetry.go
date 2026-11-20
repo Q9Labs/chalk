@@ -34,8 +34,8 @@ func applyTelemetryConstraints(schema map[string]any, schemaName string, fieldNa
 			schema["maxItems"] = sdktelemetry.MaxDropRanges
 		case "tracks":
 			schema["maxItems"] = sdktelemetry.MaxTracks
-		case "mid":
-			schema["pattern"] = sdktelemetry.MIDPattern
+		case "mid", "board_scene_id", "board_correlation_id", "board_follow_target", "board_revision", "board_previous_revision":
+			schema["pattern"] = sdktelemetry.FieldPattern(fieldName)
 		default:
 			applyTelemetryRange(schema, fieldName)
 		}

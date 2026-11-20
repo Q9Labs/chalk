@@ -15,6 +15,7 @@
  * - a second Haris in tenant AB, so the name alone is ambiguous.
  */
 import { origin } from "../proof/evidence.mjs";
+import { observationsFromRows } from "../proof/rows.mjs";
 
 /** @typedef {import("../proof/fixture-world.mjs").World} World */
 /** @typedef {import("../proof/evidence.mjs").Observation} Observation */
@@ -98,6 +99,46 @@ const mic = (episode, participant, id, from, to, claim) =>
 /** @param {string} episode @param {string} participant @param {string} id @param {number} from @param {number} to @param {number} packets @param {number} voiced */
 const ingress = (episode, participant, id, from, to, packets, voiced) =>
   row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim: voiced > 0 ? "voiced" : "silent", value: { packets, voiced }, failure: false });
+
+const BOARD_STEPS = /** @type {const} */ ([
+  ["sync_edit", "committed"],
+  ["client_edit", "committed"],
+  ["sync_delivery", "update"],
+  ["client_delivery", "update"],
+  ["sync_snapshot", "snapshot"],
+  ["client_snapshot", "snapshot"],
+  ["client_draw", "allowed"],
+  ["follow", "independent"],
+]);
+
+/** @param {readonly Seat[]} seats @param {number} start */
+function exampleBoard(seats, start) {
+  const authority = { tenant_id: TH, episode_id: IDS.ep9feb, generation: 1 };
+  const scene = { board_scene_id: "1b160000-0000-4000-8000-000000000000" };
+  const rows = seats.flatMap(({ participant }, seatIndex) =>
+    BOARD_STEPS.map(([name, step], index) => {
+      // Distinct edit, delivery and snapshot IDs; both sides of each share a correlation.
+      const pair = Math.floor(index / 2);
+      return {
+        ...authority,
+        ...scene,
+        participant_id: participant,
+        event: `board.${name}`,
+        event_id: `0b16${seatIndex}${index}00-0000-4000-8000-000000000000`,
+        est_server_ms: start + 60_000 + seatIndex * 2_000 + index * 10,
+        board_step: step,
+        ...(pair < 3
+          ? {
+              board_correlation_id: `1b16${seatIndex}${pair}00-0000-4000-8000-000000000000`,
+              board_revision: String(3 * seatIndex + pair + 1),
+            }
+          : {}),
+        ...(step === "snapshot" ? { board_element_count: 3 * seatIndex + 3 } : {}),
+      };
+    }),
+  );
+  return observationsFromRows(rows).observations;
+}
 
 /**
  * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
@@ -184,11 +225,14 @@ export function nov18() {
   const ep9feb = {
     declaration: { kind: /** @type {const} */ ("episode"), id: ep, tenant: TH, features: ["media", "board", "time_limit"], window: whole, seats },
     evidence: {
-      observations,
+      observations: [...observations, ...exampleBoard(seats, start)],
       watermarks: episodeWatermarks(
         seats.map((s) => s.participant),
         end + 130_000,
-      ),
+      ).map((watermark) => ({
+        ...watermark,
+        emits: [...watermark.emits, ...BOARD_STEPS.filter(([name]) => (watermark.source === "sync" ? name.startsWith("sync_") : watermark.source === "client" && !name.startsWith("sync_"))).map(([name]) => `board.${name}`)],
+      })),
     },
   };
 

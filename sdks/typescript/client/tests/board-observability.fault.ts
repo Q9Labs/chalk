@@ -35,19 +35,35 @@ function socketWith(intercept: Intercept): SyncWebSocketFactory {
     connect(url) {
       const socket = factory.connect(url);
       return {
-        get onopen() { return socket.onopen; },
-        set onopen(value) { socket.onopen = value; },
-        get onclose() { return socket.onclose; },
-        set onclose(value) { socket.onclose = value; },
-        get onerror() { return socket.onerror; },
-        set onerror(value) { socket.onerror = value; },
-        get onmessage() { return socket.onmessage; },
+        get onopen() {
+          return socket.onopen;
+        },
+        set onopen(value) {
+          socket.onopen = value;
+        },
+        get onclose() {
+          return socket.onclose;
+        },
+        set onclose(value) {
+          socket.onclose = value;
+        },
+        get onerror() {
+          return socket.onerror;
+        },
+        set onerror(value) {
+          socket.onerror = value;
+        },
+        get onmessage() {
+          return socket.onmessage;
+        },
         set onmessage(value) {
-          socket.onmessage = value && ((message) => {
-            assert.equal(typeof message.data, "string");
-            const frame = intercept(JSON.parse(String(message.data)) as Frame);
-            if (frame) value({ data: JSON.stringify(frame) });
-          });
+          socket.onmessage =
+            value &&
+            ((message) => {
+              assert.equal(typeof message.data, "string");
+              const frame = intercept(JSON.parse(String(message.data)) as Frame);
+              if (frame) value({ data: JSON.stringify(frame) });
+            });
         },
         send: (wire) => socket.send(wire),
         close: (code, reason) => socket.close(code, reason),
@@ -64,27 +80,41 @@ function peer(index: number, intercept: Intercept = (frame) => frame) {
   const now = performance.now();
   clock.sample(now, now, Date.now());
   let summary: ChalkWhiteboardSummary | undefined;
-  const observations = createWhiteboardObservations({
-    sessionId: crypto.randomUUID(),
-    record: ({ type, ...fields }) => rows.push({
-      ...fields,
-      event: recordIds[type],
-      tenant_id: fixture.tenant,
-      episode_id: fixture.episode,
-      participant_id: seat.participant,
-      generation: 1,
-      event_id: crypto.randomUUID(),
-    }),
-  }, clock);
+  const observations = createWhiteboardObservations(
+    {
+      sessionId: crypto.randomUUID(),
+      record: ({ type, ...fields }) =>
+        rows.push({
+          ...fields,
+          event: recordIds[type],
+          tenant_id: fixture.tenant,
+          episode_id: fixture.episode,
+          participant_id: seat.participant,
+          generation: 1,
+          event_id: crypto.randomUUID(),
+        }),
+    },
+    { clock, mode: "closed" },
+  );
   const client = new ChalkWhiteboardV1Client({
     url: fixture.url,
     token: () => Promise.resolve(seat.token),
     webSocket: socketWith(intercept),
     files: { getDownloadUrl: () => Promise.reject(new Error("this scenario has no files")) },
     observations,
-    onSummary: (value) => { summary = value; },
+    onSummary: (value) => {
+      summary = value;
+    },
     ...(index === 0 && fixture.fault === "board.edit_not_committed"
-      ? { pendingStore: { load: async () => [], put: async () => { throw new Error("injected pending-store refusal"); }, remove: async () => undefined } }
+      ? {
+          pendingStore: {
+            load: async () => [],
+            put: async () => {
+              throw new Error("injected pending-store refusal");
+            },
+            remove: async () => undefined,
+          },
+        }
       : {}),
   });
   const ready = () => client.startSceneSubscription();
@@ -129,7 +159,10 @@ try {
     });
   if (fixture.fault === "board.edit_not_committed") {
     await assert.rejects(() => draw(author, "failed-save"), /persist/);
-    assert.equal(rows.some((row) => row.board_step === "sent"), false);
+    assert.equal(
+      rows.some((row) => row.board_step === "sent"),
+      false,
+    );
   } else {
     await draw(author, "first-rectangle");
     const second = await draw(author, "second-rectangle");

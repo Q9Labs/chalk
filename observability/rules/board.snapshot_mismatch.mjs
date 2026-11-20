@@ -19,13 +19,10 @@ export function decide({ readings }) {
     const expected = durable.value.board_element_count;
     if (typeof observed !== "number" || typeof expected !== "number") continue;
     if (observed !== expected || !sameRevision(snapshot, durable)) {
-      return finding(
-        snapshot,
-        "snapshot",
-        `the SDK assembled revision ${revision(snapshot)} with ${observed} elements`,
-        "the SDK and Sync reported matching scene, revision and element count for this snapshot request",
-        { row: durable, text: `Sync prepared revision ${revision(durable)} with ${expected} elements from Postgres` },
-      );
+      return finding(snapshot, "snapshot", `the SDK assembled revision ${revision(snapshot)} with ${observed} elements`, "the SDK and Sync reported matching scene, revision and element count for this snapshot request", {
+        row: durable,
+        text: `Sync prepared revision ${revision(durable)} with ${expected} elements from Postgres`,
+      });
     }
     matched++;
   }

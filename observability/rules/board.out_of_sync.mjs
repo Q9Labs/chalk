@@ -13,18 +13,31 @@ export function decide({ readings }) {
   if (gap) {
     const from = gap.value.board_previous_revision;
     const to = revision(gap);
-    const missed = typeof from === "string" && typeof to === "string" ? sync.find((row) => {
-      const rev = revision(row);
-      return scene(row) === scene(gap) && typeof rev === "string" && BigInt(rev) > BigInt(from) && BigInt(rev) < BigInt(to);
-    }) : undefined;
+    const missed =
+      typeof from === "string" && typeof to === "string"
+        ? sync.find((row) => {
+            const rev = revision(row);
+            return scene(row) === scene(gap) && typeof rev === "string" && BigInt(rev) > BigInt(from) && BigInt(rev) < BigInt(to);
+          })
+        : undefined;
     return finding(
       gap,
       "replica",
       `the SDK's board revision jumped from ${from} to ${to} in the same scene`,
       "the recipient had already applied the intervening revision in the same scene",
-      missed ? { row: missed, text: `Sync pushed intervening revision ${revision(missed)} to the recipient socket` } : null,
+      missed ? { row: missed, text: `Sync pushed intervening revision ${revision(missed)} to a socket for this Participant` } : null,
     );
   }
-  if (client.length > 0 && client.every((row) => sync.some((push) => correlation(push) === correlation(row) && sameRevision(push, row)))) return { status: "pass" };
+  const pushes = new Map(sync.map((row) => [correlation(row), row]));
+  const updates = new Map(client.map((row) => [correlation(row), row]));
+  if (
+    pushes.size > 0 &&
+    pushes.size === updates.size &&
+    [...updates].every(([id, row]) => {
+      const push = pushes.get(id);
+      return push && sameRevision(push, row);
+    })
+  )
+    return { status: "pass" };
   return { status: "unknown", reason: "no matched SDK updates and Sync socket pushes for this recipient" };
 }

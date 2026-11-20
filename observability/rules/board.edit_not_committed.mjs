@@ -21,10 +21,15 @@ export function decide({ readings }) {
       refusal ? { row: refusal, text: "Sync refused the same edit" } : null,
     );
   }
-  const committed = client.filter((row) => row.claim === "committed");
-  const confirmed = new Set(committed
-    .filter((receipt) => sync.some((row) => row.claim !== "refused" && correlation(row) === correlation(receipt) && sameRevision(row, receipt)))
-    .map(correlation));
-  if (confirmed.size > 0 && client.every((row) => confirmed.has(correlation(row)))) return { status: "pass" };
+  const commits = new Map(sync.filter((row) => row.claim === "committed" || row.claim === "duplicate").map((row) => [correlation(row), row]));
+  const confirmed = new Set(
+    client
+      .filter((receipt) => {
+        const durable = commits.get(correlation(receipt));
+        return receipt.claim === "committed" && durable && sameRevision(durable, receipt);
+      })
+      .map(correlation),
+  );
+  if (confirmed.size > 0 && confirmed.size === commits.size && client.every((row) => confirmed.has(correlation(row)))) return { status: "pass" };
   return { status: "unknown", reason: "no matching SDK and durable Sync commit for every witnessed edit" };
 }

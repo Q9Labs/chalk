@@ -11,9 +11,21 @@ const capture = JSON.parse(readFileSync(path, "utf8"));
 const { episode, tenant, from, to, seats, rows, fault } = capture;
 const asof = to + 120_000;
 const declaration = {
-  kind: "episode", id: episode, tenant, features: ["board"],
+  kind: "episode",
+  id: episode,
+  tenant,
+  features: ["board"],
   window: { from_ms: from, to_ms: to },
-  seats: seats.map((participant) => ({ participant, generations: [1], connections: [] })),
+  seats: seats.map((participant) => ({
+    participant,
+    name: null,
+    role: "participant",
+    can_publish: true,
+    generations: [1],
+    connections: [],
+    window: { from_ms: from, to_ms: to },
+    person: { kind: "guest", device: null, name: null },
+  })),
 };
 const checks = CATALOGUE.filter(({ code }) => code.startsWith("board.") && code !== "board.view_jumped");
 const watermarks = completeWatermarks(declaration, checks, asof);
@@ -23,7 +35,9 @@ assert.deepEqual(adapted.dropped, []);
 const evidence = { observations: adapted.observations, watermarks };
 const world = {
   asof_ms: asof,
-  declarations: [declaration], people: [], sessions: [],
+  declarations: [declaration],
+  people: [],
+  sessions: [],
   tenants: [{ id: tenant, name: "board proof", tz: "UTC" }],
   evidence: { [episode]: evidence },
   history: [{ item: episode, asof_ms: asof, evidence }],
@@ -47,5 +61,8 @@ if (fault === "healthy") {
 } else {
   const { index, outcome, hop } = attribution[fault];
   const scope = seats[index].replaceAll("-", "").slice(0, 4);
-  assert.ok(findingLines.some((line) => line.includes(` ${outcome} ${fault} pt_${scope}`) && line.includes(`hop=${hop} module=sdk.whiteboard`)), view.out);
+  assert.ok(
+    findingLines.some((line) => line.includes(` ${outcome} ${fault} pt_${scope}`) && line.includes(`hop=${hop} module=sdk.whiteboard`)),
+    view.out,
+  );
 }
