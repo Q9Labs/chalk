@@ -4,9 +4,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { run } from "../diagnose.mjs";
+import { CATALOGUE } from "../proof/catalogue.mjs";
 import { uncovered } from "../proof/evidence.mjs";
 import { eventOf } from "../proof/rows.mjs";
-import { StoreError, psqlFailure, realStores } from "./stores.mjs";
+import { StoreError, openLive, psqlFailure, realStores } from "./stores.mjs";
 import { clientWatermark, sourceCoverage } from "./watermarks.mjs";
 import { liveWorld, unwrapRow } from "./world.mjs";
 
@@ -266,4 +267,18 @@ test("another Tenant's heartbeat cannot fill an unread seq", () => {
   const { world } = liveWorld({ db: DB, ledger: { tenant_id: TENANT, episode_id: EPISODE, sources: [closed] }, rows: [...rows, wrong], asof_ms: NOW });
   const watermark = world.evidence[EPISODE]?.watermarks.find((w) => w.subject === `pt:${CLOSED_SEAT}`);
   assert.ok(watermark?.evidence_gaps.some(({ reason }) => reason === "unread seq 1..2 open"));
+});
+
+test("a late ingest is read by event time, not by when Axiom got it", async () => {
+  const late = { ...ROWS[2], _time: iso(END + 180_000) };
+  const afterDeadline = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 2, END + 180_000, { name: "client.call_ended", end_reason: "connection_lost", event_id: "out-of-window" });
+  const stores = {
+    ...fakeStores(),
+    rows: async (/** @type {string} */ _episode, /** @type {{ from_ms: number, to_ms: number }} */ window) =>
+      [...ROWS.filter((row) => row !== ROWS[2]), late, afterDeadline].filter((row) => Date.parse(row._time) <= window.to_ms),
+  };
+  const { world } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { catalogue: CATALOGUE, now: NOW });
+  const screens = world.evidence[EPISODE]?.observations.filter(({ fact }) => fact === "end.client_screen");
+  assert.equal(screens?.length, 1);
+  assert.equal(screens?.[0]?.window.from_ms, END + 2_000);
 });
