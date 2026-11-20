@@ -80,24 +80,25 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def renew_presence(%Identity{} = identity) do
-    Database.guard(
-      fn ->
-        case Transaction.run(identity.episode, &Presence.transaction(&1, identity)) do
-          {:ok, result} ->
-            Presence.observe(identity, result)
-            :ok
+    result =
+      Database.guard(
+        fn -> Transaction.run(identity.episode, &Presence.transaction(&1, identity)) end,
+        {:error, :dependency_unavailable}
+      )
 
-          {:error, {:error, reason}} ->
-            Presence.observe(identity, "unconfirmed")
-            {:error, reason}
+    case result do
+      {:ok, renewal} ->
+        Presence.observe(identity, renewal)
+        :ok
 
-          {:error, _reason} ->
-            Presence.observe(identity, "unconfirmed")
-            {:retryable, :dependency_unavailable}
-        end
-      end,
-      {:retryable, :dependency_unavailable}
-    )
+      {:error, {:error, reason}} ->
+        Presence.observe(identity, "unconfirmed")
+        {:error, reason}
+
+      {:error, _reason} ->
+        Presence.observe(identity, "unconfirmed")
+        {:retryable, :dependency_unavailable}
+    end
   end
 
   @impl ChalkSync.Stateholder
