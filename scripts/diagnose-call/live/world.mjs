@@ -141,7 +141,7 @@ const boundLedger = (ledger, declaration) => {
 export function liveWorld({ db, ledger: report, rows, asof_ms }) {
   const declaration = declarationOf(db);
   const ledger = boundLedger(report, declaration);
-  const read = rows.map(unwrapRow).filter((row) => row.episode_id === declaration.id);
+  const read = rows.map(unwrapRow).filter((row) => row.episode_id === declaration.id && row.tenant_id === declaration.tenant);
   const { usable: flat, ignored } = deliveredRows(read, "unavailable" in ledger ? [] : ledger.sources);
   const { observations, dropped } = observationsFromRows(flat);
   const at = { asof_ms, start_ms: declaration.window.from_ms };

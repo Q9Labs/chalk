@@ -259,3 +259,11 @@ test("a reload leaves the time between one page's close and the next page's firs
   assert.equal(w.complete_to_ms, NOW, "the last page closed after the seat left, so the seat is complete");
   assert.deepEqual(w.evidence_gaps, [{ from_ms: START + 300_000, to_ms: START + 310_000, reason: "no ledger source of the seat covers this time" }]);
 });
+
+test("another Tenant's heartbeat cannot fill an unread seq", () => {
+  const wrong = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 1, START + 60_000, { tenant_id: "other-tenant" });
+  const rows = ROWS.filter((row) => !(row.attributes.source_id === CLOSED_SOURCE && row.attributes.seq === 1));
+  const { world } = liveWorld({ db: DB, ledger: { tenant_id: TENANT, episode_id: EPISODE, sources: [closed] }, rows: [...rows, wrong], asof_ms: NOW });
+  const watermark = world.evidence[EPISODE]?.watermarks.find((w) => w.subject === `pt:${CLOSED_SEAT}`);
+  assert.ok(watermark?.evidence_gaps.some(({ reason }) => reason === "unread seq 1..2 open"));
+});
