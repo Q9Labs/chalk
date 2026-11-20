@@ -93,6 +93,7 @@ jobs:
           exit 1
       # A fetch that stalls on GitHub's side would hold the job until its timeout (one merge group lost 27 minutes that way).
       # The first attempt fails after 3 minutes without failing the job; the second attempt is the same checkout again.
+      # Blobless: the diff and merge-base walk only commits and trees, so no blob leaves GitHub until a lane reads it.
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,6 +101,7 @@ jobs:
         continue-on-error: true
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
@@ -107,6 +109,7 @@ jobs:
         timeout-minutes: 3
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
@@ -193,6 +196,7 @@ jobs:
           echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
           curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
           exit 1
+      # Blobless: gitleaks fetches only the blobs its commit range touches, and osv lazily fetches the base tree it diffs.
       - name: Check out source
         id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -200,6 +204,7 @@ jobs:
         continue-on-error: true
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
@@ -207,6 +212,7 @@ jobs:
         timeout-minutes: 3
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - uses: ./.github/actions/setup-js
 
@@ -253,9 +259,6 @@ jobs:
             ~/go/pkg/mod
           key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
           restore-keys: go-root-checks-${{ runner.os }}-
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
 
       # The Sync model check (formal-sync) needs Java and the SFU promotion tests need gpg. The hosted image has both; the Instabox snapshot has neither.
       - name: Install Java and gpg for the checks lane
@@ -441,16 +444,18 @@ jobs:
         timeout-minutes: 3
         continue-on-error: true
         with:
-          # The vulnerability check compares a pull request with its merge base.
+          # The vulnerability check compares a pull request with its merge base; it fetches the blobs it reads on demand.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Check out source again after a stalled fetch
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 3
         with:
-          # The vulnerability check compares a pull request with its merge base.
+          # The vulnerability check compares a pull request with its merge base; it fetches the blobs it reads on demand.
           fetch-depth: 0
+          filter: blob:none
 
       - uses: ./.github/actions/setup-js
 

@@ -1,4 +1,3 @@
-import { classifyMediaFailure } from "./failure-diagnostics";
 import type { MediaPlaneResult } from "./plane";
 import { CloudflareSFUError } from "./types";
 
@@ -19,19 +18,6 @@ export function isRateLimited(error: unknown): boolean {
 }
 function unwrapAggregateErrors(error: unknown): unknown[] {
   return error instanceof AggregateError ? error.errors.flatMap(unwrapAggregateErrors) : [error];
-}
-// A 5xx, a signaling timeout or a network failure usually clears in seconds, so the pull is retried
-// after a short backoff. Rate limits (429), a gone connection (404, 410) and track failures stay on
-// the long deferral, because an immediate retry cannot change their outcome.
-export function transientRemotePull(error: unknown): boolean {
-  const { media_error_kind: kind, http_status: status } = classifyMediaFailure(error, "sfu_tracks");
-  return kind === "network" || kind === "timeout" || (typeof status === "number" && status >= 500);
-}
-export function retryableRemotePull(error: unknown): boolean {
-  if (transientRemotePull(error)) return true;
-  if (!(error instanceof CloudflareSFUError)) return false;
-  if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
-  return ["signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
 }
 export function simulcastUnsupported(error: unknown): boolean {
   return error instanceof Error && ["NotSupportedError", "OperationError", "TypeError"].includes(error.name);

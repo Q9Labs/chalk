@@ -160,7 +160,7 @@ test("missing secrets name requirements and drill requires only webhook", async 
 
 test("HTTP, JSON, malformed and network failures fail safely", async () => {
   const args = { token: "fake", dataset: "fake", ...window };
-  await assert.rejects(readSignals({ ...args, fetchImpl: async () => ({ ok: false, status: 403 }) }), /HTTP 403/);
+  await assert.rejects(readSignals({ ...args, fetchImpl: async () => ({ ok: false, status: 403 }) }), /^Error: Axiom query answered HTTP 403$/);
   await assert.rejects(readSignals({ ...args, fetchImpl: async () => ok({}) }), /malformed tabular/);
   await assert.rejects(
     readSignals({
@@ -202,7 +202,7 @@ test("HTTP, JSON, malformed and network failures fail safely", async () => {
 
 test("the provider-neutral audio_receive_stuck client report is a signal, tagged with a bounded provider", () => {
   const apl = query("synthetic-private-dataset");
-  assert.ok(apl.includes("(['attributes.event'] == 'sdk.telemetry' and ['attributes.type'] == 'audio_receive_stuck' and (isempty(['attributes.legacy_route']) or ['attributes.trigger'] == 'audio_receive_stuck'))"));
+  assert.ok(apl.includes("(['attributes.event'] == 'sdk.telemetry' and ['attributes.type'] == 'audio_receive_stuck' and (isempty(column_ifexists('attributes.legacy_route', '')) or tostring(column_ifexists('attributes.trigger', '')) == 'audio_receive_stuck'))"));
   assert.ok(apl.includes("['attributes.event'] in ('media.listener_publication_unpulled', 'sdk.telemetry')"));
   assert.deepEqual(PROVIDERS, ["cloudflare_sfu", "chalk_sfu"]);
   assert.ok(apl.includes("tostring(['attributes.provider']) in ('cloudflare_sfu', 'chalk_sfu')"));

@@ -1,5 +1,5 @@
 name: Install apt packages
-description: Bound apt installs and retry without the slow Azure Ubuntu mirror.
+description: Bound apt installs and retry without the slow Azure or EC2 Ubuntu mirror.
 
 inputs:
   packages:
@@ -26,7 +26,8 @@ runs:
             echo "::error title=apt install failed::Both install attempts failed or ran out of time."
             exit 1
           fi
-          echo "::warning title=apt install retried::The first install attempt failed or ran out of time. Retrying without the Azure Ubuntu mirror."
-          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          echo "::warning title=apt install retried::The first install attempt failed or ran out of time. Retrying without the Azure and EC2 Ubuntu mirrors."
+          sudo sed -i -e '/azure\.archive\.ubuntu\.com/d' -e '/ec2\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          grep -q '[^[:space:]]' /etc/apt/apt-mirrors.txt || echo 'http://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo dpkg --configure -a
         done
