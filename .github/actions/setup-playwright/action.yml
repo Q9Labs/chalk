@@ -55,15 +55,17 @@ runs:
         # The Azure Ubuntu mirror sometimes serves packages at a few kB/s, which stalled this step for 20 minutes.
         # apt runs under a root timeout, because a timeout outside sudo cannot stop it, and the retry drops that mirror.
         install_once() {
+          local apt_timeout="$1"
           if (( ${#packages[@]} > 0 )); then
-            sudo timeout --kill-after=10s 90s sh -c 'apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
+            sudo timeout --kill-after=10s "${apt_timeout}" sh -c 'apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
           fi
           if [[ "${CACHE_HIT}" != "true" ]]; then
             timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
           fi
         }
         for attempt in 1 2; do
-          if install_once; then
+          apt_timeout="$([[ "${attempt}" == 1 ]] && echo 2m || echo 4m)"
+          if install_once "${apt_timeout}"; then
             break
           fi
           if [[ "${attempt}" == 2 ]]; then
