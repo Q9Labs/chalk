@@ -112,11 +112,15 @@ func Sources(batch sdktelemetry.Request) ([]utilities.ID, error) {
 // Admit applies a decoded version 2 batch to the rows of the sources it touches (see Sources),
 // keyed by source id for the batch's participant. A source with no row starts empty.
 //
+// barred are predecessor sources the participant may not write (see Authorize). Admit changes none
+// of them and returns no row for them. A valid drop record naming one is settled in the batch's
+// own source as rejected with SourceBound, and it is written to the sink as that rejection.
+//
 // A seq the row already stores or rejects is a duplicate: the first copy wins, whatever the
 // retry says. A new valid record is stored, a new invalid one is rejected, and a new valid drop
 // record also marks the seqs it names as dropped in the source it names. The batch's next_seq
 // raises the high-water mark, and its end is kept as the best the source has said of itself.
-func Admit(identity Identity, rows map[utilities.ID]SourceRow, batch sdktelemetry.Request, received time.Time) (Admission, error) {
+func Admit(identity Identity, rows map[utilities.ID]SourceRow, barred []utilities.ID, batch sdktelemetry.Request, received time.Time) (Admission, error) {
 	if batch.Version != sdktelemetry.LedgerVersion || batch.NextSeq == nil {
 		return Admission{}, ErrBatch
 	}
@@ -127,6 +131,9 @@ func Admit(identity Identity, rows map[utilities.ID]SourceRow, batch sdktelemetr
 	ownID, _ := utilities.ParseID(batch.SourceID)
 	touched := make(map[utilities.ID]*SourceRow, len(sources))
 	for _, source := range sources {
+		if slices.Contains(barred, source) {
+			continue
+		}
 		row, found := rows[source]
 		if !found {
 			row = NewSourceRow(identity, source)
@@ -145,8 +152,15 @@ func Admit(identity Identity, rows map[utilities.ID]SourceRow, batch sdktelemetr
 			admission.Duplicates++
 			continue
 		}
-		admission.New = append(admission.New, event)
 		single := Set{{From: seq, To: seq + 1}}
+		if event.Type == "telemetry_dropped" && event.Rejection() == "" && event.DroppedSourceID != "" {
+			if other, _ := utilities.ParseID(event.DroppedSourceID); slices.Contains(barred, other) {
+				admission.New = append(admission.New, event.Refused(SourceBound))
+				own.Ranges.Rejected = own.Ranges.Rejected.Union(single)
+				continue
+			}
+		}
+		admission.New = append(admission.New, event)
 		if event.Rejection() != "" {
 			own.Ranges.Rejected = own.Ranges.Rejected.Union(single)
 			continue
@@ -166,7 +180,10 @@ func Admit(identity Identity, rows map[utilities.ID]SourceRow, batch sdktelemetr
 	own.recordEnd(batch.End, *batch.NextSeq)
 
 	for _, source := range sources {
-		row := touched[source]
+		row, found := touched[source]
+		if !found {
+			continue
+		}
 		if row.FirstReceivedAt.IsZero() {
 			row.FirstReceivedAt = received
 		}

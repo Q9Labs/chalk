@@ -259,6 +259,39 @@ func TestTelemetryV2BatchOnASourceBoundToAnotherParticipantIsRefusedWithReasonSo
 	}
 }
 
+// A guest reload: the new client is a new participant with no identity, so it is no successor of
+// the guest that bound the old source, yet its outbox sends the old source's drop record in its
+// live batch. The batch is answered 200: the live record is stored, the drop record is named as
+// rejected with source_bound and acked so the SDK stops sending it, and the old source is
+// unchanged, so its gap stays open.
+func TestTelemetryV2GuestReloadRejectsTheDropRecordForTheOldSourceAndStoresTheRest(t *testing.T) {
+	f := newTelemetryFixture(t)
+	if answer := f.answer(t, f.telemetryToken, ledgerBody(ledgerSource, ledgerBatch, 4, ledgerEvent(0))); answer.Accepted != 1 {
+		t.Fatalf("answer = %+v, want the first guest's record accepted", answer)
+	}
+	before, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource))
+
+	reloaded := f.subject
+	reloaded.ParticipantID = mustLedgerID(t, "55555555-5555-4555-8555-555555555555")
+	token, err := f.issuer.IssueTelemetry(t.Context(), reloaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":1,"to":4}],"dropped_source_id":%q}`, 0, ledgerSource)
+	answer := f.answer(t, token.Token, ledgerBody(ledgerReload, ledgerOtherBatch, 2, drop, ledgerEvent(1)))
+	want := []sdktelemetry.Rejection{{Seq: 0, Reason: telemetrydelivery.SourceBound}}
+	if answer.Accepted != 1 || answer.Rejected != 1 || !reflect.DeepEqual(answer.Rejections, want) || !reflect.DeepEqual(answer.Acks, ranges(0, 2)) {
+		t.Fatalf("answer = %+v, want the live record accepted, the drop record rejected as source_bound and both acked", answer)
+	}
+	rows := f.rows(t, "sdk.telemetry.rejected")
+	if len(rows) != 1 || rows[0]["reason"] != "source_bound" || rows[0]["type"] != "telemetry_dropped" || rows[0]["source_id"] != ledgerReload {
+		t.Fatalf("rejection rows = %v, want one naming the drop record of the live source", rows)
+	}
+	if after, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); !reflect.DeepEqual(after, before) {
+		t.Fatalf("old source rows = %+v, want them unchanged: %+v", after, before)
+	}
+}
+
 func TestTelemetryV1IsUnchangedAndNeverTouchesTheLedger(t *testing.T) {
 	f := newTelemetryFixture(t)
 	f.ledger.Fail = errors.New("database is down")

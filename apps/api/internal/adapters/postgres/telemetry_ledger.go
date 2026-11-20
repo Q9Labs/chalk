@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,13 +33,15 @@ func NewTelemetryLedger(db telemetryLedgerDB) TelemetryLedger {
 
 // Admit admits one version 2 batch in a single transaction. It first binds every source the batch
 // touches that has no binding yet to the batch's participant, and refuses the batch with
-// telemetrydelivery.ErrSourceBound when a source is bound to a participant this one does not
-// succeed (see bindSources). It then creates the rows of the sources when they are missing, locks them (FOR UPDATE, in source order, so concurrent
-// batches of one source queue behind each other and cannot deadlock), runs the pure
-// telemetrydelivery.Admit, calls write so the caller can write the sink rows of the new records,
-// and only then updates the rows and commits. An error anywhere, including a crash between write
-// and commit, leaves the rows as they were, so the retry finds its records new and writes them
-// again with the same event ids.
+// telemetrydelivery.ErrSourceBound when the batch's own source is bound to a participant this one
+// does not succeed (see bindSources). A predecessor bound to such a participant is barred: it gets
+// no row and no lock, and the drop record naming it is settled in the own source as rejected. It
+// then creates the rows of the other sources when they are missing, locks them (FOR UPDATE, in
+// source order, so concurrent batches of one source queue behind each other and cannot deadlock),
+// runs the pure telemetrydelivery.Admit, calls write so the caller can write the sink rows of the
+// new records, and only then updates the rows and commits. An error anywhere, including a crash
+// between write and commit, leaves the rows as they were, so the retry finds its records new and
+// writes them again with the same event ids.
 func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, write telemetrydelivery.SinkWrite) (telemetrydelivery.Admission, error) {
 	sources, err := telemetrydelivery.Sources(batch)
 	if err != nil {
@@ -51,14 +54,18 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := sqlc.New(tx)
 
-	ids := make([]pgtype.UUID, 0, len(sources))
-	for _, source := range sources {
-		ids = append(ids, uuid(source))
-	}
-	if err := bindSources(ctx, queries, identity, sources, ids, received); err != nil {
+	own, _ := utilities.ParseID(batch.SourceID)
+	barred, err := bindSources(ctx, queries, identity, own, sources, received)
+	if err != nil {
 		return telemetrydelivery.Admission{}, err
 	}
-	for _, source := range sources {
+	// A barred predecessor gets no row and no lock: the batch changes nothing in it.
+	writable := slices.DeleteFunc(slices.Clone(sources), func(source utilities.ID) bool { return slices.Contains(barred, source) })
+	ids := make([]pgtype.UUID, 0, len(writable))
+	for _, source := range writable {
+		ids = append(ids, uuid(source))
+	}
+	for _, source := range writable {
 		err := queries.EnsureTelemetrySource(ctx, sqlc.EnsureTelemetrySourceParams{
 			TenantID: uuid(identity.TenantID), SourceID: uuid(source), ParticipantID: uuid(identity.ParticipantID), EpisodeID: uuid(identity.EpisodeID),
 			FirstReceivedAt: pgtype.Timestamptz{Time: received, Valid: true},
@@ -80,7 +87,7 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 		rows[row.SourceID] = row
 	}
 
-	admission, err := telemetrydelivery.Admit(identity, rows, batch, received)
+	admission, err := telemetrydelivery.Admit(identity, rows, barred, batch, received)
 	if err != nil {
 		return telemetrydelivery.Admission{}, err
 	}
@@ -109,16 +116,21 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 	return admission, nil
 }
 
-// bindSources binds each source to the batch's participant unless it is bound already, then
-// refuses the batch unless the participant is the bound one or its successor. The inserts run in
-// source order, and an insert that meets another transaction's uncommitted binding of the same
-// source waits for it, so two first batches of one source from different participants leave
-// exactly one binding: the one that commits first. Bindings never change once written, so
-// reading them back needs no lock.
-func bindSources(ctx context.Context, queries *sqlc.Queries, identity telemetrydelivery.Identity, sources []utilities.ID, ids []pgtype.UUID, received time.Time) error {
+// bindSources binds each source to the batch's participant unless it is bound already. It refuses
+// the batch unless the participant is the bound one of the batch's own source or a successor of
+// it, and returns the predecessors the participant may not write (see telemetrydelivery.Authorize).
+// The inserts run in source order, and an insert that meets another transaction's uncommitted
+// binding of the same source waits for it, so two first batches of one source from different
+// participants leave exactly one binding: the one that commits first. Bindings never change once
+// written, so reading them back needs no lock.
+func bindSources(ctx context.Context, queries *sqlc.Queries, identity telemetrydelivery.Identity, own utilities.ID, sources []utilities.ID, received time.Time) ([]utilities.ID, error) {
+	ids := make([]pgtype.UUID, 0, len(sources))
+	for _, source := range sources {
+		ids = append(ids, uuid(source))
+	}
 	identityID, err := queries.TelemetryParticipantIdentity(ctx, sqlc.TelemetryParticipantIdentityParams{TenantID: uuid(identity.TenantID), ID: uuid(identity.ParticipantID)})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("read the telemetry participant's identity: %w", err)
+		return nil, fmt.Errorf("read the telemetry participant's identity: %w", err)
 	}
 	claimant := telemetrydelivery.Claimant{ParticipantID: identity.ParticipantID, IdentityID: nullableID(identityID)}
 	for _, source := range sources {
@@ -127,15 +139,15 @@ func bindSources(ctx context.Context, queries *sqlc.Queries, identity telemetryd
 			BoundAt: pgtype.Timestamptz{Time: received, Valid: true},
 		})
 		if err != nil {
-			return fmt.Errorf("bind the telemetry source: %w", err)
+			return nil, fmt.Errorf("bind the telemetry source: %w", err)
 		}
 	}
 	stored, err := queries.ListTelemetrySourceBindings(ctx, sqlc.ListTelemetrySourceBindingsParams{TenantID: uuid(identity.TenantID), SourceIds: ids})
 	if err != nil {
-		return fmt.Errorf("read the telemetry source bindings: %w", err)
+		return nil, fmt.Errorf("read the telemetry source bindings: %w", err)
 	}
 	if len(stored) != len(sources) {
-		return fmt.Errorf("read the telemetry source bindings: %d of %d sources bound", len(stored), len(sources))
+		return nil, fmt.Errorf("read the telemetry source bindings: %d of %d sources bound", len(stored), len(sources))
 	}
 	bindings := make([]telemetrydelivery.Binding, 0, len(stored))
 	for _, item := range stored {
@@ -144,7 +156,7 @@ func bindSources(ctx context.Context, queries *sqlc.Queries, identity telemetryd
 			IdentityID: nullableID(item.IdentityID), BoundAt: timestamp(item.BoundAt),
 		})
 	}
-	return telemetrydelivery.Authorize(bindings, claimant)
+	return telemetrydelivery.Authorize(bindings, claimant, own)
 }
 
 // Source returns the rows of one source, one per participant. Pass them to telemetrydelivery.Gaps.

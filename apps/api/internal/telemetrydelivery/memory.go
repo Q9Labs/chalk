@@ -58,7 +58,9 @@ func (l *MemoryLedger) Admit(ctx context.Context, identity Identity, batch sdkte
 		}
 		bindings = append(bindings, binding)
 	}
-	if err := Authorize(bindings, claimant); err != nil {
+	ownID, _ := utilities.ParseID(batch.SourceID)
+	barred, err := Authorize(bindings, claimant, ownID)
+	if err != nil {
 		return Admission{}, err
 	}
 	existing := make(map[utilities.ID]SourceRow, len(sources))
@@ -67,7 +69,7 @@ func (l *MemoryLedger) Admit(ctx context.Context, identity Identity, batch sdkte
 			existing[source] = row
 		}
 	}
-	admission, err := Admit(identity, existing, batch, received)
+	admission, err := Admit(identity, existing, barred, batch, received)
 	if err != nil {
 		return Admission{}, err
 	}

@@ -3,7 +3,9 @@ package telemetrydelivery
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -45,19 +47,24 @@ func TestBindingPermitsItsParticipantAndSuccessorsOfItsIdentityOnly(t *testing.T
 			if !test.want {
 				wantErr = ErrSourceBound
 			}
-			if err := Authorize([]Binding{test.binding}, test.claimant); !errors.Is(err, wantErr) {
+			if _, err := Authorize([]Binding{test.binding}, test.claimant, id(t, sourceA)); !errors.Is(err, wantErr) {
 				t.Fatalf("Authorize = %v, want %v", err, wantErr)
 			}
 		})
 	}
 }
 
-func TestAuthorizeRefusesWhenAnyBindingRefuses(t *testing.T) {
+func TestAuthorizeRefusesOnlyWhenTheOwnSourceRefuses(t *testing.T) {
 	mine := Claimant{ParticipantID: identity(t).ParticipantID}
-	own := NewBinding(identity(t).TenantID, id(t, sourceA), mine, received)
-	foreign := NewBinding(identity(t).TenantID, id(t, sourceB), Claimant{ParticipantID: id(t, participantSecond)}, received)
-	if err := Authorize([]Binding{own, foreign}, mine); !errors.Is(err, ErrSourceBound) {
-		t.Fatalf("Authorize = %v, want ErrSourceBound when a predecessor is bound to another participant", err)
+	other := Claimant{ParticipantID: id(t, participantSecond)}
+	own := NewBinding(identity(t).TenantID, id(t, sourceB), mine, received)
+	foreign := NewBinding(identity(t).TenantID, id(t, sourceA), other, received)
+	barred, err := Authorize([]Binding{foreign, own}, mine, id(t, sourceB))
+	if err != nil || len(barred) != 1 || barred[0] != id(t, sourceA) {
+		t.Fatalf("Authorize = %v, %v, want only the predecessor barred", barred, err)
+	}
+	if _, err := Authorize([]Binding{foreign, own}, mine, id(t, sourceA)); !errors.Is(err, ErrSourceBound) {
+		t.Fatalf("Authorize = %v, want ErrSourceBound when the own source is bound to another participant", err)
 	}
 }
 
@@ -91,28 +98,23 @@ func TestMemoryLedgerRefusesAnotherParticipantAndChangesNothing(t *testing.T) {
 
 	hostile := victim
 	hostile.ParticipantID = id(t, participantSecond)
-	attacks := []sdktelemetry.Request{
-		// Records under the victim's source with a close that hides its tail, and a drop record of
-		// the hostile participant's own source that names the victim's missing seqs.
-		batch(t, sourceA, 4, "closed", ended(1), ended(2), ended(3)),
-		batch(t, sourceB, 1, "", drop(0, 1, 4, "queue_full", sourceA)),
-	}
-	for _, attack := range attacks {
-		sunk := false
-		_, err := ledger.Admit(t.Context(), hostile, attack, received, func(context.Context, Admission) error {
-			sunk = true
-			return nil
-		})
-		if !errors.Is(err, ErrSourceBound) || sunk {
-			t.Fatalf("hostile batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, sunk)
-		}
+	// Records under the victim's source with a close that hides its tail, and a drop record that
+	// names an unbound source, which a refused batch must not bind.
+	attack := batch(t, sourceA, 5, "closed", ended(1), ended(2), ended(3), drop(4, 0, 2, "queue_full", sourceB))
+	sunk := false
+	_, err := ledger.Admit(t.Context(), hostile, attack, received, func(context.Context, Admission) error {
+		sunk = true
+		return nil
+	})
+	if !errors.Is(err, ErrSourceBound) || sunk {
+		t.Fatalf("hostile batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, sunk)
 	}
 	after, _ := ledger.Source(t.Context(), victim.TenantID, id(t, sourceA))
-	if len(after) != len(before) || len(after) != 1 || after[0].End != EndNone {
+	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("victim rows = %+v, want them unchanged: %+v", after, before)
 	}
 	if _, found := ledger.bindings[bindingKey{victim.TenantID, id(t, sourceB)}]; found {
-		t.Fatal("a refused batch bound its own source")
+		t.Fatal("a refused batch bound the predecessor its drop record names")
 	}
 	if gaps, _ := Gaps(after); len(gaps) != 2 || gaps[0].Cause != GapMissing || gaps[0].FromSeq != 1 {
 		t.Fatalf("victim gaps = %+v, want [1,4) still missing and the open tail", gaps)
@@ -134,8 +136,70 @@ func TestMemoryLedgerAcceptsASuccessorOfTheSameIdentity(t *testing.T) {
 	if rows, _ := ledger.Source(t.Context(), first.TenantID, id(t, sourceA)); len(rows) != 2 {
 		t.Fatalf("rows = %d, want one per participant", len(rows))
 	}
+	// The successor's drop record for the old source, sent on its own new source, is applied.
+	predecessorDrop, err := ledger.Admit(t.Context(), successor, batch(t, sourceB, 1, "", drop(0, 2, 4, "queue_full", sourceA)), received, noSink)
+	if err != nil || len(predecessorDrop.New) != 1 || predecessorDrop.New[0].Rejection() != "" {
+		t.Fatalf("the successor's drop record: %+v, %v, want it stored", predecessorDrop, err)
+	}
+	if row := rowOf(t, predecessorDrop, sourceA); !reflect.DeepEqual(row.Ranges.Dropped["queue_full"], Set{{From: 2, To: 4}}) {
+		t.Fatalf("old source dropped = %+v, want [2,4) for queue_full", row.Ranges.Dropped)
+	}
 	ledger.Identities[successor.ParticipantID] = id(t, identityOther)
 	if _, err := ledger.Admit(t.Context(), successor, batch(t, sourceA, 3, "", ended(2)), received, noSink); !errors.Is(err, ErrSourceBound) {
 		t.Fatalf("another identity: err = %v, want ErrSourceBound", err)
+	}
+}
+
+// A guest reload: the new participant is not a successor of the guest that bound the old source,
+// so its drop record for the old source is settled as rejected and changes nothing there, while
+// the live records of its own source land.
+func TestMemoryLedgerRejectsADropRecordForABarredPredecessorAndAdmitsTheRest(t *testing.T) {
+	var sunk []sdktelemetry.Event
+	sink := func(_ context.Context, admission Admission) error {
+		sunk = admission.New
+		return nil
+	}
+	ledger := &MemoryLedger{}
+	guestA := identity(t)
+	if _, err := ledger.Admit(t.Context(), guestA, batch(t, sourceA, 4, "", ended(0)), received, sink); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := ledger.Source(t.Context(), guestA.TenantID, id(t, sourceA))
+
+	guestB := guestA
+	guestB.ParticipantID = id(t, participantSecond)
+	reload := batch(t, sourceB, 2, "", drop(0, 1, 4, "queue_full", sourceA), ended(1))
+	later := received.Add(time.Minute)
+	admission, err := ledger.Admit(t.Context(), guestB, reload, later, sink)
+	if err != nil {
+		t.Fatalf("reload batch: %v", err)
+	}
+	if len(sunk) != 2 || sunk[0].Rejection() != SourceBound || sunk[1].Rejection() != "" {
+		t.Fatalf("sink events = %+v, want the drop record rejected as source_bound and the live record valid", sunk)
+	}
+	if eventType, seq := sunk[0].Seen(); eventType != "telemetry_dropped" || seq != 0 {
+		t.Fatalf("rejected drop record reads as %q seq %d, want telemetry_dropped seq 0", eventType, seq)
+	}
+	if got := Acks(reload, admission.Settled); !reflect.DeepEqual(got, []sdktelemetry.SeqRange{{From: 0, To: 2}}) {
+		t.Fatalf("acks = %+v, want both seqs settled", got)
+	}
+	live, _ := ledger.Source(t.Context(), guestA.TenantID, id(t, sourceB))
+	if len(live) != 1 || live[0].ParticipantID != guestB.ParticipantID || !live[0].Ranges.Stored.Contains(1) || !live[0].Ranges.Rejected.Contains(0) || live[0].Ranges.Stored.Contains(0) {
+		t.Fatalf("live rows = %+v, want seq 1 stored and the drop record seq 0 rejected", live)
+	}
+	after, _ := ledger.Source(t.Context(), guestA.TenantID, id(t, sourceA))
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("source A rows = %+v, want them unchanged: %+v", after, before)
+	}
+	if gaps, _ := Gaps(after); len(gaps) != 2 || gaps[0].Cause != GapMissing || gaps[0].FromSeq != 1 || gaps[0].Status != GapOpen {
+		t.Fatalf("source A gaps = %+v, want [1,4) still missing and open", gaps)
+	}
+	if binding := ledger.bindings[bindingKey{guestA.TenantID, id(t, sourceA)}]; binding.ParticipantID != guestA.ParticipantID {
+		t.Fatalf("source A binding = %+v, want it still bound to the first guest", binding)
+	}
+	// The SDK gets the drop record acked, so a retry is a duplicate and nothing changes.
+	retry, err := ledger.Admit(t.Context(), guestB, reload, later, sink)
+	if err != nil || retry.Duplicates != 2 || len(retry.New) != 0 {
+		t.Fatalf("retry = %+v, %v, want both records duplicates", retry, err)
 	}
 }

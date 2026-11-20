@@ -277,9 +277,9 @@ func TestTelemetryLedgerBindsEverySourceABatchTouches(t *testing.T) {
 	}
 }
 
-// Another participant of the tenant that knows a source_id cannot add records, a close or drop
-// claims to it: the whole batch is refused before the sink, and the victim's rows, gaps and
-// bindings stay as they were.
+// Another participant of the tenant that knows a source_id cannot send a batch under it: the whole
+// batch is refused before the sink, the victim's rows, gaps and bindings stay as they were, and
+// the predecessor its drop record names is not bound.
 func TestTelemetryLedgerRefusesAnotherParticipantAndLeavesTheVictimAlone(t *testing.T) {
 	victim := newTelemetryProof(t)
 	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
@@ -292,19 +292,14 @@ func TestTelemetryLedgerRefusesAnotherParticipantAndLeavesTheVictimAlone(t *test
 	hostile := victim
 	hostile.identity.ParticipantID = accountTenantIntegrationID(t)
 	hostileSource := "0b7c0000-0000-4000-8000-00000000000c"
-	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":1,"to":4}],"dropped_source_id":%q}`, 0, proofSource)
-	for _, attack := range []sdktelemetry.Request{
-		telemetryBatch(t, proofSource, 4, "closed", telemetryEvent(1), telemetryEvent(2), telemetryEvent(3)),
-		telemetryBatch(t, hostileSource, 1, "", drop),
-	} {
-		sunk := false
-		_, err := hostile.admit(attack, func(context.Context, telemetrydelivery.Admission) error {
-			sunk = true
-			return nil
-		})
-		if !errors.Is(err, telemetrydelivery.ErrSourceBound) || sunk {
-			t.Fatalf("hostile batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, sunk)
-		}
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":4,"elapsed_ms":1,"type":"telemetry_dropped","dropped":2,"drop_reason":"queue_full","dropped_seqs":[{"from":0,"to":2}],"dropped_source_id":%q}`, 4, hostileSource)
+	sunk := false
+	_, err := hostile.admit(telemetryBatch(t, proofSource, 5, "closed", telemetryEvent(1), telemetryEvent(2), telemetryEvent(3), drop), func(context.Context, telemetrydelivery.Admission) error {
+		sunk = true
+		return nil
+	})
+	if !errors.Is(err, telemetrydelivery.ErrSourceBound) || sunk {
+		t.Fatalf("hostile batch: err = %v, sink written = %v, want ErrSourceBound before the sink", err, sunk)
 	}
 	after := victim.rows(proofSource)
 	if !reflect.DeepEqual(after, before) {
@@ -318,6 +313,52 @@ func TestTelemetryLedgerRefusesAnotherParticipantAndLeavesTheVictimAlone(t *test
 	}
 	if rows := victim.rows(hostileSource); len(rows) != 0 {
 		t.Fatalf("hostile source rows = %v, want none from a refused batch", rows)
+	}
+}
+
+// A guest reload: the new participant is not a successor of the guest that bound the old source,
+// but its batch of its own source is admitted. The drop record naming the old source is settled
+// in the new source as rejected with source_bound, and the old source keeps its rows, gaps and
+// binding.
+func TestTelemetryLedgerRejectsADropRecordForABarredPredecessorAndAdmitsTheRest(t *testing.T) {
+	victim := newTelemetryProof(t)
+	noSink := func(context.Context, telemetrydelivery.Admission) error { return nil }
+	if _, err := victim.admit(telemetryBatch(t, proofSource, 4, "", telemetryEvent(0)), noSink); err != nil {
+		t.Fatal(err)
+	}
+	before, bindingsBefore := victim.rows(proofSource), victim.bindings()
+
+	reload := victim
+	reload.identity.ParticipantID = accountTenantIntegrationID(t)
+	drop := fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":1,"to":4}],"dropped_source_id":%q}`, 0, proofSource)
+	request := telemetryBatch(t, proofPredecessor, 2, "", drop, telemetryEvent(1))
+	var sunk []sdktelemetry.Event
+	admission, err := reload.admit(request, func(_ context.Context, admission telemetrydelivery.Admission) error {
+		sunk = admission.New
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reload batch: %v", err)
+	}
+	if len(sunk) != 2 || sunk[0].Rejection() != telemetrydelivery.SourceBound || sunk[1].Rejection() != "" {
+		t.Fatalf("sink events = %+v, want the drop record rejected as source_bound and the live record valid", sunk)
+	}
+	if acks := telemetrydelivery.Acks(request, admission.Settled); len(acks) != 1 || acks[0].From != 0 || acks[0].To != 2 {
+		t.Fatalf("acks = %+v, want seqs [0,2) settled", acks)
+	}
+	live := reload.rows(proofPredecessor)
+	if len(live) != 1 || !live[0].Ranges.Stored.Contains(1) || !live[0].Ranges.Rejected.Contains(0) || live[0].Ranges.Stored.Contains(0) {
+		t.Fatalf("live rows = %+v, want seq 1 stored and the drop record rejected", live)
+	}
+	if after := victim.rows(proofSource); !reflect.DeepEqual(after, before) {
+		t.Fatalf("old source rows = %+v, want them unchanged: %+v", after, before)
+	}
+	if gaps, _ := telemetrydelivery.Gaps(victim.rows(proofSource)); len(gaps) != 2 || gaps[0].Cause != telemetrydelivery.GapMissing {
+		t.Fatalf("old source gaps = %+v, want [1,4) still missing and the open tail", gaps)
+	}
+	bound := victim.bindings()
+	if bound[proofSource] != bindingsBefore[proofSource] || bound[proofPredecessor].participant != reload.identity.ParticipantID {
+		t.Fatalf("bindings = %v, want the old source still bound to its first participant and the new one to the reload", bound)
 	}
 }
 
@@ -349,8 +390,9 @@ func seedTelemetryParticipants(t *testing.T, tx pgx.Tx) (tenant, episode utiliti
 }
 
 // The same User rejoined is a new participant of the same identity, so it may write to the source
-// its earlier participant bound; its copy of a seq is new, not a duplicate, because rows are keyed
-// by participant. A participant of another User and a guest are refused.
+// its earlier participant bound, and its drop records for that source apply; its copy of a seq is
+// new, not a duplicate, because rows are keyed by participant. A batch of a participant of another
+// User or of a guest under that source is refused, and a guest's drop record naming it is rejected.
 func TestTelemetryLedgerAcceptsASuccessorOfTheSameIdentityOnly(t *testing.T) {
 	pool := telemetryLedgerPool(t)
 	tx, err := pool.Begin(t.Context())
@@ -377,6 +419,33 @@ func TestTelemetryLedgerAcceptsASuccessorOfTheSameIdentityOnly(t *testing.T) {
 	}
 	if rows := proof.rows(proofSource); len(rows) != 2 {
 		t.Fatalf("rows of the source = %d, want one per participant", len(rows))
+	}
+	predecessorDrop := func(seq int64) string {
+		return fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":1,"drop_reason":"queue_full","dropped_seqs":[{"from":%d,"to":%d}],"dropped_source_id":%q}`, seq, seq, seq+1, proofSource)
+	}
+	// The successor's drop record for the old source, sent on its own new source, is applied.
+	applied, err := next.admit(telemetryBatch(t, proofPredecessor, 1, "", predecessorDrop(5)), noSink)
+	if err != nil || len(applied.New) != 1 || applied.New[0].Rejection() != "" {
+		t.Fatalf("the successor's drop record: %+v, %v, want it stored", applied, err)
+	}
+	want := telemetrydelivery.NewSet(sdktelemetry.SeqRange{From: 5, To: 6})
+	var named bool
+	for _, row := range proof.rows(proofSource) {
+		named = named || (row.ParticipantID == successor && reflect.DeepEqual(row.Ranges.Dropped["queue_full"], want))
+	}
+	if !named {
+		t.Fatalf("old source rows = %+v, want the successor's row to name [5,6) as dropped", proof.rows(proofSource))
+	}
+	// A guest's drop record for the same source is settled as rejected and leaves the source alone.
+	before := proof.rows(proofSource)
+	visitor := proof
+	visitor.identity.ParticipantID = guest
+	rejected, err := visitor.admit(telemetryBatch(t, "0b7c0000-0000-4000-8000-00000000000c", 1, "", predecessorDrop(7)), noSink)
+	if err != nil || len(rejected.New) != 1 || rejected.New[0].Rejection() != telemetrydelivery.SourceBound {
+		t.Fatalf("the guest's drop record: %+v, %v, want it rejected as source_bound", rejected, err)
+	}
+	if after := proof.rows(proofSource); !reflect.DeepEqual(after, before) {
+		t.Fatalf("old source rows = %+v, want them unchanged by the guest: %+v", after, before)
 	}
 	for name, participant := range map[string]utilities.ID{"another User": stranger, "a guest": guest} {
 		refused := proof

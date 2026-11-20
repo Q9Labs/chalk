@@ -72,7 +72,7 @@ func batch(t *testing.T, source string, nextSeq int64, end string, events ...str
 
 func admit(t *testing.T, rows []SourceRow, request sdktelemetry.Request) Admission {
 	t.Helper()
-	admission, err := Admit(identity(t), byID(rows), request, received)
+	admission, err := Admit(identity(t), byID(rows), nil, request, received)
 	if err != nil {
 		t.Fatalf("Admit: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestAdmitRecordsHowASourceEnded(t *testing.T) {
 func TestAdmitStampsReceiveTimes(t *testing.T) {
 	first := rowOf(t, admit(t, nil, batch(t, sourceA, 1, "", ended(0))), sourceA)
 	later := received.Add(time.Minute)
-	admission, err := Admit(identity(t), byID([]SourceRow{first}), batch(t, sourceA, 2, "", ended(1)), later)
+	admission, err := Admit(identity(t), byID([]SourceRow{first}), nil, batch(t, sourceA, 2, "", ended(1)), later)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestAdmitRefusesABatchThatWouldGrowARowPastTheCap(t *testing.T) {
 		{"a drop record of another reason counts toward the same cap", fullDropped, batch(t, sourceA, 20000, "", drop(1, apart+1, apart+2, "refused", sourceB)), true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := Admit(identity(t), byID(test.rows), test.request, received)
+			_, err := Admit(identity(t), byID(test.rows), nil, test.request, received)
 			if test.full != errors.Is(err, ErrLedgerFull) || (!test.full && err != nil) {
 				t.Fatalf("error = %v, want ErrLedgerFull = %v", err, test.full)
 			}
@@ -340,7 +340,7 @@ func TestAdmitRefusesWhatIsNotAVersion2Batch(t *testing.T) {
 	if frame != "" {
 		t.Fatal(frame)
 	}
-	if _, err := Admit(identity(t), nil, legacy, received); !errors.Is(err, ErrBatch) {
+	if _, err := Admit(identity(t), nil, nil, legacy, received); !errors.Is(err, ErrBatch) {
 		t.Fatalf("error = %v, want ErrBatch", err)
 	}
 }

@@ -1,6 +1,6 @@
 # Slice 12: Webhooks and tenant integration
 
-This slice proves two things about a Tenant's integration with Chalk. First, every lifecycle change a subscribed webhook endpoint should hear about was committed as a webhook event, attempted on time, and answered 2xx by the Tenant's receiver, or the slice names where it stopped. Second, the Tenant's backend could authenticate and create the Spaces, Episodes, admissions and initial access grants its Participants need. SWE-2 builds it. It owns the prefixes `webhook.` and `integration.`. It depends on C1 (envelope, `ten_`/`spc_`/`ep_`/`pt_`/`whd_` handles, registry), C2 (`ProofBundle`, three-state values, verdict fields), C3 (`evidence_gap`, source watermarks) and C4 (compact CLI grammar). It consumes slice 14's API release markers and `release.started` boot facts, the `request_logs` field of its `flags.snapshot` and its edge rollups. Slice 8 owns how an Episode ends and slices 10 and 11 own recording and transcript lifecycles, so this slice only checks that their committed transitions produced webhook events. Slice 7 cites `integration.credential_refused` as a cause. Code facts are at `b3dc1d3afa`.
+This slice proves two things about a Tenant's integration with Chalk. First, every lifecycle change a subscribed webhook endpoint should hear about was committed as a webhook event, attempted on time, and answered 2xx by the Tenant's receiver, or the slice names where it stopped. Second, the Tenant's backend could authenticate and create the Spaces, Episodes, admissions and initial access grants its Participants need. SWE-2 builds it. It owns the prefixes `webhook.` and `integration.`. It depends on C1 (envelope, the `ten_`, `spc_`, `ep_`, `pt_`, `whd_` delivery, `wh_` endpoint and `ak_` API key handles, registry), C2 (`ProofBundle`, three-state readings, verdict fields), C3 (`evidence_gap`, source watermarks) and C4 (the line grammar in `docs/diagnose.md`). It consumes slice 14's `release.marker` and `release.started` facts (the `release` and `api` sources), the `request_logs` entry in the flags map of C1's `obs.flags_snapshot` (a record's `flags_hash`, shown as an `fl_` handle, resolves to it) and slice 14's edge rollups. Slice 8 owns how an Episode ends and slices 10 and 11 own recording and transcript lifecycles, so this slice only checks that their committed transitions produced webhook events. Slice 7 cites `integration.credential_refused` as a cause. Code facts are at `b3dc1d3afa`.
 
 ## 1. Scope
 
@@ -9,7 +9,7 @@ This slice proves two things about a Tenant's integration with Chalk. First, eve
 - `apps/api/internal/apikeys/service.go`, `apps/api/internal/httpapi/middleware.go`, `apps/api/internal/observability/http.go`.
 - `apps/api/internal/authorization/tenant.go`, `apps/api/internal/httpapi/rate_limit.go`, `apps/api/internal/httpapi/access_grants.go`.
 - `apps/api/internal/adapters/postgres/tenant_limits.go`, `apps/api/internal/adapters/postgres/episode_lifecycle_create.go`.
-- New: `scripts/diagnose-call/webhooks.mjs (new)` and `scripts/diagnose-call/integration.mjs (new)` (rules); new exports `webhookSql(episodeId)` and `tenantSql(tenantId, from, to)` in `scripts/diagnose-call/database.mjs` next to `episodeSql` (`scripts/diagnose-call/database.mjs:35`); the files the rules read added to `DIAGNOSE_CALL_INPUTS` (`scripts/diagnose-call/inputs.mjs:6`).
+- New, the one path every check takes (`docs/diagnose.md`, "Add a check"): the facts and symptoms in `observability/registry/areas/webhooks.json`, the area file that owns `webhook` and `integration`; one rule per symptom at `observability/rules/<code>.mjs`; `observability/fixtures/<code>/positive.json` and `observability/fixtures/<code>/healthy.json`; the fault scenarios in section 6 as each symptom's `fault_scenario`; and the live Postgres reads these facts need, behind `check`'s ports (`scripts/diagnose-call/proof/check.mjs`), whose contract is the reference adapter in `scripts/diagnose-call/proof/fixture-world.mjs`. The rules hash covers the rule files and their registry entries, so nothing else registers them.
 - No Sync file. Decided: Sync emits no fanout decision in this slice, because its producer runs inside many callers' transactions and the `db` rows already prove both a missing event and an empty target set.
 
 **Journeys.** (1) A lifecycle commit in the API or Sync, through fanout, claim, send and the terminal delivery state. (2) A Tenant backend calling `createSpace` (`apps/api/internal/httpapi/spaces.go:148`), `createEpisode` (`apps/api/internal/httpapi/episode_lifecycle.go:251`), `admitEpisodeParticipant` (`apps/api/internal/httpapi/episode_lifecycle.go:308`) and initial `issueAccessGrant` (`apps/api/internal/httpapi/access_grants.go:89`) with an API key.
@@ -28,9 +28,11 @@ This slice proves two things about a Tenant's integration with Chalk. First, eve
 | `integration.episode_create_refused` | `createSpace` or `createEpisode` was refused or failed and no Space or Episode followed within 60 s. | Participants of that Space | high |
 | `integration.grant_not_issued` | `admitEpisodeParticipant` or initial `issueAccessGrant` was refused or failed and was not retried successfully within 120 s. | The Participant being admitted | high |
 
+Every symptom here judges the `tenant` item, one Tenant over one UTC day (the item `observability/registry/core.json` gives a Tenant's integration), once per item: `item` is `tenant` and `per` is `item`, so a finding's party is `all`, and the delivery, endpoint, API key or Episode it concerns prints as a related record such as `delivery whd_3c1e endpoint=wh_8a2b state=exhausted`. One finding per symptom per Tenant day cites every row that qualifies. The EXPECTED results in section 4 name these reason codes, each declared in the area's `reasons` with outcome `expected`: `webhook.not_subscribed`, `webhook.receiver_slow`, `webhook.deploy_restart`, `integration.live_episode_limit`, `integration.episode_full` and `integration.episode_ended`.
+
 ## 3. Witnesses per symptom
 
-A row and the ledger row (`observability_journey_events`) written in the same transaction are one witness. A log line and a kernel event emitted by the same function from the same value are one witness. A DB column written by the same handler that emits a decision is the same witness as that decision.
+A row and the ledger row (`observability_journey_events`) written in the same transaction are one witness. A log line and a kernel event emitted by the same function from the same value are one witness. A DB column written by the same handler that emits a decision is the same witness as that decision. In `observability/registry/areas/webhooks.json` each witness below is a fact named under `webhook.` or `integration.`, with one `events` entry per row kind and its source from `observability/registry/core.json`. Copies of one witness are events of one fact; independent witnesses are separate entries in the symptom's `witnesses`, and a witness whose absence leaves the symptom undecidable is `required`.
 
 **`webhook.event_missing`.** `db` lifecycle columns `episodes.started_at`, `created_at`, `ended_at` (exists: `apps/api/db/schema.sql:435-442`) and `participants.joined_at`, `left_at` (exists: `apps/api/db/schema.sql:549-550`); only Sync writes the participant and end columns (`apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex:177`, `apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex:207`). `db` endpoint state (exists: `apps/api/db/schema.sql:3163-3176`) and revision `event_types` (exists: `apps/api/db/schema.sql:3213`). `db` `webhook_events` by `event_name`, `resource_type`, `resource_id`, `occurred_at` (exists: `apps/api/db/schema.sql:3264-3271`); `resource_id` is the Episode ID (`apps/api/internal/adapters/postgres/episode_lifecycle_create.go:119`) or the Participant ID (`apps/sync/lib/chalk_sync/webhooks/producer.ex:124`, `apps/sync/lib/chalk_sync/webhooks/producer.ex:246-249`). These `db` sources are independent: lifecycle code writes the transition, endpoint routes write the endpoint, and the producer writes the event. `api` fanout decision (missing: slice adds in `apps/api/internal/adapters/postgres/webhook_producer.go`) is the producer's own view; it adds the hop and the `duplicate` fact and is never required. The ledger `webhook.event.committed` (`apps/api/internal/adapters/postgres/webhook_producer.go:75`) is the same witness as the event row. Today two API paths write nothing at all: no targets (`apps/api/internal/adapters/postgres/webhook_producer.go:48-49`) and an insert that hits `on conflict do nothing` (`apps/api/internal/adapters/postgres/webhook_producer.go:66-67`, `apps/api/db/queries/webhooks.sql:122`). Sync's equivalents are an empty revision set (`apps/sync/lib/chalk_sync/webhooks/producer.ex:93`) and the conflict branch (`apps/sync/lib/chalk_sync/webhooks/producer.ex:166-167`). Sync always writes an `episode.ended` row, even with no receivers (`apps/sync/lib/chalk_sync/webhooks/producer.ex:91`).
 
@@ -48,19 +50,19 @@ A row and the ledger row (`observability_journey_events`) written in the same tr
 
 ## 4. Rule conditions
 
-Missing data never yields healthy. Each rule returns `broken`, `degraded`, `expected` or a gap; healthy comes only from the sealed `ProofBundle`. `asof` is the checker's read time. Attempt, delivery and event rows are deleted 30 days after the event's `occurred_at` (`apps/api/db/queries/webhooks.sql:229`, `apps/api/db/queries/webhooks.sql:237`, `apps/api/db/queries/webhooks.sql:245`), so anything older is `unavailable(retention_30d)` with coverage `partial(db)` and `gap: db unavailable(retention_30d)`. A rule whose window is still open at `asof` returns a gap on the source it still waits for, such as `partial(db)` with `gap: db window_open`, never a pass.
+Missing data never yields healthy. Each rule's `decide` gets three-state readings and returns `pass`, a finding (`broken`, `degraded`, or `expected` with its reason code and no module) or `unknown` with a reason; healthy comes only from the kernel, when every planned check passed on complete evidence. A gap below means the check is unknown: either `decide` returns `unknown` with the reason given, or a required reading is incomplete, and the finding a rule returns from the other readings still prints. A gap prints as `gap: <code> all: <reason>` and makes the header `coverage=partial(webhook)` or `partial(integration)`. `asof` is the checker's read time. Attempt, delivery and event rows are deleted 30 days after the event's `occurred_at` (`apps/api/db/queries/webhooks.sql:229`, `apps/api/db/queries/webhooks.sql:237`, `apps/api/db/queries/webhooks.sql:245`), so a Tenant day older than that is a gap with reason `webhook rows past 30-day retention`. A Tenant day that hasn't ended is open: the kernel judges it up to `asof`, adds the `gap: open` line and the header reads `partial(open)`, so it is never healthy. A cause named below goes in the finding's fact text, because a finding line has no cause key. A finding that carries a hypothesis sets `upstream=witnessed`, since the kernel rejects a hypothesis past an unwitnessed hop.
 
 **`webhook.event_missing`.** Population: transitions at time T with `asof - 30d < T < asof - 30s`: `episode.started` at `coalesce(started_at, created_at)` (as `apps/api/internal/adapters/postgres/episode_lifecycle_create.go:113-116` does), `episode.ended` at `ended_at`, `participant.joined` at `joined_at`, `participant.left` at `left_at`. A row matches when `event_name`, `resource_id` and `date_trunc('milliseconds', occurred_at)` equal the transition's. `endpoint.test` is never in the population. Deleted endpoints are kept 30 days after `deleted_at` (`apps/api/db/queries/webhooks.sql:266-271`), so every endpoint that existed in the window is still readable.
 - BROKEN for `episode.ended` whenever no row matches, whatever the endpoints, because Sync writes that row unconditionally (`apps/sync/lib/chalk_sync/webhooks/producer.ex:91`).
 - BROKEN for the other three when no row matches and an endpoint of the Tenant had `created_at <= T`, `updated_at <= T`, `enabled=true`, `deleted_at` null, and a current revision with `api_version=1` whose `event_types` contain the event name. Module `api.webhooks.producer` and hop `api_fanout` for `episode.started`; module `sync.webhooks.producer` and hop `sync_fanout` for the rest. When the API fanout decision for that resource says `duplicate`, print it as a fact.
-- EXPECTED when the Tenant has endpoint rows, every one of them has `updated_at <= T` or `created_at > T`, and each with `created_at <= T` was disabled, deleted at or before T, or not subscribed to the event at T. A Tenant with no endpoint rows is EXPECTED too, because any endpoint that existed at T is still readable.
-- Gap when any endpoint has `created_at <= T < updated_at`, because its state at T is unknown: `partial(db.endpoint_history)`.
+- EXPECTED with reason `webhook.not_subscribed` when the Tenant has endpoint rows, every one of them has `updated_at <= T` or `created_at > T`, and each with `created_at <= T` was disabled, deleted at or before T, or not subscribed to the event at T. A Tenant with no endpoint rows is EXPECTED too, because any endpoint that existed at T is still readable.
+- Gap `endpoint state at the transition not recorded` when any endpoint has `created_at <= T < updated_at`, because its state at T is unknown.
 
 **`webhook.delivery_stalled`.** Stall start S is the delivery's scheduled time: `webhook_events.occurred_at` for attempt 1 (`apps/api/internal/adapters/postgres/webhook_producer.go:87`), else the `next_attempt_at` attribute of the latest `retry_scheduled` ledger row, else the row's `next_attempt_at`. When slice 14 shows the API down during the wait, S moves to the API's next start marker.
 - BROKEN when a delivery is `pending` or `retry_wait` with `S < asof - 120s` and `attempt_count < 11`, or `delivering` with `lease_expires_at < asof - 60s` (`RecoverExpired` runs every 1 s cycle, `apps/api/internal/webhooks/dispatcher.go:101-108`). Module `api.webhooks.dispatcher`. Hop `dispatcher_loop` when a `webhook.dispatch.cycle_failed` fact falls in `[S, asof]` or the delivery is `delivering` past its lease; otherwise hop `dispatcher_claim`.
 - DEGRADED when the first attempt with `started_at >= S` started more than 120 s after S.
-- EXPECTED when, at every instant of the wait, the delivery's endpoint had 4 attempts in flight (`apps/api/db/queries/webhooks.sql:176`) or its Tenant had 20 (`apps/api/db/queries/webhooks.sql:193`), counted from attempt `[started_at, finished_at]` intervals, and every one of those attempts has `latency_milliseconds >= 5000` or `error_code=timeout`. Module `tenant.receiver`.
-- Gap: when slice 14's markers are missing for the window, the BROKEN or DEGRADED finding still stands with S unmoved, and coverage is `partial(release)`. When the `api` log source is missing for the window, the hop stays `dispatcher_claim` and coverage is `partial(api.dispatcher_log)`.
+- EXPECTED when, at every instant of the wait, the delivery's endpoint had 4 attempts in flight (`apps/api/db/queries/webhooks.sql:176`) or its Tenant had 20 (`apps/api/db/queries/webhooks.sql:193`), counted from attempt `[started_at, finished_at]` intervals, and every one of those attempts has `latency_milliseconds >= 5000` or `error_code=timeout`. Reason `webhook.receiver_slow`; an expected finding has no module.
+- Gap: the `release.marker` and dispatcher log facts are required witnesses. When slice 14's markers are incomplete for the window, the BROKEN or DEGRADED finding still stands with S unmoved and the check is a gap (`release markers not read for the wait`). When the `api` log is incomplete for the window, the hop stays `dispatcher_claim` and the check is a gap (`dispatcher log not read for the wait`).
 
 **`webhook.not_delivered`.** Population: deliveries with `state=exhausted`. The last attempt's `error_code` maps to a cause. Retryable statuses are 408, 425, 429 and 5xx (`apps/api/internal/webhooks/delivery_client.go:133`); the 72 h horizon is at `apps/api/internal/webhooks/dispatcher.go:278`.
 - BROKEN with `http_4xx` or `http_3xx`: cause `receiver_rejected`, module `tenant.receiver`, hypothesis "receiver refused the signed request (stale secret after rotation, or clock skew over 300 s)", falsified by a 2xx attempt on the same endpoint within 10 min after it with no `webhook.endpoint.secret_rotated` fact in between.
@@ -72,29 +74,29 @@ Missing data never yields healthy. Each rule returns `broken`, `degraded`, `expe
 
 **`webhook.outcome_unrecorded`.** Population: attempts with `outcome=lease_expired`, except `error_code=secret_rotated` (`apps/api/internal/adapters/postgres/webhook_rotation.go:42`).
 - DEGRADED when the completion-failed log or the `op` terminal for the same `attempt_id` carries `http_status_class=2xx`. Module `api.webhooks.dispatcher`, hop `dispatcher_complete`. With another class the receiver didn't accept the event, so a redelivery isn't a duplicate and there is no finding.
-- EXPECTED when there is no completion-failed log for the attempt and a slice 14 release marker (a deploy, not a crash restart) falls inside `[started_at, finished_at]`.
-- Gap when the `db` row exists with neither a log nor a release marker: `partial(api.dispatcher_log)`.
+- EXPECTED with reason `webhook.deploy_restart` when there is no completion-failed log for the attempt and a slice 14 `release.marker` (a deploy, not a crash restart) falls inside `[started_at, finished_at]`.
+- Gap `dispatcher log missing for a lease_expired attempt` when the `db` row exists with neither a log nor a release marker.
 
-**`integration.credential_refused`.** Group refusals by `api_key_id`, or by the path's `tenant_id` when no key row was found. The Tenant comes from the key row when found. A path-only Tenant counts only when that Tenant had an API-key success in the 24 h before the first refusal; otherwise the refusals go in a gap `partial(api.key_tenant)`. Only requests that presented an API key count, so a Dashboard Account's 403 never does.
+**`integration.credential_refused`.** Group refusals by `api_key_id`, or by the path's `tenant_id` when no key row was found. The Tenant comes from the key row when found. A path-only Tenant counts only when that Tenant had an API-key success in the 24 h before the first refusal; otherwise the check is a gap `refusals with no API key row and no recent success for the path's Tenant`. Only requests that presented an API key count, so a Dashboard Account's 403 never does.
 - BROKEN when no API-key success for the Tenant (any key) falls within 5 min after the first refusal. Success is a 2xx `http.request` with `auth_scheme=api_key`, an `api_key.authenticate accepted` decision, or any Tenant key's `last_used_at` inside that window.
 - DEGRADED when the refused key had no success but another key of the Tenant did.
 - Module `tenant.backend` for reasons `malformed`, `unknown_prefix`, `hash_mismatch`, `revoked`, `expired`, `tenant_mismatch`, `scope_missing`; module `api.apikeys` for `lookup_failed` and `scopes_invalid`. Hypothesis for `unknown_prefix` when `rotateAPIKey` (`apps/api/internal/httpapi/api_keys.go:174`) ran for the Tenant in the prior 24 h: "backend still sends the pre-rotation key", falsified when the first refusal came before that rotation.
 - EXPECTED: none.
-- Gap `partial(api.auth_decision)` when the `api_key.authenticate` decision is missing for the window and the request log mode is `off`. Gap `partial(api.request_log)` when the decision is missing, the mode isn't `all`, and the only `last_used_at` is after the window, so a success inside it is unknown.
+- Gap `authentication decision not read and request logs off` when the `api_key.authenticate` decision is missing for the window and the `request_logs` flag is `off`. Gap `success inside the window unknown` when the decision is missing, the mode isn't `all`, and the only `last_used_at` is after the window.
 
 **`integration.episode_create_refused`.** No finding when the Tenant created a Space (for `createSpace`) or an Episode in the same Space (for `createEpisode`) within 60 s after the refusal. Codes 401 and 403 belong to `integration.credential_refused` and are skipped here.
-- EXPECTED when the code is `tenant.live_episode_limit_reached` (`apps/api/internal/tenantlimits/limits.go:28`), the checker's count of the Tenant's Episodes with `created_at <= T` and `ended_at` null or after T is at or over the decision's `limit`, and every counted Episode had a Participant with `joined_at <= T` and `left_at` null or after T, or was created within 10 min before T.
+- EXPECTED with reason `integration.live_episode_limit` when the code is `tenant.live_episode_limit_reached` (`apps/api/internal/tenantlimits/limits.go:28`), the checker's count of the Tenant's Episodes with `created_at <= T` and `ended_at` null or after T is at or over the decision's `limit`, and every counted Episode had a Participant with `joined_at <= T` and `left_at` null or after T, or was created within 10 min before T.
 - BROKEN otherwise for that code, cause `leaked_live_episode`: module `api.episodes` when a counted Episode had `deadline_at < T`, because the deadline scheduler should have ended it, else module `tenant.backend`.
 - BROKEN for a 5xx: module `api.spaces` or `api.episodes` by route; cause `committed_but_failed` when `db` shows the Space or Episode created within 5 s of the request.
 - BROKEN for `request.invalid` with module `tenant.backend`; for any other 4xx code with module `api.episodes` and hypothesis "unmapped refusal code".
-- Gap when the code is `tenant.live_episode_limit_reached` and the decision is missing: `partial(api.live_limit_decision)`.
+- Gap `live limit decision not read` when the code is `tenant.live_episode_limit_reached` and the decision is missing.
 
-**`integration.grant_not_issued`.** Calls with `grant_kind=renewal`, and 401 or 403 codes, are outside the population. For admissions, one finding per (`api_key_id`, Episode) with the refusal count. A retry is a 2xx on the same route by the same key that starts after the refusal's `Retry-After` and within 120 s of the refusal: for `issueAccessGrant`, the same `participant_id` in the path; for admissions, `db` Participants created in the Episode in that window, which must number at least the refusals.
-- EXPECTED for `episode.capacity_exceeded` when the checker counts at least 500 Participants (`apps/api/internal/episodes/service.go:75`) with `joined_at <= T` and `left_at` null or after T. Fewer is BROKEN, module `api.episodes`, cause `capacity_without_participants`, because Participants stuck in `joining` or the lifecycle budget (`apps/api/db/queries/sync_lifecycle.sql:249-262`) refused the seat.
-- EXPECTED for `episode.not_active` when `episodes.ended_at < T`. Slice 8 judges whether that end was right.
+**`integration.grant_not_issued`.** Calls with `grant_kind=renewal`, and 401 or 403 codes, are outside the population. For admissions, the Tenant day's one finding prints a related record per (API key, Episode) with its refusal count, such as `admission ep_9feb key=ak_5d0e refusals=8`. A retry is a 2xx on the same route by the same key that starts after the refusal's `Retry-After` and within 120 s of the refusal: for `issueAccessGrant`, the same `participant_id` in the path; for admissions, `db` Participants created in the Episode in that window, which must number at least the refusals.
+- EXPECTED with reason `integration.episode_full` for `episode.capacity_exceeded` when the checker counts at least 500 Participants (`apps/api/internal/episodes/service.go:75`) with `joined_at <= T` and `left_at` null or after T. Fewer is BROKEN, module `api.episodes`, cause `capacity_without_participants`, because Participants stuck in `joining` or the lifecycle budget (`apps/api/db/queries/sync_lifecycle.sql:249-262`) refused the seat.
+- EXPECTED with reason `integration.episode_ended` for `episode.not_active` when `episodes.ended_at < T`. Slice 8 judges whether that end was right.
 - BROKEN for 429 with no retry: module `tenant.backend` when the key made at least 60 write requests (POST, PATCH, PUT, DELETE) in the 60 s before the first 429 (`apps/api/internal/httpapi/rate_limit.go:42-45`), else module `api.ratelimit`.
 - BROKEN for 503 with `ratelimit.check` reason `limiter_unavailable` (`apps/api/internal/httpapi/rate_limit.go:260-265`), module `api.ratelimit`. Any other 4xx or 5xx is BROKEN with module `api.accessgrants` or `api.episodes` by route.
-- Gap for a 429 when the request log mode isn't `all`, so the writes can't be counted: `partial(api.request_log)`, with module `tenant.backend` as a hypothesis. Gap for an `issueAccessGrant` failure with no `grant_kind`: `partial(api.grant_kind)`.
+- Gap `write requests not counted, request logs not all` for a 429 when the request log mode isn't `all`. The kernel prints a hypothesis only on a finding with a witnessed upstream hop, so an unknown check names no `tenant.backend` cause. Gap `grant kind missing` for an `issueAccessGrant` failure with no `grant_kind`.
 
 ## 5. Boundaries to adopt the kernel at
 
@@ -118,45 +120,62 @@ Missing data never yields healthy. Each rule returns `broken`, `degraded`, `expe
 
 Webhook URLs must be public HTTPS on port 443 (`apps/api/internal/webhooks/url.go:14-23`), so every scenario uses a temporary catcher token on `https://webhook.site`, created with `POST /token` and `{default_status, request_limit: 50}` the way `scripts/prod-proof/webhooks.mjs:105` does and deleted afterwards with `DELETE /token/<id>` (`scripts/prod-proof/cleanup.mjs:146`). Run all of them on the local dev stack, which sets `CHALK_API_REQUEST_LOGS=all` (`scripts/dev/chalk.mjs:149`), uses the built-in webhook key (`apps/api/internal/config/config.go:1099`) and keeps rate limits on by default (`apps/api/internal/config/config.go:458`). Start it with `CHALK_API_OTLP_ENDPOINT=https://api.axiom.co` and `OTEL_EXPORTER_OTLP_LOGS_HEADERS` for a non-production dataset (the credential from 1Password, never in Git), and run the checker with `CHALK_LOG_DATASET` set to that dataset. Before scenario 1, confirm one local `http.request` row arrives there within 2 min; if none does, stop and report. Use one endpoint subscribed to `episode.started` and one API key.
 
-1. **Receiver refuses.** Catcher with `default_status: 401`. Create an Episode. A 401 isn't retryable, so the delivery is exhausted at attempt 1.
+Samples follow the line grammar in `docs/diagnose.md`. Handles and times are illustrative and `<hash>` is the rules hash; times are relative to the Tenant day's anchor, 00:00 UTC, as in every item view (`<T1>` stands for a time such as `+600:00`, which is 10:00 UTC). The anchor line, the `next:` lines and the `gap: open` line are left out. Each scenario runs the checker on the day it injects the fault, so the header reads `coverage=partial(open)`; any other name inside `partial(...)` means the scenario failed. `diagnose evidence <f_x>` shows each finding's expectation, watermarks and falsifiers.
+
+1. **Receiver refuses.** Catcher with `default_status: 401`. Create an Episode. A 401 isn't retryable, so the delivery is exhausted at attempt 1. Run `diagnose tenant ten_xxxx <date>`.
    ```
-   episode ep_xxxx outcome=broken coverage=complete asof=<t> rules=<n>
-   F-xxxx webhook.not_delivered whd_xxxx +00:00..+00:01 hop=tenant_receiver module=tenant.receiver
-   fact: state=exhausted attempts=1 last=http_4xx http_status=401 [db]; expected 2xx within 11 attempts by occurred_at+72h; db complete to asof
-   hypothesis: receiver refused the signed request (stale secret or clock skew over 300 s); falsified by a 2xx on this endpoint within 10 min with no rotation
+   tenant ten_xxxx <date> outcome=broken coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
+   f_xxxx broken webhook.not_delivered all <T1>..<T1+1m> hop=tenant_receiver module=tenant.receiver upstream=witnessed ev=ev_xxxx
+   fact: delivery exhausted after 1 attempt, last http_4xx status 401 <T1> [ev_xxxx]
+   hypothesis: receiver refused the signed request (stale secret after rotation, or clock skew over 300 s)
+   delivery whd_xxxx endpoint=wh_xxxx state=exhausted attempts=1 last=http_4xx
    ```
+   The hypothesis is falsified by a 2xx attempt on the same endpoint within 10 min after it with no `webhook.endpoint.secret_rotated` fact in between.
 2. **Claim lock held.** Catcher with `default_status: 204`. In psql, run `select pg_advisory_lock(hashtextextended('<tenant uuid>', 0));` (the claim's key, `apps/api/db/queries/webhooks.sql:194`) and keep that connection open. Create an Episode. Run the checker at +02:30, release with `select pg_advisory_unlock_all();` at +04:00, and run it again at +05:00.
    ```
-   episode ep_xxxx outcome=broken coverage=complete asof=<t> rules=<n>
-   F-xxxx webhook.delivery_stalled whd_xxxx +00:00..+02:30 hop=dispatcher_claim module=api.webhooks.dispatcher
-   fact: state=pending attempt_count=0 waited 150s; no cycle_failed; endpoint in flight=0 tenant in flight=0 [db]; expected first attempt within 120s; db complete to asof
-   hypothesis: Tenant claim lock held outside the dispatcher; falsified by an attempt row for this Tenant during the wait
+   tenant ten_xxxx <date> outcome=broken coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
+   f_xxxx broken webhook.delivery_stalled all <T1>..<T1+2m> hop=dispatcher_claim module=api.webhooks.dispatcher upstream=witnessed ev=ev_xxxx
+   fact: delivery pending with 0 attempts for 150 s <T1>..<T1+2m> [ev_xxxx]
+   fact: no webhook.dispatch.cycle_failed during the wait [proven absent]
+   fact: 0 attempts in flight for the endpoint and the Tenant <T1>..<T1+2m> [ev_xxxx]
+   hypothesis: Tenant claim lock held outside the dispatcher
+   delivery whd_xxxx endpoint=wh_xxxx state=pending attempts=0
    ```
-   The second run prints `outcome=degraded` on line 1 and the range `+00:00..+04:0x`.
+   The hypothesis is falsified by an attempt row for this Tenant during the wait. The second run prints `degraded` as the finding's second word and the range `<T1>..<T1+4m>`, and the header's `outcome=degraded`.
 3. **Event row silently dropped.** Install `create function chalk_fault_drop() returns trigger language plpgsql as $$ begin return null; end $$;` and `create trigger chalk_fault_drop before insert on webhook_events for each row when (new.event_name = 'episode.started') execute function chalk_fault_drop();`. Create an Episode, run the checker after 30 s, then drop the trigger and the function.
    ```
-   episode ep_xxxx outcome=broken coverage=complete asof=<t> rules=<n>
-   F-xxxx webhook.event_missing ep_xxxx +00:00 hop=api_fanout module=api.webhooks.producer
-   fact: episodes.started_at=+00:00; endpoint enabled and subscribed before +00:00; no webhook_events row; fanout outcome=duplicate [api]; expected one row; db complete to asof
+   tenant ten_xxxx <date> outcome=broken coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
+   f_xxxx broken webhook.event_missing all <T1> hop=api_fanout module=api.webhooks.producer upstream=unknown ev=ev_xxxx
+   fact: episodes.started_at set <T1> [ev_xxxx]
+   fact: endpoint enabled and subscribed to episode.started before the transition [ev_xxxx]
+   fact: no webhook_events row for episode.started [proven absent]
+   fact: fanout outcome duplicate <T1> [ev_xxxx]
+   transition ep_xxxx event=episode.started endpoint=wh_xxxx
    ```
 4. **Revoked key still in use.** Create a key (`apps/api/internal/httpapi/api_keys.go:124`), call `createSpace` with it once, revoke it with `DELETE` (`apps/api/internal/httpapi/api_keys.go:200`), then call `createEpisode` with it 3 times within 1 min and with no other key. Run the checker 6 min after the first refusal.
    ```
-   tenant ten_xxxx <T0>..<T0+10m> outcome=broken coverage=complete asof=<t> rules=<n>
-   F-xxxx integration.credential_refused ten_xxxx <T1>..<T1+1m> hop=api_key_auth module=tenant.backend
-   fact: 3 requests 401 access.unauthenticated reason=revoked api_key=<uuid> [api]; api_keys.revoked_at=<T1-30s> [db]; no API-key success within 5m; expected 2xx; api complete to asof
+   tenant ten_xxxx <date> outcome=broken coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
+   f_xxxx broken integration.credential_refused all <T1>..<T1+1m> hop=api_key_auth module=tenant.backend upstream=unknown ev=ev_xxxx
+   fact: 3 requests 401 access.unauthenticated, api_key.authenticate rejected revoked <T1>..<T1+1m> [ev_xxxx,ev_xxxx,ev_xxxx]
+   fact: api_keys.revoked_at set <T1-30s> [ev_xxxx]
+   fact: no API-key success for the Tenant within 5 min [proven absent]
+   key ak_xxxx state=revoked refusals=3
    ```
 5. **Burst over the write limit.** Confirm a write response carries `X-RateLimit-Limit` (`apps/api/internal/ratelimit/policies.go:15`); if it doesn't, stop and report. Create an Episode, wait 61 s, then send 70 `admitEpisodeParticipant` calls concurrently within 2 s and don't retry any 429. The token bucket refills 1 write a second, so at least 8 calls get 429.
    ```
-   episode ep_xxxx outcome=broken coverage=complete asof=<t> rules=<n>
-   F-xxxx integration.grant_not_issued ten_xxxx +01:0x hop=rate_limit module=tenant.backend
-   fact: admit 429 request.rate_limited x<k> reason=exhausted api_key=<uuid> writes_60s=<n> retry_after=<s> [api]; no retry within 120s; expected retry after Retry-After; api complete to asof
+   tenant ten_xxxx <date> outcome=broken coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
+   f_xxxx broken integration.grant_not_issued all <T1> hop=rate_limit module=tenant.backend upstream=unknown ev=ev_xxxx
+   fact: <k> admissions 429 request.rate_limited, ratelimit.check exhausted, retry_after=<s> <T1> [ev_xxxx]
+   fact: <n> write requests by the key in the 60 s before the first 429 [ev_xxxx]
+   fact: no retry on the route within 120 s [proven absent]
+   admission ep_xxxx key=ak_xxxx refusals=<k>
    ```
    `<k>` is at least 8 and `<n>` at least 60.
-6. **Healthy control.** Catcher with `default_status: 204`, endpoint subscribed to `space.created` and `episode.started`. Call `createSpace`, `createEpisode`, admit 2 Participants, issue each an initial grant, and call the endpoint test route (`apps/api/internal/httpapi/webhook_endpoints.go:68`). Don't end the Episode. Every delivery must be `succeeded` at attempt 1 within 120 s. Neither view may print any `webhook.` or `integration.` finding, any `gap:` line, `UNEXPLAINED` or `WITNESS_DISAGREEMENT`.
+6. **Healthy control.** Catcher with `default_status: 204`, endpoint subscribed to `space.created` and `episode.started`. Call `createSpace`, `createEpisode`, admit 2 Participants, issue each an initial grant, and call the endpoint test route (`apps/api/internal/httpapi/webhook_endpoints.go:68`). Don't end the Episode. Every delivery must be `succeeded` at attempt 1 within 120 s. On the same day the Tenant view prints no `webhook.` or `integration.` finding, no gap line but `gap: open`, no `UNEXPLAINED` or `BLIND_SPOT` finding and no `disagree` line:
    ```
-   episode ep_xxxx outcome=healthy coverage=complete asof=<t> rules=<n>
-   tenant ten_xxxx <T0>..<T0+10m> outcome=healthy coverage=complete asof=<t> rules=<n>
+   tenant ten_xxxx <date> outcome=unknown coverage=partial(open) checked=<c>/<e> asof=<t> rules=<hash>
    ```
+   After the UTC day ends, run `diagnose check ten_xxxx <date>` to judge the closed day, and then `diagnose tenant ten_xxxx <date>` must print `outcome=healthy coverage=complete`. The check sweep's own header also covers the Tenant's Episodes, and the one this scenario leaves running stays open, so read the Tenant day's line, not the sweep's. The healthy fixtures prove the same verdict for each rule in the coverage gate.
 
 ## 7. Out of scope and traps
 

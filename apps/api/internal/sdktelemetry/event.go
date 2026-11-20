@@ -139,6 +139,14 @@ type ReceiveCounts struct {
 // It is a fixed label, never decoder text or input.
 func (e Event) Rejection() string { return e.rejection }
 
+// Refused is the event as the ledger settles it when it refuses the event's content after the
+// event passed its own check: a rejection with the given fixed reason that keeps the type and seq.
+func (e Event) Refused(reason string) Event {
+	refused := Event{rejection: reason, seqRead: true}
+	refused.seen = seenEvent{Type: e.Type, Seq: e.Seq}.known()
+	return refused
+}
+
 // Seen returns the type and sequence number of an invalid event as far as they could be read.
 func (e Event) Seen() (eventType string, seq int64) {
 	return e.seen.Type, e.seen.Seq

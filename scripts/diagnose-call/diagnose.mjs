@@ -4,8 +4,8 @@
  * `pnpm diagnose`: the agent's front door to verdicts. It reads stored verdicts and their status, looks things up, and runs `check`
  * on demand; nothing schedules it. `diagnose call <uuid>` is the existing single-call report over today's rows (index.mjs).
  *
- * The verdict layer reads through check.mjs's four ports. Until the slices wire live adapters (C1's envelope, C3's watermarks),
- * only a fixture world implements them, so every command except `call` needs `--fixture`. See docs/diagnose.md.
+ * The verdict layer reads through check.mjs's four ports over a World: a fixture world (`--fixture`), or one Episode read from the
+ * real stores (`--live --tenant <uuid> --episode <uuid>`, live/stores.mjs). Every command except `call` needs one. See docs/diagnose.md.
  */
 import { existsSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
@@ -14,6 +14,7 @@ import { CATALOGUE, RULES } from "./proof/catalogue.mjs";
 import { BACKSTOPS } from "./proof/verdict.mjs";
 import { check, standing, statusOf } from "./proof/check.mjs";
 import { openWorld } from "./proof/fixture-world.mjs";
+import { StoreError, openLive, realStores } from "./live/stores.mjs";
 import { localDate, localMidnight, ref } from "./output/format.mjs";
 import { renderJson } from "./output/json.mjs";
 import { UsageError } from "./output/page.mjs";
@@ -37,27 +38,56 @@ const DAY_MS = 86_400_000;
 /**
  * Runs one command and returns its output instead of printing it, so tests call it directly.
  * @param {readonly string[]} argv
- * @param {{ cwd?: string }} [options]
+ * @param {{ cwd?: string, stores?: import("./live/stores.mjs").Stores, now?: number }} [options] `stores` and `now` replace the real
+ *   stores and clock behind `--live`, for tests
  * @returns {Promise<{ code: number, out: string, err: string }>}
  */
-export async function run(argv, { cwd = process.cwd() } = {}) {
+export async function run(argv, { cwd = process.cwd(), stores, now } = {}) {
   if (argv[0] === "call") {
     const { main } = await import("./index.mjs");
     return { code: await main([...argv.slice(1)]), out: "", err: "" };
   }
   try {
-    const query = parseQuery(argv);
-    if (query.options.fixture === null) {
-      return { code: 69, out: "", err: "diagnose: the verdict commands read a fixture world until the slices wire live adapters; pass --fixture nov18, or run `diagnose call <episode uuid>` for today's real-data report\n" };
+    const { live, rest } = liveTarget(argv);
+    const query = parseQuery(rest);
+    if (live !== null && query.options.fixture !== null) throw new UsageError("pass --live or --fixture, not both");
+    if (live === null && query.options.fixture === null) {
+      return { code: 69, out: "", err: "diagnose: the verdict commands need a world; pass --fixture nov18, --live --tenant <uuid> --episode <uuid>, or run `diagnose call <episode uuid>` for the single-call report\n" };
     }
-    const session = await open(query, cwd);
+    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { catalogue: CATALOGUE, now });
+    const session = await open(query, cwd, opened.world);
     const view = await dispatch(query, session);
-    return { code: exitCode(view, query), out: query.options.json ? renderJson(view) : renderText(view), err: "" };
+    return { code: exitCode(view, query), out: query.options.json ? renderJson(view) : renderText(view), err: opened.notes.map((note) => `diagnose: live: ${note}\n`).join("") };
   } catch (error) {
     if (error instanceof UsageError) return { code: 64, out: "", err: `diagnose: ${error.message}\n${USAGE}\n` };
-    if (error instanceof SourceError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
+    if (error instanceof SourceError || error instanceof StoreError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
     throw error;
   }
+}
+
+/**
+ * Takes `--live`, and with it `--tenant <uuid>` and `--episode <uuid>`, out of argv: in live mode the tenant names the store to read,
+ * not a lookup scope. The query parser sees the rest.
+ * @param {readonly string[]} argv
+ * @returns {{ live: { tenant: string, episode: string } | null, rest: string[] }}
+ */
+function liveTarget(argv) {
+  if (!argv.includes("--live")) return { live: null, rest: [...argv] };
+  /** @type {string[]} */
+  const rest = [];
+  /** @type {Record<string, string>} */
+  const target = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const [name, inline] = argv[index].split(/=(.*)/su);
+    if (name === "--live") continue;
+    if (name === "--tenant" || name === "--episode") {
+      const value = inline ?? argv[(index += 1)];
+      if (value === undefined || value === "") throw new UsageError(`${name} needs a value`);
+      target[name.slice(2)] = value;
+    } else rest.push(argv[index]);
+  }
+  if (target.tenant === undefined || target.episode === undefined) throw new UsageError("--live needs --tenant <uuid> and --episode <uuid>");
+  return { live: { tenant: target.tenant, episode: target.episode }, rest };
 }
 
 /** A data source the command needs is missing: exit 69. */
@@ -74,15 +104,23 @@ function exitCode(/** @type {View} */ view, /** @type {Query} */ query) {
 /**
  * @param {Query} query
  * @param {string} cwd
+ * @returns {Promise<World>}
  */
-async function open(query, cwd) {
+async function fixtureWorld(query, cwd) {
   const fixture = query.options.fixture ?? "";
   const named = new Map(Object.entries(FIXTURES)).get(fixture);
   const path = resolvePath(cwd, fixture);
   if (named === undefined && !existsSync(path)) throw new SourceError(`no fixture world at ${path}; pass --fixture nov18 or a world module`);
   const module = await import(named ?? pathToFileURL(path).href);
-  /** @type {World} */
-  const world = typeof module.default === "function" ? module.default() : module.default;
+  return typeof module.default === "function" ? module.default() : module.default;
+}
+
+/**
+ * @param {Query} query
+ * @param {string} cwd
+ * @param {World} world
+ */
+async function open(query, cwd, world) {
   const store = query.options.store === null ? null : resolvePath(cwd, query.options.store);
   if (store !== null && !existsSync(dirname(store))) throw new UsageError(`--store ${store}: its directory does not exist`);
   const { items, ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES, store });
