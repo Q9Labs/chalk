@@ -54,7 +54,7 @@
         "state": "joining",
         "step": "access_initialize",
         "outcome": "succeeded",
-        "duration_ms": 1,
+        "duration_ms": 0,
         "seq": 5,
         "event_id": "00000000-0000-4000-8000-000000000010",
         "elapsed_ms": 0
@@ -192,7 +192,7 @@
         "state": "live",
         "step": "join",
         "outcome": "succeeded",
-        "duration_ms": 3,
+        "duration_ms": 0,
         "seq": 20,
         "event_id": "00000000-0000-4000-8000-000000000025",
         "elapsed_ms": 0

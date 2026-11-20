@@ -57,6 +57,7 @@ function chainTelemetry(run: Run) {
 
 function scenario(run: Run) {
   const base = terminalTestPlatform();
+  const now = Date.now();
   const telemetry = chainTelemetry(run);
   const status = vi.fn<NonNullable<ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue(run === "positive" ? "active" : "ended");
   let onFailure: ConnectionMediaFactoryInput["onFailure"] = () => {};
@@ -64,6 +65,7 @@ function scenario(run: Run) {
     ...base,
     dependencies: {
       ...base.dependencies,
+      clock: { ...base.dependencies.clock, now: () => now },
       telemetry: telemetry.outbox,
       getEpisodeStatus: status,
       createMediaClient: (input: ConnectionMediaFactoryInput) => {
