@@ -52,7 +52,7 @@ func NewAxiomEvidence(endpoint, logHeaders string) (AxiomEvidence, error) {
 		return AxiomEvidence{}, nil
 	}
 	if !axiomDatasetName.MatchString(dataset) || dataset == "." || dataset == ".." || !strings.HasPrefix(sink.authorization, "Bearer ") {
-		return AxiomEvidence{}, errors.New("Axiom evidence needs a log dataset and ingest grant")
+		return AxiomEvidence{}, errors.New("missing Axiom log dataset or ingest grant")
 	}
 	ingestURL, err := axiomIngestURL(endpoint, dataset)
 	if err != nil {
