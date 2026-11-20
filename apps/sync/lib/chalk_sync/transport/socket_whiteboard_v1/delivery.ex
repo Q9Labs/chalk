@@ -85,8 +85,7 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Delivery do
 
         payload = Protocol.encode!(presenter_frame(state, frame))
         Observation.delivery(state, frame)
-        {:push, {:text, payload},
-         %{state | outbound: queue}}
+        {:push, {:text, payload}, %{state | outbound: queue}}
 
       :empty ->
         {:ok, state}

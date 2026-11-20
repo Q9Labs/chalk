@@ -33,7 +33,8 @@ defmodule ChalkSync.BoardObservabilityStack do
     )
 
     try do
-      for fault <- ~w(healthy board.edit_not_committed board.out_of_sync board.draw_denied board.snapshot_mismatch) do
+      for fault <-
+            ~w(healthy board.edit_not_committed board.out_of_sync board.draw_denied board.snapshot_mismatch) do
         scenario(port, root, scratch, rows, fault)
       end
     after
@@ -44,7 +45,12 @@ defmodule ChalkSync.BoardObservabilityStack do
     end
   end
 
-  def collect(_event, _measurements, %{"name" => "board." <> _, "episode_id" => episode} = row, table) do
+  def collect(
+        _event,
+        _measurements,
+        %{"name" => "board." <> _, "episode_id" => episode} = row,
+        table
+      ) do
     :ets.insert(table, {episode, row})
   end
 
@@ -83,20 +89,30 @@ defmodule ChalkSync.BoardObservabilityStack do
       )
 
       script = "sdks/typescript/client/tests/board-observability.fault.ts"
-      {result, status} = System.cmd("pnpm", ["exec", "tsx", script, input, output], cd: root, stderr_to_stdout: true)
+
+      {result, status} =
+        System.cmd("pnpm", ["exec", "tsx", script, input, output],
+          cd: root,
+          stderr_to_stdout: true
+        )
+
       if status != 0, do: raise("#{fault} driver failed:\n#{result}")
 
       client = output |> File.read!() |> JSON.decode!()
       sync = :ets.lookup(rows, episode.episode_id) |> Enum.map(&elem(&1, 1))
-      File.write!(capture, JSON.encode!(%{
-        fault: fault,
-        tenant: episode.tenant_id,
-        episode: episode.episode_id,
-        seats: Enum.map(seats, & &1.participant),
-        from: client["from"] - 100,
-        to: client["to"] + 100,
-        rows: client["rows"] ++ sync
-      }))
+
+      File.write!(
+        capture,
+        JSON.encode!(%{
+          fault: fault,
+          tenant: episode.tenant_id,
+          episode: episode.episode_id,
+          seats: Enum.map(seats, & &1.participant),
+          from: client["from"] - 100,
+          to: client["to"] + 100,
+          rows: client["rows"] ++ sync
+        })
+      )
 
       {result, status} =
         System.cmd("node", ["scripts/diagnose-call/fixtures/board-stack.mjs", capture],

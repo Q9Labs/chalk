@@ -38,7 +38,7 @@ Every client witness is scoped by the SDK telemetry credential and outbox source
 A finding needs positive evidence even if the enclosing source has incomplete delivery. Passing needs the required positive rows and the kernel's completeness checks. In particular:
 
 - A locally failed store or a terminal non-access refusal gives `board.edit_not_committed`. For a stored or sent edit, require the positively observed successful author receipt and the matching durable Sync commit (a duplicate receipt is allowed). A policy refusal is handled by `board.draw_denied`, not reported as storage loss.
-- A skipped revision is a recipient replica observation. A matching Sync push supplies upstream evidence; a missing push does not prove Sync lost it. Do not infer a drop from the absence of an update. To pass, require observed updates with the same scene/revision on Sync and the client for the same Participant.
+- A skipped revision is a recipient replica observation. A Sync push of an intervening revision for the Participant supplies upstream evidence, but does not identify which of their sockets missed it; a missing push does not prove Sync lost it. Do not infer a drop from the absence of an update. To pass, require observed updates with the same scene/revision on Sync and the client for the same Participant.
 - A permission refusal gives `board.draw_denied`. A measured read-only state explains access but is not a finding without a refused draw. To pass, require a positive allowed or blocked state.
 - A pair of snapshot witnesses for the same Participant and request ID must agree on scene, revision and count. A mismatch is a finding. An incomplete or missing pair remains unknown. Equal metadata does not prove exact element content.
 
@@ -61,6 +61,28 @@ Drive the real SDK transport against a dev Sync server and Postgres, with two Pa
 
 Healthy control: both initial seats draw and receive each other's edit; the late seat gets the durable board. No board findings. A late seat with no live edits intentionally remains unchecked for edit and live delivery. Check each symptom's fixture with its required witnesses removed; none may pass on missing rows.
 
+### Stack proof
+
+Run the harness on the disposable Linux stack:
+
+```sh
+box run -- 'bash scripts/gates/instabox-run.sh bash scripts/gates/with-postgres.sh -- bash -c "cd apps/sync && export MIX_ENV=test && mix deps.get && mix run --no-start test/support/board_observability_stack.exs && mix test test/chalk_sync/whiteboard_v1"'
+```
+
+The 20 Nov run used the real SDK, Bandit sockets and the Postgres repository. The harness captured emitted facts at their sinks and passed them through the diagnose CLI. It supplied watermarks only for those isolated captures; it did not prove production export or ACK completeness.
+
+| Run | CLI result | Evidence |
+|---|---|---|
+| Healthy | `outcome=unknown coverage=partial(board) checked=14/19`; no findings or backstops | Both initial Participants received the other's edit. The late Participant assembled three elements. No live edit or delivery was expected of that seat in the run; camera evidence was not collected. |
+| Local store refusal | `broken board.edit_not_committed <author> hop=local_store module=sdk.whiteboard upstream=unknown` | The pending-store write failed; the SDK never sent the edit. |
+| Dropped update | `broken board.out_of_sync <recipient> hop=replica module=sdk.whiteboard upstream=witnessed` | Sync pushed revision 1 for that Participant; the SDK recorded a jump from 0 to 2. |
+| Draw refusal | `expected board.draw_denied <recipient> hop=policy module=sdk.whiteboard upstream=unknown reason=board.draw_denied` | The policy changed and the subsequent draw was denied. |
+| Truncated snapshot | `broken board.snapshot_mismatch <late Participant> hop=snapshot module=sdk.whiteboard upstream=witnessed` | The SDK assembled two elements at revision 3 instead of the three Sync read from Postgres. |
+
+All four fault runs identified the expected Participant and hop. The Sync whiteboard suite passed 113 tests. The bounded evidence was enough to distinguish these faults without replay.
+
 ## 7. Out of scope and traps
 
 No scheduled checker, no changes to draw/follow behavior, and no bulk camera or board replay collector unless the fault runs show that these observations cannot distinguish a fault that replay distinguishes. The metadata excludes element bodies, coordinates, files, names, claims and credentials. A replica revision is not proof of a painted canvas or identical content. A final dropped frame with no later baseline is not a proven revision gap. Recovering a later snapshot does not erase a proved earlier gap.
+
+**Foundation dependencies for live use.** The SDK wrapper sends through the existing telemetry outbox, which supplies wire IDs and seqs. In the proof the processes use a shared host-clock sample. Production needs the shared SDK clock estimator fed by server samples, canonical seat binding for ingested client rows, and the Sync obs record exporter and source manifests. The production adapter currently omits an estimate without a sample rather than treating client time or API receive time as event time. The current ledger ACK and export limitations are not addressed here. Until those services supply the witnesses, missing evidence stays a gap.
