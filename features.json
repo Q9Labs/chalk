@@ -439,6 +439,7 @@
         "apps/sync/lib/chalk_sync/observability.ex",
         "apps/sync/test/chalk_sync/obs_test.exs",
         "apps/sync/test/chalk_sync/observability_session_test.exs",
+        "docs/diagnose.md",
         "docs/observability.md",
         "docs/telemetry-delivery.md",
         "features/media/sfu/internal/obs",

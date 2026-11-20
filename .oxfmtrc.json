@@ -19,6 +19,7 @@
     "**/tests/results/**",
     "**/*.snap",
     "scripts/gates/design-tokens-baseline.json",
+    "scripts/diagnose-call/golden/**",
     "**/routeTree.gen.ts",
     "sdks/typescript/react-native/embedded/**",
     "tracker-human.html",
