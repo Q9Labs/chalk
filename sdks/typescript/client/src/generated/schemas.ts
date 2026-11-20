@@ -6096,6 +6096,25 @@ export const StorageInvalidProviderErrorSchema = StorageInvalidProviderErrorWire
   }),
 );
 
+export class TelemetryRefusedError extends Schema.TaggedErrorClass<TelemetryRefusedError>()("TelemetryRefusedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("telemetry.refused"),
+    message: Schema.String,
+  }),
+}) {}
+export const TelemetryRefusedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("telemetry.refused"),
+    message: Schema.String,
+  }),
+});
+export const TelemetryRefusedErrorSchema = TelemetryRefusedErrorWireSchema.pipe(
+  Schema.decodeTo(TelemetryRefusedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TelemetryRefusedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class TenantArtifactPolicyConflictError extends Schema.TaggedErrorClass<TenantArtifactPolicyConflictError>()("TenantArtifactPolicyConflictError", {
   error: Schema.Struct({
     code: Schema.Literal("tenant.artifact_policy_conflict"),
@@ -8109,7 +8128,16 @@ export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema
 export const UploadCallStatsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type UploadCallStatsError = typeof UploadCallStatsErrorSchema.Type;
 
-export const UploadTelemetryErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const UploadTelemetryErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TelemetryRefusedErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type UploadTelemetryError = typeof UploadTelemetryErrorSchema.Type;
 
 export const ChalkOperationPolicies = {

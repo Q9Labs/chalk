@@ -35,8 +35,8 @@ func TestTelemetryV2BatchOnASourceOfAnotherParticipantIsRefusedWithReasonSourceO
 	}
 	body := fmt.Sprintf(`{"version":2,"source_id":%q,"batch_id":%q,"next_seq":4,"end":"closed","events":[%s]}`, ledgerSource, ledgerOtherBatch, strings.Join([]string{ledgerEvent(1), ledgerEvent(2), ledgerEvent(3)}, ","))
 	recorder := f.postWith(token.Token, ledgerRoute, body)
-	if recorder.Code != http.StatusBadRequest || strings.Contains(recorder.Body.String(), "acks") {
-		t.Fatalf("status = %d, body = %s, want 400 with no acks", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), `"code":"telemetry.refused"`) || strings.Contains(recorder.Body.String(), "acks") {
+		t.Fatalf("status = %d, body = %s, want terminal 400 telemetry.refused with no acks", recorder.Code, recorder.Body.String())
 	}
 	if rows := f.rows(t, "sdk.telemetry.rejected"); len(rows) != 1 || rows[0]["reason"] != "source_owned" || rows[0]["source_id"] != ledgerSource {
 		t.Fatalf("rejection rows = %v, want one with reason source_owned naming the source", rows)

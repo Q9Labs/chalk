@@ -112,7 +112,7 @@ func telemetryEndpoint(telemetry TelemetryVerifier, media ParticipantMediaVerifi
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("TelemetryRequest", sdktelemetry.Request{}, sdktelemetry.BodyLimit).
 		Responds(http.StatusOK, "TelemetryResponse", sdktelemetry.Response{}).
-		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorTelemetryRefused, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
 }
 
 // admitTelemetry acknowledges only once the ledger has committed both the ranges and the new payload.
@@ -216,7 +216,7 @@ func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason s
 	case telemetrydelivery.ReasonParticipantGone:
 		return apiErrorForbidden
 	}
-	return apiErrorInvalidRequest
+	return apiErrorTelemetryRefused
 }
 
 var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)

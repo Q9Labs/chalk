@@ -11296,7 +11296,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["request.invalid", "tenant.invalid_id"]
+            "x-chalk-error-codes": ["telemetry.refused", "tenant.invalid_id"]
           },
           "401": {
             "content": {
