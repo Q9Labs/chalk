@@ -115,10 +115,6 @@ func recorderWorkerClaimHandler(service RecorderWorkerService) http.HandlerFunc 
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid claim request id")
 			return
 		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
 		leaseToken, err := utilities.NewID()
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
@@ -231,10 +227,6 @@ func recorderWorkerHeartbeatHandler(service RecorderWorkerService) http.HandlerF
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
 			return
 		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
 		job, err := service.Heartbeat(request.Context(), lease)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
@@ -261,10 +253,6 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 		lease, ok := recorderWorkerLeaseInput(identity, body.LeaseRequest)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker lease")
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		job, err := service.Heartbeat(request.Context(), lease)
@@ -302,10 +290,6 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 				return
 			}
 			availableAt = parsed
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
 		}
 		input := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail}
 		if identity.Role == workeridentity.RoleCapture {
@@ -348,10 +332,6 @@ func recorderWorkerRelinquishCaptureHandler(service RecorderWorkerService) http.
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid capture relinquish")
 			return
 		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
-			return
-		}
 		job, err := service.RelinquishCapture(request.Context(), lease)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
@@ -384,10 +364,6 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 			return
 		}
 		if lease.Observed, ok = recorderWorkerObservations(w, body.Observed); !ok {
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		var job recordingpipeline.Job
@@ -462,10 +438,6 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
 				ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
 			})
-			return
-		}
-		if service == nil {
-			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
 		health, err := service.UpsertPoolHealth(request.Context(), recordingpipeline.PoolHealth{Role: recorderWorkerPoolRole(identity.Role), AdmissionOpen: body.AdmissionOpen, ReadyCapacity: body.ReadyCapacity, Reason: strings.TrimSpace(body.Reason), ObservedAt: observedAt})

@@ -83,12 +83,6 @@ func (s *DeadlineScheduler) Run(ctx context.Context) error {
 	}
 }
 
-func (s *DeadlineScheduler) Health() DeadlineSchedulerHealth {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return DeadlineSchedulerHealth{LastSuccess: s.lastSuccess, LastError: s.lastError}
-}
-
 func (s *DeadlineScheduler) runCycle(ctx context.Context) error {
 	for {
 		cycle, err := s.repository.EnqueueDueEpisodeDeadlines(ctx, s.batch)

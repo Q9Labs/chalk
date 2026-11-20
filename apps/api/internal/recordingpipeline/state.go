@@ -1,7 +1,5 @@
 package recordingpipeline
 
-import "time"
-
 var stateTransitions = map[State]map[State]bool{
 	StateRequested: {
 		StateReserved: true,
@@ -56,87 +54,9 @@ var stateTransitions = map[State]map[State]bool{
 	},
 }
 
-func CanTransition(from, to State) bool {
-	if from == to {
-		return true
-	}
-	return stateTransitions[from][to]
-}
-
-func ValidateTransition(from, to State) error {
-	if !CanTransition(from, to) {
-		return ErrInvalidStateTransition
-	}
-	return nil
-}
-
 type CapturePlacement struct {
 	EpisodesPerNode     int
 	ParticipantsPerNode int
 	InputMbpsPerNode    int
 	ReadySpare          int
-}
-
-func DesiredCaptureNodes(episodes, participants int, inputBitrateBPS int64, placement CapturePlacement) int {
-	if episodes <= 0 && participants <= 0 && inputBitrateBPS <= 0 {
-		return 0
-	}
-	if placement.EpisodesPerNode <= 0 || placement.ParticipantsPerNode <= 0 || placement.InputMbpsPerNode <= 0 {
-		return 0
-	}
-	episodeNodes := ceilDiv(episodes, placement.EpisodesPerNode)
-	participantNodes := ceilDiv(participants, placement.ParticipantsPerNode)
-	bitrateMbps := int((inputBitrateBPS + 999_999) / 1_000_000)
-	bitrateNodes := ceilDiv(bitrateMbps, placement.InputMbpsPerNode)
-	nodes := episodeNodes
-	if participantNodes > nodes {
-		nodes = participantNodes
-	}
-	if bitrateNodes > nodes {
-		nodes = bitrateNodes
-	}
-	return nodes + placement.ReadySpare
-}
-
-func CanAdmit(episodes, participants int, inputBitrateBPS int64) bool {
-	return episodes >= 0 && episodes <= MaximumEpisodes &&
-		participants >= 0 && participants <= MaximumParticipants &&
-		inputBitrateBPS >= 0 && inputBitrateBPS <= MaximumInputBitrateTotalBPS
-}
-
-// RetryAvailableAt keeps retry timing durable and lets dispatchers add bounded
-// jitter before passing the timestamp to PostgreSQL. The executor never needs
-// to hold a database connection while waiting.
-func RetryAvailableAt(now time.Time, attempt int, base, maximum, jitter time.Duration) time.Time {
-	if attempt < 1 {
-		attempt = 1
-	}
-	if base <= 0 {
-		base = time.Second
-	}
-	delay := base
-	for i := 1; i < attempt; i++ {
-		if maximum > 0 && delay >= maximum/2 {
-			delay = maximum
-			break
-		}
-		delay *= 2
-	}
-	if maximum > 0 && delay > maximum {
-		delay = maximum
-	}
-	if jitter > 0 {
-		delay += jitter
-		if maximum > 0 && delay > maximum {
-			delay = maximum
-		}
-	}
-	return now.Add(delay)
-}
-
-func ceilDiv(value, divisor int) int {
-	if value <= 0 {
-		return 0
-	}
-	return (value + divisor - 1) / divisor
 }

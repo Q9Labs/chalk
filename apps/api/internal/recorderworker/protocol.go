@@ -4,7 +4,6 @@
 package recorderworker
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -171,43 +170,6 @@ type TerminalResult struct {
 	ArtifactHash string      `json:"artifact_hash,omitempty"`
 }
 
-func (e WorkerEvent) MarshalJSON() ([]byte, error) {
-	type alias WorkerEvent
-	if e.ProtocolVersion == "" {
-		e.ProtocolVersion = ProtocolVersion
-	}
-	return json.Marshal(alias(e))
-}
-
-func (e WorkerEvent) Validate(now time.Time) error {
-	if e.ProtocolVersion != ProtocolVersion {
-		return errors.New("unsupported worker event protocol")
-	}
-	if e.JobID == "" || e.TenantID == "" || e.EpisodeID == "" || e.Attempt < 1 || e.FencingGeneration < 1 {
-		return errors.New("worker event identity is incomplete")
-	}
-	if e.At.IsZero() || e.At.After(now.Add(5*time.Minute)) {
-		return errors.New("worker event timestamp is invalid")
-	}
-	switch e.Type {
-	case EventHeartbeat:
-		if e.Heartbeat == nil || e.Heartbeat.LeaseExpiresAt.Before(e.At) {
-			return errors.New("heartbeat lease is missing or expired")
-		}
-	case EventProgress:
-		if e.Progress == nil || e.Progress.Stage == "" || e.Progress.Completed < 0 || e.Progress.Total < e.Progress.Completed {
-			return errors.New("progress payload is invalid")
-		}
-	case EventTerminal:
-		if e.Terminal == nil || e.Terminal.Outcome == "" {
-			return errors.New("terminal outcome is missing")
-		}
-	default:
-		return errors.New("unknown worker event type")
-	}
-	return nil
-}
-
 // CaptureProvider is the narrow provider boundary. Real Cloudflare/Pion
 // integration is intentionally absent until its authentication contract lands.
 type CaptureProvider interface {
@@ -223,16 +185,6 @@ type RenderSession interface{ Close() error }
 
 type CloudflareCaptureProvider struct{}
 
-func (CloudflareCaptureProvider) Capture(Job) (CaptureConnection, error) {
-	return nil, ErrProviderUnimplemented
-}
-
 type PionCaptureProvider struct{}
 
-func (PionCaptureProvider) Capture(Job) (CaptureConnection, error) {
-	return nil, ErrProviderUnimplemented
-}
-
 type GPURenderProvider struct{}
-
-func (GPURenderProvider) Render(Job) (RenderSession, error) { return nil, ErrProviderUnimplemented }

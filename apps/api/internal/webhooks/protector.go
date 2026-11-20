@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -104,12 +103,4 @@ func URLScope(tenantID, endpointID, targetRevisionID utilities.ID) string {
 }
 func IdempotencyScope(tenantID utilities.ID, operation, key string) string {
 	return "webhook/tenant/" + tenantID.String() + "/idempotency/" + operation + "/" + key
-}
-
-func DecodeEncryptionKey(value string) ([]byte, error) {
-	key, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || len(key) != 32 {
-		return nil, errors.New("webhook encryption key must be base64-encoded 32 bytes")
-	}
-	return key, nil
 }

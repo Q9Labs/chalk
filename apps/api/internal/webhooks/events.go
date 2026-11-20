@@ -199,23 +199,6 @@ func EncodeEpisodeEvent(metadata EventMetadata, snapshot EpisodeSnapshot) ([]byt
 	return encodeEvent(metadata, data)
 }
 
-func EncodeParticipantEvent(metadata EventMetadata, snapshot ParticipantSnapshot) ([]byte, [32]byte, error) {
-	if !metadata.Name.isOneOf(EventParticipantJoined, EventParticipantLeft) {
-		return nil, [32]byte{}, ErrInvalidEventType
-	}
-	if !validUUIDv4(snapshot.ID) || !validUUIDv4(snapshot.SpaceID) || !validUUIDv4(snapshot.EpisodeID) || snapshot.JoinedAt.IsZero() || (snapshot.IdentityID != nil && !validUUIDv4(*snapshot.IdentityID)) {
-		return nil, [32]byte{}, errors.New("invalid participant identity")
-	}
-	if metadata.Name == EventParticipantJoined && (snapshot.Status != "active" || snapshot.LeftAt != nil) {
-		return nil, [32]byte{}, errors.New("invalid participant.joined snapshot")
-	}
-	if metadata.Name == EventParticipantLeft && (snapshot.Status != "left" || zeroTime(snapshot.LeftAt)) {
-		return nil, [32]byte{}, errors.New("invalid participant.left snapshot")
-	}
-	data := participantData{Object: participantObject{snapshot.ID, snapshot.IdentityID, snapshot.SpaceID, snapshot.EpisodeID, snapshot.Name, snapshot.Status, timestamp(snapshot.JoinedAt), optionalTimestamp(snapshot.LeftAt)}}
-	return encodeEvent(metadata, data)
-}
-
 func EncodeTestEvent(metadata EventMetadata, endpointID utilities.ID) ([]byte, [32]byte, error) {
 	if endpointID.IsZero() || !validUUIDv4(endpointID.String()) {
 		return nil, [32]byte{}, errors.New("invalid webhook endpoint id")

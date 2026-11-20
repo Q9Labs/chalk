@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -460,10 +459,6 @@ func (input ObservationInput) Canonicalize() (ObservationInput, [32]byte, json.R
 
 func (input ObservationInput) Cursor() Cursor {
 	return Cursor{Incarnation: input.Incarnation, Sequence: input.Sequence}
-}
-
-func FingerprintHex(value [32]byte) string {
-	return hex.EncodeToString(value[:])
 }
 
 func validateEffectFields(input OperationInput) error {
