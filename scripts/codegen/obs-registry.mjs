@@ -16,6 +16,7 @@ import { addArea, checkCrossReferences, axiomBudget } from "./obs-registry/event
 const GO_KERNEL_DIR = "observability/kernel/go";
 const GO_TARGETS = ["apps/api/internal/obs", "features/media/sfu/internal/obs"];
 const TS_REGISTRY = "sdks/typescript/client/src/obs/registry.ts";
+const DISPATCHER_TS_REGISTRY = "apps/transcription-dispatcher/src/obs/registry.ts";
 const EX_REGISTRY = "apps/sync/lib/chalk_sync/obs/generated/registry.ex";
 
 export async function loadRegistry(root = repositoryRoot) {
@@ -121,6 +122,7 @@ export async function generate(root = repositoryRoot) {
   const outputs = {};
   for (const [path, value] of Object.entries(emitJson(model, axiom))) outputs[path] = `${JSON.stringify(value, null, 2)}\n`;
   outputs[TS_REGISTRY] = emitTypeScript(model);
+  outputs[DISPATCHER_TS_REGISTRY] = emitTypeScript(model);
   outputs[EX_REGISTRY] = emitElixir(model);
   const goRegistry = emitGo(model);
   for (const target of GO_TARGETS) outputs[`${target}/registry_gen.go`] = goRegistry;

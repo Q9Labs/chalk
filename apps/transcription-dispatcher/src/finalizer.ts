@@ -2,6 +2,7 @@ import { AssignmentError, isLateCompletion, isTerminalFailure, safeErrorCode } f
 import { mergeTranscriptDocuments } from "./finalizer-merge.js";
 import type { ChunkDocument } from "./finalizer-merge.js";
 import { serializeTranscript } from "./normalize.js";
+import { errorReason } from "./obs/kernel.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
 import { fetchVerified, putResult } from "./storage.js";
@@ -23,9 +24,10 @@ export function finalizeQueue(context: DispatcherContext, dependencies: Dispatch
 
 async function processFinalizeAssignment(assignment: FinalizeAssignment, journey: JourneyContext, context: DispatcherContext, dependencies: DispatcherDependencies, now: () => number): Promise<"completed" | "failed"> {
   const logger = loggerOf(dependencies);
-  try {
+  const work = async (scope?: { set(fields: Record<string, string | number>): void }) => {
     const chunks = await fetchChunkDocuments(assignment, journey, context, dependencies, now);
     const document = mergeTranscriptDocuments({ jobId: assignment.jobId, episodeId: assignment.episodeId, attempt: assignment.attempt, chunks, maxTextChars: dependencies.config.provider.maxTextChars });
+    scope?.set({ transcript_cue_count: document.cues.length });
     const stored = await putResult({ fetch: dependencies.fetch, url: assignment.outputPutUrl, body: serializeTranscript(document), maxBytes: dependencies.config.provider.maxResponseBytes, tooLarge: "final transcript exceeded bound", logger, logPrefix: "finalize" });
     await dependencies.control.completeFinalize({
       jobId: assignment.jobId,
@@ -42,19 +44,26 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
       context: journey,
     });
     logger.info("finalize_completed", { provider: document.provider, cues: document.cues.length });
-    return "completed";
-  } catch (error) {
+    return "completed" as const;
+  };
+  const observed =
+    dependencies.obs === undefined
+      ? work()
+      : dependencies.obs.op("transcript.finalize", { job_id: assignment.jobId, episode_id: assignment.episodeId, attempt: assignment.attempt, journey_id: journey.journeyId }, work, {
+          classify: (error) => (isLateCompletion(error) ? { outcome: "expected", code: "transcript.late_completion" } : { outcome: "error", code: errorReason(safeErrorCode(error)) }),
+        });
+  return observed.catch(async (error) => {
     if (isLateCompletion(error)) {
       logger.warn("finalize_failed", { error: safeErrorCode(error), attempt: assignment.attempt, terminal: false });
       logger.warn("finalize_late_or_duplicate_completion_rejected");
-      return "failed";
+      return "failed" as const;
     }
     const terminal = isTerminalFailure(error);
     const errorCode = safeErrorCode(error);
     logger.warn("finalize_failed", { error: errorCode, attempt: assignment.attempt, terminal });
     await retryFinalize(dependencies, assignment, journey, errorCode, terminal);
-    return "failed";
-  }
+    return "failed" as const;
+  });
 }
 
 /** Download every chunk result, keeping the lease alive and the total size bounded. */

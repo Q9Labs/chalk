@@ -18,6 +18,16 @@ const QUEUES_BY_SOURCE = {
 
 export async function runDispatcher(event: DispatcherEvent = {}, context: DispatcherContext, dependencies: DispatcherDependencies): Promise<RunSummary> {
   const journey = journeyFor(event);
+  const source = event.source ?? "wake";
+  const run = () => drain(event, source, journey, context, dependencies);
+  if (dependencies.obs === undefined) return run();
+  const summary = await dependencies.obs.op("transcript.dispatcher.invoke", { transcript_dispatch_source: source, journey_id: journey.journeyId }, run, {
+    classify: () => ({ outcome: "error", code: "transcript.dispatcher_failure" }),
+  });
+  return summary;
+}
+
+async function drain(event: DispatcherEvent, source: string, journey: ReturnType<typeof journeyFor>, context: DispatcherContext, dependencies: DispatcherDependencies): Promise<RunSummary> {
   const queues = QUEUES_BY_SOURCE[event.source ?? "wake"];
   const budgets = splitBudget(Math.min(dependencies.config.maxBatch, dependencies.config.concurrency), queues.length);
   const results = await Promise.all(

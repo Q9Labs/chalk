@@ -1,6 +1,7 @@
 import { AssignmentError, ProviderError, isLateCompletion, isTerminalFailure, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
 import type { TranscriptionAssignment } from "./assignment-types.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
+import { errorReason } from "./obs/kernel.js";
 import { isReasonWord } from "./provider-failure.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
@@ -28,7 +29,7 @@ export function transcriptionQueue(context: DispatcherContext, dependencies: Dis
 
 async function processAssignment(assignment: TranscriptionAssignment, journey: JourneyContext, context: DispatcherContext, dependencies: DispatcherDependencies, circuit: InvocationCircuit, now: () => number): Promise<"completed" | "failed"> {
   const logger = loggerOf(dependencies);
-  try {
+  const work = async () => {
     await dependencies.control.heartbeat({ assignment, context: journey });
     const { audio, manifest } = await fetchInputs(assignment, dependencies);
     const transcription = await transcribeWithFallback({
@@ -67,15 +68,27 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     const stored = await putResult({ fetch: dependencies.fetch, url: assignment.outputPutUrl, body: serializeTranscript(document), maxBytes: dependencies.config.provider.maxResponseBytes, tooLarge: "normalized transcript exceeded bound", logger, logPrefix: "dispatcher" });
     await dependencies.control.complete({ ...completionInput(assignment, stored, transcription.result), context: journey });
     logger.info("dispatcher_completed", { provider: transcription.result.provider, fallback: transcription.usedFallback, attempts: transcription.providerAttempts });
-    return "completed";
-  } catch (error) {
+    return "completed" as const;
+  };
+  const observed =
+    dependencies.obs === undefined
+      ? work()
+      : dependencies.obs.op("transcript.chunk", trailFields(assignment, journey), work, {
+          classify: (error) => (isLateCompletion(error) ? { outcome: "expected", code: "transcript.late_completion" } : { outcome: "error", code: errorReason(safeErrorCode(error)) }),
+        });
+  return observed.catch(async (error) => {
     if (isLateCompletion(error)) {
       logger.warn("dispatcher_late_or_duplicate_completion_rejected");
-      return "failed";
+      return "failed" as const;
     }
     await reportAssignmentFailure(error, assignment, journey, dependencies.control, logger);
-    return "failed";
-  }
+    return "failed" as const;
+  });
+}
+
+/** The trail the kernel stamps on a chunk op: the ids the assignment already knows. */
+function trailFields(assignment: TranscriptionAssignment, journey: JourneyContext): Record<string, string | number> {
+  return { job_id: assignment.jobId, tenant_id: assignment.tenantId, episode_id: assignment.episodeId, attempt: assignment.attempt, journey_id: journey.journeyId };
 }
 
 function measuredAudioMs(assignment: TranscriptionAssignment): number {

@@ -1,5 +1,7 @@
 import { MaiTranscribeProvider } from "./mai-provider.js";
 import { loadReleaseConfig, required, secretParameterNames } from "./config.js";
+import { createKernel } from "./obs/kernel.js";
+import { ENVIRONMENTS, type Environment } from "./obs/registry.js";
 import { RecorderControlApiClient } from "./control-api.js";
 import { createLambdaHandler } from "./dispatcher.js";
 import { CloudflareWhisperProvider, DeepInfraWhisperProvider } from "./providers.js";
@@ -35,6 +37,18 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
         policy: config.provider,
       })
     : undefined;
+  const logger = {
+    info: (event: string, fields?: Record<string, string | number | boolean>) => console.info(event, fields ?? {}),
+    warn: (event: string, fields?: Record<string, string | number | boolean>) => console.warn(event, fields ?? {}),
+  };
+  const environment = ENVIRONMENTS.includes(config.environment as Environment) ? (config.environment as Environment) : "local";
+  const obs = createKernel({
+    // The sink is one JSON line per record: `console.info(name, fields)` in dev (the local-run harness appends
+    // dispatcher.jsonl) and the same two-argument shape in Lambda's CloudWatch logs.
+    sink: (record) => logger.info(record.name, { ...record }),
+    build: { module: "transcription_dispatcher", env: environment, platform: "lambda", release_sha: config.releaseId },
+    mode: process.env.CHALK_OBS_MODE === "closed" || process.env.VITEST !== undefined ? "closed" : "open",
+  });
   return createLambdaHandler({
     config,
     control,
@@ -42,10 +56,8 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
     ...(primary === undefined ? {} : { primary }),
     ...(fallback ? { fallback } : {}),
     fetch: fetchImpl,
-    logger: {
-      info: (event, fields) => console.info(event, fields ?? {}),
-      warn: (event, fields) => console.warn(event, fields ?? {}),
-    },
+    logger,
+    obs,
   });
 }
 

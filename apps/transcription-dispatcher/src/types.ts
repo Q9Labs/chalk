@@ -1,5 +1,6 @@
 import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { ClaimResponse, CleanupAssignment, FinalizeClaimResponse } from "./assignment-types.js";
+import type { Kernel } from "./obs/kernel.js";
 import type { ProviderPolicy, ProviderResult, TranscriptProviderSummary, TranscriptionProvider } from "./provider-types.js";
 
 export interface JourneyContext {
@@ -121,6 +122,7 @@ export interface DispatcherDependencies {
   fallback?: TranscriptionProvider;
   fetch: typeof fetch;
   logger?: DispatcherLogger;
+  obs?: Kernel;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
