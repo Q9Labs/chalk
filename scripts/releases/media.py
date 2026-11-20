@@ -9,7 +9,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(ROOT / 'scripts/recorder'))
@@ -106,16 +105,6 @@ def baseline(args):
 def check_configuration(args):
     require(fingerprint('dispatcher_configuration') == SUPPORTED_DISPATCHER_CONFIGURATION,
             'dispatcher infrastructure configuration changed; this media release path cannot migrate root inputs; apply a separately reviewed infrastructure migration before updating the supported configuration checksum')
-
-
-def record_current(args):
-    require(args.environment == 'nightly', 'current media record is nightly-only')
-    data = args.output.read_bytes()
-    validate_members(json.loads(data))
-    receipts = [json.loads((args.directory / (role + '-receipt.json')).read_text()) for role in ('capture', 'render')]
-    require(all(item['result'] == 'PASS' and item['fleet_equivalent_signed_boot'] and item['cleanup_confirmed'] for item in receipts), 'current media requires successful signed boot and cleanup')
-    GitHub().request('deployments', dict(ref=os.environ['TARGET_SHA'], environment='nightly', task='media-current', auto_merge=False,
-                     required_contexts=[], payload=retain(dict(channel='media-current', media_sha256=digest(data)), 'media', data)))
 
 
 def build_archives(args):
@@ -302,74 +291,9 @@ def deploy_dispatcher(args):
         print(json.dumps(proof))
 
 
-def reconcile_nightly_address(provider, config):
-    """Move the existing allocation; never allocate, release, or change DNS."""
-    instance_id = config['runtime']['instance_id']
-    require(instance_id == os.environ.get('CHALK_MANAGED_INSTANCE_ID'),
-            'nightly recorder SSM target must match the deployed instance')
-    instances = provider.aws('ec2', 'describe-instances', '--instance-ids', instance_id)
-    hosts = [host for reservation in instances['Reservations'] for host in reservation['Instances']]
-    require(len(hosts) == 1 and hosts[0]['InstanceId'] == instance_id, 'nightly address target is ambiguous')
-    tags = {tag['Key']: tag['Value'] for tag in hosts[0].get('Tags', [])}
-    require(tags.get('chalk:environment') == 'nightly', 'recorder address target must be tagged nightly')
-    require(hosts[0]['State']['Name'] == 'running', 'nightly address target must be running')
-    addresses = provider.aws('ec2', 'describe-addresses', '--filters',
-                             'Name=tag:Name,Values=chalk-nightly-recording-control',
-                             'Name=tag:chalk:environment,Values=nightly')['Addresses']
-    require(len(addresses) == 1, 'expected exactly one retained nightly recorder allocation; recover it before release')
-    address = addresses[0]
-    tags = {tag['Key']: tag['Value'] for tag in address.get('Tags', [])}
-    require(tags.get('Name') == 'chalk-nightly-recording-control' and tags.get('chalk:environment') == 'nightly',
-            'recorder allocation must be tagged nightly')
-    allocation = address['AllocationId']
-    if address.get('InstanceId') != instance_id:
-        provider.aws('ec2', 'associate-address', '--allocation-id', allocation,
-                     '--instance-id', instance_id, '--allow-reassociation')
-    # Also covers a retry after AWS moved the address but the client lost its response.
-    for attempt in range(12):
-        current = provider.aws('ec2', 'describe-addresses', '--allocation-ids', allocation)['Addresses']
-        if len(current) == 1 and current[0].get('InstanceId') == instance_id:
-            require(current[0]['PublicIp'] == address['PublicIp'], 'nightly recorder allocation changed address')
-            print('Nightly recorder address association ready', flush=True)
-            return
-        if attempt < 11:
-            time.sleep(5)
-    raise RuntimeError('nightly recorder address association did not converge; cold boot refused')
-
-
-# The fleet's archive CDN settings; the boot check gets them too, so it downloads through CloudFront and not S3 (0.12 USD a GB).
-ARCHIVE_CDN_KEYS = ('CHALK_RECORDER_FLEET_ARCHIVE_CDN_URL', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_KEY_PAIR_ID', 'CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64')
-
-
-def qualify(args):
-    provider, config = settings(args)
-    media = validate_members(json.loads(args.output.read_text()))
-    if args.environment == 'nightly':
-        require(args.config_parameter == '/chalk/nightly/release/recorder.json', 'nightly address requires canonical SSM config')
-        reconcile_nightly_address(provider, config)
-    args.directory.mkdir(parents=True, exist_ok=True)
-    # The two roles boot separate droplets with their own evidence, so they run side by side; both finish (and clean up) even when one fails.
-    checks = []
-    try:
-        for role in ('capture', 'render'):
-            values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])
-            image = media[role]
-            request = dict(schema_version=1, role=role, source_commit=image['source_revision'], release_id=image['release_id'], image_id=int(image['base_snapshot_id']), archive=dict(bucket=os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'], key=image['archive_key'], sha256=image['archive_sha256'], region=args.region), image_digest=image['image_digest'], region=values['CHALK_RECORDER_FLEET_REGION'], size=values['CHALK_RECORDER_FLEET_SIZE'])
-            path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
-            private_json(path, request)
-            checks.append(subprocess.Popen([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)],
-                           env={**os.environ, **{key: values[key] for key in ARCHIVE_CDN_KEYS if key in values}, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
-                                'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter}))
-    finally:
-        # A setup error on one role must not orphan the other role's droplet; the original error still propagates.
-        failed = [check for check in checks if check.wait() != 0]
-    if failed:
-        raise subprocess.CalledProcessError(failed[0].returncode, failed[0].args)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'record_current', 'build_archives', 'publish_zip', 'zip_needed', 'pin_archives', 'deploy_dispatcher', 'qualify'))
+    parser.add_argument('command', choices=('retain_runtime', 'check_configuration', 'baseline', 'build_archives', 'publish_zip', 'zip_needed', 'pin_archives', 'deploy_dispatcher'))
     parser.add_argument('--environment', choices=('nightly', 'production'), default=os.environ.get('MANAGED_ENVIRONMENT', 'nightly'))
     parser.add_argument('--region', default=os.environ.get('AWS_REGION'))
     parser.add_argument('--config-parameter', default=os.environ.get('CHALK_MANAGED_RECORDER_CONFIG_PARAMETER'))

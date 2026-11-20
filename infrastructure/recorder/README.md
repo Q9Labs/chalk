@@ -41,7 +41,7 @@ The control-plane API is under `/internal/v1/recorder/fleet` in `apps/api/intern
 
 ## Recorder images
 
-Release owns image builds, inspection, fleet pins, signed cold-boot qualification and deployment; Promote selects the same snapshot IDs without rebuilding ([managed releases](../../docs/managed-release.md)). Never build or publish fleet pins outside that path.
+Release owns image builds, inspection, fleet pins and deployment; Promote selects the same snapshot IDs without rebuilding ([managed releases](../../docs/managed-release.md)). Never build or publish fleet pins outside that path.
 
 `images/capture` builds a minimal Capture image with no Node, Chromium, FFmpeg or boot-time package installation (bootstrap accepts `capture-minimal-v1` only for Capture). `images/cpu` builds the render worker with checksum-pinned toolchains (see its scripts). Release starts a clean Debian builder at the fleet's disk size and raises only CPU and memory if needed, because the snapshot must fit the fleet.
 

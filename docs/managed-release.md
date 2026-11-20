@@ -25,7 +25,7 @@ A hotfix is rehearsed on the same kind of host by `Hotfix rehearsal` (`.github/w
 
 If the saved build baseline has expired, the cut rebuilds the saved set of enabled components. A baseline too old to say which components were enabled fails closed instead of turning recording off. Fix it with a new explicit `Release` baseline.
 
-`enable_recorder_control=false` gives a backend-only nightly bring-up. Set `CHALK_RECORDING_ENABLED=false` and `CHALK_TRANSCRIPTION_ENABLED=false` in nightly's runtime config first, because the input does not rewrite SSM values. Production ignores the input and keeps recorder control from its baseline.
+`enable_recorder_control` chooses whether a cut includes recorder control and media. Production ignores the input and keeps recorder control from its baseline.
 
 Recorder archives are content-addressed (`recorder/<role>/<sha256>.tar.gz`) and built on the runner without DigitalOcean credentials. A recorder host gets a short-lived download URL from the controller, so no AWS credentials live on a host. Snapshot v2 holds no hostname or CA: cloud-init installs the environment's own. The sidecar `<release_id>.media.json` binds snapshots, archives, hashes and the dispatcher ZIP identity to the release.
 
@@ -58,15 +58,9 @@ A failed production deploy or call runs `Release` again with the verified previo
 
 When the legacy production baseline has no retained manifest, a manual production release creates the durable baseline.
 
-## Iterate on the deployed Nightly build
+## Debug a failed cut
 
-A cut only confirms. To debug a failure, deploy master to nightly alone, then run single proofs against it. The Gate of `target_sha` must have passed, and the run queues behind a running cut.
-
-```sh
-gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -f release_managed=true -f deploy_managed=true -f deploy_web=true -f managed_environment=nightly -f enable_recorder_control=true
-```
-
-`.github/workflows/real-call-proof.yml` runs only proof code already on master, so a fix to a proof merges first. Until then, run `pnpm prod:proof <name>` from the branch. Dispatch it with `-f environment=nightly -f media_plane=chalk_sfu -f proofs=<name>`. `latency_samples` only shortens the latency run, so its p95 is not the gate value.
+Nightly has no host, so nothing deploys to it: `Release` refuses `deploy_managed` for any environment but production. To debug a failure, rerun the failed lane of the cut (`gh run rerun <run id> --failed`), or boot the same throwaway stack on a machine with `scripts/nightly-stack/boot` and run `pnpm prod:proof <name>` against it. `latency_samples` only shortens the latency run, so its p95 is not the gate value.
 
 ## Private release state
 
