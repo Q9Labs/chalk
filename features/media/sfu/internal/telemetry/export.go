@@ -15,24 +15,6 @@ import (
 // `event` attribute names a row, with the row's fields and no others, rewritten to carry the event
 // name as its body. The journal keeps every line unfiltered.
 
-// ExportedEvents lists the events that may leave the node.
-func ExportedEvents() []string {
-	names := make([]string, 0, len(media.EventFields))
-	for name := range media.EventFields {
-		names = append(names, name)
-	}
-	return names
-}
-
-// ExportedFields lists the fields an event may export, or nil when the event may not leave.
-func ExportedFields(event string) []string {
-	extra, ok := media.EventFields[event]
-	if !ok {
-		return nil
-	}
-	return append(append([]string(nil), media.IDFields...), extra...)
-}
-
 // token is the shape of every exported string: an enum value, an id or a candidate-type path. It
 // has no space, quote, bracket or equals sign, so a sentence, a SDP line or an `ip:port` pair
 // embedded in text cannot pass; the field list keeps a bare address out as well.
