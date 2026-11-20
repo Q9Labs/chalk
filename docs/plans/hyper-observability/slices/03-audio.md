@@ -44,7 +44,7 @@ Scope observations by Episode, seat, and connection or generation where availabl
 | --- | --- |
 | Client facts | `MediaDeviceSelection.getUserMedia`, microphone transitions in `space-client/media-controller.ts`, publication in `media/client.ts`, and `AudioReceiveHealth` at the point it measures active remote tracks. The SDK uses one typed telemetry event, mapped by the registry on read through the legacy event adapter. |
 | Sync fact | `external_operation_consumer/execution.ex` records a forced stop after the provider operation and the original durable moderation decision both succeed. |
-| SFU facts | Ingress at `Session.traceIngress` and subscription egress at `Session.traceMedia`. Keep counters at the packet boundary and emit on the existing reporting loop, not per packet. |
+| SFU facts | Ingress at `Session.traceIngress` and subscription egress at `Session.traceMedia`. Count ingress and RTP write results at the packet boundary, and emit on the existing reporting loop. The SFU's OTLP allowlist keeps the envelope and publication key. |
 | Surface | React commits the speaking or mute indicators; its audio output reports the result of element play and retry through the existing audio observer. |
 
 ## 6. Fault scenarios
@@ -75,7 +75,7 @@ cd features/media/sfu
 go test -run '^TestMicrophoneObservationsFollowLiveRTP$' ./tests
 ```
 
-Live verdict delivery still needs the shared SDK ledger to supply the canonical seat and calibrated time envelope, and Sync to export its kernel signal. The fixture envelope is not proof of those paths.
+On a non-production Orb, a real Chromium call emitted the permission denial and the autoplay block, and the unblocked control emitted capture, publication and playback. Replaying those browser claims through the judge names the same fault boundaries. Live verdict delivery still needs the shared SDK ledger to supply the canonical seat and calibrated time envelope, and Sync to export its kernel signal. The fixture envelope is not proof of those paths.
 
 ## 7. Out of scope and traps
 

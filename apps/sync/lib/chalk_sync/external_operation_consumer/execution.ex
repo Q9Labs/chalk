@@ -88,7 +88,9 @@ defmodule ChalkSync.ExternalOperationConsumer.Execution do
 
       {:ok, _decision} ->
         :confirmed
-      result -> finalization_failure(operation.name, result)
+
+      result ->
+        finalization_failure(operation.name, result)
     end
   end
 
