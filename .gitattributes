@@ -25,9 +25,14 @@
 # `pnpm run check:generated` confirm before pushing.
 apps/api/docs/generated-canonical-openapi.js linguist-generated merge=generated
 apps/api/internal/adapters/postgres/sqlc/** linguist-generated merge=generated
+apps/api/internal/obs/** linguist-generated merge=generated
 apps/sync/lib/chalk_sync/contract/generated.ex linguist-generated merge=generated
 apps/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex linguist-generated merge=generated
+apps/sync/lib/chalk_sync/obs/registry.ex linguist-generated merge=generated
 contract/generated/** linguist-generated merge=generated
+features/media/sfu/internal/obs/** linguist-generated merge=generated
+observability/generated/** linguist-generated merge=generated
 sdks/typescript/client/src/generated/** linguist-generated merge=generated
+sdks/typescript/client/src/obs/registry.ts linguist-generated merge=generated
 tracker-human.html linguist-generated merge=generated
 tracker-human.md linguist-generated merge=generated

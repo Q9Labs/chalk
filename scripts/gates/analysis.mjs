@@ -23,6 +23,9 @@ const deadcode = "golang.org/x/tools/cmd/deadcode@v0.52.0";
 const jscpd = "jscpd@5.4.3";
 const jscpdIgnore = [
   "**/generated/**",
+  // Generated copies of observability/kernel/go, which jscpd still reads as the source.
+  "apps/api/internal/obs/**",
+  "features/media/sfu/internal/obs/**",
   "**/sqlc/**",
   "**/node_modules/**",
   "**/dist/**",

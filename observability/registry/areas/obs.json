@@ -1,0 +1,53 @@
+{
+  "area": "obs",
+  "slice": 0,
+  "title": "The kernel itself",
+  "prefixes": ["obs"],
+  "fields": [
+    {
+      "name": "flags",
+      "type": "map",
+      "sensitivity": null,
+      "doc": "The full flags map: config switches, the media-plane kill switch and caps. Never credentials."
+    },
+    {
+      "name": "jump_ms",
+      "type": "int",
+      "sensitivity": null,
+      "doc": "How far the wall clock stepped against the monotonic clock."
+    }
+  ],
+  "events": [
+    {
+      "name": "obs.flags_snapshot",
+      "kind": "fact",
+      "dataset": "infra",
+      "side": "any",
+      "modules": [],
+      "doc": "The full flags map behind the flags_hash the kernel stamps on this and every later record. Logged at boot, at join and whenever the flags change.",
+      "fields": {
+        "flags": {
+          "required": true
+        }
+      },
+      "emit_sites": []
+    },
+    {
+      "name": "obs.clock_jump",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The client's wall clock stepped, so its clock samples were dropped and clock_epoch moved on.",
+      "fields": {
+        "jump_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": []
+    }
+  ],
+  "reasons": [],
+  "machines": [],
+  "symptoms": []
+}

@@ -1,0 +1,19 @@
+{
+  "area": "share",
+  "slice": 5,
+  "title": "Screen share",
+  "prefixes": ["share"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": [
+    {
+      "code": "share.wont_stop",
+      "doc": "The Participant stopped sharing but others still see the share.",
+      "user_words": ["my screen is still being shared"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}

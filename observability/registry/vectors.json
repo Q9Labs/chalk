@@ -1,0 +1,589 @@
+{
+  "doc": "Cross-language test vectors. The TypeScript, Go and Elixir kernels must all agree with every case. Regenerating them is a contract change.",
+  "format": [
+    {
+      "kind": "episode",
+      "id": "0F8FAD5B-D9CB-469F-A165-70867728950E",
+      "expect": "ep_0f8fad5bd9cb469fa16570867728950e"
+    },
+    {
+      "kind": "trace",
+      "id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "expect": "tr_4bf92f3577b34da6a3ce929d0e0e4736"
+    },
+    {
+      "kind": "span",
+      "id": "00f067aa0ba902b7",
+      "expect": "sp_00f067aa0ba902b7"
+    },
+    {
+      "kind": "user",
+      "id": "learner-42",
+      "expect": "usr_learner-42"
+    },
+    {
+      "kind": "episode",
+      "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "scope": ["0f8fad5b-d9cb-469f-a165-70867728950e", "0f8f1111-0000-4000-8000-000000000000", "9a000000-0000-4000-8000-000000000000"],
+      "expect": "ep_0f8fa"
+    },
+    {
+      "kind": "episode",
+      "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "scope": ["0f8fad5b-d9cb-469f-a165-70867728950e", "9a000000-0000-4000-8000-000000000000"],
+      "expect": "ep_0f8f"
+    },
+    {
+      "kind": "episode",
+      "id": "not-a-uuid",
+      "error": true
+    },
+    {
+      "kind": "user",
+      "id": "has space",
+      "error": true
+    }
+  ],
+  "parse": [
+    {
+      "text": "ep_0f8fad5bd9cb469fa16570867728950e",
+      "expect": {
+        "form": "full",
+        "kind": "episode",
+        "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+      }
+    },
+    {
+      "text": "EP_0F8F",
+      "expect": {
+        "form": "short",
+        "kind": "episode",
+        "prefix": "0f8f"
+      }
+    },
+    {
+      "text": "ep_0f8fad5b-d9cb-469f-a165-70867728950e",
+      "expect": {
+        "form": "full",
+        "kind": "episode",
+        "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+      }
+    },
+    {
+      "text": "tr_4bf92f3577b34da6a3ce929d0e0e4736",
+      "expect": {
+        "form": "full",
+        "kind": "trace",
+        "id": "4bf92f3577b34da6a3ce929d0e0e4736"
+      }
+    },
+    {
+      "text": "sp_00f067aa",
+      "expect": {
+        "form": "short",
+        "kind": "span",
+        "prefix": "00f067aa"
+      }
+    },
+    {
+      "text": "usr_learner-42",
+      "expect": {
+        "form": "full",
+        "kind": "user",
+        "id": "learner-42"
+      }
+    },
+    {
+      "text": "pm_abc123",
+      "expect": {
+        "form": "full",
+        "kind": "provider_media",
+        "id": "abc123"
+      }
+    },
+    {
+      "text": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "expect": {
+        "form": "bare",
+        "candidates": [
+          {
+            "kind": "tenant",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "space",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "episode",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "participant",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "device",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "client_session",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "journey",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "request",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "media_connection",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "sync_connection",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "operation",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "decision",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "recording",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "job",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "webhook_delivery",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "admission_request",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "event",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "batch",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "finding",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          }
+        ]
+      }
+    },
+    {
+      "text": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "expect": {
+        "form": "bare",
+        "candidates": [
+          {
+            "kind": "tenant",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "space",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "episode",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "participant",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "device",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "client_session",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "journey",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "request",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "trace",
+            "id": "4bf92f3577b34da6a3ce929d0e0e4736"
+          },
+          {
+            "kind": "media_connection",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "sync_connection",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "operation",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "decision",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "recording",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "job",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "webhook_delivery",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "admission_request",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "event",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "batch",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "finding",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          }
+        ]
+      }
+    },
+    {
+      "text": "c812e1edb64417d6090dcfbaf16c21cd8e8665c04396e1edb472fecfb2797c6a",
+      "expect": {
+        "form": "legacy_hash",
+        "kind": "participant",
+        "hash": "c812e1edb64417d6090dcfbaf16c21cd8e8665c04396e1edb472fecfb2797c6a"
+      }
+    },
+    {
+      "text": "session:0f8fad5b-d9cb-469f-a165-70867728950e",
+      "expect": {
+        "form": "session",
+        "candidates": [
+          {
+            "kind": "episode",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "provider_media",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "client_session",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          }
+        ]
+      }
+    },
+    {
+      "text": "CHK-1y7t",
+      "expect": {
+        "form": "diagnostic_code",
+        "code": "CHK-1Y7T"
+      }
+    },
+    {
+      "text": "chk-1o7t",
+      "expect": {
+        "form": "diagnostic_code",
+        "code": "CHK-107T"
+      }
+    },
+    {
+      "text": "",
+      "error": "empty"
+    },
+    {
+      "text": "xx_1234",
+      "error": "unknown_prefix"
+    },
+    {
+      "text": "ep_xyz1",
+      "error": "bad_value"
+    },
+    {
+      "text": "ep_0f8",
+      "error": "too_short"
+    },
+    {
+      "text": "ep_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "too_long"
+    },
+    {
+      "text": "CHK-12",
+      "error": "bad_diagnostic_code"
+    },
+    {
+      "text": "CHK-12U4",
+      "error": "bad_diagnostic_code"
+    },
+    {
+      "text": "hello",
+      "error": "unrecognized"
+    },
+    {
+      "text": "usr_",
+      "error": "bad_value"
+    }
+  ],
+  "resolve": [
+    {
+      "text": "ep_0f8f",
+      "candidates": [
+        {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        },
+        {
+          "kind": "episode",
+          "id": "0f8f1111-0000-4000-8000-000000000000"
+        }
+      ],
+      "expect": {
+        "status": "ambiguous",
+        "matches": [
+          {
+            "kind": "episode",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "episode",
+            "id": "0f8f1111-0000-4000-8000-000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "text": "ep_0f8fa",
+      "candidates": [
+        {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        },
+        {
+          "kind": "episode",
+          "id": "0f8f1111-0000-4000-8000-000000000000"
+        }
+      ],
+      "expect": {
+        "status": "unique",
+        "match": {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+      }
+    },
+    {
+      "text": "ep_dead",
+      "candidates": [
+        {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+      ],
+      "expect": {
+        "status": "none"
+      }
+    },
+    {
+      "text": "CHK-1Y7T",
+      "candidates": [
+        {
+          "kind": "client_session",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        },
+        {
+          "kind": "client_session",
+          "id": "0f8fa000-0000-4000-8000-000000000000"
+        },
+        {
+          "kind": "client_session",
+          "id": "9a000000-0000-4000-8000-000000000000"
+        }
+      ],
+      "expect": {
+        "status": "ambiguous",
+        "matches": [
+          {
+            "kind": "client_session",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "client_session",
+            "id": "0f8fa000-0000-4000-8000-000000000000"
+          }
+        ]
+      }
+    },
+    {
+      "text": "c812e1edb64417d6090dcfbaf16c21cd8e8665c04396e1edb472fecfb2797c6a",
+      "candidates": [
+        {
+          "kind": "participant",
+          "id": "0f8f1111-0000-4000-8000-000000000000",
+          "legacyHash": "00"
+        },
+        {
+          "kind": "participant",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "legacyHash": "c812e1edb64417d6090dcfbaf16c21cd8e8665c04396e1edb472fecfb2797c6a"
+        }
+      ],
+      "expect": {
+        "status": "unique",
+        "match": {
+          "kind": "participant",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+      }
+    },
+    {
+      "text": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "candidates": [
+        {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        },
+        {
+          "kind": "participant",
+          "id": "0F8FAD5B-D9CB-469F-A165-70867728950E"
+        },
+        {
+          "kind": "episode",
+          "id": "9a000000-0000-4000-8000-000000000000"
+        }
+      ],
+      "expect": {
+        "status": "ambiguous",
+        "matches": [
+          {
+            "kind": "episode",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "participant",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          }
+        ]
+      }
+    },
+    {
+      "text": "ep_0f8fad5b-d9cb-469f-a165-70867728950e",
+      "candidates": [
+        {
+          "kind": "episode",
+          "id": "0f8fad5bd9cb469fa16570867728950e"
+        },
+        {
+          "kind": "space",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+      ],
+      "expect": {
+        "status": "unique",
+        "match": {
+          "kind": "episode",
+          "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+      }
+    }
+  ],
+  "diagnostic_code": [
+    {
+      "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "expect": "CHK-1Y7T"
+    },
+    {
+      "id": "0f8f1111-0000-4000-8000-000000000000",
+      "expect": "CHK-1Y7H"
+    },
+    {
+      "id": "9a000000-0000-4000-8000-000000000000",
+      "expect": "CHK-K800"
+    },
+    {
+      "id": "0f8fa000-0000-4000-8000-000000000000",
+      "expect": "CHK-1Y7T"
+    },
+    {
+      "id": "ffffffff-ffff-4fff-bfff-ffffffffffff",
+      "expect": "CHK-ZZZZ"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000000",
+      "expect": "CHK-0000"
+    }
+  ],
+  "flags_hash": [
+    {
+      "flags": {},
+      "canonical": "{}",
+      "expect": "44136fa355b3678a"
+    },
+    {
+      "flags": {
+        "media.kill_switch": false,
+        "max_participants": 50,
+        "recording": "on"
+      },
+      "canonical": "{\"max_participants\":50,\"media.kill_switch\":false,\"recording\":\"on\"}",
+      "expect": "8c3f49d344bb8e59"
+    },
+    {
+      "flags": {
+        "recording": "on",
+        "max_participants": 50,
+        "media.kill_switch": false
+      },
+      "canonical": "{\"max_participants\":50,\"media.kill_switch\":false,\"recording\":\"on\"}",
+      "expect": "8c3f49d344bb8e59"
+    },
+    {
+      "flags": {
+        "label": "a\"b\\c\nd\u0001",
+        "name": "é",
+        "nothing": null
+      },
+      "canonical": "{\"label\":\"a\\\"b\\\\c\\nd\\u0001\",\"name\":\"é\",\"nothing\":null}",
+      "expect": "b2ae65c421054857"
+    },
+    {
+      "flags": {
+        "Bad": 1
+      },
+      "error": true
+    },
+    {
+      "flags": {
+        "x": 1.5
+      },
+      "error": true
+    }
+  ]
+}

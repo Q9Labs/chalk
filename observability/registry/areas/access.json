@@ -1,0 +1,19 @@
+{
+  "area": "access",
+  "slice": 7,
+  "title": "Access, reconnection and background",
+  "prefixes": ["access", "reconnect"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": [
+    {
+      "code": "access.connection_lost",
+      "doc": "The client lost its connection and did not recover within the recovery window.",
+      "user_words": ["it keeps saying connection lost"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}

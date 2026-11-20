@@ -1,0 +1,387 @@
+{
+  "doc": "Generated: the tables the diagnosis CLI prints and resolves against.",
+  "schema_ver": "55748406f5e1",
+  "symptoms": [
+    {
+      "code": "access.connection_lost",
+      "area": "access",
+      "slice": 7,
+      "doc": "The client lost its connection and did not recover within the recovery window.",
+      "user_words": ["it keeps saying connection lost"],
+      "witnesses": [],
+      "rule": "observability/rules/access.connection_lost.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "audio.cant_hear",
+      "area": "audio",
+      "slice": 3,
+      "doc": "The Participant can't hear someone who is speaking.",
+      "user_words": ["I can't hear anyone"],
+      "witnesses": [],
+      "rule": "observability/rules/audio.cant_hear.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "audio.not_heard",
+      "area": "audio",
+      "slice": 3,
+      "doc": "The Participant's microphone is on but others can't hear them.",
+      "user_words": ["nobody can hear me"],
+      "witnesses": [],
+      "rule": "observability/rules/audio.not_heard.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "board.view_jumped",
+      "area": "board",
+      "slice": 6,
+      "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
+      "user_words": ["the board keeps jumping"],
+      "witnesses": [],
+      "rule": "observability/rules/board.view_jumped.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "end.wrong_screen",
+      "area": "end",
+      "slice": 8,
+      "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
+      "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
+      "witnesses": [
+        {
+          "id": "server_end",
+          "event": "sync.episode.ended",
+          "required": true
+        },
+        {
+          "id": "client_end",
+          "event": "client.call_ended",
+          "required": true
+        }
+      ],
+      "rule": "observability/rules/end.wrong_screen.mjs",
+      "status": "complete"
+    },
+    {
+      "code": "join.no_media",
+      "area": "join",
+      "slice": 2,
+      "doc": "The Participant joined but no media connected, so they neither hear nor are heard.",
+      "user_words": ["I joined but nothing works", "stuck on connecting"],
+      "witnesses": [],
+      "rule": "observability/rules/join.no_media.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "page.crashed",
+      "area": "crash",
+      "slice": 9,
+      "doc": "The call page crashed or rendered an error boundary.",
+      "user_words": ["the page went blank", "the app crashed"],
+      "witnesses": [],
+      "rule": "observability/rules/page.crashed.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "recording.not_ready",
+      "area": "recording",
+      "slice": 10,
+      "doc": "An ended Episode's recording never became ready to watch.",
+      "user_words": ["the recording isn't there"],
+      "witnesses": [],
+      "rule": "observability/rules/recording.not_ready.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "rejoin.refused",
+      "area": "end",
+      "slice": 8,
+      "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
+      "user_words": ["it won't let me back in"],
+      "witnesses": [],
+      "rule": "observability/rules/rejoin.refused.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "share.wont_stop",
+      "area": "share",
+      "slice": 5,
+      "doc": "The Participant stopped sharing but others still see the share.",
+      "user_words": ["my screen is still being shared"],
+      "witnesses": [],
+      "rule": "observability/rules/share.wont_stop.mjs",
+      "status": "incomplete"
+    },
+    {
+      "code": "video.frozen",
+      "area": "video",
+      "slice": 4,
+      "doc": "A video tile stopped updating while its publisher was still sending.",
+      "user_words": ["their video froze"],
+      "witnesses": [],
+      "rule": "observability/rules/video.frozen.mjs",
+      "status": "incomplete"
+    }
+  ],
+  "reasons": [
+    {
+      "code": "cancelled",
+      "outcome": "expected",
+      "area": "core",
+      "doc": "The caller cancelled the operation before it finished."
+    },
+    {
+      "code": "unclassified",
+      "outcome": "error",
+      "area": "core",
+      "doc": "An error that no classifier named. Counted as unexplained, so a rise is a gap in the catalogue."
+    }
+  ],
+  "id_kinds": [
+    {
+      "kind": "tenant",
+      "prefix": "ten",
+      "field": "tenant_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "space",
+      "prefix": "spc",
+      "field": "space_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "episode",
+      "prefix": "ep",
+      "field": "episode_id",
+      "canonical": "uuid",
+      "scope": "space",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "participant",
+      "prefix": "pt",
+      "field": "participant_id",
+      "canonical": "uuid",
+      "scope": "episode",
+      "companions": ["generation"],
+      "legacy_hash_field": "participant_id_hash"
+    },
+    {
+      "kind": "user",
+      "prefix": "usr",
+      "field": "user_id",
+      "canonical": "token",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "agent",
+      "prefix": "agt",
+      "field": "agent_id",
+      "canonical": "token",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "device",
+      "prefix": "dev",
+      "field": "device_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": ["device_ephemeral"],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "client_session",
+      "prefix": "cs",
+      "field": "client_session_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "journey",
+      "prefix": "jr",
+      "field": "journey_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "request",
+      "prefix": "rq",
+      "field": "request_id",
+      "canonical": "uuid",
+      "scope": "journey",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "trace",
+      "prefix": "tr",
+      "field": "trace_id",
+      "canonical": "hex32",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "span",
+      "prefix": "sp",
+      "field": "span_id",
+      "canonical": "hex16",
+      "scope": "trace",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "media_connection",
+      "prefix": "mc",
+      "field": "media_connection_id",
+      "canonical": "uuid",
+      "scope": "episode",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "provider_media",
+      "prefix": "pm",
+      "field": "provider_media_id",
+      "canonical": "token",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "sync_connection",
+      "prefix": "sc",
+      "field": "sync_connection_id",
+      "canonical": "uuid",
+      "scope": "episode",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "operation",
+      "prefix": "op",
+      "field": "op_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "decision",
+      "prefix": "dc",
+      "field": "decision_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "recording",
+      "prefix": "rec",
+      "field": "recording_id",
+      "canonical": "uuid",
+      "scope": "episode",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "job",
+      "prefix": "job",
+      "field": "job_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": ["attempt"],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "webhook_delivery",
+      "prefix": "whd",
+      "field": "webhook_delivery_id",
+      "canonical": "uuid",
+      "scope": "tenant",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "admission_request",
+      "prefix": "adm",
+      "field": "admission_request_id",
+      "canonical": "uuid",
+      "scope": "episode",
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "event",
+      "prefix": "ev",
+      "field": "event_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "batch",
+      "prefix": "bt",
+      "field": "batch_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    },
+    {
+      "kind": "finding",
+      "prefix": "f",
+      "field": "finding_id",
+      "canonical": "uuid",
+      "scope": null,
+      "companions": [],
+      "legacy_hash_field": null
+    }
+  ],
+  "session_meanings": [
+    {
+      "meaning": "episode",
+      "kind": "episode",
+      "lookup": true
+    },
+    {
+      "meaning": "provider_media",
+      "kind": "provider_media",
+      "lookup": true
+    },
+    {
+      "meaning": "client_session",
+      "kind": "client_session",
+      "lookup": true
+    },
+    {
+      "meaning": "dashboard_auth",
+      "kind": null,
+      "lookup": false
+    }
+  ],
+  "diagnostic_code": {
+    "prefix": "CHK-",
+    "length": 4,
+    "alphabet": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+    "source_kind": "client_session"
+  }
+}

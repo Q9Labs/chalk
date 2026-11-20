@@ -1,0 +1,11 @@
+{
+  "area": "report",
+  "slice": 13,
+  "title": "Report a problem and live introspection",
+  "prefixes": ["report"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": []
+}

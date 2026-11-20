@@ -2,6 +2,8 @@
 
 API request logs, API metrics and Sync event spans export to Axiom. The private table `observability_journey_events` is the durable correlation record for webhook and recording lifecycles. Code defines the event names, fields and metrics; search it (`apps/api/internal/observability`, `apps/sync`) instead of trusting a list here. This page keeps the rules and the reading judgment.
 
+New lifecycle telemetry is declared in the [observability registry](../observability/registry/README.md) and emitted through its kernels (`op`, `transition`, `decision`, `surface`, `fact`), which check every record against it. The registry also holds the symptoms, their rules and fixtures, and the coverage gate (`node scripts/gates/obs-coverage.mjs`) that fails when a symptom loses a link.
+
 ## Correlation
 
 - Every operation is a trace and the request ID is the trace ID. Carry `traceparent` across every hop, including workers, the recorder and the dispatcher.

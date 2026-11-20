@@ -1,0 +1,46 @@
+{
+  "description": "The Episode hit its maximum duration and every client showed the right end screen. One client had dropped with connection lost ten minutes earlier and rejoined, which is not this symptom. A client in another Episode lost its connection at the same moment, which is not this Episode's end.",
+  "rows": [
+    { "event": "sync.episode.ended", "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0001", "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e", "end_reason": "maximum_duration", "est_server_ms": 1795600000000, "clock_state": "server" },
+    {
+      "event": "client.call_ended",
+      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0002",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "client_session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "end_reason": "time_limit",
+      "est_server_ms": 1795600000400,
+      "clock_err_ms": 40,
+      "clock_state": "synced"
+    },
+    {
+      "event": "client.call_ended",
+      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0003",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "client_session_id": "9b2f3c1d-1111-4222-8333-944455556666",
+      "end_reason": "episode_ended",
+      "est_server_ms": 1795600000300,
+      "clock_err_ms": 25,
+      "clock_state": "synced"
+    },
+    {
+      "event": "client.call_ended",
+      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0004",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "client_session_id": "1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d",
+      "end_reason": "connection_lost",
+      "est_server_ms": 1795599400000,
+      "clock_err_ms": 30,
+      "clock_state": "synced"
+    },
+    {
+      "event": "client.call_ended",
+      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0005",
+      "episode_id": "2c1b0a99-8877-4655-a443-322110ffeedd",
+      "client_session_id": "2b3c4d5e-6f7a-4b1c-9d2e-3f4a5b6c7d8e",
+      "end_reason": "connection_lost",
+      "est_server_ms": 1795600001000,
+      "clock_err_ms": 30,
+      "clock_state": "synced"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "area": "platform",
+  "slice": 14,
+  "title": "Platform: DB, releases, flags, Cloudflare edge",
+  "prefixes": ["platform", "db", "release", "edge"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": []
+}
