@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DIAGNOSE_CALL_INPUTS } from "../diagnose-call/inputs.mjs";
+import { loadManifest, pathPrefix } from "../../tools/formal/manifest.mjs";
 import { gitLines } from "../lib/git.mjs";
 import { isWindows } from "../lib/platform.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
@@ -59,20 +60,15 @@ const proofTestRoots = [
 ];
 // plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
 const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
-// The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
-const formalSyncPaths = [
-  "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex",
-  "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
-  "apps/sync/lib/chalk_sync/stateholder/postgres.ex",
-  "tools/formal/sync-entry-leave",
-  "tools/formal/tla2tools.sh",
-];
+// The Sync modules the entry and Leave model anchors to, read from the canonical model
+// registry (tools/formal/manifest.json) so this lane, the model workflow and the
+// sync-entry-leave-formal skill share one list.
+function formalSyncPaths(root) {
+  const manifest = loadManifest(root);
+  const model = manifest.models.find((model) => model.id === "sync-entry-leave" && model.ci === "gate");
+  if (!model) throw new GatePlanningError("formal-manifest", 'tools/formal/manifest.json has no sync-entry-leave model with ci "gate"');
+  return [...model.paths.map(pathPrefix), `tools/formal/${model.id}`, "tools/formal/tla2tools.sh", "tools/formal/manifest.json", "tools/formal/manifest.mjs"];
+}
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -487,7 +483,7 @@ export function createGatePlan(files, options = {}) {
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
-  const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
+  const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths(options.repositoryRoot ?? repositoryRoot)));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
   const mockCallInputs = full || dependencyChange || nonDocumentationFiles.some((file) => /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));

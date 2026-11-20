@@ -1,0 +1,17 @@
+# Code that each SfuPublicationLifecycle step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
+Type	sdks/typescript/client/src/media/local-publications.ts	{ kind: "pending" } | { kind: "confirmed"; handle: LocalPublicationHandle } | { kind: "held"; handle: LocalPublicationHandle } | { kind: "retiring"; handle: LocalPublicationHandle | null; detached: boolean; cause: LocalPublicationRetirementCause } | { kind: "retired" }
+Create	sdks/typescript/client/src/media/client.ts	lifecycle: { kind: "pending" }
+Create	sdks/typescript/client/src/media/client.ts	(item.lifecycle.kind === "confirmed" || item.lifecycle.kind === "held")
+LateConfirm	sdks/typescript/client/src/media/client.ts	publication.lifecycle = lifecycle.kind === "retiring" ? { ...lifecycle, handle } : { kind: "confirmed", handle };
+LateConfirm	sdks/typescript/client/src/media/client.ts	if (lifecycle.kind === "retired") continue;
+RetireStart	sdks/typescript/client/src/media/local-publications.ts	publication.lifecycle = { kind: "retiring", handle: phase.kind === "pending" ? null : phase.handle, detached: false, cause };
+Hold	sdks/typescript/client/src/media/client.ts	publication.lifecycle = { kind: "held", handle };
+Hold	sdks/typescript/client/src/media/local-publications.ts	if (phase.kind === "held" && cause === "user_pause") return;
+Resume	sdks/typescript/client/src/media/local-publications.ts	lifecycle.kind === "held" && publication.state.source === source && publication.connection === connection
+Resume	sdks/typescript/client/src/media/client.ts	if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
+RetireDone	sdks/typescript/client/src/media/local-publications.ts	item.lifecycle.kind === "retiring" && item.lifecycle.handle
+RetireDone	sdks/typescript/client/src/media/local-publications.ts	publication.lifecycle = { kind: "retired" };
+Stop	sdks/typescript/client/src/media/local-publications.ts	for (const publication of this.owned) publication.lifecycle = { kind: "retired" };

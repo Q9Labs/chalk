@@ -36,7 +36,7 @@ Read this before you "fix" a rule. These behaviors are real, and the model recor
 Run this, with the commit from the coverage record below:
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- apps/api/db/queries/recording_pipeline.sql apps/api/db/queries/recording_key_object_authority.sql apps/api/db/queries/recording_capture_lifecycle.sql apps/api/internal/recordingpipeline apps/api/internal/capturesignaling apps/api/internal/recorderfleet apps/api/internal/recorderworker apps/api/internal/recordingorchestrator apps/api/internal/providerbridge/sfu_executor.go apps/sync/lib/chalk_sync/episodes/reducer.ex apps/sync/lib/chalk_sync/external_operation_consumer.ex apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
+git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- $(node tools/formal/select-models.mjs --paths recording-pipeline)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as render or artifact code in the same file, needs no model work. Run the check anyway, because it is cheap.
@@ -75,7 +75,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 `run.sh --tlc` skips the anchors. Set `FORMAL_OUT` to keep the TLC logs in a folder you choose; the last line prints the folder.
 
-CI runs `tools/formal/recording-pipeline/run.sh` in `.github/workflows/formal-recording-pipeline.yml` when a covered file or this model changes.
+CI runs `tools/formal/recording-pipeline/run.sh` in `.github/workflows/formal-models.yml` when a covered file or this model changes.
 
 Real code breaks, shown once: each variant in `breaks` mirrors an edit of the SQL. The Go tests in `apps/api/internal/adapters/postgres/recording_pipeline_formal_integration_test.go` run on a real Postgres and fail on these edits of `apps/api/internal/adapters/postgres/sqlc/recording_pipeline.sql.go`:
 

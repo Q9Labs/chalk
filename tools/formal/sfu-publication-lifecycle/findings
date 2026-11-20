@@ -1,0 +1,3 @@
+# Rules the real code breaks today, one <rule><TAB><finding> per line. Empty:
+# every listed invariant holds of the model as written. When a real-code bug
+# is found, move its rule here with a note instead of deleting it.

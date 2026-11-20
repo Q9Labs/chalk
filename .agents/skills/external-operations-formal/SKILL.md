@@ -35,7 +35,7 @@ Because a source stop never gives up, `OperationsSettle` for it assumes the SFU 
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 99ed21f87b1b6f1aac3b216980223ac614866810 -- apps/sync/lib/chalk_sync/external_operation_consumer.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex
+git diff --stat 99ed21f87b1b6f1aac3b216980223ac614866810 -- $(node tools/formal/select-models.mjs --paths external-operations)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions needs no model work. Run the check anyway, because it is cheap.
@@ -67,7 +67,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 3. It runs the real code on one node with every rule, and again without the SFU's revision ordering (the Cloudflare path). Only the claim checks protect a provider that applies controls in arrival order.
 4. It runs each broken variant in `breaks` and needs TLC to report the named rule as broken. This proves the check can still fail.
 
-`MaxAttempts = 2` stands for the 100 attempts of the code. `tools/formal/external-operations/run.sh --deep` uses 3 attempts and 5 control revisions. The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/external-operations/run.sh` in `.github/workflows/formal-external-operations.yml` when a covered file or this model changes.
+`MaxAttempts = 2` stands for the 100 attempts of the code. `tools/formal/external-operations/run.sh --deep` uses 3 attempts and 5 control revisions. The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/external-operations/run.sh` in `.github/workflows/formal-models.yml` when a covered file or this model changes.
 
 ## Read a failure
 

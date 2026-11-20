@@ -21,7 +21,7 @@ One person in a Chalk Episode can have several sockets: a second device, a reloa
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 6e82e8f40a65c8d8d4c60daa2922cb6a65faa734 -- apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex apps/sync/lib/chalk_sync/external_operation_consumer.ex apps/sync/lib/chalk_sync/stateholder/postgres.ex
+git diff --stat 6e82e8f40a65c8d8d4c60daa2922cb6a65faa734 -- $(node tools/formal/select-models.mjs --paths sync-entry-leave)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as recording or chat code in the same file, needs no model work. Run the check anyway, because it is cheap.
