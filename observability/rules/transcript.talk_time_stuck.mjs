@@ -33,7 +33,8 @@ const DEAD_MS = 600_000;
 const MID_FLIGHT = new Set(["preparing", "transcribing", "verifying", "retryable_failure"]);
 const LIVE_RECORDING = new Set(["recording", "processing", "finalizing", "completed"]);
 
-export const settle_ms = 60_000;
+/** The episode item's window already runs to the read instant; nothing arrives past it that this check must wait for. */
+export const settle_ms = 0;
 
 /** @param {Declaration} declaration */
 export const applies = (declaration, seat) => seat === null && declaration.kind === "episode";

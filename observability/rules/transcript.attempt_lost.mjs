@@ -22,6 +22,9 @@ export const expected = "every claimed chunk attempt ends in an accepted result 
 
 export const settle_ms = 60_000;
 
+/** A job never claimed, never run and never answered has no claim/complete/retry rows or chunk op: their proven absence is the healthy claim. The db job row alone still decides a lease-expired loss. */
+export const healthy_absent = ["transcript.attempts", "transcript.claim_decision", "transcript.complete_decision", "transcript.retry_decision", "transcript.chunk_op"];
+
 /** @param {Declaration} declaration */
 export const applies = (declaration, seat) => seat === null && declaration.kind === "job" && declaration.job_kind === "transcription_chunk";
 

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "da49ddafa5db",
+  "schema_ver": "ca9cfc67d67f",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1954,7 +1954,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.attempt\""
+        }
+      ],
       "doc": "The checker's read of one transcription_attempts row of the item's transcript (its own chunk for a chunk job, every chunk for the finalize job)."
     },
     {
@@ -1976,7 +1981,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.episode\""
+        }
+      ],
       "doc": "The checker's read of the Episode's transcription mode and how many of its Recordings exist, for episode items."
     },
     {
@@ -2037,7 +2047,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.job\""
+        }
+      ],
       "doc": "The checker's read of the item's artifact_jobs row. Emitted by the evidence reader, never a program."
     },
     {
@@ -2074,7 +2089,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.prep\""
+        }
+      ],
       "doc": "The checker's read of the latest recording_jobs row of kind transcription for the item's Recording; transcript_exists false means no preparation row."
     },
     {
@@ -2099,7 +2119,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.recording\""
+        }
+      ],
       "doc": "The checker's read of the Recording row behind the item, one per Recording of the Episode for episode items."
     },
     {
@@ -2127,7 +2152,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.render\""
+        }
+      ],
       "doc": "The checker's read of the item's own recording_jobs row when the item is the Recording's export (render) job."
     },
     {
@@ -2149,7 +2179,12 @@
           "required": true
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.talk\""
+        }
+      ],
       "doc": "The talk-time status the checker's db read expects: it replays transcriptInProgress, including its dead-Recording bug."
     },
     {
@@ -2201,7 +2236,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.db.transcription\""
+        }
+      ],
       "doc": "The checker's read of the transcriptions row for the item's transcript; transcript_exists false means the Recording has none."
     },
     {
@@ -2442,7 +2482,12 @@
           "required": false
         }
       },
-      "emit_sites": [],
+      "emit_sites": [
+        {
+          "path": "scripts/transcription-dispatcher/evidence.mjs",
+          "literal": "\"transcript.r2.object\""
+        }
+      ],
       "doc": "The checker's own readback of the stored document: what it found, its size, cue count and whether the bytes match the stored sha256."
     },
     {
@@ -3644,7 +3689,7 @@
         },
         {
           "fact": "transcript.talk",
-          "from": ["api"],
+          "from": ["api", "db"],
           "required": true,
           "independent": 1,
           "query": "grep '\"name\":\"transcript.talk_time_served\"' api.log | grep {episode}",
@@ -3809,6 +3854,38 @@
     {
       "code": "share.wont_stop",
       "slice": 5
+    },
+    {
+      "code": "transcript.attempt_lost",
+      "slice": 11
+    },
+    {
+      "code": "transcript.failed",
+      "slice": 11
+    },
+    {
+      "code": "transcript.late",
+      "slice": 11
+    },
+    {
+      "code": "transcript.speech_dropped",
+      "slice": 11
+    },
+    {
+      "code": "transcript.stuck",
+      "slice": 11
+    },
+    {
+      "code": "transcript.talk_time_stuck",
+      "slice": 11
+    },
+    {
+      "code": "transcript.unreadable",
+      "slice": 11
+    },
+    {
+      "code": "transcript.wake_lost",
+      "slice": 11
     },
     {
       "code": "video.frozen",

@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "da49ddafa5db",
+  "schema_ver": "ca9cfc67d67f",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -308,7 +308,7 @@
       "code": "transcript.attempt_lost",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -424,12 +424,22 @@
             "transcript_first_retry_kind",
             "transcript_first_retry_code"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.job\""
+            }
+          ]
         },
         {
           "name": "transcript.db.attempt",
           "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.attempt\""
+            }
+          ]
         },
         {
           "name": "transcript.claim",
@@ -483,7 +493,7 @@
       "code": "transcript.failed",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -614,7 +624,12 @@
             "transcript_first_retry_kind",
             "transcript_first_retry_code"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.job\""
+            }
+          ]
         },
         {
           "name": "transcript.db.transcription",
@@ -633,7 +648,12 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.job_retry",
@@ -687,7 +707,7 @@
       "code": "transcript.late",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -767,7 +787,12 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.db.job",
@@ -789,7 +814,12 @@
             "transcript_first_retry_kind",
             "transcript_first_retry_code"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.job\""
+            }
+          ]
         }
       ],
       "rule": "observability/rules/transcript.late.mjs",
@@ -803,7 +833,7 @@
       "code": "transcript.speech_dropped",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -877,17 +907,32 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.db.attempt",
           "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.attempt\""
+            }
+          ]
         },
         {
           "name": "transcript.r2.object",
           "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.r2.object\""
+            }
+          ]
         }
       ],
       "rule": "observability/rules/transcript.speech_dropped.mjs",
@@ -901,7 +946,7 @@
       "code": "transcript.stuck",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1044,7 +1089,12 @@
             "transcript_first_retry_kind",
             "transcript_first_retry_code"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.job\""
+            }
+          ]
         },
         {
           "name": "transcript.db.transcription",
@@ -1063,22 +1113,42 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.db.recording",
           "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.recording\""
+            }
+          ]
         },
         {
           "name": "transcript.db.prep",
           "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.prep\""
+            }
+          ]
         },
         {
           "name": "transcript.db.render",
           "fields": ["job_id", "transcript_prep_state", "transcript_terminal_ms", "transcript_available_ms", "transcript_created_ms"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.render\""
+            }
+          ]
         },
         {
           "name": "transcript.claim",
@@ -1112,7 +1182,7 @@
       "code": "transcript.talk_time_stuck",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "episode",
       "per": "item",
       "witnesses": [
@@ -1181,7 +1251,7 @@
         },
         {
           "fact": "transcript.talk",
-          "from": ["api"],
+          "from": ["api", "db"],
           "required": true,
           "events": [
             {
@@ -1201,12 +1271,22 @@
         {
           "name": "transcript.db.episode",
           "fields": ["episode_id", "transcript_mode", "transcript_recordings"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.episode\""
+            }
+          ]
         },
         {
           "name": "transcript.db.recording",
           "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.recording\""
+            }
+          ]
         },
         {
           "name": "transcript.db.transcription",
@@ -1225,12 +1305,22 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.db.prep",
           "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.prep\""
+            }
+          ]
         },
         {
           "name": "transcript.talk_time_served",
@@ -1245,7 +1335,12 @@
         {
           "name": "transcript.db.talk",
           "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.talk\""
+            }
+          ]
         }
       ],
       "rule": "observability/rules/transcript.talk_time_stuck.mjs",
@@ -1259,7 +1354,7 @@
       "code": "transcript.unreadable",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1333,12 +1428,22 @@
             "transcript_open_jobs",
             "transcript_dead_letter_jobs"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.transcription\""
+            }
+          ]
         },
         {
           "name": "transcript.r2.object",
           "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider"],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.r2.object\""
+            }
+          ]
         },
         {
           "name": "transcript.document_read",
@@ -1366,7 +1471,7 @@
       "code": "transcript.wake_lost",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": false,
+      "allowlisted": true,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1488,7 +1593,12 @@
             "transcript_first_retry_kind",
             "transcript_first_retry_code"
           ],
-          "emit_sites": []
+          "emit_sites": [
+            {
+              "path": "scripts/transcription-dispatcher/evidence.mjs",
+              "literal": "\"transcript.db.job\""
+            }
+          ]
         }
       ],
       "rule": "observability/rules/transcript.wake_lost.mjs",

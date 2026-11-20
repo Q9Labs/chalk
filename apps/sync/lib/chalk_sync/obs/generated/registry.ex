@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "da49ddafa5db"
+  @schema_ver "ca9cfc67d67f"
 
   @events %{
     "client.call_ended" => %{
