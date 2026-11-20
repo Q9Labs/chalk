@@ -70,18 +70,9 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		}
 		return nil
 	}
-	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
+	err := readSpool(state.spoolPath, withinPresentation(opusClockRate, durationMS, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
 			return err
-		}
-		if err := validateMediaTimestamp(packet.Timestamp, opusClockRate, durationMS); err != nil {
-			return err
-		}
-		// A packet starting at the frozen end contributes no samples. In
-		// particular, a legacy sub-millisecond overhang must not create an
-		// empty segment or silence beyond the end.
-		if uint64(packet.Timestamp)*1_000 >= uint64(durationMS)*opusClockRate {
-			return nil
 		}
 		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
 		if len(packet.Payload) == 0 {
@@ -133,7 +124,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		started = true
 		pendingPacketLoss = false
 		return nil
-	})
+	}))
 	if err != nil {
 		if writer != nil {
 			closing := writer
