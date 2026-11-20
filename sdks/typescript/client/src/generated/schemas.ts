@@ -1664,7 +1664,9 @@ export type SyncToken = typeof SyncTokenSchema.Type;
 
 export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
-    client_session_id: UUIDSchema,
+    batch_id: Schema.optional(UUIDSchema),
+    client_session_id: Schema.optional(UUIDSchema),
+    end: Schema.optional(Schema.Literals(["closed", "abandoned"])),
     events: Schema.Array(
       Schema.Struct({
         action: Schema.optional(Schema.Literals(["mute", "unmute", "publish", "unpublish", "subscribe", "unsubscribe", "share_start", "share_stop"])),
@@ -1703,12 +1705,23 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
           ]),
         ),
         device_kind: Schema.optional(Schema.Literals(["microphone", "camera", "speaker", "screen"])),
+        drop_reason: Schema.optional(Schema.Literals(["queue_full", "credential_expired", "refused"])),
         dropped: Schema.optional(Schema.NullOr(Schema.Number)),
+        dropped_seqs: Schema.optional(
+          Schema.Array(
+            Schema.Struct({
+              from: Schema.Number,
+              to: Schema.Number,
+            }),
+          ).check(Schema.isMaxLength(64)),
+        ),
+        dropped_source_id: Schema.optional(UUIDSchema),
         duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         elapsed_ms: Schema.Number,
         element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
         end_reason: Schema.optional(Schema.Literals(["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"])),
         error_name: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"])),
+        event_id: Schema.optional(UUIDSchema),
         granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -1821,15 +1834,30 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
         ]),
         upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
       }),
-    ).check(Schema.isMinLength(1), Schema.isMaxLength(100)),
-    version: Schema.Literal(1),
+    ).check(Schema.isMinLength(0), Schema.isMaxLength(100)),
+    next_seq: Schema.optional(Schema.NullOr(Schema.Number)),
+    source_id: Schema.optional(UUIDSchema),
+    version: Schema.Literals([1, 2]),
   }))();
 export type TelemetryRequest = typeof TelemetryRequestSchema.Type;
 
 export const TelemetryResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     accepted: Schema.Number,
+    acks: Schema.Array(
+      Schema.Struct({
+        from: Schema.Number,
+        to: Schema.Number,
+      }),
+    ),
+    duplicates: Schema.Number,
     rejected: Schema.Number,
+    rejections: Schema.Array(
+      Schema.Struct({
+        reason: Schema.String,
+        seq: Schema.Number,
+      }),
+    ),
   }))();
 export type TelemetryResponse = typeof TelemetryResponseSchema.Type;
 

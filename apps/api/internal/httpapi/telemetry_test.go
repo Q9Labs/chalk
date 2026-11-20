@@ -76,7 +76,7 @@ func TestTelemetryLogsOneRowPerEventStampedFromTheCredential(t *testing.T) {
 		{"type":"recovery_attempt","seq":2,"elapsed_ms":31000,"mechanism":"ice_restart","outage_ms":4000,"free_text":"hello"},
 		{"type":"call_ended","seq":3,"elapsed_ms":60000,"end_reason":"left"}]}`
 	recorder := f.post("/telemetry", body)
-	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"accepted":3,"rejected":1}` {
+	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"accepted":3,"rejected":1,"duplicates":0,"acks":[],"rejections":[]}` {
 		t.Fatalf("response = %d %s, want 200 with 3 accepted and 1 rejected", recorder.Code, recorder.Body.String())
 	}
 	rows := f.rows(t, "sdk.telemetry")

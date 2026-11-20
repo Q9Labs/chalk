@@ -52,6 +52,17 @@ func TestEventsAreCheckedEachOnItsOwn(t *testing.T) {
 		{"device failure named freely", `{"type":"device_failed","seq":5,"elapsed_ms":9,"error_name":"MyDevice Pro","device_kind":"microphone"}`, "error_name_label"},
 		{"render crash", `{"type":"render_crashed","seq":6,"elapsed_ms":9,"render_cause":"chunk_reload"}`, ""},
 		{"drop count", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":12}`, ""},
+		{"drop record with ranges", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":3,"drop_reason":"queue_full","dropped_seqs":[{"from":2,"to":5}]}`, ""},
+		{"drop record from an earlier source", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":2,"drop_reason":"refused","dropped_source_id":"` + op + `","dropped_seqs":[{"from":40,"to":42}]}`, ""},
+		{"drop with an unknown reason", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":1,"drop_reason":"tired","dropped_seqs":[{"from":2,"to":3}]}`, "drop_reason_label"},
+		{"drop source that is not an id", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":1,"dropped_source_id":"abc"}`, "dropped_source_id_label"},
+		{"empty range", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":0,"dropped_seqs":[{"from":3,"to":3}]}`, "dropped_seqs_order"},
+		{"backwards range", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":0,"dropped_seqs":[{"from":4,"to":3}]}`, "dropped_seqs_order"},
+		{"range over the cap", `{"type":"telemetry_dropped","seq":7,"elapsed_ms":9,"dropped":1,"dropped_seqs":[{"from":0,"to":2147483648}]}`, "dropped_seqs.to_range"},
+		{"too many ranges", `{"type":"telemetry_dropped","seq":99,"elapsed_ms":9,"dropped":65,"dropped_seqs":[` + strings.TrimSuffix(strings.Repeat(`{"from":1,"to":2},`, 65), ",") + `]}`, "dropped_seqs_count"},
+		{"ranges on another event", `{"type":"call_ended","seq":7,"elapsed_ms":9,"end_reason":"left","dropped_seqs":[{"from":2,"to":3}]}`, "dropped_seqs_not_allowed"},
+		{"event id is part of every type", `{"type":"call_ended","seq":7,"elapsed_ms":9,"end_reason":"left","event_id":"` + op + `"}`, ""},
+		{"event id that is not an id", `{"type":"call_ended","seq":7,"elapsed_ms":9,"end_reason":"left","event_id":"abc"}`, "event_id_label"},
 		{"problem report marker", `{"type":"problem_reported","seq":8,"elapsed_ms":9}`, ""},
 	}
 	for _, tc := range cases {
@@ -111,7 +122,7 @@ func TestEveryTypeHasEnumsForItsLabelFields(t *testing.T) {
 		for _, field := range append(spec.allowed, spec.required...) {
 			switch field {
 			case "attempt", "duration_ms", "outage_ms", "heartbeat_gap_ms", "close_code", "http_status", "receive_counts",
-				"receivers_stopped", "bundle_tag_held", "stats", "dropped", "op_id":
+				"receivers_stopped", "bundle_tag_held", "stats", "dropped", "op_id", "dropped_seqs", "dropped_source_id":
 				continue
 			}
 			if FieldEnum(field) == nil {

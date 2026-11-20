@@ -18,8 +18,12 @@ import (
 const MIDPattern = `^[0-9A-Za-z_-]{1,16}$`
 
 const (
-	// Version is the only wire version.
+	// Version is the legacy wire version: batches name a client session and get no acknowledgment.
+	// The call-stats route and the connection report translate into it as well.
 	Version = 1
+	// LedgerVersion is the wire version whose batches name a source and a batch, carry an id on
+	// every event, and are settled seq by seq in the answer.
+	LedgerVersion = 2
 	// BodyLimit is the largest request body, the same as the browser's keepalive limit.
 	BodyLimit = 65536
 	// EventLimit is the most events in one request.
@@ -28,6 +32,8 @@ const (
 	MaxMilliseconds = 2147483647
 	// MaxTracks is the most remote tracks one stats window names.
 	MaxTracks = 32
+	// MaxDropRanges is the most seq ranges one drop record names.
+	MaxDropRanges = 64
 	// MaxReceiveCount is the largest receive counter.
 	MaxReceiveCount = 10000
 	// MaxTrackPackets is the most packets one track can count in a window.
@@ -47,10 +53,14 @@ var (
 // set: a field that Type does not name makes the event invalid.
 type Event struct {
 	Type string `json:"type"`
-	// Seq counts the events of one client session from zero, in the order they happened.
+	// Seq counts the events of one client session (version 1) or source (version 2) from zero, in the
+	// order they happened.
 	Seq int64 `json:"seq"`
 	// ElapsedMS is the client's monotonic time since its session began.
 	ElapsedMS int64 `json:"elapsed_ms"`
+	// EventID names this record for good, so a copy that arrives twice collapses into one. It is an
+	// envelope field like Seq, not a field of any type. Version 2 requires it.
+	EventID string `json:"event_id,omitempty"`
 	// OpID joins the intent and the result of one operation, and the SFU's view of it.
 	OpID string `json:"op_id,omitempty"`
 
@@ -91,11 +101,20 @@ type Event struct {
 	Stats            *StatsWindow   `json:"stats,omitempty"`
 	// Dropped is how many events the client's outbox lost to its byte bound.
 	Dropped *int64 `json:"dropped,omitempty"`
+	// DroppedSeqs names the seqs the outbox gave up on, as half-open ranges. Version 2 requires it
+	// on a drop record, which carries at most MaxDropRanges of them.
+	DroppedSeqs []SeqRange `json:"dropped_seqs,omitempty"`
+	// DropReason says why the outbox gave them up. Version 2 requires it on a drop record.
+	DropReason string `json:"drop_reason,omitempty"`
+	// DroppedSourceID names the earlier source the dropped seqs belong to, when they are not this source's.
+	DroppedSourceID string `json:"dropped_source_id,omitempty"`
 
 	// rejection is why this event failed its own check, set while decoding.
 	rejection string
 	// seen is the type and sequence number read from an event that failed its check.
 	seen seenEvent
+	// seqRead says the body gave a readable seq, so the seq can name the event in an answer.
+	seqRead bool
 }
 
 type seenEvent struct {
@@ -133,12 +152,21 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	var decoded plain
 	if err := decoder.Decode(&decoded); err != nil {
 		*e = Event{rejection: "schema"}
-		_ = json.Unmarshal(data, &e.seen)
+		var read struct {
+			Type string `json:"type"`
+			Seq  *int64 `json:"seq"`
+		}
+		_ = json.Unmarshal(data, &read)
+		e.seqRead = read.Seq != nil
+		if e.seqRead {
+			e.seen = seenEvent{Type: read.Type, Seq: *read.Seq}
+		}
 		e.seen = e.seen.known()
 		return nil
 	}
 	*e = Event(decoded)
 	e.rejection = orderingMissing(data)
+	e.seqRead = e.rejection != "seq_missing"
 	if e.rejection == "" {
 		e.rejection = e.Check()
 	}
@@ -154,6 +182,56 @@ func (s seenEvent) known() seenEvent {
 		s.Type = ""
 	}
 	return s
+}
+
+// seqValue is the seq of the event as far as it could be read, also for an event that failed its check.
+func (e Event) seqValue() int64 {
+	if e.rejection != "" {
+		return e.seen.Seq
+	}
+	return e.Seq
+}
+
+// checkLedger marks the event when it breaks a rule of a version 2 batch whose source will
+// give its next record nextSeq. An event that already failed its own check keeps that reason.
+func (e *Event) checkLedger(nextSeq int64) {
+	if e.rejection != "" {
+		return
+	}
+	e.rejection = e.ledgerRejection(nextSeq)
+	if e.rejection != "" {
+		e.seen = seenEvent{Type: e.Type, Seq: e.Seq}.known()
+	}
+}
+
+func (e Event) ledgerRejection(nextSeq int64) string {
+	switch {
+	case e.EventID == "":
+		return "event_id_missing"
+	case e.Seq >= nextSeq:
+		return "seq_range"
+	case e.Type != "telemetry_dropped":
+		return ""
+	case len(e.DroppedSeqs) == 0:
+		return "dropped_seqs_missing"
+	case e.DropReason == "":
+		return "drop_reason_missing"
+	}
+	var total int64
+	for _, dropped := range e.DroppedSeqs {
+		total += dropped.To - dropped.From
+	}
+	if e.Dropped == nil || total != *e.Dropped {
+		return "dropped_count"
+	}
+	if e.DroppedSourceID == "" {
+		for _, dropped := range e.DroppedSeqs {
+			if dropped.To > e.Seq {
+				return "dropped_seqs_range"
+			}
+		}
+	}
+	return ""
 }
 
 // orderingMissing names the sequence field an event left out or set to null. Without it a zero
@@ -197,6 +275,11 @@ func (e Event) Check() string {
 	if reason := checkValues(reflect.ValueOf(e), ""); reason != "" {
 		return reason
 	}
+	for _, dropped := range e.DroppedSeqs {
+		if dropped.From >= dropped.To {
+			return "dropped_seqs_order"
+		}
+	}
 	if e.Stats != nil {
 		return e.Stats.check()
 	}
@@ -210,7 +293,7 @@ func (e Event) presentFields() []string {
 	for index := range value.NumField() {
 		field := reflect.TypeFor[Event]().Field(index)
 		name, optional := jsonName(field)
-		if optional && !value.Field(index).IsZero() {
+		if optional && name != "event_id" && !value.Field(index).IsZero() {
 			names = append(names, name)
 		}
 	}
@@ -254,7 +337,7 @@ func checkField(name string, value reflect.Value) string {
 	case reflect.Struct:
 		return checkValues(value, name+".")
 	case reflect.Slice:
-		if value.Len() > MaxTracks {
+		if value.Len() > sliceLimit(name) {
 			return name + "_count"
 		}
 		for index := range value.Len() {
@@ -266,9 +349,17 @@ func checkField(name string, value reflect.Value) string {
 	return ""
 }
 
+// sliceLimit is the most items a list field may hold.
+func sliceLimit(name string) int {
+	if name == "dropped_seqs" {
+		return MaxDropRanges
+	}
+	return MaxTracks
+}
+
 func checkString(name, value string) string {
 	switch name {
-	case "op_id":
+	case "op_id", "event_id", "dropped_source_id":
 		if !uuidPattern.MatchString(value) {
 			return name + "_label"
 		}
