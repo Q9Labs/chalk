@@ -56,7 +56,7 @@ const cases = [
     file: "apps/sync/lib/chalk_sync/whiteboard_v1/authority.ex",
     from: '{_episode, "left"} -> {:error, {:permission_denied, :participant_inactive}}',
     to: '{_episode, "joining"} -> {:error, {:permission_denied, :participant_inactive}}',
-    ...mix("test/chalk_sync/whiteboard_v1/authority_test.exs"),
+    ...mix("test/chalk_sync/whiteboard_v1/authority/removal_test.exs"),
   },
   {
     name: "ended-reconnect-terminal-state",

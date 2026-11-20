@@ -50,18 +50,6 @@ type ControlPlaneClient struct {
 	uploader *http.Client
 }
 
-func NewControlPlaneClient(baseURL string, client *http.Client) (*ControlPlaneClient, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return nil, fmt.Errorf("%w: base URL: %v", ErrInvalidControlPlaneClient, err)
-	}
-	return NewControlPlaneClientWithURL(parsed, client)
-}
-
-func NewControlPlaneClientWithURL(baseURL *url.URL, client *http.Client) (*ControlPlaneClient, error) {
-	return NewControlPlaneClientWithURLAndUploader(baseURL, client, &http.Client{Timeout: 30 * time.Second})
-}
-
 func NewControlPlaneClientWithURLAndUploader(baseURL *url.URL, client, uploader *http.Client) (*ControlPlaneClient, error) {
 	if baseURL == nil || client == nil || uploader == nil || baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" {
 		return nil, ErrInvalidControlPlaneClient
