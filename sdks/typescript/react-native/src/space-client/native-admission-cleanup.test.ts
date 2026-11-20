@@ -3,9 +3,11 @@ import { opaqueAccessGrant } from "../../../client/src/space-client/core.test.he
 
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({
-  RTCPeerConnection: vi.fn(() => {
-    throw new Error("native media unavailable");
-  }),
+  RTCPeerConnection: class {
+    constructor() {
+      throw new Error("native media unavailable");
+    }
+  },
   mediaDevices: {},
 }));
 import { createNativeSpaceClient } from "./create-native-space-client";

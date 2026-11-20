@@ -1,34 +1,3 @@
-import { vi } from "vitest";
-import type { CoreTestPlatform } from "./core.test.helpers";
-import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
-import { createSpaceClientForPlatform } from "./space-client";
-
-export function captureClient(platform: CoreTestPlatform, dependencies: Partial<CoreTestPlatform["dependencies"]>) {
-  return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, ...dependencies } });
-}
-export function pendingCapture() {
-  let resolve = (_stream: MediaStream) => {};
-  const capture = vi.fn(
-    () =>
-      new Promise<MediaStream>((done) => {
-        resolve = done;
-      }),
-  );
-  return { capture, release: (stream: MediaStream) => resolve(stream) };
-}
-export function pendingPreview() {
-  const video = track("video");
-  const { capture, release } = pendingCapture();
-  const client = captureClient(createCoreTestPlatform(), { mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [], releaseTrack: (track) => track.stop() } });
-  return { video, capture, release, client };
-}
-export function pendingMedia() {
-  return { platform: createCoreTestPlatform(), audio: track("audio"), video: track("video"), ...pendingCapture() };
-}
-export function noCaptureDevices() {
-  throw new DOMException("No capture device", "NotFoundError");
-}
-
 export function track(kind: "audio" | "video"): MediaStreamTrack {
   let readyState: MediaStreamTrackState = "live";
   const result = Object.assign(new EventTarget(), {
@@ -49,9 +18,9 @@ export function track(kind: "audio" | "video"): MediaStreamTrack {
     getCapabilities: () => ({}),
     getConstraints: () => ({}),
     getSettings: () => ({}),
-    stop: vi.fn(() => {
+    stop: () => {
       readyState = "ended";
-    }),
+    },
   });
   Object.defineProperty(result, "readyState", { get: () => readyState });
   return result;

@@ -1,23 +1,29 @@
-import { parseParsedAccessGrant } from "../access/grant";
-import type { V1MediaPause } from "../sync/v1-types";
 import type { AccessGrant } from "./index";
 import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
 import type { SpaceClientPlatform } from "./core";
-import { createTestOutbox } from "../telemetry/outbox.test.helpers";
-export type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
-export type CoreTestPlatform = SpaceClientPlatform & {
-  readonly outbox: ReturnType<typeof createTestOutbox>;
+import { TelemetryOutbox } from "../telemetry/outbox";
+type CoreTestMediaSnapshot = ReturnType<ConnectionMediaClient["getSnapshot"]>;
+type CoreTestPlatform = SpaceClientPlatform & {
   readonly dependencies: Pick<ConnectionDependencies, "telemetry" | "clock" | "mediaDevices" | "createMediaClient" | "createSyncClient" | "cancelPendingAdmission" | "getEpisodeStatus">;
   readonly media: {
     readonly getSnapshot: () => CoreTestMediaSnapshot;
     readonly emit: (snapshot: CoreTestMediaSnapshot) => void;
   };
   readonly sync: ConnectionSyncClient;
-  readonly emitMediaPause: (pause: V1MediaPause) => void;
   readonly emitSync: (snapshot: ReturnType<ConnectionSyncClient["getSnapshot"]>) => void;
 };
 export function createCoreTestPlatform(): CoreTestPlatform {
-  const outbox = createTestOutbox();
+  const telemetry = new TelemetryOutbox({
+    endpoint: () => "https://api.test/telemetry",
+    platform: {
+      now: Date.now,
+      uuid: () => crypto.randomUUID(),
+      online: () => true,
+      hidden: () => false,
+      subscribe: () => () => undefined,
+      send: async () => ({ status: 204, retryAfterMs: 0 }),
+    },
+  });
   let mediaSnapshot: CoreTestMediaSnapshot = {
     connection: { phase: "idle", peerConnectionState: null, iceConnectionState: null },
     cursor: null,
@@ -57,7 +63,6 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       return () => mediaListeners.delete(listener);
     },
   } as unknown as ConnectionMediaClient;
-  const pauseListeners = new Set<(pause: V1MediaPause) => void>();
   const sync: ConnectionSyncClient = {
     start: async () => {
       syncSnapshot = { ...syncSnapshot, connection: { phase: "live" }, participantId: "participant-1", participantGeneration: 1 };
@@ -74,21 +79,16 @@ export function createCoreTestPlatform(): CoreTestPlatform {
     subscribeCollaboration: () => () => undefined,
     getCollaborationExtensionState: () => ({ version: 1, chatHeadSequence: null }),
     getParticipantCollaborationCapabilities: () => ({}),
-    onMediaPause: (listener: (pause: V1MediaPause) => void) => {
-      pauseListeners.add(listener);
-      return () => pauseListeners.delete(listener);
-    },
+    onMediaPause: () => () => undefined,
     onDirectedRequest: () => () => undefined,
     // Sync accepts every self-media target unless a test says otherwise.
     setMicrophoneEnabled: async () => ({ operationId: "microphone-target", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
     setCameraEnabled: async () => ({ operationId: "camera-target", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
   } as unknown as ConnectionSyncClient;
   return {
-    /** The outbox every observer of this platform records into, with the events its fake server took. */
-    outbox,
     whiteboardUrl: null,
     dependencies: {
-      telemetry: outbox.outbox,
+      telemetry,
       getEpisodeStatus: async () => "active",
       cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
@@ -104,9 +104,6 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       },
     },
     sync,
-    emitMediaPause: (pause) => {
-      for (const listener of pauseListeners) listener(pause);
-    },
     emitSync: (snapshot) => {
       syncSnapshot = snapshot;
       for (const listener of syncListeners) listener(syncSnapshot);
@@ -120,13 +117,6 @@ export function opaqueAccessGrant(value: string | number, suffix = String(value)
     sync: { token: credential("chalk-sync", suffix), expires_at: expiresAt },
     media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
   } as unknown as AccessGrant;
-}
-/** A parsed grant for the Chalk SFU, with the capabilities object exactly as the API would send it. */
-export function chalkSFUGrant(capabilities: Record<string, unknown>) {
-  const grant: unknown = opaqueAccessGrant("chalk-sfu");
-  if (typeof grant !== "object" || grant === null || !("media" in grant) || typeof grant.media !== "object" || grant.media === null) throw new Error("Unexpected grant fixture");
-  const media = { ...grant.media, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref", iceServers: [], capabilities } };
-  return parseParsedAccessGrant({ ...grant, media });
 }
 function credential(audience: "chalk-sync" | "chalk-media", suffix: string): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");

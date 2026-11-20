@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import { gatedActionIds, gatedSampleFloor, readBudgets } from "./budgets.mjs";
-import { planeNoteMarkdown } from "./plane-note.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
 
 const MIN_GATED_SAMPLES = gatedSampleFloor(await readBudgets());
@@ -18,11 +17,6 @@ const run = { id: "run-latency", commit: revision, tier: "nightly", environment:
 const metric = (id, value, n = 60) => ({ id, unit: "ms", n, p50: value, p95: value, source: "latency-kit" });
 const card = (mediaPlane, metrics) => ({ schema: SCORECARD_SCHEMA, run, mediaPlane, metrics, dropped: [] });
 const node = (script, args, env = {}) => spawnSync(process.execPath, [resolve(import.meta.dirname, script), ...args], { cwd: root, encoding: "utf8", env: { ...process.env, SCORECARD_HISTORY_REF: "origin/no-history", ...env } });
-
-test("only the Cloudflare plane carries the Iowa and Singapore note", () => {
-  assert.equal(planeNoteMarkdown(chalkSfu), "");
-  assert.match(planeNoteMarkdown("cf_sfu"), /Iowa.*nearby point of presence.*Singapore.*not a fair comparison yet.*fewer samples/s);
-});
 
 test("a Cloudflare latency card is collected, shown with the note, and an over-budget value blocks its own run", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "cf-card-"));
