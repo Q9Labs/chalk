@@ -55,6 +55,8 @@ What the SFU telemetry adds to the report:
 - **Durable outcome.** `participant_media_sessions` (one row per session) and `media_plane_changes` are read from the database, which keeps them after Axiom's 30 days. An Episode older than that is read from the database alone and the report says what is gone. Axiom's closing line and the durable row for one connection are one finding. The plane the Episode was bound to and any plane setting change made during it are in the summary.
 - **Coverage.** A durable outcome with no `sfu.session.closed` line, and a connected session with no `sfu.media.*` rows, are missing data that point at the `chalk.sfu.telemetry.dropped` counter and the `logs_export` gauge, so a lost export is not read as a good call.
 
+`pnpm diagnose` is the query CLI built on the same checker: verdicts with outcome, coverage and disagreement for Episodes, attempts and jobs, lookups by day, person, symptom, window or any id, and a proof view per finding. [diagnose.md](diagnose.md) is the guide for agents.
+
 A source it cannot read is a gap, never a silent omission. When no rule finds a failure and a source is missing, the verdict says "Not enough evidence" and names the source. `--strict` exits 3 when it finds a bad call and 2 when it found none but evidence is missing. The thresholds are in `infrastructure/observability/production-alerts/call-verdict.json`. A new event needs a rule in `scripts/diagnose-call/rules.mjs` and, to read well, a line in `scripts/diagnose-call/timeline.mjs`. CI runs the checker's tests when those files, or the code that writes the rows it reads, change.
 
 ## Client telemetry

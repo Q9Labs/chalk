@@ -1,4 +1,4 @@
-check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=6/6 partial=2 asof=2026-11-19T01:00Z rules=51d54aba
+check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=6/6 partial=2 asof=2026-11-19T01:00Z rules=c3470b2d
 anchor=2026-11-19T01:00Z local=2026-11-19T06:00+05:00 tz=Asia/Karachi
 current ep_5c0d 11-18 09:00 outcome=healthy coverage=complete
 rechecked ep_31aa 11-18 11:00 outcome=unknown coverage=complete codes=BLIND_SPOT was=healthy

@@ -1,4 +1,4 @@
-day TH 2026-11-18 outcome=broken coverage=partial checked=4/6 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=51d54aba
+day TH 2026-11-18 outcome=broken coverage=partial checked=4/6 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=c3470b2d
 anchor=2026-11-17T19:00Z local=2026-11-18T00:00+05:00 tz=Asia/Karachi
 audio.no_voice_detected broken episodes=1 people=1 ep_9feb
 entry.unresolved broken episodes=1 jr_6d5e
