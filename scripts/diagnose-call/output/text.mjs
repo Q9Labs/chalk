@@ -10,7 +10,8 @@
  *   more: N omitted by limit|budget                                  output left out on purpose, never a source read incompletely
  *   next: diagnose ...                                               commands that drill down
  *
- * Times are relative (`+07:10`) only in an Episode, attempt or job detail; aggregate views print tenant-local clock times.
+ * Times are relative (`+07:10`) only in an Episode, attempt or job detail and its evidence. A Space, Tenant or platform day prints UTC
+ * `HH:MM`, because its header names the UTC date, and aggregate views print tenant-local clock times.
  */
 import { formatHandle } from "../../../sdks/typescript/client/src/obs/ids.ts";
 import { partyText } from "./format.mjs";

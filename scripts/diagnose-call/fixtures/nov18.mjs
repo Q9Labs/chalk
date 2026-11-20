@@ -106,7 +106,7 @@ const ingress = (episode, participant, id, from, to, packets, voiced) =>
  * @returns {Watermark[]}
  */
 const episodeWatermarks = (participants, complete_to_ms) => [
-  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "admission.decision"], build: "api 2026.11.18" },
+  { source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" },
   { source: "sfu", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["audio.ingress"], build: "sfu 2026.11.12" },
   { source: "sync", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode"], build: "sync 2026.11.18" },
   { source: "report", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["report.problem"], build: "api 2026.11.18" },
@@ -159,7 +159,7 @@ export function nov18() {
     mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),
     ingress(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), 176_000, 61_500),
     mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
-    row(IDS.evEnd, { fact: "end.episode", source: "api", origin: origin.decision(IDS.evEnd), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "time_limit", value: { cap_minutes: 60 }, failure: false }),
+    row(IDS.evEnd, { fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "maximum_duration", value: {}, failure: false }),
     row(IDS.evLeave, {
       fact: "join.leave",
       source: "client",
@@ -222,7 +222,7 @@ export function nov18() {
   const attemptWindow = { from_ms: at("2026-11-18T10:02:00Z"), to_ms: at("2026-11-18T10:02:40Z") };
   const attempt = {
     declaration: { kind: /** @type {const} */ ("attempt"), id: IDS.attempt, tenant: TH, window: attemptWindow },
-    evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["end.episode", "admission.decision"], build: "api 2026.11.18" }] },
+    evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" }] },
   };
   const job = {
     declaration: { kind: /** @type {const} */ ("job"), id: IDS.job, tenant: TH, episode: ep, job_kind: "recording", window: { from_ms: end, to_ms: null } },

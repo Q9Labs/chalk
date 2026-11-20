@@ -40,7 +40,7 @@ The delivery group is how a reader knows what it has not seen. Contract C3, [tel
 - `end` says how a source ended: `closed` (the client named its last `next_seq` exactly) or `abandoned` (a successor found it dead and reports the last high-water mark it persisted).
 - A drop record carries `dropped_seqs` (half-open `[from, to)` ranges, at most 64), `drop_reason` (`queue_full`, `credential_expired` or `refused`) and, when the seqs belong to a predecessor, `dropped_source_id`.
 
-The ledger binds each source to the first Participant that wrote it. A later Participant of the same User or Agent is a successor and may write to it; any other batch is refused with `source_bound`. The ledger turns each source into watermarks and evidence gaps, and an open gap (a source that never closed, or a range it never accounted for) leaves the seat it covers unchecked. Unchecked is never healthy.
+The ledger binds each source to the first Participant that wrote it. A later Participant of the same User or Agent is a successor and may write to it. A batch whose own source is bound to another Participant that the batch's Participant does not succeed is refused whole with `source_bound`. A drop record that names a predecessor bound that way is rejected alone with `source_bound` and leaves that predecessor's gap open, while the rest of the batch lands. The ledger turns each source into watermarks and evidence gaps, and an open gap (a source that never closed, or a range it never accounted for) leaves the seat it covers unchecked. Unchecked is never healthy.
 
 ## Steps for a slice
 

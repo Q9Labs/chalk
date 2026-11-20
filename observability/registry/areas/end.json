@@ -152,10 +152,10 @@
       "witnesses": [
         {
           "fact": "end.episode",
-          "from": ["api"],
+          "from": ["sync"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'decision' and name == 'episode.end'",
-          "doc": "The API's end decision and its reason."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],
       "fault_scenario": null

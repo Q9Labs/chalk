@@ -1,5 +1,5 @@
 {
-  "schema_ver": "43d2a1352a2d",
+  "schema_ver": "72216cc081c8",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1011,7 +1011,7 @@
       "required": true,
       "sensitivity": null,
       "owner": "envelope.delivery",
-      "doc": "The record's position in its source's stream, starting at 1."
+      "doc": "The record's position in its source's stream, with no reuse. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger."
     },
     {
       "name": "shown_ms",
@@ -1492,7 +1492,7 @@
           "from": ["api"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and event == 'decision' and name == 'admission'",
+          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
           "doc": "The decision that admits or refuses the attempt."
         }
       ],
@@ -1596,11 +1596,11 @@
       "witnesses": [
         {
           "fact": "end.episode",
-          "from": ["api"],
+          "from": ["sync"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'decision' and name == 'episode.end'",
-          "doc": "The API's end decision and its reason."
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and event == 'sync.episode.ended'",
+          "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],
       "rule": "observability/rules/end.time_limit.mjs",

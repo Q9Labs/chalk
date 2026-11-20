@@ -104,7 +104,7 @@ export function localMidnight(/** @type {string} */ date, /** @type {string} */ 
   return guess - shift(first);
 }
 
-/** `+07:10` from the anchor; minutes keep counting past an hour (`+60:00`, `+105:00`). Only Episode detail uses relative times. */
+/** `+07:10` from the anchor; minutes keep counting past an hour (`+60:00`, `+105:00`). Only Episode, attempt and job detail use relative times. */
 export function relative(/** @type {number} */ ms, /** @type {number} */ anchor) {
   const total = Math.round((ms - anchor) / 1000);
   const sign = total < 0 ? "-" : "+";

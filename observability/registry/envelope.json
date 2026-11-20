@@ -6,7 +6,7 @@
       "doc": "Who sent a record and where it sits in that sender's stream.",
       "fields": [
         { "name": "event_id", "type": "id", "id_kind": "event", "required": true, "sensitivity": null, "doc": "One record. Minted by the kernel when the record is made." },
-        { "name": "seq", "type": "int", "required": true, "sensitivity": null, "doc": "The record's position in its source's stream, starting at 1." },
+        { "name": "seq", "type": "int", "required": true, "sensitivity": null, "doc": "The record's position in its source's stream, with no reuse. A client source counts from 0, as the outbox and the delivery ledger do (C3); a server source (the API, SFU and Sync kernels) counts from 1 and has no ledger." },
         { "name": "batch_id", "type": "id", "id_kind": "batch", "required": false, "sensitivity": null, "doc": "The batch that delivered the record. Stamped by the batcher or the ingest, not by the kernel." },
         { "name": "source_id", "type": "string", "required": true, "sensitivity": null, "doc": "The stream that owns seq. A client uses its client session id; a server uses its instance id." },
         { "name": "next_seq", "type": "int", "sensitivity": null, "doc": "The source's high-water mark on every batch (C3): every seq below it has been assigned." },

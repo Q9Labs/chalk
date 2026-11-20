@@ -98,7 +98,7 @@ Sync gets no Elixir kernel adoption here; its existing spans are the `sync` witn
 
 ## 6. Fault scenarios
 
-Handles, `ev_` handles and times vary per run. The header's `outcome` and `coverage`, each finding's outcome, code, party, `hop`, `module` and `upstream`, which facts read `[proven absent]`, and each `gap:` line's code and reason must match exactly. The samples follow the line grammar in [docs/diagnose.md](../../../diagnose.md): they leave out line 2 (the anchor) and the `next:` lines, and show only this slice's lines and the coverage its own checks give, because a view also carries other slices' checks. What each rule expected, its witnesses and the watermarks behind every `[proven absent]` print in `diagnose evidence f_x`. Each scenario below is the `fault_scenario` of its symptom. Local runs use `pnpm dev` (web 3070, api 8080, sync 4100), a Space from `pnpm web:proof` (`CHALK_E2E_INVITE`), and browsers launched the way `tests/pre-join.e2e.ts:18-21` launches them. Orb runs use `orb up chalk <branch>` and end with `orb down <orb>`. Preview runs deploy to the staging Pages project, never `chalk`: `pnpm exec wrangler pages deploy dist/client --project-name chalk-staging --branch obs-entry-fault` from `apps/web`, as `scripts/deploy/deploy-web-release.mjs:118` does for staging, so their findings land on the `staging` platform day. Times on a Space, Tenant or platform day are relative to 00:00 UTC (`+600:00` is 10:00 UTC). A day item stays open until its UTC day ends, so the day samples below are read the next day; read on the day of the fault, the same lines print under `coverage=partial(open)` with a `gap: open` line.
+Handles, `ev_` handles and times vary per run. The header's `outcome` and `coverage`, each finding's outcome, code, party, `hop`, `module` and `upstream`, which facts read `[proven absent]`, and each `gap:` line's code and reason must match exactly. The samples follow the line grammar in [docs/diagnose.md](../../../diagnose.md): they leave out line 2 (the anchor) and the `next:` lines, and show only this slice's lines and the coverage its own checks give, because a view also carries other slices' checks. What each rule expected, its witnesses and the watermarks behind every `[proven absent]` print in `diagnose evidence f_x`. Each scenario below is the `fault_scenario` of its symptom. Local runs use `pnpm dev` (web 3070, api 8080, sync 4100), a Space from `pnpm web:proof` (`CHALK_E2E_INVITE`), and browsers launched the way `tests/pre-join.e2e.ts:18-21` launches them. Orb runs use `orb up chalk <branch>` and end with `orb down <orb>`. Preview runs deploy to the staging Pages project, never `chalk`: `pnpm exec wrangler pages deploy dist/client --project-name chalk-staging --branch obs-entry-fault` from `apps/web`, as `scripts/deploy/deploy-web-release.mjs:118` does for staging, so their findings land on the `staging` platform day. Times on a Space, Tenant or platform day are UTC `HH:MM`. A day item stays open until its UTC day ends, so the day samples below are read the next day; read on the day of the fault, the same lines print under `coverage=partial(open)` with a `gap: open` line.
 
 1. **Call UI chunk fails** (Orb). A Dashboard Account keeps an open-admission Space's call running. In the Guest browser, `page.route("**/SpaceCall*", r => r.abort())` runs before Join, and stays on after the reload; the Guest presses Join again after it. The first page's attempt reads `f_x expected boot.app_failed all +00:40 reason=boot.chunk_reloaded ev=ev_x`, and the reloaded page's attempt prints the finding below. Control: remove the route once the second document load starts; the first attempt must still print that expected line and the second must read `outcome=healthy coverage=complete`.
 ```
@@ -110,7 +110,7 @@ fact: previous attempt cs_6c1f on the same device dev_5c2e ended boot.load_call_
 2. **No script runs** (preview). Visit one Space link once, then on a throwaway branch add `Content-Security-Policy: script-src 'none'` under `/:a-:b-:c` in `apps/web/public/_headers`, build and redeploy. e2e makes 20 visits to the link with a desktop Chrome user agent within 15 min, then one visit to `/privacy`.
 ```
 platform staging 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
-f_2b02 broken boot.never_ran all +600:00..+615:00 hop=edge_document module=web.boot upstream=witnessed ev=ev_4c2d
+f_2b02 broken boot.never_ran all 10:00..10:15 hop=edge_document module=web.boot upstream=witnessed ev=ev_4c2d
 fact: 20 html 200 documents to browsers on /:a-:b-:c [ev_4c2d]
 fact: no boot.started on /:a-:b-:c in the window [proven absent]
 fact: boot.started on /:a-:b-:c in the previous 24 h [ev_5d3e]
@@ -119,7 +119,7 @@ fact: boot.started of the same build on /privacy after the window [ev_6e4f]
 3. **Host page blocks Chalk** (local). The Dashboard Account opens `/dashboard/call/<spaceId>/join`; `page.route` fetches that document and fulfills it with an added `Content-Security-Policy: connect-src 'self'`, which blocks the api (8080) and sync (4100) origins. It reloads the page once, 70 s later.
 ```
 tenant ten_3c1d 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
-f_3c03 broken embed.blocked all +601:00..+602:00 hop=host_csp module=react.embed upstream=unknown ev=ev_7f5a
+f_3c03 broken embed.blocked all 10:01..10:02 hop=host_csp module=react.embed upstream=unknown ev=ev_7f5a
 fact: 2 access grants issued within 5 min, the latest for pt_4c1e [ev_7f5a,ev_8a6b]
 fact: no sync.websocket.authenticated for either grant's Participant within 60 s [proven absent]
 fact: no api request under either grant within 60 s [proven absent]
@@ -162,7 +162,7 @@ gap: admission.unanswered pt_7a20: edge not read
 8. **Unreadable sign-ins** (preview). Three fresh browser contexts each add the cookie `__Host-chalk_session=AAAA.AAAA` (name from `apps/web/server/cookies.ts:35-36`) and open `/dashboard`.
 ```
 platform staging 2026-11-20 outcome=broken coverage=complete checked=<c>/<e> asof=<t> rules=<hash>
-f_8b08 broken dashboard.request_failed all +602:00..+603:00 hop=dashboard_auth module=web.dashboard_server upstream=witnessed ev=ev_8e5a
+f_8b08 broken dashboard.request_failed all 10:02..10:03 hop=dashboard_auth module=web.dashboard_server upstream=witnessed ev=ev_8e5a
 fact: 401 auth_result=unreadable for 3 distinct cs_ within 15 min [ev_8e5a,ev_9f6b,ev_0a7c]
 ```
 9. **Invite row contradicts its refusal** (local). `update space_public_invites set enabled=false, disabled_at=null where space_id=<id>`, then open the Space's link. Control: `update space_public_invites set enabled=false, disabled_at=now(), state_epoch=state_epoch+1 where space_id=<id>` (the write `apps/api/db/queries/public_invites.sql:60-74` makes), then open the link; that attempt must print `outcome=expected coverage=complete` and the one finding `f_x expected invite.refused all +00:01 reason=invite.disabled ev=ev_x`.

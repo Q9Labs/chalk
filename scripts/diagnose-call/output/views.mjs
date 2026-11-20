@@ -6,7 +6,7 @@
  */
 import { profileFor } from "../proof/profile.mjs";
 import { standing } from "../proof/check.mjs";
-import { area, finalizeHandles, isoMinute, localAnchor, localMidnight, localWhen, ref, relative, span, uncoveredText } from "./format.mjs";
+import { area, finalizeHandles, isoMinute, localAnchor, localDate, localMidnight, localWhen, ref, relative, span, uncoveredText } from "./format.mjs";
 import { page } from "./page.mjs";
 
 /** @typedef {import("./format.mjs").Ref} Ref */
@@ -50,6 +50,20 @@ const dayScope = (declaration) => {
   if (declaration.kind === "platform") return { item: declaration.id, date: declaration.day };
   if (declaration.kind === "space" || declaration.kind === "tenant") return { item: ref(declaration.kind, declaration.id), date: declaration.day };
   return null;
+};
+
+/**
+ * How an item prints the times in its finding, fact and gap lines. A day item prints UTC `HH:MM`, since its header names the date
+ * (`MM-DD HH:MM` for a time on another day); an Episode, attempt or job prints `+07:10` from its start.
+ * @param {import("../proof/profile.mjs").Declaration} declaration
+ * @returns {At}
+ */
+const itemClock = (declaration) => {
+  if (declaration.kind === "space" || declaration.kind === "tenant" || declaration.kind === "platform") {
+    const { day } = declaration;
+    return (ms) => localWhen(ms, "UTC", localDate(ms, "UTC") !== day);
+  }
+  return (ms) => relative(ms, declaration.window.from_ms);
 };
 
 /**
@@ -130,15 +144,14 @@ function verdictGaps(verdict, declaration, at) {
 }
 
 /**
- * One Episode, attempt or job in depth: the only view with relative times.
+ * One item in depth: an Episode, attempt or job with relative times, or a Space, Tenant or platform day with UTC clock times.
  * @param {{ item: Item, status: Status, tenant: Tenant, ctx: ViewContext, via?: Via | null }} input
  * @returns {View}
  */
 export function itemView({ item, status, tenant, ctx, via = null }) {
   const { outcome, verdict } = standing(status);
   const declaration = item.declaration;
-  const anchorMs = declaration.window.from_ms;
-  const at = (/** @type {number} */ ms) => relative(ms, anchorMs);
+  const at = itemClock(declaration);
   const eligible = verdict?.coverage.eligible ?? profileFor(declaration, ctx.catalogue, ctx.asof_ms).checks.length;
   /** @type {Head} */
   const head = {
@@ -301,7 +314,7 @@ export function evidenceView({ item, status, finding, tenant, ctx, via = null })
   if (verdict === null) throw new TypeError("evidence needs a stored verdict");
   const declaration = item.declaration;
   const anchorMs = declaration.window.from_ms;
-  const at = (/** @type {number} */ ms) => relative(ms, anchorMs);
+  const at = itemClock(declaration);
   const complete = finding.proof.uncovered.length === 0;
   /** @type {Head} */
   const head = {

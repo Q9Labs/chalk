@@ -299,7 +299,7 @@ The v1 journey table still holds. v2 adds the following.
 
 - **Output contract** (the line grammar in [docs/diagnose.md](../diagnose.md), with goldens in `scripts/diagnose-call/golden/`):
   - Line 1 is the header: the scope (`episode ep_x tenant=T`, `attempt cs_x tenant=T`, `job job_x tenant=T`, `space spc_x <day>`, `tenant ten_x <day>`, `platform production <day>`, or a sweep such as `day T <date>`), then `outcome=`, `coverage=`, `checked=c/e`, `asof=` and `rules=`. Status and gaps are never truncated.
-  - One scoped time anchor comes next. Every item view (Episode, attempt, job, and the Space, Tenant and platform days, which are anchored at 00:00 UTC) prints times relative to it; sweeps print local clock times.
+  - One scoped time anchor comes next. An Episode, attempt or job view prints times relative to it, a Space, Tenant or platform day (anchored at 00:00 UTC) prints UTC clock times, and sweeps print local clock times.
   - Records are deterministic, one per line. A finding is `f_x <outcome> <code> <party> <when>` with `hop=`, `module=`, `upstream=`, `reason=` and `ev=` as they apply; a party is a bare handle with an optional name (`pt_4c1e(Haris)`) or `all`; a `fact:` cites only `ev_` handles or `[proven absent]`; and a hypothesis line appears only when an upstream witness supports it.
   - Handles are stable and resolvable within their scope, and a collision returns the candidates.
   - **Every finding says why its proof is sufficient** in `diagnose evidence f_x`: what was expected, what was observed, the source watermark for its window, a reproducible proof query, and what would falsify an absence or an attribution.
