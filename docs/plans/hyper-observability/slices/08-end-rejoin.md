@@ -28,9 +28,9 @@ Use the authenticated previous seat to attribute release. Do not join the two se
 
 ## 4. Rule conditions
 
-- `end.wrong_screen` retains the existing 10 s before / 120 s after comparison around the server end. Failure classifications in that interval are wrong. When the client knows the specific reason, compare it with the required classification too: `maximum_duration` must be reported as `time_limit`. An intentional Leave, removal, or page close is not a disagreement. A status-only confirmation from older servers can have no reason and show the generic end screen.
+- `end.wrong_screen` retains the existing 10 s before / 120 s after comparison around the server end. Failure classifications in that interval are wrong. When the client knows the specific reason, compare it with the required classification too: `maximum_duration` must be reported as `time_limit`. An intentional Leave, removal, or page close is not a disagreement. A generic maximum-duration end without a known client reason is unchecked: the row cannot distinguish a status-only confirmation from the old mapping bug.
 - `end.time_limit` requires a witnessed end. It reports `expected` for `maximum_duration` and passes another authoritative reason. It does not suppress a separate, proven wrong screen.
-- `rejoin.refused` reports a witnessed failed release even if a later retry works. A witnessed successful release passes if the evidence is complete and no failure was seen. A seat with no terminal release result is not declared a healthy rejoin; no click is inferred from an absent event.
+- `rejoin.refused` checks a seat that left before its Episode ended. It reads up to 120 seconds after the seat left and reports a witnessed failed release even if a later retry works. A witnessed successful release passes if the evidence is complete and no failure was seen. A seat with no terminal release result is not declared a healthy rejoin; no click is inferred from an absent event.
 - An absent required terminal witness cannot pass. Do not infer an Episode end from a socket closing, or infer a deploy caused a failed client from coincident timestamps.
 
 ## 5. Kernel boundaries
@@ -51,9 +51,9 @@ Against the non-production stack, run `node .agents/skills/verify-chalk/scripts/
 Finding line shapes (handles and times come from the run):
 
 ```text
-f_x broken end.wrong_screen pt_x +60:00 hop=client_end module=sdk.connection upstream=witnessed ev=ev_x
+f_x broken end.wrong_screen pt_x +60:00..+60:01 hop=client_end module=sdk.connection upstream=witnessed ev=ev_x
 f_x expected end.time_limit all +60:00 reason=end.time_limit ev=ev_x
-f_x broken rejoin.refused pt_x +02:10 hop=release module=web.space_entry upstream=unknown ev=ev_x
+f_x broken rejoin.refused pt_x +60:00..+60:00 hop=release module=web.space_entry upstream=unknown ev=ev_x
 ```
 
 ## 7. Out of scope

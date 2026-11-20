@@ -39,7 +39,13 @@ export function decide({ readings }) {
   const nearEnd = screen.observations.filter((o) => o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
   if (nearEnd.length === 0) return { status: "unknown", reason: "no terminal classification is timed near the Episode end" };
   const wrong = nearEnd.find((o) => FAILURE_SCREENS.has(o.claim) || (server.claim === "maximum_duration" && o.value.episode_end_reason === "maximum_duration" && o.claim === "episode_ended"));
-  if (!wrong) return { status: "pass" };
+  if (!wrong) {
+    // Legacy rows can't tell a status-only confirmation from a client that knew the reason but lost it.
+    if (server.claim === "maximum_duration" && nearEnd.some((o) => o.claim === "episode_ended")) {
+      return { status: "unknown", reason: "the generic end does not establish whether the client knew the time limit" };
+    }
+    return { status: "pass" };
+  }
   return {
     status: "finding",
     outcome: "broken",

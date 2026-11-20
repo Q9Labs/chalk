@@ -1,4 +1,4 @@
-check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=8/8 partial=4 asof=2026-11-19T01:00Z rules=807d705f
+check tenant=TH date=2026-11-18 outcome=broken coverage=partial checked=8/8 partial=4 asof=2026-11-19T01:00Z rules=ce39d129
 anchor=2026-11-19T01:00Z local=2026-11-19T06:00+05:00 tz=Asia/Karachi
 checked ten_1f0c 11-18 05:00 outcome=unknown coverage=partial(empty)
 checked spc_5bac 11-18 05:00 outcome=unknown coverage=partial(empty)

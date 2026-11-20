@@ -104,14 +104,14 @@ describe(symptom, () => {
     }
   });
 
-  it("healthy: a current status read ends the call on the Episode-ended screen", async () => {
+  it("a current status read avoids a failure screen without proving the client knew the time limit", async () => {
     const test = scenario("ended");
     try {
       await joinWithTerminalControl(test.client, test.platform);
       test.revokeMedia();
       await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
       const [draft] = test.callEnded();
-      expect(judged(withRecorded("healthy", draft))).toMatchObject({ findings: 0, checked: 2, eligible: 2 });
+      expect(judged(withRecorded("healthy", draft))).toMatchObject({ findings: 0, checked: 1, eligible: 2 });
     } finally {
       test.client.dispose();
     }
