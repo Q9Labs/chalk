@@ -24,6 +24,7 @@ type Entry = {
   trackId?: string;
   bytes?: number;
   sampledAt?: number;
+  flatSince?: number;
   paused?: boolean;
 };
 type Snapshot = Pick<TransportDiagnostic, "receive_state" | "track_state" | "element_state" | "play_result">;
@@ -86,6 +87,7 @@ export class AudioReceiveHealth {
       entry.trackId = undefined;
       entry.bytes = undefined;
       entry.sampledAt = undefined;
+      entry.flatSince = undefined;
       entry.hop = undefined;
     }
   }
@@ -203,6 +205,7 @@ export class AudioReceiveHealth {
     for (const entry of this.#entries.values()) {
       entry.bytes = undefined;
       entry.sampledAt = undefined;
+      entry.flatSince = undefined;
     }
   }
 
@@ -223,6 +226,7 @@ export class AudioReceiveHealth {
         entry.projectionOff = true;
         entry.bytes = undefined;
         entry.sampledAt = undefined;
+        entry.flatSince = undefined;
         this.#recordHop(entry, "remote_off");
         increment(counts, "projection_off");
         continue;
@@ -234,9 +238,10 @@ export class AudioReceiveHealth {
       const bytes = track ? inbound.get(track.id)?.bytesReceived : undefined;
       const comparable = track && entry.trackId === track.id && entry.bytes !== undefined && bytes !== undefined && bytes >= entry.bytes;
       const elapsed = comparable && entry.sampledAt !== undefined ? Math.floor(now - entry.sampledAt) : 0;
+      const previousSample = entry.sampledAt;
       entry.sampledAt = now;
       const snapshot = this.#snapshot(entry, track, inbound);
-      this.#recordAudioSample(entry, snapshot, elapsed >= 1000 && elapsed <= 60_000 ? elapsed : undefined, now);
+      this.#recordAudioSample(entry, snapshot, elapsed >= 1000 && elapsed <= 60_000 ? previousSample : undefined, now);
       const state = snapshot.receive_state ?? "announced";
       increment(counts, state);
       this.#reportStuck(entry, snapshot, now);
@@ -246,14 +251,25 @@ export class AudioReceiveHealth {
     }
   }
 
-  #recordAudioSample(entry: Entry, snapshot: Snapshot, sampleMs: number | undefined, now: number): void {
-    if (sampleMs !== undefined && snapshot.receive_state === "playing") this.#recordHop(entry, "playing");
-    else if (sampleMs !== undefined && (snapshot.receive_state === "element_bound" || snapshot.receive_state === "bytes_flowing")) {
+  #recordAudioSample(entry: Entry, snapshot: Snapshot, previousSample: number | undefined, now: number): void {
+    if (!entry.observedTrack) return;
+    if (previousSample !== undefined && snapshot.receive_state === "track_received") {
+      entry.flatSince ??= previousSample;
+      const flatMs = Math.floor(now - entry.flatSince);
+      // Cover a full SFU sampling interval even when the endpoints sample at different times.
+      if (flatMs >= 20_000) {
+        if (flatMs <= 60_000) this.#recordHop(entry, "inbound_flat", flatMs);
+        entry.flatSince = now;
+      } else if (entry.hop === undefined) this.#recordHop(entry, "subscribed");
+      return;
+    }
+    entry.flatSince = undefined;
+    if (previousSample !== undefined && snapshot.receive_state === "playing") this.#recordHop(entry, "playing");
+    else if (previousSample !== undefined && (snapshot.receive_state === "element_bound" || snapshot.receive_state === "bytes_flowing")) {
       if (snapshot.play_result === "NotAllowedError") this.#recordHop(entry, "autoplay_blocked");
       else if (snapshot.element_state === "paused" && snapshot.play_result === "ok") this.#recordHop(entry, "playback_paused");
       else this.#recordHop(entry, "inbound_flowing");
     } else if (now - entry.since > 10_000 && snapshot.receive_state === "pull_failed") this.#recordHop(entry, "pull_failed");
-    else if (now - entry.since > 10_000 && sampleMs !== undefined && snapshot.track_state === "live" && snapshot.receive_state === "track_received") this.#recordHop(entry, "inbound_flat", sampleMs);
     else if (entry.pull === "pull_succeeded") this.#recordHop(entry, "subscribed");
   }
 

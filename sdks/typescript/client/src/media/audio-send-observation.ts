@@ -28,8 +28,8 @@ export class AudioSendObservation {
       const previous = this.#previous;
       if (previous?.trackName === current.trackName && previous.id === current.id && current.bytes >= previous.bytes) {
         const elapsed = Math.floor(current.at - previous.at);
-        if (elapsed < 10_000 && elapsed >= 0) return;
-        if (elapsed >= 10_000 && elapsed <= 60_000) {
+        if (elapsed < 5_000 && elapsed >= 0) return;
+        if (elapsed >= 5_000 && elapsed <= 60_000) {
           if (current.bytes > previous.bytes) recordAudio(this.telemetry, "outbound_flowing", publication, elapsed);
           else if (hasSignal(previous, current)) recordAudio(this.telemetry, "capture_signal_no_outbound", publication, elapsed);
         }

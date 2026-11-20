@@ -76,7 +76,8 @@ describe("audio.not_heard", () => {
 });
 
 describe("audio.cant_hear", () => {
-  it.each([false, true])("judges real playback observation when inbound bytes advance (healthy=%s)", async (healthy) => {
+  it.each(["blocked", "playing", "no RTP"] as const)("judges the listener boundary: %s", async (scenario) => {
+    const healthy = scenario === "playing";
     const code = "audio.cant_hear";
     const input = fixture(code, healthy);
     const sender = input.rows[2]?.audio_peer_id;
@@ -101,9 +102,29 @@ describe("audio.cant_hear", () => {
     try {
       health.roster([publication]);
       health.pullSucceeded([publication.publicationId]);
-      health.observeAudioElement(publication.track, audio).played(healthy ? undefined : new DOMException("private policy detail", "NotAllowedError"));
+      health.observeAudioElement(publication.track, audio).played(scenario === "blocked" ? new DOMException("private policy detail", "NotAllowedError") : undefined);
       await health.sample();
       expect(drafts.map((draft) => draft.audio_observation)).toEqual(["subscribed"]);
+      if (scenario === "no RTP") {
+        for (let step = 0; step < 3; step++) {
+          now += 5000;
+          await health.sample();
+        }
+        expect(drafts.map((draft) => draft.audio_observation)).toEqual(["subscribed"]);
+        now += 5000;
+        await health.sample();
+        expect(drafts[1]).toMatchObject({ audio_observation: "inbound_flat", audio_sample_ms: 20_000 });
+
+        const [otherListener, subscription, flat, forwarded] = input.rows;
+        const timed = { ...input, rows: [otherListener, subscription, { ...flat, est_server_ms: input.declaration.window.from_ms + 25_000 }, { ...forwarded, est_server_ms: input.declaration.window.from_ms + 18_000 }] };
+        const observed = withCaptured(withCaptured(timed, 1, drafts[0]!), 2, drafts[1]!);
+        expect(judge(observed, code).rows).toMatchObject([{ hop: "receive_rtp", module: "unknown", upstream: "witnessed" }]);
+        const differentTrack = { ...observed, rows: observed.rows.map((row, index) => (index === 3 ? { ...row, audio_track_key: otherListener!.audio_track_key } : row)) };
+        const unmatched = judge(differentTrack, code);
+        expect(unmatched.findings).toBe(0);
+        expect(unmatched.checked).toBeLessThan(unmatched.eligible);
+        return;
+      }
       now += 5000;
       bytes += 4096;
       audio.currentTime += healthy ? 1 : 0;

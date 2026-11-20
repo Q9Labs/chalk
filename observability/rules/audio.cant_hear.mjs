@@ -1,5 +1,5 @@
 // @ts-check
-import { broken, containsProgress, records, sameTrack, withUpstream } from "./audio-evidence.mjs";
+import { broken, containsProgress, records, sameTrack, withUpstream } from "./audio.not_heard.mjs";
 
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Seat} Seat */
@@ -14,7 +14,7 @@ export const applies = (declaration, seat) => declaration.kind === "episode" && 
 
 const receiveClaims = new Set(["remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused"]);
 const failures = new Map([
-  ["pull_failed", ["audio_subscription", "sdk.audio.subscribe", "the microphone is listed but the listener's pull keeps failing", "a successful pull of this microphone during the failure"]],
+  ["pull_failed", ["audio_subscription", "sdk.audio.subscribe", "the microphone is listed but the listener's pull failed and did not deliver a track", "a successful pull of this microphone during the failure"]],
   ["autoplay_blocked", ["autoplay", "react.audio_output", "inbound RTP advanced but the browser denied play()", "advancing element time in the blocked sample"]],
   ["playback_paused", ["audio_element", "react.audio_output", "inbound RTP advanced but the attached element paused after a successful play()", "advancing element time in the paused sample"]],
 ]);
