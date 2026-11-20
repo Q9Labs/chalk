@@ -395,7 +395,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/adapters/aws/lambdawaker/waker.go",
-          "literal": "\"transcript.wake\""
+          "literal": "obs.EventTranscriptWake"
         }
       ]
     },
@@ -427,7 +427,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
-          "literal": "\"transcript.claim\""
+          "literal": "obs.EventTranscriptClaim"
         }
       ]
     },
@@ -457,7 +457,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_claim\""
+          "literal": "obs.EventTranscriptFinalizeClaim"
         }
       ]
     },
@@ -488,7 +488,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker.go",
-          "literal": "\"transcript.job_retry\""
+          "literal": "obs.EventTranscriptJobRetry"
         }
       ]
     },
@@ -517,7 +517,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker.go",
-          "literal": "\"transcript.job_complete\""
+          "literal": "obs.EventTranscriptJobComplete"
         }
       ]
     },
@@ -546,7 +546,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_accept\""
+          "literal": "obs.EventTranscriptFinalizeAccept"
         }
       ]
     },
@@ -577,7 +577,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_retry\""
+          "literal": "obs.EventTranscriptFinalizeRetry"
         }
       ]
     },
@@ -604,11 +604,11 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_document.go",
-          "literal": "\"transcript.document_read\""
+          "literal": "obs.EventTranscriptDocumentRead"
         },
         {
           "path": "apps/api/internal/talktime/service.go",
-          "literal": "\"transcript.document_read\""
+          "literal": "obs.EventTranscriptDocumentRead"
         }
       ]
     },
@@ -635,7 +635,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/episode_talk_time.go",
-          "literal": "\"transcript.talk_time_served\""
+          "literal": "obs.EventTranscriptTalkTimeServed"
         }
       ]
     },
@@ -658,7 +658,7 @@
       },
       "emit_sites": [
         {
-          "path": "apps/transcription-dispatcher/src/index.ts",
+          "path": "apps/transcription-dispatcher/src/dispatcher.ts",
           "literal": "\"transcript.dispatcher.invoke\""
         }
       ]

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "ca9cfc67d67f",
+  "schema_ver": "6e3b338bbd39",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1912,7 +1912,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
-          "literal": "\"transcript.claim\""
+          "literal": "obs.EventTranscriptClaim"
         }
       ],
       "doc": "One decision per claimed job, plus none (nothing claimable) or repository_error per call. The lease commits before URL signing, so url_failed, invalid_assignment and lease_stale name the orphaned-lease fault of issue #1510."
@@ -2262,7 +2262,7 @@
       },
       "emit_sites": [
         {
-          "path": "apps/transcription-dispatcher/src/index.ts",
+          "path": "apps/transcription-dispatcher/src/dispatcher.ts",
           "literal": "\"transcript.dispatcher.invoke\""
         }
       ],
@@ -2290,11 +2290,11 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_document.go",
-          "literal": "\"transcript.document_read\""
+          "literal": "obs.EventTranscriptDocumentRead"
         },
         {
           "path": "apps/api/internal/talktime/service.go",
-          "literal": "\"transcript.document_read\""
+          "literal": "obs.EventTranscriptDocumentRead"
         }
       ],
       "doc": "Reading a stored transcript document, on the document route or inside talk-time: ok, expected(transcript.not_ready), or error(object_get, artifact_mismatch, decode). Never the body."
@@ -2346,7 +2346,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_accept\""
+          "literal": "obs.EventTranscriptFinalizeAccept"
         }
       ],
       "doc": "The finalizer-accept decision: accepted, rejected (artifact verification failed) or error."
@@ -2371,7 +2371,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_claim\""
+          "literal": "obs.EventTranscriptFinalizeClaim"
         }
       ],
       "doc": "One decision per claimed finalizer job, plus none or repository_error per call; url_failed when chunk GET or output PUT signing fails after the lease committed."
@@ -2399,7 +2399,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_finalize.go",
-          "literal": "\"transcript.finalize_retry\""
+          "literal": "obs.EventTranscriptFinalizeRetry"
         }
       ],
       "doc": "After RetryFinalizer commits: retryable or dead_letter, with the error code."
@@ -2424,7 +2424,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker.go",
-          "literal": "\"transcript.job_complete\""
+          "literal": "obs.EventTranscriptJobComplete"
         }
       ],
       "doc": "The result-accept decision: accepted, rejected (result verification failed) or error (the accept call failed)."
@@ -2452,7 +2452,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/transcription_worker.go",
-          "literal": "\"transcript.job_retry\""
+          "literal": "obs.EventTranscriptJobRetry"
         }
       ],
       "doc": "After the retry service commits: retryable or dead_letter, with the dispatcher's safe error code and the attempt it ended."
@@ -2512,7 +2512,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/httpapi/episode_talk_time.go",
-          "literal": "\"transcript.talk_time_served\""
+          "literal": "obs.EventTranscriptTalkTimeServed"
         }
       ],
       "doc": "The status the Episode talk-time endpoint served and how many Recordings it counted as still transcribing."
@@ -2534,7 +2534,7 @@
       "emit_sites": [
         {
           "path": "apps/api/internal/adapters/aws/lambdawaker/waker.go",
-          "literal": "\"transcript.wake\""
+          "literal": "obs.EventTranscriptWake"
         }
       ],
       "doc": "The API's wake call to the dispatcher for a job: queued (accepted) or failed (unavailable, encoding, invoke or rejected status), always with the job it was for."
@@ -3854,38 +3854,6 @@
     {
       "code": "share.wont_stop",
       "slice": 5
-    },
-    {
-      "code": "transcript.attempt_lost",
-      "slice": 11
-    },
-    {
-      "code": "transcript.failed",
-      "slice": 11
-    },
-    {
-      "code": "transcript.late",
-      "slice": 11
-    },
-    {
-      "code": "transcript.speech_dropped",
-      "slice": 11
-    },
-    {
-      "code": "transcript.stuck",
-      "slice": 11
-    },
-    {
-      "code": "transcript.talk_time_stuck",
-      "slice": 11
-    },
-    {
-      "code": "transcript.unreadable",
-      "slice": 11
-    },
-    {
-      "code": "transcript.wake_lost",
-      "slice": 11
     },
     {
       "code": "video.frozen",

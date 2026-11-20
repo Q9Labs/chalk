@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "ca9cfc67d67f",
+  "schema_ver": "6e3b338bbd39",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -308,7 +308,7 @@
       "code": "transcript.attempt_lost",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -447,7 +447,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
-              "literal": "\"transcript.claim\""
+              "literal": "obs.EventTranscriptClaim"
             }
           ]
         },
@@ -457,7 +457,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker.go",
-              "literal": "\"transcript.job_complete\""
+              "literal": "obs.EventTranscriptJobComplete"
             }
           ]
         },
@@ -467,7 +467,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker.go",
-              "literal": "\"transcript.job_retry\""
+              "literal": "obs.EventTranscriptJobRetry"
             }
           ]
         },
@@ -493,7 +493,7 @@
       "code": "transcript.failed",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -661,7 +661,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker.go",
-              "literal": "\"transcript.job_retry\""
+              "literal": "obs.EventTranscriptJobRetry"
             }
           ]
         },
@@ -671,7 +671,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_finalize.go",
-              "literal": "\"transcript.finalize_retry\""
+              "literal": "obs.EventTranscriptFinalizeRetry"
             }
           ]
         },
@@ -707,7 +707,7 @@
       "code": "transcript.late",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -833,7 +833,7 @@
       "code": "transcript.speech_dropped",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -946,7 +946,7 @@
       "code": "transcript.stuck",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1156,7 +1156,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
-              "literal": "\"transcript.claim\""
+              "literal": "obs.EventTranscriptClaim"
             }
           ]
         },
@@ -1166,7 +1166,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_finalize.go",
-              "literal": "\"transcript.finalize_claim\""
+              "literal": "obs.EventTranscriptFinalizeClaim"
             }
           ]
         }
@@ -1182,7 +1182,7 @@
       "code": "transcript.talk_time_stuck",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "item",
       "witnesses": [
@@ -1328,7 +1328,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/episode_talk_time.go",
-              "literal": "\"transcript.talk_time_served\""
+              "literal": "obs.EventTranscriptTalkTimeServed"
             }
           ]
         },
@@ -1354,7 +1354,7 @@
       "code": "transcript.unreadable",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1451,11 +1451,11 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_document.go",
-              "literal": "\"transcript.document_read\""
+              "literal": "obs.EventTranscriptDocumentRead"
             },
             {
               "path": "apps/api/internal/talktime/service.go",
-              "literal": "\"transcript.document_read\""
+              "literal": "obs.EventTranscriptDocumentRead"
             }
           ]
         }
@@ -1471,7 +1471,7 @@
       "code": "transcript.wake_lost",
       "area": "transcription",
       "slice": 11,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "job",
       "per": "item",
       "witnesses": [
@@ -1549,7 +1549,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/adapters/aws/lambdawaker/waker.go",
-              "literal": "\"transcript.wake\""
+              "literal": "obs.EventTranscriptWake"
             }
           ]
         },
@@ -1559,7 +1559,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
-              "literal": "\"transcript.claim\""
+              "literal": "obs.EventTranscriptClaim"
             }
           ]
         },
@@ -1569,7 +1569,7 @@
           "emit_sites": [
             {
               "path": "apps/api/internal/httpapi/transcription_finalize.go",
-              "literal": "\"transcript.finalize_claim\""
+              "literal": "obs.EventTranscriptFinalizeClaim"
             }
           ]
         },
