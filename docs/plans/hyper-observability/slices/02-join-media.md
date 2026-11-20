@@ -51,7 +51,16 @@ Listen-only after a denied or absent input is supported, not a finding. The proo
 | Remote pull repeatedly fails and startup never moves RTP | `join.no_media`, Participant, `sdk.media`, `media.subscribe_timeout` | Remote pull accepted and receive RTP, outgoing devices unavailable or off |
 | Connected but RTP stays at zero for the observed budget | `join.no_media`, Participant, `sdk.media`, `media.rtp_timeout` | Packet counts advance; absent or interrupted measurements remain unchecked |
 
-Use the normal SDK entry points, inject at the Sync, SFU signaling and peer-connection boundaries, and judge outbox records without fabricating timestamps or identity. A live stack run additionally needs intake, readback and the real CLI. Save fault and control lines with the run evidence; do not present fixture output as live readback.
+The CLI finding line identifies the seat, not the whole Episode:
+
+```text
+f_* broken join.no_media pt_* +MM:SS hop=transport module=sdk.media upstream=unknown ev=ev_*
+fact: media.transport_timeout: the peer transport timed out before RTP flowed [ev_*]
+```
+
+The other failures replace `hop` with `sync_entry`, `publish`, `ice`, `dtls`, `subscribe` or `rtp` and name their reason in the fact line. The two-way and listen-only controls print no finding for the seat.
+
+Use the normal SDK entry points and inject at the Sync, SFU signaling and peer-connection boundaries. Do not invent timestamps or identity to make outbox records judgeable. A live stack run additionally needs intake, readback and the real CLI. Save fault and control lines with the run evidence; do not present fixture output as live readback.
 
 ## 7. Out of scope and traps
 

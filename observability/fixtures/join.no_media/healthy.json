@@ -5,9 +5,7 @@
     "kind": "episode",
     "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
     "tenant": "c1000000-0000-4000-8000-000000000001",
-    "features": [
-      "media"
-    ],
+    "features": ["media"],
     "window": {
       "from_ms": 1795596400000,
       "to_ms": 1795600000000
@@ -18,9 +16,7 @@
         "name": "Seat A",
         "role": "participant",
         "can_publish": true,
-        "generations": [
-          1
-        ],
+        "generations": [1],
         "connections": [],
         "window": {
           "from_ms": 1795596400000,
@@ -216,6 +212,24 @@
       "clock_state": "synced",
       "clock_err_ms": 20,
       "join_signal": "listen_only"
+    }
+  ],
+  "watermarks": [
+    {
+      "source": "client",
+      "subject": "pt:a1000000-0000-4000-8000-000000000001",
+      "complete_to_ms": 1795600300000,
+      "evidence_gaps": [],
+      "emits": ["join.initial"],
+      "build": "client fixture"
+    },
+    {
+      "source": "report",
+      "subject": "*",
+      "complete_to_ms": 1795600300000,
+      "evidence_gaps": [],
+      "emits": ["report.problem"],
+      "build": "report fixture"
     }
   ]
 }

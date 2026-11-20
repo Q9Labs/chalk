@@ -74,6 +74,12 @@ export class InitialJoin {
     return "publish_failed";
   }
 
+  noRemotePublication(pc: RTCPeerConnection): void {
+    if (this.#peer?.pc !== pc || this.#pull === "unrequested") return;
+    this.#pull = "unrequested";
+    this.#observed = undefined;
+  }
+
   subscribe(pc: RTCPeerConnection, state: "started" | "accepted" | "failed"): void {
     if (this.#peer?.pc !== pc || this.#closed) return;
     if (state === "accepted") this.#pull = "accepted";

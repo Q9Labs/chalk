@@ -1457,6 +1457,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#receiveHealth.roster(advertised.values());
     this.#pruneRemotePullState(advertised);
     const desired = this.#visibleRemotePublications(advertised);
+    if (desired.size === 0) this.#initialJoin?.noRemotePublication(this.#connection);
     // Only the authoritative roster counts: the early-pull pass sees the Sync projection, which is empty while Sync is down.
     this.#hiddenVideos = advertised.size - desired.size;
     this.#pollFailedPull = true;

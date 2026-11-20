@@ -19,6 +19,7 @@ class Peer extends EventTarget {
   sendPackets: number | undefined;
   receivePackets: number | undefined;
   route: "host" | "relay" = "host";
+  dtls: "connected" | "failed" = "connected";
   answerState: TransportState = CONNECTED;
 
   change(state: TransportState) {
@@ -65,8 +66,8 @@ class Peer extends EventTarget {
   async getStats(): Promise<RTCStatsReport> {
     const rows = new Map<string, RTCStats>();
     const stat = (id: string, type: string, values: object) => rows.set(id, { id, type, timestamp: performance.now(), ...values });
-    if (this.connectionState === "connected") {
-      stat("transport", "transport", { dtlsState: "connected", selectedCandidatePairId: "pair" });
+    if (this.iceConnectionState === "connected") {
+      stat("transport", "transport", { dtlsState: this.dtls, selectedCandidatePairId: "pair" });
       stat("pair", "candidate-pair", { state: "succeeded", localCandidateId: "local", remoteCandidateId: "remote" });
       stat("local", "local-candidate", { candidateType: this.route });
       stat("remote", "remote-candidate", { candidateType: "host" });
@@ -106,6 +107,7 @@ function scenario(input: { readonly syncTimeout?: boolean; readonly deviceError?
           pollIntervalMs: 500,
           transport,
           initialJoin: options.initialJoin,
+          telemetry: options.telemetry,
         });
         return bindConnectionMediaClient(media, async () => {});
       },
@@ -143,10 +145,12 @@ describe(symptom, () => {
   it.each([
     ["signaling", CONNECTED, "publish_failed"],
     ["failed ICE", { connection: "failed", ice: "failed" }, "startup_ice_failed"],
+    ["failed DTLS", { connection: "failed", ice: "connected" }, "startup_dtls_failed"],
     ["checking ICE", { connection: "connecting", ice: "checking" }, "transport_timeout"],
   ] satisfies readonly (readonly [string, TransportState, string])[])("records terminal initial publish failure: %s", async (fault, state, signal) => {
     const test = scenario();
     test.peer.answerState = state;
+    if (fault === "failed DTLS") test.peer.dtls = "failed";
     if (fault === "signaling") test.transport.localPublishFailure = new CloudflareSFUError("injected refusal", "signaling_failed");
     const joined = test.client.join({ microphone: true, camera: false }).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(0);
@@ -202,5 +206,16 @@ describe(symptom, () => {
     test.peer.receivePackets = 0;
     await vi.advanceTimersByTimeAsync(32_000);
     expect(await test.signals()).toContain("rtp_timeout");
+  });
+  it("does not time out after the last publisher leaves", async () => {
+    const test = scenario();
+    const joined = test.client.join({ microphone: false, camera: false });
+    await joined;
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await test.signals()).toContain("subscribe_accepted");
+    test.peer.receivePackets = 0;
+    test.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+    await vi.advanceTimersByTimeAsync(35_000);
+    expect(await test.signals()).not.toContain("rtp_timeout");
   });
 });

@@ -546,8 +546,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             const reason = initialJoin?.publishFailure();
             if (reason) initialJoin?.fail(reason);
             else initialJoin?.close();
-          }
-          else initialJoin?.close();
+          } else initialJoin?.close();
           if (!retry) yield* recordFailure(failure);
           model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
           yield* stopPorts();
