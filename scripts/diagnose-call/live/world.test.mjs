@@ -271,15 +271,14 @@ test("another Tenant's heartbeat cannot fill an unread seq", () => {
 
 test("a late ingest is read by event time, not by when Axiom got it", async () => {
   const late = { ...ROWS[2], _time: iso(END + 180_000) };
-  const afterDeadline = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 2, END + 180_000, { name: "client.call_ended", end_reason: "connection_lost", event_id: "out-of-window" });
+  const overlapsDeadline = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 1, END + 120_001, { name: "client.call_ended", end_reason: "connection_lost", clock_err_ms: 25 });
   const stores = {
     ...fakeStores(),
-    rows: async (/** @type {string} */ _episode, /** @type {{ from_ms: number, to_ms: number }} */ window) => [...ROWS.filter((row) => row !== ROWS[2]), late, afterDeadline].filter((row) => Date.parse(row._time) <= window.to_ms),
+    rows: async (/** @type {string} */ _episode, /** @type {{ from_ms: number, to_ms: number }} */ window) => [...ROWS.filter((row) => row !== ROWS[1] && row !== ROWS[2]), late, overlapsDeadline].filter((row) => Date.parse(row._time) <= window.to_ms),
   };
-  const { world } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { catalogue: CATALOGUE, now: NOW });
+  const { world } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { now: NOW });
   const screens = world.evidence[EPISODE]?.observations.filter(({ fact }) => fact === "end.client_screen");
-  assert.equal(screens?.length, 1);
-  assert.equal(screens?.[0]?.window.from_ms, END + 2_000);
+  assert.deepEqual(screens?.map(({ window }) => window.from_ms).sort(), [END + 2_000, END + 119_976]);
 });
 
 test("live mode does not present one Episode as a discovered population", async () => {

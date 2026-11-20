@@ -126,7 +126,7 @@ describe("end.wrong_screen's chain ends in the kernel's verdict", () => {
       return fetch(new URL(url.pathname + url.search, axiomURL), init);
     });
     const asof = chainFixture(run).asof_ms;
-    const { world, notes } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { catalogue: CATALOGUE, now: asof });
+    const { world, notes } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { now: asof });
     assert.ok(!notes.some((note) => note.includes("telemetry ledger unread")), notes.join("\n"));
     const { ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES });
     const [checked] = await check({ item: { kind: "episode", id: EPISODE } }, ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: asof });

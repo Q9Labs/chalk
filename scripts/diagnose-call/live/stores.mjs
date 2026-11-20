@@ -13,11 +13,10 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { axiom, quote } from "../axiom.mjs";
 import { connectionEnv } from "../database.mjs";
-import { liveWorld, unwrapRow } from "./world.mjs";
+import { liveWorld } from "./world.mjs";
 
 /** @typedef {import("./world.mjs").DbEpisode} DbEpisode */
 /** @typedef {import("./world.mjs").Ledger} Ledger */
-/** @typedef {import("../proof/profile.mjs").CheckDef} CheckDef */
 /** @typedef {{ tenant: string, episode: string }} Target */
 /**
  * @typedef {{
@@ -38,23 +37,16 @@ export class StoreError extends Error {}
  * Opens the World of one Episode.
  * @param {Target} target
  * @param {Stores} stores
- * @param {{ catalogue: readonly CheckDef[], now?: number }} options
+ * @param {{ now?: number }} options
  */
-export async function openLive(target, stores, { catalogue, now = Date.now() }) {
+export async function openLive(target, stores, { now = Date.now() }) {
   for (const [name, id] of Object.entries(target)) if (!UUID.test(id)) throw new StoreError(`--live needs --${name} <uuid>, got ${JSON.stringify(id.slice(0, 40))}`);
   const db = await stores.declaration(target);
   if (db === null) throw new StoreError(`no Episode ${target.episode} in tenant ${target.tenant}`);
-  const from_ms = Date.parse(db.episode.started_at ?? db.episode.created_at);
-  // The settle deadline limits event time, not when an offline upload or relay reaches Axiom.
-  const settle = Math.max(0, ...catalogue.map((def) => def.settle_ms ?? 0));
-  const ended = db.episode.ended_at === null ? null : Date.parse(db.episode.ended_at);
-  const window = { from_ms, to_ms: Math.min(now, ended === null ? now : ended + settle) };
-  const [ledger, ingested] = await Promise.all([stores.ledger(target), stores.rows(target.episode, { from_ms, to_ms: now })]);
-  const rows = ingested.filter((raw) => {
-    const at = unwrapRow(raw).est_server_ms;
-    // Untimed rows remain visible for diagnostics but cannot count as a timed witness or fill a seq.
-    return typeof at !== "number" || (at >= window.from_ms && at <= window.to_ms);
-  });
+  // Query by ingest time through now, so late uploads can fill seqs. The
+  // proof rules select witnesses by their event intervals, including clock error.
+  const window = { from_ms: Date.parse(db.episode.created_at), to_ms: now };
+  const [ledger, rows] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window)]);
   return liveWorld({ db, ledger, rows, asof_ms: now });
 }
 

@@ -56,7 +56,7 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
     if (live === null && query.options.fixture === null) {
       return { code: 69, out: "", err: "diagnose: the verdict commands need a world; pass --fixture nov18, --live --tenant <uuid> --episode <uuid>, or run `diagnose call <episode uuid>` for the single-call report\n" };
     }
-    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { catalogue: checks.catalogue, now });
+    const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { now });
     const session = await open(query, cwd, opened.world, checks);
     const dispatched = await dispatch(query, session);
     // A live read without --store keeps nothing, so its head says so and no line claims a verdict retained from an earlier run.
