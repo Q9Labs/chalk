@@ -53,7 +53,7 @@ import { clientWatermark } from "./watermarks.mjs";
  */
 
 /** The service name each server source's rows carry in Axiom. */
-export const SERVICES = Object.freeze({ api: "chalk-api", sync: "chalk-sync", sfu: "chalk-sfu" });
+const SERVICES = Object.freeze({ api: "chalk-api", sync: "chalk-sync", sfu: "chalk-sfu" });
 
 /**
  * One Axiom row as the row adapter reads it: the event fields (Axiom nests them under `attributes`) at the top and the service name

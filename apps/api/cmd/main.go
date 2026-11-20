@@ -90,27 +90,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: %w", err)
 	}
-	evidenceSink, err := observability.NewAxiomEvidence(cfg.Observability.OTLPEndpoint, os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
+	evidenceSink, shutdownTelemetry, err := startTelemetry(cfg.Observability)
 	if err != nil {
 		return err
 	}
-	telemetry, err := observability.Start(context.Background(), observability.Config{
-		Environment:  cfg.Observability.Environment,
-		OTLPEndpoint: cfg.Observability.OTLPEndpoint,
-		OTLPInsecure: cfg.Observability.OTLPInsecure,
-		Service:      cfg.Observability.Service,
-		Version:      cfg.Observability.Version,
-	})
-	if err != nil {
-		return fmt.Errorf("start telemetry: %w", err)
-	}
-	defer func() {
-		shutdownCtx, cancel := observability.TelemetryShutdownContext()
-		defer cancel()
-		if err := telemetry.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "api: shutdown telemetry: %v\n", err)
-		}
-	}()
+	defer shutdownTelemetry()
 
 	diagnostics := observability.New(observability.Config{
 		Environment:          cfg.Observability.Environment,
@@ -684,17 +668,7 @@ func run() error {
 		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(pool))
-	if evidenceSink.Enabled() {
-		evidenceDone := make(chan struct{})
-		go func() {
-			defer close(evidenceDone)
-			evidenceSink.Run(signalCtx, telemetryLedger.RelayEvidence, logger)
-		}()
-		defer func() {
-			stop()
-			<-evidenceDone
-		}()
-	}
+	defer startEvidenceRelay(signalCtx, telemetryLedger, evidenceSink, logger)()
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

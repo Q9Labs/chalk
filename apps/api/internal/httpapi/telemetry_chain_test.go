@@ -20,6 +20,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/obs"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
@@ -220,9 +221,10 @@ func seedChainEpisode(t *testing.T, pool *pgxpool.Pool, subject accessgrants.Sub
 		}
 		write(`delete from tenants where id = $1::text::uuid`, tenant)
 	})
-	write(`insert into spaces(id, tenant_id, name, slug, media_plane) values ($1::text::uuid, $2::text::uuid, 'Chain', 'chain', 'cf_sfu')`, space, tenant)
+	plane := mediaplane.ProviderCloudflareSFU.SettingName()
+	write(`insert into spaces(id, tenant_id, name, slug, media_plane) values ($1::text::uuid, $2::text::uuid, 'Chain', 'chain', $3)`, space, tenant, plane)
 	write(`insert into episodes(id, tenant_id, space_id, status, config_snapshot)
-	       values ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'active', '{"media_plane_binding":{"provider":"cf_sfu"}}')`, episode, tenant, space)
+	       values ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'active', jsonb_build_object('media_plane_binding', jsonb_build_object('provider', $4::text)))`, episode, tenant, space, plane)
 	write(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role)
 	       values ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, '{subscribe}', 1, 'left', 'collaborator')`, participant, tenant, space, episode)
 }

@@ -54,7 +54,7 @@ func TestEpisodeReportGroupsRowsBySourceAndNamesEachSourcesGaps(t *testing.T) {
 	admit := func(participant, source string, req sdktelemetry.Request) {
 		who := telemetrydelivery.Identity{TenantID: id(t, tenantID), EpisodeID: id(t, episodeID), ParticipantID: id(t, participant)}
 		ledger.Join(who)
-		if _, err := ledger.Admit(t.Context(), who, req, received); err != nil {
+		if _, err := ledger.Admit(t.Context(), who, req, received, sdktelemetry.Stamp{}); err != nil {
 			t.Fatal(err)
 		}
 	}

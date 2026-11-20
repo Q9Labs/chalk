@@ -52,12 +52,9 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
   try {
     const { live, rest } = liveTarget(argv);
     const query = parseQuery(rest);
-    if (live !== null && query.options.fixture !== null) throw new UsageError("pass --live or --fixture, not both");
+    if (live !== null) validateLiveQuery(query);
     if (live === null && query.options.fixture === null) {
       return { code: 69, out: "", err: "diagnose: the verdict commands need a world; pass --fixture nov18, --live --tenant <uuid> --episode <uuid>, or run `diagnose call <episode uuid>` for the single-call report\n" };
-    }
-    if (live !== null && DISCOVERY_COMMANDS.has(query.command)) {
-      throw new UsageError("--live reads one Episode; use --fixture <world> for attempts, jobs or population views");
     }
     const opened = live === null ? { world: await fixtureWorld(query, cwd), notes: [] } : await openLive(live, stores ?? realStores(process.env), { catalogue: checks.catalogue, now });
     const session = await open(query, cwd, opened.world, checks);
@@ -73,6 +70,12 @@ export async function run(argv, { cwd = process.cwd(), stores, now, checks = { c
     if (error instanceof SourceError || error instanceof StoreError) return { code: 69, out: "", err: `diagnose: ${error.message}\n` };
     throw error;
   }
+}
+
+/** @param {Query} query */
+function validateLiveQuery(query) {
+  if (query.options.fixture !== null) throw new UsageError("pass --live or --fixture, not both");
+  if (DISCOVERY_COMMANDS.has(query.command)) throw new UsageError("--live reads one Episode; use --fixture <world> for attempts, jobs or population views");
 }
 
 /**
