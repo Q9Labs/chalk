@@ -829,6 +829,12 @@ jobs:
       deployments: write
       id-token: write
     steps:
+      - name: Refuse a deployment to Nightly
+        if: inputs.managed_environment != 'production'
+        run: |
+          echo 'Nightly has no host to deploy to: a cut proves a release on a throwaway stack. Set managed_environment to production.' >&2
+          exit 1
+
       - name: Checkout deployment tooling from workflow revision
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -920,12 +926,6 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-doctl
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
-        if: inputs.managed_environment == 'nightly'
-        with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
-
       - name: Deploy, health-check, and prove release
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         env:
@@ -972,18 +972,6 @@ jobs:
             fi
           done < <(printf '%s\n' "$MANAGED_SECRET_EXCLUSIONS" | tr ',' '\n')
 
-          if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
-            [[ "$CHALK_MANAGED_PARAMETER_PREFIX" == /chalk/nightly/managed-episode ]] || {
-              echo 'nightly requires its own managed parameter prefix' >&2
-              exit 1
-            }
-          fi
-          if [[ "$MANAGED_ENVIRONMENT" == nightly && "$recorder_control" == true ]]; then
-            [[ "$CHALK_MANAGED_RECORDER_CONFIG_PARAMETER" == /chalk/nightly/* ]] || {
-              echo 'nightly requires its own dispatcher configuration and state (PR #268, scheduler_state=DISABLED initially)' >&2
-              exit 1
-            }
-          fi
           if [[ "$MANAGED_ENVIRONMENT" == production ]]; then
             python3 scripts/releases/release.py verify_images --manifest "$manifest"
           fi
@@ -993,10 +981,6 @@ jobs:
             python3 scripts/releases/media.py pin_archives --manifest "$manifest" --output "$media"
           fi
           node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
-          if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then
-            python3 scripts/releases/media.py qualify --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
-            python3 scripts/releases/media.py record_current --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
-          fi
 
       - name: Capture applied identity under the environment lock
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
@@ -1048,15 +1032,6 @@ jobs:
           path: ${{ runner.temp }}/managed-deployment.json
           if-no-files-found: ignore
           retention-days: 90
-
-      - name: Retain signed media boot receipts
-        if: always() && inputs.managed_environment == 'nightly'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: media-qualification-${{ needs.prepare-release.outputs.release_id }}
-          path: ${{ runner.temp }}/media-qualification/*-receipt.json
-          retention-days: 90
-          if-no-files-found: ignore
 
   build-web:
     name: Build web-${{ matrix.target }} once

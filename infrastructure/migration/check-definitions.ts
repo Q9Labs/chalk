@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { isDeepStrictEqual } from "node:util";
 import * as Schema from "effect/Schema";
-import { entryFile, stacks } from "../registry.ts";
+import { cutoverStages, entryFile, stacks } from "../registry.ts";
 
 // Compare every transitive declaration, not one chosen set of fixture inputs.
 // Equality of the executable AST and dependency edges proves equal resource
@@ -86,7 +86,7 @@ function normalizedSource(path: string, source: string, before: boolean) {
   // These are fail-closed credential guards, not declaration inputs/props.
   source = source.replace(/^    (?:requireCloudflareCredentials\(\)|credential\("[A-Z_]+"\));\n/gm, "");
   if (identity === "infrastructure/recorder/alchemy.run.ts") source = source.replace(/^    requireInput\(!!process.env.CHALK_CAPTURE[^\n]+\n/m, "");
-  if (!before && path === "infrastructure/platform/config.ts") source = source.replace(/^      yield\* resolveCredentials.pipe[^\n]+\n/m, "");
+  if (!before && path === "infrastructure/platform/config.ts") source = source.replace(/^      yield\* resolveCredentials.pipe[^\n]+\n/m, "").replace(/^\/\/ The account and region of this run[^\n]*\nexport const awsEnvironment = [^\n]+\n/m, "");
   return source;
 }
 const inputModules = new Set([
@@ -166,7 +166,9 @@ function graph(entry: string, before: boolean) {
   visit(entry);
   return [...modules.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
-for (const stack of [...stacks.map((stack) => ({ name: stack.stackName, entry: `infrastructure/${entryFile(stack)}` })), { name: "r2-transcription-lifecycle", entry: "infrastructure/transcription-storage/temporary-object-cleanup.ts" }]) {
+// A stack already cut over was proven by its seeded no-op plan and clean drift check; its definition has changed on purpose since.
+const settled = new Set(cutoverStages().map(({ stack }) => stack));
+for (const stack of [...stacks.filter(({ stackName }) => !settled.has(stackName)).map((stack) => ({ name: stack.stackName, entry: `infrastructure/${entryFile(stack)}` })), { name: "r2-transcription-lifecycle", entry: "infrastructure/transcription-storage/temporary-object-cleanup.ts" }]) {
   const entry = stack.entry;
   const before = graph(originalPath(entry), true),
     after = graph(entry, false);

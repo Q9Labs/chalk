@@ -63,7 +63,7 @@ class DispatcherAlchemyTests(unittest.TestCase):
             seen['path'].write_text('private diagnostics')
             if returncode == 0:
                 Path(env['CHALK_INFRA_RESULT']).write_text(json.dumps({'checked': True, 'applied': False}))
-            return subprocess.CompletedProcess(command, returncode)
+            return subprocess.CompletedProcess(command, returncode, stderr='warning: noise\nInfrastructure dispatcher operation failed (defect StateStoreError); no payload logged.\n' if returncode else '')
         inputs = {'environment_name': 'nightly', 'function_name': 'chalk-nightly-transcription-dispatcher'}
         with mock.patch.object(alchemy_dispatcher.subprocess, 'run', driver):
             try:
@@ -84,6 +84,13 @@ class DispatcherAlchemyTests(unittest.TestCase):
         self.assertFalse(seen['path'].exists())
         self.assertEqual(kept.read_text(), 'private diagnostics')
         self.assertEqual(kept.stat().st_mode & 0o777, 0o600)
+
+    def test_a_failed_plan_names_the_error_class_and_nothing_else(self):
+        _, _, error = self.run_plan_with_driver(1)
+        kept = Path(error.rsplit(': ', 1)[1])
+        self.addCleanup(kept.unlink)
+        self.assertIn('Infrastructure dispatcher operation failed (defect StateStoreError)', error)
+        self.assertNotIn('noise', error)
 
 
 if __name__ == '__main__':

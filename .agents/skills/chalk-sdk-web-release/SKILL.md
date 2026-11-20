@@ -14,7 +14,7 @@ Ship only the requested targets. Use one pre-push gate, let each release workflo
 - `sdk+web`: Dispatch both workflows from the same release SHA before waiting for either one.
 - `managed`: Deploy API and Sync through the Release workflow. Follow [managed releases](../../../docs/managed-release.md).
 
-Managed backend changes and recorder input reloads must use `deploy_managed=true` and the intended `managed_environment`. Never use a build-only Release followed by a local SSM command, `release:recorder deploy`, or a non-dry-run managed controller. Never read a skipped managed job as deployment success. The rest is in [managed releases](../../../docs/managed-release.md).
+Managed backend changes and recorder input reloads must use `deploy_managed=true` with `managed_environment=production`; Nightly has no host. Never use a build-only Release followed by a local SSM command, `release:recorder deploy`, or a non-dry-run managed controller. Never read a skipped managed job as deployment success. The rest is in [managed releases](../../../docs/managed-release.md).
 
 An SDK release without an explicit version uses the next patch version. A web request means staging first and then production only when the active thread explicitly approves production shipping.
 
