@@ -248,6 +248,23 @@ describe("a reload", () => {
     expect(world.storage.length).toBe(1);
   });
 
+  it("does not take the source of a client that is still disposing", async () => {
+    const world = createWorld("dispose-in-realm");
+    const live = new Set<string>();
+    const first = world.boot({ liveSources: live });
+    const source = first.outbox.sessionId;
+    first.outbox.record(ended);
+    world.server.faults.push("lose_request");
+    const disposing = first.outbox.dispose();
+    await seconds(1);
+    world.boot({ liveSources: live });
+    await seconds(5);
+    expect(world.server.requests.filter((request) => request.source_id === source)).toHaveLength(1);
+    await seconds(60);
+    await disposing;
+    expect(live.has(source)).toBe(false);
+  });
+
   it("clears the closing mark when a page restored from the back-forward cache records again", async () => {
     const world = createWorld("bfcache");
     const first = world.boot();

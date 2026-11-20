@@ -178,6 +178,7 @@ type AccessGrantWire = {
     readonly generation: number;
     readonly intake_path: string;
   } | null;
+  readonly telemetry?: { readonly token: string; readonly expires_at: string };
 };
 type ParticipantLifecycleWire = Omit<ParticipantLifecycle, "access"> & {
   readonly access?: AccessGrantWire | null;
@@ -205,6 +206,7 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
       provider: value.media.provider,
       client_payload: payload,
     },
+    telemetry: value.telemetry,
   });
 }
 function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, unknown>> {

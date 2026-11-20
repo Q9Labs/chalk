@@ -34,8 +34,6 @@ const MAX_DISPOSE_ROUNDS = 8;
 /** The server takes 64 KiB a request. Every request is sent with keepalive so a closing page cannot cancel it, and a keepalive request may not go over that. */
 const MAX_BATCH_BYTES = 48 * 1024;
 const MAX_QUEUE_BYTES = 256 * 1024;
-/** The journal holds P0 records only, and no more of them than the P0 share of the queue. */
-const MAX_JOURNAL_RECORD_BYTES = MAX_QUEUE_BYTES / 2;
 const SEND_TIMEOUT_MS = 10_000;
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 60_000;
@@ -210,10 +208,13 @@ export class TelemetryOutbox implements TelemetrySink {
     stream.end = "closed";
     stream.closing = true;
     stream.saved = stream.next;
-    this.#realm.delete(stream.id);
     this.#step({ a: "dispose", src: stream.id });
     this.#persist(true);
-    await this.flush();
+    try {
+      await this.flush();
+    } finally {
+      this.#realm.delete(stream.id);
+    }
   }
 
   #streams(): Stream[] {
@@ -553,17 +554,10 @@ export class TelemetryOutbox implements TelemetrySink {
     return stream.live ? this.#disposed && this.#drops.empty : true;
   }
 
-  /** The P0 records not yet settled, oldest first, as many as the journal's share of the budget holds. A record that does not fit is held in memory only. */
+  /** Every P0 record not yet settled, oldest first. The queue budget and the one batch in flight already bound them. */
   #heldRecords(stream: Stream): { readonly event: TelemetryEvent; readonly subject: string | null }[] {
     const held = [...(stream.inflight?.entries ?? []), ...stream.queue.entries()].filter((entry) => entry.priority === "p0");
-    let bytes = 0;
-    const kept: { readonly event: TelemetryEvent; readonly subject: string | null }[] = [];
-    for (const entry of held) {
-      bytes += entry.bytes;
-      if (bytes > MAX_JOURNAL_RECORD_BYTES) break;
-      kept.push({ event: entry.event, subject: entry.subject });
-    }
-    return kept;
+    return held.map((entry) => ({ event: entry.event, subject: entry.subject }));
   }
 
   /** Reads the journals of other sources: dead predecessors of this tab, which this client sends for and ends. A source still alive in this realm is skipped. */

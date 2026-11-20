@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryStorage } from "./outbox.delivery.test.helpers";
 import { createTestOutbox, expectUnbrokenSequence, statsEvent } from "./outbox.test.helpers";
+import { readJournalText } from "./journal";
+import { createSessionJournal } from "./web-platform";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -236,5 +239,18 @@ describe("faults", () => {
     expect(test.accepted).toHaveLength(135 * 6);
     expectUnbrokenSequence(test.accepted);
     expect(test.requests.reduce((bytes, request) => bytes + request.send.body.length, 0)).toBeLessThan(4 * 1024 * 1024);
+  });
+});
+
+describe("the journal", () => {
+  it("holds every unsettled P0 record, past 128 KiB", () => {
+    const storage = new MemoryStorage();
+    const test = createTestOutbox({ journal: createSessionJournal(() => storage) });
+    test.state.online = false;
+    const count = 700;
+    for (let index = 0; index < count; index++) test.outbox.record({ type: "connection_failed", code: "media_start_failed", detail: "x".repeat(200) });
+    const text = storage.getItem(`chalk.telemetry.${test.outbox.sessionId}`) ?? "";
+    expect(text.length).toBeGreaterThan(128 * 1024);
+    expect(readJournalText(text)?.records.map((record) => record.event.seq)).toEqual(Array.from({ length: count }, (_, index) => index));
   });
 });
