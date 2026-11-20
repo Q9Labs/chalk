@@ -124,13 +124,13 @@ Telemetry has its own credential, so a loss no longer follows the 5-minute media
 
 ## The model
 
-`tools/formal/telemetry-delivery/run.sh` checks [TelemetryDelivery.tla](../tools/formal/telemetry-delivery/TelemetryDelivery.tla). It models the client (record, evict, drop records of each source, journal, joins as another Participant, crash, `pagehide`, reload, dispose), the network (loss and duplicates), another Participant of the tenant that sends a forged batch or end for a source it learned, and the API (owner check, ledger commit, then the sink write and the answer, partial answers, content rejections, stale ends below the floor, and crashes before and after the commit), and checks:
+`tools/formal/telemetry-delivery/run.sh` checks [TelemetryDelivery.tla](../tools/formal/telemetry-delivery/TelemetryDelivery.tla). It models the client (record, evict, drop records of each source, journal, joins as another Participant, crash, `pagehide`, reload, dispose), the network (loss and duplicates), another Participant of the tenant that sends a forged batch or end for a source it learned, and the API (owner check, atomic ledger and payload commit, an independent relay and ACK, partial answers, content rejections, stale ends below the floor, and crashes before and after the commit), and checks:
 
 - `AckSafe`: an acknowledged seq is committed as stored or rejected.
-- `SinkCommitted`: the sink holds only committed rows, so a failed commit logs nothing.
+- `SinkCommitted`: pending and exported rows both require a committed sequence.
 - `TruthfulLedger`: a stored seq has its row, and a dropped seq is named by a drop record with its row, in the pending outbox or the sink.
-- `OwnerWrites`: only a source's own Participant writes it. The row's owner is the Participant whose credential sends the source, every stored or rejected seq is one the client minted for it, and every sink row is a record the client made.
-- `OneRecordPerKey` and `SeqNeverReused`: no two different records share `(source_id, seq)`, in the sink or anywhere the client minted them.
+- `OwnerWrites`: only a source's own Participant writes it. The row's owner is the Participant whose credential sends the source, every stored or rejected seq is one the client minted for it, and every pending or exported row is a record the client made.
+- `OneRecordPerKey` and `SeqNeverReused`: no two different records share `(source_id, seq)`, in durable evidence or anywhere the client minted them.
 - `DurableAccounted`: every durably enqueued record is with the client, pending export, stored, or named by a durable drop record. The only exceptions are losses the server names: a rejected record or the unsent drop list of an abandoned source, and each of those is inside a gap.
 - `Conservation`: every record the outbox accepted is one of those or inside a gap.
 - `GapsHonest` and `CloseHonest`: a missing range only names seqs that were assigned, and a closed source names its last seq exactly.

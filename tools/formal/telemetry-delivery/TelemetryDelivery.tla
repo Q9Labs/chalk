@@ -485,24 +485,25 @@ Held(r) ==
     \/ Key(r) \in pdrops
     \/ \E d \in HeldRecs : Key(r) \in d.covers
 
-\* A stored seq whose row is not in the sink: the reader sees it as missing.
-NoRowFor(k) == k[2] \in ledger[k[1]].stored /\ ~\E r \in sink : Key(r) = k
 \* The reader may not see a pending row yet, but Postgres has its payload.
 DurableRows == pending \cup sink
 DurablyCovered(k) == \E d \in DurableRows : k \in d.covers
 
-\* The evidence_gap computation (telemetrydelivery.Gaps) with the reader's row check: below
-\* the high-water mark every seq that is neither stored nor dropped is missing (a rejected
-\* seq included); past it, the tail is unknown unless the source closed. A stored seq with no
-\* row, and a seq named only by such a drop record, are missing to the reader too.
+\* The join safety rules depend only on the durable payloads, not on which
+\* store has them. Write stutters under this view; the liveness models use
+\* the full state so they still check that the rows reach the sink.
+JoinSafetyView == <<clientVars, netVars, ledger, DurableRows, srv, ghostVars, faultVars>>
+
+\* The ledger's evidence gaps (telemetrydelivery.Gaps): below the high-water
+\* mark every seq neither stored nor dropped is missing (rejections included);
+\* past it, the tail is unknown unless the source closed. The readback tests
+\* separately show that readers leave committed but unexported seqs unread.
 High(s) == IF ledger[s].end = "closed" THEN ledger[s].endNext ELSE Max(ledger[s].reported, ledger[s].endNext)
 Missing(s) == {q \in 0..(High(s) - 1) : q \notin ledger[s].stored \cup ledger[s].dropped}
 TailUnknown(s) == ledger[s].end # "closed"
 InGap(r) ==
     \/ r.seq \in Missing(r.src)
     \/ TailUnknown(r.src) /\ r.seq >= High(r.src)
-    \/ NoRowFor(Key(r))
-    \/ \E d \in assigned : IsDrop(d) /\ NoRowFor(Key(d)) /\ Key(r) \in d.covers
 
 \* A loss the server can name: a rejected record (including a rejected drop
 \* record), or the unnamed drop list of an abandoned source.
@@ -521,8 +522,8 @@ TypeOK ==
 \* Nothing is acknowledged that the ledger has not committed as stored or rejected.
 AckSafe == \A a \in resps : \A q \in a.acks : q \in ledger[a.req.src].stored \cup ledger[a.req.src].rejected
 
-\* The sink holds only committed rows, so a failed commit logs nothing.
-SinkCommitted == \A r \in sink : r.seq \in ledger[r.src].stored
+\* Pending and exported payloads both require a committed seq.
+SinkCommitted == \A r \in DurableRows : r.seq \in ledger[r.src].stored
 
 \* A stored seq (including a drop record) always has a durable payload.
 TruthfulLedger ==
@@ -540,7 +541,7 @@ OwnerWrites ==
 
 \* One record per key: copies of a write collapse, but two different records never share
 \* (source_id, seq).
-OneRecordPerKey == \A r1, r2 \in sink : Key(r1) = Key(r2) => r1 = r2
+OneRecordPerKey == \A r1, r2 \in DurableRows : Key(r1) = Key(r2) => r1 = r2
 
 \* The client never mints two records at one (source_id, seq), even across a reload.
 SeqNeverReused == \A r1, r2 \in assigned : Key(r1) = Key(r2) => r1 = r2
@@ -550,7 +551,7 @@ SeqNeverReused == \A r1, r2 \in assigned : Key(r1) = Key(r2) => r1 = r2
 DurableAccounted == \A r \in durable : Held(r) \/ r \in DurableRows \/ DurablyCovered(Key(r)) \/ (Excused(Key(r)) /\ InGap(r))
 
 \* Every record the outbox accepted is accounted, a gap included.
-Conservation == \A r \in assigned : Held(r) \/ InSink(r) \/ Covered(Key(r)) \/ InGap(r)
+Conservation == \A r \in assigned : Held(r) \/ r \in DurableRows \/ DurablyCovered(Key(r)) \/ InGap(r)
 
 \* An exact missing range is never invented: every missing seq was really assigned.
 GapsHonest == \A s \in Sources : \A q \in Missing(s) : \E r \in assigned : Key(r) = <<s, q>>
