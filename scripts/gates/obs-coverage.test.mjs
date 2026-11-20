@@ -36,6 +36,12 @@ test("a healthy fixture the rule flags, or a positive one it misses, fails", asy
   assert.match(failures.join("\n"), /healthy fixture .* gives 1 end\.wrong_screen finding/u);
 });
 
+test("a positive fixture with no row of a witnessing event fails", async () => {
+  const witnesses = example.witnesses.map((witness) => (witness.fact === "end.client_screen" ? { ...witness, events: witness.events.map((event) => ({ ...event, event: "client.screen_shown" })) } : witness));
+  const { failures } = await checkCoverage({ root, graph: only({ ...example, witnesses }) });
+  assert.match(failures.join("\n"), /positive fixture has no client\.screen_shown row for end\.client_screen/u);
+});
+
 test("an allow-listed symptom that is complete fails, so the list only shrinks", async () => {
   const { failures } = await checkCoverage({ root, graph: only({ ...example, allowlisted: true }) });
   assert.match(failures.join("\n"), /end\.wrong_screen is complete: remove it/u);

@@ -7,13 +7,16 @@
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { run } from "../diagnose.mjs";
 import nov18, { IDS } from "../fixtures/nov18.mjs";
 import { CATALOGUE, RULES } from "../proof/catalogue.mjs";
 import { check } from "../proof/check.mjs";
 import { openWorld } from "../proof/fixture-world.mjs";
+import { finalizeHandles, ref } from "./format.mjs";
 import { measureRecord, renderText } from "./text.mjs";
 import { evidenceView, itemView } from "./views.mjs";
 
@@ -194,14 +197,54 @@ describe("contract", () => {
     assert.throws(() => renderText(view), /coverage complete with 1 gap lines/u);
   });
 
+  it("prints a related record as <kind> <handle> key=value", () => {
+    /** @type {import("./views.mjs").Related} */
+    const upload = { t: "related", kind: "upload", ref: ref("diagnostic_upload", "3f9a1c2e-0000-4000-8000-00000000a001"), fields: { readback: "missing", trigger: "report" } };
+    /** @type {import("./views.mjs").View} */
+    const view = {
+      v: 1,
+      view: "episode",
+      head: { view: "episode", scope: { item: "ep_x", tenant: "T" }, outcome: "unknown", coverage: null, checked: null, eligible: null, asof: "a", rules: "r", stale: null },
+      anchor: null,
+      via: null,
+      records: [upload],
+      gaps: [],
+      page: null,
+      next: [],
+    };
+    assert.equal(renderText(finalizeHandles(view)).split("\n")[1], "upload dg_3f9a readback=missing trigger=report");
+  });
+
   it("exits 64 on a usage mistake and 69 without a fixture", async () => {
     assert.equal((await run(["ep_9feb", "--bogus"])).code, 64);
     assert.equal((await run(["ep_9feb"])).code, 69);
   });
 
-  it("exits 3 under --strict when something is broken, 2 when coverage is partial", async () => {
+  it("exits 3 under --strict when something is broken, 2 when coverage is partial or the outcome unknown, 0 only when healthy", async () => {
     assert.equal((await diagnose(["ep_9feb", "--strict"])).code, 3);
     assert.equal((await diagnose(["ep_31aa", "--strict"])).code, 2);
+    assert.equal((await diagnose(["ep_5c0d", "--strict"])).code, 0);
+    // A world where an independent witness contradicts one seat's microphone state: coverage stays complete, the outcome unknown.
+    const dir = mkdtempSync(join(tmpdir(), "diagnose-strict-"));
+    const world = join(dir, "disagree.mjs");
+    writeFileSync(
+      world,
+      `import { nov18, IDS } from ${JSON.stringify(new URL("../fixtures/nov18.mjs", import.meta.url).href)};
+export default function world() {
+  const w = nov18();
+  const evidence = structuredClone(w.evidence[IDS.ep5c0d]);
+  const o = evidence.observations.find((x) => x.fact === "audio.mic_state");
+  evidence.observations.push({ ...o, id: o.id.slice(0, -4) + "ffff", origin: o.origin + ":other", claim: o.claim === "unmuted" ? "muted" : "unmuted" });
+  w.evidence[IDS.ep5c0d] = evidence;
+  w.history = w.history.map((h) => (h.item === IDS.ep5c0d ? { ...h, evidence } : h));
+  return w;
+}
+`,
+    );
+    const contradicted = await run(["ep_5c0d", "--fixture", world, "--strict"]);
+    rmSync(dir, { recursive: true, force: true });
+    assert.match(contradicted.out, /outcome=unknown coverage=complete/u);
+    assert.equal(contradicted.code, 2);
   });
 });
 
@@ -291,36 +334,41 @@ describe("review fixes", () => {
 
 describe("day item times", () => {
   // No check judges a day item yet, so the goldens show none of its timed lines. This renders the 18 Nov Episode's real verdict under
-  // the Space's day declaration, which changes only how the times print.
-  it("prints a day item's times as UTC HH:MM, with the date for a time on another day", async () => {
-    const world = nov18();
-    const { items, ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES });
-    const [checked] = await check({ item: { kind: "episode", id: IDS.ep9feb } }, ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: world.asof_ms });
-    assert.ok(checked);
-    const { verdict } = checked;
-    const space = items.find((item) => item.kind === "space");
-    assert.ok(space);
-    /** @type {import("../proof/check.mjs").Status} */
-    const status = { state: "current", stored: { item: { kind: space.kind, id: space.id }, declaration: "", fingerprint: "", verdict } };
-    const tenant = world.tenants[0];
-    assert.ok(tenant);
-    const ctx = { asof_ms: world.asof_ms, rules: RULES, catalogue: CATALOGUE, paging: { limit: 20, cursor: null, budget: null }, measure: measureRecord };
+  // each day declaration (Space, Tenant, platform), which changes only how the times print.
+  for (const [kind, header] of /** @type {const} */ ([
+    ["space", /^space spc_5bac 2026-11-18 outcome=broken /u],
+    ["tenant", /^tenant ten_1f0c 2026-11-18 outcome=broken /u],
+    ["platform", /^platform production 2026-11-18 outcome=broken /u],
+  ]))
+    it(`prints a ${kind} day's times as UTC HH:MM, with the date for a time on another day`, async () => {
+      const world = nov18();
+      const { items, ports } = await openWorld(world, { catalogue: CATALOGUE, rules: RULES });
+      const [checked] = await check({ item: { kind: "episode", id: IDS.ep9feb } }, ports, { catalogue: CATALOGUE, rules: RULES, asof_ms: world.asof_ms });
+      assert.ok(checked);
+      const { verdict } = checked;
+      const day = items.find((item) => item.kind === kind);
+      assert.ok(day);
+      /** @type {import("../proof/check.mjs").Status} */
+      const status = { state: "current", stored: { item: { kind: day.kind, id: day.id }, declaration: "", fingerprint: "", verdict } };
+      const tenant = world.tenants[0];
+      assert.ok(tenant);
+      const ctx = { asof_ms: world.asof_ms, rules: RULES, catalogue: CATALOGUE, paging: { limit: 20, cursor: null, budget: null }, measure: measureRecord };
 
-    const view = renderText(itemView({ item: space, status, tenant, ctx }));
-    assert.match(view, /^space spc_5bac 2026-11-18 outcome=broken /u);
-    assert.match(view, /^f_5b55 broken audio\.not_heard all 09:52\.\.09:55 /mu);
-    assert.match(view, /^report ev_2b3c all 09:56 /mu);
+      const view = renderText(itemView({ item: day, status, tenant, ctx }));
+      assert.match(view, header);
+      assert.match(view, /^f_5b55 broken audio\.not_heard all 09:52\.\.09:55 /mu);
+      assert.match(view, /^report ev_2b3c all 09:56 /mu);
 
-    const finding = verdict.findings.find((candidate) => candidate.code === "audio.not_heard");
-    assert.ok(finding);
-    const evidence = renderText(evidenceView({ item: space, status, finding, tenant, ctx }));
-    assert.match(evidence, /^fact: SFU ingress 10480 packets, 0 voiced 09:52\.\.09:55 \[ev_a1f3\]$/mu);
-    assert.match(evidence, /^watermark: sfu all complete_to=11-19 01:00 /mu);
-    const timed = [view, evidence].flatMap((text) => text.split("\n")).filter((line) => !/^(anchor=|query:)/u.test(line));
-    assert.deepEqual(
-      timed.filter((line) => / [+-]\d\d:\d\d\b/u.test(line)),
-      [],
-      "no relative time in a day item",
-    );
-  });
+      const finding = verdict.findings.find((candidate) => candidate.code === "audio.not_heard");
+      assert.ok(finding);
+      const evidence = renderText(evidenceView({ item: day, status, finding, tenant, ctx }));
+      assert.match(evidence, /^fact: SFU ingress 10480 packets, 0 voiced 09:52\.\.09:55 \[ev_a1f3\]$/mu);
+      assert.match(evidence, /^watermark: sfu all complete_to=11-19 01:00 /mu);
+      const timed = [view, evidence].flatMap((text) => text.split("\n")).filter((line) => !/^(anchor=|query:)/u.test(line));
+      assert.deepEqual(
+        timed.filter((line) => / [+-]\d\d:\d\d\b/u.test(line)),
+        [],
+        "no relative time in a day item",
+      );
+    });
 });

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { run } from "../diagnose.mjs";
 import { uncovered } from "../proof/evidence.mjs";
-import { StoreError, realStores } from "./stores.mjs";
+import { StoreError, psqlFailure, realStores } from "./stores.mjs";
 import { clientWatermark, liveWorld, sourceCoverage, unwrapRow } from "./world.mjs";
 
 /** @typedef {import("./world.mjs").LedgerSource} LedgerSource */
@@ -160,4 +160,46 @@ test("a legacy row is renamed to its registry event by the registry's match", ()
   const row = unwrapRow({ _time: iso(START), service: { name: "chalk-api" }, attributes: { event: "sdk.telemetry", type: "call_ended", episode_id: EPISODE } });
   assert.equal(row.event, "client.call_ended");
   assert.equal(row.service, "chalk-api");
+});
+
+test("a seq the API rejected for its content is a gap, so a closed source does not read it as absent", () => {
+  /** @type {LedgerSource} */
+  const rejecting = {
+    ...closed,
+    watermark: {
+      ...closed.watermark,
+      stored: [
+        { from: 0, to: 1 },
+        { from: 2, to: 3 },
+      ],
+      rejected: [{ from: 1, to: 2 }],
+    },
+  };
+  const rows = ROWS.map(unwrapRow).filter((row) => !(row.source_id === CLOSED_SOURCE && row.seq === 1));
+  const w = clientWatermark(CLOSED_SEAT, { tenant_id: TENANT, episode_id: EPISODE, sources: [rejecting] }, rows, { asof_ms: NOW, start_ms: START });
+  assert.deepEqual(w.evidence_gaps, [{ from_ms: START + 1_000, to_ms: END + 2_000, reason: "rejected seq 1..2 final" }]);
+  assert.equal(uncovered(w, { source: "client", subject: `pt:${CLOSED_SEAT}`, fact: "end.client_screen", window: { from_ms: START, to_ms: END + 120_000 } })?.why, "evidence_gap");
+});
+
+test("rows shaped like the API sink's sdk.telemetry rows carry no est_server_ms, so their seat stays partial, never complete", () => {
+  // sdktelemetry.Log writes type, seq, elapsed_ms, source_id, batch_id and received_at; nothing stamps a server time yet.
+  const logRow = (/** @type {number} */ seq, extra = {}) =>
+    unwrapRow({
+      _time: iso(START + seq * 1_000),
+      service: { name: "chalk-api" },
+      attributes: { event: "sdk.telemetry", type: "heartbeat", seq, elapsed_ms: seq * 1_000, source_id: OPEN_SOURCE, batch_id: "0e000000-0000-4000-8000-0000000000f6", received_at: iso(START + seq * 1_000), episode_id: EPISODE, participant_id: OPEN_SEAT, ...extra },
+    });
+  /** @type {LedgerSource} */
+  const source = { ...open, watermark: { ...open.watermark, stored: [{ from: 0, to: 3 }] }, gaps: [] };
+  const coverage = sourceCoverage(source, [logRow(0), logRow(1), logRow(2, { type: "call_ended", end_reason: "episode_ended" })], { asof_ms: NOW, start_ms: START });
+  assert.equal(coverage.complete_to_ms, null);
+  assert.deepEqual(coverage.evidence_gaps, [{ from_ms: START, to_ms: null, reason: "unread seq 0..3 open" }]);
+});
+
+test("a psql failure prints a fixed message, never psql's stderr, which names the database user and host", () => {
+  const stderr = 'psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL:  role "synthetic" does not exist';
+  assert.equal(psqlFailure({ code: 2, stderr }), "connect to the declaration database failed");
+  assert.equal(psqlFailure({ code: 3, stderr }), "the declaration query failed");
+  assert.equal(psqlFailure({ code: "ENOENT" }), "psql is not installed");
+  assert.doesNotMatch(psqlFailure({ code: 1, stderr }), /synthetic|127\.0\.0\.1/u);
 });

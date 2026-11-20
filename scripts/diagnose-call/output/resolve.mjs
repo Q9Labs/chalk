@@ -40,14 +40,17 @@ export function indexWorld(world, items, verdicts) {
   for (const tenant of world.tenants) entries.push({ kind: "tenant", id: tenant.id, label: tenant.name, tenant: null, meaning: null, when_ms: null, target: { kind: "tenant", tenant: tenant.id }, tenant_id: tenant.id, name: tenant.name });
   for (const person of world.people)
     entries.push({ kind: person.kind, id: person.id, label: person.name, tenant: tenantName(person.tenant), meaning: null, when_ms: null, target: { kind: "person", person: { kind: person.kind, id: person.id }, tenant: person.tenant }, tenant_id: person.tenant, name: person.name });
-  for (const item of items) entries.push(...itemEntries(item, tenantName(item.tenant), tenantOf(item.tenant)?.tz ?? "UTC"));
+  // Labels name other records by handle, shortened against every id of that kind in the world, the way a view finalizes its handles.
+  const episodes = items.filter((item) => item.declaration.kind === "episode").map((item) => item.id);
+  const seats = items.flatMap((item) => (item.declaration.kind === "episode" ? item.declaration.seats.map((seat) => seat.participant) : []));
+  for (const item of items) entries.push(...itemEntries(item, tenantName(item.tenant), tenantOf(item.tenant)?.tz ?? "UTC", episodes));
   for (const session of world.sessions) {
     const item = items.find((candidate) => candidate.id === session.episode);
     if (!item) continue;
     entries.push({
       kind: session.meaning === "client_session" ? "client_session" : "media_connection",
       id: session.id,
-      label: `session of ${formatHandle("participant", session.participant).slice(0, 7)}`,
+      label: `session of ${formatHandle("participant", session.participant, { scope: seats })}`,
       tenant: tenantName(item.tenant),
       meaning: session.meaning,
       when_ms: item.declaration.window.from_ms,
@@ -70,9 +73,10 @@ export function indexWorld(world, items, verdicts) {
  * @param {Item} item
  * @param {string} tenant the tenant's name
  * @param {string} tz
+ * @param {readonly string[]} episodes every Episode id, the scope its handle is shortened against
  * @returns {Entry[]}
  */
-function itemEntries(item, tenant, tz) {
+function itemEntries(item, tenant, tz, episodes) {
   const declaration = item.declaration;
   const when_ms = declaration.window.from_ms;
   /** @type {Entry[]} */
@@ -83,7 +87,7 @@ function itemEntries(item, tenant, tz) {
     const guest = person.kind === "guest";
     /** @type {Target} */
     const target = { kind: "person", person: person.kind === "guest" ? { kind: "seat", item, participant: seat.participant } : { kind: person.kind, id: person.id }, tenant: item.tenant };
-    entries.push({ kind: "participant", id: seat.participant, label: `${seat.name ?? "unnamed"} ${seat.role} in ${formatHandle("episode", item.id).slice(0, 7)}`, tenant, meaning: guest ? "guest" : null, when_ms, target, tenant_id: item.tenant, name: guest ? seat.name : null });
+    entries.push({ kind: "participant", id: seat.participant, label: `${seat.name ?? "unnamed"} ${seat.role} in ${formatHandle("episode", item.id, { scope: episodes })}`, tenant, meaning: guest ? "guest" : null, when_ms, target, tenant_id: item.tenant, name: guest ? seat.name : null });
   }
   return entries;
 }

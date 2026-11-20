@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkFrom } from "../diagnose-call/proof/catalogue.mjs";
-import { judgeFixture, ruleResult } from "../diagnose-call/proof/rows.mjs";
+import { eventOf, judgeFixture, ruleResult } from "../diagnose-call/proof/rows.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -22,21 +22,22 @@ const readJson = (root, path) => JSON.parse(readFileSync(join(root, path), "utf8
 
 /** Problems with one fixture row: an unknown event or field, a missing required field, or a value outside its enum. */
 function rowProblems(row, index, events, fields) {
-  const event = events.get(row.event);
-  if (!event) return [`row ${index} has unknown event ${row.event}`];
+  const eventName = eventOf(row);
+  const event = eventName === undefined ? undefined : events.get(eventName);
+  if (!event) return [`row ${index} has unknown event ${eventName}`];
   const problems = [];
   for (const [name, value] of Object.entries(row)) {
     if (name === "event") continue;
     const field = fields.get(name);
     if (!field) {
-      problems.push(`row ${index} (${row.event}) has unknown field ${name}`);
+      problems.push(`row ${index} (${eventName}) has unknown field ${name}`);
       continue;
     }
     const allowed = event.fields[name]?.values ?? field.values;
-    if (field.type === "enum" && !allowed?.includes(value)) problems.push(`row ${index} (${row.event}) has ${name}=${JSON.stringify(value)}, not one of ${allowed?.join(", ")}`);
+    if (field.type === "enum" && !allowed?.includes(value)) problems.push(`row ${index} (${eventName}) has ${name}=${JSON.stringify(value)}, not one of ${allowed?.join(", ")}`);
   }
   for (const [name, rule] of Object.entries(event.fields)) {
-    if (rule.required && !(name in row)) problems.push(`row ${index} (${row.event}) is missing required field ${name}`);
+    if (rule.required && !(name in row)) problems.push(`row ${index} (${eventName}) is missing required field ${name}`);
   }
   return problems;
 }
@@ -83,7 +84,7 @@ async function ruleLinks(root, symptom, events, fields, declared) {
     if (kind === "positive") {
       for (const witness of symptom.witnesses) {
         for (const event of witness.events) {
-          const eventRows = rows.filter((row) => row.event === event.event);
+          const eventRows = rows.filter((row) => eventOf(row) === event.event);
           if (eventRows.length === 0) missing.push(`positive fixture has no ${event.event} row for ${witness.fact}`);
           for (const field of event.fields) if (eventRows.length > 0 && !eventRows.some((row) => field in row)) missing.push(`positive fixture has no ${event.event} row with ${witness.fact} field ${field}`);
         }

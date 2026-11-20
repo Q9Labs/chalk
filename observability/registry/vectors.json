@@ -201,6 +201,18 @@
           {
             "kind": "finding",
             "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "diagnostic_upload",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "api_key",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
+          },
+          {
+            "kind": "webhook_endpoint",
+            "id": "0f8fad5b-d9cb-469f-a165-70867728950e"
           }
         ]
       }
@@ -288,6 +300,18 @@
           },
           {
             "kind": "finding",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "diagnostic_upload",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "api_key",
+            "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+          },
+          {
+            "kind": "webhook_endpoint",
             "id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
           }
         ]

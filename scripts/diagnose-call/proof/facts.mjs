@@ -28,6 +28,8 @@ const registry = JSON.parse(readFileSync(new URL("../../../observability/generat
 
 /** The witness sources, and whether each is delivered per seat. */
 export const SOURCE_TABLE = Object.freeze(registry.sources.map((/** @type {{ source: string, per_seat: boolean }} */ entry) => Object.freeze({ ...entry })));
+/** The record kinds a kernel row carries in `kind`, beside its event name in `name`. */
+export const RECORD_KINDS = Object.freeze([...registry.kinds]);
 /** The item kinds a check can judge. */
 export const ITEM_KINDS = Object.freeze([...registry.items]);
 /** The fault components a finding's module names, and the names that stand alone. */

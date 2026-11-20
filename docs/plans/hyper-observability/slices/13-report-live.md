@@ -79,7 +79,7 @@ Missing data never yields healthy. Each rule's `decide` gets three-state reading
 
 ## 6. Fault scenarios
 
-Samples follow the line grammar in `docs/diagnose.md`. Handles and times are illustrative and `<hash>` is the rules hash; code, Participant, hop and module are exact. The anchor line and the `next:` lines are left out. After each fault, end the Episode, wait 3 minutes (past the longest `settle_ms`), run `diagnose check ep_9feb`, then read `diagnose ep_9feb`; an Episode still running reads `coverage=partial(open)`. `diagnose evidence <f_x>` shows each finding's expectation, watermarks and falsifiers.
+Samples follow the line grammar in `docs/diagnose.md`. Handles and times are illustrative and `<hash>` is the rules hash; code, Participant, hop and module are exact. The anchor line and the `next:` lines are left out. After each fault, end the Episode, wait 3 minutes (past the longest `settle_ms`), run `diagnose check ep_9feb`, then read `diagnose ep_9feb`; an Episode still running reads `coverage=partial(open)`. `diagnose evidence <f_x>` shows each finding's expectation, watermarks and falsifiers. The kernel explains a report by the latest finding that started at or before it, so a report whose own forward or upload failed reads `explained_by=` that finding and raises no `BLIND_SPOT`.
 
 1. **Forward rejected** (local dev). Set `CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1/chalk-fault` (passes `apps/api/internal/adapters/discordreports/adapter.go:157`), restart `pnpm dev`, file a report picking "Others can't hear me". Discord answers 404 Unknown Webhook for id 1; the fact prints whatever status it returned.
    ```
@@ -87,9 +87,7 @@ Samples follow the line grammar in `docs/diagnose.md`. Handles and times are ill
    f_2c41 degraded report.forward_failed pt_4c1e +03:10 hop=api_forward module=api.discordreports upstream=unknown ev=ev_5b2d
    fact: report CHK-7Q2M stored +03:10 [ev_4a1c]
    fact: problem_report.forward error(http_404) +03:10 [ev_5b2d]
-   report ev_4a1c pt_4c1e +03:10 "<description>" explained_by=none
-   f_6e0a unknown BLIND_SPOT pt_4c1e +03:10 module=unknown ev=ev_4a1c
-   fact: problem report: <description> +03:10 [ev_4a1c]
+   report ev_4a1c pt_4c1e +03:10 "<description>" explained_by=f_2c41
    ```
 2. **Commit refused** (local dev). In the dev database (`CHALK_DATABASE_URL`, `scripts/dev/chalk.mjs:152`) run `ALTER TABLE problem_reports ADD CONSTRAINT fault_block CHECK (false) NOT VALID;`, file a report, then `ALTER TABLE problem_reports DROP CONSTRAINT fault_block;`. Postgres checks new rows against a `NOT VALID` constraint, so the insert fails with 23514.
    ```
@@ -128,9 +126,7 @@ Samples follow the line grammar in `docs/diagnose.md`. Handles and times are ill
    fact: report.upload error(network) +08:01 [ev_9b2d]
    fact: no R2 object for the upload [proven absent]
    upload dg_41f3 readback=missing trigger=live
-   report ev_4a1c pt_4c1e +04:20 "<description>" explained_by=none
-   f_6e0b unknown BLIND_SPOT pt_4c1e +04:20 module=unknown ev=ev_4a1c
-   fact: problem report: <description> +04:20 [ev_4a1c]
+   report ev_4a1c pt_4c1e +04:20 "<description>" explained_by=f_c90e
    ```
 6. **Participant's link goes silent** (local dev, e2e step). Launch the target Participant in its own browser with `chromium.launchServer()`, join, then `server.process().kill("SIGSTOP")`. After 130 s (past the 120 s idle timeout at `apps/sync/lib/chalk_sync/transport/router.ex:14`) run `diagnose live pt_4c1e`, then `kill("SIGCONT")`. Check the request row's snapshot says `active`; otherwise the precondition failed and the run doesn't count.
    ```

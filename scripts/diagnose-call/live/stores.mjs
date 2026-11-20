@@ -54,6 +54,19 @@ export async function openLive(target, stores, { catalogue, now = Date.now() }) 
 }
 
 /**
+ * A fixed message for a failed psql run. psql's stderr names the database user, host and port when it cannot connect, so it is never
+ * printed, the way telemetry-watermarks redacts the same failure. psql exits 2 when the connection fails (authentication included)
+ * and 3 when the query fails under ON_ERROR_STOP.
+ * @param {{ code?: unknown }} error
+ */
+export function psqlFailure(error) {
+  if (error.code === "ENOENT") return "psql is not installed";
+  if (error.code === 2) return "connect to the declaration database failed";
+  if (error.code === 3) return "the declaration query failed";
+  return `psql failed (exit ${String(error.code)})`;
+}
+
+/**
  * @param {NodeJS.ProcessEnv} env
  * @returns {Stores}
  */
@@ -77,7 +90,7 @@ export function realStores(env) {
       const roots = String(params.get("sslmode")).startsWith("verify-") && !params.has("sslrootcert") && !env.PGSSLROOTCERT ? { PGSSLROOTCERT: "system" } : {};
       const pg = { ...connectionEnv(url, env), ...roots };
       const { stdout } = await run("psql", ["-X", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c", declarationSql(tenant, episode)], { env: pg, maxBuffer: 16 << 20 }).catch((error) => {
-        throw new StoreError(`Postgres refused the declaration read: ${String(error.stderr ?? error.message).trim().split("\n")[0]}`);
+        throw new StoreError(`Postgres refused the declaration read: ${psqlFailure(error)}`);
       });
       const parsed = JSON.parse(stdout.trim());
       return parsed.episode === null ? null : parsed;

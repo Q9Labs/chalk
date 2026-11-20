@@ -17,9 +17,9 @@ import { describe, it } from "node:test";
 import { openBundle } from "./bundle.mjs";
 import { CATALOGUE, RULES } from "./catalogue.mjs";
 import { standing } from "./check.mjs";
-import { factDef, factKind } from "./facts.mjs";
+import { SOURCE_TABLE, factDef, factKind } from "./facts.mjs";
 import { origin, watermark } from "./evidence.mjs";
-import { profileFor } from "./profile.mjs";
+import { ITEM, profileFor } from "./profile.mjs";
 import { judge, rulesVersion } from "./verdict.mjs";
 import { ASOF, IDS, nov18 } from "../fixtures/nov18.mjs";
 
@@ -47,6 +47,17 @@ function base(id) {
   const world = nov18();
   const declaration = /** @type {Declaration} */ (world.declarations.find((candidate) => candidate.id === id));
   return { declaration, evidence: /** @type {Evidence} */ (structuredClone(world.evidence[id])) };
+}
+
+/**
+ * The source and subject of every watermark a planned check requires: a per-seat source for the seat it judges, any other for the
+ * whole item. Losing a watermark no check requires may leave the item healthy.
+ * @param {Declaration} declaration
+ */
+function requiredWatermarks(declaration) {
+  const perSeat = new Set(SOURCE_TABLE.filter((entry) => entry.per_seat).map((entry) => entry.source));
+  const defs = new Map(CATALOGUE.map((def) => [def.code, def]));
+  return new Set(profileFor(declaration, CATALOGUE, ASOF).checks.flatMap((planned) => (defs.get(planned.code)?.requires ?? []).flatMap((requirement) => requirement.from.map((source) => `${source}/${perSeat.has(source) ? planned.subject : ITEM}`))));
 }
 
 const HEALTHY = [IDS.ep5c0d, IDS.ep7a21];
@@ -118,10 +129,12 @@ describe("lose a source", () => {
   for (const id of BASES) {
     it(`never leaves ${id.slice(0, 4)} healthy`, () => {
       const { declaration, evidence } = base(id);
+      const read = requiredWatermarks(declaration);
+      assert.ok(read.size > 0, `${id.slice(0, 4)} plans no check that reads a source`);
       for (const [index, w] of evidence.watermarks.entries()) {
+        if (!read.has(`${w.source}/${w.subject}`)) continue;
         const changed = /** @type {Evidence} */ (structuredClone(evidence));
         changed.watermarks.splice(index, 1);
-        if (w.source === "api" && declaration.kind === "episode" && !declaration.features.includes("time_limit")) continue;
         notHealthy(verdictOf(declaration, changed), `dropping ${w.source}/${w.subject}`);
       }
     });
@@ -369,6 +382,20 @@ describe("rules are held to their evidence", () => {
   it("rejects an absence its reading does not prove", () => {
     const unread = { observations: evidence.observations, watermarks: evidence.watermarks.filter((w) => w.source !== "api") };
     assert.throws(() => verdictOf(declaration, unread, { catalogue: one(() => ({ ...finding, facts: [{ text: "t", evidence: [], window: null, absent: "end.episode" }] })) }), /does not prove it/u);
+  });
+
+  it("rejects an absence over time the check never read", () => {
+    // Sync's end row sits at the Episode's end, so the first second of the window is complete and holds no end.episode.
+    /** @param {number} shift @returns {CheckDef[]} */
+    const claim = (shift) => [
+      {
+        ...one(() => ({ status: "pass" }))[0],
+        requires: [{ fact: "end.episode", from: ["sync"], query: "q" }],
+        decide: ({ window }) => ({ ...finding, facts: [{ text: "t", evidence: [], window: { from_ms: window.from_ms + shift, to_ms: window.from_ms + 1000 + shift }, absent: "end.episode" }] }),
+      },
+    ];
+    assert.doesNotThrow(() => verdictOf(declaration, evidence, { catalogue: claim(0) }));
+    assert.throws(() => verdictOf(declaration, evidence, { catalogue: claim(-86_400_000) }), /does not prove it/u);
   });
 
   it("rejects a fact with neither evidence nor a proven absence", () => {

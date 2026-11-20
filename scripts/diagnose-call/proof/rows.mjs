@@ -4,11 +4,14 @@
  * one way a symptom's fixture is judged. The registry says which events witness which fact (an area file's `facts`), so this file
  * holds no per-symptom mapping: a slice that declares a fact and its events gets its rows read here.
  *
+ * A row names its event in one of two ways: a kernel row (the Go, SFU and Sync kernels' `send`) carries its record `kind` and the
+ * event in `name`, and an older emitter's row carries it in `event`. `eventOf` reads both, for fixtures and live rows alike.
+ *
  * A row becomes one observation per fact whose events list it. A row that can't be placed is dropped and returned with the reason,
  * never guessed: no `event_id` means it can't be cited, and no `est_server_ms` means its time is unknown, so the subject it would
  * have witnessed stays unchecked.
  */
-import { FACTS, SOURCE_TABLE } from "./facts.mjs";
+import { FACTS, RECORD_KINDS, SOURCE_TABLE } from "./facts.mjs";
 import { observation, origin } from "./evidence.mjs";
 import { openBundle } from "./bundle.mjs";
 import { ITEM, profileFor, seatKey } from "./profile.mjs";
@@ -35,7 +38,7 @@ const SUBJECT_FIELDS = /** @type {const} */ ([
   ["env", "environment"],
 ]);
 /** Fields that place or name a row rather than describe what it measured. */
-const NOT_VALUES = new Set([...SUBJECT_FIELDS.map(([field]) => field), "event", "event_id", "est_server_ms", "clock_err_ms", "clock_state", "duration_ms", "decision_id"]);
+const NOT_VALUES = new Set([...SUBJECT_FIELDS.map(([field]) => field), "event", "kind", "name", "event_id", "est_server_ms", "clock_err_ms", "clock_state", "duration_ms", "decision_id"]);
 
 /** @type {ReadonlyMap<string, readonly { fact: string, source: string, claim: string, failure_claims: readonly string[] }[]>} */
 const BY_EVENT = (() => {
@@ -46,6 +49,16 @@ const BY_EVENT = (() => {
   }
   return map;
 })();
+
+/**
+ * The registry event a row records: `event` when the row has one, else `name` on a kernel row of a registry record kind.
+ * @param {Row} row
+ * @returns {string | undefined}
+ */
+export function eventOf(row) {
+  if (typeof row.event === "string") return row.event;
+  return typeof row.name === "string" && RECORD_KINDS.includes(String(row.kind)) ? row.name : undefined;
+}
 
 /** @param {string} eventId */
 export const rowQuery = (eventId) => `axiom chalk-logs | where event_id == '${eventId}'`;
@@ -60,10 +73,11 @@ export function observationsFromRows(rows) {
   /** @type {{ index: number, event: unknown, why: string }[]} */
   const dropped = [];
   rows.forEach((row, index) => {
-    const witnessed = BY_EVENT.get(String(row.event));
+    const event = eventOf(row);
+    const witnessed = event === undefined ? undefined : BY_EVENT.get(event);
     if (!witnessed) return;
-    if (typeof row.event_id !== "string" || row.event_id === "") return void dropped.push({ index, event: row.event, why: "no event_id, so it can't be cited" });
-    if (typeof row.est_server_ms !== "number") return void dropped.push({ index, event: row.event, why: "no est_server_ms, so its time is unknown" });
+    if (typeof row.event_id !== "string" || row.event_id === "") return void dropped.push({ index, event, why: "no event_id, so it can't be cited" });
+    if (typeof row.est_server_ms !== "number") return void dropped.push({ index, event, why: "no est_server_ms, so its time is unknown" });
     const err = typeof row.clock_err_ms === "number" ? row.clock_err_ms : 0;
     const window = typeof row.duration_ms === "number" ? { from_ms: row.est_server_ms, to_ms: row.est_server_ms + row.duration_ms } : { from_ms: row.est_server_ms - err, to_ms: row.est_server_ms + err };
     /** @type {Record<string, string | number>} */
@@ -75,7 +89,7 @@ export function observationsFromRows(rows) {
     for (const { fact, source, claim, failure_claims } of witnessed) {
       const claimed = row[claim];
       if (claimed === undefined || claimed === null) {
-        dropped.push({ index, event: row.event, why: `no ${claim}, the field ${fact} compares` });
+        dropped.push({ index, event, why: `no ${claim}, the field ${fact} compares` });
         continue;
       }
       observations.push(

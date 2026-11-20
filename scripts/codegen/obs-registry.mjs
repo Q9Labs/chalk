@@ -446,31 +446,10 @@ function emitJson(model, axiom) {
       fault_scenario: symptom.fault_scenario,
     })),
   };
-  const cli = {
-    doc: "Generated: the tables the diagnosis CLI prints and resolves against.",
-    schema_ver: model.schema_ver,
-    symptoms: live(model.symptoms).map(({ code, area, slice, item, per, doc, user_words, witnesses, rule }) => ({
-      code,
-      area,
-      slice,
-      item,
-      per,
-      doc,
-      user_words,
-      witnesses: witnesses.map(({ fact, from, required }) => ({ fact, from, required })),
-      rule,
-      status: model.incomplete.some((entry) => entry.code === code) ? "incomplete" : "complete",
-    })),
-    reasons: live(model.reasons).map(({ code, outcome, area, doc }) => ({ code, outcome, area, doc })),
-    id_kinds: model.id_kinds,
-    session_meanings: model.session_meanings,
-    diagnostic_code: model.diagnostic_code,
-  };
   return {
     [`${GENERATED_DIR}/registry.json`]: model,
     [`${GENERATED_DIR}/axiom-fields.json`]: { doc: "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.", schema_ver: model.schema_ver, datasets: axiom },
     [`${GENERATED_DIR}/coverage-graph.json`]: coverage,
-    [`${GENERATED_DIR}/cli-tables.json`]: cli,
   };
 }
 

@@ -93,12 +93,16 @@ function liveTarget(argv) {
 /** A data source the command needs is missing: exit 69. */
 class SourceError extends Error {}
 
-/** 0 by default. With --strict: 3 when something is broken or degraded, 2 when coverage is not complete or a lookup did not resolve. */
+/**
+ * 0 by default. With --strict: 3 when something is broken or degraded, 0 only when the outcome is healthy or expected over complete
+ * coverage, and 2 otherwise (an unknown outcome, coverage that is not complete, or a lookup that did not resolve).
+ */
 function exitCode(/** @type {View} */ view, /** @type {Query} */ query) {
   if (!query.options.strict) return 0;
   if (view.view === "resolve") return 2;
-  if (view.head.outcome === "broken" || view.head.outcome === "degraded") return 3;
-  return view.head.coverage?.state === "complete" ? 0 : 2;
+  const { outcome, coverage } = view.head;
+  if (outcome === "broken" || outcome === "degraded") return 3;
+  return (outcome === "healthy" || outcome === "expected") && coverage?.state === "complete" ? 0 : 2;
 }
 
 /**

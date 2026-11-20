@@ -184,6 +184,10 @@ const STALE_WHY = {
 };
 
 /** @typedef {{ key: string } & Record<string, unknown>} Keyed */
+/**
+ * A record a slice shows beside its findings (an upload readback, a webhook delivery), printed as `<kind> <handle> key=value`.
+ * @typedef {{ t: "related", kind: string, ref: Ref, fields: Readonly<Record<string, string | number>> }} Related
+ */
 /** @typedef {(ms: number) => string} At */
 
 /**
@@ -469,7 +473,7 @@ export function rangeView({ title, tenantTz, range, entries, keep, check, again,
         outcome: finding.outcome,
         code: finding.code,
         item: itemRef(item),
-        party: title.view === "pattern" ? partyOf(item.declaration, finding.subject) : null,
+        party: partyOf(item.declaration, finding.subject),
         when: when(finding.window.from_ms),
         hop: finding.hop,
         module: finding.module,

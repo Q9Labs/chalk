@@ -40,7 +40,7 @@ import { observationsFromRows } from "../proof/rows.mjs";
  * `telemetry-watermarks` output, or why the ledger could not be read.
  * @typedef {{ from: number, to: number }} SeqRange
  * @typedef {{ source_id: string, from_seq: number, to_seq: number | null, cause: string, drop_reason?: string, status: "open" | "final" }} LedgerGap
- * @typedef {{ source_id: string, watermark: { participants: readonly string[], next_seq: number, end: "closed" | "abandoned" | null, stored: readonly SeqRange[] | null }, gaps: readonly LedgerGap[] }} LedgerSource
+ * @typedef {{ source_id: string, watermark: { participants: readonly string[], next_seq: number, end: "closed" | "abandoned" | null, stored: readonly SeqRange[] | null, rejected?: readonly SeqRange[] | null }, gaps: readonly LedgerGap[] }} LedgerSource
  * @typedef {{ tenant_id: string, episode_id: string, sources: readonly LedgerSource[] } | { unavailable: string }} Ledger
  */
 
@@ -114,7 +114,9 @@ export const emitsOf = (source) =>
  * `est_server_ms` widened by `clock_err_ms`). A gap runs from the earlier to the later of its neighbours, the last row before it
  * (the Episode's start when there is none) and the first row at or after its end, so a clock that stepped back between them still
  * leaves the gap covering both; it has no end when the ledger knows none or no later row exists. A seq the ledger stored but Axiom
- * returned no timed row for is a gap too (`unread`): its record was never read, so it can't count as absent. A closed source is
+ * returned no timed row for is a gap too (`unread`): its record was never read, so it can't count as absent. A seq the API refused
+ * for its content (`rejected`, such as a record from a newer SDK) is a gap for the same reason, although the ledger counts it as
+ * delivered. A closed source is
  * complete to `asof_ms`; any other is complete only to its highest stored row that Axiom returned.
  * @param {LedgerSource} source
  * @param {readonly Row[]} rows
@@ -149,7 +151,8 @@ export function sourceCoverage(source, rows, { asof_ms, start_ms }) {
       else unread.push({ source_id: source.source_id, from_seq: seq, to_seq: seq + 1, cause: "unread", status: "open" });
     }
   }
-  const evidence_gaps = [...source.gaps, ...unread]
+  const rejected = (source.watermark.rejected ?? []).map((range) => ({ source_id: source.source_id, from_seq: range.from, to_seq: range.to, cause: "rejected", status: /** @type {const} */ ("final") }));
+  const evidence_gaps = [...source.gaps, ...unread, ...rejected]
     .sort((a, b) => a.from_seq - b.from_seq)
     .map((gap) => place(gap.from_seq, gap.to_seq, `${gap.cause}${gap.drop_reason ? `(${gap.drop_reason})` : ""} seq ${gap.from_seq}..${gap.to_seq ?? "?"} ${gap.status}`));
   if (source.watermark.end === "closed") return { complete_to_ms: asof_ms, evidence_gaps };

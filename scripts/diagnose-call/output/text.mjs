@@ -116,15 +116,15 @@ const RECORD_LINES = {
       h(r.f),
       r.outcome,
       r.code,
-      ...(r.item ? [h(r.item)] : []),
-      ...(r.party ? [party(r.party)] : []),
+      party(r.party),
       r.when,
       ...opt("hop", r.hop),
       ...opt("module", r.module),
       ...opt("upstream", r.upstream),
       ...opt("reason", r.reason),
       ...(r.ev ? [`ev=${h(r.ev)}`] : []),
-      ...(r.retained ? ["retained"] : []),
+      ...(r.item ? [`of=${h(r.item)}`] : []),
+      ...(r.retained ? ["retained=yes"] : []),
     ];
     const lines = [words.join(" ")];
     for (const fact of r.facts ?? []) lines.push(`fact: ${at(fact.text, fact.when)} ${fact.absent ? "[proven absent]" : cite(fact.ev)}`);
@@ -144,7 +144,7 @@ const RECORD_LINES = {
   candidate: (r, h) => [["cand", h(r.ref), r.kind, JSON.stringify(r.label), ...opt("tenant", r.tenant), ...opt("as", r.meaning), ...(r.when ? [r.when] : [])].join(" ")],
   expected: (r) => [`expected: ${r.text}`],
   observed: (r) => [`observed: ${r.text} ${r.when}`],
-  fact: (r) => [`fact: ${at(r.text, r.when)} ${r.absent ? `[proven absent: ${r.absent}]` : cite(r.ev)}`],
+  fact: (r) => [`fact: ${at(r.text, r.when)} ${r.absent ? "[proven absent]" : cite(r.ev)}`],
   hypothesis: (r) => [r.text === null ? "hypothesis: none, the evidence does not attribute a cause" : `hypothesis: ${r.text}; falsified by ${r.falsified_by}`],
   witness: (r, h) => {
     const value = Object.entries(r.value)
@@ -157,6 +157,7 @@ const RECORD_LINES = {
   falsify: (r) => [...(r.absence ? [`falsify absence: ${r.absence}`] : []), ...(r.attribution ? [`falsify attribution: ${r.attribution}`] : [])],
   retained: (r) => [`retained: proven in bundle ${r.from_bundle}; its rows may be gone, the proof copy above is what was seen`],
   independence: (r) => [`independence: ${r.witnesses} witnesses from ${r.origins} independent origins`],
+  related: (r, h) => [[r.kind, h(r.ref), ...Object.entries(r.fields).map(([key, value]) => `${key}=${value}`)].join(" ")],
 };
 
 /**

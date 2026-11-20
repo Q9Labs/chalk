@@ -17,7 +17,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { overlaps, reading, uncovered as uncoveredBy } from "./evidence.mjs";
-import { factDef, factKind } from "./facts.mjs";
+import { FACTS, factDef, factKind } from "./facts.mjs";
 import { validateCatalogue, validateDecision } from "./rules.mjs";
 import { ITEM, deepFreeze } from "./profile.mjs";
 import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
@@ -92,12 +92,16 @@ import { byKey, isSealed, watermarkKey } from "./bundle.mjs";
 /** The findings the kernel itself raises, beyond the catalogue's checks. */
 export const BACKSTOPS = /** @type {const} */ (["UNEXPLAINED", "BLIND_SPOT"]);
 
-/** The judging kernel's own source: a change to how readings, coverage or outcomes work changes every rules version. */
-const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "rules.mjs", "verdict.mjs"].map((name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).join("\n");
+/**
+ * The judging kernel's own source, with the row adapter and the catalogue's assembly: a change to how rows become observations, how
+ * checks are built, or how readings, coverage or outcomes work changes every rules version.
+ */
+const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "rules.mjs", "verdict.mjs", "rows.mjs", "catalogue.mjs"].map((name) => readFileSync(new URL(`./${name}`, import.meta.url), "utf8")).join("\n");
 
 /**
  * A version for a set of checks: it changes whenever a code, a requirement, a rule's source, the modules that define the rules (their
- * thresholds and helpers, which a rule's own source names but does not contain) or the kernel changes, so a stored verdict judged by
+ * thresholds and helpers, which a rule's own source names but does not contain), a registry fact (its kind, witnessing events,
+ * claim field or failure claims, which decide what a check reads) or the kernel changes, so a stored verdict judged by
  * other rules reads as stale and `check` judges it again. Hashing whole files is deliberately coarse: a comment edit also makes every
  * verdict stale, which costs a recheck, while a missed logic edit would serve old verdicts as current.
  * @param {readonly CheckDef[]} catalogue
@@ -105,7 +109,7 @@ const KERNEL = ["facts.mjs", "evidence.mjs", "profile.mjs", "bundle.mjs", "rules
  */
 export function rulesVersion(catalogue, sources) {
   validateCatalogue(catalogue);
-  const text = [KERNEL, ...sources, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, def.settle_ms ?? 0, String(def.applies), String(def.decide)]))].join("\n");
+  const text = [KERNEL, JSON.stringify(FACTS), ...sources, ...[...catalogue].sort(byKey((def) => def.code)).map((def) => JSON.stringify([def.code, def.item, def.per, def.requires, def.optional, def.expected, def.settle_ms ?? 0, String(def.applies), String(def.decide)]))].join("\n");
   return createHash("sha256").update(text).digest("hex").slice(0, 8);
 }
 
@@ -263,7 +267,7 @@ function runCheck(bundle, planned, def, rules) {
   const ready = uncovered.length === 0 && decision.status !== "unknown";
   if (decision.status !== "finding") return { planned, decision, ready, uncovered, finding: null };
 
-  const { citable, cited } = citations(where, decision.facts, readings, failures);
+  const { citable, cited } = citations(where, decision.facts, readings, failures, planned.window);
   /** @type {Finding} */
   const finding = {
     id: findingId(bundle, def.code, planned.subject, String(decision.window.from_ms)),
@@ -342,8 +346,9 @@ function uncoveredOf(requires, readings) {
  * @param {readonly Fact[]} facts
  * @param {Record<string, Reading>} readings
  * @param {readonly Readonly<Observation>[]} failures
+ * @param {Window} read the window the readings cover
  */
-function citations(where, facts, readings, failures) {
+function citations(where, facts, readings, failures, read) {
   if (facts.length === 0) throw new TypeError(`${where}: a finding needs at least one fact`);
   /** @type {Map<string, Readonly<Observation>>} */
   const citable = new Map();
@@ -356,7 +361,7 @@ function citations(where, facts, readings, failures) {
       if (!citable.has(id)) throw new TypeError(`${where}: a fact cites ${id}, which is not a present, citable observation of this check`);
       cited.add(id);
     }
-    if (fact.absent !== null && !provenAbsent(readings[fact.absent], fact.window)) throw new TypeError(`${where}: a fact claims ${fact.absent} is absent, but its reading does not prove it`);
+    if (fact.absent !== null && !provenAbsent(readings[fact.absent], fact.window, read)) throw new TypeError(`${where}: a fact claims ${fact.absent} is absent, but its reading does not prove it`);
     if (fact.absent === null && fact.evidence.length === 0) throw new TypeError(`${where}: the fact "${fact.text}" cites no evidence and claims no proven absence`);
   }
   return { citable, cited };
@@ -364,11 +369,14 @@ function citations(where, facts, readings, failures) {
 
 /**
  * An absence is proven when the whole reading is absent, or when the reading is complete and nothing in it touches the fact's window.
+ * Either way the fact's window must lie inside the window the check read, because a reading says nothing about time it never covered.
  * @param {Reading | undefined} value
  * @param {Window | null} window
+ * @param {Window} read
  */
-function provenAbsent(value, window) {
+function provenAbsent(value, window, read) {
   if (value === undefined) return false;
+  if (window !== null && (window.from_ms < read.from_ms || window.to_ms > read.to_ms)) return false;
   if (value.kind === "absent") return true;
   return value.kind === "present" && value.complete && window !== null && !value.observations.some((o) => overlaps(o.window, window));
 }
