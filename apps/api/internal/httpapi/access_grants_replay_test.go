@@ -30,7 +30,8 @@ type replayScenario struct {
 	replayedAt   time.Time
 }
 
-func newReplayScenario(t *testing.T, replayAge time.Duration) replayScenario {
+// edit, when given, changes the cached response before it is sealed.
+func newReplayScenario(t *testing.T, replayAge time.Duration, edit ...func(*accessGrantResponse)) replayScenario {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -55,6 +56,9 @@ func newReplayScenario(t *testing.T, replayAge time.Duration) replayScenario {
 		t.Fatal(err)
 	}
 	cached := newAccessGrantResponse(winning, synctokens.Token{Value: "expired-sync", ExpiresAt: now.Add(-23 * time.Hour)}, expiredWinner, accessgrants.TelemetryCredential{Token: "expired-telemetry", ExpiresAt: now.Add(-23 * time.Hour)}, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": "replacement"}})
+	for _, change := range edit {
+		change(&cached)
+	}
 	encoded, err := json.Marshal(cached)
 	if err != nil {
 		t.Fatal(err)
@@ -159,5 +163,43 @@ func TestAccessGrantRefreshReplayInsideDeadlineRenewsTheWinningConnection(t *tes
 	}
 	if s.fixture.resumed != 1 {
 		t.Fatalf("repeating the replay resumed the connection again: resumed=%d", s.fixture.resumed)
+	}
+}
+
+// A response sealed before grants carried telemetry decodes to an empty telemetry token. It is still
+// unexpired, but replaying it would hand the client no way to send telemetry, so it renews instead.
+func TestAccessGrantRefreshReplayWithoutTelemetryRenews(t *testing.T) {
+	unexpired := func(response *accessGrantResponse) {
+		later := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+		response.Media.ExpiresAt = later
+		response.Sync.ExpiresAt = later
+	}
+	for _, test := range []struct {
+		name    string
+		edit    func(*accessGrantResponse)
+		resumed int
+	}{
+		{"replays a body that carries telemetry", func(r *accessGrantResponse) {
+			unexpired(r)
+			r.Telemetry.Token = "cached-telemetry"
+		}, 0},
+		{"renews a body sealed before telemetry existed", func(r *accessGrantResponse) {
+			unexpired(r)
+			r.Telemetry = accessGrantTokenResponse{}
+		}, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s := newReplayScenario(t, time.Minute, test.edit)
+			grant, err := s.endpoint.handle(s.ctx(), s.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.fixture.resumed != test.resumed {
+				t.Errorf("resumed = %d, want %d", s.fixture.resumed, test.resumed)
+			}
+			if grant.Telemetry.Token == "" {
+				t.Error("grant carries no telemetry token")
+			}
+		})
 	}
 }

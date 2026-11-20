@@ -11,7 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// ErrLedgerFull says a batch would grow a range set past MaxRanges. The batch is refused as a
+// ErrLedgerFull says a batch would grow a row's ranges past MaxRanges. The batch is refused as a
 // whole and nothing is settled.
 var ErrLedgerFull = errors.New("telemetry ledger range cap exceeded")
 
@@ -226,13 +226,9 @@ func (r Ranges) Normalized() Ranges {
 }
 
 func (r Ranges) oversized() bool {
-	if len(r.Stored) > MaxRanges || len(r.Rejected) > MaxRanges {
-		return true
-	}
+	total := len(r.Stored) + len(r.Rejected)
 	for _, set := range r.Dropped {
-		if len(set) > MaxRanges {
-			return true
-		}
+		total += len(set)
 	}
-	return false
+	return total > MaxRanges
 }

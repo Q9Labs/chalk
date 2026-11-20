@@ -13,6 +13,7 @@
         "apps/api/internal/calllength",
         "apps/api/internal/httpapi/call_stats.go",
         "apps/api/internal/httpapi/telemetry.go",
+        "apps/api/internal/httpapi/telemetry_ledger_test.go",
         "apps/api/internal/httpapi/telemetry_test.go",
         "apps/api/internal/sdktelemetry",
         "apps/api/internal/telemetrydelivery",

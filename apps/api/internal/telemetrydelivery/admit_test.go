@@ -261,16 +261,16 @@ func TestAdmitStampsReceiveTimes(t *testing.T) {
 	}
 }
 
-// fragmented is MaxRanges ranges of one seq each, with one-seq holes between them.
-func fragmented() Set {
-	ranges := make(Set, 0, MaxRanges)
-	for index := range int64(MaxRanges) {
+// fragmented is n ranges of one seq each, with one-seq holes between them.
+func fragmented(n int) Set {
+	ranges := make(Set, 0, n)
+	for index := range int64(n) {
 		ranges = append(ranges, sdktelemetry.SeqRange{From: 2 * index, To: 2*index + 1})
 	}
 	return ranges
 }
 
-func TestAdmitRefusesABatchThatWouldGrowASetPastTheCap(t *testing.T) {
+func TestAdmitRefusesABatchThatWouldGrowARowPastTheCap(t *testing.T) {
 	const apart = 2*MaxRanges + 1 // past every range of a fragmented set, with a hole before it
 	full := func(fill func(*SourceRow)) []SourceRow {
 		row := NewSourceRow(identity(t), id(t, sourceA))
@@ -279,9 +279,15 @@ func TestAdmitRefusesABatchThatWouldGrowASetPastTheCap(t *testing.T) {
 		fill(&predecessor)
 		return []SourceRow{row, predecessor}
 	}
-	fullStored := full(func(r *SourceRow) { r.Ranges.Stored = fragmented() })
-	fullRejected := full(func(r *SourceRow) { r.Ranges.Rejected = fragmented() })
-	fullDropped := full(func(r *SourceRow) { r.Ranges.Dropped["queue_full"] = fragmented() })
+	fullStored := full(func(r *SourceRow) { r.Ranges.Stored = fragmented(MaxRanges) })
+	fullRejected := full(func(r *SourceRow) { r.Ranges.Rejected = fragmented(MaxRanges) })
+	fullDropped := full(func(r *SourceRow) { r.Ranges.Dropped["queue_full"] = fragmented(MaxRanges) })
+	nearlyFull := full(func(r *SourceRow) { r.Ranges.Stored = fragmented(MaxRanges - 1) })
+	split := full(func(r *SourceRow) {
+		r.Ranges.Stored = fragmented(MaxRanges / 2)
+		r.Ranges.Rejected = fragmented(MaxRanges / 4)
+		r.Ranges.Dropped["queue_full"] = fragmented(MaxRanges / 4)
+	})
 
 	for _, test := range []struct {
 		name    string
@@ -292,10 +298,12 @@ func TestAdmitRefusesABatchThatWouldGrowASetPastTheCap(t *testing.T) {
 		{"a record that adds a stored range", fullStored, batch(t, sourceA, 20000, "", ended(apart)), true},
 		{"a record that fills a stored hole", fullStored, batch(t, sourceA, 20000, "", ended(1)), false},
 		{"a rejected record that adds a rejected range", fullRejected, batch(t, sourceA, 20000, "", bad(apart)), true},
-		{"a rejected record when only the stored set is full", fullStored, batch(t, sourceA, 20000, "", bad(apart)), false},
+		{"a rejected record when only the stored set is full", fullStored, batch(t, sourceA, 20000, "", bad(apart)), true},
+		{"a record that fills the last range of the cap", nearlyFull, batch(t, sourceA, 20000, "", ended(apart)), false},
+		{"a record that adds a range to a row split across its sets", split, batch(t, sourceA, 20000, "", ended(apart)), true},
 		{"a drop record that adds a range to its own source", fullDropped, batch(t, sourceA, 20000, "", drop(apart+5, apart, apart+1, "queue_full", "")), true},
 		{"a drop record that adds a range to a predecessor", fullDropped, batch(t, sourceA, 20000, "", drop(1, apart+1, apart+2, "queue_full", sourceB)), true},
-		{"a drop record of another reason has its own set", fullDropped, batch(t, sourceA, 20000, "", drop(1, apart+1, apart+2, "refused", sourceB)), false},
+		{"a drop record of another reason counts toward the same cap", fullDropped, batch(t, sourceA, 20000, "", drop(1, apart+1, apart+2, "refused", sourceB)), true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Admit(identity(t), byID(test.rows), test.request, received)

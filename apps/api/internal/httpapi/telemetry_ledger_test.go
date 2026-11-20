@@ -304,3 +304,29 @@ func TestTelemetryRefusesATokenOfAnotherTenant(t *testing.T) {
 		t.Fatalf("status = %d, want 403 for a tenant the token does not name", code)
 	}
 }
+
+// Every source a batch names can create a ledger row, so each one costs the budget on top of the bytes.
+func TestTelemetryChargePricesEachPredecessorABatchNames(t *testing.T) {
+	drop := func(predecessor string) string {
+		return fmt.Sprintf(`{"event_id":"9a4f0000-0000-4000-8000-%012d","seq":0,"elapsed_ms":1,"type":"telemetry_dropped","dropped":1,"drop_reason":"queue_full","dropped_seqs":[{"from":6,"to":7}],"dropped_source_id":%q}`, 0, predecessor)
+	}
+	for _, test := range []struct {
+		name         string
+		body         string
+		predecessors int
+	}{
+		{"its own source alone", ledgerBody(ledgerSource, ledgerBatch, 1, ledgerEvent(0)), 0},
+		{"a predecessor it names", ledgerBody(ledgerSource, ledgerBatch, 1, drop(ledgerReload)), 1},
+		{"its own source named again", ledgerBody(ledgerSource, ledgerBatch, 1, drop(ledgerSource)), 0},
+		{"a source id that is not an id", ledgerBody("nope", ledgerBatch, 1, ledgerEvent(0)), 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			batch, frame := sdktelemetry.Decode(strings.NewReader(test.body))
+			request := telemetryRequest{Batch: batch, Frame: frame, Bytes: len(test.body)}
+			policy, _ := telemetryCharge(request)
+			if want := len(test.body) + telemetrySourceCost*test.predecessors; policy.Cost != want {
+				t.Errorf("cost = %d (frame %q), want %d", policy.Cost, frame, want)
+			}
+		})
+	}
+}

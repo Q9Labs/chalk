@@ -11,9 +11,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 )
 
-// MaxRanges is the most ranges one Set may hold in the ledger. A client that fragments a set
-// beyond it gets ErrLedgerFull, so a row's size stays bounded whatever a client sends.
-const MaxRanges = 4096
+// MaxRanges is the most ranges one ledger row may hold across its Stored, Rejected and Dropped
+// sets together. A client that fragments a row beyond it gets ErrLedgerFull, so a row's size, and
+// the jsonb every request rewrites, stays bounded whatever a client sends.
+const MaxRanges = 1024
 
 // Set is a set of seqs as sorted, disjoint, non-adjacent half-open ranges. The constructor and
 // every operation return it in that form and never nil, so it encodes as a JSON list.

@@ -36,11 +36,22 @@ type telemetryRequest struct {
 	Frame string
 }
 
-// telemetryCharge prices a request in bytes of the participant's budget. A body
-// that was too large to read costs the largest body.
+// telemetrySourceCost is what each predecessor source a version 2 batch names costs the budget on
+// top of its bytes, because the batch may create a ledger row for each. The batch's own source is
+// not charged: every batch names it, and a source costs at most one row.
+const telemetrySourceCost = 4096
+
+// telemetryCharge prices a request in bytes of the participant's budget, plus telemetrySourceCost
+// per predecessor source a version 2 batch names. A body that was too large to read costs the
+// largest body.
 func telemetryCharge(request telemetryRequest) (ratelimit.Policy, bool) {
 	policy := telemetryBudget
 	policy.Cost = request.Bytes
+	if request.Frame == "" && request.Batch.Version == sdktelemetry.LedgerVersion {
+		if sources, err := telemetrydelivery.Sources(request.Batch); err == nil {
+			policy.Cost += telemetrySourceCost * (len(sources) - 1)
+		}
+	}
 	return policy, true
 }
 
