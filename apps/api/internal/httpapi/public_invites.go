@@ -859,8 +859,9 @@ func newPublicAccessGrantResponse(grant publicinvites.PublicAccessGrant) publicA
 			TenantID: grant.TenantID.String(), SpaceID: grant.SpaceID.String(), EpisodeID: grant.EpisodeID.String(),
 			ParticipantID: grant.ParticipantID.String(), ParticipantGeneration: grant.ParticipantGeneration,
 		},
-		Sync:  accessGrantTokenResponse{Token: grant.SyncToken, ExpiresAt: expiresAt},
-		Media: accessGrantMediaResponse{Token: grant.MediaToken, ExpiresAt: expiresAt, Provider: grant.Provider, ClientPayload: publicAccessClientPayload(grant)},
+		Sync:      accessGrantTokenResponse{Token: grant.SyncToken, ExpiresAt: expiresAt},
+		Media:     accessGrantMediaResponse{Token: grant.MediaToken, ExpiresAt: expiresAt, Provider: grant.Provider, ClientPayload: publicAccessClientPayload(grant)},
+		Telemetry: accessGrantTokenResponse{Token: grant.TelemetryToken, ExpiresAt: grant.TelemetryExpiresAt.UTC().Format(time.RFC3339)},
 	}
 
 	return response

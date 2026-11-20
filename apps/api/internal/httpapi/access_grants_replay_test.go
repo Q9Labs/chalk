@@ -54,7 +54,7 @@ func newReplayScenario(t *testing.T, replayAge time.Duration) replayScenario {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cached := newAccessGrantResponse(winning, synctokens.Token{Value: "expired-sync", ExpiresAt: now.Add(-23 * time.Hour)}, expiredWinner, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": "replacement"}})
+	cached := newAccessGrantResponse(winning, synctokens.Token{Value: "expired-sync", ExpiresAt: now.Add(-23 * time.Hour)}, expiredWinner, accessgrants.TelemetryCredential{Token: "expired-telemetry", ExpiresAt: now.Add(-23 * time.Hour)}, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": "replacement"}})
 	encoded, err := json.Marshal(cached)
 	if err != nil {
 		t.Fatal(err)

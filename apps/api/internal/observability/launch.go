@@ -22,6 +22,7 @@ var launchTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/observ
 
 type accessGrantIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
+	IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error)
 }
 
 type participantMediaVerifier interface {
@@ -129,6 +130,14 @@ func (i AccessGrantIssuer) Issue(ctx context.Context, subject accessgrants.Subje
 	i.telemetry.recordParticipantIssuance(ctx, outcome, reason, i.telemetry.now().Sub(startedAt))
 	finishLaunchSpan(span, outcome, reason, err)
 	return credential, err
+}
+
+// IssueTelemetry passes through: the telemetry credential rides on an access grant that Issue already measures.
+func (i AccessGrantIssuer) IssueTelemetry(ctx context.Context, subject accessgrants.Subject) (accessgrants.TelemetryCredential, error) {
+	if i.next == nil {
+		return accessgrants.TelemetryCredential{}, accessgrants.ErrInvalidConfig
+	}
+	return i.next.IssueTelemetry(ctx, subject)
 }
 
 type accessGrantRefreshContextKey struct{}

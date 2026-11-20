@@ -48,6 +48,7 @@ type SyncIssuer interface {
 
 type MediaIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
+	IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error)
 }
 
 type MediaProofVerifier interface {
@@ -356,13 +357,17 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
+	telemetryToken, err := a.mediaTokens.IssueTelemetry(ctx, mediaSubject)
+	if err != nil {
+		return publicinvites.PublicAccessGrant{}, err
+	}
 	expiresAt := syncToken.ExpiresAt
 	if !mediaToken.ExpiresAt.IsZero() && mediaToken.ExpiresAt.Before(expiresAt) {
 		expiresAt = mediaToken.ExpiresAt
 	}
 
 	return publicinvites.PublicAccessGrant{
-		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, ExpiresAt: expiresAt,
+		SyncToken: syncToken.Value, MediaToken: mediaToken.Token, TelemetryToken: telemetryToken.Token, TelemetryExpiresAt: telemetryToken.ExpiresAt, ExpiresAt: expiresAt,
 		TenantID: arrival.TenantID, SpaceID: arrival.SpaceID, EpisodeID: result.Episode.ID, StartedAt: syncToken.StartedAt,
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider, ProviderSubject: providerSubject, ClientPayload: clientPayload,

@@ -375,6 +375,8 @@ type PublicSpaceArrival struct {
 type PublicAccessGrant struct {
 	SyncToken             string
 	MediaToken            string
+	TelemetryToken        string
+	TelemetryExpiresAt    time.Time
 	ExpiresAt             time.Time
 	TenantID              utilities.ID
 	SpaceID               utilities.ID

@@ -358,8 +358,12 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 				if err != nil {
 					return participantLifecycleResponse{}, err
 				}
+				telemetryCredential, err := mediaTokens.IssueTelemetry(ctx, subject)
+				if err != nil {
+					return participantLifecycleResponse{}, err
+				}
 				response.Access = func() *accessGrantResponse {
-					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, telemetryCredential, join)
 
 					return &grant
 				}()

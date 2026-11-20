@@ -18,6 +18,7 @@ import (
 
 type ParticipantMediaIssuer interface {
 	Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error)
+	IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error)
 }
 
 type ParticipantGenerationAuthorizer interface {
@@ -55,6 +56,8 @@ type accessGrantResponse struct {
 	Subject          accessGrantSubjectResponse `json:"subject"`
 	Sync             accessGrantTokenResponse   `json:"sync"`
 	Media            accessGrantMediaResponse   `json:"media"`
+	// Telemetry is the credential for the telemetry route alone, valid for 24 hours.
+	Telemetry accessGrantTokenResponse `json:"telemetry"`
 }
 
 type issueAccessGrantBody struct {
@@ -247,7 +250,12 @@ func issueAccessGrantEndpoint(
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
-			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
+			stage = "telemetry_credential"
+			telemetryCredential, err := mediaIssuer.IssueTelemetry(ctx, subject)
+			if err != nil {
+				return accessGrantResponse{}, err
+			}
+			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, telemetryCredential, join)
 			stage = "media_binding"
 			if replayReplacement {
 				body, err := json.Marshal(response)
@@ -387,15 +395,16 @@ func accessGrantScope(request issueAccessGrantRequest) mediaplane.Scope {
 	}
 }
 
-func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, join mediaplane.Join) accessGrantResponse {
+func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, telemetryCredential accessgrants.TelemetryCredential, join mediaplane.Join) accessGrantResponse {
 	return accessGrantResponse{
 		EpisodeStartedAt: episodeStartedAt(syncCredential.StartedAt),
 		Subject: accessGrantSubjectResponse{
 			TenantID: subject.TenantID.String(), SpaceID: subject.SpaceID.String(), EpisodeID: subject.EpisodeID.String(),
 			ParticipantID: subject.ParticipantID.String(), ParticipantGeneration: subject.ParticipantGeneration,
 		},
-		Sync:  accessGrantTokenResponse{Token: syncCredential.Value, ExpiresAt: syncCredential.ExpiresAt.UTC().Format(time.RFC3339)},
-		Media: accessGrantMediaResponse{Token: mediaCredential.Token, ExpiresAt: mediaCredential.ExpiresAt.UTC().Format(time.RFC3339), Provider: subject.Provider, ClientPayload: join.ClientPayload},
+		Sync:      accessGrantTokenResponse{Token: syncCredential.Value, ExpiresAt: syncCredential.ExpiresAt.UTC().Format(time.RFC3339)},
+		Media:     accessGrantMediaResponse{Token: mediaCredential.Token, ExpiresAt: mediaCredential.ExpiresAt.UTC().Format(time.RFC3339), Provider: subject.Provider, ClientPayload: join.ClientPayload},
+		Telemetry: accessGrantTokenResponse{Token: telemetryCredential.Token, ExpiresAt: telemetryCredential.ExpiresAt.UTC().Format(time.RFC3339)},
 	}
 }
 

@@ -83,6 +83,10 @@ func (f *refreshGrantPlane) Issue(_ context.Context, subject accessgrants.Subjec
 	return f.issuer.Issue(context.Background(), subject)
 }
 
+func (f *refreshGrantPlane) IssueTelemetry(_ context.Context, subject accessgrants.Subject) (accessgrants.TelemetryCredential, error) {
+	return f.issuer.IssueTelemetry(context.Background(), subject)
+}
+
 func (f *refreshGrantPlane) IssueForParticipant(ctx context.Context, key synctokens.SubjectKey) (synctokens.Token, error) {
 	token, err := f.replacementGrantFixture.IssueForParticipant(ctx, key)
 	if err != nil {
@@ -129,6 +133,10 @@ func (f *replacementGrantFixture) Issue(context.Context, accessgrants.Subject) (
 		return accessgrants.MediaCredential{}, errReplacementCredential
 	}
 	return accessgrants.MediaCredential{}, nil
+}
+
+func (f *replacementGrantFixture) IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error) {
+	return accessgrants.TelemetryCredential{}, nil
 }
 
 func (*replacementGrantFixture) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
