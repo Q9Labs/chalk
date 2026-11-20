@@ -4,6 +4,8 @@
 
 Every command except `call` reads one world. `--fixture nov18` (or a path to a world module) reads a fixture world, which is plain data: the 18 Nov example is the reference. `--live --tenant <uuid> --episode <uuid>` reads one Episode from the real stores, read-only: its declaration and seats from Postgres (`CHALK_DATABASE_URL`), its rows from the environment's log dataset in Axiom (`AXIOM_TOKEN`, `AXIOM_ORG_ID`, `CHALK_LOG_DATASET`) by event time from the Episode's start to its end plus the longest settle time (including uploads Axiom received later), and each seat's client watermark from the telemetry ledger through `apps/api/cmd/telemetry-watermarks`. Without a world, or with a store it can't open, it exits 69. It prints what it read, ignored and dropped on stderr.
 
+Live does not discover pre-seat attempts, jobs, or populations across Episodes. Use a fixture world for `attempt`, `job`, `day`, `space`, `tenant`, `platform`, `pattern` and `window`. Live Participant and check views are scoped to the selected Episode only.
+
 The ledger decides what a live read may count as client evidence:
 
 - A client row is evidence only when a ledger source of this Tenant and Episode stored its `(source_id, seq)`. A client row whose seq the ledger did not store, or whose source the ledger does not know, is ignored and counted on stderr. A ledger report or source that names another Tenant or Episode is not read at all.

@@ -282,3 +282,14 @@ test("a late ingest is read by event time, not by when Axiom got it", async () =
   assert.equal(screens?.length, 1);
   assert.equal(screens?.[0]?.window.from_ms, END + 2_000);
 });
+
+test("live mode does not present one Episode as a discovered population", async () => {
+  for (const query of [["day", "Synthetic"], ["attempt", "cs_deadbeef"], ["job", "job_deadbeef"], ["pattern", "END_WRONG_SCREEN"]]) {
+    const result = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, ...query], {
+      stores: { ...fakeStores(), declaration: async () => assert.fail("should reject before reading stores") },
+      now: NOW,
+    });
+    assert.equal(result.code, 64);
+    assert.match(result.err, /one Episode.*--fixture/u);
+  }
+});

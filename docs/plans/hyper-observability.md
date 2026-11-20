@@ -294,6 +294,8 @@ The v1 journey table still holds. v2 adds the following.
 
 ## 8. CLI shape for agents
 
+The live foundation opens one known Episode within one Tenant. Attempt, job, and population views below describe the fixture-world CLI until live discovery has its own sources.
+
 - **Commands:**
 
   | Command                       | Purpose                                                                             |
