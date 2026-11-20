@@ -1,0 +1,130 @@
+# Telemetry delivery
+
+This is contract C3 of the observability foundation. It says how a client record gets from the SDK to the server exactly once, how the server acknowledges it, and what the server can claim when a record never arrives. The rule it guards is **delivery conservation**: every durably enqueued record is stored once, or named by a stored drop record. A source that vanishes without a persisted high-water mark leaves an `evidence_gap` with an unknown tail, never an invented exact range.
+
+The model that checks the rule is [TelemetryDelivery.tla](../tools/formal/telemetry-delivery/TelemetryDelivery.tla). The reference code is the SDK outbox (`sdks/typescript/client/src/telemetry/`), the ingest route (`apps/api/internal/httpapi/telemetry.go`) and the source ledger (`apps/api/internal/telemetrydelivery`). [Observability](observability.md#client-telemetry) covers what the rows mean.
+
+## Names
+
+These names are shared with C1 (IDs and envelope) and C2+C4 (witnesses and output). Use them exactly.
+
+| Name | What it is | Minted by |
+|---|---|---|
+| `source_id` | The stream a record belongs to. For the SDK it is the client session (`cs_` in display): one run of one SDK client, from boot through disposal. A reload is a new source. | client, a UUID at boot |
+| `seq` | The record's position in its source: 0, 1, 2 and so on with no reuse. `(source_id, seq)` is the record's identity and the dedupe key. | client, at record time |
+| `event_id` | A UUID per record, minted with its `seq`. It is the evidence handle (`ev_` in display), and a reader that sees two `event_id`s for one `(source_id, seq)` has found a bug. | client, at record time |
+| `batch_id` | A UUID per batch. A batch never changes while it is in flight, and a retry resends it with the same `batch_id`. | client, when it forms the batch |
+| `next_seq` | The source's high-water mark: every seq below it has been assigned. | client, on every batch |
+| `end` | How a source ended: `closed` (the client said its last `next_seq` exactly) or `abandoned` (a successor found it dead and reports the last high-water mark it persisted). | client |
+| `SourceWatermark` | What the server knows of a source: its high-water mark, its end and which seqs are stored, rejected or dropped. | server ledger |
+| `EvidenceGap` | A seq range the server cannot account for, with its cause. | server, computed from the ledger |
+
+## The wire
+
+`POST /v1/tenants/{tenant_id}/telemetry`, body at most 64 KiB:
+
+```json
+{
+  "version": 2,
+  "source_id": "0b7c…",
+  "batch_id": "5d1e…",
+  "next_seq": 42,
+  "end": "abandoned",
+  "events": [
+    { "event_id": "9a4f…", "seq": 40, "elapsed_ms": 81234, "type": "call_ended", "…": "…" },
+    { "event_id": "c2d8…", "seq": 41, "elapsed_ms": 81240, "type": "telemetry_dropped",
+      "dropped": 3, "drop_reason": "queue_full", "dropped_seqs": [{ "from": 12, "to": 15 }] }
+  ]
+}
+```
+
+- `events` holds 0 to 100 records. An empty batch is allowed only when it carries `end`.
+- A drop record is a `telemetry_dropped` event. `dropped_seqs` lists half-open ranges `[from, to)`, at most 64. `dropped_source_id` names a predecessor source when the dropped seqs are not this source's. `drop_reason` is `queue_full`, `credential_expired` or `refused`. The ranges name records the client gave up on; the record itself is P0 and never evicted.
+- Version 1 bodies (`{ version: 1, client_session_id, events }`) from SDKs that predate this contract are still accepted. They are logged as before and never touch the ledger, so they get no acknowledgment and no gaps.
+
+The answer to a version 2 batch:
+
+```json
+{ "accepted": 1, "rejected": 1, "duplicates": 0,
+  "acks": [{ "from": 40, "to": 42 }],
+  "rejections": [{ "seq": 41, "reason": "range" }] }
+```
+
+- `acks` names every seq of the batch that is **settled**: stored now, stored before (a duplicate), or rejected for its content. A rejected record is logged as `sdk.telemetry.rejected` with its reason and is final; sending it again changes nothing.
+- A seq of the batch that `acks` does not name is unsettled. The client keeps it and sends it again. The server answers this way when it settles only part of a batch.
+- Status codes settle nothing: 400 and 413 mean the frame is wrong, so the client drops the batch and records the drop with reason `refused`. 401 means refresh the credential, or drop with `credential_expired` when the subject has no fresh one. 429, 5xx, a timeout and a network error mean send the same batch again after backoff. When the ledger is down the API answers 503 with `Retry-After` and writes nothing.
+
+## The client
+
+1. **Stamping.** `record()` gives the record its `source_id`, the next `seq` and a new `event_id`, and queues it.
+2. **Priority.** Each event type has a class in one exhaustive table: `p0` for the records that explain why a call failed or ended (`call_ended`, `connection_failed`, `render_crashed`, `problem_reported`, `telemetry_dropped`, the space join span, recovery exhaustion, access refresh failure, device failure and unconfirmed cleanup), `stats` for `call_stats`, and `routine` for the rest.
+3. **Reservation.** Routine and stats records may fill at most half of the queue's byte budget, and they never push out a P0 record. When the queue is full it gives up stats first (folding two windows into one keeps the newer and drops the older), then routine records, oldest first, and a P0 record only when nothing else is left. Every record it gives up joins the **drop list**.
+4. **Drop records.** The next drain turns the drop list into one `telemetry_dropped` record of the current source, sent like any P0 record. A drop record is never evicted.
+5. **Batches.** A batch takes up to 100 records of one subject, at most 48 KiB, and gets a `batch_id`. It is immutable until its answer arrives. One batch per source is in flight at a time.
+6. **Settling.** The client removes exactly the seqs `acks` names and keeps the rest.
+7. **The journal.** On the web the outbox keeps a journal in `sessionStorage` (`TelemetryJournal` in the platform), which a reload of the same tab can read and other tabs cannot. It holds, per source, the P0 records not yet settled, the drop list, the high-water mark, the end the client still owes and the credential of each subject. A P0 record is written to the journal before `record()` returns, so P0 means **durably enqueued**. The high-water mark is saved at most every 5 seconds, and exactly on `pagehide`, with a closing mark.
+8. **Reload.** A new boot is a new source. It reads its predecessors' journals, sends their records under the predecessor's `source_id` and credential, and sends each predecessor's end: `closed` with the exact `next_seq` when the predecessor saved its closing mark, otherwise `abandoned` with the last `next_seq` it persisted.
+9. **Disposal.** `dispose()` emits the drop list, then sends `end: "closed"` with the exact `next_seq`.
+
+React Native has no journal yet, so an app kill leaves an unknown tail there. A slice adds one through the same `TelemetryJournal` port.
+
+## The server
+
+The handler does this for one batch, under a row lock on the source's ledger (`SELECT … FOR UPDATE`):
+
+1. Decode the frame and mark each record accepted or rejected for its content.
+2. Find the new seqs: those not already stored or rejected for this `(tenant, source, participant)`.
+3. Write one row per new accepted record to the sink (`sdk.telemetry`) and one per new rejected record (`sdk.telemetry.rejected`).
+4. Commit the ledger: the stored, rejected and dropped ranges, the reported high-water mark, the end and the receive times.
+5. Answer with `acks`.
+
+The answer comes only after the commit, so an acknowledged seq is always stored. A crash between the sink write and the commit leaves rows the ledger does not name; the retry writes them again with the same `event_id`, and the reader collapses copies by `(source_id, seq)`. That is exactly-once as the reader sees it, not as the log store holds it.
+
+The ledger is the table `telemetry_sources`, one row per `(tenant_id, source_id, participant_id)`, holding the Episode, the ranges as JSON, `reported_next_seq`, `end`, `end_next_seq` and the first and last receive times. Rows are keyed by participant so that a batch signed for one participant can never mark another participant's seqs as stored and suppress them. A source spans participants when the SDK client rejoins, so the watermark of a source is the union of its rows.
+
+## Watermarks and gaps
+
+`telemetrydelivery.Gaps` turns a source's rows into `EvidenceGap`s, and C2+C4 read them by these names:
+
+```text
+SourceWatermark { source_id, tenant_id, participants, episodes, next_seq, end, end_next_seq,
+                  stored, rejected, dropped, first_received_at, last_received_at }
+EvidenceGap     { source_id, from_seq, to_seq | null, cause, drop_reason?, status }
+```
+
+- The high-water mark is `end_next_seq` when the source is closed, and otherwise the larger of the reported `next_seq` and `end_next_seq`.
+- Below it, every seq that is neither stored, rejected nor dropped is a `missing` gap with exact bounds.
+- Dropped seqs are `dropped` gaps with their `drop_reason`.
+- Past the high-water mark, a source that did not close has a `tail_unknown` gap with `to_seq: null`. No exact count exists, and none is invented.
+- `status` is `open` while the source has no end (records may still arrive) and `final` once it has one. A late delivery can still shrink a final gap; nothing grows one.
+
+A source the server never heard of has no row, so its gaps are not visible here at all. The attempt populations in C2 cover that case.
+
+## The telemetry token
+
+Telemetry has its own credential, so a loss no longer follows the 5-minute media credential. Every access grant response carries `telemetry: { token, expires_at }`, an EdDSA JWT with audience `chalk-telemetry`, the same subject (tenant, Space, Episode, participant) and a 24-hour lifetime. The route accepts it, and still accepts the media credential from older SDKs. It authorizes only the telemetry route, so the 24 hours buy delivery after a reload or a long background, not access. The byte budget per participant still bounds it.
+
+## Known gaps
+
+- **The OTLP exporter buffers in memory.** The sink write is an slog row, and the OpenTelemetry batch processor holds it in memory before it reaches Axiom. A crash there loses rows the ledger counts as stored. The readback canary measures this; the model doesn't cover it.
+- **Ad blockers.** The path ends in `/telemetry`, which common filter lists match. A neutral alias such as `/v1/tenants/{tenant_id}/client-events` is the proposed fix, but routing stays as it is until a browser test in slice 1 shows real blocking.
+- **React Native has no journal**, so every app kill leaves an unknown tail.
+- **The back-forward cache.** A page restored after `pagehide` clears its closing mark on its next record; the model doesn't cover the restore.
+- **Version 1 SDKs** get no ledger, so their loss shows only as `seq` holes in the rows.
+
+## The model
+
+`tools/formal/telemetry-delivery/run.sh` checks [TelemetryDelivery.tla](../tools/formal/telemetry-delivery/TelemetryDelivery.tla). It models the client (record, evict, drop records, journal, crash, `pagehide`, reload, dispose), the network (loss and duplicates) and the API (sink write, ledger commit, answers, partial answers, crashes), and checks:
+
+- `AckSafe`: an acknowledged seq is stored.
+- `TruthfulLedger`: the ledger names only what the sink holds.
+- `OneRecordPerKey`: no two different records share `(source_id, seq)`.
+- `DurableAccounted`: every durably enqueued record is with the client, stored, or named by a stored drop record.
+- `Conservation`: every record the outbox accepted is one of those or inside a gap.
+- `GapsHonest` and `CloseHonest`: a missing range only names seqs that were assigned, and a closed source names its last seq exactly.
+- `P0Reserved`: routine records never push out a P0 record.
+- `DurableDelivered` and `EndsReported`, under the fairness assumptions stated in the model: the client keeps sending what it holds and times out lost requests, the API handles what reaches it, faults are bounded, and the last session does not vanish.
+
+Broken variants (answer before store, ledger before sink, dedupe on seq alone, keeping the source across a reload, evicting without a drop record, a drop list in memory only, acknowledging the whole batch, eviction without the P0 reserve, and reporting an abandoned source as closed) must each produce a counterexample.
+
+An outbox integration test records a trace of what the real code did, and `run.sh --trace` checks that trace against the model. A trace the model rejects proves the code and the model disagree. Traces that pass do not prove the code refines the model: they cover only the runs the tests made.

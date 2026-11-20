@@ -1,0 +1,4 @@
+# Code that each TelemetryDelivery step mirrors. `run.sh` fails when a
+# fragment is gone, so a change to these guards forces a fresh look at the model.
+# Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
+# the file and the fragment compare as one space.
