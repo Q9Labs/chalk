@@ -1,8 +1,13 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery/ledgertest"
@@ -122,7 +128,7 @@ func holdOpen(t *testing.T, pool *pgxpool.Pool, identity telemetrydelivery.Ident
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	if _, err := NewTelemetryLedger(tx).Admit(t.Context(), identity, request, time.Now()); err != nil {
+	if _, err := NewTelemetryLedger(tx).Admit(t.Context(), identity, request, time.Now(), sdktelemetry.Stamp{}); err != nil {
 		t.Fatal(err)
 	}
 	return tx
@@ -139,7 +145,7 @@ func admitBehind(t *testing.T, pool *pgxpool.Pool, open pgx.Tx, identity telemet
 	t.Helper()
 	done := make(chan admitted, 1)
 	go func() {
-		admission, err := NewTelemetryLedger(pool).Admit(context.Background(), identity, request, time.Now())
+		admission, err := NewTelemetryLedger(pool).Admit(context.Background(), identity, request, time.Now(), sdktelemetry.Stamp{})
 		done <- admitted{admission, err}
 	}()
 	select {
@@ -189,7 +195,7 @@ func TestTelemetryLedgerConcurrentFirstBatchesMakeOneOwner(t *testing.T) {
 func TestTelemetryLedgerAdmissionWaitsForAnOpenPurge(t *testing.T) {
 	pool, seed := committedTelemetryTenant(t)
 	owner := seed.join(t, 0)
-	if _, err := NewTelemetryLedger(pool).Admit(t.Context(), owner, ledgertest.Batch(t, proofSource, 1, "", ledgertest.Record(0)), time.Now()); err != nil {
+	if _, err := NewTelemetryLedger(pool).Admit(t.Context(), owner, ledgertest.Batch(t, proofSource, 1, "", ledgertest.Record(0)), time.Now(), sdktelemetry.Stamp{}); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := pool.Begin(t.Context())
@@ -207,5 +213,67 @@ func TestTelemetryLedgerAdmissionWaitsForAnOpenPurge(t *testing.T) {
 	var count int
 	if err := pool.QueryRow(t.Context(), `select count(*) from telemetry_sources where tenant_id = $1`, uuid(seed.tenant)).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("telemetry_sources rows = %d, err = %v, want none recreated", count, err)
+	}
+}
+
+func TestTelemetryAckSurvivesRestartBeforeExport(t *testing.T) {
+	pool, seed := committedTelemetryTenant(t)
+	identity := seed.join(t, 0)
+	request := ledgertest.Batch(t, ledgertest.SourceID(1), 1, "", ledgertest.Record(0))
+	received := time.Now()
+	if _, err := NewTelemetryLedger(pool).Admit(t.Context(), identity, request, received, sdktelemetry.Stamp{}); err != nil {
+		t.Fatal(err)
+	}
+	// The process may stop here before any exporter runs. A fresh instance sees a duplicate.
+	retry, err := NewTelemetryLedger(pool).Admit(t.Context(), identity, request, received, sdktelemetry.Stamp{})
+	if err != nil || retry.Duplicates != 1 {
+		t.Fatalf("retry = %+v, error = %v; want duplicate ACK", retry, err)
+	}
+	var rows int
+	if err := pool.QueryRow(t.Context(), `select coalesce(sum(jsonb_array_length(payload)), 0) from telemetry_outbox where tenant_id = $1`, uuid(seed.tenant)).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("durable payloads after restart = %d, error = %v; want exactly one", rows, err)
+	}
+}
+
+func TestTelemetryRelayRetainsPayloadUntilAxiomAcknowledgesAllFields(t *testing.T) {
+	pool, seed := committedTelemetryTenant(t)
+	identity := seed.join(t, 0)
+	request := ledgertest.Batch(t, ledgertest.SourceID(1), 1, "", ledgertest.Record(0))
+	ledger := NewTelemetryLedger(pool)
+	if _, err := ledger.Admit(t.Context(), identity, request, time.Now(), sdktelemetry.Stamp{}); err != nil {
+		t.Fatal(err)
+	}
+
+	deliveries := make(chan []byte, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		partial := len(deliveries) == 0
+		deliveries <- payload
+		receipt := map[string]any{"ingested": 1, "failed": 0}
+		if partial {
+			receipt["messages"] = []map[string]string{{"code": "column_limit_drop"}}
+		}
+		_ = json.NewEncoder(w).Encode(receipt)
+	}))
+	defer server.Close()
+	sink, err := observability.NewAxiomEvidence(server.URL, "Authorization=Bearer%20synthetic,x-axiom-dataset=test-logs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := ledger.RelayEvidence(t.Context(), sink.Export); count != 0 || err == nil {
+		t.Fatalf("partial ingest: count=%d err=%v; want retry", count, err)
+	}
+	mustExec(t, pool, `update telemetry_outbox set available_at = now() where tenant_id = $1`, uuid(seed.tenant))
+	if count, err := NewTelemetryLedger(pool).RelayEvidence(t.Context(), sink.Export); count != 1 || err != nil {
+		t.Fatalf("relay after restart: count=%d err=%v; want one delivery", count, err)
+	}
+	if first, second := <-deliveries, <-deliveries; !bytes.Equal(first, second) {
+		t.Fatal("retry changed stored evidence")
+	}
+	if count, err := ledger.RelayEvidence(t.Context(), sink.Export); count != 0 || err != nil {
+		t.Fatalf("relay after full receipt: count=%d err=%v; want empty", count, err)
 	}
 }

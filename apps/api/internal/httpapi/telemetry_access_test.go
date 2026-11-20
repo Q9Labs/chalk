@@ -41,9 +41,6 @@ func TestTelemetryV2BatchOnASourceOfAnotherParticipantIsRefusedWithReasonSourceO
 	if rows := f.rows(t, "sdk.telemetry.rejected"); len(rows) != 1 || rows[0]["reason"] != "source_owned" || rows[0]["source_id"] != ledgerSource {
 		t.Fatalf("rejection rows = %v, want one with reason source_owned naming the source", rows)
 	}
-	if rows := f.sinkRows(t); rows != 1 {
-		t.Fatalf("sink rows = %d, want only the owner's record", rows)
-	}
 	if after, _, _ := f.ledger.Source(t.Context(), f.subject.TenantID, mustLedgerID(t, ledgerSource)); !reflect.DeepEqual(after, before) {
 		t.Fatalf("owner row = %+v, want it unchanged: %+v", after, before)
 	}

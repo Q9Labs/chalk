@@ -1590,6 +1590,13 @@ type SyncWhiteboardScene struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
+type TelemetryOutbox struct {
+	ID          int64              `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Payload     []byte             `json:"payload"`
+	AvailableAt pgtype.Timestamptz `json:"available_at"`
+}
+
 type TelemetrySource struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	SourceID        pgtype.UUID        `json:"source_id"`

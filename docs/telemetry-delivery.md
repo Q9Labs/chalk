@@ -76,10 +76,10 @@ The handler does this for one batch, in one ledger transaction:
 3. Refuse the batch when the source belongs to another Participant (`source_owned`), or when it is new and the Participant already owns 64 sources (`source_budget`).
 4. Find the new seqs: those not already stored or rejected for the source. A new valid record is stored, a new invalid one is rejected, a record at or past a closed end is rejected with `after_end`, and a stored drop record marks the seqs it names as dropped in the same source.
 5. Check the end against the committed history, then raise the reported high-water mark (see below).
-6. Commit the ledger.
-7. Write one row per new stored record to the sink (`sdk.telemetry`) and one per new rejected record (`sdk.telemetry.rejected`), then answer with `acks`.
+6. Write the new accepted payload to `telemetry_outbox` and commit it with the source row.
+7. Log new rejections and answer with `acks`. The reply does not wait for Axiom.
 
-The sink write and the answer come only after the commit, so a failed commit logs nothing and acknowledges nothing, and the client retries the same batch. A retry of a batch whose answer was lost finds every seq settled and logs nothing again. A crash between the commit and the sink write loses those rows: the retry is a duplicate, and the reader sees a stored seq with no row, which it reports as a gap. The log store never holds a row the ledger doesn't name.
+A failed commit acknowledges nothing. A retry after commit returns the same settled seqs without recreating the payload. The API relay claims a bounded group of pending payloads and deletes it only after a full Axiom ingest receipt. A lost reply between ingest and deletion can yield duplicate rows in Axiom; the reader deduplicates by event ID and fact. It still reports a stored seq as unread until its row is visible. Receipt time does not advance after a source closes.
 
 The ledger is the table `telemetry_sources`, one row per `(tenant_id, source_id)`, holding its owner (the Participant and Episode of the first batch), the ranges as JSON, `reported_next_seq`, `end`, `end_next_seq` and the first and last receive times. A row is written only by its owner, so a Participant of the tenant that learns another client's `source_id` can't add stored, dropped or closed claims to that source, or records under its seqs, and can't hide its gaps. An empty batch that only closes a new source creates one row.
 
@@ -114,7 +114,7 @@ Telemetry has its own credential, so a loss no longer follows the 5-minute media
 
 ## Known gaps
 
-- **The OTLP exporter buffers in memory.** The sink write is an slog row, and the OpenTelemetry batch processor holds it in memory before it reaches Axiom. A crash there loses rows the ledger counts as stored, which the reader's row check reports as gaps. The readback canary measures this; the model assumes a lossless sink once a row is written.
+- **Axiom can lag or refuse delivery.** Pending payloads stay in Postgres and the relay logs `telemetry.relay_retry`. Set up the existing Axiom log dataset and ingest grant before enabling delivery. An outage can grow the pending queue; it does not expire acknowledged evidence.
 - **Ad blockers.** The path ends in `/telemetry`, which common filter lists match. A neutral alias such as `/v1/tenants/{tenant_id}/client-events` is the proposed fix, but routing stays as it is until a browser test in slice 1 shows real blocking.
 - **React Native has no journal**, so every app kill leaves an unknown tail.
 - **The back-forward cache.** A page restored after `pagehide` clears its closing mark on its next record; the model doesn't cover the restore.
@@ -128,18 +128,18 @@ Telemetry has its own credential, so a loss no longer follows the 5-minute media
 
 - `AckSafe`: an acknowledged seq is committed as stored or rejected.
 - `SinkCommitted`: the sink holds only committed rows, so a failed commit logs nothing.
-- `TruthfulLedger`: a stored seq has its row, and a dropped seq is named by a drop record with its row, unless a crash between the commit and the write lost that row.
+- `TruthfulLedger`: a stored seq has its row, and a dropped seq is named by a drop record with its row, in the pending outbox or the sink.
 - `OwnerWrites`: only a source's own Participant writes it. The row's owner is the Participant whose credential sends the source, every stored or rejected seq is one the client minted for it, and every sink row is a record the client made.
 - `OneRecordPerKey` and `SeqNeverReused`: no two different records share `(source_id, seq)`, in the sink or anywhere the client minted them.
-- `DurableAccounted`: every durably enqueued record is with the client, stored, or named by a stored drop record. The only exceptions are losses the server names, a rejected record, a row lost after its commit, or the unsent drop list of an abandoned source, and each of those is inside a gap.
+- `DurableAccounted`: every durably enqueued record is with the client, pending export, stored, or named by a durable drop record. The only exceptions are losses the server names: a rejected record or the unsent drop list of an abandoned source, and each of those is inside a gap.
 - `Conservation`: every record the outbox accepted is one of those or inside a gap.
 - `GapsHonest` and `CloseHonest`: a missing range only names seqs that were assigned, and a closed source names its last seq exactly.
 - `SuffixKept`: a close never lies below a stored or rejected seq.
 - `P0Reserved`: routine records never push out a P0 record.
-- `DurableDelivered` and `EndsReported`, under the fairness assumptions stated in the model: the client keeps sending what it holds and times out lost requests, the API handles what reaches it, faults are bounded, and the last session does not vanish.
+- `DurableDelivered` and `EndsReported`, under the fairness assumptions stated in the model: the client keeps sending what it holds and times out lost requests, the API handles what reaches it, the relay can eventually export, faults are bounded, and the last session does not vanish.
 
-The model assumes a lossless sink once a row is written, a valid credential for every source while the client sends for it, a journal that survives a reload, and a live tenant and Participant. The purge fence and the source budget are checked by the ledger tests instead. `TelemetryDelivery.cfg` checks two sessions with one fault, and `TelemetryDeliveryJoin.cfg` checks two sessions with one join and no fault.
+The model assumes a full sink receipt and retention through the read horizon, a valid credential for every source while the client sends for it, a journal that survives a reload, and a live tenant and Participant. The purge fence and the source budget are checked by the ledger tests instead. `TelemetryDelivery.cfg` checks two sessions with one fault, and `TelemetryDeliveryJoin.cfg` checks two sessions with one join and no fault.
 
-Broken variants must each produce a counterexample: answering before the commit, writing the sink before the commit, counting a rejected record as stored, applying an end below the floor, sending a batch before its high-water mark is saved, keeping one source across joins, naming an abandoned predecessor's drop list at its saved mark, dedupe on seq alone, keeping the source across a reload, evicting without a drop record, a drop list in memory only, acknowledging the whole batch, eviction without the P0 reserve, reporting an abandoned source as closed, never loading a predecessor's journal on reload, and skipping the owner check, which lets a forged batch or end into the source.
+Broken variants must each produce a counterexample: answering before the commit, writing the sink before the commit, omitting the payload from the commit, counting a rejected record as stored, applying an end below the floor, sending a batch before its high-water mark is saved, keeping one source across joins, naming an abandoned predecessor's drop list at its saved mark, dedupe on seq alone, keeping the source across a reload, evicting without a drop record, a drop list in memory only, acknowledging the whole batch, eviction without the P0 reserve, reporting an abandoned source as closed, never loading a predecessor's journal on reload, and skipping the owner check, which lets a forged batch or end into the source.
 
 An outbox integration test records a trace of what the real code did, and `run.sh --trace` checks that trace against the model. A trace the model rejects proves the code and the model disagree. Traces that pass do not prove the code refines the model: they cover only the runs the tests made.

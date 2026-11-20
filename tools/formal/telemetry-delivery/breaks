@@ -3,7 +3,8 @@
 # Format: <Break value><TAB><rule TLC must report><TAB><bounds: main, Join, Live or LiveJoin,
 # the TelemetryDelivery*.cfg it runs under><TAB><code edit it mirrors>
 ack_before_store	AckSafe	main	telemetry.go answers the batch before the ledger commit
-sink_before_ledger	SinkCommitted	main	telemetry.go writes the sink rows before the ledger adapter commits the source rows
+sink_before_ledger	SinkCommitted	main	the relay writes rows before the ledger commits
+omit_payload_on_commit	TruthfulLedger	main	the ledger commits the range without its outbox payload
 rejected_as_stored	TruthfulLedger	main	telemetrydelivery.Admit adds a rejected seq to Stored instead of Rejected
 accept_short_end	SuffixKept	main	applyEnd applies an end below the floor instead of naming it end_short
 send_before_save	EndsReported	Live	the outbox sends a batch before #form saves the journal high-water mark

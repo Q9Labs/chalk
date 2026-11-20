@@ -1,0 +1,125 @@
+package observability
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+)
+
+type AxiomEvidence struct {
+	client        *http.Client
+	ingestURL     string
+	authorization string
+}
+
+var axiomDatasetName = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,80}$`)
+
+// NewAxiomEvidence reuses the existing Axiom OTLP log dataset and ingest grant.
+// The native ingest API gives the relay a synchronous, per-batch receipt.
+func NewAxiomEvidence(endpoint, logHeaders string) (AxiomEvidence, error) {
+	var sink AxiomEvidence
+	if endpoint == "" || logHeaders == "" {
+		return sink, nil
+	}
+	var dataset string
+	for _, pair := range strings.Split(logHeaders, ",") {
+		key, value, found := strings.Cut(pair, "=")
+		if !found {
+			continue
+		}
+		value, err := url.PathUnescape(strings.TrimSpace(value))
+		if err != nil {
+			return AxiomEvidence{}, errors.New("invalid Axiom log header encoding")
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "x-axiom-dataset":
+			dataset = value
+		case "authorization":
+			sink.authorization = value
+		}
+	}
+	if dataset == "" {
+		// A generic OTLP collector may have headers but is not an Axiom endpoint.
+		return AxiomEvidence{}, nil
+	}
+	if !axiomDatasetName.MatchString(dataset) || dataset == "." || dataset == ".." || !strings.HasPrefix(sink.authorization, "Bearer ") {
+		return AxiomEvidence{}, errors.New("Axiom evidence needs a log dataset and ingest grant")
+	}
+	ingestURL, err := url.JoinPath(endpoint, "/v1/ingest", dataset)
+	if err != nil {
+		return AxiomEvidence{}, errors.New("invalid Axiom evidence endpoint")
+	}
+	sink.ingestURL = ingestURL
+	sink.client = &http.Client{
+		Timeout: 8 * time.Second,
+		// Do not forward the ingest grant or evidence to a redirected endpoint.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	return sink, nil
+}
+
+func (s AxiomEvidence) Enabled() bool { return s.client != nil }
+
+func (s AxiomEvidence) Export(ctx context.Context, rows []json.RawMessage) error {
+	payload, err := json.Marshal(rows)
+	if err != nil {
+		return errors.New("encode telemetry ingest request")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.ingestURL, bytes.NewReader(payload))
+	if err != nil {
+		return errors.New("build telemetry ingest request")
+	}
+	request.Header.Set("Authorization", s.authorization)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := s.client.Do(request)
+	if err != nil {
+		return errors.New("send telemetry ingest request")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("telemetry ingest status %d", response.StatusCode)
+	}
+	var receipt struct {
+		Ingested int               `json:"ingested"`
+		Failed   int               `json:"failed"`
+		Messages []json.RawMessage `json:"messages"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&receipt); err != nil {
+		return errors.New("read telemetry ingest receipt")
+	}
+	// Axiom can accept a row but drop fields, including indispensable proof
+	// fields. Any warning keeps the original payload available for replay.
+	if receipt.Ingested != len(rows) || receipt.Failed != 0 || len(receipt.Messages) != 0 {
+		return errors.New("incomplete telemetry ingest receipt")
+	}
+	return nil
+}
+
+// Run drains ready groups and backs off between idle or failed reads.
+func (s AxiomEvidence) Run(ctx context.Context, relay func(context.Context, func(context.Context, []json.RawMessage) error) (int, error), logger *slog.Logger) {
+	for ctx.Err() == nil {
+		count, err := relay(ctx, s.Export)
+		if count > 0 {
+			continue
+		}
+		if err != nil && ctx.Err() == nil {
+			// Neither HTTP responses nor driver errors are safe to print.
+			logger.WarnContext(ctx, "Evidence relay did not complete; pending payloads retained", "event", "telemetry.relay_retry")
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+}

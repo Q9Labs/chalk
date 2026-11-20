@@ -90,6 +90,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: %w", err)
 	}
+	evidenceSink, err := observability.NewAxiomEvidence(cfg.Observability.OTLPEndpoint, os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
+	if err != nil {
+		return err
+	}
 	telemetry, err := observability.Start(context.Background(), observability.Config{
 		Environment:  cfg.Observability.Environment,
 		OTLPEndpoint: cfg.Observability.OTLPEndpoint,
@@ -147,6 +151,7 @@ func run() error {
 	defer pool.Close()
 	logger.Info("postgres connected", "event", "postgres.connected")
 
+	telemetryLedger := postgres.NewTelemetryLedger(pool)
 	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
 	var redisClient *goredis.Client
@@ -567,7 +572,7 @@ func run() error {
 		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
 		ParticipantMediaVerify: credentials.mediaVerifier,
 		TelemetryVerify:        credentials.telemetryVerifier,
-		TelemetryLedger:        postgres.NewTelemetryLedger(pool),
+		TelemetryLedger:        telemetryLedger,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,
 		Memberships:            membershipService,
@@ -679,6 +684,17 @@ func run() error {
 		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(pool))
+	if evidenceSink.Enabled() {
+		evidenceDone := make(chan struct{})
+		go func() {
+			defer close(evidenceDone)
+			evidenceSink.Run(signalCtx, telemetryLedger.RelayEvidence, logger)
+		}()
+		defer func() {
+			stop()
+			<-evidenceDone
+		}()
+	}
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

@@ -16,20 +16,19 @@
 (* own; an abandoned one cannot, because its saved high-water mark is only *)
 (* a lower bound, so its drop list is given up and those seqs stay a gap.  *)
 (*                                                                         *)
-(* The ingest route (apps/api/internal/httpapi/telemetry.go) admits a      *)
-(* batch against the source's row, commits the ledger                      *)
-(* (apps/api/internal/telemetrydelivery and the Postgres adapter), then    *)
-(* writes the committed rows to the sink and answers with the seqs it      *)
-(* settled. A failed commit writes nothing. A crash between the commit and *)
-(* the sink write loses those rows: the retry is a duplicate, and the      *)
-(* reader sees a stored seq with no row, which is a gap. A rejected record *)
-(* is settled but not stored, so it is a gap too. Only the row's owner may *)
-(* write a source, and an end below the committed history is refused.      *)
+(* The ingest route commits the ledger and accepted payload together.     *)
+(* It may ACK as soon as the transaction commits. A failed commit stores  *)
+(* nothing. A crash after commit but before ACK or export leaves a durable *)
+(* row for the relay; a duplicate retry can safely ACK. The relay moves   *)
+(* pending rows to the sink independently. A rejected record is settled *)
+(* but not stored, so it is a gap. An end below history is refused.       *)
 (* Another Participant of the tenant that learned a source_id may send a   *)
 (* forged batch or end for it (Foreign); the owner check refuses it.       *)
 (*                                                                         *)
-(* Assumptions. The sink is lossless: a row it took stays, and copies of   *)
-(* one record collapse by (source_id, seq). Every source's credential is   *)
+(* Assumptions. A sink receipt confirms the full row; accepted rows stay   *)
+(* for the read horizon. Retries collapse by a stable record key. A failed *)
+(* export or lost receipt may leave the payload pending. Successful send  *)
+(* and deletion are one abstract step. Every source's credential is       *)
 (* valid while the client sends for it (the code abandons a source whose   *)
 (* credential expired, and its gap stays open; the model does not cover    *)
 (* that). The journal survives a reload. The tenant and Participant stay   *)
@@ -59,6 +58,7 @@ BreakNames == {
     "none",
     "ack_before_store",          \* the handler answers before the ledger commit
     "sink_before_ledger",        \* the handler writes the sink before the ledger commits
+    "omit_payload_on_commit",   \* the ledger commits the range without the payload
     "rejected_as_stored",        \* the ledger counts a rejected record as stored
     "accept_short_end",          \* the ledger applies an end below the committed history
     "send_before_save",          \* a batch leaves before the journal saves its high-water mark
@@ -111,18 +111,18 @@ VARIABLES
     resps,     \* answers on their way back
     ledger,    \* ledger[s]: what the API has committed for source s
     sink,      \* rows written: records and drop records
+    pending,   \* payload committed alongside the source ranges
     srv,       \* the batch the API is handling, if any
     assigned,  \* ghost: every record any boot made
     durable,   \* ghost: every record that was durably enqueued
     p0OverLow, \* ghost: a P0 record was evicted while a routine one was held
-    lostRows,  \* ghost: keys committed whose rows a crash kept out of the sink
     gaveUp,    \* ghost: keys in the drop list of an abandoned source, never named
     faults     \* faults so far
 
 clientVars == <<boot, alive, src, last, joins, who, part, closed, made, next, mem, jrecs, jnext, jclosing, pdrops, toEnd, out>>
 netVars == <<reqs, resps>>
-serverVars == <<ledger, sink, srv>>
-ghostVars == <<assigned, durable, p0OverLow, lostRows, gaveUp>>
+serverVars == <<ledger, sink, pending, srv>>
+ghostVars == <<assigned, durable, p0OverLow, gaveUp>>
 faultVars == <<faults>>
 vars == <<clientVars, netVars, serverVars, ghostVars, faultVars>>
 
@@ -152,8 +152,8 @@ Init ==
     /\ out = [s \in Sources |-> NoMsg]
     /\ reqs = {} /\ resps = {}
     /\ ledger = [s \in Sources |-> NoRow]
-    /\ sink = {} /\ srv = Idle
-    /\ assigned = {} /\ durable = {} /\ p0OverLow = FALSE /\ lostRows = {} /\ gaveUp = {}
+    /\ sink = {} /\ pending = {} /\ srv = Idle
+    /\ assigned = {} /\ durable = {} /\ p0OverLow = FALSE /\ gaveUp = {}
     /\ faults = 0
 
 -----------------------------------------------------------------------------
@@ -174,7 +174,7 @@ Record(p0) ==
                 ELSE UNCHANGED <<durable, jrecs, jnext>>
     /\ next' = [next EXCEPT ![src] = @ + 1]
     /\ made' = made + 1
-    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, jclosing, pdrops, toEnd, out, netVars, serverVars, p0OverLow, lostRows, gaveUp, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, jclosing, pdrops, toEnd, out, netVars, serverVars, p0OverLow, gaveUp, faultVars>>
 
 \* The queue gives up routine records first: a P0 record goes only when no routine one is left.
 Victim(v) ==
@@ -192,7 +192,7 @@ Evict(v) ==
     /\ jrecs' = jrecs \ {v}
     /\ pdrops' = IF Break = "evict_without_drop_record" THEN pdrops ELSE pdrops \cup {Key(v)}
     /\ p0OverLow' = (p0OverLow \/ (v.p0 /\ \E u \in Counted(mem) : ~u.p0))
-    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, jnext, jclosing, toEnd, out, netVars, serverVars, assigned, durable, lostRows, gaveUp, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, next, jnext, jclosing, toEnd, out, netVars, serverVars, assigned, durable, gaveUp, faultVars>>
 
 \* A drain turns a source's drop list into a telemetry_dropped record of that same source. The
 \* live source does it while it takes records; a retired source only while it is closing and
@@ -211,7 +211,7 @@ EmitDrop(s) ==
           /\ pdrops' = pdrops \ DropsOf(s)
           /\ jnext' = [jnext EXCEPT ![s] = q + 1]
           /\ next' = [next EXCEPT ![s] = q + 1]
-    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, jclosing, toEnd, out, netVars, serverVars, p0OverLow, lostRows, gaveUp, faultVars>>
+    /\ UNCHANGED <<boot, alive, src, last, joins, who, part, closed, made, jclosing, toEnd, out, netVars, serverVars, p0OverLow, gaveUp, faultVars>>
 
 \* The throttled journal save that moves the high-water mark without a P0 record.
 Checkpoint ==
@@ -327,7 +327,7 @@ Reboot ==
           /\ gaveUp' = gaveUp \cup given
     /\ alive' = TRUE /\ closed' = FALSE /\ made' = 0
     /\ mem' = IF Break = "ignore_journal_on_reload" THEN {} ELSE jrecs
-    /\ UNCHANGED <<joins, who, jrecs, jnext, jclosing, out, netVars, serverVars, assigned, durable, p0OverLow, lostRows, faultVars>>
+    /\ UNCHANGED <<joins, who, jrecs, jnext, jclosing, out, netVars, serverVars, assigned, durable, p0OverLow, faultVars>>
 
 -----------------------------------------------------------------------------
 (* The API: the ingest handler and the source ledger.                      *)
@@ -350,7 +350,7 @@ Receive(m, S, J) ==
     /\ reqs' = reqs \ {m}
     /\ srv' = [st |-> "admitted", m |-> m, settle |-> S \cup J, rejected |-> {r \in J : Fresh(r)}, new |-> {r \in S : Fresh(r)}]
     /\ resps' = IF Break = "ack_before_store" THEN resps \cup {[req |-> m, acks |-> {r.seq : r \in S \cup J}]} ELSE resps
-    /\ UNCHANGED <<clientVars, ledger, sink, ghostVars>>
+    /\ UNCHANGED <<clientVars, ledger, sink, pending, ghostVars>>
 
 \* A batch for a source another Participant owns is refused, and nothing of it is applied.
 Refuse(m) ==
@@ -396,33 +396,38 @@ Applied(L, m, new, rej) ==
 \* The rows the commit stores, which the sink gets after it.
 Rows(m, new) == IF ledger[m.src].end = "closed" THEN {r \in new : r.seq < ledger[m.src].endNext} ELSE new
 
-\* One ledger transaction for the batch's source.
+\* One transaction for the range and evidence payload.
 Commit ==
     /\ srv.st = IF Break = "sink_before_ledger" THEN "sunk" ELSE "admitted"
     /\ ledger' = [ledger EXCEPT ![srv.m.src] = Applied(@, srv.m, srv.new, srv.rejected)]
-    /\ srv' = [srv EXCEPT !.st = IF Break = "sink_before_ledger" THEN "written" ELSE "committed", !.new = Rows(srv.m, srv.new)]
+    /\ pending' = IF Break = "omit_payload_on_commit" THEN pending ELSE pending \cup Rows(srv.m, srv.new)
+    /\ srv' = [srv EXCEPT !.st = "committed"]
     /\ UNCHANGED <<clientVars, netVars, sink, ghostVars, faultVars>>
 
-\* The committed rows go to the sink.
+\* Export is independent of the request. A retry has the same record key.
 Write ==
-    /\ srv.st = IF Break = "sink_before_ledger" THEN "admitted" ELSE "committed"
+    /\ pending # {}
+    /\ sink' = sink \cup pending
+    /\ pending' = {}
+    /\ UNCHANGED <<clientVars, netVars, ledger, srv, ghostVars, faultVars>>
+
+WriteEarly ==
+    /\ Break = "sink_before_ledger" /\ srv.st = "admitted"
     /\ sink' = sink \cup srv.new
-    /\ srv' = [srv EXCEPT !.st = IF Break = "sink_before_ledger" THEN "sunk" ELSE "written"]
-    /\ UNCHANGED <<clientVars, netVars, ledger, ghostVars, faultVars>>
+    /\ srv' = [srv EXCEPT !.st = "sunk"]
+    /\ UNCHANGED <<clientVars, netVars, ledger, pending, ghostVars, faultVars>>
 
 Respond ==
-    /\ srv.st = "written"
+    /\ srv.st = "committed"
     /\ resps' = IF Break = "ack_before_store" \/ srv.m.boot = 0 THEN resps ELSE resps \cup {[req |-> srv.m, acks |-> {r.seq : r \in srv.settle}]}
     /\ srv' = Idle
-    /\ UNCHANGED <<clientVars, reqs, ledger, sink, ghostVars, faultVars>>
+    /\ UNCHANGED <<clientVars, reqs, ledger, sink, pending, ghostVars, faultVars>>
 
-\* The API dies mid-batch: an uncommitted change is gone; rows committed but not yet written
-\* never reach the sink.
+\* The API dies mid-batch. No committed range or payload is lost.
 ServerCrash ==
     /\ srv.st # "idle" /\ faults < MaxFaults
     /\ srv' = Idle /\ faults' = faults + 1
-    /\ lostRows' = IF srv.st = "committed" THEN lostRows \cup {Key(r) : r \in srv.new} ELSE lostRows
-    /\ UNCHANGED <<clientVars, netVars, ledger, sink, assigned, durable, p0OverLow, gaveUp>>
+    /\ UNCHANGED <<clientVars, netVars, ledger, sink, pending, ghostVars>>
 
 LoseRequest(m) ==
     /\ m \in reqs /\ faults < MaxFaults
@@ -447,13 +452,13 @@ Next ==
     \/ \E m \in reqs : Refuse(m)
     \/ \E s \in Sources : StaleEnd(s)
     \/ \E s \in Sources : Foreign(s)
-    \/ Write \/ Commit \/ Respond \/ ServerCrash
+    \/ Write \/ WriteEarly \/ Commit \/ Respond \/ ServerCrash
     \/ \E m \in reqs : LoseRequest(m)
     \/ \E a \in resps : LoseAnswer(a)
 
 \* Progress assumptions for eventual accounting, and nothing more: the client sends what it
 \* holds, times out a lost request, reads answers and comes back after a crash; the API
-\* handles what reaches it. Faults are bounded by the constants.
+\* handles what reaches it and the relay can eventually export. Faults are bounded by the constants.
 Fairness ==
     /\ \A s \in Sources : WF_vars(Send(s))
     /\ \A s \in Sources : WF_vars(alive /\ out[s] # NoMsg /\ Lost(out[s]) /\ Timeout(s))
@@ -482,8 +487,9 @@ Held(r) ==
 
 \* A stored seq whose row is not in the sink: the reader sees it as missing.
 NoRowFor(k) == k[2] \in ledger[k[1]].stored /\ ~\E r \in sink : Key(r) = k
-\* Committed rows the sink has not taken yet, or never will.
-Unwritten(k) == k \in lostRows \/ (srv.st = "committed" /\ k \in {Key(r) : r \in srv.new})
+\* The reader may not see a pending row yet, but Postgres has its payload.
+DurableRows == pending \cup sink
+DurablyCovered(k) == \E d \in DurableRows : k \in d.covers
 
 \* The evidence_gap computation (telemetrydelivery.Gaps) with the reader's row check: below
 \* the high-water mark every seq that is neither stored nor dropped is missing (a rejected
@@ -498,20 +504,19 @@ InGap(r) ==
     \/ NoRowFor(Key(r))
     \/ \E d \in assigned : IsDrop(d) /\ NoRowFor(Key(d)) /\ Key(r) \in d.covers
 
-\* A loss the server can name: a rejected record, a committed row a crash kept out of the sink,
-\* a seq named only by such a drop record, or the unnamed drop list of an abandoned source.
+\* A loss the server can name: a rejected record (including a rejected drop
+\* record), or the unnamed drop list of an abandoned source.
 Excused(k) ==
     \/ k \in gaveUp
     \/ k[2] \in ledger[k[1]].rejected
-    \/ k \in lostRows
-    \/ \E d \in assigned : IsDrop(d) /\ k \in d.covers /\ (Key(d) \in lostRows \/ d.seq \in ledger[d.src].rejected)
+    \/ \E d \in assigned : IsDrop(d) /\ k \in d.covers /\ d.seq \in ledger[d.src].rejected
 
 TypeOK ==
     /\ boot \in 1..MaxBoots /\ src \in Sources /\ last \in Sources /\ alive \in BOOLEAN /\ closed \in BOOLEAN
     /\ next \in [Sources -> Nat] /\ jnext \in [Sources -> Nat]
-    /\ pdrops \subseteq Keys /\ gaveUp \subseteq Keys /\ lostRows \subseteq Keys
+    /\ pdrops \subseteq Keys /\ gaveUp \subseteq Keys
     /\ toEnd \in [Sources -> Ends]
-    /\ srv.st \in {"idle", "admitted", "sunk", "committed", "written"}
+    /\ srv.st \in {"idle", "admitted", "sunk", "committed"}
 
 \* Nothing is acknowledged that the ledger has not committed as stored or rejected.
 AckSafe == \A a \in resps : \A q \in a.acks : q \in ledger[a.req.src].stored \cup ledger[a.req.src].rejected
@@ -519,12 +524,11 @@ AckSafe == \A a \in resps : \A q \in a.acks : q \in ledger[a.req.src].stored \cu
 \* The sink holds only committed rows, so a failed commit logs nothing.
 SinkCommitted == \A r \in sink : r.seq \in ledger[r.src].stored
 
-\* The ledger claims only what the sink holds or a crash visibly lost: a stored seq has its
-\* row, a dropped seq is named by a drop record that has its row.
+\* A stored seq (including a drop record) always has a durable payload.
 TruthfulLedger ==
     \A s \in Sources :
-        /\ \A q \in ledger[s].stored : (\E r \in sink : Key(r) = <<s, q>>) \/ Unwritten(<<s, q>>)
-        /\ \A q \in ledger[s].dropped : Covered(<<s, q>>) \/ \E d \in assigned : IsDrop(d) /\ <<s, q>> \in d.covers /\ Unwritten(Key(d))
+        /\ \A q \in ledger[s].stored : \E r \in DurableRows : Key(r) = <<s, q>>
+        /\ \A q \in ledger[s].dropped : DurablyCovered(<<s, q>>)
 
 \* Only the source's own Participant writes it: the row's owner is the Participant whose
 \* credential sends the source, every stored or rejected seq is one the client minted for it,
@@ -532,7 +536,7 @@ TruthfulLedger ==
 OwnerWrites ==
     /\ \A s \in Sources : ledger[s].owner \in {0, part[s]}
     /\ \A s \in Sources : \A q \in ledger[s].stored \cup ledger[s].rejected : \E r \in assigned : Key(r) = <<s, q>>
-    /\ sink \subseteq assigned
+    /\ DurableRows \subseteq assigned
 
 \* One record per key: copies of a write collapse, but two different records never share
 \* (source_id, seq).
@@ -543,7 +547,7 @@ SeqNeverReused == \A r1, r2 \in assigned : Key(r1) = Key(r2) => r1 = r2
 
 \* Every durably enqueued record is still with the client, stored, or named by a stored drop
 \* record. Otherwise its loss is one the server names, and it is in a gap.
-DurableAccounted == \A r \in durable : Held(r) \/ InSink(r) \/ Covered(Key(r)) \/ (Excused(Key(r)) /\ InGap(r))
+DurableAccounted == \A r \in durable : Held(r) \/ r \in DurableRows \/ DurablyCovered(Key(r)) \/ (Excused(Key(r)) /\ InGap(r))
 
 \* Every record the outbox accepted is accounted, a gap included.
 Conservation == \A r \in assigned : Held(r) \/ InSink(r) \/ Covered(Key(r)) \/ InGap(r)

@@ -28,13 +28,8 @@ func NewTelemetryLedger(db telemetryLedgerDB) TelemetryLedger {
 	return TelemetryLedger{db: db}
 }
 
-// Admit admits one version 2 batch in a single transaction and returns only after it committed,
-// so the caller logs the new records and acks the batch on a durable ledger and never before. It
-// locks the batch's source row and checks that the batch's participant is live (see
-// lockForAdmission), runs the pure telemetrydelivery.Admit, which checks ownership and the source
-// budget, then writes the row and commits. An error anywhere leaves the row as it was, so the
-// retry finds its records new.
-func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time) (telemetrydelivery.Admission, error) {
+// Admit commits the source ranges and the corresponding evidence in one transaction.
+func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, stamp sdktelemetry.Stamp) (telemetrydelivery.Admission, error) {
 	source, err := telemetrydelivery.SourceID(batch)
 	if err != nil {
 		return telemetrydelivery.Admission{}, err
@@ -56,6 +51,15 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 	}
 	if err := writeSourceRow(ctx, queries, admission.Row, existing == nil); err != nil {
 		return telemetrydelivery.Admission{}, err
+	}
+	payload, err := sdktelemetry.EvidencePayload(batch, admission.New, received, stamp)
+	if err != nil {
+		return telemetrydelivery.Admission{}, fmt.Errorf("encode telemetry outbox payload: %w", err)
+	}
+	if payload != nil {
+		if err := queries.InsertTelemetryOutbox(ctx, sqlc.InsertTelemetryOutboxParams{TenantID: uuid(identity.TenantID), Payload: payload}); err != nil {
+			return telemetrydelivery.Admission{}, fmt.Errorf("insert telemetry outbox payload: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return telemetrydelivery.Admission{}, fmt.Errorf("commit the telemetry ledger: %w", err)
