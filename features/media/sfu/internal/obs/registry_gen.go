@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "9bc7309f3cf3"
+const SchemaVer = "51c411f9db7f"
 
 // Event names.
 const (
@@ -118,7 +118,7 @@ var registryFields = map[string]fieldSpec{
 	"app_build":            {typ: "string", group: "build", required: false},
 	"app_version":          {typ: "string", group: "build", required: false},
 	"attempt":              {typ: "int", group: "trail", required: false},
-	"audio_observation":    {typ: "enum", group: "event", required: false, values: []string{"default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "ingress_not_forwarded"}},
+	"audio_observation":    {typ: "enum", group: "event", required: false, values: []string{"default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "outbound_signal", "ingress_signal", "ingress_not_forwarded"}},
 	"audio_peer_id":        {typ: "id", group: "event", required: false},
 	"audio_sample_ms":      {typ: "int", group: "event", required: false},
 	"audio_track_key":      {typ: "string", group: "event", required: false},

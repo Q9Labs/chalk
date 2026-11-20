@@ -36,6 +36,7 @@ func (s *Session) audioFact(event, claim string, publication *publication, peer 
 }
 
 func (s *Session) traceMicrophoneIngress(pub *publication, packets, previous uint64, now int64) {
+	since := pub.audioSampleAt
 	elapsed := audioSampleElapsed(&pub.audioSampleAt, now)
 	if elapsed == 0 || pub.held.Load() || packets < previous || s.scope.ParticipantID == "" {
 		return
@@ -43,6 +44,9 @@ func (s *Session) traceMicrophoneIngress(pub *publication, packets, previous uin
 	claim := "ingress_flat"
 	if packets > previous {
 		claim = "ingress_packets"
+		if signal := pub.audioSignalAt.Load(); signal != 0 && signal > since && signal <= now {
+			claim = "ingress_signal"
+		}
 	}
 	s.audioFact(obs.EventAudioSfuIngress, claim, pub, "", elapsed)
 }

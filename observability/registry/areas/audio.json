@@ -43,6 +43,8 @@
         "surface_quiet",
         "capture_signal_no_outbound",
         "outbound_flowing",
+        "outbound_signal",
+        "ingress_signal",
         "ingress_not_forwarded"
       ]
     },
@@ -101,7 +103,7 @@
       "dataset": "media-stats",
       "side": "server",
       "modules": ["sfu"],
-      "doc": "The SFU measured RTP progress for a microphone publication.",
+      "doc": "The SFU measured RTP progress for a microphone publication, with a signal witness when a packet carries a loud enough audio level.",
       "fields": {
         "audio_observation": {
           "required": true

@@ -6,7 +6,7 @@ type Sample = { trackName: string; id: string; at: number; bytes: number; energy
 export class AudioSendObservation {
   #previous: Sample | undefined;
 
-  constructor(private readonly telemetry: TelemetrySink | undefined) {}
+  constructor(private readonly telemetry: Pick<TelemetrySink, "record"> | undefined) {}
 
   sample(report: RTCStatsReport, track: MediaStreamTrack | undefined, publication: AudioTrack | undefined): void {
     if (!this.telemetry || !track?.enabled || track.muted || track.readyState !== "live" || !publication) {
@@ -30,8 +30,9 @@ export class AudioSendObservation {
         const elapsed = Math.floor(current.at - previous.at);
         if (elapsed < 5_000 && elapsed >= 0) return;
         if (elapsed >= 5_000 && elapsed <= 60_000) {
-          if (current.bytes > previous.bytes) recordAudio(this.telemetry, "outbound_flowing", publication, elapsed);
-          else if (hasSignal(previous, current)) recordAudio(this.telemetry, "capture_signal_no_outbound", publication, elapsed);
+          const signal = hasSignal(previous, current);
+          if (current.bytes > previous.bytes) recordAudio(this.telemetry, signal ? "outbound_signal" : "outbound_flowing", publication, elapsed);
+          else if (signal) recordAudio(this.telemetry, "capture_signal_no_outbound", publication, elapsed);
         }
       }
       this.#previous = current;

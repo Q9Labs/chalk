@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "9bc7309f3cf3"
+  @schema_ver "51c411f9db7f"
 
   @events %{
     "audio.client_observed" => %{
@@ -203,7 +203,7 @@ defmodule ChalkSync.Obs.Registry do
       "type" => "enum",
       "group" => "event",
       "required" => false,
-      "values" => ["default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "ingress_not_forwarded"]
+      "values" => ["default_input", "selected_input", "capture_live", "capture_denied", "input_unavailable", "capture_missing", "capture_failed", "local_on", "local_off", "forced_off", "server_off", "published", "publish_failed", "ingress_packets", "ingress_flat", "forwarded", "forwarding_flat", "remote_off", "pull_failed", "subscribed", "inbound_flat", "inbound_flowing", "playing", "autoplay_blocked", "playback_paused", "output_selected", "output_failed", "surface_muted", "surface_unmuted", "surface_speaking", "surface_quiet", "capture_signal_no_outbound", "outbound_flowing", "outbound_signal", "ingress_signal", "ingress_not_forwarded"]
     },
     "audio_peer_id" => %{
       "type" => "id",

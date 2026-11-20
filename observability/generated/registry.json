@@ -1,5 +1,5 @@
 {
-  "schema_ver": "9bc7309f3cf3",
+  "schema_ver": "51c411f9db7f",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -622,6 +622,8 @@
         "surface_quiet",
         "capture_signal_no_outbound",
         "outbound_flowing",
+        "outbound_signal",
+        "ingress_signal",
         "ingress_not_forwarded"
       ],
       "required": false,
@@ -1316,7 +1318,7 @@
           "literal": "obs.EventAudioSfuIngress"
         }
       ],
-      "doc": "The SFU measured RTP progress for a microphone publication."
+      "doc": "The SFU measured RTP progress for a microphone publication, with a signal witness when a packet carries a loud enough audio level."
     },
     {
       "name": "audio.sync_stopped",

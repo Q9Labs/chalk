@@ -6,6 +6,7 @@ import { unwrapRow } from "../../../../../scripts/diagnose-call/live/world.mjs";
 import { MediaDeviceSelection } from "../space-client/media-device-selection";
 import type { TelemetryDraft } from "../telemetry/types";
 import { AudioReceiveHealth } from "./audio-receive-health";
+import { AudioSendObservation } from "./audio-send-observation";
 import type { CloudflareSFURemoteTrack } from "./types";
 
 type Fixture = Parameters<typeof judgeFixture>[0];
@@ -34,6 +35,22 @@ function liveMic() {
 }
 
 describe("audio.not_heard", () => {
+  it.each([false, true])("distinguishes microphone energy from outbound progress (sent=%s)", (sent) => {
+    const drafts: TelemetryDraft[] = [];
+    const observer = new AudioSendObservation({ record: (draft) => drafts.push(draft) });
+    const microphone = liveMic();
+    const publication = { connectionId: "connection", trackName: "mic-a" };
+    const sample = (at: number, duration: number, bytes: number) =>
+      new Map<string, unknown>([
+        ["out", { type: "outbound-rtp", kind: "audio", id: "out", mediaSourceId: "source", timestamp: at, bytesSent: bytes }],
+        ["source", { type: "media-source", trackIdentifier: microphone.id, totalAudioEnergy: duration * 0.05, totalSamplesDuration: duration }],
+      ]) as unknown as RTCStatsReport;
+    observer.sample(sample(1000, 0, 100), microphone, publication);
+    expect(drafts).toEqual([]);
+    observer.sample(sample(6000, 5, sent ? 200 : 100), microphone, publication);
+    expect(drafts).toMatchObject([{ audio_observation: sent ? "outbound_signal" : "capture_signal_no_outbound", audio_sample_ms: 5000 }]);
+  });
+
   it.each([false, true])("judges the selected microphone's actual capture result (healthy=%s)", async (healthy) => {
     const drafts: TelemetryDraft[] = [];
     const stream = { getTracks: () => [liveMic()] } as MediaStream;

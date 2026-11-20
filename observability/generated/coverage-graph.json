@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "9bc7309f3cf3",
+  "schema_ver": "51c411f9db7f",
   "symptoms": [
     {
       "code": "access.connection_lost",

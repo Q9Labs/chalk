@@ -67,6 +67,7 @@ type publication struct {
 	statsPackets  uint64
 	statsIdle     bool
 	audioSampleAt int64
+	audioSignalAt atomic.Int64
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
@@ -203,6 +204,7 @@ func (p *publication) readAudioLevel(layer *ingressLayer, header *rtp.Header, pa
 	}
 	packet.audioLevel, packet.hasAudioLevel = extension[0], true
 	if extension[0]&0x7f <= voicedLevel {
+		p.audioSignalAt.Store(packet.arrival)
 		p.session.lastVoiced.Store(packet.arrival)
 		p.markVoiced(packet)
 	}

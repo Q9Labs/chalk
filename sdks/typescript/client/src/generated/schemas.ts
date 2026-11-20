@@ -1699,6 +1699,7 @@ export const TelemetryRequestSchema = /* @__PURE__ */ (() =>
             "playback_paused",
             "capture_signal_no_outbound",
             "outbound_flowing",
+            "outbound_signal",
             "output_selected",
             "output_failed",
             "surface_muted",

@@ -24,7 +24,7 @@ The registry owns the vocabulary. Each of these witnesses describes only what th
 | --- | --- | --- |
 | Device and capture | An audio capture request uses the default or a selected input. The result names a live audio track, denial, unavailable input, missing track, or another capture failure. | A live track is not proof of speech. |
 | Mute and publication | The client records microphone intent, its applied forced stop, the publication result, and outbound RTP progress. It can also see a live input signal without outbound byte progress. The listener records an off projection separately from a stopped subscription. | Intent is not a confirmation. An input signal is not proof of speech, and a published track is not proof of packets. |
-| SFU | Chalk SFU records whether each microphone publication gained ingress packets, and whether each microphone subscription wrote RTP. | RTP presence does not prove audible voice. |
+| SFU | Chalk SFU records whether each microphone publication gained ingress packets and, when present, whether a packet carried a loud enough RFC 6464 audio level. It records whether each microphone subscription wrote RTP. | A packet or a level threshold does not prove speech. Absence of a level witness is not silence. |
 | Listener | The client records the pull result, inbound byte progress, and the bound element's playback or autoplay state for the same remote publication. | Successful `play()` alone is not proof of progress or audible hardware output. |
 | Surface | The React view records committed speaking and mute indicators, not an inference from transport state. | A speaking indicator is not an audio sample. |
 

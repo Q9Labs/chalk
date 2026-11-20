@@ -33,7 +33,7 @@ export function decide({ readings }) {
   }
 
   for (const flat of ingress.filter((row) => row.claim === "ingress_flat")) {
-    const sending = client.find((row) => row.claim === "outbound_flowing" && sameTrack(flat, row) && containsProgress(flat, row));
+    const sending = client.find((row) => (row.claim === "outbound_flowing" || row.claim === "outbound_signal") && sameTrack(flat, row) && containsProgress(flat, row));
     if (!sending) continue;
     return withUpstream(broken(flat, "sfu_ingress", "unknown", "SFU ingress did not advance while the same publication sent RTP", "ingress progress for this microphone during the sampled interval"), sending, "outbound microphone RTP advanced in the interval");
   }
@@ -45,7 +45,7 @@ export function decide({ readings }) {
   if (published.length === 0 || !published.every((row) => client.some((capture) => capture.claim === "capture_live" && capture.origin === row.origin && capture.window.from_ms <= row.window.to_ms))) {
     return { status: "unknown", reason: "no matched live capture and microphone publication" };
   }
-  if (readings["audio.ingress"].kind !== "present" || !readings["audio.ingress"].complete || !published.every((row) => ingress.some((packet) => packet.claim === "ingress_packets" && sameTrack(row, packet) && packet.window.to_ms >= row.window.from_ms))) {
+  if (readings["audio.ingress"].kind !== "present" || !readings["audio.ingress"].complete || !published.every((row) => ingress.some((packet) => (packet.claim === "ingress_packets" || packet.claim === "ingress_signal") && sameTrack(row, packet) && packet.window.to_ms >= row.window.from_ms))) {
     return { status: "unknown", reason: "no SFU ingress progress witnessed for every microphone publication" };
   }
   return { status: "pass" };
