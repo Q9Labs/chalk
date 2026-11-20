@@ -1,0 +1,14 @@
+[
+  {
+    "job_id": "0e96f1ef-41e1-4802-abc2-c76ddffd751c",
+    "reason_code": "transcript.wake_failed",
+    "decision": "failed",
+    "est_server_ms": 1795202012506,
+    "kind": "decision",
+    "name": "transcript.wake",
+    "event_id": "701aaecc-c87a-47eb-8632-81f958dbe2ca",
+    "tenant_id": "c69041d2-cee4-498b-a8e8-861d7bfa13d9",
+    "episode_id": "98b17a2f-f797-4df8-935d-bf5cdaaf2757",
+    "decision_id": "e6e2fe6d-41df-4de6-8ac4-a29c7c0291a9"
+  }
+]

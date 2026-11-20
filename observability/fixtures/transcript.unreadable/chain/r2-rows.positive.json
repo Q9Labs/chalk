@@ -1,0 +1,13 @@
+[
+  {
+    "transcript_r2_result": "not_found",
+    "est_server_ms": 1795201462059,
+    "kind": "fact",
+    "name": "transcript.r2.object",
+    "event_id": "6a825fba-c587-4483-a5b4-9d492b32fe17",
+    "duration_ms": 64716,
+    "tenant_id": "739e5f38-e9d4-45ff-b41f-336e71110629",
+    "episode_id": "5dfe42e8-e8a9-4868-ae5a-5225b23bcc48",
+    "job_id": "902cd3ac-7d50-448b-ab2b-df90af8f83ca"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/transcription-dispatcher/transcript.talk_time_stuck.fault.test.mjs",
+      "command": "node --test scripts/transcription-dispatcher/transcript.talk_time_stuck.fault.test.mjs",
+      "writes": ["api-rows.positive.json", "coverage-rows.positive.json", "db-rows.healthy.json", "db-rows.positive.json", "lambda-rows.healthy.json", "witness-rows.positive.json"]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/transcription-dispatcher/transcript-fixtures-chain.test.mjs",
+      "command": "node --test scripts/transcription-dispatcher/transcript-fixtures-chain.test.mjs",
+      "writes": ["../positive.json", "../healthy.json"]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "recording_id": "342351d8-ea31-4727-8b2c-3349eb902615",
+    "transcript_exists": true,
+    "transcript_prep_state": "leased",
+    "transcript_error_code": "transcription_prepare_failed",
+    "transcript_attempt_count": 1,
+    "transcript_available_ms": 1795201785667,
+    "transcript_terminal_ms": 1795201785667,
+    "transcript_lease_expiry_ms": 1795201785667,
+    "est_server_ms": 1795201785667,
+    "kind": "fact",
+    "name": "transcript.db.prep",
+    "event_id": "syn_f834ab6a5b09bfefed2d504b60365e2a",
+    "tenant_id": "38940c6c-90ac-452a-af83-3aa62699f358",
+    "episode_id": "dd1f8e70-2ec7-443f-872a-68ace487f433",
+    "job_id": "9b586d20-b324-430c-8dbd-9408cd3e0b20"
+  }
+]

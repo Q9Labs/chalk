@@ -1,0 +1,39 @@
+[
+  {
+    "job_id": "5d714255-497c-46bd-b3a7-168fe6f8c0c7",
+    "attempt": 1,
+    "decision": "leased",
+    "est_server_ms": 1795201161309,
+    "kind": "decision",
+    "name": "transcript.claim",
+    "event_id": "079407e5-4ef1-49aa-a7f6-f666e6d372a7",
+    "tenant_id": "b0662a33-536c-45bc-b77f-a5bd7756afd5",
+    "episode_id": "ff8504bf-b0ff-4578-8fe7-b96d706a8991",
+    "decision_id": "b47c63bd-5f87-4ddb-a66c-5c236063e5c9"
+  },
+  {
+    "job_id": "5d714255-497c-46bd-b3a7-168fe6f8c0c7",
+    "attempt": 1,
+    "transcript_error_code": "provider_rejected",
+    "decision": "dead_letter",
+    "est_server_ms": 1795201161338,
+    "kind": "decision",
+    "name": "transcript.job_retry",
+    "event_id": "d6117fac-d1dc-4db7-a3ce-197f10d9b8ef",
+    "tenant_id": "b0662a33-536c-45bc-b77f-a5bd7756afd5",
+    "episode_id": "ff8504bf-b0ff-4578-8fe7-b96d706a8991",
+    "decision_id": "2e84c758-5fda-4029-94e3-aaa0b79ae2f9"
+  },
+  {
+    "job_id": "5d714255-497c-46bd-b3a7-168fe6f8c0c7",
+    "reason_code": "transcript.wake_failed",
+    "decision": "failed",
+    "est_server_ms": 1795201157874,
+    "kind": "decision",
+    "name": "transcript.wake",
+    "event_id": "93049eba-6898-4efb-9e55-0c92f2b524d4",
+    "tenant_id": "b0662a33-536c-45bc-b77f-a5bd7756afd5",
+    "episode_id": "ff8504bf-b0ff-4578-8fe7-b96d706a8991",
+    "decision_id": "69aa4e36-7706-4080-a5e5-e0d74aaaa210"
+  }
+]

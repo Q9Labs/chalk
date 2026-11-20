@@ -1,0 +1,12 @@
+[
+  {
+    "episode_id": "2880ef83-01c5-4f2c-acc4-36450643529d",
+    "transcript_talk_status": "transcript_pending",
+    "transcript_in_progress": 1,
+    "est_server_ms": 1795201779599,
+    "kind": "fact",
+    "name": "transcript.talk_time_served",
+    "event_id": "589d9030-d95b-448c-8f98-ecc428ce9ab8",
+    "tenant_id": "38940c6c-90ac-452a-af83-3aa62699f358"
+  }
+]

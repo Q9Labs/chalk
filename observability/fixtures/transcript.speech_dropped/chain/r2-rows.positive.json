@@ -1,0 +1,17 @@
+[
+  {
+    "transcript_r2_result": "ok",
+    "transcript_size_bytes": 381,
+    "est_server_ms": 1795201405317,
+    "transcript_sha_match": true,
+    "transcript_cue_count": 0,
+    "transcript_provider": "openrouter",
+    "kind": "fact",
+    "name": "transcript.r2.object",
+    "event_id": "36c7b344-55d8-4e56-a94f-9f236cfc098c",
+    "duration_ms": 115958,
+    "tenant_id": "960578c4-a8eb-42cc-a98f-492d87ed3b17",
+    "episode_id": "3bf9f54a-5ea2-423c-b5b3-2b386d05c803",
+    "job_id": "51006a31-15db-47a7-a08f-c79559eddd68"
+  }
+]

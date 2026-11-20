@@ -1,0 +1,24 @@
+[
+  {
+    "recording_id": "a098b8fc-d35a-44b2-92ec-533b6bc1c4c3",
+    "transcript_exists": true,
+    "transcript_mode": "on_demand",
+    "transcript_state": "complete",
+    "transcript_deleted": false,
+    "transcript_created_ms": 1795200553447,
+    "transcript_updated_ms": 1795200558670,
+    "transcript_artifact_set": true,
+    "transcript_sha_set": true,
+    "transcript_generation": 1,
+    "transcript_open_jobs": 0,
+    "transcript_dead_letter_jobs": 0,
+    "transcript_completed_ms": 1795200558670,
+    "est_server_ms": 1795200553447,
+    "kind": "fact",
+    "name": "transcript.db.transcription",
+    "event_id": "ev_b44706b4ce9d9943",
+    "duration_ms": 520211,
+    "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+    "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "scripts/transcription-dispatcher/transcript.unreadable.fault.test.mjs",
+      "command": "node --test scripts/transcription-dispatcher/transcript.unreadable.fault.test.mjs",
+      "writes": ["api-rows.healthy.json", "api-rows.positive.json", "coverage-rows.positive.json", "db-rows.healthy.json", "db-rows.positive.json", "lambda-rows.healthy.json", "lambda-rows.positive.json", "r2-rows.healthy.json", "r2-rows.positive.json", "witness-rows.positive.json"]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/transcription-dispatcher/transcript-fixtures-chain.test.mjs",
+      "command": "node --test scripts/transcription-dispatcher/transcript-fixtures-chain.test.mjs",
+      "writes": ["../positive.json", "../healthy.json"]
+    }
+  ]
+}

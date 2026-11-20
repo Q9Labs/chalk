@@ -1,0 +1,15 @@
+[
+  {
+    "job_id": "5d714255-497c-46bd-b3a7-168fe6f8c0c7",
+    "attempt": 1,
+    "reason_code": "transcript.provider_rejected",
+    "outcome": "error",
+    "est_server_ms": 1795201161332,
+    "kind": "op",
+    "name": "transcript.chunk",
+    "event_id": "57056f62-c6ec-498e-87c7-5642dbd8414d",
+    "duration_ms": 18,
+    "tenant_id": "b0662a33-536c-45bc-b77f-a5bd7756afd5",
+    "episode_id": "ff8504bf-b0ff-4578-8fe7-b96d706a8991"
+  }
+]

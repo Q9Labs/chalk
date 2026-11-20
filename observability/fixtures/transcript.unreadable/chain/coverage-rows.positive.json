@@ -1,0 +1,15 @@
+[
+  {
+    "transcript_route": "document",
+    "outcome": "error",
+    "reason_code": "transcript.object_get",
+    "episode_id": "dd1f8e70-2ec7-443f-872a-68ace487f433",
+    "job_id": "9b586d20-b324-430c-8dbd-9408cd3e0b20",
+    "transcript_cue_count": 0,
+    "est_server_ms": 1795201526649,
+    "kind": "op",
+    "name": "transcript.document_read",
+    "event_id": "syn_612c1be8c3127aed2464daa2712750f0",
+    "tenant_id": "739e5f38-e9d4-45ff-b41f-336e71110629"
+  }
+]

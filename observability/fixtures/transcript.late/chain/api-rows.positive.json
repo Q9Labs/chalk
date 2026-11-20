@@ -1,0 +1,26 @@
+[
+  {
+    "job_id": "a53efec4-341e-4ecf-b30c-3ceab00b4a25",
+    "attempt": 1,
+    "decision": "accepted",
+    "est_server_ms": 1795201537660,
+    "kind": "decision",
+    "name": "transcript.finalize_accept",
+    "event_id": "537293e1-cbd1-4107-b1e7-ad3e89324965",
+    "tenant_id": "257e0ab5-1e7f-49c7-8313-2ef3c6ae2a02",
+    "episode_id": "e7d1366c-f28f-466c-bab2-03f70b5bd4ce",
+    "decision_id": "51d75201-2005-4d59-bfbf-73d10b2843d6"
+  },
+  {
+    "job_id": "a53efec4-341e-4ecf-b30c-3ceab00b4a25",
+    "attempt": 1,
+    "decision": "leased",
+    "est_server_ms": 1795201537651,
+    "kind": "decision",
+    "name": "transcript.finalize_claim",
+    "event_id": "3c12298e-6e4f-47cb-b456-94a937566fb7",
+    "tenant_id": "257e0ab5-1e7f-49c7-8313-2ef3c6ae2a02",
+    "episode_id": "e7d1366c-f28f-466c-bab2-03f70b5bd4ce",
+    "decision_id": "36e3b2e4-ac1c-4245-a8f8-8d69b9c795ea"
+  }
+]

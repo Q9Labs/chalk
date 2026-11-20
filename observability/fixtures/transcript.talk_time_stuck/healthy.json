@@ -1,0 +1,120 @@
+{
+ "description": "An Episode whose transcript completed and whose talk time reports available.",
+ "asof_ms": 1795201073621,
+ "declaration": {
+  "kind": "episode",
+  "id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca",
+  "tenant": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+  "features": [
+   "media"
+  ],
+  "window": {
+   "from_ms": 1795187833394,
+   "to_ms": 1795201073621
+  },
+  "seats": []
+ },
+ "chain": [
+  "observability/fixtures/transcript.talk_time_stuck/chain/db-rows.healthy.json",
+  "observability/fixtures/transcript.talk_time_stuck/chain/lambda-rows.healthy.json"
+ ],
+ "rows": [
+  {
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca",
+   "transcript_mode": "on_demand",
+   "transcript_recordings": 1,
+   "est_server_ms": 1795187833394,
+   "kind": "fact",
+   "name": "transcript.db.episode",
+   "event_id": "ev_8ee6b98a72640f87",
+   "duration_ms": 13240264,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd"
+  },
+  {
+   "recording_id": "a098b8fc-d35a-44b2-92ec-533b6bc1c4c3",
+   "transcript_exists": true,
+   "transcript_prep_state": "succeeded",
+   "transcript_attempt_count": 1,
+   "transcript_available_ms": 1795200553394,
+   "transcript_terminal_ms": 1795200553394,
+   "est_server_ms": 1795200553394,
+   "kind": "fact",
+   "name": "transcript.db.prep",
+   "event_id": "ev_d82fffdce1319407",
+   "duration_ms": 520264,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  },
+  {
+   "recording_id": "a098b8fc-d35a-44b2-92ec-533b6bc1c4c3",
+   "transcript_recording_state": "completed",
+   "transcript_mode": "on_demand",
+   "transcript_completed_ms": 1795189753394,
+   "est_server_ms": 1795200553394,
+   "kind": "fact",
+   "name": "transcript.db.recording",
+   "event_id": "ev_826c47d920a33921",
+   "duration_ms": 520264,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  },
+  {
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca",
+   "transcript_talk_status": "available",
+   "transcript_in_progress": 0,
+   "est_server_ms": 1795187833394,
+   "kind": "fact",
+   "name": "transcript.db.talk",
+   "event_id": "ev_5d21fb4b57eaa78d",
+   "duration_ms": 13240264,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd"
+  },
+  {
+   "recording_id": "a098b8fc-d35a-44b2-92ec-533b6bc1c4c3",
+   "transcript_exists": true,
+   "transcript_mode": "on_demand",
+   "transcript_state": "complete",
+   "transcript_deleted": false,
+   "transcript_created_ms": 1795200553447,
+   "transcript_updated_ms": 1795200558670,
+   "transcript_artifact_set": true,
+   "transcript_sha_set": true,
+   "transcript_generation": 1,
+   "transcript_open_jobs": 0,
+   "transcript_dead_letter_jobs": 0,
+   "transcript_completed_ms": 1795200558670,
+   "est_server_ms": 1795200553447,
+   "kind": "fact",
+   "name": "transcript.db.transcription",
+   "event_id": "ev_b44706b4ce9d9943",
+   "duration_ms": 520211,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  },
+  {
+   "job_id": "712aa20d-c655-433f-b04b-d4696c167efd",
+   "attempt": 1,
+   "outcome": "ok",
+   "est_server_ms": 1795200558654,
+   "kind": "op",
+   "name": "transcript.chunk",
+   "event_id": "94cfa64e-9931-402a-954e-a8099429f3ae",
+   "duration_ms": 34,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  },
+  {
+   "job_id": "449afad6-cf36-466c-8df8-8f4fecd69d30",
+   "attempt": 1,
+   "transcript_cue_count": 1,
+   "outcome": "ok",
+   "est_server_ms": 1795200558675,
+   "kind": "op",
+   "name": "transcript.finalize",
+   "event_id": "303c6a04-048a-4f73-b5c0-0b0130edaa49",
+   "duration_ms": 12,
+   "tenant_id": "e73f8280-d92c-4c34-9547-a9c5aa1843dd",
+   "episode_id": "fc53da9b-32e7-4657-b4f3-d071a6cf5bca"
+  }
+ ]
+}

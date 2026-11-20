@@ -1,0 +1,14 @@
+[
+  {
+    "job_id": "00e68204-2ea1-418a-9baf-a7609ad7a1c4",
+    "attempt": 1,
+    "outcome": "ok",
+    "est_server_ms": 1795201916208,
+    "kind": "op",
+    "name": "transcript.chunk",
+    "event_id": "d256f4d4-0c35-451d-918b-8d202592ea38",
+    "duration_ms": 31,
+    "tenant_id": "3807d792-4459-4a2a-8619-3b2ff5b53dd0",
+    "episode_id": "ef2c55d6-795a-46d5-80aa-09bdb3038517"
+  }
+]

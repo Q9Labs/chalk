@@ -1,0 +1,15 @@
+[
+  {
+    "job_id": "a53efec4-341e-4ecf-b30c-3ceab00b4a25",
+    "attempt": 1,
+    "transcript_cue_count": 1,
+    "outcome": "ok",
+    "est_server_ms": 1795201537661,
+    "kind": "op",
+    "name": "transcript.finalize",
+    "event_id": "e46853c9-02ad-407a-80c6-5013c8bee28b",
+    "duration_ms": 10,
+    "tenant_id": "257e0ab5-1e7f-49c7-8313-2ef3c6ae2a02",
+    "episode_id": "e7d1366c-f28f-466c-bab2-03f70b5bd4ce"
+  }
+]

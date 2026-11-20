@@ -1,0 +1,20 @@
+[
+  {
+    "transcript_attempt_state": "retryable_failure",
+    "attempt": 2,
+    "transcript_generation": 1,
+    "transcript_error_code": "provider_timeout",
+    "transcript_provider": "openrouter",
+    "transcript_observed_ms": 2300,
+    "transcript_finished_ms": 1795201521153,
+    "transcript_chunk_index": 0,
+    "transcript_speech_ms": 2300,
+    "est_server_ms": 1795201521153,
+    "kind": "fact",
+    "name": "transcript.db.attempt",
+    "event_id": "syn_a2a05d26e1f53879b4cffc507791ece5",
+    "tenant_id": "960578c4-a8eb-42cc-a98f-492d87ed3b17",
+    "episode_id": "dd1f8e70-2ec7-443f-872a-68ace487f433",
+    "job_id": "9b586d20-b324-430c-8dbd-9408cd3e0b20"
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "job_id": "00e68204-2ea1-418a-9baf-a7609ad7a1c4",
+    "attempt": 1,
+    "decision": "leased",
+    "est_server_ms": 1795201916172,
+    "kind": "decision",
+    "name": "transcript.claim",
+    "event_id": "8f7c0738-8cb5-4f85-b8e9-dc797b9bd984",
+    "tenant_id": "3807d792-4459-4a2a-8619-3b2ff5b53dd0",
+    "episode_id": "ef2c55d6-795a-46d5-80aa-09bdb3038517",
+    "decision_id": "682c8638-1213-48dd-a100-7d883925faec"
+  },
+  {
+    "job_id": "00e68204-2ea1-418a-9baf-a7609ad7a1c4",
+    "attempt": 1,
+    "decision": "accepted",
+    "est_server_ms": 1795201916207,
+    "kind": "decision",
+    "name": "transcript.job_complete",
+    "event_id": "3c7b862f-8a08-4009-a37b-6e7db034d933",
+    "tenant_id": "3807d792-4459-4a2a-8619-3b2ff5b53dd0",
+    "episode_id": "ef2c55d6-795a-46d5-80aa-09bdb3038517",
+    "decision_id": "cbdb85c5-502a-4bf9-8716-83a57f64f26d"
+  },
+  {
+    "job_id": "00e68204-2ea1-418a-9baf-a7609ad7a1c4",
+    "reason_code": "transcript.wake_failed",
+    "decision": "failed",
+    "est_server_ms": 1795201793105,
+    "kind": "decision",
+    "name": "transcript.wake",
+    "event_id": "125b66fe-1a82-4b21-85c3-8e40d8a0ade8",
+    "tenant_id": "3807d792-4459-4a2a-8619-3b2ff5b53dd0",
+    "episode_id": "ef2c55d6-795a-46d5-80aa-09bdb3038517",
+    "decision_id": "2c88d4de-7a8f-4dae-ad9d-bb63f917cb91"
+  }
+]

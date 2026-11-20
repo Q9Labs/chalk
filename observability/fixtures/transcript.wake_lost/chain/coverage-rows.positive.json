@@ -1,0 +1,26 @@
+[
+  {
+    "job_id": "9b586d20-b324-430c-8dbd-9408cd3e0b20",
+    "transcript_job_state": "dead_letter",
+    "transcript_job_kind": "transcription_chunk",
+    "transcript_error_code": "provider_rejected",
+    "transcript_attempt_count": 2,
+    "transcript_attempt_limit": 4,
+    "transcript_terminal_ms": 1795202003082,
+    "transcript_available_ms": 1795202003082,
+    "transcript_lease_expiry_ms": 1795202003082,
+    "transcript_created_ms": 1795202003082,
+    "transcript_updated_ms": 1795202003082,
+    "transcript_latest_job": true,
+    "transcript_open_jobs": 0,
+    "transcript_dead_letter_jobs": 1,
+    "transcript_first_retry_kind": "transcription_chunk",
+    "transcript_first_retry_code": "provider_rejected",
+    "est_server_ms": 1795202003082,
+    "kind": "fact",
+    "name": "transcript.db.job",
+    "event_id": "syn_02b7d78f437ece38ad0b01b88906406a",
+    "tenant_id": "3807d792-4459-4a2a-8619-3b2ff5b53dd0",
+    "episode_id": "dd1f8e70-2ec7-443f-872a-68ace487f433"
+  }
+]
