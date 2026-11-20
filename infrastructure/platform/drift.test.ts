@@ -37,7 +37,7 @@ test("each private-input stack gets only its own inputs file, readable by the ow
     const recorder = driftChildEnv("recorder", "production", parent, directory);
     assert.equal(sfu.missing, undefined);
     assert.equal(readFileSync(sfu.env.CHALK_INFRA_INPUTS!, "utf8"), '{"a":1}');
-    assert.equal(statSync(sfu.env.CHALK_INFRA_INPUTS!).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal(statSync(sfu.env.CHALK_INFRA_INPUTS!).mode & 0o777, 0o600);
     assert.equal(readFileSync(recorder.env.CHALK_INFRA_INPUTS!, "utf8"), '{"c":3}');
     assert.equal(sfu.env.KEEP, "yes");
     assert.deepEqual(
