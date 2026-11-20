@@ -1,0 +1,212 @@
+package obs
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type capture struct {
+	mu      sync.Mutex
+	records []map[string]any
+}
+
+func (c *capture) Enabled(context.Context, slog.Level) bool { return true }
+func (c *capture) WithAttrs([]slog.Attr) slog.Handler       { return c }
+func (c *capture) WithGroup(string) slog.Handler            { return c }
+
+func (c *capture) Handle(_ context.Context, record slog.Record) error {
+	row := map[string]any{"level": record.Level.String(), "msg": record.Message}
+	record.Attrs(func(attr slog.Attr) bool {
+		row[attr.Key] = attr.Value.Any()
+		return true
+	})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.records = append(c.records, row)
+	return nil
+}
+
+func (c *capture) rows() []map[string]any {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]map[string]any(nil), c.records...)
+}
+
+func configure(t *testing.T, mode Mode) *capture {
+	t.Helper()
+	sink := &capture{}
+	Configure(Config{Logger: slog.New(sink), Mode: mode, Module: "api", Env: "test", SourceID: "src-test", Trail: func(ctx context.Context) []slog.Attr {
+		if episode, ok := ctx.Value(episodeKey{}).(string); ok {
+			return []slog.Attr{slog.String(FieldEpisodeID, episode)}
+		}
+		return nil
+	}})
+	t.Cleanup(func() { Configure(Config{}) })
+	return sink
+}
+
+type episodeKey struct{}
+
+func last(t *testing.T, sink *capture) map[string]any {
+	t.Helper()
+	rows := sink.rows()
+	if len(rows) == 0 {
+		t.Fatal("no record emitted")
+	}
+	return rows[len(rows)-1]
+}
+
+func mustViolate(t *testing.T, want string, call func()) {
+	t.Helper()
+	defer func() {
+		t.Helper()
+		var violation *Violation
+		recovered := recover()
+		err, _ := recovered.(error)
+		if !errors.As(err, &violation) || !strings.Contains(violation.Error(), want) {
+			t.Fatalf("panic = %v, want a violation containing %q", recovered, want)
+		}
+	}()
+	call()
+}
+
+func TestOpRecordsExactlyOneOutcome(t *testing.T) {
+	sink := configure(t, ModeClosed)
+	ctx := context.WithValue(context.Background(), episodeKey{}, "0f8fad5b-d9cb-469f-a165-70867728950e")
+	broken := errors.New("disk on fire")
+	cases := []struct {
+		name, outcome, code string
+		run                 func(context.Context, *Scope) error
+		wantErr             error
+	}{
+		{"ok", "ok", "", func(context.Context, *Scope) error { return nil }, nil},
+		{"scope expected", "expected", "selftest.busy", func(_ context.Context, s *Scope) error { s.Expected("selftest.busy"); return nil }, nil},
+		{"classified expected", "expected", "selftest.busy", func(context.Context, *Scope) error { return Expected("selftest.busy", broken) }, broken},
+		{"classified error", "error", "selftest.broken", func(context.Context, *Scope) error { return Failure("selftest.broken", broken) }, broken},
+		{"unclassified", "error", ReasonUnclassified, func(context.Context, *Scope) error { return broken }, broken},
+		{"cancelled", "expected", ReasonCancelled, func(context.Context, *Scope) error { return context.Canceled }, context.Canceled},
+	}
+	for _, test := range cases {
+		before := len(sink.rows())
+		err := Op(ctx, "selftest.work", test.run, F(FieldItemCount, 3))
+		if !errors.Is(err, test.wantErr) || (test.wantErr == nil && err != nil) {
+			t.Errorf("%s: err = %v, want %v", test.name, err, test.wantErr)
+		}
+		rows := sink.rows()[before:]
+		if len(rows) != 1 {
+			t.Fatalf("%s: %d records, want 1", test.name, len(rows))
+		}
+		row := rows[0]
+		code, _ := row[FieldReasonCode].(string)
+		if row[FieldOutcome] != test.outcome || code != test.code || row[FieldKind] != "op" || row[FieldName] != "selftest.work" {
+			t.Errorf("%s: record = %v", test.name, row)
+		}
+		if row[FieldEpisodeID] != "0f8fad5b-d9cb-469f-a165-70867728950e" || row[FieldSchemaVer] != SchemaVer || row[FieldSourceID] != "src-test" || row[FieldItemCount] != int64(3) {
+			t.Errorf("%s: envelope = %v", test.name, row)
+		}
+		if _, ok := row[FieldDurationMs].(int64); !ok {
+			t.Errorf("%s: no duration_ms in %v", test.name, row)
+		}
+	}
+}
+
+func TestOpRecordsAPanicAndRethrowsIt(t *testing.T) {
+	sink := configure(t, ModeClosed)
+	defer func() {
+		if recovered := recover(); recovered != "boom" {
+			t.Fatalf("recovered %v, want boom", recovered)
+		}
+		row := last(t, sink)
+		if row[FieldOutcome] != "error" || row[FieldReasonCode] != ReasonUnclassified || row["level"] != "ERROR" {
+			t.Errorf("record = %v", row)
+		}
+	}()
+	_ = Op(context.Background(), "selftest.work", func(context.Context, *Scope) error { panic("boom") })
+}
+
+func TestOpLinksChildOpsAndLateFields(t *testing.T) {
+	sink := configure(t, ModeClosed)
+	var parent string
+	_ = Op(context.Background(), "selftest.work", func(ctx context.Context, scope *Scope) error {
+		parent = scope.OpID()
+		scope.Set(F(FieldItemCount, 7))
+		return Op(ctx, "selftest.work", func(context.Context, *Scope) error { return nil })
+	})
+	rows := sink.rows()
+	child, outer := rows[len(rows)-2], rows[len(rows)-1]
+	if child[FieldParentOpID] != parent || outer[FieldOpID] != parent || outer[FieldItemCount] != int64(7) {
+		t.Errorf("child %v, outer %v", child, outer)
+	}
+	if child[FieldSeq].(int64) >= outer[FieldSeq].(int64) {
+		t.Errorf("seq is not increasing: %v then %v", child[FieldSeq], outer[FieldSeq])
+	}
+}
+
+func TestClosedModeRejectsWhatTheRegistryDoesNotDeclare(t *testing.T) {
+	configure(t, ModeClosed)
+	ctx := context.Background()
+	mustViolate(t, "unknown event selftest.nope", func() { Fact(ctx, "selftest.nope") })
+	mustViolate(t, "is declared as op, not fact", func() { Fact(ctx, "selftest.work") })
+	mustViolate(t, "required field note_kind is missing", func() { Fact(ctx, "selftest.note") })
+	mustViolate(t, "field note_kind has b", func() { Fact(ctx, "selftest.note", F(FieldNoteKind, "b")) })
+	mustViolate(t, "field item_count is not declared", func() { Fact(ctx, "selftest.note", F(FieldNoteKind, "a"), F(FieldItemCount, 1)) })
+	mustViolate(t, "field mystery is not in the registry", func() { Fact(ctx, "selftest.note", F(FieldNoteKind, "a"), F("mystery", 1)) })
+	mustViolate(t, "reason selftest.broken is error, not expected", func() {
+		_ = Op(ctx, "selftest.work", func(context.Context, *Scope) error { return Expected("selftest.broken", nil) })
+	})
+	mustViolate(t, "open -> locked is not a declared edge", func() {
+		Transition(ctx, Move{Machine: MachineSelftestDoor, From: "open", To: "locked", Trigger: "lock"})
+	})
+	mustViolate(t, "unknown trigger kick", func() {
+		Transition(ctx, Move{Machine: MachineSelftestDoor, From: "closed", To: "open", Trigger: "kick"})
+	})
+	mustViolate(t, "unknown decision maybe", func() { Decision(ctx, "selftest.admit", "maybe", "") })
+}
+
+func TestOpenModeCountsAndStillEmits(t *testing.T) {
+	sink := configure(t, ModeOpen)
+	before, _ := Stats()
+	Fact(context.Background(), "selftest.note", F(FieldNoteKind, "b"))
+	after, _ := Stats()
+	if after != before+1 || last(t, sink)[FieldNoteKind] != "b" {
+		t.Errorf("violations %d -> %d, record %v", before, after, last(t, sink))
+	}
+}
+
+func TestTransitionDecisionSurfaceAndFlags(t *testing.T) {
+	sink := configure(t, ModeClosed)
+	ctx := context.Background()
+	Transition(ctx, Move{Machine: MachineSelftestDoor, From: "closed", To: "open", Trigger: "push", Reason: "selftest.busy"})
+	if row := last(t, sink); row[FieldKind] != "transition" || row[FieldFromState] != "closed" || row[FieldToState] != "open" || row[FieldReasonCode] != "selftest.busy" {
+		t.Errorf("transition = %v", row)
+	}
+	id := Decision(ctx, "selftest.admit", "refused", "selftest.busy")
+	if row := last(t, sink); row[FieldDecisionID] != id || row[FieldDecision] != "refused" {
+		t.Errorf("decision = %v", row)
+	}
+	dismiss := Surface(ctx, "selftest.banner", F(FieldBannerKind, "info"))
+	dismiss()
+	dismiss()
+	rows := sink.rows()
+	if rows[len(rows)-2][FieldSurfaceState] != "shown" || rows[len(rows)-1][FieldSurfaceState] != "dismissed" || rows[len(rows)-3][FieldKind] != "decision" {
+		t.Errorf("surface records = %v", rows[len(rows)-3:])
+	}
+	SetFlags(ctx, Flags{"recording": "on", "max_participants": 50, "media.kill_switch": false})
+	if row := last(t, sink); row[FieldName] != EventObsFlagsSnapshot || row[FieldFlagsHash] != "8c3f49d344bb8e59" {
+		t.Errorf("flags snapshot = %v", row)
+	}
+	Fact(ctx, "selftest.note", F(FieldNoteKind, "a"))
+	if row := last(t, sink); row[FieldFlagsHash] != "8c3f49d344bb8e59" {
+		t.Errorf("later record has no flags_hash: %v", row)
+	}
+}
+
+func TestEnvelopeNeedsARegistryModule(t *testing.T) {
+	Configure(Config{Logger: slog.New(&capture{}), Mode: ModeClosed, Module: "nope", Env: "test"})
+	t.Cleanup(func() { Configure(Config{}) })
+	mustViolate(t, "registry module and env", func() { Fact(context.Background(), "selftest.note", F(FieldNoteKind, "a")) })
+}

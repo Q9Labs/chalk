@@ -1,0 +1,115 @@
+{
+  "area": "end",
+  "slice": 8,
+  "title": "Call end and rejoin",
+  "prefixes": ["end", "rejoin", "episode"],
+  "fields": [
+    {
+      "name": "end_reason",
+      "type": "enum",
+      "values": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"],
+      "sensitivity": null,
+      "doc": "Why a call or an Episode ended. The server and the client use different values, so each event narrows the list."
+    }
+  ],
+  "events": [
+    {
+      "name": "sync.episode.ended",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["sync"],
+      "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason.",
+      "fields": {
+        "episode_id": {
+          "required": true
+        },
+        "end_reason": {
+          "required": true,
+          "values": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+          "literal": "\"sync.episode.ended\""
+        }
+      ]
+    },
+    {
+      "name": "client.call_ended",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "doc": "The SDK decided which end screen the call gets. Today it reaches Axiom as an sdk.telemetry row of type call_ended.",
+      "fields": {
+        "client_session_id": {
+          "required": true
+        },
+        "end_reason": {
+          "required": true,
+          "values": ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "literal": "type: \"call_ended\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "call_ended"
+        }
+      }
+    }
+  ],
+  "reasons": [],
+  "machines": [
+    {
+      "name": "episode.lifecycle",
+      "doc": "The Episode row's status in Postgres (episodes.status).",
+      "states": ["active", "ending", "ended"],
+      "initial": "active",
+      "edges": [
+        ["active", "ending"],
+        ["ending", "ended"],
+        ["active", "ended"]
+      ],
+      "triggers": ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
+    }
+  ],
+  "symptoms": [
+    {
+      "code": "end.wrong_screen",
+      "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
+      "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
+      "witnesses": [
+        {
+          "id": "server_end",
+          "event": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason", "est_server_ms"],
+          "required": true,
+          "doc": "The authoritative end and when it happened."
+        },
+        {
+          "id": "client_end",
+          "event": "client.call_ended",
+          "fields": ["episode_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"],
+          "required": true,
+          "doc": "The end screen each client chose."
+        }
+      ],
+      "fault_scenario": "sdks/typescript/client/src/connection/end-wrong-screen.fault.test.ts"
+    },
+    {
+      "code": "rejoin.refused",
+      "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
+      "user_words": ["it won't let me back in"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}

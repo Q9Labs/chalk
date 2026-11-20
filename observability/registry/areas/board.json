@@ -1,0 +1,19 @@
+{
+  "area": "board",
+  "slice": 6,
+  "title": "Whiteboard",
+  "prefixes": ["board"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": [
+    {
+      "code": "board.view_jumped",
+      "doc": "A follower's whiteboard view jumped away from what the person they follow is looking at.",
+      "user_words": ["the board keeps jumping"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}

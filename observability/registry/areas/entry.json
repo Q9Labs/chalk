@@ -1,0 +1,11 @@
+{
+  "area": "entry",
+  "slice": 1,
+  "title": "Entry: dashboard, invite, admission, prejoin, embed and boot",
+  "prefixes": ["entry", "admit", "prejoin"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": []
+}

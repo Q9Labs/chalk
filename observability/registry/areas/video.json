@@ -1,0 +1,19 @@
+{
+  "area": "video",
+  "slice": 4,
+  "title": "Video",
+  "prefixes": ["video"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": [
+    {
+      "code": "video.frozen",
+      "doc": "A video tile stopped updating while its publisher was still sending.",
+      "user_words": ["their video froze"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}

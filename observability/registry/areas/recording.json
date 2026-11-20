@@ -1,0 +1,19 @@
+{
+  "area": "recording",
+  "slice": 10,
+  "title": "Recording and rendering",
+  "prefixes": ["recording", "render"],
+  "fields": [],
+  "events": [],
+  "reasons": [],
+  "machines": [],
+  "symptoms": [
+    {
+      "code": "recording.not_ready",
+      "doc": "An ended Episode's recording never became ready to watch.",
+      "user_words": ["the recording isn't there"],
+      "witnesses": [],
+      "fault_scenario": null
+    }
+  ]
+}
