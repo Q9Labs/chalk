@@ -3,18 +3,39 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "06a4092b8fb7"
+const SchemaVer = "da49ddafa5db"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded            = "client.call_ended"
+	EventObsClockJump               = "obs.clock_jump"
+	EventObsFlagsSnapshot           = "obs.flags_snapshot"
+	EventSelftestAdmit              = "selftest.admit"
+	EventSelftestBanner             = "selftest.banner"
+	EventSelftestNote               = "selftest.note"
+	EventSelftestWork               = "selftest.work"
+	EventSyncEpisodeEnded           = "sync.episode.ended"
+	EventTranscriptChunk            = "transcript.chunk"
+	EventTranscriptClaim            = "transcript.claim"
+	EventTranscriptDbAttempt        = "transcript.db.attempt"
+	EventTranscriptDbEpisode        = "transcript.db.episode"
+	EventTranscriptDbJob            = "transcript.db.job"
+	EventTranscriptDbPrep           = "transcript.db.prep"
+	EventTranscriptDbRecording      = "transcript.db.recording"
+	EventTranscriptDbRender         = "transcript.db.render"
+	EventTranscriptDbTalk           = "transcript.db.talk"
+	EventTranscriptDbTranscription  = "transcript.db.transcription"
+	EventTranscriptDispatcherInvoke = "transcript.dispatcher.invoke"
+	EventTranscriptDocumentRead     = "transcript.document_read"
+	EventTranscriptFinalize         = "transcript.finalize"
+	EventTranscriptFinalizeAccept   = "transcript.finalize_accept"
+	EventTranscriptFinalizeClaim    = "transcript.finalize_claim"
+	EventTranscriptFinalizeRetry    = "transcript.finalize_retry"
+	EventTranscriptJobComplete      = "transcript.job_complete"
+	EventTranscriptJobRetry         = "transcript.job_retry"
+	EventTranscriptR2Object         = "transcript.r2.object"
+	EventTranscriptTalkTimeServed   = "transcript.talk_time_served"
+	EventTranscriptWake             = "transcript.wake"
 )
 
 // Machine names.
@@ -22,179 +43,350 @@ const (
 	MachineClientConnection = "client.connection"
 	MachineEpisodeLifecycle = "episode.lifecycle"
 	MachineSelftestDoor     = "selftest.door"
+	MachineTranscriptJob    = "transcript.job"
+	MachineTranscriptStatus = "transcript.status"
 )
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled                            = "cancelled"
+	ReasonEndTimeLimit                         = "end.time_limit"
+	ReasonSelftestBroken                       = "selftest.broken"
+	ReasonSelftestBusy                         = "selftest.busy"
+	ReasonTranscriptAcceptFailed               = "transcript.accept_failed"
+	ReasonTranscriptArtifactMismatch           = "transcript.artifact_mismatch"
+	ReasonTranscriptArtifactVerificationFailed = "transcript.artifact_verification_failed"
+	ReasonTranscriptAssignmentInvalid          = "transcript.assignment_invalid"
+	ReasonTranscriptChunkDownloadRetryable     = "transcript.chunk_download_retryable"
+	ReasonTranscriptControlAPIRejected         = "transcript.control_api_rejected"
+	ReasonTranscriptDecode                     = "transcript.decode"
+	ReasonTranscriptDispatcherFailure          = "transcript.dispatcher_failure"
+	ReasonTranscriptInvalidAssignment          = "transcript.invalid_assignment"
+	ReasonTranscriptLateCompletion             = "transcript.late_completion"
+	ReasonTranscriptLeaseExpired               = "transcript.lease_expired"
+	ReasonTranscriptLeaseStale                 = "transcript.lease_stale"
+	ReasonTranscriptNetworkFailure             = "transcript.network_failure"
+	ReasonTranscriptNoClaimableJob             = "transcript.no_claimable_job"
+	ReasonTranscriptNotReady                   = "transcript.not_ready"
+	ReasonTranscriptObjectGet                  = "transcript.object_get"
+	ReasonTranscriptProviderRateLimited        = "transcript.provider_rate_limited"
+	ReasonTranscriptProviderRejected           = "transcript.provider_rejected"
+	ReasonTranscriptProviderSchemaInvalid      = "transcript.provider_schema_invalid"
+	ReasonTranscriptProviderTimeout            = "transcript.provider_timeout"
+	ReasonTranscriptProviderUnavailable        = "transcript.provider_unavailable"
+	ReasonTranscriptRepositoryError            = "transcript.repository_error"
+	ReasonTranscriptResultVerificationFailed   = "transcript.result_verification_failed"
+	ReasonTranscriptTimeout                    = "transcript.timeout"
+	ReasonTranscriptUnknownFailure             = "transcript.unknown_failure"
+	ReasonTranscriptURLFailed                  = "transcript.url_failed"
+	ReasonTranscriptWakeFailed                 = "transcript.wake_failed"
+	ReasonUnclassified                         = "unclassified"
 )
 
 // Field names.
 const (
-	FieldAdmissionRequestID = "admission_request_id"
-	FieldAgentID            = "agent_id"
-	FieldAppBuild           = "app_build"
-	FieldAppVersion         = "app_version"
-	FieldAttempt            = "attempt"
-	FieldBannerKind         = "banner_kind"
-	FieldBatchID            = "batch_id"
-	FieldClientMonoMs       = "client_mono_ms"
-	FieldClientSessionID    = "client_session_id"
-	FieldClientWallMs       = "client_wall_ms"
-	FieldClockEpoch         = "clock_epoch"
-	FieldClockErrMs         = "clock_err_ms"
-	FieldClockState         = "clock_state"
-	FieldDecision           = "decision"
-	FieldDecisionID         = "decision_id"
-	FieldDeviceEphemeral    = "device_ephemeral"
-	FieldDeviceID           = "device_id"
-	FieldDropReason         = "drop_reason"
-	FieldDroppedSeqs        = "dropped_seqs"
-	FieldDurationMs         = "duration_ms"
-	FieldEnd                = "end"
-	FieldEndReason          = "end_reason"
-	FieldEnv                = "env"
-	FieldEpisodeID          = "episode_id"
-	FieldEstServerMs        = "est_server_ms"
-	FieldEventID            = "event_id"
-	FieldFlags              = "flags"
-	FieldFlagsHash          = "flags_hash"
-	FieldFromState          = "from_state"
-	FieldGeneration         = "generation"
-	FieldItemCount          = "item_count"
-	FieldJobID              = "job_id"
-	FieldJourneyID          = "journey_id"
-	FieldJumpMs             = "jump_ms"
-	FieldKind               = "kind"
-	FieldMachine            = "machine"
-	FieldMediaConnectionID  = "media_connection_id"
-	FieldModule             = "module"
-	FieldName               = "name"
-	FieldNextSeq            = "next_seq"
-	FieldNoteKind           = "note_kind"
-	FieldOpID               = "op_id"
-	FieldOutcome            = "outcome"
-	FieldParentOpID         = "parent_op_id"
-	FieldParticipantID      = "participant_id"
-	FieldPlatform           = "platform"
-	FieldProviderMediaID    = "provider_media_id"
-	FieldReasonCode         = "reason_code"
-	FieldRecordingID        = "recording_id"
-	FieldReleaseSHA         = "release_sha"
-	FieldRequestID          = "request_id"
-	FieldSchemaVer          = "schema_ver"
-	FieldSDKVersion         = "sdk_version"
-	FieldSeq                = "seq"
-	FieldShownMs            = "shown_ms"
-	FieldSourceID           = "source_id"
-	FieldSpaceID            = "space_id"
-	FieldSpanID             = "span_id"
-	FieldSurfaceState       = "surface_state"
-	FieldSyncConnectionID   = "sync_connection_id"
-	FieldTenantID           = "tenant_id"
-	FieldToState            = "to_state"
-	FieldTraceID            = "trace_id"
-	FieldTrigger            = "trigger"
-	FieldUserID             = "user_id"
-	FieldWebhookDeliveryID  = "webhook_delivery_id"
+	FieldAdmissionRequestID       = "admission_request_id"
+	FieldAgentID                  = "agent_id"
+	FieldAppBuild                 = "app_build"
+	FieldAppVersion               = "app_version"
+	FieldAttempt                  = "attempt"
+	FieldBannerKind               = "banner_kind"
+	FieldBatchID                  = "batch_id"
+	FieldClientMonoMs             = "client_mono_ms"
+	FieldClientSessionID          = "client_session_id"
+	FieldClientWallMs             = "client_wall_ms"
+	FieldClockEpoch               = "clock_epoch"
+	FieldClockErrMs               = "clock_err_ms"
+	FieldClockState               = "clock_state"
+	FieldDecision                 = "decision"
+	FieldDecisionID               = "decision_id"
+	FieldDeviceEphemeral          = "device_ephemeral"
+	FieldDeviceID                 = "device_id"
+	FieldDropReason               = "drop_reason"
+	FieldDroppedSeqs              = "dropped_seqs"
+	FieldDurationMs               = "duration_ms"
+	FieldEnd                      = "end"
+	FieldEndReason                = "end_reason"
+	FieldEnv                      = "env"
+	FieldEpisodeID                = "episode_id"
+	FieldEstServerMs              = "est_server_ms"
+	FieldEventID                  = "event_id"
+	FieldFlags                    = "flags"
+	FieldFlagsHash                = "flags_hash"
+	FieldFromState                = "from_state"
+	FieldGeneration               = "generation"
+	FieldItemCount                = "item_count"
+	FieldJobID                    = "job_id"
+	FieldJourneyID                = "journey_id"
+	FieldJumpMs                   = "jump_ms"
+	FieldKind                     = "kind"
+	FieldMachine                  = "machine"
+	FieldMediaConnectionID        = "media_connection_id"
+	FieldModule                   = "module"
+	FieldName                     = "name"
+	FieldNextSeq                  = "next_seq"
+	FieldNoteKind                 = "note_kind"
+	FieldOpID                     = "op_id"
+	FieldOutcome                  = "outcome"
+	FieldParentOpID               = "parent_op_id"
+	FieldParticipantID            = "participant_id"
+	FieldPlatform                 = "platform"
+	FieldProviderMediaID          = "provider_media_id"
+	FieldReasonCode               = "reason_code"
+	FieldRecordingID              = "recording_id"
+	FieldReleaseSHA               = "release_sha"
+	FieldRequestID                = "request_id"
+	FieldSchemaVer                = "schema_ver"
+	FieldSDKVersion               = "sdk_version"
+	FieldSeq                      = "seq"
+	FieldShownMs                  = "shown_ms"
+	FieldSourceID                 = "source_id"
+	FieldSpaceID                  = "space_id"
+	FieldSpanID                   = "span_id"
+	FieldSurfaceState             = "surface_state"
+	FieldSyncConnectionID         = "sync_connection_id"
+	FieldTenantID                 = "tenant_id"
+	FieldToState                  = "to_state"
+	FieldTraceID                  = "trace_id"
+	FieldTranscriptArtifactSet    = "transcript_artifact_set"
+	FieldTranscriptAttemptCount   = "transcript_attempt_count"
+	FieldTranscriptAttemptLimit   = "transcript_attempt_limit"
+	FieldTranscriptAttemptState   = "transcript_attempt_state"
+	FieldTranscriptAvailableMs    = "transcript_available_ms"
+	FieldTranscriptChunkCount     = "transcript_chunk_count"
+	FieldTranscriptChunkIndex     = "transcript_chunk_index"
+	FieldTranscriptClaimed        = "transcript_claimed"
+	FieldTranscriptCompletedMs    = "transcript_completed_ms"
+	FieldTranscriptCount          = "transcript_count"
+	FieldTranscriptCreatedMs      = "transcript_created_ms"
+	FieldTranscriptCueCount       = "transcript_cue_count"
+	FieldTranscriptDead           = "transcript_dead"
+	FieldTranscriptDeadLetterJobs = "transcript_dead_letter_jobs"
+	FieldTranscriptDeleted        = "transcript_deleted"
+	FieldTranscriptDispatchSource = "transcript_dispatch_source"
+	FieldTranscriptErrorCode      = "transcript_error_code"
+	FieldTranscriptExists         = "transcript_exists"
+	FieldTranscriptFinishedMs     = "transcript_finished_ms"
+	FieldTranscriptFirstRetryCode = "transcript_first_retry_code"
+	FieldTranscriptFirstRetryKind = "transcript_first_retry_kind"
+	FieldTranscriptGeneration     = "transcript_generation"
+	FieldTranscriptHasRow         = "transcript_has_row"
+	FieldTranscriptInProgress     = "transcript_in_progress"
+	FieldTranscriptJobKind        = "transcript_job_kind"
+	FieldTranscriptJobState       = "transcript_job_state"
+	FieldTranscriptLatestJob      = "transcript_latest_job"
+	FieldTranscriptLeaseExpiryMs  = "transcript_lease_expiry_ms"
+	FieldTranscriptMode           = "transcript_mode"
+	FieldTranscriptObservedMs     = "transcript_observed_ms"
+	FieldTranscriptOpenJobs       = "transcript_open_jobs"
+	FieldTranscriptPrepState      = "transcript_prep_state"
+	FieldTranscriptProvider       = "transcript_provider"
+	FieldTranscriptQueue          = "transcript_queue"
+	FieldTranscriptR2Result       = "transcript_r2_result"
+	FieldTranscriptRecordingState = "transcript_recording_state"
+	FieldTranscriptRecordings     = "transcript_recordings"
+	FieldTranscriptRoute          = "transcript_route"
+	FieldTranscriptSHAMatch       = "transcript_sha_match"
+	FieldTranscriptSHASet         = "transcript_sha_set"
+	FieldTranscriptSizeBytes      = "transcript_size_bytes"
+	FieldTranscriptSpeechMs       = "transcript_speech_ms"
+	FieldTranscriptState          = "transcript_state"
+	FieldTranscriptTalkStatus     = "transcript_talk_status"
+	FieldTranscriptTerminalMs     = "transcript_terminal_ms"
+	FieldTranscriptUpdatedMs      = "transcript_updated_ms"
+	FieldTrigger                  = "trigger"
+	FieldUserID                   = "user_id"
+	FieldWebhookDeliveryID        = "webhook_delivery_id"
 )
 
 var registryFields = map[string]fieldSpec{
-	"admission_request_id": {typ: "id", group: "trail", required: false},
-	"agent_id":             {typ: "id", group: "trail", required: false},
-	"app_build":            {typ: "string", group: "build", required: false},
-	"app_version":          {typ: "string", group: "build", required: false},
-	"attempt":              {typ: "int", group: "trail", required: false},
-	"banner_kind":          {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
-	"batch_id":             {typ: "id", group: "delivery", required: false},
-	"client_mono_ms":       {typ: "number", group: "clock", required: false},
-	"client_session_id":    {typ: "id", group: "trail", required: false},
-	"client_wall_ms":       {typ: "int", group: "clock", required: false},
-	"clock_epoch":          {typ: "int", group: "clock", required: false},
-	"clock_err_ms":         {typ: "int", group: "clock", required: false},
-	"clock_state":          {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
-	"decision":             {typ: "string", group: "record", required: false},
-	"decision_id":          {typ: "id", group: "record", required: false},
-	"device_ephemeral":     {typ: "bool", group: "trail", required: false},
-	"device_id":            {typ: "id", group: "trail", required: false},
-	"drop_reason":          {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
-	"dropped_seqs":         {typ: "ranges", group: "delivery", required: false},
-	"duration_ms":          {typ: "int", group: "record", required: false},
-	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
-	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
-	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
-	"episode_id":           {typ: "id", group: "trail", required: false},
-	"est_server_ms":        {typ: "int", group: "clock", required: false},
-	"event_id":             {typ: "id", group: "delivery", required: true},
-	"flags":                {typ: "map", group: "event", required: false},
-	"flags_hash":           {typ: "string", group: "flags", required: false},
-	"from_state":           {typ: "string", group: "record", required: false},
-	"generation":           {typ: "int", group: "trail", required: false},
-	"item_count":           {typ: "int", group: "event", required: false},
-	"job_id":               {typ: "id", group: "trail", required: false},
-	"journey_id":           {typ: "id", group: "trail", required: false},
-	"jump_ms":              {typ: "int", group: "event", required: false},
-	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
-	"machine":              {typ: "string", group: "record", required: false},
-	"media_connection_id":  {typ: "id", group: "trail", required: false},
-	"module":               {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
-	"name":                 {typ: "string", group: "record", required: true},
-	"next_seq":             {typ: "int", group: "delivery", required: false},
-	"note_kind":            {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
-	"op_id":                {typ: "id", group: "record", required: false},
-	"outcome":              {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
-	"parent_op_id":         {typ: "id", group: "record", required: false},
-	"participant_id":       {typ: "id", group: "trail", required: false},
-	"platform":             {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
-	"provider_media_id":    {typ: "id", group: "trail", required: false},
-	"reason_code":          {typ: "string", group: "record", required: false},
-	"recording_id":         {typ: "id", group: "trail", required: false},
-	"release_sha":          {typ: "string", group: "build", required: false},
-	"request_id":           {typ: "id", group: "trail", required: false},
-	"schema_ver":           {typ: "string", group: "build", required: true},
-	"sdk_version":          {typ: "string", group: "build", required: false},
-	"seq":                  {typ: "int", group: "delivery", required: true},
-	"shown_ms":             {typ: "int", group: "record", required: false},
-	"source_id":            {typ: "string", group: "delivery", required: true},
-	"space_id":             {typ: "id", group: "trail", required: false},
-	"span_id":              {typ: "id", group: "trail", required: false},
-	"surface_state":        {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
-	"sync_connection_id":   {typ: "id", group: "trail", required: false},
-	"tenant_id":            {typ: "id", group: "trail", required: false},
-	"to_state":             {typ: "string", group: "record", required: false},
-	"trace_id":             {typ: "id", group: "trail", required: false},
-	"trigger":              {typ: "string", group: "record", required: false},
-	"user_id":              {typ: "id", group: "trail", required: false},
-	"webhook_delivery_id":  {typ: "id", group: "trail", required: false},
+	"admission_request_id":        {typ: "id", group: "trail", required: false},
+	"agent_id":                    {typ: "id", group: "trail", required: false},
+	"app_build":                   {typ: "string", group: "build", required: false},
+	"app_version":                 {typ: "string", group: "build", required: false},
+	"attempt":                     {typ: "int", group: "trail", required: false},
+	"banner_kind":                 {typ: "enum", group: "event", required: false, values: []string{"info", "warning"}},
+	"batch_id":                    {typ: "id", group: "delivery", required: false},
+	"client_mono_ms":              {typ: "number", group: "clock", required: false},
+	"client_session_id":           {typ: "id", group: "trail", required: false},
+	"client_wall_ms":              {typ: "int", group: "clock", required: false},
+	"clock_epoch":                 {typ: "int", group: "clock", required: false},
+	"clock_err_ms":                {typ: "int", group: "clock", required: false},
+	"clock_state":                 {typ: "enum", group: "clock", required: true, values: []string{"server", "synced", "unsynced"}},
+	"decision":                    {typ: "string", group: "record", required: false},
+	"decision_id":                 {typ: "id", group: "record", required: false},
+	"device_ephemeral":            {typ: "bool", group: "trail", required: false},
+	"device_id":                   {typ: "id", group: "trail", required: false},
+	"drop_reason":                 {typ: "enum", group: "delivery", required: false, values: []string{"queue_full", "credential_expired", "refused"}},
+	"dropped_seqs":                {typ: "ranges", group: "delivery", required: false},
+	"duration_ms":                 {typ: "int", group: "record", required: false},
+	"end":                         {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
+	"end_reason":                  {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
+	"env":                         {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_id":                  {typ: "id", group: "trail", required: false},
+	"est_server_ms":               {typ: "int", group: "clock", required: false},
+	"event_id":                    {typ: "id", group: "delivery", required: true},
+	"flags":                       {typ: "map", group: "event", required: false},
+	"flags_hash":                  {typ: "string", group: "flags", required: false},
+	"from_state":                  {typ: "string", group: "record", required: false},
+	"generation":                  {typ: "int", group: "trail", required: false},
+	"item_count":                  {typ: "int", group: "event", required: false},
+	"job_id":                      {typ: "id", group: "trail", required: false},
+	"journey_id":                  {typ: "id", group: "trail", required: false},
+	"jump_ms":                     {typ: "int", group: "event", required: false},
+	"kind":                        {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
+	"machine":                     {typ: "string", group: "record", required: false},
+	"media_connection_id":         {typ: "id", group: "trail", required: false},
+	"module":                      {typ: "enum", group: "build", required: true, values: []string{"api", "sync", "sfu", "recorder_capture", "recorder_render", "transcription_dispatcher", "recording_renderer", "sdk", "web", "mobile", "checker"}},
+	"name":                        {typ: "string", group: "record", required: true},
+	"next_seq":                    {typ: "int", group: "delivery", required: false},
+	"note_kind":                   {typ: "enum", group: "event", required: false, values: []string{"a", "b"}},
+	"op_id":                       {typ: "id", group: "record", required: false},
+	"outcome":                     {typ: "enum", group: "record", required: false, values: []string{"ok", "expected", "error"}},
+	"parent_op_id":                {typ: "id", group: "record", required: false},
+	"participant_id":              {typ: "id", group: "trail", required: false},
+	"platform":                    {typ: "enum", group: "build", required: false, values: []string{"web", "ios", "android", "server", "lambda", "node"}},
+	"provider_media_id":           {typ: "id", group: "trail", required: false},
+	"reason_code":                 {typ: "string", group: "record", required: false},
+	"recording_id":                {typ: "id", group: "trail", required: false},
+	"release_sha":                 {typ: "string", group: "build", required: false},
+	"request_id":                  {typ: "id", group: "trail", required: false},
+	"schema_ver":                  {typ: "string", group: "build", required: true},
+	"sdk_version":                 {typ: "string", group: "build", required: false},
+	"seq":                         {typ: "int", group: "delivery", required: true},
+	"shown_ms":                    {typ: "int", group: "record", required: false},
+	"source_id":                   {typ: "string", group: "delivery", required: true},
+	"space_id":                    {typ: "id", group: "trail", required: false},
+	"span_id":                     {typ: "id", group: "trail", required: false},
+	"surface_state":               {typ: "enum", group: "record", required: false, values: []string{"shown", "dismissed"}},
+	"sync_connection_id":          {typ: "id", group: "trail", required: false},
+	"tenant_id":                   {typ: "id", group: "trail", required: false},
+	"to_state":                    {typ: "string", group: "record", required: false},
+	"trace_id":                    {typ: "id", group: "trail", required: false},
+	"transcript_artifact_set":     {typ: "bool", group: "event", required: false},
+	"transcript_attempt_count":    {typ: "int", group: "event", required: false},
+	"transcript_attempt_limit":    {typ: "int", group: "event", required: false},
+	"transcript_attempt_state":    {typ: "enum", group: "event", required: false, values: []string{"started", "retryable_failure", "accepted", "rejected", "cancelled"}},
+	"transcript_available_ms":     {typ: "int", group: "event", required: false},
+	"transcript_chunk_count":      {typ: "int", group: "event", required: false},
+	"transcript_chunk_index":      {typ: "int", group: "event", required: false},
+	"transcript_claimed":          {typ: "int", group: "event", required: false},
+	"transcript_completed_ms":     {typ: "int", group: "event", required: false},
+	"transcript_count":            {typ: "int", group: "event", required: false},
+	"transcript_created_ms":       {typ: "int", group: "event", required: false},
+	"transcript_cue_count":        {typ: "int", group: "event", required: false},
+	"transcript_dead":             {typ: "bool", group: "event", required: false},
+	"transcript_dead_letter_jobs": {typ: "int", group: "event", required: false},
+	"transcript_deleted":          {typ: "bool", group: "event", required: false},
+	"transcript_dispatch_source":  {typ: "enum", group: "event", required: false, values: []string{"wake", "finalize", "cleanup", "reconcile", "eventbridge.scheduler"}},
+	"transcript_error_code":       {typ: "string", group: "event", required: false},
+	"transcript_exists":           {typ: "bool", group: "event", required: false},
+	"transcript_finished_ms":      {typ: "int", group: "event", required: false},
+	"transcript_first_retry_code": {typ: "string", group: "event", required: false},
+	"transcript_first_retry_kind": {typ: "enum", group: "event", required: false, values: []string{"transcription_chunk", "transcription_finalize"}},
+	"transcript_generation":       {typ: "int", group: "event", required: false},
+	"transcript_has_row":          {typ: "bool", group: "event", required: false},
+	"transcript_in_progress":      {typ: "int", group: "event", required: false},
+	"transcript_job_kind":         {typ: "enum", group: "event", required: false, values: []string{"transcription_chunk", "transcription_finalize", "render", "transcription", "recording"}},
+	"transcript_job_state":        {typ: "enum", group: "event", required: false, values: []string{"pending", "leased", "retryable", "completed", "dead_letter", "cancelled"}},
+	"transcript_latest_job":       {typ: "bool", group: "event", required: false},
+	"transcript_lease_expiry_ms":  {typ: "int", group: "event", required: false},
+	"transcript_mode":             {typ: "enum", group: "event", required: false, values: []string{"automatic", "on_demand", "disabled"}},
+	"transcript_observed_ms":      {typ: "int", group: "event", required: false},
+	"transcript_open_jobs":        {typ: "int", group: "event", required: false},
+	"transcript_prep_state":       {typ: "enum", group: "event", required: false, values: []string{"pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled", "none"}},
+	"transcript_provider":         {typ: "string", group: "event", required: false},
+	"transcript_queue":            {typ: "enum", group: "event", required: false, values: []string{"transcription", "finalize", "cleanup"}},
+	"transcript_r2_result":        {typ: "enum", group: "event", required: false, values: []string{"ok", "not_found", "error", "size_mismatch", "sha_mismatch", "type_mismatch", "invalid"}},
+	"transcript_recording_state":  {typ: "enum", group: "event", required: false, values: []string{"recording", "processing", "finalizing", "completed", "failed", "deleted"}},
+	"transcript_recordings":       {typ: "int", group: "event", required: false},
+	"transcript_route":            {typ: "enum", group: "event", required: false, values: []string{"document", "talk_time"}},
+	"transcript_sha_match":        {typ: "bool", group: "event", required: false},
+	"transcript_sha_set":          {typ: "bool", group: "event", required: false},
+	"transcript_size_bytes":       {typ: "int", group: "event", required: false},
+	"transcript_speech_ms":        {typ: "int", group: "event", required: false},
+	"transcript_state":            {typ: "enum", group: "event", required: false, values: []string{"not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "none"}},
+	"transcript_talk_status":      {typ: "enum", group: "event", required: false, values: []string{"available", "transcript_pending", "no_transcript", "live"}},
+	"transcript_terminal_ms":      {typ: "int", group: "event", required: false},
+	"transcript_updated_ms":       {typ: "int", group: "event", required: false},
+	"trigger":                     {typ: "string", group: "record", required: false},
+	"user_id":                     {typ: "id", group: "trail", required: false},
+	"webhook_delivery_id":         {typ: "id", group: "trail", required: false},
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":            {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"obs.clock_jump":               {kind: "fact", dataset: "lifecycle", side: "client", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":           {kind: "fact", dataset: "infra", side: "any", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":               {kind: "decision", dataset: "lifecycle", side: "server", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":              {kind: "surface", dataset: "lifecycle", side: "client", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":                {kind: "fact", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":                {kind: "op", dataset: "lifecycle", side: "any", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"transcript.chunk":             {kind: "op", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}}},
+	"transcript.claim":             {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"leased", "invalid_assignment", "lease_stale", "url_failed", "none", "repository_error"}, fields: map[string]fieldRule{"job_id": {required: false}, "attempt": {required: false}}},
+	"transcript.db.attempt":        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"transcript_attempt_state": {required: true}, "attempt": {required: true}, "transcript_generation": {required: true}, "transcript_provider": {required: false}, "transcript_observed_ms": {required: false}, "transcript_error_code": {required: false}, "transcript_finished_ms": {required: false}, "transcript_chunk_index": {required: false}, "transcript_speech_ms": {required: false}}},
+	"transcript.db.episode":        {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "transcript_mode": {required: true}, "transcript_recordings": {required: true}}},
+	"transcript.db.job":            {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"job_id": {required: true}, "transcript_job_state": {required: true}, "transcript_job_kind": {required: true}, "transcript_error_code": {required: false}, "transcript_attempt_count": {required: true}, "transcript_attempt_limit": {required: true}, "transcript_terminal_ms": {required: false}, "transcript_available_ms": {required: true}, "transcript_lease_expiry_ms": {required: false}, "transcript_created_ms": {required: true}, "transcript_updated_ms": {required: true}, "transcript_latest_job": {required: true}, "transcript_open_jobs": {required: true}, "transcript_dead_letter_jobs": {required: true}, "transcript_first_retry_kind": {required: false}, "transcript_first_retry_code": {required: false}}},
+	"transcript.db.prep":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"recording_id": {required: true}, "transcript_exists": {required: true}, "transcript_prep_state": {required: true}, "transcript_error_code": {required: false}, "transcript_terminal_ms": {required: false}, "transcript_attempt_count": {required: false}, "transcript_available_ms": {required: false}, "transcript_lease_expiry_ms": {required: false}}},
+	"transcript.db.recording":      {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"recording_id": {required: true}, "transcript_recording_state": {required: true}, "transcript_completed_ms": {required: false}, "transcript_mode": {required: false}}},
+	"transcript.db.render":         {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"job_id": {required: true}, "transcript_prep_state": {required: true}, "transcript_terminal_ms": {required: false}, "transcript_available_ms": {required: false}, "transcript_created_ms": {required: true}}},
+	"transcript.db.talk":           {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "transcript_talk_status": {required: true}, "transcript_in_progress": {required: true}}},
+	"transcript.db.transcription":  {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"recording_id": {required: false}, "transcript_exists": {required: true}, "transcript_state": {required: false}, "transcript_deleted": {required: false}, "transcript_created_ms": {required: false}, "transcript_updated_ms": {required: false}, "transcript_completed_ms": {required: false}, "transcript_artifact_set": {required: false}, "transcript_sha_set": {required: false}, "transcript_generation": {required: false}, "transcript_mode": {required: false}, "transcript_open_jobs": {required: false}, "transcript_dead_letter_jobs": {required: false}}},
+	"transcript.dispatcher.invoke": {kind: "op", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"transcript_dispatch_source": {required: true}, "job_id": {required: false}}},
+	"transcript.document_read":     {kind: "op", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"transcript_route": {required: true}, "job_id": {required: false}, "transcript_cue_count": {required: false}}},
+	"transcript.finalize":          {kind: "op", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}, "transcript_cue_count": {required: false}}},
+	"transcript.finalize_accept":   {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"accepted", "rejected", "error"}, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}}},
+	"transcript.finalize_claim":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"leased", "none", "url_failed", "repository_error"}, fields: map[string]fieldRule{"job_id": {required: false}, "attempt": {required: false}}},
+	"transcript.finalize_retry":    {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"retryable", "dead_letter"}, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}, "transcript_error_code": {required: true}}},
+	"transcript.job_complete":      {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"accepted", "rejected", "error"}, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}}},
+	"transcript.job_retry":         {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"retryable", "dead_letter"}, fields: map[string]fieldRule{"job_id": {required: true}, "attempt": {required: true}, "transcript_error_code": {required: true}}},
+	"transcript.r2.object":         {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"transcript_r2_result": {required: true}, "transcript_size_bytes": {required: false}, "transcript_sha_match": {required: false}, "transcript_cue_count": {required: false}, "transcript_provider": {required: false}}},
+	"transcript.talk_time_served":  {kind: "fact", dataset: "lifecycle", side: "server", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "transcript_talk_status": {required: true}, "transcript_in_progress": {required: true}}},
+	"transcript.wake":              {kind: "decision", dataset: "lifecycle", side: "server", testOnly: false, decisions: []string{"queued", "failed"}, fields: map[string]fieldRule{"job_id": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{
 	"client.connection": {states: []string{"idle", "joining", "live", "reconnecting", "leaving", "left", "failed"}, edges: [][2]string{{"idle", "joining"}, {"left", "joining"}, {"failed", "joining"}, {"joining", "live"}, {"joining", "failed"}, {"joining", "leaving"}, {"live", "reconnecting"}, {"reconnecting", "live"}, {"live", "leaving"}, {"reconnecting", "leaving"}, {"failed", "leaving"}, {"leaving", "left"}, {"live", "failed"}, {"reconnecting", "failed"}}, triggers: []string{"join", "joined", "join_failed", "leave", "left", "transport_lost", "recovered", "recovery_exhausted", "removed", "episode_ended"}},
 	"episode.lifecycle": {states: []string{"active", "ending", "ended"}, edges: [][2]string{{"active", "ending"}, {"ending", "ended"}, {"active", "ended"}}, triggers: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}},
 	"selftest.door":     {states: []string{"closed", "open", "locked"}, edges: [][2]string{{"closed", "open"}, {"open", "closed"}, {"closed", "locked"}, {"locked", "closed"}}, triggers: []string{"push", "pull", "lock", "unlock"}},
+	"transcript.job":    {states: []string{"pending", "leased", "retryable", "completed", "dead_letter", "cancelled"}, edges: [][2]string{{"pending", "leased"}, {"retryable", "leased"}, {"leased", "completed"}, {"leased", "retryable"}, {"leased", "dead_letter"}, {"leased", "pending"}, {"leased", "cancelled"}, {"pending", "cancelled"}, {"retryable", "dead_letter"}, {"dead_letter", "pending"}}, triggers: []string{"claim", "retry", "complete", "cancel", "recover", "requeue"}},
+	"transcript.status": {states: []string{"not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted"}, edges: [][2]string{{"not_requested", "preparing"}, {"preparing", "transcribing"}, {"preparing", "terminal_failure"}, {"transcribing", "verifying"}, {"transcribing", "retryable_failure"}, {"transcribing", "terminal_failure"}, {"retryable_failure", "transcribing"}, {"retryable_failure", "terminal_failure"}, {"verifying", "complete"}, {"verifying", "retryable_failure"}, {"verifying", "terminal_failure"}, {"complete", "deleted"}}, triggers: []string{"request", "prepare", "claim", "retry", "fail", "finalize_complete", "delete"}},
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":                               "expected",
+	"end.time_limit":                          "expected",
+	"selftest.broken":                         "error",
+	"selftest.busy":                           "expected",
+	"transcript.accept_failed":                "error",
+	"transcript.artifact_mismatch":            "error",
+	"transcript.artifact_verification_failed": "error",
+	"transcript.assignment_invalid":           "error",
+	"transcript.chunk_download_retryable":     "error",
+	"transcript.control_api_rejected":         "error",
+	"transcript.decode":                       "error",
+	"transcript.dispatcher_failure":           "error",
+	"transcript.invalid_assignment":           "error",
+	"transcript.late_completion":              "expected",
+	"transcript.lease_expired":                "error",
+	"transcript.lease_stale":                  "error",
+	"transcript.network_failure":              "error",
+	"transcript.no_claimable_job":             "expected",
+	"transcript.not_ready":                    "expected",
+	"transcript.object_get":                   "error",
+	"transcript.provider_rate_limited":        "error",
+	"transcript.provider_rejected":            "error",
+	"transcript.provider_schema_invalid":      "error",
+	"transcript.provider_timeout":             "error",
+	"transcript.provider_unavailable":         "error",
+	"transcript.repository_error":             "error",
+	"transcript.result_verification_failed":   "error",
+	"transcript.timeout":                      "error",
+	"transcript.unknown_failure":              "error",
+	"transcript.url_failed":                   "error",
+	"transcript.wake_failed":                  "error",
+	"unclassified":                            "error",
 }
 
 var registryIDKinds = []idKind{

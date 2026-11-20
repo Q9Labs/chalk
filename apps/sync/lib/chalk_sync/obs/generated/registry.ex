@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "06a4092b8fb7"
+  @schema_ver "da49ddafa5db"
 
   @events %{
     "client.call_ended" => %{
@@ -95,6 +95,456 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
+        }
+      }
+    },
+    "transcript.chunk" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.claim" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["leased", "invalid_assignment", "lease_stale", "url_failed", "none", "repository_error"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => false
+        },
+        "attempt" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.db.attempt" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "transcript_attempt_state" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        },
+        "transcript_generation" => %{
+          "required" => true
+        },
+        "transcript_provider" => %{
+          "required" => false
+        },
+        "transcript_observed_ms" => %{
+          "required" => false
+        },
+        "transcript_error_code" => %{
+          "required" => false
+        },
+        "transcript_finished_ms" => %{
+          "required" => false
+        },
+        "transcript_chunk_index" => %{
+          "required" => false
+        },
+        "transcript_speech_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.db.episode" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "episode_id" => %{
+          "required" => true
+        },
+        "transcript_mode" => %{
+          "required" => true
+        },
+        "transcript_recordings" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.db.job" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "transcript_job_state" => %{
+          "required" => true
+        },
+        "transcript_job_kind" => %{
+          "required" => true
+        },
+        "transcript_error_code" => %{
+          "required" => false
+        },
+        "transcript_attempt_count" => %{
+          "required" => true
+        },
+        "transcript_attempt_limit" => %{
+          "required" => true
+        },
+        "transcript_terminal_ms" => %{
+          "required" => false
+        },
+        "transcript_available_ms" => %{
+          "required" => true
+        },
+        "transcript_lease_expiry_ms" => %{
+          "required" => false
+        },
+        "transcript_created_ms" => %{
+          "required" => true
+        },
+        "transcript_updated_ms" => %{
+          "required" => true
+        },
+        "transcript_latest_job" => %{
+          "required" => true
+        },
+        "transcript_open_jobs" => %{
+          "required" => true
+        },
+        "transcript_dead_letter_jobs" => %{
+          "required" => true
+        },
+        "transcript_first_retry_kind" => %{
+          "required" => false
+        },
+        "transcript_first_retry_code" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.db.prep" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "recording_id" => %{
+          "required" => true
+        },
+        "transcript_exists" => %{
+          "required" => true
+        },
+        "transcript_prep_state" => %{
+          "required" => true
+        },
+        "transcript_error_code" => %{
+          "required" => false
+        },
+        "transcript_terminal_ms" => %{
+          "required" => false
+        },
+        "transcript_attempt_count" => %{
+          "required" => false
+        },
+        "transcript_available_ms" => %{
+          "required" => false
+        },
+        "transcript_lease_expiry_ms" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.db.recording" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "recording_id" => %{
+          "required" => true
+        },
+        "transcript_recording_state" => %{
+          "required" => true
+        },
+        "transcript_completed_ms" => %{
+          "required" => false
+        },
+        "transcript_mode" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.db.render" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "transcript_prep_state" => %{
+          "required" => true
+        },
+        "transcript_terminal_ms" => %{
+          "required" => false
+        },
+        "transcript_available_ms" => %{
+          "required" => false
+        },
+        "transcript_created_ms" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.db.talk" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "episode_id" => %{
+          "required" => true
+        },
+        "transcript_talk_status" => %{
+          "required" => true
+        },
+        "transcript_in_progress" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.db.transcription" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "recording_id" => %{
+          "required" => false
+        },
+        "transcript_exists" => %{
+          "required" => true
+        },
+        "transcript_state" => %{
+          "required" => false
+        },
+        "transcript_deleted" => %{
+          "required" => false
+        },
+        "transcript_created_ms" => %{
+          "required" => false
+        },
+        "transcript_updated_ms" => %{
+          "required" => false
+        },
+        "transcript_completed_ms" => %{
+          "required" => false
+        },
+        "transcript_artifact_set" => %{
+          "required" => false
+        },
+        "transcript_sha_set" => %{
+          "required" => false
+        },
+        "transcript_generation" => %{
+          "required" => false
+        },
+        "transcript_mode" => %{
+          "required" => false
+        },
+        "transcript_open_jobs" => %{
+          "required" => false
+        },
+        "transcript_dead_letter_jobs" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.dispatcher.invoke" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "transcript_dispatch_source" => %{
+          "required" => true
+        },
+        "job_id" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.document_read" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "transcript_route" => %{
+          "required" => true
+        },
+        "job_id" => %{
+          "required" => false
+        },
+        "transcript_cue_count" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.finalize" => %{
+      "kind" => "op",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        },
+        "transcript_cue_count" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.finalize_accept" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["accepted", "rejected", "error"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.finalize_claim" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["leased", "none", "url_failed", "repository_error"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => false
+        },
+        "attempt" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.finalize_retry" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["retryable", "dead_letter"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        },
+        "transcript_error_code" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.job_complete" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["accepted", "rejected", "error"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.job_retry" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["retryable", "dead_letter"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
+        },
+        "attempt" => %{
+          "required" => true
+        },
+        "transcript_error_code" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.r2.object" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "transcript_r2_result" => %{
+          "required" => true
+        },
+        "transcript_size_bytes" => %{
+          "required" => false
+        },
+        "transcript_sha_match" => %{
+          "required" => false
+        },
+        "transcript_cue_count" => %{
+          "required" => false
+        },
+        "transcript_provider" => %{
+          "required" => false
+        }
+      }
+    },
+    "transcript.talk_time_served" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "episode_id" => %{
+          "required" => true
+        },
+        "transcript_talk_status" => %{
+          "required" => true
+        },
+        "transcript_in_progress" => %{
+          "required" => true
+        }
+      }
+    },
+    "transcript.wake" => %{
+      "kind" => "decision",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => ["queued", "failed"],
+      "fields" => %{
+        "job_id" => %{
+          "required" => true
         }
       }
     }
@@ -479,6 +929,282 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "transcript_artifact_set" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_attempt_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_attempt_limit" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_attempt_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["started", "retryable_failure", "accepted", "rejected", "cancelled"]
+    },
+    "transcript_available_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_chunk_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_chunk_index" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_claimed" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_completed_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_created_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_cue_count" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_dead" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_dead_letter_jobs" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_deleted" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_dispatch_source" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["wake", "finalize", "cleanup", "reconcile", "eventbridge.scheduler"]
+    },
+    "transcript_error_code" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_exists" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_finished_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_first_retry_code" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_first_retry_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["transcription_chunk", "transcription_finalize"]
+    },
+    "transcript_generation" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_has_row" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_in_progress" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_job_kind" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["transcription_chunk", "transcription_finalize", "render", "transcription", "recording"]
+    },
+    "transcript_job_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"]
+    },
+    "transcript_latest_job" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_lease_expiry_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_mode" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["automatic", "on_demand", "disabled"]
+    },
+    "transcript_observed_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_open_jobs" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_prep_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled", "none"]
+    },
+    "transcript_provider" => %{
+      "type" => "string",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_queue" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["transcription", "finalize", "cleanup"]
+    },
+    "transcript_r2_result" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ok", "not_found", "error", "size_mismatch", "sha_mismatch", "type_mismatch", "invalid"]
+    },
+    "transcript_recording_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["recording", "processing", "finalizing", "completed", "failed", "deleted"]
+    },
+    "transcript_recordings" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_route" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["document", "talk_time"]
+    },
+    "transcript_sha_match" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_sha_set" => %{
+      "type" => "bool",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_size_bytes" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_speech_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_state" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "none"]
+    },
+    "transcript_talk_status" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["available", "transcript_pending", "no_transcript", "live"]
+    },
+    "transcript_terminal_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
+    "transcript_updated_ms" => %{
+      "type" => "int",
+      "group" => "event",
+      "required" => false,
+      "values" => nil
+    },
     "trigger" => %{
       "type" => "string",
       "group" => "record",
@@ -538,6 +1264,40 @@ defmodule ChalkSync.Obs.Registry do
         ["locked", "closed"]
       ],
       "triggers" => ["push", "pull", "lock", "unlock"]
+    },
+    "transcript.job" => %{
+      "states" => ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"],
+      "edges" => [
+        ["pending", "leased"],
+        ["retryable", "leased"],
+        ["leased", "completed"],
+        ["leased", "retryable"],
+        ["leased", "dead_letter"],
+        ["leased", "pending"],
+        ["leased", "cancelled"],
+        ["pending", "cancelled"],
+        ["retryable", "dead_letter"],
+        ["dead_letter", "pending"]
+      ],
+      "triggers" => ["claim", "retry", "complete", "cancel", "recover", "requeue"]
+    },
+    "transcript.status" => %{
+      "states" => ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted"],
+      "edges" => [
+        ["not_requested", "preparing"],
+        ["preparing", "transcribing"],
+        ["preparing", "terminal_failure"],
+        ["transcribing", "verifying"],
+        ["transcribing", "retryable_failure"],
+        ["transcribing", "terminal_failure"],
+        ["retryable_failure", "transcribing"],
+        ["retryable_failure", "terminal_failure"],
+        ["verifying", "complete"],
+        ["verifying", "retryable_failure"],
+        ["verifying", "terminal_failure"],
+        ["complete", "deleted"]
+      ],
+      "triggers" => ["request", "prepare", "claim", "retry", "fail", "finalize_complete", "delete"]
     }
   }
 
@@ -546,6 +1306,33 @@ defmodule ChalkSync.Obs.Registry do
     "end.time_limit" => "expected",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
+    "transcript.accept_failed" => "error",
+    "transcript.artifact_mismatch" => "error",
+    "transcript.artifact_verification_failed" => "error",
+    "transcript.assignment_invalid" => "error",
+    "transcript.chunk_download_retryable" => "error",
+    "transcript.control_api_rejected" => "error",
+    "transcript.decode" => "error",
+    "transcript.dispatcher_failure" => "error",
+    "transcript.invalid_assignment" => "error",
+    "transcript.late_completion" => "expected",
+    "transcript.lease_expired" => "error",
+    "transcript.lease_stale" => "error",
+    "transcript.network_failure" => "error",
+    "transcript.no_claimable_job" => "expected",
+    "transcript.not_ready" => "expected",
+    "transcript.object_get" => "error",
+    "transcript.provider_rate_limited" => "error",
+    "transcript.provider_rejected" => "error",
+    "transcript.provider_schema_invalid" => "error",
+    "transcript.provider_timeout" => "error",
+    "transcript.provider_unavailable" => "error",
+    "transcript.repository_error" => "error",
+    "transcript.result_verification_failed" => "error",
+    "transcript.timeout" => "error",
+    "transcript.unknown_failure" => "error",
+    "transcript.url_failed" => "error",
+    "transcript.wake_failed" => "error",
     "unclassified" => "error"
   }
 

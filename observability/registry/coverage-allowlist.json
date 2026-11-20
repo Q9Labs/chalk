@@ -1,17 +1,85 @@
 {
   "doc": "Symptoms that are catalogued but not yet complete. Each entry names the slice that finishes it. The coverage gate prints this list with each symptom's missing links, fails on an incomplete symptom that is not listed here, and fails on a listed symptom that is already complete, so the list only shrinks.",
   "incomplete": [
-    { "code": "admission.unresolved", "slice": 1 },
-    { "code": "join.no_media", "slice": 2 },
-    { "code": "audio.cant_hear", "slice": 3 },
-    { "code": "audio.not_heard", "slice": 3 },
-    { "code": "video.frozen", "slice": 4 },
-    { "code": "share.wont_stop", "slice": 5 },
-    { "code": "board.view_jumped", "slice": 6 },
-    { "code": "access.connection_lost", "slice": 7 },
-    { "code": "end.time_limit", "slice": 8 },
-    { "code": "rejoin.refused", "slice": 8 },
-    { "code": "page.crashed", "slice": 9 },
-    { "code": "recording.not_ready", "slice": 10 }
+    {
+      "code": "admission.unresolved",
+      "slice": 1
+    },
+    {
+      "code": "join.no_media",
+      "slice": 2
+    },
+    {
+      "code": "audio.cant_hear",
+      "slice": 3
+    },
+    {
+      "code": "audio.not_heard",
+      "slice": 3
+    },
+    {
+      "code": "video.frozen",
+      "slice": 4
+    },
+    {
+      "code": "share.wont_stop",
+      "slice": 5
+    },
+    {
+      "code": "board.view_jumped",
+      "slice": 6
+    },
+    {
+      "code": "access.connection_lost",
+      "slice": 7
+    },
+    {
+      "code": "end.time_limit",
+      "slice": 8
+    },
+    {
+      "code": "rejoin.refused",
+      "slice": 8
+    },
+    {
+      "code": "page.crashed",
+      "slice": 9
+    },
+    {
+      "code": "recording.not_ready",
+      "slice": 10
+    },
+    {
+      "code": "transcript.failed",
+      "slice": 11
+    },
+    {
+      "code": "transcript.unreadable",
+      "slice": 11
+    },
+    {
+      "code": "transcript.attempt_lost",
+      "slice": 11
+    },
+    {
+      "code": "transcript.stuck",
+      "slice": 11
+    },
+    {
+      "code": "transcript.late",
+      "slice": 11
+    },
+    {
+      "code": "transcript.speech_dropped",
+      "slice": 11
+    },
+    {
+      "code": "transcript.talk_time_stuck",
+      "slice": 11
+    },
+    {
+      "code": "transcript.wake_lost",
+      "slice": 11
+    }
   ]
 }

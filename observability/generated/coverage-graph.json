@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "da49ddafa5db",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -303,6 +303,1200 @@
         "healthy": "observability/fixtures/share.wont_stop/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "transcript.attempt_lost",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.job",
+              "source": "db",
+              "fields": [
+                "job_id",
+                "transcript_job_state",
+                "transcript_job_kind",
+                "transcript_error_code",
+                "transcript_attempt_count",
+                "transcript_attempt_limit",
+                "transcript_terminal_ms",
+                "transcript_available_ms",
+                "transcript_lease_expiry_ms",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_latest_job",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms",
+                "transcript_first_retry_kind",
+                "transcript_first_retry_code"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.attempts",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.attempt",
+              "source": "db",
+              "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.claim",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.complete_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.job_complete",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.retry_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.job_retry",
+              "source": "api",
+              "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.chunk_op",
+          "from": ["lambda"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.chunk",
+              "source": "lambda",
+              "fields": ["job_id", "attempt", "reason_code", "outcome", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.job",
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.attempt",
+          "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.claim",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
+              "literal": "\"transcript.claim\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.job_complete",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker.go",
+              "literal": "\"transcript.job_complete\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.job_retry",
+          "fields": ["job_id", "attempt", "transcript_error_code"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker.go",
+              "literal": "\"transcript.job_retry\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.chunk",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/transcription-dispatcher/src/transcriber.ts",
+              "literal": "\"transcript.chunk\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/transcript.attempt_lost.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.attempt_lost/positive.json",
+        "healthy": "observability/fixtures/transcript.attempt_lost/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.attempt_lost.fault.test.mjs"
+    },
+    {
+      "code": "transcript.failed",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.job",
+              "source": "db",
+              "fields": [
+                "job_id",
+                "transcript_job_state",
+                "transcript_job_kind",
+                "transcript_error_code",
+                "transcript_attempt_count",
+                "transcript_attempt_limit",
+                "transcript_terminal_ms",
+                "transcript_available_ms",
+                "transcript_lease_expiry_ms",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_latest_job",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms",
+                "transcript_first_retry_kind",
+                "transcript_first_retry_code"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.retry_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.job_retry",
+              "source": "api",
+              "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.finalize_retry_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.finalize_retry",
+              "source": "api",
+              "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.chunk_op",
+          "from": ["lambda"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.chunk",
+              "source": "lambda",
+              "fields": ["job_id", "attempt", "reason_code", "outcome", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.finalize_op",
+          "from": ["lambda"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.finalize",
+              "source": "lambda",
+              "fields": ["job_id", "attempt", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.job",
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.job_retry",
+          "fields": ["job_id", "attempt", "transcript_error_code"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker.go",
+              "literal": "\"transcript.job_retry\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.finalize_retry",
+          "fields": ["job_id", "attempt", "transcript_error_code"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_finalize.go",
+              "literal": "\"transcript.finalize_retry\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.chunk",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/transcription-dispatcher/src/transcriber.ts",
+              "literal": "\"transcript.chunk\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.finalize",
+          "fields": ["job_id", "attempt", "transcript_cue_count"],
+          "emit_sites": [
+            {
+              "path": "apps/transcription-dispatcher/src/finalizer.ts",
+              "literal": "\"transcript.finalize\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/transcript.failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.failed/positive.json",
+        "healthy": "observability/fixtures/transcript.failed/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.failed.fault.test.mjs"
+    },
+    {
+      "code": "transcript.late",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.job",
+              "source": "db",
+              "fields": [
+                "job_id",
+                "transcript_job_state",
+                "transcript_job_kind",
+                "transcript_error_code",
+                "transcript_attempt_count",
+                "transcript_attempt_limit",
+                "transcript_terminal_ms",
+                "transcript_available_ms",
+                "transcript_lease_expiry_ms",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_latest_job",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms",
+                "transcript_first_retry_kind",
+                "transcript_first_retry_code"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.job",
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ],
+          "emit_sites": []
+        }
+      ],
+      "rule": "observability/rules/transcript.late.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.late/positive.json",
+        "healthy": "observability/fixtures/transcript.late/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.late.fault.test.mjs"
+    },
+    {
+      "code": "transcript.speech_dropped",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.attempts",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.attempt",
+              "source": "db",
+              "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.object",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.r2.object",
+              "source": "r2",
+              "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.attempt",
+          "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.r2.object",
+          "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider"],
+          "emit_sites": []
+        }
+      ],
+      "rule": "observability/rules/transcript.speech_dropped.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.speech_dropped/positive.json",
+        "healthy": "observability/fixtures/transcript.speech_dropped/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.speech_dropped.fault.test.mjs"
+    },
+    {
+      "code": "transcript.stuck",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.job",
+              "source": "db",
+              "fields": [
+                "job_id",
+                "transcript_job_state",
+                "transcript_job_kind",
+                "transcript_error_code",
+                "transcript_attempt_count",
+                "transcript_attempt_limit",
+                "transcript_terminal_ms",
+                "transcript_available_ms",
+                "transcript_lease_expiry_ms",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_latest_job",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms",
+                "transcript_first_retry_kind",
+                "transcript_first_retry_code"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.recording",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.recording",
+              "source": "db",
+              "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.prep",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.prep",
+              "source": "db",
+              "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.render",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.render",
+              "source": "db",
+              "fields": ["job_id", "transcript_prep_state", "transcript_terminal_ms", "transcript_available_ms", "transcript_created_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.claim",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.finalize_claim_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.finalize_claim",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.job",
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.recording",
+          "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.prep",
+          "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.render",
+          "fields": ["job_id", "transcript_prep_state", "transcript_terminal_ms", "transcript_available_ms", "transcript_created_ms"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.claim",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
+              "literal": "\"transcript.claim\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.finalize_claim",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_finalize.go",
+              "literal": "\"transcript.finalize_claim\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/transcript.stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.stuck/positive.json",
+        "healthy": "observability/fixtures/transcript.stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.stuck.fault.test.mjs"
+    },
+    {
+      "code": "transcript.talk_time_stuck",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "episode",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.episode",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.episode",
+              "source": "db",
+              "fields": ["episode_id", "transcript_mode", "transcript_recordings", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.recording",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.recording",
+              "source": "db",
+              "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.prep",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.prep",
+              "source": "db",
+              "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.talk",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.talk_time_served",
+              "source": "api",
+              "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
+            },
+            {
+              "event": "transcript.db.talk",
+              "source": "db",
+              "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.episode",
+          "fields": ["episode_id", "transcript_mode", "transcript_recordings"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.recording",
+          "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.db.prep",
+          "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.talk_time_served",
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/episode_talk_time.go",
+              "literal": "\"transcript.talk_time_served\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.db.talk",
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress"],
+          "emit_sites": []
+        }
+      ],
+      "rule": "observability/rules/transcript.talk_time_stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.talk_time_stuck/positive.json",
+        "healthy": "observability/fixtures/transcript.talk_time_stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.talk_time_stuck.fault.test.mjs"
+    },
+    {
+      "code": "transcript.unreadable",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.transcription",
+              "source": "db",
+              "fields": [
+                "recording_id",
+                "transcript_exists",
+                "transcript_state",
+                "transcript_deleted",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_completed_ms",
+                "transcript_artifact_set",
+                "transcript_sha_set",
+                "transcript_generation",
+                "transcript_mode",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms"
+              ]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.object",
+          "from": ["r2"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.r2.object",
+              "source": "r2",
+              "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.doc",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.document_read",
+              "source": "api",
+              "fields": ["transcript_route", "episode_id", "job_id", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.db.transcription",
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs"
+          ],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.r2.object",
+          "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider"],
+          "emit_sites": []
+        },
+        {
+          "name": "transcript.document_read",
+          "fields": ["transcript_route", "job_id", "transcript_cue_count"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_document.go",
+              "literal": "\"transcript.document_read\""
+            },
+            {
+              "path": "apps/api/internal/talktime/service.go",
+              "literal": "\"transcript.document_read\""
+            }
+          ]
+        }
+      ],
+      "rule": "observability/rules/transcript.unreadable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.unreadable/positive.json",
+        "healthy": "observability/fixtures/transcript.unreadable/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.unreadable.fault.test.mjs"
+    },
+    {
+      "code": "transcript.wake_lost",
+      "area": "transcription",
+      "slice": 11,
+      "allowlisted": false,
+      "item": "job",
+      "per": "item",
+      "witnesses": [
+        {
+          "fact": "transcript.wake_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.wake",
+              "source": "api",
+              "fields": ["job_id", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.claim",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.finalize_claim_decision",
+          "from": ["api"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.finalize_claim",
+              "source": "api",
+              "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+            }
+          ]
+        },
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "events": [
+            {
+              "event": "transcript.db.job",
+              "source": "db",
+              "fields": [
+                "job_id",
+                "transcript_job_state",
+                "transcript_job_kind",
+                "transcript_error_code",
+                "transcript_attempt_count",
+                "transcript_attempt_limit",
+                "transcript_terminal_ms",
+                "transcript_available_ms",
+                "transcript_lease_expiry_ms",
+                "transcript_created_ms",
+                "transcript_updated_ms",
+                "transcript_latest_job",
+                "transcript_open_jobs",
+                "transcript_dead_letter_jobs",
+                "est_server_ms",
+                "transcript_first_retry_kind",
+                "transcript_first_retry_code"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "transcript.wake",
+          "fields": ["job_id"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/adapters/aws/lambdawaker/waker.go",
+              "literal": "\"transcript.wake\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.claim",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
+              "literal": "\"transcript.claim\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.finalize_claim",
+          "fields": ["job_id", "attempt"],
+          "emit_sites": [
+            {
+              "path": "apps/api/internal/httpapi/transcription_finalize.go",
+              "literal": "\"transcript.finalize_claim\""
+            }
+          ]
+        },
+        {
+          "name": "transcript.db.job",
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ],
+          "emit_sites": []
+        }
+      ],
+      "rule": "observability/rules/transcript.wake_lost.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.wake_lost/positive.json",
+        "healthy": "observability/fixtures/transcript.wake_lost/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.wake_lost.fault.test.mjs"
     },
     {
       "code": "video.frozen",

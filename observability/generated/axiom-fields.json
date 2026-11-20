@@ -1,11 +1,11 @@
 {
   "doc": "Generated: the Axiom field schema per dataset and its budget. Envelope fields are in every dataset.",
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "da49ddafa5db",
   "datasets": [
     {
       "dataset": "lifecycle",
       "budget": 256,
-      "used": 62,
+      "used": 102,
       "fields": [
         {
           "name": "admission_request_id",
@@ -242,6 +242,166 @@
         {
           "name": "trace_id",
           "type": "string"
+        },
+        {
+          "name": "transcript_artifact_set",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_attempt_count",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_attempt_limit",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_attempt_state",
+          "type": "string"
+        },
+        {
+          "name": "transcript_available_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_chunk_index",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_completed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_created_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_cue_count",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_dead_letter_jobs",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_deleted",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_dispatch_source",
+          "type": "string"
+        },
+        {
+          "name": "transcript_error_code",
+          "type": "string"
+        },
+        {
+          "name": "transcript_exists",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_finished_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_first_retry_code",
+          "type": "string"
+        },
+        {
+          "name": "transcript_first_retry_kind",
+          "type": "string"
+        },
+        {
+          "name": "transcript_generation",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_in_progress",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_job_kind",
+          "type": "string"
+        },
+        {
+          "name": "transcript_job_state",
+          "type": "string"
+        },
+        {
+          "name": "transcript_latest_job",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_lease_expiry_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_mode",
+          "type": "string"
+        },
+        {
+          "name": "transcript_observed_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_open_jobs",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_prep_state",
+          "type": "string"
+        },
+        {
+          "name": "transcript_provider",
+          "type": "string"
+        },
+        {
+          "name": "transcript_r2_result",
+          "type": "string"
+        },
+        {
+          "name": "transcript_recording_state",
+          "type": "string"
+        },
+        {
+          "name": "transcript_recordings",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_route",
+          "type": "string"
+        },
+        {
+          "name": "transcript_sha_match",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_sha_set",
+          "type": "boolean"
+        },
+        {
+          "name": "transcript_size_bytes",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_speech_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_state",
+          "type": "string"
+        },
+        {
+          "name": "transcript_talk_status",
+          "type": "string"
+        },
+        {
+          "name": "transcript_terminal_ms",
+          "type": "integer"
+        },
+        {
+          "name": "transcript_updated_ms",
+          "type": "integer"
         },
         {
           "name": "trigger",

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "06a4092b8fb7",
+  "schema_ver": "da49ddafa5db",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -523,7 +523,7 @@
     {
       "area": "transcription",
       "slice": 11,
-      "title": "Transcription",
+      "title": "Transcription: chunk claim, dispatch, provider, accept, finalize, store and serve, plus the talk-time view.",
       "prefixes": ["transcript"],
       "test_only": false
     },
@@ -1084,6 +1084,387 @@
       "doc": "The W3C trace."
     },
     {
+      "name": "transcript_artifact_set",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether artifact_key, artifact_size and artifact_content_type are all stored."
+    },
+    {
+      "name": "transcript_attempt_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "A job row's attempt_count."
+    },
+    {
+      "name": "transcript_attempt_limit",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "A job row's attempt_limit."
+    },
+    {
+      "name": "transcript_attempt_state",
+      "type": "enum",
+      "values": ["started", "retryable_failure", "accepted", "rejected", "cancelled"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "A transcription_attempts row's state."
+    },
+    {
+      "name": "transcript_available_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The job row's available_at, in Unix milliseconds."
+    },
+    {
+      "name": "transcript_chunk_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many source chunks a transcription has."
+    },
+    {
+      "name": "transcript_chunk_index",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Which chunk of the source a row is about."
+    },
+    {
+      "name": "transcript_claimed",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many assignments a claim response carried."
+    },
+    {
+      "name": "transcript_completed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The row's completed_at, in Unix milliseconds."
+    },
+    {
+      "name": "transcript_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many assignments a dispatcher claim returned."
+    },
+    {
+      "name": "transcript_created_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The row's created_at, in Unix milliseconds."
+    },
+    {
+      "name": "transcript_cue_count",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many cues a document or readback holds."
+    },
+    {
+      "name": "transcript_dead",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether this Recording's transcription is dead: it counted as in progress but can never complete."
+    },
+    {
+      "name": "transcript_dead_letter_jobs",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many dead_letter artifact jobs a transcription has."
+    },
+    {
+      "name": "transcript_deleted",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether the transcriptions row has deleted_at set."
+    },
+    {
+      "name": "transcript_dispatch_source",
+      "type": "enum",
+      "values": ["wake", "finalize", "cleanup", "reconcile", "eventbridge.scheduler"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "What invoked the dispatcher (dispatcher.ts QUEUES_BY_SOURCE)."
+    },
+    {
+      "name": "transcript_error_code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The dispatcher's safe error code, as stored on the job and reported in retry decisions."
+    },
+    {
+      "name": "transcript_exists",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether the db row this observation names exists."
+    },
+    {
+      "name": "transcript_finished_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "An attempt row's finished_at, in Unix milliseconds."
+    },
+    {
+      "name": "transcript_first_retry_code",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The latest error_code of the transcription's first job with attempt_count > 1."
+    },
+    {
+      "name": "transcript_first_retry_kind",
+      "type": "enum",
+      "values": ["transcription_chunk", "transcription_finalize"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The kind of the transcription's first job with attempt_count > 1."
+    },
+    {
+      "name": "transcript_generation",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The transcript's generation, or the attempt row's generation."
+    },
+    {
+      "name": "transcript_has_row",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether this Recording has a transcriptions row."
+    },
+    {
+      "name": "transcript_in_progress",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many Recordings talk-time counted as still transcribing."
+    },
+    {
+      "name": "transcript_job_kind",
+      "type": "enum",
+      "values": ["transcription_chunk", "transcription_finalize", "render", "transcription", "recording"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Which job row the item is: an artifact_jobs kind, or render for the Recording's export job."
+    },
+    {
+      "name": "transcript_job_state",
+      "type": "enum",
+      "values": ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The artifact_jobs.state the checker read."
+    },
+    {
+      "name": "transcript_latest_job",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether this job item is its transcription's latest artifact job."
+    },
+    {
+      "name": "transcript_lease_expiry_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The job row's lease_expires_at, in Unix milliseconds."
+    },
+    {
+      "name": "transcript_mode",
+      "type": "enum",
+      "values": ["automatic", "on_demand", "disabled"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The Episode's transcription mode from its config snapshot."
+    },
+    {
+      "name": "transcript_observed_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "An attempt's provider_observed_duration_ms: the speech the provider measured."
+    },
+    {
+      "name": "transcript_open_jobs",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many open artifact jobs a transcription has (pending, leased or retryable)."
+    },
+    {
+      "name": "transcript_prep_state",
+      "type": "enum",
+      "values": ["pending", "leased", "succeeded", "retryable_failure", "terminal_failure", "cancelled", "none"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The recording_jobs row's state (kind transcription for audio preparation, render for export), or none when absent."
+    },
+    {
+      "name": "transcript_provider",
+      "type": "string",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The provider an attempt row names (openrouter is the MAI provider's name)."
+    },
+    {
+      "name": "transcript_queue",
+      "type": "enum",
+      "values": ["transcription", "finalize", "cleanup"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Which dispatcher queue drained."
+    },
+    {
+      "name": "transcript_r2_result",
+      "type": "enum",
+      "values": ["ok", "not_found", "error", "size_mismatch", "sha_mismatch", "type_mismatch", "invalid"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "What the checker's readback of the stored document found."
+    },
+    {
+      "name": "transcript_recording_state",
+      "type": "enum",
+      "values": ["recording", "processing", "finalizing", "completed", "failed", "deleted"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The recordings.status the checker read."
+    },
+    {
+      "name": "transcript_recordings",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "How many Recordings of the Episode the checker read."
+    },
+    {
+      "name": "transcript_route",
+      "type": "enum",
+      "values": ["document", "talk_time"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Which read path a transcript.document_read op measured."
+    },
+    {
+      "name": "transcript_sha_match",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether the readback's sha256 equals the stored artifact_sha256."
+    },
+    {
+      "name": "transcript_sha_set",
+      "type": "bool",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Whether artifact_sha256 is stored."
+    },
+    {
+      "name": "transcript_size_bytes",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Bytes the readback returned."
+    },
+    {
+      "name": "transcript_speech_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "Speech the -45 dB gate measured in a chunk's audio."
+    },
+    {
+      "name": "transcript_state",
+      "type": "enum",
+      "values": ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "none"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The transcriptions.status the checker read, or none when the Recording has no row."
+    },
+    {
+      "name": "transcript_talk_status",
+      "type": "enum",
+      "values": ["available", "transcript_pending", "no_transcript", "live"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The status the talk-time endpoint served."
+    },
+    {
+      "name": "transcript_terminal_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The row's terminal_at, in Unix milliseconds; absent when not terminal."
+    },
+    {
+      "name": "transcript_updated_ms",
+      "type": "int",
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/transcription",
+      "doc": "The row's updated_at, in Unix milliseconds."
+    },
+    {
       "name": "trigger",
       "type": "string",
       "required": false,
@@ -1138,6 +1519,195 @@
       "area": "selftest",
       "test_only": true,
       "doc": "A self-test expected outcome."
+    },
+    {
+      "code": "transcript.accept_failed",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The accept or finalize-accept call itself failed."
+    },
+    {
+      "code": "transcript.artifact_mismatch",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The stored object's key, size or content type does not match the transcriptions row."
+    },
+    {
+      "code": "transcript.artifact_verification_failed",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The final artifact failed verification at finalizer accept."
+    },
+    {
+      "code": "transcript.assignment_invalid",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The dispatcher judged the assignment's data invalid."
+    },
+    {
+      "code": "transcript.chunk_download_retryable",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "A chunk or manifest download failed retryably inside the dispatcher."
+    },
+    {
+      "code": "transcript.control_api_rejected",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The control plane rejected the dispatcher's call."
+    },
+    {
+      "code": "transcript.decode",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The stored document did not decode or failed transcript.v1 validation."
+    },
+    {
+      "code": "transcript.dispatcher_failure",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The dispatcher failed in a way its error classifier could not name."
+    },
+    {
+      "code": "transcript.invalid_assignment",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The claimed job's assignment could not be built (missing chunk, source or manifest)."
+    },
+    {
+      "code": "transcript.late_completion",
+      "outcome": "expected",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The control plane refused a completion or retry because the lease moved on or the work finished already."
+    },
+    {
+      "code": "transcript.lease_expired",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The job's lease expired before its attempt ended; recovered jobs carry this reason."
+    },
+    {
+      "code": "transcript.lease_stale",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The claimed lease had already expired when the assignment was built."
+    },
+    {
+      "code": "transcript.network_failure",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "A fetch failed at the network layer inside the dispatcher."
+    },
+    {
+      "code": "transcript.no_claimable_job",
+      "outcome": "expected",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The claim found no claimable job."
+    },
+    {
+      "code": "transcript.not_ready",
+      "outcome": "expected",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The document route was asked for a transcription that has no artifact yet."
+    },
+    {
+      "code": "transcript.object_get",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The object store could not return the transcript artifact."
+    },
+    {
+      "code": "transcript.provider_rate_limited",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The transcription provider rate-limited the request."
+    },
+    {
+      "code": "transcript.provider_rejected",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The transcription provider rejected the request non-retryably."
+    },
+    {
+      "code": "transcript.provider_schema_invalid",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The transcription provider's response failed schema validation."
+    },
+    {
+      "code": "transcript.provider_timeout",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The transcription provider timed out."
+    },
+    {
+      "code": "transcript.provider_unavailable",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The transcription provider answered 5xx."
+    },
+    {
+      "code": "transcript.repository_error",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The claim's repository call failed."
+    },
+    {
+      "code": "transcript.result_verification_failed",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The result object failed verification at chunk accept."
+    },
+    {
+      "code": "transcript.timeout",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The dispatcher's deadline or cancel signal fired."
+    },
+    {
+      "code": "transcript.unknown_failure",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "An error the dispatcher classified only by its safe code."
+    },
+    {
+      "code": "transcript.url_failed",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "Signing a chunk, manifest or output URL failed after the lease committed."
+    },
+    {
+      "code": "transcript.wake_failed",
+      "outcome": "error",
+      "area": "transcription",
+      "test_only": false,
+      "doc": "The API's wake call to the dispatcher did not queue."
     },
     {
       "code": "unclassified",
@@ -1297,6 +1867,632 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "transcript.chunk",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["transcription_dispatcher"],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/transcription-dispatcher/src/transcriber.ts",
+          "literal": "\"transcript.chunk\""
+        }
+      ],
+      "doc": "One chunk assignment's terminal: ok after the control plane accepted the result, expected(transcript.late_completion) on the 409 path, or error(transcript.<safe error code>)."
+    },
+    {
+      "name": "transcript.claim",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["leased", "invalid_assignment", "lease_stale", "url_failed", "none", "repository_error"],
+      "fields": {
+        "job_id": {
+          "required": false
+        },
+        "attempt": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_worker_claim.go",
+          "literal": "\"transcript.claim\""
+        }
+      ],
+      "doc": "One decision per claimed job, plus none (nothing claimable) or repository_error per call. The lease commits before URL signing, so url_failed, invalid_assignment and lease_stale name the orphaned-lease fault of issue #1510."
+    },
+    {
+      "name": "transcript.db.attempt",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "transcript_attempt_state": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        },
+        "transcript_generation": {
+          "required": true
+        },
+        "transcript_provider": {
+          "required": false
+        },
+        "transcript_observed_ms": {
+          "required": false
+        },
+        "transcript_error_code": {
+          "required": false
+        },
+        "transcript_finished_ms": {
+          "required": false
+        },
+        "transcript_chunk_index": {
+          "required": false
+        },
+        "transcript_speech_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of one transcription_attempts row of the item's transcript (its own chunk for a chunk job, every chunk for the finalize job)."
+    },
+    {
+      "name": "transcript.db.episode",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "episode_id": {
+          "required": true
+        },
+        "transcript_mode": {
+          "required": true
+        },
+        "transcript_recordings": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the Episode's transcription mode and how many of its Recordings exist, for episode items."
+    },
+    {
+      "name": "transcript.db.job",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "transcript_job_state": {
+          "required": true
+        },
+        "transcript_job_kind": {
+          "required": true
+        },
+        "transcript_error_code": {
+          "required": false
+        },
+        "transcript_attempt_count": {
+          "required": true
+        },
+        "transcript_attempt_limit": {
+          "required": true
+        },
+        "transcript_terminal_ms": {
+          "required": false
+        },
+        "transcript_available_ms": {
+          "required": true
+        },
+        "transcript_lease_expiry_ms": {
+          "required": false
+        },
+        "transcript_created_ms": {
+          "required": true
+        },
+        "transcript_updated_ms": {
+          "required": true
+        },
+        "transcript_latest_job": {
+          "required": true
+        },
+        "transcript_open_jobs": {
+          "required": true
+        },
+        "transcript_dead_letter_jobs": {
+          "required": true
+        },
+        "transcript_first_retry_kind": {
+          "required": false
+        },
+        "transcript_first_retry_code": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the item's artifact_jobs row. Emitted by the evidence reader, never a program."
+    },
+    {
+      "name": "transcript.db.prep",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "transcript_exists": {
+          "required": true
+        },
+        "transcript_prep_state": {
+          "required": true
+        },
+        "transcript_error_code": {
+          "required": false
+        },
+        "transcript_terminal_ms": {
+          "required": false
+        },
+        "transcript_attempt_count": {
+          "required": false
+        },
+        "transcript_available_ms": {
+          "required": false
+        },
+        "transcript_lease_expiry_ms": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the latest recording_jobs row of kind transcription for the item's Recording; transcript_exists false means no preparation row."
+    },
+    {
+      "name": "transcript.db.recording",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": true
+        },
+        "transcript_recording_state": {
+          "required": true
+        },
+        "transcript_completed_ms": {
+          "required": false
+        },
+        "transcript_mode": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the Recording row behind the item, one per Recording of the Episode for episode items."
+    },
+    {
+      "name": "transcript.db.render",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "transcript_prep_state": {
+          "required": true
+        },
+        "transcript_terminal_ms": {
+          "required": false
+        },
+        "transcript_available_ms": {
+          "required": false
+        },
+        "transcript_created_ms": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the item's own recording_jobs row when the item is the Recording's export (render) job."
+    },
+    {
+      "name": "transcript.db.talk",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "episode_id": {
+          "required": true
+        },
+        "transcript_talk_status": {
+          "required": true
+        },
+        "transcript_in_progress": {
+          "required": true
+        }
+      },
+      "emit_sites": [],
+      "doc": "The talk-time status the checker's db read expects: it replays transcriptInProgress, including its dead-Recording bug."
+    },
+    {
+      "name": "transcript.db.transcription",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "recording_id": {
+          "required": false
+        },
+        "transcript_exists": {
+          "required": true
+        },
+        "transcript_state": {
+          "required": false
+        },
+        "transcript_deleted": {
+          "required": false
+        },
+        "transcript_created_ms": {
+          "required": false
+        },
+        "transcript_updated_ms": {
+          "required": false
+        },
+        "transcript_completed_ms": {
+          "required": false
+        },
+        "transcript_artifact_set": {
+          "required": false
+        },
+        "transcript_sha_set": {
+          "required": false
+        },
+        "transcript_generation": {
+          "required": false
+        },
+        "transcript_mode": {
+          "required": false
+        },
+        "transcript_open_jobs": {
+          "required": false
+        },
+        "transcript_dead_letter_jobs": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's read of the transcriptions row for the item's transcript; transcript_exists false means the Recording has none."
+    },
+    {
+      "name": "transcript.dispatcher.invoke",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["transcription_dispatcher"],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "transcript_dispatch_source": {
+          "required": true
+        },
+        "job_id": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/transcription-dispatcher/src/index.ts",
+          "literal": "\"transcript.dispatcher.invoke\""
+        }
+      ],
+      "doc": "One dispatcher invocation: a wake, a scheduled reconcile, or a targeted drain. Field transcript_dispatch_source names what called it; job_id is set on wake dispatches."
+    },
+    {
+      "name": "transcript.document_read",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "transcript_route": {
+          "required": true
+        },
+        "job_id": {
+          "required": false
+        },
+        "transcript_cue_count": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_document.go",
+          "literal": "\"transcript.document_read\""
+        },
+        {
+          "path": "apps/api/internal/talktime/service.go",
+          "literal": "\"transcript.document_read\""
+        }
+      ],
+      "doc": "Reading a stored transcript document, on the document route or inside talk-time: ok, expected(transcript.not_ready), or error(object_get, artifact_mismatch, decode). Never the body."
+    },
+    {
+      "name": "transcript.finalize",
+      "kind": "op",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["transcription_dispatcher"],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        },
+        "transcript_cue_count": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/transcription-dispatcher/src/finalizer.ts",
+          "literal": "\"transcript.finalize\""
+        }
+      ],
+      "doc": "One finalizer assignment's terminal: ok, expected(transcript.late_completion), or error(transcript.<safe error code>), with the merged document's cue count."
+    },
+    {
+      "name": "transcript.finalize_accept",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["accepted", "rejected", "error"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_finalize.go",
+          "literal": "\"transcript.finalize_accept\""
+        }
+      ],
+      "doc": "The finalizer-accept decision: accepted, rejected (artifact verification failed) or error."
+    },
+    {
+      "name": "transcript.finalize_claim",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["leased", "none", "url_failed", "repository_error"],
+      "fields": {
+        "job_id": {
+          "required": false
+        },
+        "attempt": {
+          "required": false
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_finalize.go",
+          "literal": "\"transcript.finalize_claim\""
+        }
+      ],
+      "doc": "One decision per claimed finalizer job, plus none or repository_error per call; url_failed when chunk GET or output PUT signing fails after the lease committed."
+    },
+    {
+      "name": "transcript.finalize_retry",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["retryable", "dead_letter"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        },
+        "transcript_error_code": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_finalize.go",
+          "literal": "\"transcript.finalize_retry\""
+        }
+      ],
+      "doc": "After RetryFinalizer commits: retryable or dead_letter, with the error code."
+    },
+    {
+      "name": "transcript.job_complete",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["accepted", "rejected", "error"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_worker.go",
+          "literal": "\"transcript.job_complete\""
+        }
+      ],
+      "doc": "The result-accept decision: accepted, rejected (result verification failed) or error (the accept call failed)."
+    },
+    {
+      "name": "transcript.job_retry",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["retryable", "dead_letter"],
+      "fields": {
+        "job_id": {
+          "required": true
+        },
+        "attempt": {
+          "required": true
+        },
+        "transcript_error_code": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/transcription_worker.go",
+          "literal": "\"transcript.job_retry\""
+        }
+      ],
+      "doc": "After the retry service commits: retryable or dead_letter, with the dispatcher's safe error code and the attempt it ended."
+    },
+    {
+      "name": "transcript.r2.object",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": [],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "transcript_r2_result": {
+          "required": true
+        },
+        "transcript_size_bytes": {
+          "required": false
+        },
+        "transcript_sha_match": {
+          "required": false
+        },
+        "transcript_cue_count": {
+          "required": false
+        },
+        "transcript_provider": {
+          "required": false
+        }
+      },
+      "emit_sites": [],
+      "doc": "The checker's own readback of the stored document: what it found, its size, cue count and whether the bytes match the stored sha256."
+    },
+    {
+      "name": "transcript.talk_time_served",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "fields": {
+        "episode_id": {
+          "required": true
+        },
+        "transcript_talk_status": {
+          "required": true
+        },
+        "transcript_in_progress": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/httpapi/episode_talk_time.go",
+          "literal": "\"transcript.talk_time_served\""
+        }
+      ],
+      "doc": "The status the Episode talk-time endpoint served and how many Recordings it counted as still transcribing."
+    },
+    {
+      "name": "transcript.wake",
+      "kind": "decision",
+      "dataset": "lifecycle",
+      "side": "server",
+      "modules": ["api"],
+      "area": "transcription",
+      "test_only": false,
+      "decisions": ["queued", "failed"],
+      "fields": {
+        "job_id": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "apps/api/internal/adapters/aws/lambdawaker/waker.go",
+          "literal": "\"transcript.wake\""
+        }
+      ],
+      "doc": "The API's wake call to the dispatcher for a job: queued (accepted) or failed (unavailable, encoding, invoke or rejected status), always with the job it was for."
     }
   ],
   "machines": [
@@ -1353,6 +2549,50 @@
       ],
       "triggers": ["push", "pull", "lock", "unlock"],
       "doc": "A self-test machine."
+    },
+    {
+      "name": "transcript.job",
+      "area": "transcription",
+      "test_only": false,
+      "states": ["pending", "leased", "retryable", "completed", "dead_letter", "cancelled"],
+      "initial": "pending",
+      "edges": [
+        ["pending", "leased"],
+        ["retryable", "leased"],
+        ["leased", "completed"],
+        ["leased", "retryable"],
+        ["leased", "dead_letter"],
+        ["leased", "pending"],
+        ["leased", "cancelled"],
+        ["pending", "cancelled"],
+        ["retryable", "dead_letter"],
+        ["dead_letter", "pending"]
+      ],
+      "triggers": ["claim", "retry", "complete", "cancel", "recover", "requeue"],
+      "doc": "The artifact_jobs.state of a transcription job (chunk or finalize), committed by the worker repository."
+    },
+    {
+      "name": "transcript.status",
+      "area": "transcription",
+      "test_only": false,
+      "states": ["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted"],
+      "initial": "not_requested",
+      "edges": [
+        ["not_requested", "preparing"],
+        ["preparing", "transcribing"],
+        ["preparing", "terminal_failure"],
+        ["transcribing", "verifying"],
+        ["transcribing", "retryable_failure"],
+        ["transcribing", "terminal_failure"],
+        ["retryable_failure", "transcribing"],
+        ["retryable_failure", "terminal_failure"],
+        ["verifying", "complete"],
+        ["verifying", "retryable_failure"],
+        ["verifying", "terminal_failure"],
+        ["complete", "deleted"]
+      ],
+      "triggers": ["request", "prepare", "claim", "retry", "fail", "finalize_complete", "delete"],
+      "doc": "The transcriptions.status of a transcript. Only verifying to complete is emitted today (the finalizer's completion commit)."
     }
   ],
   "facts": [
@@ -1451,6 +2691,366 @@
       "per": "any",
       "events": [],
       "doc": "A problem report a person filed, from a seat or from outside the call. Claim: the report kind."
+    },
+    {
+      "name": "transcript.attempts",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.attempt",
+          "source": "db",
+          "claim": "transcript_attempt_state",
+          "failure_claims": [],
+          "fields": ["transcript_attempt_state", "attempt", "transcript_generation", "transcript_provider", "transcript_observed_ms", "transcript_error_code", "transcript_finished_ms", "transcript_chunk_index", "transcript_speech_ms", "est_server_ms"]
+        }
+      ],
+      "doc": "The transcription_attempts rows of the item's transcript: its own chunk's attempts for a chunk job, every chunk's for the finalize job. Claim: each attempt's state."
+    },
+    {
+      "name": "transcript.chunk_op",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.chunk",
+          "source": "lambda",
+          "claim": "outcome",
+          "failure_claims": ["error"],
+          "fields": ["job_id", "attempt", "reason_code", "outcome", "est_server_ms"]
+        }
+      ],
+      "doc": "The dispatcher's chunk-work terminals for the item's job. Claim: the op's outcome."
+    },
+    {
+      "name": "transcript.claim_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.claim",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's claim decisions for the item's job. Claim: what was decided."
+    },
+    {
+      "name": "transcript.complete_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.job_complete",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's accept decisions for the item's job. Claim: accepted, rejected or error."
+    },
+    {
+      "name": "transcript.doc",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.document_read",
+          "source": "api",
+          "claim": "outcome",
+          "failure_claims": ["error"],
+          "fields": ["transcript_route", "episode_id", "job_id", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
+        }
+      ],
+      "doc": "Document-read ops that read the item's transcript artifact (document route and talk-time). Claim: the op's outcome."
+    },
+    {
+      "name": "transcript.episode",
+      "area": "transcription",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.episode",
+          "source": "db",
+          "claim": "transcript_mode",
+          "failure_claims": [],
+          "fields": ["episode_id", "transcript_mode", "transcript_recordings", "est_server_ms"]
+        }
+      ],
+      "doc": "The Episode's transcription mode and Recording count, read by the checker for episode items."
+    },
+    {
+      "name": "transcript.finalize_accept_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.finalize_accept",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's finalize-accept decisions for the item's job. Claim: accepted, rejected or error."
+    },
+    {
+      "name": "transcript.finalize_claim_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.finalize_claim",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's finalize-claim decisions for the item's job. Claim: what was decided."
+    },
+    {
+      "name": "transcript.finalize_op",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.finalize",
+          "source": "lambda",
+          "claim": "outcome",
+          "failure_claims": ["error"],
+          "fields": ["job_id", "attempt", "transcript_cue_count", "reason_code", "outcome", "est_server_ms"]
+        }
+      ],
+      "doc": "The dispatcher's finalize-work terminals for the item's job. Claim: the op's outcome."
+    },
+    {
+      "name": "transcript.finalize_retry_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.finalize_retry",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's finalize-retry decisions for the item's job. Claim: retryable or dead_letter."
+    },
+    {
+      "name": "transcript.invoke",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.dispatcher.invoke",
+          "source": "lambda",
+          "claim": "outcome",
+          "failure_claims": ["error"],
+          "fields": ["transcript_dispatch_source", "job_id", "outcome", "est_server_ms"]
+        }
+      ],
+      "doc": "Dispatcher invocations bound to the item's job (wake dispatches carry it). Claim: the op's outcome."
+    },
+    {
+      "name": "transcript.job_state",
+      "area": "transcription",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.job",
+          "source": "db",
+          "claim": "transcript_job_state",
+          "failure_claims": [],
+          "fields": [
+            "job_id",
+            "transcript_job_state",
+            "transcript_job_kind",
+            "transcript_error_code",
+            "transcript_attempt_count",
+            "transcript_attempt_limit",
+            "transcript_terminal_ms",
+            "transcript_available_ms",
+            "transcript_lease_expiry_ms",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_latest_job",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "est_server_ms",
+            "transcript_first_retry_kind",
+            "transcript_first_retry_code"
+          ]
+        }
+      ],
+      "doc": "The item's artifact_jobs row, read by the checker from Postgres. Claim: its state."
+    },
+    {
+      "name": "transcript.object",
+      "area": "transcription",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.r2.object",
+          "source": "r2",
+          "claim": "transcript_r2_result",
+          "failure_claims": [],
+          "fields": ["transcript_r2_result", "transcript_size_bytes", "transcript_sha_match", "transcript_cue_count", "transcript_provider", "est_server_ms"]
+        }
+      ],
+      "doc": "The checker's readback of the stored document from r2. Claim: what the read found."
+    },
+    {
+      "name": "transcript.prep",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.prep",
+          "source": "db",
+          "claim": "transcript_prep_state",
+          "failure_claims": [],
+          "fields": ["recording_id", "transcript_exists", "transcript_prep_state", "transcript_error_code", "transcript_terminal_ms", "transcript_attempt_count", "transcript_available_ms", "transcript_lease_expiry_ms", "est_server_ms"]
+        }
+      ],
+      "doc": "The Recording's latest recording_jobs row of kind transcription. Claim: its state; transcript_exists false means the preparation row was never written."
+    },
+    {
+      "name": "transcript.recording",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.recording",
+          "source": "db",
+          "claim": "transcript_recording_state",
+          "failure_claims": [],
+          "fields": ["recording_id", "transcript_recording_state", "transcript_completed_ms", "transcript_mode", "est_server_ms"]
+        }
+      ],
+      "doc": "The Recording row behind the item (one per Recording for episode items). Claim: its status."
+    },
+    {
+      "name": "transcript.render",
+      "area": "transcription",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.render",
+          "source": "db",
+          "claim": "transcript_prep_state",
+          "failure_claims": [],
+          "fields": ["job_id", "transcript_prep_state", "transcript_terminal_ms", "transcript_available_ms", "transcript_created_ms", "est_server_ms"]
+        }
+      ],
+      "doc": "The item's recording_jobs row when the item is the Recording's export job. Claim: its state."
+    },
+    {
+      "name": "transcript.retry_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.job_retry",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "attempt", "transcript_error_code", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's retry decisions for the item's job: the dispatcher's error code reaching the control plane. Claim: retryable or dead_letter."
+    },
+    {
+      "name": "transcript.row",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.db.transcription",
+          "source": "db",
+          "claim": "transcript_state",
+          "failure_claims": [],
+          "fields": [
+            "recording_id",
+            "transcript_exists",
+            "transcript_state",
+            "transcript_deleted",
+            "transcript_created_ms",
+            "transcript_updated_ms",
+            "transcript_completed_ms",
+            "transcript_artifact_set",
+            "transcript_sha_set",
+            "transcript_generation",
+            "transcript_mode",
+            "transcript_open_jobs",
+            "transcript_dead_letter_jobs",
+            "est_server_ms"
+          ]
+        }
+      ],
+      "doc": "The item's transcriptions row, read by the checker. Claim: its status; transcript_exists false means the Recording has none."
+    },
+    {
+      "name": "transcript.talk",
+      "area": "transcription",
+      "kind": "once",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.talk_time_served",
+          "source": "api",
+          "claim": "transcript_talk_status",
+          "failure_claims": [],
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
+        },
+        {
+          "event": "transcript.db.talk",
+          "source": "db",
+          "claim": "transcript_talk_status",
+          "failure_claims": [],
+          "fields": ["episode_id", "transcript_talk_status", "transcript_in_progress", "est_server_ms"]
+        }
+      ],
+      "doc": "The status the Episode talk-time endpoint served (api) against what the stored rows imply (db). Claim: the status."
+    },
+    {
+      "name": "transcript.wake_decision",
+      "area": "transcription",
+      "kind": "event",
+      "per": "item",
+      "events": [
+        {
+          "event": "transcript.wake",
+          "source": "api",
+          "claim": "decision",
+          "failure_claims": [],
+          "fields": ["job_id", "reason_code", "decision", "est_server_ms"]
+        }
+      ],
+      "doc": "The API's wake decisions for the item's job. Claim: queued or failed."
     }
   ],
   "symptoms": [
@@ -1723,6 +3323,430 @@
         "healthy": "observability/fixtures/share.wont_stop/healthy.json"
       },
       "fault_scenario": null
+    },
+    {
+      "code": "transcript.attempt_lost",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "A claimed chunk attempt's lease expired with no accepted result and no accepted retry, so the work was silently dropped and waits for lease recovery.",
+      "user_words": ["transcription restarted itself"],
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
+          "doc": "The job row: leased with an expired lease, or a recovered row with error_code lease_expired."
+        },
+        {
+          "fact": "transcript.attempts",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcription_attempts where chunk_id = (select chunk_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The attempts the control plane recorded."
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
+          "doc": "How the attempt's lease committed: leased, or the claim-handler failure decisions of issue #1510."
+        },
+        {
+          "fact": "transcript.complete_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.job_complete\"' api.log | grep {job}",
+          "doc": "Whether an accepted result exists for the attempt."
+        },
+        {
+          "fact": "transcript.retry_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.job_retry\"' api.log | grep {job}",
+          "doc": "Whether the attempt was reported retryable or dead."
+        },
+        {
+          "fact": "transcript.chunk_op",
+          "from": ["lambda"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.chunk\"' dispatcher.jsonl | grep {job}",
+          "doc": "The dispatcher's terminal for the attempt; its absence after a claim is the open gap."
+        }
+      ],
+      "rule": "observability/rules/transcript.attempt_lost.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.attempt_lost/positive.json",
+        "healthy": "observability/fixtures/transcript.attempt_lost/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.attempt_lost.fault.test.mjs"
+    },
+    {
+      "code": "transcript.failed",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "A transcription job reached dead_letter, or the transcription reached terminal_failure.",
+      "user_words": ["my transcript never came"],
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
+          "doc": "The job row: state, error code, attempts and terminal time."
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The transcription's status."
+        },
+        {
+          "fact": "transcript.retry_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.job_retry\"' api.log | grep {job}",
+          "doc": "The dispatcher's error code reaching the control plane."
+        },
+        {
+          "fact": "transcript.finalize_retry_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.finalize_retry\"' api.log | grep {job}",
+          "doc": "The finalizer's error code reaching the control plane."
+        },
+        {
+          "fact": "transcript.chunk_op",
+          "from": ["lambda"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.chunk\"' dispatcher.jsonl | grep {job}",
+          "doc": "The dispatcher's terminal for the chunk."
+        },
+        {
+          "fact": "transcript.finalize_op",
+          "from": ["lambda"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.finalize\"' dispatcher.jsonl | grep {job}",
+          "doc": "The dispatcher's terminal for the finalizer."
+        }
+      ],
+      "rule": "observability/rules/transcript.failed.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.failed/positive.json",
+        "healthy": "observability/fixtures/transcript.failed/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.failed.fault.test.mjs"
+    },
+    {
+      "code": "transcript.late",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "The transcript completed more than 60 minutes after the transcription row was created.",
+      "user_words": ["the transcript took over an hour"],
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "created_at and completed_at."
+        },
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
+          "doc": "The finalize job's row: attempts and latest error code for attribution."
+        }
+      ],
+      "rule": "observability/rules/transcript.late.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.late/positive.json",
+        "healthy": "observability/fixtures/transcript.late/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.late.fault.test.mjs"
+    },
+    {
+      "code": "transcript.speech_dropped",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "The dispatcher measured at least 2000 ms of speech in the audio, but the stored document has zero cues.",
+      "user_words": ["the transcript is empty"],
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The transcription is complete."
+        },
+        {
+          "fact": "transcript.attempts",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcription_attempts a join transcript_chunks c on a.chunk_id = c.id where a.transcript_id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "Each chunk's accepted attempt and the speech the provider measured."
+        },
+        {
+          "fact": "transcript.object",
+          "from": ["r2"],
+          "required": true,
+          "independent": 1,
+          "query": "r2 get <artifact_key>",
+          "doc": "The checker's readback: the stored document's cue count."
+        }
+      ],
+      "rule": "observability/rules/transcript.speech_dropped.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.speech_dropped/positive.json",
+        "healthy": "observability/fixtures/transcript.speech_dropped/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.speech_dropped.fault.test.mjs"
+    },
+    {
+      "code": "transcript.stuck",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "A transcription stopped moving: a job waits unclaimed, a lease outlived its expiry with no work recorded, a transcription sits mid-pipeline with no open job, or an automatic Recording never got a transcription.",
+      "user_words": ["the transcript never appeared"],
+      "witnesses": [
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
+          "doc": "The job's state, available_at and lease expiry."
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The transcription's status and last update."
+        },
+        {
+          "fact": "transcript.recording",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from recordings where id = (select recording_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The Recording's status and completion time."
+        },
+        {
+          "fact": "transcript.prep",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from recording_jobs where recording_id = '<rec>' and kind = 'transcription'\"",
+          "doc": "The audio-preparation job slice 10 owns."
+        },
+        {
+          "fact": "transcript.render",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from recording_jobs where id = '{job}'\"",
+          "doc": "The item's own row when it is the Recording's export job."
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
+          "doc": "Chunk claims in the last five minutes pick the schedule-vs-worker attribution."
+        },
+        {
+          "fact": "transcript.finalize_claim_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.finalize_claim\"' api.log | grep {job}",
+          "doc": "Finalizer claims in the last five minutes pick the schedule-vs-worker attribution."
+        }
+      ],
+      "rule": "observability/rules/transcript.stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.stuck/positive.json",
+        "healthy": "observability/fixtures/transcript.stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.stuck.fault.test.mjs"
+    },
+    {
+      "code": "transcript.talk_time_stuck",
+      "area": "transcription",
+      "slice": 11,
+      "item": "episode",
+      "per": "item",
+      "doc": "Talk-time answers transcript_pending for an Episode where no transcript can arrive.",
+      "user_words": ["talk time still says processing"],
+      "witnesses": [
+        {
+          "fact": "transcript.episode",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select config_snapshot from episodes where id = '{episode}'\"; reader: config_snapshot.artifact_policy.transcription.mode",
+          "doc": "The Episode's transcription mode and Recording count."
+        },
+        {
+          "fact": "transcript.recording",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from recordings where episode_id = '{episode}'\"",
+          "doc": "Every Recording's status and completion time."
+        },
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where episode_id = '{episode}'\"",
+          "doc": "Every transcription row of the Episode."
+        },
+        {
+          "fact": "transcript.prep",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from recording_jobs where episode_id = '{episode}' and kind = 'transcription'\"",
+          "doc": "Every preparation row of the Episode."
+        },
+        {
+          "fact": "transcript.talk",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.talk_time_served\"' api.log | grep {episode}",
+          "doc": "The live answer the endpoint served."
+        }
+      ],
+      "rule": "observability/rules/transcript.talk_time_stuck.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.talk_time_stuck/positive.json",
+        "healthy": "observability/fixtures/transcript.talk_time_stuck/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.talk_time_stuck.fault.test.mjs"
+    },
+    {
+      "code": "transcript.unreadable",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "The transcription is complete but its stored document is missing, differs from the recorded metadata, fails validation, or the API failed to read a document that is in fact readable.",
+      "user_words": ["the transcript won't open"],
+      "witnesses": [
+        {
+          "fact": "transcript.row",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from transcriptions where id = (select transcript_id from artifact_jobs where id = '{job}')\"",
+          "doc": "The status and recorded artifact metadata."
+        },
+        {
+          "fact": "transcript.object",
+          "from": ["r2"],
+          "required": true,
+          "independent": 1,
+          "query": "r2 get <artifact_key>",
+          "doc": "The checker's own readback of the stored document."
+        },
+        {
+          "fact": "transcript.doc",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.document_read\"' api.log | grep {episode}",
+          "doc": "Document reads the API attempted in the window."
+        }
+      ],
+      "rule": "observability/rules/transcript.unreadable.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.unreadable/positive.json",
+        "healthy": "observability/fixtures/transcript.unreadable/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.unreadable.fault.test.mjs"
+    },
+    {
+      "code": "transcript.wake_lost",
+      "area": "transcription",
+      "slice": 11,
+      "item": "job",
+      "per": "item",
+      "doc": "The API's wake call to the dispatcher failed, and the first claim came more than 90 s after the job was created.",
+      "user_words": [],
+      "witnesses": [
+        {
+          "fact": "transcript.wake_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.wake\"' api.log | grep {job}",
+          "doc": "The wake decisions for this job."
+        },
+        {
+          "fact": "transcript.claim_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.claim\"' api.log | grep {job}",
+          "doc": "The first leased claim's time."
+        },
+        {
+          "fact": "transcript.finalize_claim_decision",
+          "from": ["api"],
+          "required": true,
+          "independent": 1,
+          "query": "grep '\"name\":\"transcript.finalize_claim\"' api.log | grep {job}",
+          "doc": "Finalizer claims are the pickup for finalize jobs."
+        },
+        {
+          "fact": "transcript.job_state",
+          "from": ["db"],
+          "required": true,
+          "independent": 1,
+          "query": "psql -c \"select * from artifact_jobs where id = '{job}'\"",
+          "doc": "The job's created_at is the 90-second clock's start."
+        }
+      ],
+      "rule": "observability/rules/transcript.wake_lost.mjs",
+      "fixtures": {
+        "positive": "observability/fixtures/transcript.wake_lost/positive.json",
+        "healthy": "observability/fixtures/transcript.wake_lost/healthy.json"
+      },
+      "fault_scenario": "scripts/transcription-dispatcher/transcript.wake_lost.fault.test.mjs"
     },
     {
       "code": "video.frozen",
