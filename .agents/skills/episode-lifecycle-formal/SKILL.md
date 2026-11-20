@@ -28,7 +28,7 @@ No rule is broken today. `findings` is empty, and `tools/formal/episode-lifecycl
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- apps/api/internal/adapters/postgres/episode_lifecycle_create.go apps/api/internal/adapters/postgres/episode_control.go apps/api/db/queries/sync_lifecycle.sql apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex apps/sync/lib/chalk_sync/external_operation_consumer.ex
+git diff --stat 98385cafd771ec4ea6d0cbd876eb5e4cdc43c7e1 -- $(node tools/formal/select-models.mjs --paths episode-lifecycle)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as recording or chat code in the same file, needs no model work. Run the check anyway, because it is cheap.
@@ -64,7 +64,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 3. It checks each rule in `findings` (none today) and needs TLC to report it as broken, so a fixed finding does not go unnoticed.
 4. It runs each broken variant in `breaks`, and needs TLC to report the named rule as broken. This proves the check can still fail.
 
-The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/episode-lifecycle/run.sh` in `.github/workflows/formal-episode-lifecycle.yml` when a covered file or this model changes.
+The full TLC logs go to the folder that the last line prints. CI runs `tools/formal/episode-lifecycle/run.sh` in `.github/workflows/formal-models.yml` when a covered file or this model changes.
 
 ## Read a failure
 

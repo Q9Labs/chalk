@@ -23,7 +23,7 @@ The model has two reconnect rules for the device. `decided` is the rule the prod
 ## Does my change touch the model?
 
 ```sh
-git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- sdks/typescript/client/src/space-client/media-controller.ts
+git diff --stat 941d5710deeddb444ef904519bf2a792f608fd36 -- $(node tools/formal/select-models.mjs --paths media-control)
 ```
 
 If the diff changes how an off is sent, how a failed or refused revision is settled, or what is resent after a reconnect, read it against the model. Other changes, such as device selection or screen-share capture, do not touch it.
@@ -50,7 +50,7 @@ tools/formal/media-control/run.sh
 
 It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4) once into `~/.cache/chalk-tla`. The full run has 17 `runs.txt` rows and 33 `heal-runs.txt` rows and takes about 15 minutes. The script exits non-zero if any row's outcome differs from the `pass` or `violated` in its table.
 
-CI runs a bounded subset in `.github/workflows/formal-media-control.yml`. the run script takes row names, and then it does not overwrite the summary files:
+CI runs a bounded subset in `.github/workflows/formal-models.yml`. the run script takes row names, and then it does not overwrite the summary files:
 
 ```sh
 tools/formal/media-control/run.sh cf-decided-safety-1src own-decided-safety-1src cf-current-P2-1src cf-current-P4-1src cf-current-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute

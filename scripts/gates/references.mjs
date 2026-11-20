@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
+import { formalManifestProblems } from "../../tools/formal/check-manifest.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
 const binaryExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".svg", ".wav", ".mp3", ".ogg", ".opus", ".mp4", ".webm", ".mov", ".woff2", ".gz", ".zip", ".bin"]);
@@ -114,7 +115,7 @@ export function brokenWorkflowReferences(root = repositoryRoot, files = trackedF
 }
 
 if (import.meta.main) {
-  const failures = [...uncalledScripts().map((script) => `${script}: nothing calls this script; call it or delete it`), ...brokenWorkflowReferences()];
+  const failures = [...uncalledScripts().map((script) => `${script}: nothing calls this script; call it or delete it`), ...brokenWorkflowReferences(), ...formalManifestProblems()];
   for (const failure of failures) console.error(failure);
   if (failures.length > 0) process.exitCode = 1;
   else console.log("References are valid: every script has a caller and every workflow path exists.");

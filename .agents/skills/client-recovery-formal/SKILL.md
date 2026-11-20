@@ -37,7 +37,7 @@ The model found three bugs. The code fixes them, and `runs` keeps each old behav
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat cb63aa3cc2606b1a25dca59916ce144c8aedd559 -- sdks/typescript/client/src/connection/lifecycle.ts sdks/typescript/client/src/access/manager.ts sdks/typescript/client/src/sync/v1-client.ts sdks/typescript/client/src/media/client.ts
+git diff --stat cb63aa3cc2606b1a25dca59916ce144c8aedd559 -- $(node tools/formal/select-models.mjs --paths client-recovery)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions, such as diagnostics or the join trace, needs no model work. Run the check anyway, because it is cheap.
@@ -78,7 +78,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 `tools/formal/client-recovery/run.sh break-leave_keeps_going` runs one row. The full TLC logs go to the folder that the last line prints. Each row is one TLC run with its own bounds, because the fault budgets multiply, so each row stays small.
 
-CI runs the same script in `.github/workflows/formal-client-recovery.yml` when a covered file or this model changes.
+CI runs the same script in `.github/workflows/formal-models.yml` when a covered file or this model changes.
 
 The replay tests run with the package's tests:
 

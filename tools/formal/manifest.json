@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "comment": "Canonical registry of Chalk's TLA+ models. `paths` lists the covered code each model is checked against (a trailing /** means a directory prefix). `shared` lists inputs that select every matrix model. tools/formal/check-manifest.mjs keeps .github/workflows/formal-models.yml, scripts/gates/chalk-gate-plan.mjs, the *-formal skills and each model's anchors in step with this file.",
+  "shared": [".github/workflows/formal-models.yml", "tools/formal/check-manifest.mjs", "tools/formal/manifest.json", "tools/formal/manifest.mjs", "tools/formal/select-models.mjs", "tools/formal/tla2tools.sh"],
+  "models": [
+    {
+      "id": "client-recovery",
+      "title": "Client connection recovery model",
+      "run": "tools/formal/client-recovery/run.sh",
+      "timeoutMinutes": 15,
+      "ci": "matrix",
+      "skill": ".agents/skills/client-recovery-formal/SKILL.md",
+      "paths": ["sdks/typescript/client/src/access/manager.ts", "sdks/typescript/client/src/connection/lifecycle.ts", "sdks/typescript/client/src/media/client.ts", "sdks/typescript/client/src/sync/v1-client.ts"]
+    },
+    {
+      "id": "episode-lifecycle",
+      "title": "Episode lifecycle model",
+      "run": "tools/formal/episode-lifecycle/run.sh",
+      "timeoutMinutes": 5,
+      "ci": "matrix",
+      "skill": ".agents/skills/episode-lifecycle-formal/SKILL.md",
+      "paths": [
+        "apps/api/db/queries/sync_lifecycle.sql",
+        "apps/api/internal/adapters/postgres/episode_control.go",
+        "apps/api/internal/adapters/postgres/episode_lifecycle_create.go",
+        "apps/api/internal/adapters/postgres/public_episode_admission.go",
+        "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
+        "apps/sync/lib/chalk_sync/external_operation_consumer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex",
+        "apps/sync/test/chalk_sync/episode_lifecycle_replay_test.exs"
+      ]
+    },
+    {
+      "id": "external-operations",
+      "title": "Sync external-operation model",
+      "run": "tools/formal/external-operations/run.sh",
+      "timeoutMinutes": 15,
+      "ci": "matrix",
+      "skill": ".agents/skills/external-operations-formal/SKILL.md",
+      "paths": [
+        "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
+        "apps/sync/lib/chalk_sync/external_operation_consumer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex",
+        "apps/sync/test/chalk_sync/external_operations_findings_test.exs"
+      ]
+    },
+    {
+      "id": "media-control",
+      "title": "Media control model",
+      "run": "tools/formal/media-control/run.sh cf-decided-safety-1src own-decided-safety-1src cf-current-P2-1src cf-current-P4-1src cf-current-P4-drop-1src mutant-adoptSync-P1 mutant-optimisticUi-P3 witness-on witness-hostmute",
+      "timeoutMinutes": 20,
+      "ci": "matrix",
+      "skill": ".agents/skills/media-control-formal/SKILL.md",
+      "paths": ["sdks/typescript/client/src/space-client/media-controller.ts"]
+    },
+    {
+      "id": "public-invite-access",
+      "title": "Public invite access model",
+      "run": "tools/formal/public-invite-access/run.sh",
+      "timeoutMinutes": 30,
+      "ci": "matrix",
+      "skill": ".agents/skills/public-invite-access-formal/SKILL.md",
+      "paths": [
+        "apps/api/db/queries/episode_live.sql",
+        "apps/api/db/queries/sync_lifecycle.sql",
+        "apps/api/internal/adapters/postgres/episode_public_join.go",
+        "apps/api/internal/adapters/postgres/public_episode_admission.go",
+        "apps/api/internal/adapters/postgres/public_invites.go",
+        "apps/api/internal/publicinviteapp/**",
+        "apps/api/internal/publicinvites/**"
+      ]
+    },
+    {
+      "id": "recording-pipeline",
+      "title": "Recording pipeline model",
+      "run": "tools/formal/recording-pipeline/run.sh",
+      "timeoutMinutes": 30,
+      "ci": "matrix",
+      "skill": ".agents/skills/recording-pipeline-formal/SKILL.md",
+      "paths": [
+        "apps/api/db/queries/recording_capture_lifecycle.sql",
+        "apps/api/db/queries/recording_key_object_authority.sql",
+        "apps/api/db/queries/recording_pipeline.sql",
+        "apps/api/internal/capturesignaling/**",
+        "apps/api/internal/providerbridge/sfu_executor.go",
+        "apps/api/internal/recorderfleet/**",
+        "apps/api/internal/recorderworker/**",
+        "apps/api/internal/recordingorchestrator/**",
+        "apps/api/internal/recordingpipeline/**",
+        "apps/sync/lib/chalk_sync/episodes/reducer.ex",
+        "apps/sync/lib/chalk_sync/episodes/reducer/**",
+        "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
+        "apps/sync/lib/chalk_sync/external_operation_consumer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/recording/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex"
+      ]
+    },
+    {
+      "id": "screen-share-lease",
+      "title": "Screen-share lease model",
+      "run": "tools/formal/screen-share-lease/run.sh",
+      "timeoutMinutes": 5,
+      "ci": "matrix",
+      "skill": ".agents/skills/screen-share-lease-formal/SKILL.md",
+      "paths": [
+        "apps/sync/lib/chalk_sync/episodes/coordinator.ex",
+        "apps/sync/lib/chalk_sync/episodes/coordinator/**",
+        "apps/sync/lib/chalk_sync/live/episode.ex",
+        "apps/sync/lib/chalk_sync/live/episode/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex",
+        "apps/sync/test/chalk_sync/stateholder/screen_share_lease_postgres_test.exs"
+      ]
+    },
+    {
+      "id": "sfu-publication-lifecycle",
+      "title": "SFU publication lifecycle model",
+      "run": "tools/formal/sfu-publication-lifecycle/run.sh",
+      "timeoutMinutes": 5,
+      "ci": "matrix",
+      "paths": ["sdks/typescript/client/src/media/client.ts", "sdks/typescript/client/src/media/local-publications.ts", "sdks/typescript/client/src/media/plane.ts", "sdks/typescript/client/src/media/types.ts"],
+      "skill": ".agents/skills/sfu-publication-lifecycle-formal/SKILL.md"
+    },
+    {
+      "id": "sync-entry-leave",
+      "title": "Sync entry and Leave model",
+      "run": "tools/formal/sync-entry-leave/run.sh",
+      "timeoutMinutes": 5,
+      "ci": "gate",
+      "skill": ".agents/skills/sync-entry-leave-formal/SKILL.md",
+      "paths": [
+        "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
+        "apps/sync/lib/chalk_sync/external_operation_consumer/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats/**",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
+        "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex",
+        "apps/sync/test/chalk_sync/rolling_entry_postgres_test.exs",
+        "apps/sync/test/chalk_sync/sync_entry_leave_replay_test.exs"
+      ]
+    }
+  ]
+}

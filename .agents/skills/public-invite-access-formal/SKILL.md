@@ -39,7 +39,7 @@ All seven hold on the real code at the bounds below. Two fixes keep them true:
 Run this, with the commit from the coverage record below:
 
 ```sh
-git diff --stat e1814ad6e012e33d3966b6da6a2fadafbb18a25b -- apps/api/internal/publicinvites apps/api/internal/publicinviteapp apps/api/internal/adapters/postgres/public_invites.go apps/api/internal/adapters/postgres/public_episode_admission.go apps/api/internal/adapters/postgres/episode_public_join.go apps/api/db/queries/sync_lifecycle.sql apps/api/db/queries/episode_live.sql
+git diff --stat e1814ad6e012e33d3966b6da6a2fadafbb18a25b -- $(node tools/formal/select-models.mjs --paths public-invite-access)
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions needs no model work. Run the check anyway, because it is cheap.
@@ -80,7 +80,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 `run.sh --tlc` skips the anchors. Set `FORMAL_OUT` to keep the TLC logs in a folder you choose; the last line prints the folder.
 
-CI runs `tools/formal/public-invite-access/run.sh` in `.github/workflows/formal-public-invite-access.yml` when a covered file or this model changes.
+CI runs `tools/formal/public-invite-access/run.sh` in `.github/workflows/formal-models.yml` when a covered file or this model changes.
 
 Real code breaks, shown once: each variant in `breaks` mirrors a one-line edit of the Go. Applied to the real code, a Postgres test fails for six of the seven: `TestDashboardCallPublicKnockReachesEpisodeAdmission` for `collect_skips_provenance`, `decide_skips_provenance` and `decide_not_fenced`, `TestPublicArrivalTerminalStateStays` for `transition_unchecked`, and `TestPublicInviteArchivedSpaceTakesNoGuests` for `join_ignores_archive` and `knock_ignores_archive`. No test shows `issue_skips_participant`, because the database cancels a participant's join seat when the participant leaves or the Episode ends, which hides the extra conditions in the token SQL. The model keeps that variant because the SQL conditions are the guard that the code relies on for an active participant.
 

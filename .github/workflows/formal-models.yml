@@ -1,0 +1,134 @@
+name: Formal models
+
+# Model-checks Chalk's TLA+ models. tools/formal/manifest.json is the one registry of
+# the models, the code paths each covers and its run command; the Gate's references
+# lane (tools/formal/check-manifest.mjs) keeps the trigger paths below in step with it.
+# The sync-entry-leave model is not here: it blocks merges, so the Gate runs it as the
+# formal-sync lane. A draft pull request runs nothing, as in the Gate; marking it ready
+# starts the run.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/formal-models.yml
+      - apps/api/db/queries/episode_live.sql
+      - apps/api/db/queries/recording_capture_lifecycle.sql
+      - apps/api/db/queries/recording_key_object_authority.sql
+      - apps/api/db/queries/recording_pipeline.sql
+      - apps/api/db/queries/sync_lifecycle.sql
+      - apps/api/internal/adapters/postgres/episode_control.go
+      - apps/api/internal/adapters/postgres/episode_lifecycle_create.go
+      - apps/api/internal/adapters/postgres/episode_public_join.go
+      - apps/api/internal/adapters/postgres/public_episode_admission.go
+      - apps/api/internal/adapters/postgres/public_invites.go
+      - apps/api/internal/capturesignaling/**
+      - apps/api/internal/providerbridge/sfu_executor.go
+      - apps/api/internal/publicinviteapp/**
+      - apps/api/internal/publicinvites/**
+      - apps/api/internal/recorderfleet/**
+      - apps/api/internal/recorderworker/**
+      - apps/api/internal/recordingorchestrator/**
+      - apps/api/internal/recordingpipeline/**
+      - apps/sync/lib/chalk_sync/episodes/coordinator.ex
+      - apps/sync/lib/chalk_sync/episodes/coordinator/**
+      - apps/sync/lib/chalk_sync/episodes/reducer.ex
+      - apps/sync/lib/chalk_sync/episodes/reducer/**
+      - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer/**
+      - apps/sync/lib/chalk_sync/live/episode.ex
+      - apps/sync/lib/chalk_sync/live/episode/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/recording.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/recording/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner/**
+      - apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/screen_share_lease.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/lifecycle.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex
+      - apps/sync/test/chalk_sync/episode_lifecycle_replay_test.exs
+      - apps/sync/test/chalk_sync/external_operations_findings_test.exs
+      - apps/sync/test/chalk_sync/stateholder/screen_share_lease_postgres_test.exs
+      - sdks/typescript/client/src/access/manager.ts
+      - sdks/typescript/client/src/connection/lifecycle.ts
+      - sdks/typescript/client/src/media/client.ts
+      - sdks/typescript/client/src/media/local-publications.ts
+      - sdks/typescript/client/src/media/plane.ts
+      - sdks/typescript/client/src/media/types.ts
+      - sdks/typescript/client/src/space-client/media-controller.ts
+      - sdks/typescript/client/src/sync/v1-client.ts
+      - tools/formal/check-manifest.mjs
+      - tools/formal/client-recovery/**
+      - tools/formal/episode-lifecycle/**
+      - tools/formal/external-operations/**
+      - tools/formal/manifest.json
+      - tools/formal/manifest.mjs
+      - tools/formal/media-control/**
+      - tools/formal/public-invite-access/**
+      - tools/formal/recording-pipeline/**
+      - tools/formal/screen-share-lease/**
+      - tools/formal/select-models.mjs
+      - tools/formal/sfu-publication-lifecycle/**
+      - tools/formal/tla2tools.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-models-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select:
+    name: Select formal models
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    if: github.event.pull_request.draft != true
+    outputs:
+      models: ${{ steps.models.outputs.value }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pick the models this change covers
+        id: models
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            selected="$(node tools/formal/select-models.mjs --base "origin/${{ github.base_ref }}")"
+          else
+            selected="$(node tools/formal/select-models.mjs --all)"
+          fi
+          echo "value=${selected}" >> "$GITHUB_OUTPUT"
+
+  check:
+    name: ${{ matrix.title }}
+    needs: select
+    if: ${{ github.event.pull_request.draft != true && needs.select.outputs.models != '{"include":[]}' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeoutMinutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select.outputs.models) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check ${{ matrix.id }}
+        run: ${{ matrix.run }}
