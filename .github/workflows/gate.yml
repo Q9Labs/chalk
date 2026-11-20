@@ -165,11 +165,8 @@ jobs:
     timeout-minutes: ${{ fromJSON(needs.changes.outputs.group_timeouts || '{}')[matrix.group] || 57 }}
     strategy:
       fail-fast: false
-      # One run holds at most eight root runners, so a full run takes 10 of the organisation's 20 hosted-runner slots
-      # (eight root groups, API and Sync). Four left the last groups of a full run waiting 6 to 10 minutes for a slot
-      # while the slots were free (runner queue was under 10 seconds for the first four), and the work is the same
-      # whichever order it runs in. The matrix lists the slowest groups first so they start first.
-      max-parallel: 8
+      # Allow all 10 root groups to start together so build and call-leaks-3 do not stall 3 to 4 minutes behind a smaller cap.
+      max-parallel: 10
       matrix:
         group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "dashboard-board", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
@@ -345,14 +342,16 @@ jobs:
         with:
           name: scorecard-${{ matrix.group == 'build' && 'web' || 'sfu' }}
           path: artifacts/scorecard-*.json
+          overwrite: true
           if-no-files-found: ignore
 
       - name: Save leak shard report
         if: always() && startsWith(matrix.group, 'call-leaks-')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ matrix.group }}
+          name: ${{ matrix.group }}-attempt-${{ github.run_attempt }}
           path: artifacts/${{ matrix.group }}.json
+          overwrite: true
           if-no-files-found: error
 
   root:
@@ -383,8 +382,8 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: call-leaks-*
-          path: artifacts
-          merge-multiple: true
+          path: artifacts/leak-shards
+          merge-multiple: false
 
       - name: Require complete leak journey coverage
         if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
@@ -392,14 +391,7 @@ jobs:
           LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
           ROOT_LANES_RESULT: ${{ needs.root-lanes.result }}
         run: |
-          missing=0
-          for shard in 1 2 3; do
-            if [[ ! -f "artifacts/call-leaks-${shard}.json" ]]; then
-              echo "::error::Shard call-leaks-${shard} left no report. Its job was never created, or it failed before it saved one (root lane groups: ${ROOT_LANES_RESULT})."
-              missing=1
-            fi
-          done
-          [[ "${missing}" == "0" ]]
+          node scripts/gates/select-leak-shards.mjs artifacts/leak-shards artifacts
           node --input-type=module <<'JS'
           const shards = JSON.parse(process.env.LEAK_GROUPS).filter((group) => group.startsWith("call-leaks-"));
           if (shards.length && JSON.stringify(shards.sort()) !== JSON.stringify(["call-leaks-1", "call-leaks-2", "call-leaks-3"])) throw new Error("Incomplete leak shard plan");

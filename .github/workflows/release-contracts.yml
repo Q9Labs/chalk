@@ -74,10 +74,30 @@ jobs:
         with:
           cache: "false"
           install: "false"
+      - uses: ./.github/actions/setup-opentofu
+      - name: Restore OpenTofu providers
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
+      - name: Use the OpenTofu provider cache
+        run: |
+          mkdir -p ~/.terraform.d/plugin-cache
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+      - name: Restore pinned workflow lint
+        id: actionlint-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/chalk-actionlint
+          key: chalk-actionlint-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.tool-versions') }}
       - name: Install pinned workflow lint
         run: |
-          go install "github.com/rhysd/actionlint/cmd/actionlint@v$(scripts/lib/tool-version.sh actionlint)"
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          bin_dir="${HOME}/.cache/chalk-actionlint"
+          mkdir -p "${bin_dir}"
+          if [[ ! -x "${bin_dir}/actionlint" ]]; then
+            GOBIN="${bin_dir}" go install "github.com/rhysd/actionlint/cmd/actionlint@v$(scripts/lib/tool-version.sh actionlint)"
+          fi
+          echo "${bin_dir}" >> "$GITHUB_PATH"
       - name: Check every release contract without cloud credentials
         run: scripts/releases/check-contracts.sh
       - name: Keep complete contract logs

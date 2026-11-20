@@ -34,6 +34,7 @@ runs:
       shell: bash
       env:
         BROWSERS: ${{ inputs.browsers }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
       run: |
         set -euo pipefail
         read -ra browsers <<< "${BROWSERS}"
@@ -55,9 +56,11 @@ runs:
         # apt runs under a root timeout, because a timeout outside sudo cannot stop it, and the retry drops that mirror.
         install_once() {
           if (( ${#packages[@]} > 0 )); then
-            sudo timeout --kill-after=10s 3m sh -c 'apt-get update -qq && apt-get install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
+            sudo timeout --kill-after=10s 90s sh -c 'apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update -qq && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "$@"' sh "${packages[@]}" || return 1
           fi
-          timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
+          if [[ "${CACHE_HIT}" != "true" ]]; then
+            timeout --kill-after=10s 2m "${playwright[@]}" install "${browsers[@]}"
+          fi
         }
         for attempt in 1 2; do
           if install_once; then
