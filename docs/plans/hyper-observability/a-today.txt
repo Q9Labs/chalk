@@ -1,0 +1,22 @@
+Episode 9feb0ff6-3c1a-4e7b-9a52-0d4c8e1f2a77
+
+VERDICT: Participant 4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c was unmuted from 09:52:10 to 09:55:40 UTC while the SFU received audio packets with no voice; failing stage: sending, side: client; cause: microphone sent silence. Participant 77b1c0e9d8f7a6b5c4d3e2f1a0b9c8d7 saw the call end at 10:45:00 UTC; failing stage: ending, side: unknown; cause: unknown.
+
+Summary
+  Timeline columns: time UTC, stage, side, what happened, ids of the rows that prove it. ▶ marks a finding, · a note.
+  Rows by source: client 412, api 37, sfu 96, sync 22, recorder 0, db 14
+  Finding: Participant 4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c unmuted but no voice reached the SFU [sending/client] [a1f3e0c2-5b6d-4e7f-8a9b-0c1d2e3f4a5b, c9d0b1a2-3c4d-4e5f-9a6b-7c8d9e0f1a2b]
+  Finding: Participant 77b1c0e9d8f7a6b5c4d3e2f1a0b9c8d7 call ended [ending/unknown] [0b9e1f2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a]
+
+Participant 4c1e9b7a2f3d5e6c8b0a1d2e3f4a5b6c (owner): joined 09:45:02, left 10:45:00 (time_limit)
+  · 09:45:02  joining      client   joined [5d6e7f8a-9b0c-4d1e-8f2a-3b4c5d6e7f8a]
+  ▶ 09:52:10  sending      client   unmuted but no voice reached the SFU for 3 min 30 s [a1f3e0c2-5b6d-4e7f-8a9b-0c1d2e3f4a5b, c9d0b1a2-3c4d-4e5f-9a6b-7c8d9e0f1a2b]
+  · 10:45:00  ending       server   episode ended: time_limit [0b9e1f2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a]
+Participant 77b1c0e9d8f7a6b5c4d3e2f1a0b9c8d7 (observer): joined 09:46:11, left 10:45:00 (failed)
+  · 09:46:11  joining      client   joined [6e7f8a9b-0c1d-4e2f-9a3b-4c5d6e7f8a9b]
+  ▶ 10:45:00  ending       unknown  call ended [0b9e1f2a-3b4c-4d5e-8f6a-7b8c9d0e1f2a]
+
+Missing data
+  - board: no whiteboard rows collected
+
+Elapsed: 3.4 s
