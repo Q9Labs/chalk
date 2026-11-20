@@ -92,19 +92,6 @@ type episodeObject struct {
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
 }
-type participantData struct {
-	Object participantObject `json:"object"`
-}
-type participantObject struct {
-	ID         string  `json:"id"`
-	IdentityID *string `json:"identity_id"`
-	SpaceID    string  `json:"space_id"`
-	EpisodeID  string  `json:"episode_id"`
-	Name       *string `json:"name"`
-	Status     string  `json:"status"`
-	JoinedAt   string  `json:"joined_at"`
-	LeftAt     *string `json:"left_at"`
-}
 type testData struct {
 	Object struct {
 		EndpointID string `json:"endpoint_id"`
