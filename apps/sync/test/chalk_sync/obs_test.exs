@@ -224,6 +224,15 @@ defmodule ChalkSync.ObsTest do
     assert is_integer(shown_ms)
     refute_received {:record, _second_dismissal}
 
+    flags_key = {Obs, :flags_hash}
+    previous_hash = :persistent_term.get(flags_key, nil)
+
+    on_exit(fn ->
+      if previous_hash,
+        do: :persistent_term.put(flags_key, previous_hash),
+        else: :persistent_term.erase(flags_key)
+    end)
+
     Obs.set_flags(%{"recording" => "on", "max_participants" => 50, "media.kill_switch" => false})
     assert %{"name" => "obs.flags_snapshot", "flags_hash" => "8c3f49d344bb8e59"} = record!()
     Obs.fact("selftest.note", %{note_kind: "a"})
