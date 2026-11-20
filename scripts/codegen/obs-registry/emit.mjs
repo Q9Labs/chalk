@@ -71,6 +71,8 @@ function tsEventFields(event, trail, fieldsByName) {
   return `  ${tsString(event.name)}: { ${own.join("; ")} } & ${rest};`;
 }
 
+// The TypeScript tables ship in the web call bundle, so they carry only what the client kernel reads at runtime:
+// no field-level required flag, test_only marker or machine initial state (registry.json and the Go and Elixir tables keep them).
 export function emitTypeScript(model) {
   const fieldsByName = new Map(model.fields.map((field) => [field.name, field]));
   const trail = model.envelope.find((group) => group.group === "trail").fields;
@@ -81,9 +83,9 @@ export function emitTypeScript(model) {
   lines.push(`export const ID_KINDS = ${tsString(model.id_kinds.map(({ kind, prefix, field, canonical, legacy_hash_field }) => ({ kind, prefix, field, canonical, legacyHashField: legacy_hash_field })))} as const;`);
   lines.push(`export const SESSION_MEANINGS = ${tsString(model.session_meanings)} as const;`);
   lines.push(`export const DIAGNOSTIC_CODE = ${tsString(model.diagnostic_code)} as const;`);
-  lines.push(`export const FIELDS = ${tsString(Object.fromEntries(model.fields.map((field) => [field.name, { type: field.type, ...present("values", field.values), group: groupOf(field), required: field.required }])))} as const;`);
-  lines.push(`export const EVENTS = ${tsString(Object.fromEntries(model.events.map((event) => [event.name, { kind: event.kind, dataset: event.dataset, testOnly: event.test_only, decisions: event.decisions ?? [], fields: event.fields }])))} as const;`);
-  lines.push(`export const MACHINES = ${tsString(Object.fromEntries(model.machines.map((machine) => [machine.name, { states: machine.states, initial: machine.initial, edges: machine.edges, triggers: machine.triggers }])))} as const;`);
+  lines.push(`export const FIELDS = ${tsString(Object.fromEntries(model.fields.map((field) => [field.name, { type: field.type, ...present("values", field.values), group: groupOf(field) }])))} as const;`);
+  lines.push(`export const EVENTS = ${tsString(Object.fromEntries(model.events.map((event) => [event.name, { kind: event.kind, dataset: event.dataset, decisions: event.decisions ?? [], fields: event.fields }])))} as const;`);
+  lines.push(`export const MACHINES = ${tsString(Object.fromEntries(model.machines.map((machine) => [machine.name, { states: machine.states, edges: machine.edges, triggers: machine.triggers }])))} as const;`);
   lines.push(`export const REASONS = ${tsString(Object.fromEntries(model.reasons.map((reason) => [reason.code, reason.outcome])))} as const;`);
   lines.push(`export const LEGACY = ${tsString(model.events.filter((event) => event.legacy).map((event) => ({ event: event.name, match: event.legacy.match })))} as const;`);
   lines.push("");

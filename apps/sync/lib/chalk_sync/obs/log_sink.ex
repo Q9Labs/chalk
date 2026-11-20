@@ -15,7 +15,12 @@ defmodule ChalkSync.Obs.LogSink do
   @doc "Attaches the sink once. Attaching again keeps the first handler."
   @spec attach() :: :ok
   def attach do
-    case :telemetry.attach(@handler, [:chalk_sync, :obs, :record], &__MODULE__.handle_event/4, nil) do
+    case :telemetry.attach(
+           @handler,
+           [:chalk_sync, :obs, :record],
+           &__MODULE__.handle_event/4,
+           nil
+         ) do
       :ok -> :ok
       {:error, :already_exists} -> :ok
     end

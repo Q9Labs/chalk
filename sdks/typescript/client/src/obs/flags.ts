@@ -1,5 +1,5 @@
+import { sha256 } from "@noble/hashes/sha2.js";
 import type { FlagMap } from "./registry.ts";
-import { sha256Hex } from "./sha256.ts";
 
 const FLAG_KEY = /^[a-z][a-z0-9_.]*$/;
 
@@ -16,7 +16,9 @@ export function canonicalFlags(flags: FlagMap): string {
   return `{${members.join(",")}}`;
 }
 
-// flags_hash: 16 hex characters of the SHA-256 of the canonical flags JSON.
+// flags_hash: 16 hex characters of the SHA-256 of the canonical flags JSON. Synchronous, because Web Crypto's digest is
+// async and flags_hash is stamped on every record; @noble/hashes is already in the call bundle for the Sync reducer.
 export function flagsHash(flags: FlagMap): string {
-  return sha256Hex(canonicalFlags(flags)).slice(0, 16);
+  const digest = sha256(new TextEncoder().encode(canonicalFlags(flags)));
+  return Array.from(digest.subarray(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
