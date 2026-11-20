@@ -1,7 +1,7 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { axiom, chunks, quote, withFields } from "./axiom.mjs";
 import { readDatabase } from "./database.mjs";
-import { normalizeRow } from "./rows.mjs";
+import { attr, normalizeRow } from "./rows.mjs";
 
 const DEADLINE_MS = 40_000;
 const DAY_MS = 86_400_000;
@@ -161,8 +161,12 @@ export async function readSources({ episodeId, env, fetchImpl = fetch, now = Dat
 function dedupe(rows) {
   const seen = new Set();
   return rows.filter((row) => {
-    if (seen.has(row.id)) return false;
-    seen.add(row.id);
+    const tenant = attr(row, "tenant_id");
+    const source = attr(row, "source_id");
+    const seq = attr(row, "seq");
+    const key = row.source === "client" && tenant && source && Number.isInteger(seq) ? JSON.stringify([tenant, source, seq]) : row.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
