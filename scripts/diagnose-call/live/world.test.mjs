@@ -136,31 +136,6 @@ test("a seat with an open gap, and a seat with no ledger source, stay unchecked,
   assert.match(endGap("Seat 3"), /client not read/u, "the quiet seat has no ledger source");
 });
 
-test("Sync only certifies the witnessed terminal reason that Postgres stored", async () => {
-  const stores = {
-    ...fakeStores(),
-    declaration: async () => ({ ...DB, episode: { ...DB.episode, end_reason: "maximum_duration" } }),
-  };
-  const result = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, "episode", EPISODE], { stores, now: NOW });
-  assert.match(result.out, /gap: end\.wrong_screen[^\n]*"Seat 1"[^\n]*sync not read/u);
-});
-
-test("a recognized SDK diagnostic that emits no proof facts fills its seq without a clock", () => {
-  const diagnostic = axiomRow(START, "chalk-api", {
-    event: "sdk.telemetry",
-    type: "state_changed",
-    source_id: CLOSED_SOURCE,
-    seq: 1,
-    event_id: "0e0000ee-0000-4000-8000-000000000001",
-    est_server_ms: undefined,
-  });
-  const rows = [diagnostic, ...ROWS.filter((row) => row !== ROWS[1]).map((row) => ({ ...row, attributes: { ...row.attributes, platform: "web" } }))];
-  const { world } = liveWorld({ db: DB, ledger: { tenant_id: TENANT, episode_id: EPISODE, sources: [closed] }, rows, asof_ms: NOW });
-  const watermark = world.evidence[EPISODE].watermarks.find((w) => w.subject === `pt:${CLOSED_SEAT}`);
-  assert.deepEqual(watermark?.evidence_gaps, []);
-  assert.ok(watermark?.emits.includes("end.client_screen"));
-});
-
 test("an unreadable ledger leaves every seat's client source not read", async () => {
   const result = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, "episode", EPISODE, "--json"], { stores: fakeStores({ unavailable: "relation does not exist" }), now: NOW });
   const view = JSON.parse(result.out);
@@ -196,9 +171,9 @@ test("a gap whose neighbours' clocks run backwards still covers the time between
 });
 
 test("an Axiom refusal is a store error, so diagnose exits 69 instead of crashing", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => new Response("denied", { status: 401 }));
+  t.mock.method(globalThis, "fetch", async () => new Response("private upstream response", { status: 401 }));
   const stores = realStores({ AXIOM_TOKEN: "synthetic", CHALK_LOG_DATASET: "synthetic-logs" });
-  await assert.rejects(stores.rows(EPISODE, { from_ms: START, to_ms: END }), StoreError);
+  await assert.rejects(stores.rows(EPISODE, { from_ms: START, to_ms: END }), (error) => error instanceof StoreError && error.message === "Axiom refused the read (HTTP 401)");
 });
 
 test("a legacy row keeps its own fields, and the row adapter reads its registry event by the registry's match", () => {

@@ -122,3 +122,23 @@ test("every printed next: command carries the live world it came from, and runs 
     assert.equal(again.code, 0, `${line}: ${again.err}`);
   }
 });
+
+test("Sync only certifies the terminal reason that Postgres stored", () => {
+  assert.deepEqual(markOf(worldOf(ROWS), "sync|*")?.certified_once, { "end.episode": SYNC_END.attributes.event_id });
+  const mismatch = { ...SYNC_END, attributes: { ...SYNC_END.attributes, end_reason: "maximum_duration" } };
+  assert.equal(markOf(worldOf([...ROWS.slice(0, -1), mismatch]), "sync|*")?.certified_once, undefined);
+});
+
+test("a recognized SDK diagnostic fills its seq without changing the kernel build", () => {
+  const diagnostic = axiomRow(START, "chalk-api", {
+    event: "sdk.telemetry",
+    type: "state_changed",
+    source_id: SOURCE,
+    seq: 1,
+    event_id: "0e1000ee-0000-4000-8000-000000009001",
+    est_server_ms: undefined,
+  });
+  const mark = markOf(worldOf([ROWS[0], diagnostic, ...ROWS.slice(2)]), `client|pt:${SEAT}`);
+  assert.deepEqual(mark?.evidence_gaps, []);
+  assert.ok(mark?.emits.includes("end.client_screen"));
+});

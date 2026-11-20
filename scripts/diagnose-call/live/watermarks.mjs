@@ -49,22 +49,12 @@ export function sourceCoverage(source, rows, { start_ms }) {
       reason,
     };
   };
-  /** @type {LedgerGap[]} */
-  const unread = [];
-  for (const range of source.watermark.stored ?? []) {
-    for (let seq = range.from; seq < range.to; seq += 1) {
-      if (read.has(seq)) continue;
-      const run = unread.at(-1);
-      if (run !== undefined && run.to_seq === seq) unread[unread.length - 1] = { ...run, to_seq: seq + 1 };
-      else unread.push({ source_id: source.source_id, from_seq: seq, to_seq: seq + 1, cause: "unread", status: "open" });
-    }
-  }
   // The ledger reports rejected ranges as gaps; a ledger that only lists them in the watermark still makes them gaps, once.
   const reported = new Set(source.gaps.map((gap) => `${gap.cause}|${gap.from_seq}|${gap.to_seq}`));
   const rejected = (source.watermark.rejected ?? []).flatMap((range) =>
     reported.has(`rejected|${range.from}|${range.to}`) ? [] : [{ source_id: source.source_id, from_seq: range.from, to_seq: range.to, cause: "rejected", status: /** @type {const} */ (source.watermark.end === null ? "open" : "final") }],
   );
-  const evidence_gaps = [...source.gaps, ...unread, ...rejected].sort((a, b) => a.from_seq - b.from_seq).map((gap) => place(gap.from_seq, gap.to_seq, `${gap.cause}${gap.drop_reason ? `(${gap.drop_reason})` : ""} seq ${gap.from_seq}..${gap.to_seq ?? "?"} ${gap.status}`));
+  const evidence_gaps = [...source.gaps, ...unreadRanges(source, read), ...rejected].sort((a, b) => a.from_seq - b.from_seq).map((gap) => place(gap.from_seq, gap.to_seq, `${gap.cause}${gap.drop_reason ? `(${gap.drop_reason})` : ""} seq ${gap.from_seq}..${gap.to_seq ?? "?"} ${gap.status}`));
   const from_ms = timed.length === 0 ? null : Math.min(...timed.map((row) => row.from));
   if (source.watermark.end === "closed") {
     const received = source.watermark.last_received_at === undefined ? NaN : Date.parse(source.watermark.last_received_at);
@@ -75,6 +65,21 @@ export function sourceCoverage(source, rows, { start_ms }) {
   const highest = stored.length === 0 ? null : Math.max(...stored.map((range) => range.to - 1));
   const last = highest === null ? undefined : timed.findLast((row) => row.seq <= highest);
   return { complete_to_ms: last?.at ?? null, evidence_gaps, from_ms, closed: false };
+}
+
+/** @param {LedgerSource} source @param {ReadonlySet<number>} read */
+function unreadRanges(source, read) {
+  /** @type {LedgerGap[]} */
+  const unread = [];
+  for (const range of source.watermark.stored ?? []) {
+    for (let seq = range.from; seq < range.to; seq += 1) {
+      if (read.has(seq)) continue;
+      const run = unread.at(-1);
+      if (run !== undefined && run.to_seq === seq) unread[unread.length - 1] = { ...run, to_seq: seq + 1 };
+      else unread.push({ source_id: source.source_id, from_seq: seq, to_seq: seq + 1, cause: "unread", status: "open" });
+    }
+  }
+  return unread;
 }
 
 /** @param {Row} row */
