@@ -21,6 +21,7 @@ if (local) {
   childEnvironment.GOMAXPROCS ||= "1";
   childEnvironment.VITEST_MAX_WORKERS ||= "1";
   childEnvironment.ERL_FLAGS ||= "+S 1:1";
+  childEnvironment.GATE_LANE_CONCURRENCY ||= "1";
 }
 // q9gate and the other workspace tools live in node_modules/.bin, which pnpm adds to PATH only inside `pnpm run`.
 const pathKey = Object.keys(childEnvironment).find((key) => key.toLowerCase() === "path") ?? "PATH";
