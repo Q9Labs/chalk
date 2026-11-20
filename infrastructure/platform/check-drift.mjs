@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cutoverStages } from "../registry.ts";
+import { driftChildEnv } from "./drift.ts";
 import { postToOncall } from "../oncall-alert.mjs";
 
 const cwd = fileURLToPath(new URL("..", import.meta.url));
@@ -12,13 +13,15 @@ const incidents = [];
 try {
   // Sequential even if two entries share a state store; never use drift repair.
   for (const { stack, stage } of cutoverStages()) {
+    const { env, missing } = driftChildEnv(stack, stage, process.env, directory);
     const log = openSync(join(directory, `${stack}-${stage}.log`), "wx", 0o600);
     let result;
     try {
-      result = spawnSync("pnpm", ["exec", "tsx", "run-stack.ts", "drift", stack, stage], { cwd, stdio: ["ignore", log, log], timeout: 600_000 });
+      result = missing ? { status: 1 } : spawnSync("pnpm", ["exec", "tsx", "run-stack.ts", "drift", stack, stage], { cwd, env, stdio: ["ignore", log, log], timeout: 600_000 });
     } finally {
       closeSync(log);
     }
+    if (missing) console.log(`${stack}/${stage}: missing the ${missing} secret`);
     const status = result.status === 0 ? "clean" : result.status === 2 ? "drift" : "check-failed";
     console.log(`${stack}/${stage}: ${status}`);
     if (status !== "clean") incidents.push({ id: `infra-drift-${stack}-${stage}`, title: `Infrastructure ${status}: ${stack}/${stage}`, severity: "high", url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` });
