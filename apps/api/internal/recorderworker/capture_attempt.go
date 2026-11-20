@@ -983,14 +983,20 @@ func (a *PionCaptureAttempt) closeLocal(ctx context.Context, writer *captureBund
 	var result error
 	// Stop remote ingress before the bounded durable tail. A storage timeout must
 	// fail the attempt, but it must not consume the provider shutdown budget first.
-	result = a.coordinator.Close(ctx, true)
-	result = errors.Join(result, a.peer.Close())
+	if err := a.coordinator.Close(ctx, true); err != nil {
+		result = fmt.Errorf("close capture connection: %w", err)
+	}
+	if err := a.peer.Close(); err != nil {
+		result = errors.Join(result, fmt.Errorf("close capture peer: %w", err))
+	}
 	if writer != nil {
 		endedAt := a.config.Now().UTC()
 		if endsAt := a.authority.EndsAt(); !endsAt.IsZero() && (reason == recordingbundle.CloseReasonMaxDuration || endedAt.After(endsAt)) {
 			endedAt = endsAt
 		}
-		result = errors.Join(result, writer.closeWithContext(ctx, reason, endedAt))
+		if err := writer.closeWithContext(ctx, reason, endedAt); err != nil {
+			result = errors.Join(result, fmt.Errorf("flush capture tail: %w", err))
+		}
 		writer.clearTerminalState()
 	}
 	result = errors.Join(result, ctx.Err())
