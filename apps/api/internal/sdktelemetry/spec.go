@@ -28,6 +28,7 @@ func connection(extra ...string) spec {
 
 var specs = map[string]spec{
 	// Join, state and recovery steps.
+	"initial_join":              {allowed: []string{"join_signal", "op_id"}, required: []string{"join_signal", "op_id"}},
 	"space_join_span":           {allowed: connectionFields, required: []string{"outcome"}},
 	"state_changed":             connection(),
 	"connection_failed":         connection(),
@@ -80,6 +81,14 @@ func EventTypes() []string {
 }
 
 var fieldEnums = map[string][]string{
+	"join_signal": {
+		"started", "sync_started", "sync_live", "sync_entered", "sync_timeout", "sync_failed", "mic_off",
+		"mic_captured", "mic_denied", "mic_absent", "mic_unavailable", "camera_off", "camera_captured", "camera_denied",
+		"camera_absent", "camera_unavailable", "publish_started", "publish_accepted", "publish_skipped", "publish_failed", "subscribe_started",
+		"subscribe_accepted", "subscribe_failed", "subscribe_timeout", "ice_checking", "ice_connected", "ice_disconnected", "ice_failed",
+		"dtls_connecting", "dtls_connected", "dtls_failed", "direct_selected", "relay_selected", "relay_fallback", "transport_timeout",
+		"rtp_timeout", "send_rtp", "receive_rtp", "ready", "listen_only", "startup_ice_failed", "startup_dtls_failed",
+	},
 	"media_error_kind":      {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"},
 	"error_name":            {"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"},
 	"media_error_step":      {"local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"},

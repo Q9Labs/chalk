@@ -1,3 +1,4 @@
+import type { InitialJoin } from "./initial-join";
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { validateBootstrap, validateClientOptions, validateTrackSource } from "./client-validation";
@@ -212,6 +213,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
   readonly #callStats: CallStatsCollector;
+  readonly #initialJoin: InitialJoin | undefined;
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
@@ -222,6 +224,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#telemetry = options.telemetry;
+    this.#initialJoin = options.initialJoin;
     this.#onDiagnostic = options.onDiagnostic;
     this.#onReceiveHealth = options.onReceiveHealth;
     this.#callStats = createCallStatsCollector({ record: (draft) => options.telemetry?.record(draft), interruption: (withinMs) => options.telemetry?.interruption(withinMs) ?? null });
@@ -367,10 +370,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
     for (const track of tracks) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
-    await this.#activatePreparedTracks(
-      [...this.#localTracks.values()].filter((state) => state.source === "microphone" || state.source === "camera"),
-      generation,
-    );
+    const initial = [...this.#localTracks.values()].filter((state) => state.source === "microphone" || state.source === "camera");
+    this.#initialJoin?.publication(initial.length > 0 ? "started" : "skipped");
+    await this.#activatePreparedTracks(initial, generation);
+    if (initial.length > 0 && generation === this.#generation && initial.every((state) => state.enabled && state.providerPublicationId)) this.#initialJoin?.publication("accepted");
   }
 
   async refreshRemotePublications(): Promise<void> {
@@ -1069,6 +1072,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   stop(): void {
+    this.#initialJoin?.close();
     if (this.#stopped) {
       void this.#retireOwnedPublications();
       return;
@@ -1945,10 +1949,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     connection.addEventListener("track", onTrack);
     try {
       this.#requireGeneration(generation);
+      if (requested.length > 0) this.#initialJoin?.subscribe(connection, "started");
       const issued = await issue(connectionId);
       publications = issued.publications;
       const response = issued.response;
       this.#requireGeneration(generation);
+      if (requested.length === 0 && publications.length > 0) this.#initialJoin?.subscribe(connection, "started");
       this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
       const responseTracks = response.tracks ?? [];
       matched = matchRemotePullTracks(publications, responseTracks);
@@ -1967,14 +1973,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const arrived = (mid: string) => received.get(mid) ?? this.#revivedReceiverTrack(connection, mid);
       await waitFor(() => responseTracks.every((track) => track.mid !== undefined && arrived(track.mid) !== undefined), 5000);
       this.#requireGeneration(generation);
-      return matched.map(({ publication, mid }) => {
+      const tracks = matched.map(({ publication, mid }) => {
         const track = arrived(mid);
         if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
         this.#closedReceiverTracks.delete(track);
         this.#receiveHealth.pullSucceeded([publication.publicationId]);
         return Object.freeze({ ...publication, track });
       });
+      this.#initialJoin?.subscribe(connection, "accepted");
+      return tracks;
     } catch (error) {
+      if (publications.length > 0) this.#initialJoin?.subscribe(connection, "failed");
       this.#recordReceivePullFailure(publications, generation, error);
       this.#queueUnclaimedReceivers(connection, matched, (mid) => received.get(mid) ?? this.#revivedReceiverTrack(connection, mid));
       throw error;
@@ -2236,7 +2245,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       },
       CONNECTION_TIMEOUT_MS,
       "Timed out waiting for the Cloudflare SFU peer connection",
-    );
+    ).catch((error: unknown) => {
+      if (generation === this.#generation) this.#initialJoin?.transportExpired(connection);
+      throw error;
+    });
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;
@@ -2270,13 +2282,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // Sampling skips a failed path but keeps its schedule, so an ICE restart on the same connection resumes it.
     const adaptCamera = async () => {
       try {
-        if (!current()) return;
+        if (!current() && !(observed() && this.#initialJoin?.observing(connection))) return;
         const state = this.#localTracks.get("camera");
         if (state !== observedCamera) {
           cameraPolicy.reset();
           observedCamera = state;
         }
         const report = await connection.getStats();
+        if (!observed()) return;
+        if (this.#initialJoin?.observing(connection)) this.#initialJoin.sample(connection, report, performance.now(), pageIsHidden() || this.#telemetry?.interruption(2500) != null);
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
@@ -2304,6 +2318,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const observe = () => {
       if (!owned()) return;
+      this.#initialJoin?.observePeer(connection);
       if (connectionIsLive(connection)) this.#connectedEpoch = connectionEpoch;
       const observation = this.#observeIceRecovery(connection, connectionEpoch, observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started));
       if (observation) this.#publishSnapshot(observation.phase, observation.failure);

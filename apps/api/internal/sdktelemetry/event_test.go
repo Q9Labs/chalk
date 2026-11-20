@@ -23,6 +23,9 @@ func TestEventsAreCheckedEachOnItsOwn(t *testing.T) {
 		reason string
 	}{
 		{"join started", `{"type":"space_join_span","seq":0,"elapsed_ms":1,"step":"join","outcome":"started"}`, ""},
+		{"initial join signal", `{"type":"initial_join","seq":0,"elapsed_ms":1,"op_id":"` + op + `","join_signal":"startup_ice_failed"}`, ""},
+		{"initial join signal without an operation", `{"type":"initial_join","seq":0,"elapsed_ms":1,"join_signal":"listen_only"}`, "op_id_missing"},
+		{"initial join rejects arbitrary labels", `{"type":"initial_join","seq":0,"elapsed_ms":1,"op_id":"` + op + `","join_signal":"raw error text"}`, "join_signal_label"},
 		{"join without an outcome", `{"type":"space_join_span","seq":0,"elapsed_ms":1}`, "outcome_missing"},
 		{"receivers closed with bundle flag", `{"type":"receivers_closed","seq":1,"elapsed_ms":5,"receivers_stopped":3,"bundle_tag_held":true}`, ""},
 		{"access retry in a join", `{"type":"access_retry","seq":1,"elapsed_ms":5,"state":"joining"}`, ""},

@@ -75,7 +75,7 @@ describe("goldens", () => {
   it("renders the reviewer's corrected 18 Nov example: partial coverage that names the board, no cause from zero voiced packets", async () => {
     const text = (await diagnose(["ep_9feb"])).out;
     const [first, anchor, finding, fact] = text.split("\n");
-    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=9\/13 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
+    assert.match(first, /^episode ep_9feb tenant=TH outcome=broken coverage=partial\(board\) checked=13\/17 asof=2026-11-19T01:00Z rules=[0-9a-f]{8}$/u);
     assert.equal(anchor, "anchor=2026-11-18T09:45Z local=14:45+05:00 dur=60m seats=4");
     assert.match(finding, /^f_5b55 broken audio\.not_heard pt_4c1e\(Haris\) \+07:10\.\.\+10:40 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3$/u);
     assert.equal(fact, "fact: SFU ingress 10480 packets, 0 voiced [ev_a1f3]");

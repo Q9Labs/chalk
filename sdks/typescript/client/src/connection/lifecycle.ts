@@ -17,6 +17,7 @@ import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
+import { observeInitialJoin, type InitialJoin } from "../media/initial-join";
 import { deviceFailedEvent } from "../media/capture-error";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
@@ -468,7 +469,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           ),
         );
       };
-      const makeMediaClient = (grant: ParsedAccessGrant): ConnectionMediaClient => {
+      const makeMediaClient = (grant: ParsedAccessGrant, initialJoin: InitialJoin | undefined): ConnectionMediaClient => {
         const media: ConnectionMediaClient = platform.createMediaClient({
           access: grant,
           credential: () => toPromise(access.getMediaToken()),
@@ -487,6 +488,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           onTransportPath,
           traceparent: telemetry?.traceparent,
           telemetry,
+          initialJoin,
           onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
           onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
         });
@@ -518,23 +520,34 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             Effect.andThen(trace("wait_for_sync_live", waitForSyncLive(sync, boundedInteger(options.syncStartupTimeoutMs, START_TIMEOUT_MS, 1, 60000)))),
           ),
         );
-      const failJoin = (cause: unknown, stream: MediaStream | null, span: ReturnType<typeof diagnostics.startSpan>, retried: boolean): Effect.Effect<void, ConnectionLifecycleFailure> =>
+      const failJoin = (cause: unknown, stream: MediaStream | null, span: ReturnType<typeof diagnostics.startSpan>, retried: boolean, initialJoin: InitialJoin | undefined): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
           yield* releaseLocalTracks(platform.mediaDevices, liveTracks(stream));
           const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
           const failure = yield* resolveMediaRejection(originalFailure);
           if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
+            initialJoin?.close();
             span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "episode_ended" });
             yield* finishEpisodeEnded();
             return;
           }
           model.failure = toFailure(failure);
           if (model.joinCancelled) {
+            initialJoin?.close();
             span.end({ state: model.state, epoch: model.epoch, outcome: "cancelled", code: "invalid_state" });
             return yield* Effect.fail(joinCancelledFailure());
           }
           span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
           const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
+          if (retry || failure.code === "episode_ended" || failure.code === "invalid_access") initialJoin?.close();
+          else if (failure.code === "sync_hello_timeout") initialJoin?.fail("sync_timeout");
+          else if (failure.code === "sync_start_failed") initialJoin?.fail("sync_failed");
+          else if (failure.code === "media_start_failed") {
+            const reason = initialJoin?.publishFailure();
+            if (reason) initialJoin?.fail(reason);
+            else initialJoin?.close();
+          }
+          else initialJoin?.close();
           if (!retry) yield* recordFailure(failure);
           model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
           yield* stopPorts();
@@ -562,11 +575,18 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           model.activeScope = scope;
           let stream: MediaStream | null = null;
           let captureWarning: ConnectionLifecycleFailure | null = null;
+          let initialJoin: InitialJoin | undefined;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
+            const intent = model.initialMediaIntent?.() ?? model.intent;
+            const deviceEvidence = new Map<"microphone" | "camera", ReturnType<typeof deviceFailedEvent>["error_name"]>();
             const captured = yield* trace(
               "acquire_initial_media",
-              acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices, (source, cause) => telemetry?.record(deviceFailedEvent(cause, source))),
+              acquireInitialMedia(model.initialMedia, intent, platform.mediaDevices, (source, cause) => {
+                const event = deviceFailedEvent(cause, source);
+                deviceEvidence.set(source, event.error_name);
+                telemetry?.record(event);
+              }),
             );
             const capturedStream = captured.stream;
             stream = capturedStream;
@@ -576,17 +596,32 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
             if (retried) recordAccessRetry();
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
-            const media = yield* trace("create_media_client", Effect.try({ try: () => makeMediaClient(grant), catch: startFailure("media_start_failed", "The media layer could not start") }));
+            if (telemetry) {
+              initialJoin = observeInitialJoin(telemetry);
+              const disposition = (source: "microphone" | "camera", available: boolean) => {
+                if (!intent[source]) return "off";
+                if (available) return "captured";
+                const error = deviceEvidence.get(source);
+                if (error === "NotAllowedError") return "denied";
+                if (error === "NotFoundError") return "absent";
+                return "unavailable";
+              };
+              initialJoin.capture(disposition("microphone", grantedMedia.granted_audio === "granted"), disposition("camera", grantedMedia.granted_video === "granted"));
+            }
+            const media = yield* trace("create_media_client", Effect.try({ try: () => makeMediaClient(grant, initialJoin), catch: startFailure("media_start_failed", "The media layer could not start") }));
             model.media = media;
             const sync = yield* trace("create_sync_client", Effect.try({ try: () => makeSyncClient(grant, media), catch: startFailure("sync_start_failed", "The sync layer could not start") }));
             model.sync = sync;
             yield* bindPorts(scope);
-            yield* Effect.all([startMedia(media, capturedStream), startSync(sync)], { concurrency: "unbounded", discard: true });
+            initialJoin?.signal("sync_started");
+            const syncStarted = startSync(sync).pipe(Effect.tap(() => Effect.sync(() => initialJoin?.signal("sync_live"))));
+            yield* Effect.all([startMedia(media, capturedStream), syncStarted], { concurrency: "unbounded", discard: true });
             if (model.joinCancelled) return yield* Effect.fail(joinCancelledFailure());
             yield* confirmSyncEntry(sync);
+            initialJoin?.syncEntered();
           }).pipe(
             Effect.matchEffect({
-              onFailure: (cause) => failJoin(cause, stream, span, retried),
+              onFailure: (cause) => failJoin(cause, stream, span, retried, initialJoin),
               onSuccess: () =>
                 Effect.gen(function* () {
                   readSnapshots();

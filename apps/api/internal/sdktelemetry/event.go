@@ -92,6 +92,7 @@ type Event struct {
 	BundleTagHeld    *bool          `json:"bundle_tag_held,omitempty"`
 	UploadFailure    string         `json:"upload_failure,omitempty"`
 	Action           string         `json:"action,omitempty"`
+	JoinSignal       string         `json:"join_signal,omitempty"`
 	DeviceKind       string         `json:"device_kind,omitempty"`
 	PermissionState  string         `json:"permission_state,omitempty"`
 	RenderCause      string         `json:"render_cause,omitempty"`

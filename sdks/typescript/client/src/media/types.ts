@@ -1,3 +1,4 @@
+import type { InitialJoin } from "./initial-join";
 import type { TelemetrySink } from "../telemetry/types";
 import type { TransportDiagnostic } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
@@ -185,6 +186,7 @@ export type CloudflareSFUClientOptions = {
   readonly onReceiveHealth?: (event: TransportDiagnostic) => void;
   /** Where call stats windows go. */
   readonly telemetry?: TelemetrySink;
+  readonly initialJoin?: InitialJoin;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };

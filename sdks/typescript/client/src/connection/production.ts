@@ -94,6 +94,7 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
     onDiagnostic: (event) => console.warn("chalk.media.local_offer_pending", event),
     onReceiveHealth: input.onTransportDiagnostic,
     telemetry: input.telemetry,
+    initialJoin: input.initialJoin,
     onScreenEnded: input.onScreenEnded,
   });
   return bindConnectionMediaClient(client, (input) => client.restart("provider" in input ? mediaBootstrap(input) : input));

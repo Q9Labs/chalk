@@ -3,18 +3,19 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "72216cc081c8"
+const SchemaVer = "b41919826048"
 
 // Event names.
 const (
-	EventClientCallEnded  = "client.call_ended"
-	EventObsClockJump     = "obs.clock_jump"
-	EventObsFlagsSnapshot = "obs.flags_snapshot"
-	EventSelftestAdmit    = "selftest.admit"
-	EventSelftestBanner   = "selftest.banner"
-	EventSelftestNote     = "selftest.note"
-	EventSelftestWork     = "selftest.work"
-	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventClientCallEnded   = "client.call_ended"
+	EventJoinInitialSignal = "join.initial_signal"
+	EventObsClockJump      = "obs.clock_jump"
+	EventObsFlagsSnapshot  = "obs.flags_snapshot"
+	EventSelftestAdmit     = "selftest.admit"
+	EventSelftestBanner    = "selftest.banner"
+	EventSelftestNote      = "selftest.note"
+	EventSelftestWork      = "selftest.work"
+	EventSyncEpisodeEnded  = "sync.episode.ended"
 )
 
 // Machine names.
@@ -26,11 +27,19 @@ const (
 
 // Reason codes.
 const (
-	ReasonCancelled      = "cancelled"
-	ReasonEndTimeLimit   = "end.time_limit"
-	ReasonSelftestBroken = "selftest.broken"
-	ReasonSelftestBusy   = "selftest.busy"
-	ReasonUnclassified   = "unclassified"
+	ReasonCancelled             = "cancelled"
+	ReasonEndTimeLimit          = "end.time_limit"
+	ReasonJoinSyncFailed        = "join.sync_failed"
+	ReasonJoinSyncTimeout       = "join.sync_timeout"
+	ReasonMediaDtlsFailed       = "media.dtls_failed"
+	ReasonMediaIceFailed        = "media.ice_failed"
+	ReasonMediaPublishFailed    = "media.publish_failed"
+	ReasonMediaRtpTimeout       = "media.rtp_timeout"
+	ReasonMediaSubscribeTimeout = "media.subscribe_timeout"
+	ReasonMediaTransportTimeout = "media.transport_timeout"
+	ReasonSelftestBroken        = "selftest.broken"
+	ReasonSelftestBusy          = "selftest.busy"
+	ReasonUnclassified          = "unclassified"
 )
 
 // Field names.
@@ -68,6 +77,7 @@ const (
 	FieldGeneration         = "generation"
 	FieldItemCount          = "item_count"
 	FieldJobID              = "job_id"
+	FieldJoinSignal         = "join_signal"
 	FieldJourneyID          = "journey_id"
 	FieldJumpMs             = "jump_ms"
 	FieldKind               = "kind"
@@ -138,6 +148,7 @@ var registryFields = map[string]fieldSpec{
 	"generation":           {typ: "int", group: "trail", required: false},
 	"item_count":           {typ: "int", group: "event", required: false},
 	"job_id":               {typ: "id", group: "trail", required: false},
+	"join_signal":          {typ: "enum", group: "event", required: false, values: []string{"started", "sync_started", "sync_live", "sync_entered", "sync_timeout", "sync_failed", "mic_off", "mic_captured", "mic_denied", "mic_absent", "mic_unavailable", "camera_off", "camera_captured", "camera_denied", "camera_absent", "camera_unavailable", "publish_started", "publish_accepted", "publish_skipped", "publish_failed", "subscribe_started", "subscribe_accepted", "subscribe_failed", "subscribe_timeout", "ice_checking", "ice_connected", "ice_disconnected", "ice_failed", "dtls_connecting", "dtls_connected", "dtls_failed", "direct_selected", "relay_selected", "relay_fallback", "transport_timeout", "rtp_timeout", "send_rtp", "receive_rtp", "ready", "listen_only", "startup_ice_failed", "startup_dtls_failed"}},
 	"journey_id":           {typ: "id", group: "trail", required: false},
 	"jump_ms":              {typ: "int", group: "event", required: false},
 	"kind":                 {typ: "enum", group: "record", required: true, values: []string{"op", "transition", "decision", "surface", "fact"}},
@@ -175,14 +186,15 @@ var registryFields = map[string]fieldSpec{
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
-	"obs.flags_snapshot": {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
-	"selftest.admit":     {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
-	"selftest.banner":    {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
-	"selftest.note":      {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
-	"selftest.work":      {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
-	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"client.call_ended":   {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"join.initial_signal": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"join_signal": {required: true}}},
+	"obs.clock_jump":      {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
+	"obs.flags_snapshot":  {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
+	"selftest.admit":      {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
+	"selftest.banner":     {kind: "surface", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"banner_kind": {required: true}}},
+	"selftest.note":       {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
+	"selftest.work":       {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
+	"sync.episode.ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
 }
 
 var registryMachines = map[string]machineSpec{
@@ -192,11 +204,19 @@ var registryMachines = map[string]machineSpec{
 }
 
 var registryReasons = map[string]string{
-	"cancelled":       "expected",
-	"end.time_limit":  "expected",
-	"selftest.broken": "error",
-	"selftest.busy":   "expected",
-	"unclassified":    "error",
+	"cancelled":               "expected",
+	"end.time_limit":          "expected",
+	"join.sync_failed":        "error",
+	"join.sync_timeout":       "error",
+	"media.dtls_failed":       "error",
+	"media.ice_failed":        "error",
+	"media.publish_failed":    "error",
+	"media.rtp_timeout":       "error",
+	"media.subscribe_timeout": "error",
+	"media.transport_timeout": "error",
+	"selftest.broken":         "error",
+	"selftest.busy":           "expected",
+	"unclassified":            "error",
 }
 
 var registryIDKinds = []idKind{

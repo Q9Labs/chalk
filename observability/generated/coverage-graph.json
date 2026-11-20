@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "b41919826048",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -221,17 +221,41 @@
       "code": "join.no_media",
       "area": "join",
       "slice": 2,
-      "allowlisted": true,
+      "allowlisted": false,
       "item": "episode",
       "per": "seat",
-      "witnesses": [],
-      "events": [],
+      "witnesses": [
+        {
+          "fact": "join.initial",
+          "from": ["client"],
+          "required": true,
+          "events": [
+            {
+              "event": "join.initial_signal",
+              "source": "client",
+              "fields": ["join_signal", "op_id"]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "name": "join.initial_signal",
+          "fields": ["join_signal"],
+          "emit_sites": [
+            {
+              "path": "sdks/typescript/client/src/media/initial-join.ts",
+              "literal": "join.initial_signal"
+            }
+          ]
+        }
+      ],
       "rule": "observability/rules/join.no_media.mjs",
       "fixtures": {
         "positive": "observability/fixtures/join.no_media/positive.json",
         "healthy": "observability/fixtures/join.no_media/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/initial-join.fault.test.ts"
     },
     {
       "code": "page.crashed",

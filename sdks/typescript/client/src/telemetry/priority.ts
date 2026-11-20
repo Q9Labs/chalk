@@ -9,6 +9,7 @@ export const PRIORITY: Record<TelemetryEventType, Priority> = {
   render_crashed: "p0",
   problem_reported: "p0",
   telemetry_dropped: "p0",
+  initial_join: "p0",
   space_join_span: "p0",
   recovery_exhausted: "p0",
   access_refresh_failed: "p0",

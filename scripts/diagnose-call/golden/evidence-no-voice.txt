@@ -1,4 +1,4 @@
-evidence f_5b55 audio.not_heard pt_4c1e(Haris) of=ep_9feb outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=d7d52b11
+evidence f_5b55 audio.not_heard pt_4c1e(Haris) of=ep_9feb outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=ebf2a46c
 anchor=2026-11-18T09:45Z local=14:45+05:00
 expected: while the microphone is unmuted for 5 s or more, voiced audio packets reach SFU ingress
 observed: unmuted, 10480 packets and 0 voiced at SFU ingress +07:10..+10:40

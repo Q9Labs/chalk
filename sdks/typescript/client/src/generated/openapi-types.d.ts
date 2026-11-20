@@ -2789,6 +2789,50 @@ export interface components {
         heartbeat_gap_ms?: number | null;
         http_status?: number | null;
         /** @enum {string} */
+        join_signal?:
+          | "started"
+          | "sync_started"
+          | "sync_live"
+          | "sync_entered"
+          | "sync_timeout"
+          | "sync_failed"
+          | "mic_off"
+          | "mic_captured"
+          | "mic_denied"
+          | "mic_absent"
+          | "mic_unavailable"
+          | "camera_off"
+          | "camera_captured"
+          | "camera_denied"
+          | "camera_absent"
+          | "camera_unavailable"
+          | "publish_started"
+          | "publish_accepted"
+          | "publish_skipped"
+          | "publish_failed"
+          | "subscribe_started"
+          | "subscribe_accepted"
+          | "subscribe_failed"
+          | "subscribe_timeout"
+          | "ice_checking"
+          | "ice_connected"
+          | "ice_disconnected"
+          | "ice_failed"
+          | "dtls_connecting"
+          | "dtls_connected"
+          | "dtls_failed"
+          | "direct_selected"
+          | "relay_selected"
+          | "relay_fallback"
+          | "transport_timeout"
+          | "rtp_timeout"
+          | "send_rtp"
+          | "receive_rtp"
+          | "ready"
+          | "listen_only"
+          | "startup_ice_failed"
+          | "startup_dtls_failed";
+        /** @enum {string} */
         mechanism?: "ice_restart" | "media_reconnect" | "sync_reconnect" | "sync_digest" | "access_refresh";
         /** @enum {string} */
         media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
@@ -2886,6 +2930,7 @@ export interface components {
           | "cleanup_unconfirmed"
           | "connection_failed"
           | "device_failed"
+          | "initial_join"
           | "media_http_error"
           | "media_intent"
           | "media_projection_mismatch"

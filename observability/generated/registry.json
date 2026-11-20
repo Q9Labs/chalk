@@ -1,5 +1,5 @@
 {
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "b41919826048",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -823,6 +823,58 @@
       "doc": "The background job."
     },
     {
+      "name": "join_signal",
+      "type": "enum",
+      "values": [
+        "started",
+        "sync_started",
+        "sync_live",
+        "sync_entered",
+        "sync_timeout",
+        "sync_failed",
+        "mic_off",
+        "mic_captured",
+        "mic_denied",
+        "mic_absent",
+        "mic_unavailable",
+        "camera_off",
+        "camera_captured",
+        "camera_denied",
+        "camera_absent",
+        "camera_unavailable",
+        "publish_started",
+        "publish_accepted",
+        "publish_skipped",
+        "publish_failed",
+        "subscribe_started",
+        "subscribe_accepted",
+        "subscribe_failed",
+        "subscribe_timeout",
+        "ice_checking",
+        "ice_connected",
+        "ice_disconnected",
+        "ice_failed",
+        "dtls_connecting",
+        "dtls_connected",
+        "dtls_failed",
+        "direct_selected",
+        "relay_selected",
+        "relay_fallback",
+        "transport_timeout",
+        "rtp_timeout",
+        "send_rtp",
+        "receive_rtp",
+        "ready",
+        "listen_only",
+        "startup_ice_failed",
+        "startup_dtls_failed"
+      ],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/join",
+      "doc": "One bounded observation about the admitted SDK Join and its first media path."
+    },
+    {
       "name": "journey_id",
       "type": "id",
       "id_kind": "journey",
@@ -1134,6 +1186,62 @@
       "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
     },
     {
+      "code": "join.sync_failed",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: sync failed."
+    },
+    {
+      "code": "join.sync_timeout",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: sync timeout."
+    },
+    {
+      "code": "media.dtls_failed",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: dtls failed."
+    },
+    {
+      "code": "media.ice_failed",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: ice failed."
+    },
+    {
+      "code": "media.publish_failed",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: publish failed."
+    },
+    {
+      "code": "media.rtp_timeout",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: rtp timeout."
+    },
+    {
+      "code": "media.subscribe_timeout",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: subscribe timeout."
+    },
+    {
+      "code": "media.transport_timeout",
+      "outcome": "error",
+      "area": "join",
+      "test_only": false,
+      "doc": "Initial Join failed: transport timeout."
+    },
+    {
       "code": "selftest.broken",
       "outcome": "error",
       "area": "selftest",
@@ -1186,6 +1294,33 @@
         }
       },
       "doc": "The SDK decided which end screen the call gets. Today it reaches Axiom as an sdk.telemetry row of type call_ended."
+    },
+    {
+      "name": "join.initial_signal",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["sdk"],
+      "area": "join",
+      "test_only": false,
+      "fields": {
+        "join_signal": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/media/initial-join.ts",
+          "literal": "join.initial_signal"
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "initial_join"
+        }
+      },
+      "doc": "An admitted SDK Join reached an initial Sync, capture, signaling or RTP milestone."
     },
     {
       "name": "obs.clock_jump",
@@ -1437,6 +1572,22 @@
       "doc": "The Episode's authoritative end. Claim: the end reason."
     },
     {
+      "name": "join.initial",
+      "area": "join",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "join.initial_signal",
+          "source": "client",
+          "claim": "join_signal",
+          "failure_claims": ["sync_timeout", "sync_failed", "publish_failed", "subscribe_timeout", "startup_ice_failed", "startup_dtls_failed", "transport_timeout", "rtp_timeout"],
+          "fields": ["join_signal", "op_id"]
+        }
+      ],
+      "doc": "The joined seat’s first media attempt, with explicit outcomes and bounded evidence of progress."
+    },
+    {
       "name": "join.leave",
       "area": "join",
       "kind": "event",
@@ -1649,15 +1800,24 @@
       "slice": 2,
       "item": "episode",
       "per": "seat",
-      "doc": "The Participant joined but no media connected, so they neither hear nor are heard.",
+      "doc": "A Participant’s initial Sync or media startup failed before any RTP flowed.",
       "user_words": ["I joined but nothing works", "stuck on connecting"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "join.initial",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'initial_join'",
+          "doc": "The client witnesses completed startup, or why an admitted Join failed before media flowed."
+        }
+      ],
       "rule": "observability/rules/join.no_media.mjs",
       "fixtures": {
         "positive": "observability/fixtures/join.no_media/positive.json",
         "healthy": "observability/fixtures/join.no_media/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "sdks/typescript/client/src/media/initial-join.fault.test.ts"
     },
     {
       "code": "page.crashed",
@@ -1773,10 +1933,6 @@
     {
       "code": "end.time_limit",
       "slice": 8
-    },
-    {
-      "code": "join.no_media",
-      "slice": 2
     },
     {
       "code": "page.crashed",

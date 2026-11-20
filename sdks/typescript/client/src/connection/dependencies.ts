@@ -1,3 +1,4 @@
+import type { InitialJoin } from "../media/initial-join";
 import type { ParticipantEpisodeStatus } from "../generated/schemas";
 import type { TransportPath } from "../direct-path";
 import type { TelemetryOutbox } from "../telemetry/outbox";
@@ -94,6 +95,7 @@ export type ConnectionMediaFactoryInput = {
   readonly replaceMediaConnection?: (observedConnectionId: string) => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly telemetry?: TelemetrySink;
+  readonly initialJoin?: InitialJoin;
   readonly onTransportDiagnostic?: (event: TransportDiagnostic) => void;
   readonly onTransportPath?: (path: TransportPath) => void;
   readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;

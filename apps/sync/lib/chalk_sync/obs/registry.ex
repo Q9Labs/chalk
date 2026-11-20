@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "b41919826048"
 
   @events %{
     "client.call_ended" => %{
@@ -17,6 +17,17 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
+        }
+      }
+    },
+    "join.initial_signal" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "join_signal" => %{
+          "required" => true
         }
       }
     },
@@ -299,6 +310,12 @@ defmodule ChalkSync.Obs.Registry do
       "required" => false,
       "values" => nil
     },
+    "join_signal" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["started", "sync_started", "sync_live", "sync_entered", "sync_timeout", "sync_failed", "mic_off", "mic_captured", "mic_denied", "mic_absent", "mic_unavailable", "camera_off", "camera_captured", "camera_denied", "camera_absent", "camera_unavailable", "publish_started", "publish_accepted", "publish_skipped", "publish_failed", "subscribe_started", "subscribe_accepted", "subscribe_failed", "subscribe_timeout", "ice_checking", "ice_connected", "ice_disconnected", "ice_failed", "dtls_connecting", "dtls_connected", "dtls_failed", "direct_selected", "relay_selected", "relay_fallback", "transport_timeout", "rtp_timeout", "send_rtp", "receive_rtp", "ready", "listen_only", "startup_ice_failed", "startup_dtls_failed"]
+    },
     "journey_id" => %{
       "type" => "id",
       "group" => "trail",
@@ -550,6 +567,14 @@ defmodule ChalkSync.Obs.Registry do
   @reasons %{
     "cancelled" => "expected",
     "end.time_limit" => "expected",
+    "join.sync_failed" => "error",
+    "join.sync_timeout" => "error",
+    "media.dtls_failed" => "error",
+    "media.ice_failed" => "error",
+    "media.publish_failed" => "error",
+    "media.rtp_timeout" => "error",
+    "media.subscribe_timeout" => "error",
+    "media.transport_timeout" => "error",
     "selftest.broken" => "error",
     "selftest.busy" => "expected",
     "unclassified" => "error"

@@ -64,7 +64,7 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "join.initial", "end.client_screen"]);
 
 /**
  * @param {string} participant
@@ -99,6 +99,25 @@ const mic = (episode, participant, id, from, to, claim) =>
 const ingress = (episode, participant, id, from, to, packets, voiced) =>
   row(id, { fact: "audio.ingress", source: "sfu", origin: origin.measured("sfu"), subject: { episode, participant, connection: connectionOf(participant) }, window: { from_ms: from, to_ms: to }, claim: voiced > 0 ? "voiced" : "silent", value: { packets, voiced }, failure: false });
 
+/** @param {string} episode @param {ReturnType<typeof seat>} subject @param {number} index */
+function initialJoin(episode, subject, index) {
+  const prefix = episode.slice(0, 8);
+  const op_id = `${prefix}-0010-4000-8000-${String(index).padStart(12, "0")}`;
+  return ["started", subject.can_publish ? "ready" : "listen_only"].map((claim, step) => {
+    const at = subject.window.from_ms + 1_000 * (step + 1);
+    return row(`${prefix}-0011-4000-8000-${String(index * 2 + step).padStart(12, "0")}`, {
+      fact: "join.initial",
+      source: "client",
+      origin: origin.measured("client", subject.participant),
+      subject: { episode, participant: subject.participant, generation: 1, connection: connectionOf(subject.participant) },
+      window: { from_ms: at, to_ms: at },
+      claim,
+      value: { op_id },
+      failure: false,
+    });
+  });
+}
+
 /**
  * Complete watermarks for an ended Episode: whole-item API, SFU, Sync and report streams, and each seat's client.
  * @param {readonly string[]} participants
@@ -125,6 +144,7 @@ function quietEpisode(id, tenant, from, minutes, people) {
   const to = from + minutes * 60_000;
   const seats = people.map((person, index) => seat(`${id.replaceAll("-", "").slice(0, 8)}${String(index).repeat(24)}`, person.name, user(person), { from_ms: from, to_ms: to }));
   const observations = seats.flatMap((s, index) => [
+    ...initialJoin(id, s, index),
     mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
     ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
   ]);
@@ -154,6 +174,7 @@ export function nov18() {
   ];
   /** @type {Observation[]} */
   const observations = [
+    ...seats.flatMap((s, index) => initialJoin(ep, s, index)),
     mic(ep, IDS.ptHaris, IDS.evMic, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), "unmuted"),
     ingress(ep, IDS.ptHaris, IDS.evIngress, at("2026-11-18T09:52:10Z"), at("2026-11-18T09:55:40Z"), 10_480, 0),
     mic(ep, IDS.ptSana, "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), "unmuted"),
@@ -212,7 +233,7 @@ export function nov18() {
 
   const ep2d4e = quietEpisode(IDS.ep2d4e, TH, at("2026-11-11T10:00:00Z"), 40, [PEOPLE.haris, PEOPLE.sana]);
   const harisSeat = ep2d4e.declaration.seats[0].participant;
-  ep2d4e.evidence.observations = ep2d4e.evidence.observations.filter((o) => o.subject.participant !== harisSeat);
+  ep2d4e.evidence.observations = ep2d4e.evidence.observations.filter((o) => o.subject.participant !== harisSeat || o.fact === "join.initial");
   ep2d4e.evidence.observations.push(
     mic(IDS.ep2d4e, harisSeat, "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5e", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), "unmuted"),
     ingress(IDS.ep2d4e, harisSeat, "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6f", at("2026-11-11T10:05:00Z"), at("2026-11-11T10:06:30Z"), 4_500, 0),

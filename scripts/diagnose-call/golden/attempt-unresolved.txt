@@ -1,4 +1,4 @@
-attempt cs_6d5e tenant=TH outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=d7d52b11
+attempt cs_6d5e tenant=TH outcome=broken coverage=complete checked=1/1 asof=2026-11-19T01:00Z rules=ebf2a46c
 anchor=2026-11-18T10:02Z local=15:02+05:00
 f_bdef broken admission.unresolved all +00:00..+00:40 hop=api_admission module=api.admission upstream=unknown
 fact: no admission decision [proven absent]

@@ -217,6 +217,28 @@ function selectedPair(report: RTCStatsReport): Stat | undefined {
   return stats(report, "candidate-pair").find((stat) => stat.state === "succeeded" && (stat.selected === true || stat.nominated === true));
 }
 
+/** Only bounded labels leave the first-media observer; the selected pair's ids and addresses stay here. */
+export function initialMediaStats(report: RTCStatsReport) {
+  const pair = selectedPair(report);
+  const local = pair ? candidateType(report.get(String(pair.localCandidateId))) : undefined;
+  const remote = pair ? candidateType(report.get(String(pair.remoteCandidateId))) : undefined;
+  const transports = stats(report, "transport");
+  const transport = transports.find((stat) => pair && stat.selectedCandidatePairId === pair.id) ?? (transports.length === 1 ? transports[0] : undefined);
+  const dtls = transport?.dtlsState;
+  const dtlsState: "connecting" | "connected" | "failed" | undefined = dtls === "connecting" || dtls === "connected" || dtls === "failed" ? dtls : undefined;
+  return {
+    path: local === "relay" || remote === "relay" ? "relay" : local && remote ? "direct" : undefined,
+    dtls: dtlsState,
+    sent: packetEvidence(stats(report, "outbound-rtp"), "packetsSent"),
+    received: packetEvidence(stats(report, "inbound-rtp"), "packetsReceived"),
+  };
+}
+
+function packetEvidence(rows: readonly Stat[], field: string): "flowed" | "zero" | "unknown" {
+  if (rows.some((row) => typeof row[field] === "number" && row[field] > 0)) return "flowed";
+  return rows.length > 0 && rows.every((row) => row[field] === 0) ? "zero" : "unknown";
+}
+
 function connectionType(local: Stat | undefined): CallStatsSample["connection_type"] {
   if (!local) return "unknown";
   if (local.candidateType === "relay") return "turn";
