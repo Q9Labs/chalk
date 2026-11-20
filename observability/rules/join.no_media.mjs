@@ -50,8 +50,8 @@ export function decide({ readings }) {
     };
   }
 
-  const attempts = new Set(initial.observations.map(({ value }) => value.op_id));
-  const completed = new Set(initial.observations.filter(({ claim }) => claim === "ready" || claim === "listen_only").map(({ value }) => value.op_id));
+  const attempts = new Set(initial.observations.map(({ value }) => value.join_attempt_id ?? value.op_id));
+  const completed = new Set(initial.observations.filter(({ claim }) => claim === "ready" || claim === "listen_only").map(({ value }) => value.join_attempt_id ?? value.op_id));
   if (attempts.size === 0 || [...attempts].some((id) => typeof id !== "string" || !completed.has(id))) return { status: "unknown", reason: "initial media was not proved in the required directions" };
   return { status: "pass" };
 }

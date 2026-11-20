@@ -38,7 +38,7 @@ test("the listen-only control needs a placeable outcome for every observed Join"
   assert.deepEqual(judge([]), { findings: 0, checked: 0, eligible: 1 });
 
   const [first] = recorded.rows;
-  const unfinished = { ...first, event_id: "4c8e67f9-7425-40de-944b-e07fc1f90ae8", op_id: "4c8e67f9-7425-40de-944b-e07fc1f90ae9", join_signal: "ice_checking" };
+  const unfinished = { ...first, event_id: "4c8e67f9-7425-40de-944b-e07fc1f90ae8", join_attempt_id: "4c8e67f9-7425-40de-944b-e07fc1f90ae9", join_signal: "ice_checking" };
   assert.deepEqual(judge([...recorded.rows, unfinished]), { findings: 0, checked: 0, eligible: 1 });
 });
 

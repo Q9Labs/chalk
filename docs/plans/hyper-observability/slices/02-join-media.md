@@ -19,7 +19,7 @@ Listen-only after a denied or absent input is supported, not a finding. The proo
 
 ## 3. Witnesses
 
-`join.initial` is a per-seat SDK fact. It reads `join.initial_signal` (`sdk.telemetry` type `initial_join` until the client kernel envelope has a native delivery path). Query: `episode_id`, Participant, and `op_id` for one Join. The server binds identity to the credential rather than accepting a Participant claim from the payload.
+`join.initial` is a per-seat SDK fact. It reads `join.initial_signal` (`sdk.telemetry` type `initial_join` until the client kernel envelope has a native delivery path). Query: `episode_id`, Participant, and `join_attempt_id` for one Join (`op_id` on the legacy wire). The server binds identity to the credential rather than accepting a Participant claim from the payload.
 
 | Hop | Evidence |
 |---|---|

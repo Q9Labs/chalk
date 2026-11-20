@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "b41919826048",
+  "schema_ver": "2f0928ec80e1",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -233,7 +233,7 @@
             {
               "event": "join.initial_signal",
               "source": "client",
-              "fields": ["join_signal", "op_id"]
+              "fields": ["join_signal", "join_attempt_id"]
             }
           ]
         }
@@ -241,7 +241,7 @@
       "events": [
         {
           "name": "join.initial_signal",
-          "fields": ["join_signal"],
+          "fields": ["join_signal", "join_attempt_id"],
           "emit_sites": [
             {
               "path": "sdks/typescript/client/src/media/initial-join.ts",

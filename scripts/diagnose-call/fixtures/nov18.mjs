@@ -102,7 +102,7 @@ const ingress = (episode, participant, id, from, to, packets, voiced) =>
 /** @param {string} episode @param {ReturnType<typeof seat>} subject @param {number} index */
 function initialJoin(episode, subject, index) {
   const prefix = episode.slice(0, 8);
-  const op_id = `${prefix}-0010-4000-8000-${String(index).padStart(12, "0")}`;
+  const join_attempt_id = `${prefix}-0010-4000-8000-${String(index).padStart(12, "0")}`;
   return ["started", subject.can_publish ? "ready" : "listen_only"].map((claim, step) => {
     const at = subject.window.from_ms + 1_000 * (step + 1);
     return row(`${prefix}-0011-4000-8000-${String(index * 2 + step).padStart(12, "0")}`, {
@@ -112,7 +112,7 @@ function initialJoin(episode, subject, index) {
       subject: { episode, participant: subject.participant, generation: 1, connection: connectionOf(subject.participant) },
       window: { from_ms: at, to_ms: at },
       claim,
-      value: { op_id },
+      value: { join_attempt_id },
       failure: false,
     });
   });

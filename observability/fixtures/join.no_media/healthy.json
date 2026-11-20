@@ -36,182 +36,182 @@
       "event_id": "9c8e67f9-7425-40de-944b-000000000001",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 0,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596401000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "started"
+      "join_signal": "started",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000002",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 1,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596402000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "mic_denied"
+      "join_signal": "mic_denied",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000003",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 2,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596403000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "camera_off"
+      "join_signal": "camera_off",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000004",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 3,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596404000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "sync_started"
+      "join_signal": "sync_started",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000005",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 4,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596405000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "sync_live"
+      "join_signal": "sync_live",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000006",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 5,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596406000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "publish_skipped"
+      "join_signal": "publish_skipped",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000007",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 6,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596407000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "sync_entered"
+      "join_signal": "sync_entered",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000008",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 7,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596408000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "subscribe_started"
+      "join_signal": "subscribe_started",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000009",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 8,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596409000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "ice_connected"
+      "join_signal": "ice_connected",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000010",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 9,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596410000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "dtls_connected"
+      "join_signal": "dtls_connected",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000011",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 10,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596411000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "relay_selected"
+      "join_signal": "relay_selected",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000012",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 11,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596412000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "subscribe_accepted"
+      "join_signal": "subscribe_accepted",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000013",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 12,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596413000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "receive_rtp"
+      "join_signal": "receive_rtp",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     },
     {
       "event": "join.initial_signal",
       "event_id": "9c8e67f9-7425-40de-944b-000000000014",
       "source_id": "3c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "seq": 13,
-      "op_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7",
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000001",
       "est_server_ms": 1795596414000,
       "clock_state": "synced",
       "clock_err_ms": 20,
-      "join_signal": "listen_only"
+      "join_signal": "listen_only",
+      "join_attempt_id": "4c8e67f9-7425-40de-944b-e07fc1f90ae7"
     }
   ],
   "watermarks": [

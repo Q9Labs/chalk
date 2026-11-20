@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "b41919826048"
+  @schema_ver "2f0928ec80e1"
 
   @events %{
     "client.call_ended" => %{
@@ -28,6 +28,9 @@ defmodule ChalkSync.Obs.Registry do
       "fields" => %{
         "join_signal" => %{
           "required" => true
+        },
+        "join_attempt_id" => %{
+          "required" => false
         }
       }
     },
@@ -307,6 +310,12 @@ defmodule ChalkSync.Obs.Registry do
     "job_id" => %{
       "type" => "id",
       "group" => "trail",
+      "required" => false,
+      "values" => nil
+    },
+    "join_attempt_id" => %{
+      "type" => "id",
+      "group" => "event",
       "required" => false,
       "values" => nil
     },

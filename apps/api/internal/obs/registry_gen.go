@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "b41919826048"
+const SchemaVer = "2f0928ec80e1"
 
 // Event names.
 const (
@@ -77,6 +77,7 @@ const (
 	FieldGeneration         = "generation"
 	FieldItemCount          = "item_count"
 	FieldJobID              = "job_id"
+	FieldJoinAttemptID      = "join_attempt_id"
 	FieldJoinSignal         = "join_signal"
 	FieldJourneyID          = "journey_id"
 	FieldJumpMs             = "jump_ms"
@@ -148,6 +149,7 @@ var registryFields = map[string]fieldSpec{
 	"generation":           {typ: "int", group: "trail", required: false},
 	"item_count":           {typ: "int", group: "event", required: false},
 	"job_id":               {typ: "id", group: "trail", required: false},
+	"join_attempt_id":      {typ: "id", group: "event", required: false},
 	"join_signal":          {typ: "enum", group: "event", required: false, values: []string{"started", "sync_started", "sync_live", "sync_entered", "sync_timeout", "sync_failed", "mic_off", "mic_captured", "mic_denied", "mic_absent", "mic_unavailable", "camera_off", "camera_captured", "camera_denied", "camera_absent", "camera_unavailable", "publish_started", "publish_accepted", "publish_skipped", "publish_failed", "subscribe_started", "subscribe_accepted", "subscribe_failed", "subscribe_timeout", "ice_checking", "ice_connected", "ice_disconnected", "ice_failed", "dtls_connecting", "dtls_connected", "dtls_failed", "direct_selected", "relay_selected", "relay_fallback", "transport_timeout", "rtp_timeout", "send_rtp", "receive_rtp", "ready", "listen_only", "startup_ice_failed", "startup_dtls_failed"}},
 	"journey_id":           {typ: "id", group: "trail", required: false},
 	"jump_ms":              {typ: "int", group: "event", required: false},
@@ -187,7 +189,7 @@ var registryFields = map[string]fieldSpec{
 
 var registryEvents = map[string]eventSpec{
 	"client.call_ended":   {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
-	"join.initial_signal": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"join_signal": {required: true}}},
+	"join.initial_signal": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"join_signal": {required: true}, "join_attempt_id": {required: false}}},
 	"obs.clock_jump":      {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
 	"obs.flags_snapshot":  {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
 	"selftest.admit":      {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},

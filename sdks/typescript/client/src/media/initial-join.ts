@@ -1,5 +1,5 @@
 import { ClockEstimator } from "../obs/clock";
-import { createKernel } from "../obs/kernel";
+import { createKernel, type Kernel } from "../obs/kernel";
 import { FIELDS, type EventFields } from "../obs/registry";
 import type { TelemetryOutbox } from "../telemetry/outbox";
 import { initialMediaStats } from "./call-stats";
@@ -178,11 +178,18 @@ export class InitialJoin {
   }
 }
 
+function carriesKernel(telemetry: TelemetryOutbox): telemetry is TelemetryOutbox & { readonly obs: Pick<Kernel, "fact"> } {
+  return "obs" in telemetry && typeof telemetry.obs === "object" && telemetry.obs !== null && "fact" in telemetry.obs && typeof telemetry.obs.fact === "function";
+}
+
 export function observeInitialJoin(telemetry: TelemetryOutbox): InitialJoin {
   const opId = globalThis.crypto.randomUUID();
+  if (carriesKernel(telemetry)) {
+    return new InitialJoin((signal) => telemetry.obs.fact("join.initial_signal", { join_attempt_id: opId, join_signal: signal }));
+  }
   const kernel = createKernel({
     mode: "open",
-    sourceId: telemetry.sessionId,
+    sourceId: opId,
     build: { module: "sdk", env: "local" },
     clock: new ClockEstimator({ mono: () => performance.now(), wall: Date.now }),
     // The legacy outbox owns the wire ids and sequence. Forward only the registered fact's payload.
@@ -191,5 +198,5 @@ export function observeInitialJoin(telemetry: TelemetryOutbox): InitialJoin {
       if (row.name === "join.initial_signal" && signal) telemetry.record({ type: "initial_join", op_id: opId, join_signal: signal });
     },
   });
-  return new InitialJoin((signal) => kernel.fact("join.initial_signal", { join_signal: signal }));
+  return new InitialJoin((signal) => kernel.fact("join.initial_signal", { join_attempt_id: opId, join_signal: signal }));
 }

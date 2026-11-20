@@ -5,6 +5,7 @@ import { createSpaceClientForPlatform } from "../space-client/space-client";
 import type { ConnectionMediaFactoryInput } from "../connection/dependencies";
 import { CloudflareSFUClient, CloudflareSFUError } from "./cloudflare-sfu";
 import { bootstrap, FakeTrack, FakeTransport, fakeStream, versionedPublicationID } from "./cloudflare-sfu.test.helpers";
+import { InitialJoin } from "./initial-join";
 
 const symptom = "join.no_media";
 const CONNECTED = { connection: "connected", ice: "connected" } as const;
@@ -117,10 +118,14 @@ function scenario(input: { readonly syncTimeout?: boolean; readonly deviceError?
   clients.push(client);
   const signals = async () => {
     await base.outbox.outbox.flush();
-    const events = base.outbox.accepted.filter((event) => event.type === "initial_join");
-    expect(new Set(events.map((event) => event.op_id)).size).toBe(1);
-    expect(events.every((event) => event.event_id !== undefined)).toBe(true);
-    return events.map((event) => event.join_signal);
+    const events = base.outbox.accepted.flatMap((event) => {
+      if ("name" in event && event.name === "join.initial_signal" && "join_attempt_id" in event) return [{ id: event.join_attempt_id, signal: event.join_signal, eventId: event.event_id }];
+      if ("type" in event && event.type === "initial_join") return [{ id: event.op_id, signal: event.join_signal, eventId: event.event_id }];
+      return [];
+    });
+    expect(new Set(events.map((event) => event.id)).size).toBe(1);
+    expect(events.every((event) => event.eventId !== undefined)).toBe(true);
+    return events.map((event) => event.signal);
   };
   return { client, peer, transport, signals };
 }
@@ -217,5 +222,27 @@ describe(symptom, () => {
     test.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
     await vi.advanceTimersByTimeAsync(35_000);
     expect(await test.signals()).not.toContain("rtp_timeout");
+  });
+  it("does not complete startup with RTP from a different peer after the recovery seam", async () => {
+    const signals: string[] = [];
+    const observe = new InitialJoin((signal) => signals.push(signal));
+    const first = new Peer();
+    const second = new Peer();
+    const startup = first as unknown as RTCPeerConnection;
+    const replacement = second as unknown as RTCPeerConnection;
+
+    observe.observePeer(startup);
+    observe.syncEntered();
+    observe.publication("accepted");
+    first.sendPackets = 3;
+    observe.sample(startup, await first.getStats(), 1_000, false);
+    expect(signals).toContain("send_rtp");
+
+    observe.observePeer(replacement);
+    observe.subscribe(replacement, "accepted");
+    second.receivePackets = 3;
+    observe.sample(replacement, await second.getStats(), 2_000, false);
+    expect(signals).not.toContain("receive_rtp");
+    expect(signals).not.toContain("ready");
   });
 });

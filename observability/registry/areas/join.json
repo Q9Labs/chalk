@@ -53,6 +53,13 @@
       ],
       "sensitivity": null,
       "doc": "One bounded observation about the admitted SDK Join and its first media path."
+    },
+    {
+      "name": "join_attempt_id",
+      "type": "id",
+      "id_kind": "operation",
+      "sensitivity": null,
+      "doc": "Correlates the milestones of a single admitted SDK Join."
     }
   ],
   "events": [
@@ -66,6 +73,9 @@
       "fields": {
         "join_signal": {
           "required": true
+        },
+        "join_attempt_id": {
+          "required": false
         }
       },
       "emit_sites": [
@@ -167,7 +177,7 @@
           "source": "client",
           "claim": "join_signal",
           "failure_claims": ["sync_timeout", "sync_failed", "publish_failed", "subscribe_timeout", "startup_ice_failed", "startup_dtls_failed", "transport_timeout", "rtp_timeout"],
-          "fields": ["join_signal", "op_id"]
+          "fields": ["join_signal", "join_attempt_id"]
         }
       ],
       "doc": "The joined seat’s first media attempt, with explicit outcomes and bounded evidence of progress."
@@ -185,7 +195,7 @@
           "fact": "join.initial",
           "from": ["client"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'initial_join'",
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'join.initial_signal' or (event == 'sdk.telemetry' and type == 'initial_join'))",
           "doc": "The client witnesses completed startup, or why an admitted Join failed before media flowed."
         }
       ],
