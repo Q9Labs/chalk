@@ -70,11 +70,8 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		}
 		return nil
 	}
-	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
+	err := readSpool(state.spoolPath, withinPresentation(opusClockRate, durationMS, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if err := validateMediaTimestamp(packet.Timestamp, opusClockRate, durationMS); err != nil {
 			return err
 		}
 		lost := started && (packet.ExtendedSequenceNumber != previousSequence+1 || packet.SSRC != previousSSRC)
@@ -127,7 +124,7 @@ func decodeOpusSource(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		started = true
 		pendingPacketLoss = false
 		return nil
-	})
+	}))
 	if err != nil {
 		if writer != nil {
 			closing := writer

@@ -46,8 +46,9 @@ var captureFailureLiterals = []string{
 	"recording key response is invalid",
 	"access recording key", "apply recorder capture lease", "authorize capture packets",
 	"build recorder capture authority", "claim recorder capture job", "commit recording bundle",
+	"close capture connection", "close capture peer", "commit recording bundle",
 	"create capture coordinator", "emit capture ready", "emit capture stopped",
-	"finalize recording bundle", "packet could not fit after bundle rotation",
+	"finalize recording bundle", "flush capture tail", "packet could not fit after bundle rotation",
 	"relinquish recorder capture lease", "renew recorder capture lease",
 	"report recorder capture failure", "reserve recording bundle", "resume recording bundle commit",
 	"upload recording bundle",
@@ -60,14 +61,14 @@ var captureFailureLiterals = []string{
 
 // SanitizeCaptureFailure reduces a Capture worker's failure report to a bounded diagnostic that
 // is safe to store and log. The code must be a plain identifier. The detail is split into its
-// ": " wrapped parts and each part must match a known shape. Others become "[redacted]", so the
+// wrapped or joined parts and each part must match a known shape. Others become "[redacted]", so the
 // failing step stays readable while URLs, tokens and media text never survive.
 func SanitizeCaptureFailure(code, detail string) (string, string) {
 	if !captureFailureCode.MatchString(code) {
 		code = defaultCaptureFailureCode
 	}
 	parts := make([]string, 0, 8)
-	for _, part := range strings.Split(detail, ": ") {
+	for part := range strings.SplitSeq(strings.ReplaceAll(detail, "\n", ": "), ": ") {
 		if !allowedCaptureFailurePart(part) {
 			part = redactedFailurePart
 		}

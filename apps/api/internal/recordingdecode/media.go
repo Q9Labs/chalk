@@ -71,8 +71,9 @@ func readSpool(path string, visit func(recordingbundle.RTPPacket) error) (result
 }
 
 func validateMediaTimestamp(timestamp uint32, rate uint64, durationMS int64) error {
-	maximum := uint64(durationMS) * rate / 1_000
-	if uint64(timestamp) > maximum {
+	// Already committed captures rounded their media bounds down to whole
+	// milliseconds. Accept that final bucket, not a packet in the next one.
+	if ticksToMillisecondsFloor(uint64(timestamp), rate) > durationMS {
 		return fmt.Errorf("%w: RTP timestamp exceeds presentation duration", ErrInvalidBundle)
 	}
 	return nil

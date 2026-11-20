@@ -193,7 +193,7 @@ Codes an operator sees:
 
 Transcription is independent of the MP4 export. A failed export fails the Recording (`status` `failed`), but a transcription job that already holds a valid lease still commits its prepared source for a failed Recording, as long as the capture completed, the lease holds, the capture is not deleted and the source window is open.
 
-A Recording that ends in `terminal_failure` through lease recovery publishes the same `recording.failed` webhook as `Fail`, and the semantic key is per Recording, so a failure after a retry does not publish a second event.
+A Recording that ends in `terminal_failure` through lease recovery publishes the same `recording.failed` webhook as `Fail`. Each terminal transition appears in the journey ledger, but the pipeline records the first webhook enqueue, so a failed Export retry does not enqueue another event even after webhook history expires.
 
 A lease that expired during an attempt writes its `recording_job_attempt_failures` row at recovery, since `Fail` never ran. A job that was never claimed has no attempt to record, so its reason stays on the job row.
 
