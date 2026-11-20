@@ -16,8 +16,10 @@ export const SIGNALS = [
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 // An SDK from before client telemetry replays its earlier events in every report, so a row from the old route counts only
-// when its report was sent for this type. A current SDK sends each event once.
-const typeClause = (type) => ` and ['attributes.type'] == ${literal(type)} and (isempty(['attributes.legacy_route']) or ['attributes.trigger'] == ${literal(type)})`;
+// when its report was sent for this type. A current SDK sends each event once. Both fields sit behind column_ifexists
+// because Axiom refuses to compile a query naming a field the dataset has never received, and legacy rows may never have
+// arrived or may already be trimmed.
+const typeClause = (type) => ` and ['attributes.type'] == ${literal(type)} and (isempty(column_ifexists('attributes.legacy_route', '')) or tostring(column_ifexists('attributes.trigger', '')) == ${literal(type)})`;
 const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.type ? typeClause(signal.type) : ""})`;
 
 export function query(dataset) {
@@ -105,7 +107,16 @@ export async function readSignals({ fetchImpl = fetch, token, dataset, startTime
   } catch {
     throw new Error("Axiom query request failed");
   }
-  if (!response.ok) throw new Error(`Axiom query answered HTTP ${response.status}`);
+  if (!response.ok) {
+    // Axiom answers a bad query with a JSON reason. Keep the first line only: the rest echoes the submitted APL.
+    let reason = "";
+    try {
+      const body = JSON.parse(await response.text());
+      const raw = body?.detail?.message ?? body?.message;
+      if (typeof raw === "string") reason = raw.split("\n", 1)[0].replaceAll(dataset, "<dataset>").replaceAll(token, "<token>").slice(0, 200);
+    } catch {}
+    throw new Error(`Axiom query answered HTTP ${response.status}${reason ? `: ${reason}` : ""}`);
+  }
   let body;
   try {
     body = await response.json();
