@@ -3,6 +3,8 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -15,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"go.opentelemetry.io/otel/baggage"
 )
 
@@ -30,6 +33,11 @@ type telemetryFixture struct {
 	router chi.Router
 	logs   *bytes.Buffer
 	path   string
+	ledger *telemetrydelivery.MemoryLedger
+	// mediaToken and telemetryToken are real credentials of the same participant.
+	mediaToken     string
+	telemetryToken string
+	subject        accessgrants.Subject
 }
 
 func newTelemetryFixture(t *testing.T) telemetryFixture {
@@ -38,17 +46,42 @@ func newTelemetryFixture(t *testing.T) telemetryFixture {
 	logs := &bytes.Buffer{}
 	router := chi.NewRouter()
 	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(logs, nil))))
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	media, err := issuer.Issue(t.Context(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	telemetry, err := issuer.IssueTelemetry(t.Context(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger := &telemetrydelivery.MemoryLedger{}
 	verifier := subjectVerifier{subject: subject}
 	limits := RateLimitOptions{Limiter: ratelimit.NewLocalLimiter()}
-	telemetryEndpoint(verifier).Mount(router, limits)
+	telemetryEndpoint(real, real, ledger).Mount(router, limits)
 	connectionReportEndpoint(verifier).Mount(router, limits)
 	callStatsEndpoint(verifier).Mount(router, limits)
-	return telemetryFixture{router: router, logs: logs, path: "/tenants/" + subject.TenantID.String()}
+	return telemetryFixture{router: router, logs: logs, path: "/tenants/" + subject.TenantID.String(), ledger: ledger, mediaToken: media.Token, telemetryToken: telemetry.Token, subject: subject}
 }
 
 func (f telemetryFixture) post(route, body string) *httptest.ResponseRecorder {
+	return f.postWith(f.mediaToken, route, body)
+}
+
+func (f telemetryFixture) postWith(token, route, body string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, f.path+route, strings.NewReader(body))
-	request.Header.Set("Authorization", "Bearer credential")
+	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 	f.router.ServeHTTP(recorder, request)
@@ -76,7 +109,7 @@ func TestTelemetryLogsOneRowPerEventStampedFromTheCredential(t *testing.T) {
 		{"type":"recovery_attempt","seq":2,"elapsed_ms":31000,"mechanism":"ice_restart","outage_ms":4000,"free_text":"hello"},
 		{"type":"call_ended","seq":3,"elapsed_ms":60000,"end_reason":"left"}]}`
 	recorder := f.post("/telemetry", body)
-	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"accepted":3,"rejected":1}` {
+	if recorder.Code != http.StatusOK || strings.TrimSpace(recorder.Body.String()) != `{"accepted":3,"rejected":1,"duplicates":0,"acks":[],"rejections":[]}` {
 		t.Fatalf("response = %d %s, want 200 with 3 accepted and 1 rejected", recorder.Code, recorder.Body.String())
 	}
 	rows := f.rows(t, "sdk.telemetry")

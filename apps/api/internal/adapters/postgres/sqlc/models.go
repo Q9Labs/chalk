@@ -1590,6 +1590,19 @@ type SyncWhiteboardScene struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
+type TelemetrySource struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	SourceID        pgtype.UUID        `json:"source_id"`
+	ParticipantID   pgtype.UUID        `json:"participant_id"`
+	EpisodeID       pgtype.UUID        `json:"episode_id"`
+	Ranges          []byte             `json:"ranges"`
+	ReportedNextSeq int64              `json:"reported_next_seq"`
+	EndState        pgtype.Text        `json:"end_state"`
+	EndNextSeq      pgtype.Int8        `json:"end_next_seq"`
+	FirstReceivedAt pgtype.Timestamptz `json:"first_received_at"`
+	LastReceivedAt  pgtype.Timestamptz `json:"last_received_at"`
+}
+
 type Tenant struct {
 	RecordingRenderMode       string             `json:"recording_render_mode"`
 	ID                        pgtype.UUID        `json:"id"`

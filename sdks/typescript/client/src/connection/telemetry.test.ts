@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { parseParsedAccessGrant } from "../access/grant";
+import { parseAccessGrant, parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createTestOutbox } from "../telemetry/outbox.test.helpers";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer } from "./lifecycle";
-import { callEndReason, createOutageClock, mediaCredential } from "./telemetry";
+import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 
 const facts = { removedByHost: false, episodeEndConfirmed: false, episodeEndReason: undefined, timedOut: false };
 
@@ -38,8 +38,40 @@ describe("outage clock", () => {
 
 it("reads the media credential of a grant, and none without one", () => {
   const grant = parseParsedAccessGrant(opaqueAccessGrant(1));
-  expect(mediaCredential(grant)).toEqual({ tenantId: grant.subject.tenantId, subject: `${grant.subject.tenantId}/${grant.subject.episodeId}/${grant.subject.participantId}`, token: grant.media.token, expiresAt: Date.parse(grant.media.expiresAt) });
-  expect(mediaCredential(null)).toBeNull();
+  expect(telemetryCredential(grant)).toEqual({ tenantId: grant.subject.tenantId, subject: `${grant.subject.tenantId}/${grant.subject.episodeId}/${grant.subject.participantId}`, token: grant.media.token, expiresAt: Date.parse(grant.media.expiresAt) });
+  expect(telemetryCredential(null)).toBeNull();
+});
+
+describe("the telemetry credential of a grant", () => {
+  const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  const token = (audience: string) => `${encode({ alg: "EdDSA" })}.${encode({ aud: audience })}.signature`;
+  const withTelemetry = (telemetry: unknown) => {
+    const base: Record<string, unknown> = { ...opaqueAccessGrant(1) };
+    return { ...base, telemetry };
+  };
+
+  it("is preferred over the media token, for the same subject", () => {
+    const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+    const grant = parseParsedAccessGrant(withTelemetry({ token: token("chalk-telemetry"), expires_at: expiresAt }));
+    expect(telemetryCredential(grant)).toEqual({ tenantId: "tenant-1", subject: "tenant-1/episode-1/participant-1", token: token("chalk-telemetry"), expiresAt: Date.parse(expiresAt) });
+  });
+
+  it("survives the opaque envelope the access manager passes around", () => {
+    const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+    const grant = parseParsedAccessGrant(parseAccessGrant(withTelemetry({ token: token("chalk-telemetry"), expires_at: expiresAt })));
+    expect(grant.telemetry).toEqual({ token: token("chalk-telemetry"), expiresAt });
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["null", null],
+    ["of another audience", { token: token("chalk-media"), expires_at: new Date().toISOString() }],
+    ["without a date", { token: token("chalk-telemetry") }],
+  ])("falls back to the media token when it is %s, and the grant still parses", (_name, telemetry) => {
+    const grant = parseParsedAccessGrant(withTelemetry(telemetry));
+    expect(grant.telemetry).toBeUndefined();
+    expect(telemetryCredential(grant)?.token).toBe(grant.media.token);
+  });
 });
 
 describe("a call tells the server how it ended", () => {

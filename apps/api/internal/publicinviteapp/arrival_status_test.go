@@ -181,6 +181,9 @@ func (f *arrivalStatusFixture) IssueForParticipant(context.Context, synctokens.S
 func (f *arrivalStatusFixture) Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error) {
 	return accessgrants.MediaCredential{Token: "media-proof"}, nil
 }
+func (f *arrivalStatusFixture) IssueTelemetry(context.Context, accessgrants.Subject) (accessgrants.TelemetryCredential, error) {
+	return accessgrants.TelemetryCredential{Token: "telemetry-token"}, nil
+}
 func (f *arrivalStatusFixture) VerifyForRecovery(context.Context, string) (accessgrants.Subject, error) {
 	a := f.arrival
 	return accessgrants.Subject{TenantID: a.TenantID, SpaceID: a.SpaceID, EpisodeID: a.EpisodeID, ParticipantID: a.ParticipantID, ParticipantGeneration: a.ParticipantGeneration, Provider: a.Provider, ConnectionID: "superseded-connection"}, nil

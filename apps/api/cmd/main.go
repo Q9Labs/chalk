@@ -205,6 +205,7 @@ func run() error {
 	var participantMediaIssuer httpapi.ParticipantMediaIssuer
 
 	var participantMediaVerifier httpapi.ParticipantMediaVerifier
+	var participantTelemetryVerifier httpapi.TelemetryVerifier
 	var participantMediaRecoveryVerifier publicinviteapp.MediaProofRecoveryVerifier
 	var syncParticipantVerifier synctokens.Verifier
 	var syncParticipantVerifierConfigured bool
@@ -244,6 +245,7 @@ func run() error {
 		instrumentedMediaVerifier := observability.InstrumentParticipantMediaVerifier(mediaVerifier, launchTelemetry)
 		participantMediaVerifier = instrumentedMediaVerifier
 		participantMediaRecoveryVerifier = instrumentedMediaVerifier
+		participantTelemetryVerifier = mediaVerifier
 	}
 	recordingRepository := postgres.NewRecordingRepository(operationQueries)
 	recordingService := recordings.NewService(recordingRepository)
@@ -607,6 +609,8 @@ func run() error {
 
 		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
 		ParticipantMediaVerify: participantMediaVerifier,
+		TelemetryVerify:        participantTelemetryVerifier,
+		TelemetryLedger:        postgres.NewTelemetryLedger(pool),
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,
 		Memberships:            membershipService,

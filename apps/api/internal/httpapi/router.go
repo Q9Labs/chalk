@@ -78,6 +78,10 @@ type Options struct {
 	ParticipantMediaIssuer ParticipantMediaIssuer
 
 	ParticipantMediaVerify ParticipantMediaVerifier
+	// TelemetryVerify verifies the telemetry token; the telemetry route falls back to ParticipantMediaVerify.
+	TelemetryVerify TelemetryVerifier
+	// TelemetryLedger stores which seqs of each telemetry source the server has settled.
+	TelemetryLedger        TelemetryLedger
 	ParticipantMediaActive ActiveParticipantAuthorizer
 	ParticipantGeneration  ParticipantGenerationAuthorizer
 

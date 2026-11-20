@@ -1,19 +1,26 @@
+import { PRIORITY, type Priority } from "./priority";
 import type { TelemetryEvent } from "./types";
 
 const MAX_MILLISECONDS = 2_147_483_647;
 
 /** `subject` names the credential the event may leave under, and never changes. It is null until the first grant of the session names one. */
-type Entry = { readonly event: TelemetryEvent; readonly bytes: number; subject: string | null };
+export type Entry = { readonly event: TelemetryEvent; readonly bytes: number; readonly priority: Priority; subject: string | null };
 
-/** How many sequence numbers a lost batch leaves open. A lost `telemetry_dropped` event takes its own number with it, and the count it carried. */
-export function lostBy(events: readonly TelemetryEvent[]): number {
-  return events.reduce((sum, event) => sum + (event.type === "telemetry_dropped" ? (event.dropped ?? 0) + 1 : 1), 0);
+export function entryOf(event: TelemetryEvent, subject: string | null): Entry {
+  return { event, bytes: sizeOf(event), priority: PRIORITY[event.type], subject };
 }
 
-/** Holds events in `seq` order under a byte budget. When it is full it folds the oldest stats windows into one gap window, and drops an event only when no two windows are left to fold. */
+export const isDropRecord = (entry: Entry): boolean => entry.event.type === "telemetry_dropped";
+
+/**
+ * Holds events in `seq` order under a byte budget. Routine and stats events may use at most half of it, and never push out a P0 event.
+ * When it is full it gives up stats windows first (folding two into one keeps the newer), then routine events oldest first, and a P0 event only when nothing else is left.
+ * Drop records are never given up. Events in a batch that is in flight are not in the queue.
+ */
 export class EventQueue {
   #entries: Entry[] = [];
   #bytes = 0;
+  #p0Bytes = 0;
   readonly #maxBytes: number;
 
   constructor(maxBytes: number) {
@@ -22,6 +29,10 @@ export class EventQueue {
 
   get length(): number {
     return this.#entries.length;
+  }
+
+  get hasDropRecord(): boolean {
+    return this.#entries.some(isDropRecord);
   }
 
   /** The subject of the oldest event: undefined when the queue is empty, null when no grant has named one yet. */
@@ -34,19 +45,29 @@ export class EventQueue {
     return this.#entries.at(-1)?.subject;
   }
 
-  /** Returns how many events the byte budget cost. */
-  push(event: TelemetryEvent, subject: string | null): number {
-    this.#insert(this.#entries.length, { event, bytes: sizeOf(event), subject });
+  entries(): readonly Entry[] {
+    return this.#entries;
+  }
+
+  /** Returns what the byte budget cost. The new event may be among it. */
+  push(entry: Entry): Entry[] {
+    this.#insert(this.#entries.length, entry);
     return this.#fit();
   }
 
-  /** Gives the events that came before any grant the subject of the first grant. */
-  adopt(subject: string): void {
-    for (const entry of this.#entries) entry.subject ??= subject;
+  /** Gives the events that came before any grant the subject of the first grant. Returns whether any changed. */
+  adopt(subject: string): boolean {
+    let changed = false;
+    for (const entry of this.#entries) {
+      if (entry.subject !== null) continue;
+      entry.subject = subject;
+      changed = true;
+    }
+    return changed;
   }
 
   /** Removes the oldest events of one subject that fit one request. Events of another subject wait for their own request. */
-  take(maxEvents: number, maxBytes: number): TelemetryEvent[] {
+  take(maxEvents: number, maxBytes: number): Entry[] {
     const subject = this.headSubject;
     let count = 0;
     let bytes = 0;
@@ -56,58 +77,79 @@ export class EventQueue {
       bytes += next;
       count += 1;
     }
-    this.#bytes -= bytes;
-    return this.#entries.splice(0, count).map((entry) => entry.event);
+    return this.#entries.splice(0, count).map((entry) => this.#released(entry));
   }
 
-  /** Puts a batch that was not accepted back in front, under the subject it was taken for. Returns how many events the byte budget cost. */
-  restore(events: readonly TelemetryEvent[], subject: string | null): number {
-    events.forEach((event, index) => this.#insert(index, { event, bytes: sizeOf(event), subject }));
+  /** Puts events of a batch that was not fully settled back in front, where they were. Returns what the byte budget cost. */
+  restore(entries: readonly Entry[]): Entry[] {
+    entries.forEach((entry, index) => this.#insert(index, entry));
     return this.#fit();
   }
 
-  /** Removes every event of one subject, for a credential that can no longer send them. Returns how many events were lost. */
-  discard(subject: string | null): number {
+  /** Removes every event of one subject, for a credential that can no longer send them. */
+  discard(subject: string | null): Entry[] {
     const lost = this.#entries.filter((entry) => entry.subject === subject);
     this.#entries = this.#entries.filter((entry) => entry.subject !== subject);
-    this.#bytes -= lost.reduce((sum, entry) => sum + entry.bytes, 0);
-    return lostBy(lost.map((entry) => entry.event));
+    for (const entry of lost) this.#released(entry);
+    return lost;
+  }
+
+  #released(entry: Entry): Entry {
+    this.#bytes -= entry.bytes;
+    if (entry.priority === "p0") this.#p0Bytes -= entry.bytes;
+    return entry;
   }
 
   #insert(index: number, entry: Entry): void {
     this.#entries.splice(index, 0, entry);
     this.#bytes += entry.bytes;
+    if (entry.priority === "p0") this.#p0Bytes += entry.bytes;
   }
 
-  #remove(index: number): Entry | undefined {
-    const [removed] = this.#entries.splice(index, 1);
-    if (removed) this.#bytes -= removed.bytes;
-    return removed;
+  #remove(entry: Entry): void {
+    const index = this.#entries.indexOf(entry);
+    if (index >= 0) this.#released(this.#entries.splice(index, 1)[0] ?? entry);
   }
 
-  #fit(): number {
-    let dropped = 0;
-    while (this.#bytes > this.#maxBytes && this.#entries.length > 1) {
-      const removed = this.#foldOldestStats() ? undefined : this.#remove(0);
-      dropped += removed ? lostBy([removed.event]) : 1;
+  #fit(): Entry[] {
+    const gone: Entry[] = [];
+    for (;;) {
+      const lowBytes = this.#bytes - this.#p0Bytes;
+      const tooMuchLow = lowBytes > this.#maxBytes / 2;
+      if (!tooMuchLow && this.#bytes <= this.#maxBytes) return gone;
+      const victim = this.#victim();
+      if (!victim) return gone;
+      this.#evict(victim);
+      gone.push(victim);
     }
-    return dropped;
   }
 
-  #foldOldestStats(): boolean {
-    const [older, ...later] = this.#entries.filter((entry) => entry.event.type === "call_stats");
-    const newer = later.find((entry) => entry.subject === older?.subject);
-    if (!older || !newer) return false;
-    const windowMs = (older.event.stats?.window_ms ?? 0) + (newer.event.stats?.window_ms ?? 0);
-    const folded: TelemetryEvent = { ...older.event, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
-    const first = this.#entries.indexOf(older);
-    this.#remove(this.#entries.indexOf(newer));
-    this.#remove(first);
-    this.#insert(first, { event: folded, bytes: sizeOf(folded), subject: older.subject });
-    return true;
+  /** Stats first, then routine oldest first, and a P0 event only when no other is held and the whole budget is spent. */
+  #victim(): Entry | undefined {
+    const stats = this.#entries.find((entry) => entry.priority === "stats");
+    if (stats) return stats;
+    const routine = this.#entries.find((entry) => entry.priority === "routine");
+    if (routine) return routine;
+    return this.#entries.find((entry) => entry.priority === "p0" && !isDropRecord(entry));
+  }
+
+  /** Giving up a stats window that has a later window of the same subject folds it into that one, which keeps its own seq. */
+  #evict(victim: Entry): void {
+    if (victim.priority === "stats") this.#foldInto(victim);
+    this.#remove(victim);
+  }
+
+  #foldInto(older: Entry): void {
+    const later = this.#entries.find((entry) => entry.priority === "stats" && entry.subject === older.subject && entry.event.seq > older.event.seq);
+    if (!later) return;
+    const windowMs = (older.event.stats?.window_ms ?? 0) + (later.event.stats?.window_ms ?? 0);
+    const folded: TelemetryEvent = { ...later.event, stats: { window_ms: Math.max(1, Math.min(MAX_MILLISECONDS, windowMs)), gap: "dropped" } };
+    const index = this.#entries.indexOf(later);
+    this.#remove(later);
+    this.#insert(index, entryOf(folded, later.subject));
   }
 }
 
-function sizeOf(event: TelemetryEvent): number {
+export function sizeOf(event: TelemetryEvent): number {
   return JSON.stringify(event).length + 1;
 }

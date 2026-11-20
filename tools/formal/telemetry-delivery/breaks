@@ -1,0 +1,13 @@
+# Broken variants of the code. `run.sh` runs each one and
+# requires TLC to report the named rule as broken.
+# Format: <Break value><TAB><rule TLC must report><TAB><code edit it mirrors>
+ack_before_store	AckSafe	telemetry.go answers the batch before the sink write and the ledger commit
+ledger_before_sink	DurableAccounted	the ledger adapter commits the source rows before the callback writes the sink rows
+dedupe_on_seq_only	DurableAccounted	telemetrydelivery.Admit keys dedupe on seq alone, not on (source_id, seq)
+reuse_source_on_reload	DurableAccounted	the outbox reads its source_id from the journal on boot instead of minting one
+evict_without_drop_record	DurableAccounted	the queue evicts a record without adding its seq to the drop list
+volatile_drop_list	DurableAccounted	the drop list lives in memory only and is left out of the journal
+ack_whole_batch	DurableAccounted	the outbox settles a whole batch on 200 instead of the seqs in acks
+no_p0_reserve	P0Reserved	the queue evicts oldest first regardless of the priority table
+abandoned_as_closed	CloseHonest	a reloaded outbox reports its predecessor closed without the closing mark
+ignore_journal_on_reload	DurableDelivered	the outbox persists its journal but never loads a predecessor's on boot

@@ -51,7 +51,7 @@ func v1RouteGroups(options Options) []routeGroup {
 				participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify),
 				connectionReportEndpoint(options.ParticipantMediaVerify),
 				callStatsEndpoint(options.ParticipantMediaVerify),
-				telemetryEndpoint(options.ParticipantMediaVerify),
+				telemetryEndpoint(options.TelemetryVerify, options.ParticipantMediaVerify, options.TelemetryLedger),
 				cancelParticipantJoinEndpoint(options.ParticipantJoins, options.ParticipantMediaVerify),
 			}, problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit)...),
 		},

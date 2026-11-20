@@ -128,6 +128,7 @@ type Querier interface {
 	// existing row is never reactivated or rewritten here. These rows live apart from
 	// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
+	EnsureTelemetrySource(ctx context.Context, arg EnsureTelemetrySourceParams) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
 	// admission use that same lock, so an earlier reconnect cancels the old window.
@@ -304,6 +305,8 @@ type Querier interface {
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
+	ListTelemetryEpisodeRows(ctx context.Context, arg ListTelemetryEpisodeRowsParams) ([]TelemetrySource, error)
+	ListTelemetrySourceRows(ctx context.Context, arg ListTelemetrySourceRowsParams) ([]TelemetrySource, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
 	ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error)
@@ -361,6 +364,7 @@ type Querier interface {
 	LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error)
 	LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
+	LockTelemetrySources(ctx context.Context, arg LockTelemetrySourcesParams) ([]TelemetrySource, error)
 	LockTenantArtifactPolicyForShare(ctx context.Context, tenantID pgtype.UUID) (LockTenantArtifactPolicyForShareRow, error)
 	LockTenantExternalOperationForRequest(ctx context.Context, arg LockTenantExternalOperationForRequestParams) (SyncExternalOperation, error)
 	LockTenantMediaLimits(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
@@ -451,6 +455,7 @@ type Querier interface {
 	UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateSpacePublicArrivalStateParams) (SpacePublicArrival, error)
 	UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error)
 	UpdateSpaceRole(ctx context.Context, arg UpdateSpaceRoleParams) (SpaceRole, error)
+	UpdateTelemetrySource(ctx context.Context, arg UpdateTelemetrySourceParams) error
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (UpdateTenantRow, error)
 	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (UpdateTenantMembershipRow, error)
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
