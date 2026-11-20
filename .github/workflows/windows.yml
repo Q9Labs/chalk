@@ -57,13 +57,6 @@ jobs:
             apps/api/go.sum
             features/media/sfu/go.sum
 
-      - name: Restore Turborepo cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: .turbo
-          key: windows-turbo-${{ github.sha }}
-          restore-keys: windows-turbo-
-
       # Every step runs even when an earlier one failed, so one run reports every Windows break.
       - name: Test native Windows dev orchestration
         run: node --test scripts/dev/*.test.mjs
