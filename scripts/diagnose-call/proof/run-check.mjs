@@ -193,7 +193,7 @@ function provenAbsent(value, window, read) {
  * @param {Requirement} requirement
  */
 function readFact(bundle, planned, requirement) {
-  factKind(requirement.fact);
+  const immutable = factKind(requirement.fact) === "once";
   const itemFact = factDef(requirement.fact).per === "item";
   const onSubject = (/** @type {BoundObservation} */ o) => planned.subject === ITEM || o.bound === planned.subject || (itemFact && o.bound === ITEM);
   const matched = bundle.observations.filter((o) => o.fact === requirement.fact && requirement.from.includes(o.source) && onSubject(o) && overlaps(o.window, planned.window)).map(stripBinding);
@@ -201,7 +201,8 @@ function readFact(bundle, planned, requirement) {
     const subjects = coverageSubjects(bundle, planned, source, itemFact);
     return subjects.map((subject) => {
       const w = watermarkOf(bundle, source, subject);
-      return { watermark: w, gap: uncoveredBy(w, { source, subject, fact: requirement.fact, window: planned.window }) };
+      const certified = immutable && matched.some((o) => o.source === source && o.id === w?.certified_once?.[requirement.fact]);
+      return { watermark: w, gap: certified ? null : uncoveredBy(w, { source, subject, fact: requirement.fact, window: planned.window }) };
     });
   });
   return { value: reading(matched, coverage), watermarks: coverage.flatMap(({ watermark: w }) => (w ? [w] : [])) };

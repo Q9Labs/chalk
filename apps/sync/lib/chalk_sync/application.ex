@@ -1,10 +1,11 @@
 defmodule ChalkSync.Application do
   @moduledoc false
   use Application
+  alias ChalkSync.Obs.EvidenceSink
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   @impl true
   def start(_type, _args) do
-    :ok = ChalkSync.Obs.LogSink.attach()
+    :ok = EvidenceSink.attach()
 
     children =
       [

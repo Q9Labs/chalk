@@ -9,42 +9,22 @@
         "tenant_id": "c1000000-0000-4000-8000-000000000001",
         "participants": ["a1000000-0000-4000-8000-000000000001"],
         "episodes": ["0f8fad5b-d9cb-469f-a165-70867728950e"],
-        "next_seq": 23,
-        "end": null,
-        "end_next_seq": null,
+        "next_seq": 24,
+        "end": "closed",
+        "end_next_seq": 24,
         "stored": [
           {
-            "from": 21,
-            "to": 23
+            "from": 0,
+            "to": 24
           }
         ],
         "rejected": [],
         "dropped": {},
-        "missing": [
-          {
-            "from": 0,
-            "to": 21
-          }
-        ],
+        "missing": [],
         "first_received_at": "2026-11-25T09:46:42Z",
         "last_received_at": "2026-11-25T09:46:42Z"
       },
-      "gaps": [
-        {
-          "source_id": "00000000-0000-4000-8000-000000000001",
-          "from_seq": 0,
-          "to_seq": 21,
-          "cause": "missing",
-          "status": "open"
-        },
-        {
-          "source_id": "00000000-0000-4000-8000-000000000001",
-          "from_seq": 23,
-          "to_seq": null,
-          "cause": "tail_unknown",
-          "status": "open"
-        }
-      ]
+      "gaps": []
     }
   ]
 }

@@ -18,7 +18,7 @@ import (
 
 // Ledger is what a telemetry ledger offers its callers.
 type Ledger interface {
-	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time) (telemetrydelivery.Admission, error)
+	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, stamp sdktelemetry.Stamp) (telemetrydelivery.Admission, error)
 	Live(ctx context.Context, identity telemetrydelivery.Identity) error
 	Source(ctx context.Context, tenant, source utilities.ID) (telemetrydelivery.SourceRow, bool, error)
 	Episode(ctx context.Context, tenant, episode utilities.ID) ([]telemetrydelivery.SourceRow, error)
@@ -82,7 +82,7 @@ func oneOwner(t *testing.T, world World) {
 	mustAdmit(t, world, owner, Batch(t, SourceID(1), 3, "", Record(0), Record(1), Record(2)))
 	before := source(t, world, owner, SourceID(1))
 	for _, other := range []telemetrydelivery.Identity{neighbour, elsewhere} {
-		_, err := world.Ledger().Admit(t.Context(), other, Batch(t, SourceID(1), 4, "closed", Record(3)), received)
+		_, err := world.Ledger().Admit(t.Context(), other, Batch(t, SourceID(1), 4, "closed", Record(3)), received, sdktelemetry.Stamp{})
 		if !errors.Is(err, telemetrydelivery.ErrSourceOwned) {
 			t.Fatalf("participant %s wrote the source of %s: err = %v", other.ParticipantID, owner.ParticipantID, err)
 		}
@@ -102,7 +102,7 @@ func neverLive(t *testing.T, world World) {
 	live := world.Join(t, 0)
 	stranger := live
 	stranger.ParticipantID = SourceID(99)
-	if _, err := world.Ledger().Admit(t.Context(), stranger, Batch(t, SourceID(1), 1, "", Record(0)), received); !errors.Is(err, telemetrydelivery.ErrParticipantGone) {
+	if _, err := world.Ledger().Admit(t.Context(), stranger, Batch(t, SourceID(1), 1, "", Record(0)), received, sdktelemetry.Stamp{}); !errors.Is(err, telemetrydelivery.ErrParticipantGone) {
 		t.Fatalf("err = %v, want ErrParticipantGone", err)
 	}
 	if rows := episode(t, world, live); len(rows) != 0 {
@@ -121,7 +121,7 @@ func purgeFence(t *testing.T, world World) {
 		t.Fatalf("after the purge: live err = %v, want ErrParticipantGone", err)
 	}
 	for _, request := range []sdktelemetry.Request{Batch(t, SourceID(1), 2, "", Record(1)), Batch(t, SourceID(2), 1, "", Record(0))} {
-		if _, err := world.Ledger().Admit(t.Context(), owner, request, received); !errors.Is(err, telemetrydelivery.ErrParticipantGone) {
+		if _, err := world.Ledger().Admit(t.Context(), owner, request, received, sdktelemetry.Stamp{}); !errors.Is(err, telemetrydelivery.ErrParticipantGone) {
 			t.Fatalf("after the purge: err = %v, want ErrParticipantGone", err)
 		}
 	}
@@ -136,7 +136,7 @@ func sourceBudget(t *testing.T, world World) {
 		mustAdmit(t, world, owner, Batch(t, SourceID(index+1), 1, "", Record(0)))
 	}
 	next := SourceID(telemetrydelivery.MaxSourcesPerParticipant + 1)
-	if _, err := world.Ledger().Admit(t.Context(), owner, Batch(t, next, 0, "closed"), received); !errors.Is(err, telemetrydelivery.ErrSourceBudget) {
+	if _, err := world.Ledger().Admit(t.Context(), owner, Batch(t, next, 0, "closed"), received, sdktelemetry.Stamp{}); !errors.Is(err, telemetrydelivery.ErrSourceBudget) {
 		t.Fatalf("a source past the budget: err = %v, want ErrSourceBudget", err)
 	}
 	if rows := episode(t, world, owner); len(rows) != telemetrydelivery.MaxSourcesPerParticipant {
@@ -152,7 +152,7 @@ func manyReloads(t *testing.T, world World) {
 	owner := world.Join(t, 0)
 	const loads = 24
 	for index := range loads {
-		if _, err := world.Ledger().Admit(t.Context(), owner, Batch(t, SourceID(index+1), 1, "closed", Record(0)), received); err != nil {
+		if _, err := world.Ledger().Admit(t.Context(), owner, Batch(t, SourceID(index+1), 1, "closed", Record(0)), received, sdktelemetry.Stamp{}); err != nil {
 			t.Fatalf("page load %d: err = %v, want it admitted", index+1, err)
 		}
 	}
@@ -205,7 +205,7 @@ func rejectedGap(t *testing.T, world World) {
 
 func mustAdmit(t *testing.T, world World, identity telemetrydelivery.Identity, request sdktelemetry.Request) telemetrydelivery.Admission {
 	t.Helper()
-	admission, err := world.Ledger().Admit(t.Context(), identity, request, received)
+	admission, err := world.Ledger().Admit(t.Context(), identity, request, received, sdktelemetry.Stamp{})
 	if err != nil {
 		t.Fatalf("Admit: %v", err)
 	}

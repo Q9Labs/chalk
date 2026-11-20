@@ -9,13 +9,13 @@
     {
       "hop": "b",
       "test": "apps/api/internal/httpapi/telemetry_chain_test.go",
-      "command": "GOTOOLCHAIN=go1.26.11 go -C apps/api test ./internal/httpapi -run TestTelemetryChainEndWrongScreen -count=1",
+      "command": "scripts/gates/with-postgres.sh -- go -C apps/api test ./internal/httpapi -run TestTelemetryChainEndWrongScreen -count=1",
       "writes": ["api-rows.positive.json", "api-rows.healthy.json", "ledger.positive.json", "ledger.healthy.json"]
     },
     {
       "hop": "c",
       "test": "apps/sync/test/chalk_sync/obs_chain_test.exs",
-      "command": "scripts/gates/with-postgres.sh -- bash -c 'cd apps/sync && mix test test/chalk_sync/obs_chain_test.exs'",
+      "command": "scripts/gates/with-postgres.sh -- bash -c 'cd apps/sync && CHALK_CHAIN_LIVE=1 mix test test/chalk_sync/obs_chain_test.exs'",
       "writes": ["sync-rows.json"]
     },
     {

@@ -17,7 +17,6 @@ import { liveWorld } from "./world.mjs";
 
 /** @typedef {import("./world.mjs").DbEpisode} DbEpisode */
 /** @typedef {import("./world.mjs").Ledger} Ledger */
-/** @typedef {import("../proof/profile.mjs").CheckDef} CheckDef */
 /** @typedef {{ tenant: string, episode: string }} Target */
 /**
  * @typedef {{
@@ -38,17 +37,15 @@ export class StoreError extends Error {}
  * Opens the World of one Episode.
  * @param {Target} target
  * @param {Stores} stores
- * @param {{ catalogue: readonly CheckDef[], now?: number }} options
+ * @param {{ now?: number }} options
  */
-export async function openLive(target, stores, { catalogue, now = Date.now() }) {
+export async function openLive(target, stores, { now = Date.now() }) {
   for (const [name, id] of Object.entries(target)) if (!UUID.test(id)) throw new StoreError(`--live needs --${name} <uuid>, got ${JSON.stringify(id.slice(0, 40))}`);
   const db = await stores.declaration(target);
   if (db === null) throw new StoreError(`no Episode ${target.episode} in tenant ${target.tenant}`);
-  const from_ms = Date.parse(db.episode.started_at ?? db.episode.created_at);
-  // Records about an end arrive after it, so the read runs the longest settle time of any check past the end.
-  const settle = Math.max(0, ...catalogue.map((def) => def.settle_ms ?? 0));
-  const ended = db.episode.ended_at === null ? null : Date.parse(db.episode.ended_at);
-  const window = { from_ms, to_ms: Math.min(now, ended === null ? now : ended + settle) };
+  // Query by ingest time through now, so late uploads can fill seqs. The
+  // proof rules select witnesses by their event intervals, including clock error.
+  const window = { from_ms: Date.parse(db.episode.created_at), to_ms: now };
   const [ledger, rows] = await Promise.all([stores.ledger(target), stores.rows(target.episode, window)]);
   return liveWorld({ db, ledger, rows, asof_ms: now });
 }
@@ -68,9 +65,10 @@ export function psqlFailure(error) {
 
 /**
  * @param {NodeJS.ProcessEnv} env
+ * @param {typeof fetch} [fetchImpl]
  * @returns {Stores}
  */
-export function realStores(env) {
+export function realStores(env, fetchImpl = fetch) {
   const need = (/** @type {string} */ name) => {
     const value = env[name];
     if (!value) throw new StoreError(`--live needs ${name}`);
@@ -78,9 +76,10 @@ export function realStores(env) {
   };
   const databaseUrl = () => need("CHALK_DATABASE_URL");
   const ask = (/** @type {string} */ apl, /** @type {{ from_ms: number, to_ms: number }} */ window) =>
-    axiom({ token: need("AXIOM_TOKEN"), org: env.AXIOM_ORG_ID, dataset: need("CHALK_LOG_DATASET"), apl, start: window.from_ms, end: window.to_ms, signal: AbortSignal.timeout(60_000) }, fetch).catch((error) => {
+    axiom({ token: need("AXIOM_TOKEN"), org: env.AXIOM_ORG_ID, dataset: need("CHALK_LOG_DATASET"), apl, start: window.from_ms, end: window.to_ms, signal: AbortSignal.timeout(60_000) }, fetchImpl).catch((error) => {
       if (error instanceof StoreError) throw error;
-      throw new StoreError(`Axiom refused the read: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+      const status = error instanceof Error ? /^Axiom answered HTTP (\d{3})\b/u.exec(error.message)?.[1] : null;
+      throw new StoreError(status ? `Axiom refused the read (HTTP ${status})` : "Axiom log read failed");
     });
   return {
     async declaration({ tenant, episode }) {

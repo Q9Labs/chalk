@@ -118,7 +118,9 @@ type Querier interface {
 	CreateTranscriptionCleanupJob(ctx context.Context, arg CreateTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
 	DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg DecideMCPOAuthAuthorizationRequestParams) (DecideMCPOAuthAuthorizationRequestRow, error)
+	DelayTelemetryOutbox(ctx context.Context, ids []int64) error
 	DeleteExpiredMCPOAuthGrantRows(ctx context.Context, arg DeleteExpiredMCPOAuthGrantRowsParams) error
+	DeleteShippedTelemetryOutbox(ctx context.Context, ids []int64) error
 	DeleteStaleMCPOAuthRegistrations(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
@@ -266,6 +268,7 @@ type Querier interface {
 	InsertRecordingPresentationBaseline(ctx context.Context, arg InsertRecordingPresentationBaselineParams) (RecordingPresentationBaseline, error)
 	InsertRecordingPresentationSource(ctx context.Context, arg InsertRecordingPresentationSourceParams) (RecordingPresentationSource, error)
 	InsertRecordingRenderInput(ctx context.Context, arg InsertRecordingRenderInputParams) (RecordingRenderInput, error)
+	InsertTelemetryOutbox(ctx context.Context, arg InsertTelemetryOutboxParams) error
 	InsertTelemetrySource(ctx context.Context, arg InsertTelemetrySourceParams) (int64, error)
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InsertWebhookEndpoint(ctx context.Context, arg InsertWebhookEndpointParams) (WebhookEndpoint, error)
@@ -344,6 +347,7 @@ type Querier interface {
 	LockMediaPlaneKillSwitchForUpdate(ctx context.Context) (bool, error)
 	LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error)
 	LockPublicEpisodeAdmission(ctx context.Context, arg LockPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
+	LockReadyTelemetryOutbox(ctx context.Context) ([]LockReadyTelemetryOutboxRow, error)
 	LockRecordingCapacity(ctx context.Context) (int16, error)
 	LockRecordingCaptureConnection(ctx context.Context, arg LockRecordingCaptureConnectionParams) (RecordingCaptureConnection, error)
 	LockRecordingCaptureLifecycleAuthority(ctx context.Context, arg LockRecordingCaptureLifecycleAuthorityParams) (LockRecordingCaptureLifecycleAuthorityRow, error)
@@ -365,6 +369,7 @@ type Querier interface {
 	LockSpacePublicInvite(ctx context.Context, arg LockSpacePublicInviteParams) (SpacePublicInvite, error)
 	LockSpacePublicInviteByHandle(ctx context.Context, handle []byte) (SpacePublicInvite, error)
 	LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockSyncEpisodeControlForUpdateParams) (SyncEpisodeControl, error)
+	LockTelemetryOutbox(ctx context.Context) error
 	// The no key update lock serializes the source creations of one participant, so two concurrent
 	// first batches cannot both pass the source budget.
 	LockTelemetryParticipant(ctx context.Context, arg LockTelemetryParticipantParams) ([]pgtype.UUID, error)

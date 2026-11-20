@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
@@ -76,7 +78,7 @@ type TelemetryVerifier interface {
 // telemetrydelivery.ErrParticipantGone unless the participant's row exists. See
 // telemetrydelivery.MemoryLedger and postgres.TelemetryLedger.
 type TelemetryLedger interface {
-	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time) (telemetrydelivery.Admission, error)
+	Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, stamp sdktelemetry.Stamp) (telemetrydelivery.Admission, error)
 	Live(ctx context.Context, identity telemetrydelivery.Identity) error
 }
 
@@ -110,22 +112,29 @@ func telemetryEndpoint(telemetry TelemetryVerifier, media ParticipantMediaVerifi
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("TelemetryRequest", sdktelemetry.Request{}, sdktelemetry.BodyLimit).
 		Responds(http.StatusOK, "TelemetryResponse", sdktelemetry.Response{}).
-		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
+		Errors(apiErrorInvalidTenantID, apiErrorForbidden, apiErrorTelemetryRefused, apiErrorPayloadTooLarge, apiErrorUnauthenticated, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorInternal)
 }
 
-// admitTelemetry settles a version 2 batch in the ledger, then logs the records the ledger calls
-// new and acks what it settled. The log rows are written only after the ledger committed, so a
-// failed commit logs and acks nothing and the client retries the same batch, and a retry of a
-// batch whose answer was lost logs nothing again. A row lost after it was logged leaves a stored
-// seq with no readable row, which a reader names as a gap.
+// admitTelemetry acknowledges only once the ledger has committed both the ranges and the new payload.
 func admitTelemetry(ctx context.Context, ledger TelemetryLedger, subject accessgrants.Subject, request telemetryRequest) (sdktelemetry.Response, error) {
-	admission, err := ledger.Admit(ctx, telemetryIdentity(subject), request.Batch, time.Now())
+	received := time.Now()
+	stamp := sdktelemetry.Stamp{Legacy: telemetryStamp(subject, request.Origin), Record: recordStamp(subject)}
+	if span := trace.SpanContextFromContext(ctx); span.IsValid() {
+		stamp.Legacy = append(stamp.Legacy, "trace_id", span.TraceID().String(), "span_id", span.SpanID().String())
+	}
+	admission, err := ledger.Admit(ctx, telemetryIdentity(subject), request.Batch, received, stamp)
 	if err != nil {
 		return sdktelemetry.Response{}, refuseTelemetry(ctx, subject, request.Batch, err)
 	}
-	fresh := request.Batch
-	fresh.Events = admission.New
-	response := logTelemetry(ctx, subject, fresh, request.Origin)
+	rejected := request.Batch
+	rejected.Events = nil
+	for _, event := range admission.New {
+		if event.Rejection() != "" {
+			rejected.Events = append(rejected.Events, event)
+		}
+	}
+	response := sdktelemetry.Log(ctx, observability.RequestLogger(ctx), rejected, received, stamp)
+	response.Accepted = len(admission.New) - response.Rejected
 	response.Duplicates = admission.Duplicates
 	response.Acks = telemetrydelivery.Acks(request.Batch, admission.Settled)
 	if admission.EndRejection != "" {
@@ -163,7 +172,7 @@ func refuseTelemetry(ctx context.Context, subject accessgrants.Subject, batch sd
 		return rejectTelemetry(ctx, subject, "schema")
 	}
 	observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).ErrorContext(ctx, "Telemetry ledger failed",
-		"event", "sdk.telemetry.ledger_failed", "source_id", batch.SourceID, "batch_id", batch.BatchID, "error", err)
+		"event", "sdk.telemetry.ledger_failed", "source_id", batch.SourceID, "batch_id", batch.BatchID)
 	return apiErrorServiceUnavailableRetry
 }
 
@@ -207,7 +216,7 @@ func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason s
 	case telemetrydelivery.ReasonParticipantGone:
 		return apiErrorForbidden
 	}
-	return apiErrorInvalidRequest
+	return apiErrorTelemetryRefused
 }
 
 var countryCode = regexp.MustCompile(`^[A-Z]{2}$`)

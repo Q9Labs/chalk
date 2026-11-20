@@ -133,7 +133,7 @@ func watermark(row SourceRow) SourceWatermark {
 		SourceID: row.SourceID, TenantID: row.TenantID,
 		Participants: []utilities.ID{row.ParticipantID}, Episodes: []utilities.ID{row.EpisodeID},
 		NextSeq: row.ReportedNextSeq, Stored: ranges.Stored, Rejected: ranges.Rejected, Dropped: map[string]Set{}, Missing: Set{},
-		FirstReceivedAt: row.FirstReceivedAt, LastReceivedAt: row.LastReceivedAt,
+		FirstReceivedAt: row.FirstReceivedAt.UTC(), LastReceivedAt: row.LastReceivedAt.UTC(),
 	}
 	for reason, set := range ranges.Dropped {
 		if len(set) > 0 {

@@ -57,6 +57,7 @@ function chainTelemetry(run: Run) {
 
 function scenario(run: Run) {
   const base = terminalTestPlatform();
+  const now = Date.now();
   const telemetry = chainTelemetry(run);
   const status = vi.fn<NonNullable<ConnectionDependencies["getEpisodeStatus"]>>().mockResolvedValue(run === "positive" ? "active" : "ended");
   let onFailure: ConnectionMediaFactoryInput["onFailure"] = () => {};
@@ -64,6 +65,7 @@ function scenario(run: Run) {
     ...base,
     dependencies: {
       ...base.dependencies,
+      clock: { ...base.dependencies.clock, now: () => now },
       telemetry: telemetry.outbox,
       getEpisodeStatus: status,
       createMediaClient: (input: ConnectionMediaFactoryInput) => {
@@ -74,9 +76,6 @@ function scenario(run: Run) {
   };
   return { platform, telemetry, ...terminalTestClient(platform), revokeMedia: () => onFailure(new CloudflareSFUError("Publications rejected", "signaling_failed", { status: 403 })) };
 }
-
-// The frames that carry the client's end record: the hand-off to the API hop.
-const endFrames = (frames: readonly LedgerFrame[]) => frames.filter((frame) => frame.events.some((event) => event.name === "client.call_ended"));
 
 // A frame as JSON without its records' schema_ver: the registry's content hash changes with any registry edit, so the hand-off is
 // compared without it, and each record's hash is checked against the registry it was built from instead.
@@ -98,7 +97,8 @@ async function drive(run: Run, ended: (test: ReturnType<typeof scenario>) => voi
     test.revokeMedia();
     await vi.waitFor(() => ended(test));
     await test.telemetry.outbox.flush();
-    return endFrames(test.telemetry.frames);
+    await test.telemetry.outbox.dispose();
+    return test.telemetry.frames;
   } finally {
     test.client.dispose();
   }

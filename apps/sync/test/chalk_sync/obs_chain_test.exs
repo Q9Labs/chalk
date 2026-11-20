@@ -1,13 +1,9 @@
 defmodule ChalkSync.ObsChainTest do
-  # Hop (c) of the end.wrong_screen chain (observability/fixtures/end.wrong_screen/README.md): a real Episode end on Postgres
-  # stores its reason, the finalizer reads it back from episodes.end_reason and records sync.episode.ended through the
-  # kernel, the production log sink writes its row, and the row is compared with the committed one that hop (d) judges.
-  # CHALK_CHAIN_WRITE=1 rewrites it.
+  # A real Episode end writes its kernel record to the same outbox the API drains.
+  # In chain replay this also runs the API upload, relay, and live reader on this Episode.
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureLog
-
-  alias ChalkSync.Obs.{LogSink, Registry}
+  alias ChalkSync.Obs.Registry
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -21,6 +17,7 @@ defmodule ChalkSync.ObsChainTest do
   @chain Path.expand("../../../../observability/fixtures/end.wrong_screen/chain", __DIR__)
   @ended_at 1_795_600_000_000
   @event_id "7db7df2b-9dd7-420b-8bab-baaab9efe617"
+  @participant "a1000000-0000-4000-8000-000000000001"
   @ids %{
     tenant_id: "c1000000-0000-4000-8000-000000000001",
     space_id: "d1000000-0000-4000-8000-000000000001",
@@ -57,34 +54,45 @@ defmodule ChalkSync.ObsChainTest do
       )
     )
 
-    level = Logger.level()
-    Logger.configure(level: :info)
-    seed = SyncPostgres.seed_episode(connection, 2, %{}, @ids)
+    seed =
+      SyncPostgres.seed_episode(
+        connection,
+        1,
+        %{},
+        Map.put(@ids, :participants, [%{id: @participant}])
+      )
 
     on_exit(fn ->
+      Postgrex.query!(connection, "delete from telemetry_sources where tenant_id = $1", [
+        UUID.dump!(seed.episode.tenant_id)
+      ])
+
       SyncPostgres.cleanup(connection, seed.episode)
-      Logger.configure(level: level)
       Application.put_env(:chalk_sync, ChalkSync.Obs, previous)
     end)
 
     {:ok, seed: seed}
   end
 
-  test "a real Episode end reaches the log as a registry row with the reason Postgres stored",
-       ctx do
-    :ok = LogSink.attach()
-    log = capture_log([level: :info], fn -> end_episode(ctx.seed.episode, "maximum_duration") end)
+  for scenario <- ["positive", "healthy"] do
+    @scenario scenario
+    test "a real Episode end enqueues evidence for the #{scenario} chain", ctx do
+      assert_end_record(ctx)
+      if System.get_env("CHALK_CHAIN_LIVE") == "1", do: verify_live(ctx, @scenario)
+    end
+  end
 
-    [row] =
-      log
-      |> String.split("\n")
-      |> Enum.flat_map(fn line ->
-        case Regex.run(~r/\{.*\}/, line) do
-          [json] -> [JSON.decode!(json)]
-          nil -> []
-        end
-      end)
-      |> Enum.filter(&(&1["name"] == "sync.episode.ended"))
+  defp assert_end_record(ctx) do
+    end_episode(ctx.seed.episode, "maximum_duration")
+
+    %{rows: [[row]]} =
+      Postgrex.query!(
+        ctx.connection,
+        """
+        select payload->0->'attributes' from telemetry_outbox where tenant_id = $1
+        """,
+        [UUID.dump!(ctx.seed.episode.tenant_id)]
+      )
 
     assert row["end_reason"] == stored_reason(ctx)
 
@@ -107,6 +115,42 @@ defmodule ChalkSync.ObsChainTest do
     committed = committed_row(row)
     assert Map.delete(row, "schema_ver") == Map.delete(committed, "schema_ver")
     assert Map.has_key?(committed, "schema_ver")
+  end
+
+  defp verify_live(ctx, scenario) do
+    started = DateTime.from_unix!(@ended_at - 3_600_000, :millisecond)
+    ended = DateTime.from_unix!(@ended_at, :millisecond)
+
+    Postgrex.query!(
+      ctx.connection,
+      """
+      update episodes set created_at = $1, started_at = $1, ended_at = $2 where id = $3
+      """,
+      [started, ended, UUID.dump!(ctx.seed.episode.episode_id)]
+    )
+
+    Postgrex.query!(
+      ctx.connection,
+      """
+      update participants set created_at = $1, joined_at = $1, left_at = $2 where id = $3
+      """,
+      [started, ended, UUID.dump!(@participant)]
+    )
+
+    {output, status} =
+      System.cmd(
+        "go",
+        ["test", "./internal/httpapi", "-run", "TestTelemetryChainEndWrongScreen/#{scenario}$"],
+        cd: Path.expand("../../../api", __DIR__),
+        env: [
+          {"CHALK_TELEMETRY_TEST_DATABASE_URL", @database_url},
+          {"CHALK_CHAIN_EXISTING_EPISODE", "1"},
+          {"CHALK_CHAIN_WRITE", "0"}
+        ],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
   end
 
   defp end_episode(episode, reason) do

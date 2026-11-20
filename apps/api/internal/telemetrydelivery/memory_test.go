@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery"
 	"github.com/q9labs/chalk/apps/api/internal/telemetrydelivery/ledgertest"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -54,14 +55,14 @@ func TestMemoryLedgerFailedCommitChangesNothing(t *testing.T) {
 	request := ledgertest.Batch(t, ledgertest.SourceID(1), 2, "", ledgertest.Record(0), ledgertest.Record(1))
 	failure := errors.New("commit failed")
 	world.ledger.FailCommit = failure
-	if _, err := world.ledger.Admit(t.Context(), owner, request, time.Now()); !errors.Is(err, failure) {
+	if _, err := world.ledger.Admit(t.Context(), owner, request, time.Now(), sdktelemetry.Stamp{}); !errors.Is(err, failure) {
 		t.Fatalf("err = %v, want the commit's", err)
 	}
 	if _, found, _ := world.ledger.Source(t.Context(), owner.TenantID, ledgertest.SourceID(1)); found {
 		t.Fatal("a row exists after a failed commit")
 	}
 	world.ledger.FailCommit = nil
-	admission, err := world.ledger.Admit(t.Context(), owner, request, time.Now())
+	admission, err := world.ledger.Admit(t.Context(), owner, request, time.Now(), sdktelemetry.Stamp{})
 	if err != nil || len(admission.New) != 2 {
 		t.Fatalf("retry: new = %d, err = %v, want both records new", len(admission.New), err)
 	}

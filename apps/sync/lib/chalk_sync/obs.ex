@@ -13,7 +13,7 @@ defmodule ChalkSync.Obs do
 
   A test may also set `clock`, a function that returns Unix milliseconds, to pin `est_server_ms`, and `event_id` and
   `seq`, functions that return the next record's id and sequence number, so a recorded row is the same on every run.
-  `ChalkSync.Obs.LogSink` is the production subscriber: it writes each record as one log row.
+  `ChalkSync.Obs.EvidenceSink` enqueues Episode records for the API evidence relay.
 
   See observability/registry/README.md for how a slice declares and emits its events.
   """

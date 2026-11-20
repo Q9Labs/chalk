@@ -133,7 +133,7 @@ describe("disposal", () => {
     await client.outbox.dispose();
     expect(world.server.ledger(source)).toMatchObject({ end: "closed", endNext: 4, stored: new Set([0, 2, 3]), dropped: new Set([1]) });
     expect(world.server.requests.at(-1)).toMatchObject({ events: [], end: "closed", next_seq: 4 });
-    expect(world.steps.map((step) => step.a)).toEqual(["record", "record", "record", "evict", "emit_drop", "send", "receive", "commit", "write", "respond", "ack", "dispose", "send", "receive", "commit", "write", "respond", "ack"]);
+    expect(world.steps.map((step) => step.a)).toEqual(["record", "record", "record", "evict", "emit_drop", "send", "receive", "commit", "write", "respond", "ack", "dispose", "send", "receive", "commit", "respond", "ack"]);
     expect(world.storage.length).toBe(0);
     expectConservation(world);
     writeTrace(world);

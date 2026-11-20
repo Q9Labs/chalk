@@ -22,6 +22,7 @@ export type Fault = "lose_request" | "lose_answer" | "crash" | "crash_after_comm
 
 /** One source row. `owner` is the token of its first batch: the double treats a token as the participant it speaks for. */
 type SourceLedger = { owner: string; readonly stored: Set<number>; readonly dropped: Set<number>; reported: number; end: "" | "closed" | "abandoned"; endNext: number; endRejection: string };
+type EvidenceRow = { readonly source: string; readonly event: TelemetryEvent };
 
 /** A tab's sessionStorage, which a reload keeps. */
 export class MemoryStorage {
@@ -44,16 +45,18 @@ export class MemoryStorage {
 }
 
 /**
- * The server rules of docs/telemetry-delivery.md: one owner per source, a ledger keyed by source and seq, dedupe, an end checked against the committed history, the ledger commit before the sink write, and answers that name the settled seqs.
+ * The server rules of docs/telemetry-delivery.md: the ledger and the pending
+ * rows share a commit. A reply names settled seqs without waiting for export.
  */
 export class ProtocolDouble {
   readonly ledgers = new Map<string, SourceLedger>();
-  /** Every row the sink got, only after its commit. A crash between the commit and the write loses the row, and the retry is a duplicate. */
-  readonly rows: { readonly source: string; readonly event: TelemetryEvent }[] = [];
+  readonly rows: EvidenceRow[] = [];
   readonly requests: TelemetryRequest[] = [];
   /** The token of each request, in the order of `requests`. */
   readonly tokens: string[] = [];
   readonly faults: Fault[] = [];
+  autoRelay = true;
+  readonly #pending: EvidenceRow[] = [];
   readonly #emit: (step: TraceStep) => void;
 
   constructor(emit: (step: TraceStep) => void) {
@@ -72,6 +75,12 @@ export class ProtocolDouble {
   /** The records as the reader sees them: copies of one `(source_id, seq)` collapse to one. */
   stored(): Map<string, TelemetryEvent> {
     return new Map(this.rows.map((row) => [`${row.source}/${row.event.seq}`, row.event]));
+  }
+
+  relay(): void {
+    if (this.#pending.length === 0) return;
+    this.rows.push(...this.#pending.splice(0));
+    this.#emit({ a: "write" });
   }
 
   handle(body: TelemetryRequest, signal: AbortSignal, token: string): Promise<TelemetrySendResult> {
@@ -108,13 +117,13 @@ export class ProtocolDouble {
     }
     applyEnd(ledger, body);
     ledger.reported = Math.max(ledger.reported, body.next_seq ?? 0);
+    this.#pending.push(...fresh.map((event) => ({ source, event })));
     this.#emit({ a: "commit" });
     if (fault === "crash_after_commit") {
       this.#emit({ a: "server_crash" });
       return Promise.reject(new TypeError("the server died"));
     }
-    this.rows.push(...fresh.map((event) => ({ source, event })));
-    this.#emit({ a: "write" });
+    if (this.autoRelay) this.relay();
     this.#emit({ a: "respond" });
     if (fault === "lose_answer") {
       this.#emit({ a: "lose_answer", batch });

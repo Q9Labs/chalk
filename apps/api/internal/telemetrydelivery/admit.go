@@ -67,7 +67,7 @@ const (
 
 // Ranges is what the ledger knows of the seqs of one source.
 type Ranges struct {
-	// Stored seqs were committed as valid records and logged after the commit.
+	// Stored seqs were committed with their valid payloads.
 	Stored Set `json:"stored"`
 	// Rejected seqs were refused for their content and logged as such. They are settled and final,
 	// but they are not evidence.
@@ -118,7 +118,7 @@ type Admission struct {
 	// Row is the batch's source row after the batch. The caller persists it.
 	Row SourceRow
 	// New holds the events whose seq the ledger had not settled before, in batch order, valid and
-	// rejected alike. Only these are logged, and only after the row is committed.
+	// rejected alike. Rejected events are logged after the row is committed.
 	New []sdktelemetry.Event
 	// Duplicates counts the events whose seq the ledger had already stored or rejected.
 	Duplicates int
@@ -179,18 +179,25 @@ func Admit(identity Identity, existing *SourceRow, owned int, batch sdktelemetry
 		admission.New = append(admission.New, event)
 		row.Ranges.admit(event, seq)
 	}
+	row.noteReceipt(received)
 	admission.EndRejection = row.applyEnd(batch.End, *batch.NextSeq)
 	row.ReportedNextSeq = max(row.ReportedNextSeq, *batch.NextSeq)
-	if row.FirstReceivedAt.IsZero() {
-		row.FirstReceivedAt = received
-	}
-	row.LastReceivedAt = received
 	if row.Ranges.oversized() {
 		return Admission{}, ErrLedgerFull
 	}
 	admission.Row = row
 	admission.Settled = NewSet(seqs...)
 	return admission, nil
+}
+
+func (r *SourceRow) noteReceipt(received time.Time) {
+	if r.FirstReceivedAt.IsZero() {
+		r.FirstReceivedAt = received
+	}
+	// A closed source may still fill holes, but a receipt is not new activity.
+	if r.End != EndClosed && received.After(r.LastReceivedAt) {
+		r.LastReceivedAt = received
+	}
 }
 
 // startRow is the row a batch of the identity starts from: a copy of the existing row when the

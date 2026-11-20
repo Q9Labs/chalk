@@ -2,7 +2,7 @@
 import { retryAfterMilliseconds } from "../connection/episode-status";
 import type { SeqRange, TelemetrySend, TelemetrySendResult } from "./types";
 
-/** The one POST both platforms make. Only a 2xx answer is read, for the seqs it settled: a status settles nothing. */
+/** The one POST both platforms make. Only a 2xx answer can settle seqs. */
 export async function postTelemetry(fetch: typeof globalThis.fetch, request: TelemetrySend): Promise<TelemetrySendResult> {
   const response = await fetch(request.url, {
     method: "POST",
@@ -14,7 +14,17 @@ export async function postTelemetry(fetch: typeof globalThis.fetch, request: Tel
   });
   const retryAfterMs = retryAfterMilliseconds(response.headers.get("Retry-After"), Date.now());
   if (!response.ok) {
-    await response.body?.cancel();
+    if (response.status === 400) {
+      const body: unknown = await response.json().catch(() => null);
+      if (body && typeof body === "object" && "error" in body) {
+        const error = body.error;
+        if (error && typeof error === "object" && "code" in error && error.code === "request.invalid") {
+          return { status: 400, retryAfterMs, retryAfterUpgrade: true };
+        }
+      }
+    } else {
+      await response.body?.cancel();
+    }
     return { status: response.status, retryAfterMs };
   }
   const answer = await readAnswer(response);

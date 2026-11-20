@@ -12,6 +12,8 @@ on:
       - apps/api/internal/sdktelemetry/**
       - apps/api/internal/telemetrydelivery/**
       - apps/api/internal/adapters/postgres/telemetry_ledger.go
+      - apps/api/internal/adapters/postgres/telemetry_relay.go
+      - apps/api/db/queries/telemetry_outbox.sql
       - apps/api/db/queries/telemetry_sources.sql
       - tools/formal/telemetry-delivery/**
       - .github/workflows/formal-telemetry-delivery.yml

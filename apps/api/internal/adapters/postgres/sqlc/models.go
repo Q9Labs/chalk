@@ -1590,6 +1590,20 @@ type SyncWhiteboardScene struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
+type TelemetryOutbox struct {
+	ID          int64              `json:"id"`
+	TenantID    pgtype.UUID        `json:"tenant_id"`
+	Payload     []byte             `json:"payload"`
+	AvailableAt pgtype.Timestamptz `json:"available_at"`
+	Retry       bool               `json:"retry"`
+}
+
+type TelemetryOutboxCapacity struct {
+	Singleton   bool  `json:"singleton"`
+	MaxBytes    int64 `json:"max_bytes"`
+	QueuedBytes int64 `json:"queued_bytes"`
+}
+
 type TelemetrySource struct {
 	TenantID        pgtype.UUID        `json:"tenant_id"`
 	SourceID        pgtype.UUID        `json:"source_id"`

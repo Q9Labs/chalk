@@ -21,6 +21,7 @@ var (
 	apiErrorForbidden          = APIError{Status: http.StatusForbidden, Code: "access.forbidden", Message: "Access denied"}
 	apiErrorServiceUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "service.unavailable", Message: "Service is not ready"}
 	apiErrorInvalidRequest     = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid request body"}
+	apiErrorTelemetryRefused   = APIError{Status: http.StatusBadRequest, Code: "telemetry.refused", Message: "Telemetry batch refused"}
 	apiErrorInvalidPageSize    = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_page_size", Message: "Invalid page size"}
 	apiErrorInvalidCursor      = APIError{Status: http.StatusBadRequest, Code: "pagination.invalid_cursor", Message: "Invalid cursor"}
 	apiErrorInvalidTenantID    = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_id", Message: "Invalid tenant id"}

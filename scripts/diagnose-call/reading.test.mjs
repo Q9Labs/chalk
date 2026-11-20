@@ -95,6 +95,21 @@ test("rows named by a connection id are looked up by connection_id and by provid
   assert.ok(byConnection.every((apl) => apl.includes("connection_id") && (apl.match(/'conn-/gu) ?? []).length <= 100));
 });
 
+test("re-exported SDK stats keep their API receipt time and count once", async () => {
+  const attributes = { event: "sdk.telemetry", type: "call_stats", tenant_id: "synthetic", episode_id: EPISODE, source_id: "synthetic-source", seq: 4, received_at: at(10) };
+  const copies = [
+    { _time: at(50), _rowId: "first", attributes },
+    { _time: at(55), _rowId: "second", attributes },
+  ];
+  const { fetchImpl } = fakeAxiom((apl) => (apl.includes("episode_id") ? copies.map(matchOf) : []));
+  const { rows } = await read({ fetchImpl });
+  const stats = rows.filter((row) => row.event === "sdk.call_stats");
+  assert.deepEqual(
+    stats.map(({ id, time }) => [id, time]),
+    [["first", Date.parse(at(10))]],
+  );
+});
+
 test("the Sync dataset defaults to chalk-prod-traces, and a token that cannot read it leaves Sync a visible blocking gap", async () => {
   const datasets = [];
   const refused = async (_url, { body }) => {

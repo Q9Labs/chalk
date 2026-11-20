@@ -4,9 +4,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { run } from "../diagnose.mjs";
+import { CATALOGUE } from "../proof/catalogue.mjs";
 import { uncovered } from "../proof/evidence.mjs";
 import { eventOf } from "../proof/rows.mjs";
-import { StoreError, psqlFailure, realStores } from "./stores.mjs";
+import { StoreError, openLive, psqlFailure, realStores } from "./stores.mjs";
 import { clientWatermark, sourceCoverage } from "./watermarks.mjs";
 import { liveWorld, unwrapRow } from "./world.mjs";
 
@@ -129,9 +130,8 @@ test("a seat with an open gap, and a seat with no ledger source, stay unchecked,
     gaps.some((line) => line.includes("end.wrong_screen")),
     `the open and quiet seats' end checks are gaps:\n${text.out}`,
   );
-  assert.match(text.out, /checked=0\//u, "Sync has no delivery ledger, so no seat's end check can decide");
   const endGap = (/** @type {string} */ seat) => gaps.find((line) => line.startsWith("gap: end.wrong_screen") && line.includes(`"${seat}"`)) ?? "";
-  assert.match(endGap("Seat 1"), /: sync not read$/u, "the closed seat's client covered its end, so only Sync is missing");
+  assert.equal(endGap("Seat 1"), "", "the closed seat and the witnessed authoritative end cover the end check");
   assert.match(endGap("Seat 2"), /not emitted by client/u, "the open seat's client never showed its end screen");
   assert.match(endGap("Seat 3"), /client not read/u, "the quiet seat has no ledger source");
 });
@@ -171,9 +171,9 @@ test("a gap whose neighbours' clocks run backwards still covers the time between
 });
 
 test("an Axiom refusal is a store error, so diagnose exits 69 instead of crashing", async (t) => {
-  t.mock.method(globalThis, "fetch", async () => new Response("denied", { status: 401 }));
+  t.mock.method(globalThis, "fetch", async () => new Response("private upstream response", { status: 401 }));
   const stores = realStores({ AXIOM_TOKEN: "synthetic", CHALK_LOG_DATASET: "synthetic-logs" });
-  await assert.rejects(stores.rows(EPISODE, { from_ms: START, to_ms: END }), StoreError);
+  await assert.rejects(stores.rows(EPISODE, { from_ms: START, to_ms: END }), (error) => error instanceof StoreError && error.message === "Axiom refused the read (HTTP 401)");
 });
 
 test("a legacy row keeps its own fields, and the row adapter reads its registry event by the registry's match", () => {
@@ -258,4 +258,40 @@ test("a reload leaves the time between one page's close and the next page's firs
   assert.ok(w);
   assert.equal(w.complete_to_ms, NOW, "the last page closed after the seat left, so the seat is complete");
   assert.deepEqual(w.evidence_gaps, [{ from_ms: START + 300_000, to_ms: START + 310_000, reason: "no ledger source of the seat covers this time" }]);
+});
+
+test("another Tenant's heartbeat cannot fill an unread seq", () => {
+  const wrong = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 1, START + 60_000, { tenant_id: "other-tenant" });
+  const rows = ROWS.filter((row) => !(row.attributes.source_id === CLOSED_SOURCE && row.attributes.seq === 1));
+  const { world } = liveWorld({ db: DB, ledger: { tenant_id: TENANT, episode_id: EPISODE, sources: [closed] }, rows: [...rows, wrong], asof_ms: NOW });
+  const watermark = world.evidence[EPISODE]?.watermarks.find((w) => w.subject === `pt:${CLOSED_SEAT}`);
+  assert.ok(watermark?.evidence_gaps.some(({ reason }) => reason === "unread seq 1..2 open"));
+});
+
+test("a late ingest is read by event time, not by when Axiom got it", async () => {
+  const late = { ...ROWS[2], _time: iso(END + 180_000) };
+  const overlapsDeadline = clientRow(CLOSED_SOURCE, CLOSED_SEAT, 1, END + 120_001, { name: "client.call_ended", end_reason: "connection_lost", clock_err_ms: 25 });
+  const stores = {
+    ...fakeStores(),
+    rows: async (/** @type {string} */ _episode, /** @type {{ from_ms: number, to_ms: number }} */ window) => [...ROWS.filter((row) => row !== ROWS[1] && row !== ROWS[2]), late, overlapsDeadline].filter((row) => Date.parse(row._time) <= window.to_ms),
+  };
+  const { world } = await openLive({ tenant: TENANT, episode: EPISODE }, stores, { now: NOW });
+  const screens = world.evidence[EPISODE]?.observations.filter(({ fact }) => fact === "end.client_screen");
+  assert.deepEqual(screens?.map(({ window }) => window.from_ms).sort(), [END + 2_000, END + 119_976]);
+});
+
+test("live mode does not present one Episode as a discovered population", async () => {
+  for (const query of [
+    ["day", "Synthetic"],
+    ["attempt", "cs_deadbeef"],
+    ["job", "job_deadbeef"],
+    ["pattern", "END_WRONG_SCREEN"],
+  ]) {
+    const result = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, ...query], {
+      stores: { ...fakeStores(), declaration: async () => assert.fail("should reject before reading stores") },
+      now: NOW,
+    });
+    assert.equal(result.code, 64);
+    assert.match(result.err, /one Episode.*--fixture/u);
+  }
 });

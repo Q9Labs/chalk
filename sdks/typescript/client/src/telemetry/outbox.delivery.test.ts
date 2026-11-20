@@ -31,7 +31,7 @@ describe("a record reaches the server exactly once", () => {
     expect(world.server.requests[1]).toEqual(world.server.requests[0]);
     expect(world.server.requests[0]?.batch_id).toBeTruthy();
     expect(world.server.rows).toHaveLength(1);
-    expect(world.steps.map((step) => step.a)).toEqual(["record", "send", "receive", "commit", "write", "respond", "lose_answer", "timeout", "send", "receive", "commit", "write", "respond", "ack"]);
+    expect(world.steps.map((step) => step.a)).toEqual(["record", "send", "receive", "commit", "write", "respond", "lose_answer", "timeout", "send", "receive", "commit", "respond", "ack"]);
     expectConservation(world);
     writeTrace(world);
   });
@@ -76,10 +76,11 @@ describe("a record reaches the server exactly once", () => {
     writeTrace(world);
   });
 
-  it("loses the row when the server crashes between the commit and the sink write: the retry is a duplicate, and the reader sees a stored seq with no row", async () => {
+  it("recovers a committed payload after the server crashes before export and the duplicate retry ACKs", async () => {
     const world = createWorld("crash-after-commit");
     const client = world.boot();
     world.server.faults.push("crash_after_commit");
+    world.server.autoRelay = false;
     client.outbox.record(ended);
     await seconds(10);
     const source = client.outbox.sourceId;
@@ -89,6 +90,10 @@ describe("a record reaches the server exactly once", () => {
     expect([...ledger.stored]).toEqual([0]);
     expect([...ledger.stored].filter((seq) => !world.server.stored().has(keyOf(source, seq)))).toEqual([0]);
     expect(world.steps.filter((step) => step.a === "ack")).toEqual([{ a: "ack", src: source, batch: expect.any(String), acks: [0] }]);
+    world.server.relay();
+    expect(world.server.rows).toHaveLength(1);
+    expect(world.server.stored().has(keyOf(source, 0))).toBe(true);
+    expectConservation(world);
     writeTrace(world);
   });
 

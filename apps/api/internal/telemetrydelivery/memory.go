@@ -14,7 +14,7 @@ import (
 // MemoryLedger is the ledger in memory, for tests and for a server with no database. It keeps the
 // contract of the Postgres ledger: a batch is admitted under one lock, only for a participant that
 // is live, only into a source that participant owns or has budget for, and an error from any step
-// leaves every row as it was. Nothing is logged here; the caller logs after Admit returns.
+// leaves every row as it was. This test double does not export payloads.
 type MemoryLedger struct {
 	mu   sync.Mutex
 	rows map[sourceKey]SourceRow
@@ -55,7 +55,7 @@ func (l *MemoryLedger) Purge(tenant utilities.ID) {
 }
 
 // Admit admits one batch for the participant the identity names. See telemetrydelivery.Admit.
-func (l *MemoryLedger) Admit(_ context.Context, identity Identity, batch sdktelemetry.Request, received time.Time) (Admission, error) {
+func (l *MemoryLedger) Admit(_ context.Context, identity Identity, batch sdktelemetry.Request, received time.Time, _ sdktelemetry.Stamp) (Admission, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.Fail != nil {

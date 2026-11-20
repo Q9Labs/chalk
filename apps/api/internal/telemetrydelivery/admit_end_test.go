@@ -3,6 +3,7 @@ package telemetrydelivery
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/sdktelemetry"
 )
@@ -67,5 +68,20 @@ func TestAdmitRejectsRecordsAtOrPastAClosedEnd(t *testing.T) {
 		if event.Rejection() != ReasonAfterEnd {
 			t.Fatalf("new event %+v, want it refused with %s", event, ReasonAfterEnd)
 		}
+	}
+}
+
+func TestRetryAfterCloseDoesNotExtendReceiptCoverage(t *testing.T) {
+	request := batch(t, sourceA, 1, "closed", ended(0))
+	first, err := Admit(identity(t), nil, 0, request, received)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retry, err := Admit(identity(t), &first.Row, 0, request, received.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.Duplicates != 1 || !retry.Row.LastReceivedAt.Equal(first.Row.LastReceivedAt) {
+		t.Fatalf("duplicate = %d, coverage receipt = %s, want 1 and %s", retry.Duplicates, retry.Row.LastReceivedAt, first.Row.LastReceivedAt)
 	}
 }

@@ -70,7 +70,7 @@ export function eventOf(row) {
 }
 
 /** @param {string} eventId */
-const rowQuery = (eventId) => `axiom chalk-logs | where event_id == '${eventId}'`;
+const rowQuery = (eventId) => `axiom chalk-logs | search ${JSON.stringify(eventId)}`;
 
 /**
  * The sources a row witnesses for, from the registry: an empty list means no fact reads it.

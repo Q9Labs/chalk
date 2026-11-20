@@ -50,7 +50,7 @@ export type TelemetrySend = {
 
 /** `retryAfterMs` is 0 when the response names no delay. `acks` is what a 2xx answer settled, and absent when the answer could not be read. `send` rejects when the request never got a response. */
 /** `serverMs` is the server's clock as it answered, which the client clock estimate samples. */
-export type TelemetrySendResult = { readonly status: number; readonly retryAfterMs: number; readonly acks?: readonly SeqRange[]; readonly serverMs?: number };
+export type TelemetrySendResult = { readonly status: number; readonly retryAfterMs: number; readonly retryAfterUpgrade?: true; readonly acks?: readonly SeqRange[]; readonly serverMs?: number };
 
 /** Where the outbox keeps what must outlive a reload, as one text per source. Every call is synchronous. `save` says whether the text was kept, and a journal that fails is no durability, never an error. */
 export type TelemetryJournal = {

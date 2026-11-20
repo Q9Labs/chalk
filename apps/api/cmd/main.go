@@ -92,23 +92,11 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configure CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL: %w", err)
 	}
-	telemetry, err := observability.Start(context.Background(), observability.Config{
-		Environment:  cfg.Observability.Environment,
-		OTLPEndpoint: cfg.Observability.OTLPEndpoint,
-		OTLPInsecure: cfg.Observability.OTLPInsecure,
-		Service:      cfg.Observability.Service,
-		Version:      cfg.Observability.Version,
-	})
+	evidenceSink, shutdownTelemetry, err := startTelemetry(cfg.Observability)
 	if err != nil {
-		return fmt.Errorf("start telemetry: %w", err)
+		return err
 	}
-	defer func() {
-		shutdownCtx, cancel := observability.TelemetryShutdownContext()
-		defer cancel()
-		if err := telemetry.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "api: shutdown telemetry: %v\n", err)
-		}
-	}()
+	defer shutdownTelemetry()
 
 	diagnostics := observability.New(observability.Config{
 		Environment:          cfg.Observability.Environment,
@@ -174,6 +162,7 @@ func run() error {
 	defer pool.Close()
 	logger.Info("postgres connected", "event", "postgres.connected")
 
+	telemetryLedger := postgres.NewTelemetryLedger(pool)
 	queries := postgressqlc.New(pool)
 	operationQueries := diagnostics.Queries(queries)
 	var redisClient *goredis.Client
@@ -594,7 +583,7 @@ func run() error {
 		ProblemReports:         problemreports.NewService(postgres.NewProblemReportRepository(pool), reportSender),
 		ParticipantMediaVerify: credentials.mediaVerifier,
 		TelemetryVerify:        credentials.telemetryVerifier,
-		TelemetryLedger:        postgres.NewTelemetryLedger(pool),
+		TelemetryLedger:        telemetryLedger,
 		ParticipantMediaActive: participantActiveAuthorizer,
 		ParticipantGeneration:  participantActiveAuthorizer,
 		Memberships:            membershipService,
@@ -706,6 +695,7 @@ func run() error {
 		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	go observability.RunMediaPlaneChangeRelay(signalCtx, postgres.NewChangeLedger(pool))
+	defer startEvidenceRelay(signalCtx, telemetryLedger, evidenceSink, logger)()
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

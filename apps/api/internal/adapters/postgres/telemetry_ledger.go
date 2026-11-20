@@ -28,13 +28,8 @@ func NewTelemetryLedger(db telemetryLedgerDB) TelemetryLedger {
 	return TelemetryLedger{db: db}
 }
 
-// Admit admits one version 2 batch in a single transaction and returns only after it committed,
-// so the caller logs the new records and acks the batch on a durable ledger and never before. It
-// locks the batch's source row and checks that the batch's participant is live (see
-// lockForAdmission), runs the pure telemetrydelivery.Admit, which checks ownership and the source
-// budget, then writes the row and commits. An error anywhere leaves the row as it was, so the
-// retry finds its records new.
-func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time) (telemetrydelivery.Admission, error) {
+// Admit commits the source ranges and the corresponding evidence in one transaction.
+func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.Identity, batch sdktelemetry.Request, received time.Time, stamp sdktelemetry.Stamp) (telemetrydelivery.Admission, error) {
 	source, err := telemetrydelivery.SourceID(batch)
 	if err != nil {
 		return telemetrydelivery.Admission{}, err
@@ -57,6 +52,15 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 	if err := writeSourceRow(ctx, queries, admission.Row, existing == nil); err != nil {
 		return telemetrydelivery.Admission{}, err
 	}
+	payload, err := sdktelemetry.EvidencePayload(batch, admission.New, received, stamp)
+	if err != nil {
+		return telemetrydelivery.Admission{}, fmt.Errorf("encode telemetry outbox payload: %w", err)
+	}
+	if payload != nil {
+		if err := queries.InsertTelemetryOutbox(ctx, sqlc.InsertTelemetryOutboxParams{TenantID: uuid(identity.TenantID), Payload: payload}); err != nil {
+			return telemetrydelivery.Admission{}, fmt.Errorf("insert telemetry outbox payload: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return telemetrydelivery.Admission{}, fmt.Errorf("commit the telemetry ledger: %w", err)
 	}
@@ -68,11 +72,14 @@ func (l TelemetryLedger) Admit(ctx context.Context, identity telemetrydelivery.I
 // telemetrydelivery.ErrParticipantGone unless the participant's row exists in the credential's
 // tenant and Episode.
 //
-// The table lock comes first so that a tenant purge and an admission never interleave (see the
-// LockTelemetrySourceTable query). The participant row is then held against deletion, and for a
+// Take both table locks in Tenant purge order, before the participant row. An admission
+// cannot wait on the outbox while a purge holds it and is waiting on the sources. For a
 // new source it is locked for update, which queues the source creations of one participant: the
 // one that waited reads the row again, since a creation it waited for may have made it.
 func lockForAdmission(ctx context.Context, queries *sqlc.Queries, identity telemetrydelivery.Identity, source utilities.ID) (*telemetrydelivery.SourceRow, int, error) {
+	if err := queries.LockTelemetryOutbox(ctx); err != nil {
+		return nil, 0, fmt.Errorf("lock the telemetry outbox: %w", err)
+	}
 	if err := queries.LockTelemetrySourceTable(ctx); err != nil {
 		return nil, 0, fmt.Errorf("lock the telemetry source table: %w", err)
 	}
