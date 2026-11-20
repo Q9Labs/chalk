@@ -83,7 +83,8 @@ export function observation(o) {
  * - `build`: the build that produced the source, for the reader (`client 3.1.0`).
  *
  * @typedef {{ from_ms: number, to_ms: number | null, reason: string }} EvidenceGap
- * @typedef {{ source: string, subject: string, complete_to_ms: number | null, evidence_gaps: readonly EvidenceGap[], emits: readonly string[], build: string }} Watermark
+ * - `certified_once`: optional event IDs for immutable facts corroborated by the durable declaration, not coverage for other facts.
+ * @typedef {{ source: string, subject: string, complete_to_ms: number | null, evidence_gaps: readonly EvidenceGap[], emits: readonly string[], build: string, certified_once?: Readonly<Record<string, string>> }} Watermark
  */
 
 /** Sources each Participant's own device delivers (the registry's per-seat sources). One seat's complete stream says nothing about another seat's. */
@@ -102,7 +103,12 @@ export function watermark(w) {
   if (!Array.isArray(w.emits) || !Array.isArray(w.evidence_gaps)) throw new TypeError(`${where}: emits and evidence_gaps are lists`);
   if (perSeat(w.source) && !w.subject.startsWith("pt:") && !w.subject.startsWith("cs:")) throw new TypeError(`${where}: a ${w.source} source is per seat, so its watermark names one seat (pt:<participant>) or, before a seat exists, one client session (cs:<id>), never the whole item`);
   for (const gap of w.evidence_gaps) if (!Number.isFinite(gap.from_ms) || (gap.to_ms !== null && !(gap.to_ms > gap.from_ms))) throw new TypeError(`${where}: an evidence gap is [from_ms, to_ms) with to_ms after from_ms, or null for an unknown tail`);
-  return Object.freeze({ ...w, emits: Object.freeze([...w.emits]), evidence_gaps: Object.freeze(w.evidence_gaps.map((gap) => Object.freeze({ ...gap }))) });
+  return Object.freeze({
+    ...w,
+    emits: Object.freeze([...w.emits]),
+    evidence_gaps: Object.freeze(w.evidence_gaps.map((gap) => Object.freeze({ ...gap }))),
+    ...(w.certified_once === undefined ? {} : { certified_once: Object.freeze({ ...w.certified_once }) }),
+  });
 }
 
 /**

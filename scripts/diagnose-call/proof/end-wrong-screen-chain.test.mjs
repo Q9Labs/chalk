@@ -147,10 +147,7 @@ describe("end.wrong_screen's chain ends in the kernel's verdict", () => {
       const [finding] = verdict.findings.filter((entry) => entry.code === CODE);
       assert.equal(finding?.hop, "client_end");
     } else {
-      // Actual witnesses are present, but an open client tail and no complete
-      // Sync watermark cannot certify that no competing screen was missed.
-      assert.notEqual(verdict.outcome, "healthy");
-      assert.deepEqual(ruleResult(verdict, CODE), { findings: 0, checked: 0, eligible: 1 });
+      assert.deepEqual(ruleResult(verdict, CODE), { findings: 0, checked: 1, eligible: 1 }, JSON.stringify(verdict.coverage.gaps.filter((gap) => gap.kind === "check" && gap.code === CODE)));
     }
   });
 });

@@ -2,6 +2,7 @@
 // fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 // The watermark of a client source in a live World: how far its telemetry ledger and its stored rows prove it complete.
 import { seatKey } from "../proof/profile.mjs";
+import { rowSources } from "../proof/rows.mjs";
 import { deliveredRows, observedEmits, storedSeq } from "./delivery.mjs";
 
 /** @typedef {import("../proof/profile.mjs").Seat} Seat */
@@ -17,8 +18,8 @@ import { deliveredRows, observedEmits, storedSeq } from "./delivery.mjs";
  * `est_server_ms` widened by `clock_err_ms`). A gap runs from the earlier to the later of its neighbours, the last row before it
  * (the Episode's start when there is none) and the first row at or after its end, so a clock that stepped back between them still
  * leaves the gap covering both. Gaps are half-open, so a gap ends just after its later neighbour's time, and it has no end when the
- * ledger knows none or no later row exists. A seq the ledger stored but Axiom returned no timed row for is a gap too (`unread`): its
- * record was never read, so it can't count as absent. A seq the API refused for its content (`rejected`, such as a record from a
+ * ledger knows none or no later row exists. A stored seq without a timed witness is a gap (`unread`), unless the row is present
+ * and is a diagnostic that cannot witness any proof fact. A seq the API refused for its content (`rejected`, such as a record from a
  * newer SDK) is a gap the ledger reports, although it counts it as delivered. A closed source is complete to its own close (its last
  * row, or the ledger's last receipt from it when that is later), never further: after it closed, only another source can speak for the
  * seat. Any other source is complete only to its highest stored row that Axiom returned. `from_ms` is the source's first row.
@@ -36,6 +37,9 @@ export function sourceCoverage(source, rows, { start_ms }) {
     })
     .sort((a, b) => a.seq - b.seq);
   const read = new Set(timed.map((row) => row.seq));
+  for (const row of rows) {
+    if (row.source_id === source.source_id && typeof row.seq === "number" && isNonWitnessDiagnostic(row)) read.add(row.seq);
+  }
   const place = (/** @type {number} */ from_seq, /** @type {number | null} */ to_seq, /** @type {string} */ reason) => {
     const prev = timed.findLast((row) => row.seq < from_seq);
     const next = to_seq === null ? undefined : timed.find((row) => row.seq >= to_seq);
@@ -71,6 +75,11 @@ export function sourceCoverage(source, rows, { start_ms }) {
   const highest = stored.length === 0 ? null : Math.max(...stored.map((range) => range.to - 1));
   const last = highest === null ? undefined : timed.findLast((row) => row.seq <= highest);
   return { complete_to_ms: last?.at ?? null, evidence_gaps, from_ms, closed: false };
+}
+
+/** @param {Row} row */
+function isNonWitnessDiagnostic(row) {
+  return row.service === "chalk-api" && row.event === "sdk.telemetry" && typeof row.type === "string" && typeof row.event_id === "string" && rowSources(row).length === 0;
 }
 
 /**
@@ -124,7 +133,7 @@ export function clientWatermark({ participant, window }, ledger, rows, at) {
     source: "client",
     subject,
     emits: observedEmits(
-      deliveredRows(rows, sources).usable.filter((row) => mine.has(String(row.source_id))),
+      deliveredRows(rows, sources).usable.filter((row) => mine.has(String(row.source_id)) && !isNonWitnessDiagnostic(row)),
       "client",
     ),
   };

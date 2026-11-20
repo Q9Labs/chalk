@@ -130,11 +130,35 @@ test("a seat with an open gap, and a seat with no ledger source, stay unchecked,
     gaps.some((line) => line.includes("end.wrong_screen")),
     `the open and quiet seats' end checks are gaps:\n${text.out}`,
   );
-  assert.match(text.out, /checked=0\//u, "Sync has no delivery ledger, so no seat's end check can decide");
   const endGap = (/** @type {string} */ seat) => gaps.find((line) => line.startsWith("gap: end.wrong_screen") && line.includes(`"${seat}"`)) ?? "";
-  assert.match(endGap("Seat 1"), /: sync not read$/u, "the closed seat's client covered its end, so only Sync is missing");
+  assert.equal(endGap("Seat 1"), "", "the closed seat and the witnessed authoritative end cover the end check");
   assert.match(endGap("Seat 2"), /not emitted by client/u, "the open seat's client never showed its end screen");
   assert.match(endGap("Seat 3"), /client not read/u, "the quiet seat has no ledger source");
+});
+
+test("Sync only certifies the witnessed terminal reason that Postgres stored", async () => {
+  const stores = {
+    ...fakeStores(),
+    declaration: async () => ({ ...DB, episode: { ...DB.episode, end_reason: "maximum_duration" } }),
+  };
+  const result = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, "episode", EPISODE], { stores, now: NOW });
+  assert.match(result.out, /gap: end\.wrong_screen[^\n]*"Seat 1"[^\n]*sync not read/u);
+});
+
+test("a recognized SDK diagnostic that emits no proof facts fills its seq without a clock", () => {
+  const diagnostic = axiomRow(START, "chalk-api", {
+    event: "sdk.telemetry",
+    type: "state_changed",
+    source_id: CLOSED_SOURCE,
+    seq: 1,
+    event_id: "0e0000ee-0000-4000-8000-000000000001",
+    est_server_ms: undefined,
+  });
+  const rows = [diagnostic, ...ROWS.filter((row) => row !== ROWS[1]).map((row) => ({ ...row, attributes: { ...row.attributes, platform: "web" } }))];
+  const { world } = liveWorld({ db: DB, ledger: { tenant_id: TENANT, episode_id: EPISODE, sources: [closed] }, rows, asof_ms: NOW });
+  const watermark = world.evidence[EPISODE].watermarks.find((w) => w.subject === `pt:${CLOSED_SEAT}`);
+  assert.deepEqual(watermark?.evidence_gaps, []);
+  assert.ok(watermark?.emits.includes("end.client_screen"));
 });
 
 test("an unreadable ledger leaves every seat's client source not read", async () => {

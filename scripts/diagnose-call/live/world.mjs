@@ -103,7 +103,7 @@ function declarationOf(db) {
 
 /**
  * A server source's watermark. Server sources are not ledger-delivered, and a recent row proves only that the read reached that far,
- * not that the service dropped nothing before it, so a server source is never read as complete. Its rows still count as present.
+ * not that the service dropped nothing before it. Only a witnessed immutable terminal fact can be certified, not the stream.
  * @param {keyof typeof SERVICES} source
  * @param {readonly Row[]} rows every row of the Episode
  * @returns {Watermark}
@@ -119,6 +119,20 @@ const serverWatermark = (source, rows) => ({
   ),
   build: `${SERVICES[source]} (no delivery ledger)`,
 });
+
+/**
+ * An ended Episode has exactly one authoritative reason. The matching Sync
+ * witness can settle that fact, but cannot certify any other Sync record.
+ * @param {DbEpisode["episode"]} episode
+ * @param {readonly Row[]} rows
+ */
+function certifiedEnd(episode, rows) {
+  if (episode.ended_at === null || episode.end_reason === null) return {};
+  const witnesses = rows.filter((row) => row.service === SERVICES.sync && row.name === "sync.episode.ended" && row.kind === "fact");
+  const matching = witnesses.find((row) => row.end_reason === episode.end_reason && typeof row.event_id === "string" && typeof row.est_server_ms === "number");
+  if (!matching || witnesses.some((row) => row.end_reason !== episode.end_reason)) return {};
+  return { certified_once: { "end.episode": /** @type {string} */ (matching.event_id) } };
+}
 
 /**
  * The ledger sources of this Tenant and Episode. A report or source for another one is not read, so it can't cover a seat here.
@@ -145,7 +159,7 @@ export function liveWorld({ db, ledger: report, rows, asof_ms }) {
   const { usable: flat, ignored } = deliveredRows(read, "unavailable" in ledger ? [] : ledger.sources);
   const { observations, dropped } = observationsFromRows(flat);
   const at = { asof_ms, start_ms: declaration.window.from_ms };
-  const watermarks = [...declaration.seats.map((seat) => clientWatermark(seat, ledger, flat, at)), ...Object.keys(SERVICES).map((source) => serverWatermark(/** @type {keyof typeof SERVICES} */ (source), flat))];
+  const watermarks = [...declaration.seats.map((seat) => clientWatermark(seat, ledger, flat, at)), serverWatermark("api", flat), { ...serverWatermark("sync", flat), ...certifiedEnd(db.episode, flat) }, serverWatermark("sfu", flat)];
   const evidence = { observations: [...observations], watermarks };
   /** @type {Map<string, World["sessions"][number]>} */
   const sessions = new Map();
@@ -159,7 +173,7 @@ export function liveWorld({ db, ledger: report, rows, asof_ms }) {
     `read ${read.length} rows, ${observations.length} observations`,
     ...(ignored > 0 ? [`ignored ${ignored} client rows the ledger did not store, so they are not evidence`] : []),
     ...[...why].map(([reason, count]) => `dropped ${count} rows (${reason})`),
-    `server sources ${Object.keys(SERVICES).join(", ")} have no delivery ledger, so they are not read as complete`,
+    `server sources ${Object.keys(SERVICES).join(", ")} have no complete delivery ledger; only the witnessed durable Episode end can be certified`,
     ...("unavailable" in ledger ? [`telemetry ledger unread, so every seat's client source is not read: ${ledger.unavailable}`] : []),
   ];
   return {
