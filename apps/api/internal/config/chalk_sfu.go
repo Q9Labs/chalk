@@ -29,7 +29,6 @@ const (
 	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
 	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
 	ChalkSFUClientSunset       = "CHALK_SFU_CLIENT_SUNSET"
-	ChalkSFUUnifiedSignaling   = "CHALK_SFU_UNIFIED_SIGNALING"
 	ChalkSFUNewEpisodes        = "CHALK_SFU_NEW_EPISODES"
 	DefaultChalkSFUTimeoutMS   = int64(6000)
 	// DefaultChalkSFUColocatedGraceSeconds is how long a capture waits for the healthy worker
@@ -96,12 +95,6 @@ type ChalkSFUConfig struct {
 	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
 	ClientSunset time.Time
 
-	// UnifiedSignaling advertises the single-URL signalling route in each Chalk SFU join, so the
-	// SDK sends every signalling call to one URL and pays one CORS preflight. It is on by
-	// default. Turning it off sends clients back to the per-operation routes without a web
-	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
-	UnifiedSignaling bool
-
 	// DirectSignalingURL is the origin of the direct door (TLS proxy on the host) for the
 	// signalling routes. Each Chalk SFU join advertises it as directSignalingUrl, so the SDK
 	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
@@ -156,10 +149,6 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if standbyBudget <= 0 {
 		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUStandbyBudget)
 	}
-	unifiedSignaling, err := envStrictBool(ChalkSFUUnifiedSignaling, true)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
 	directURL, err := directSignalingURL(os.Getenv(APIDirectURL))
 	if err != nil {
 		return ChalkSFUConfig{}, err
@@ -176,7 +165,6 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 		ColocatedCaptureGrace: colocatedGrace,
 		Enabled:               true,
 		NewEpisodesPaused:     newEpisodesPaused,
-		UnifiedSignaling:      unifiedSignaling,
 		DirectSignalingURL:    directURL,
 		CaptureEnabled:        envBool(ChalkSFUCaptureEnabled),
 		CloudflareOverflow:    overflow,

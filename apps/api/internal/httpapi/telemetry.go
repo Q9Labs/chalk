@@ -90,8 +90,8 @@ func telemetryEndpoint(verifier ParticipantMediaVerifier) Endpoint[telemetryRequ
 // logTelemetry writes the rows of a batch. The credential names the tenant, Space, Episode,
 // participant and provider; the client names nothing of that. provider and provider_session_id
 // join a row to the media plane's own logs for the same connection.
-func logTelemetry(ctx context.Context, subject accessgrants.Subject, batch sdktelemetry.Request, origin []any, extra ...any) sdktelemetry.Response {
-	return sdktelemetry.Log(ctx, observability.RequestLogger(ctx), batch, time.Now(), append(telemetryStamp(subject, origin), extra...)...)
+func logTelemetry(ctx context.Context, subject accessgrants.Subject, batch sdktelemetry.Request, origin []any) sdktelemetry.Response {
+	return sdktelemetry.Log(ctx, observability.RequestLogger(ctx), batch, time.Now(), telemetryStamp(subject, origin)...)
 }
 
 func telemetryStamp(subject accessgrants.Subject, origin []any) []any {
@@ -103,9 +103,9 @@ func telemetryStamp(subject accessgrants.Subject, origin []any) []any {
 }
 
 // Reasons are fixed labels from the checks, never decoder errors or input.
-func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason string, extra ...any) error {
+func rejectTelemetry(ctx context.Context, subject accessgrants.Subject, reason string) error {
 	observability.RequestLogger(ctx).With(telemetryStamp(subject, nil)...).WarnContext(ctx, "Rejected SDK telemetry batch",
-		append([]any{"event", "sdk.telemetry.rejected", "reason", reason}, extra...)...)
+		"event", "sdk.telemetry.rejected", "reason", reason)
 	if reason == "body_too_large" {
 		return apiErrorPayloadTooLarge
 	}
@@ -161,14 +161,4 @@ func firstMarker(userAgent string, markers []userAgentMarker) string {
 		}
 	}
 	return "other"
-}
-
-// legacySessionID is the session the old routes' baggage names, or empty when it is not a valid id,
-// so the free text of an old client's header cannot reach a log row.
-func legacySessionID(ctx context.Context) string {
-	id, valid := observability.SessionIDFromContext(ctx)
-	if !valid {
-		return ""
-	}
-	return id
 }

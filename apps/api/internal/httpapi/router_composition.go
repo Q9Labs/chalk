@@ -49,15 +49,13 @@ func v1RouteGroups(options Options) []routeGroup {
 		{
 			endpoints: append([]RouteEndpoint{
 				participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify),
-				connectionReportEndpoint(options.ParticipantMediaVerify),
-				callStatsEndpoint(options.ParticipantMediaVerify),
 				telemetryEndpoint(options.ParticipantMediaVerify),
 				cancelParticipantJoinEndpoint(options.ParticipantJoins, options.ParticipantMediaVerify),
 			}, problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit)...),
 		},
 		{
 			middleware: []func(http.Handler) http.Handler{requireParticipantMedia(options.ParticipantMediaVerify, options.ParticipantMediaActive)},
-			endpoints:  sfuSignalingEndpoints(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications),
+			endpoints:  []RouteEndpoint{sfuSignalEndpoint(options.Spaces, options.Episodes, options.Tenants, options.MediaPlane, options.MediaPublications)},
 		},
 		{endpoints: append(chatAttachmentEndpoints(options.ChatAttachments, options.ChatParticipants), whiteboardFileEndpoints(options.WhiteboardFiles, options.WhiteboardParticipants)...)},
 	}

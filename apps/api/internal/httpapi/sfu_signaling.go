@@ -118,41 +118,6 @@ type EpisodeLookup interface {
 	GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error)
 }
 
-func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) []RouteEndpoint {
-	return []RouteEndpoint{
-		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
-		sfuCloseTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
-		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
-		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
-		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
-		sfuListSubscriptionsEndpoint(spaces, episodeLookup, tenants, media),
-		sfuSignalEndpoint(spaces, episodeLookup, tenants, media, publications),
-	}
-}
-
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
-	return Post(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
-		"addCloudflareSFUTracks",
-		decodeSFUTracksRequest,
-		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
-			return signalSFUTracks(ctx, request, spaces, episodeLookup, tenants, media, publications)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(append(tenantSpaceEpisodeParticipantParameters(),
-			APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"},
-			APIParameterContract{Name: "replacement_cause", In: "query", Type: "string", Enum: observability.MediaReplacementCauses()},
-		)...).
-		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
-		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
 func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
 	if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 		return mediaplane.TracksResponse{}, err
@@ -475,26 +440,6 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 	}, true
 }
 
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {
-	return Put(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
-		"closeCloudflareSFUTracks",
-		decodeSFUCloseTracksRequest,
-		func(ctx context.Context, request sfuCloseTracksEndpointRequest) (mediaplane.CloseTracksResponse, error) {
-			return signalSFUCloseTracks(ctx, request, spaces, episodeLookup, tenants, media, publications)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		RequestBody("CloudflareSFUCloseTracksRequest", sfuCloseTracksRequest{}).
-		Responds(http.StatusOK, "CloudflareSFUCloseTracksAPIResponse", mediaplane.CloseTracksResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
 func attachPublishedReferences(response *mediaplane.TracksResponse, references []mediapublications.PublishedReference) error {
 	byMID := make(map[string]mediapublications.PublishedReference, len(references))
 	for _, reference := range references {
@@ -523,66 +468,10 @@ func attachPublishedReferences(response *mediaplane.TracksResponse, references [
 	return nil
 }
 
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationsEndpointRequest, sfuPublicationsResponse] {
-	return Get(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
-		"listCloudflareSFUPublications",
-		decodeSFUPublicationsRequest,
-		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuPublicationsResponse, error) {
-			return listSFUPublications(ctx, request, spaces, episodeLookup, tenants, media, publications)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		Responds(http.StatusOK, "CloudflareSFUPublicationsResponse", sfuPublicationsResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
 // sfuListSubscriptionsEndpoint reports whether the plane is delivering each
 // remote video of the caller's connection, and on which layer. A client reads it
 // when a video goes quiet, so it can tell a paused subscription from a stall.
 //
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuPublicationsEndpointRequest, sfuSubscriptionsResponse] {
-	return Get(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
-		"listSFUSubscriptions",
-		decodeSFUPublicationsRequest,
-		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuSubscriptionsResponse, error) {
-			return listSFUSubscriptions(ctx, request, spaces, episodeLookup, tenants, media)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		Responds(http.StatusOK, "SFUSubscriptionsResponse", sfuSubscriptionsResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
-	return Put(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
-		"updateCloudflareSFUTracks",
-		decodeSFUUpdateTracksRequest,
-		func(ctx context.Context, request sfuUpdateTracksEndpointRequest) (mediaplane.TracksResponse, error) {
-			return signalSFUUpdateTracks(ctx, request, spaces, episodeLookup, tenants, media, publications)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		RequestBody("CloudflareSFUUpdateTracksRequest", sfuUpdateTracksRequest{}).
-		Responds(http.StatusOK, "CloudflareSFUUpdateTracksAPIResponse", mediaplane.TracksResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
 // holdLocalTracks parks or resumes the caller's own publications for a mute that keeps the
 // track and its MID. The node changes first, so media stops before any viewer is told, and the
 // publication keeps its identity in the registry with only its visibility changed. A record that
@@ -634,82 +523,6 @@ func holdLocalTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest
 		}
 	}
 	return response, nil
-}
-
-// legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
-// No new behaviour lands here: the unified signal route serves the same operation.
-func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
-	return Post(
-		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
-		"renegotiateCloudflareSFU",
-		decodeSFURenegotiateRequest,
-		func(ctx context.Context, request sfuRenegotiateEndpointRequest) (sfuRenegotiateResponse, error) {
-			return signalSFURenegotiate(ctx, request, spaces, episodeLookup, tenants, media)
-		},
-	).
-		Auth(APIAuthParticipantMedia).
-		RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantSpaceEpisodeParticipantParameters()...).
-		RequestBody("CloudflareSFURenegotiateRequest", sfuRenegotiateRequest{}).
-		Responds(http.StatusOK, "CloudflareSFURenegotiateResponse", sfuRenegotiateResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		ErrorRules(episodeLifecycleRules)
-}
-
-func decodeSFUUpdateTracksRequest(request *http.Request) (sfuUpdateTracksEndpointRequest, error) {
-	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
-	if err != nil {
-		return sfuUpdateTracksEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[sfuUpdateTracksRequest](request)
-	if err != nil {
-		return sfuUpdateTracksEndpointRequest{}, err
-	}
-	return sfuUpdateTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
-}
-
-func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, error) {
-	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
-	if err != nil {
-		return sfuTracksEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[sfuTracksRequest](request)
-	if err != nil {
-		return sfuTracksEndpointRequest{}, err
-	}
-	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true", ReplacementCause: request.URL.Query().Get("replacement_cause")}, nil
-}
-
-func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointRequest, error) {
-	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
-	if err != nil {
-		return sfuRenegotiateEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[sfuRenegotiateRequest](request)
-	if err != nil {
-		return sfuRenegotiateEndpointRequest{}, err
-	}
-	return sfuRenegotiateEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
-}
-
-func decodeSFUCloseTracksRequest(request *http.Request) (sfuCloseTracksEndpointRequest, error) {
-	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
-	if err != nil {
-		return sfuCloseTracksEndpointRequest{}, err
-	}
-	body, err := decodeJSONBody[sfuCloseTracksRequest](request)
-	if err != nil {
-		return sfuCloseTracksEndpointRequest{}, err
-	}
-	return sfuCloseTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
-}
-
-func decodeSFUPublicationsRequest(request *http.Request) (sfuPublicationsEndpointRequest, error) {
-	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
-	if err != nil {
-		return sfuPublicationsEndpointRequest{}, err
-	}
-	return sfuPublicationsEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID}, nil
 }
 
 func tenantSpaceEpisodeParticipantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {

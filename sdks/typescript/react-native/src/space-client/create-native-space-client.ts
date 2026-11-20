@@ -133,7 +133,6 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       episodeId: subject.episodeId,
       participantId: subject.participantId,
       // The grant decides, so an older API without the capability keeps the per-operation routes.
-      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       fetch,
     }),
     replaceMediaConnection: replaceMediaConnection ? async (observedConnectionId) => mediaBootstrap(await replaceMediaConnection(observedConnectionId)) : undefined,

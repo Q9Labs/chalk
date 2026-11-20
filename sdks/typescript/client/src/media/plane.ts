@@ -1,6 +1,6 @@
-import type { operations } from "../generated/openapi-types";
+import type { components } from "../generated/openapi-types";
 
-export type MediaConnectionReplacementCause = NonNullable<NonNullable<operations["addCloudflareSFUTracks"]["parameters"]["query"]>["replacement_cause"]>;
+export type MediaConnectionReplacementCause = NonNullable<components["schemas"]["CloudflareSFUSignalRequest"]["replacement_cause"]>;
 export type LocalPublicationRetirementCause = Exclude<MediaConnectionReplacementCause, "local_signaling_failure" | "remote_signaling_failure" | "dormant_connection" | "access_refresh" | "receive_stalled" | "section_budget">;
 
 export type ScreenShareSurface = "monitor" | "window" | "browser";
