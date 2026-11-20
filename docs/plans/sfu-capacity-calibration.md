@@ -1,3 +1,5 @@
+> **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
+
 # SFU packet budget calibration
 
 Why the SFU nodes admit as many Episodes as they do. The values (packet budget and steal limit per node

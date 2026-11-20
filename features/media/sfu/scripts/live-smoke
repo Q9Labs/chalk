@@ -15,7 +15,7 @@
 # defaults to ~/.ssh/chalk-sfu-operator_ed25519; certificates come from
 # $CHALK_SFU_PRIVATE_DIR/<env> (default ~/.config/chalk-sfu), as for deploy.
 #
-# Production needs this smoke (docs/sfu/production-rollout.md). Run it once the production
+# Production needs this smoke (docs/plans/sfu-production-rollout.md). Run it once the production
 # node is deployed and before any production API gets CHALK_SFU_ENABLED. It creates one
 # random-named Episode and ends it.
 set -euo pipefail

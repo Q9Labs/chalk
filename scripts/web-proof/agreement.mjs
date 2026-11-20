@@ -143,7 +143,7 @@ function identityIssues(samples) {
   return samples.length < 2 || new Set(samples.map((sample) => sample.self)).size !== samples.length ? ["agreement requires at least two distinct participant identities"] : [];
 }
 
-export function agreementIssues(before, after, { checkCameraFrames = true } = {}) {
+function agreementIssues(before, after, { checkCameraFrames = true } = {}) {
   const issues = identityIssues(after);
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
