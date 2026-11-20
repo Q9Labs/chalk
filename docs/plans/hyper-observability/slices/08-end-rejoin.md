@@ -46,6 +46,8 @@ Extend `end-wrong-screen.fault.test.ts` through the real SDK lifecycle. Drop the
 
 For `rejoin.refused`, make the previous arrival release fail during an explicit Rejoin. The entrance stays ended, the next arrival is not created, and the witness names the previous seat. Retry with a successful release and check that a new arrival starts. Exercise intentional Leave, removal, and a 1012 deploy close separately: Leave and removal should not read as Episode end, and a recovered 1012 close should produce no terminal record.
 
+Against the non-production stack, run `node .agents/skills/verify-chalk/scripts/start-call.mjs <run-id> --fault-rejoin`. Chromium injects HTTP 503 on the old arrival's DELETE, witnesses the failed release POST, clears the fault, and verifies that retry rejoins the same Space. Run `call-length.mjs <run-id>` in the same harness to drive the deadline and observe both the time-limit and host-end screens.
+
 Finding line shapes (handles and times come from the run):
 
 ```text

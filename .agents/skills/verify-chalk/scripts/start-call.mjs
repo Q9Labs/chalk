@@ -3,7 +3,7 @@
 // joins by the call's link, both turn on camera and microphone and see each other. The starter leaves and presses Rejoin, still has
 // the owner menu, and ends the call for everyone, and the second person is told it ended.
 //
-//   node .agents/skills/verify-chalk/scripts/start-call.mjs <run-id> [--web <origin>]
+//   node .agents/skills/verify-chalk/scripts/start-call.mjs <run-id> [--web <origin>] [--fault-rejoin]
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runJourney } from "./journey.mjs";
@@ -12,6 +12,16 @@ import { measureAdvance, measureFirstFrame, receiverTimedOut, senderNeverPublish
 
 const waitMs = 60_000;
 const enableMs = 15_000;
+const faultRejoin = process.argv.includes("--fault-rejoin");
+const arrivalRoute = /\/v1\/public\/space-invite-arrival$/u;
+
+function waitForReleaseRecord(page, claim) {
+  return page.waitForResponse((response) => {
+    const request = response.request();
+    if (!response.ok() || request.method() !== "POST" || !new URL(response.url()).pathname.endsWith("/telemetry")) return false;
+    return request.postDataJSON()?.events?.some((event) => event.type === "rejoin_release" && event.rejoin_release === claim);
+  }, { timeout: 20_000 });
+}
 
 await runJourney("start-call", async ({ step, person, startCall, joinByLink, control, shot, system, out }) => {
   const starter = await person("StartCaller", 1);
@@ -72,6 +82,11 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
   });
 
   await step("the starter leaves and the guest stays in the call", async () => {
+    if (faultRejoin) {
+      await starter.page.route(arrivalRoute, (route) => route.request().method() === "DELETE"
+        ? route.fulfill({ status: 503, json: { error: { code: "media.unavailable", message: "Injected release refusal" } } })
+        : route.fallback());
+    }
     await control(starter, "Leave call");
     await starter.page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
     await starter.page.getByRole("button", { name: "Rejoin", exact: true }).waitFor({ timeout: 30_000 });
@@ -79,8 +94,34 @@ await runJourney("start-call", async ({ step, person, startCall, joinByLink, con
     await tile(guest, guest.name).waitFor({ timeout: 10_000 });
   });
 
+  if (faultRejoin) {
+    await step("a failed release is witnessed and Rejoin leaves the old screen in place", async () => {
+      const { page } = starter;
+      const arrived = [];
+      const countArrival = (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/public/space-invite-arrivals") arrived.push(request);
+      };
+      page.on("request", countArrival);
+      try {
+        await Promise.all([
+          waitForReleaseRecord(page, "release_failed"),
+          page.getByRole("button", { name: "Rejoin", exact: true }).click(),
+        ]);
+        await page.getByRole("button", { name: "Rejoin", exact: true }).waitFor();
+        if (arrived.length !== 0) throw new Error("the app started a new arrival after the release failed");
+        await shot(starter, "rejoin-release-failed");
+      } finally {
+        page.off("request", countArrival);
+        await page.unroute(arrivalRoute);
+      }
+    });
+  }
+
   await step("the starter rejoins and the guest sees them again", async () => {
-    await starter.page.getByRole("button", { name: "Rejoin", exact: true }).click();
+    await Promise.all([
+      ...(faultRejoin ? [waitForReleaseRecord(starter.page, "released")] : []),
+      starter.page.getByRole("button", { name: "Rejoin", exact: true }).click(),
+    ]);
     await tile(starter, starter.name).waitFor({ timeout: waitMs });
     await tile(guest, starter.name).waitFor({ timeout: waitMs });
     await shot(starter, "rejoined");
