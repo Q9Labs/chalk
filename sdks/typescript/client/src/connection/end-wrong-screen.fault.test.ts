@@ -117,8 +117,27 @@ describe(symptom, () => {
     }
   });
 
+  it.each(["left", "removed"] as const)("classifies %s without claiming an Episode end", async (ending) => {
+    const test = scenario("active");
+    try {
+      await joinWithTerminalControl(test.client, test.platform);
+      if (ending === "left") await test.client.leave();
+      else test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "participant_removed" }, control: null });
+      await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("left"));
+      expect(test.ended).not.toHaveBeenCalled();
+      expect(test.callEnded()).toEqual([{ type: "call_ended", end_reason: ending }]);
+    } finally {
+      test.client.dispose();
+    }
+  });
+
   it("the fixtures agree with the rule", () => {
     expect(judged(fixture("positive")).findings).toBe(1);
     expect(judged(fixture("healthy"))).toMatchObject({ findings: 0, checked: 2, eligible: 2 });
+  });
+
+  it.each(["sync.episode.ended", "client.call_ended"])("stays unchecked without the %s witness", (missing) => {
+    const healthy = fixture("healthy");
+    expect(judged({ ...healthy, rows: healthy.rows.filter((row) => row.event !== missing) })).toMatchObject({ findings: 0, checked: 0, eligible: 2 });
   });
 });

@@ -51,6 +51,8 @@ it.each(["positive", "healthy"])("%s: judges the previous arrival's release on e
     expect(dropped).toEqual([]);
     expect(ruleResult(verdict, code)).toEqual({ checked: 1, eligible: 1, findings: variant === "positive" ? 1 : 0 });
     if (variant === "positive") expect(verdict.findings.find((finding) => finding.code === code)).toMatchObject({ subject: `pt:${row.participant_id}`, hop: "release", module: "web.space_entry" });
+    const missing = judgeFixture({ ...input, rows: [] }, CATALOGUE, code);
+    expect(ruleResult(missing.verdict, code)).toEqual({ checked: 0, eligible: 1, findings: 0 });
   } finally {
     await test.outbox.dispose();
   }

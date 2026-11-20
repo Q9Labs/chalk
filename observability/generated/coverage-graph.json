@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "616a914b35d1",
+  "schema_ver": "7e8e1528b693",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -206,6 +206,10 @@
             {
               "path": "sdks/typescript/client/src/connection/telemetry.ts",
               "literal": "type: \"call_ended\""
+            },
+            {
+              "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+              "literal": "end_reason: \"page_closed\""
             }
           ]
         }

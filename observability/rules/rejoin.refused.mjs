@@ -8,9 +8,7 @@ export const settle_ms = 120_000;
  * @param {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} declaration
  * @param {import("../../scripts/diagnose-call/proof/profile.mjs").Seat | null} seat
  */
-export const applies = (declaration, seat) =>
-  declaration.kind === "episode" && seat !== null && seat.window.to_ms !== null &&
-  (declaration.window.to_ms === null || seat.window.to_ms < declaration.window.to_ms);
+export const applies = (declaration, seat) => declaration.kind === "episode" && seat !== null && seat.window.to_ms !== null && (declaration.window.to_ms === null || seat.window.to_ms < declaration.window.to_ms);
 
 /**
  * @param {import("../../scripts/diagnose-call/proof/profile.mjs").DecideInput} input

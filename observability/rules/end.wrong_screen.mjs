@@ -23,9 +23,7 @@ export const settle_ms = AFTER_MS;
 export const expected = "the SDK classifies the authoritative Episode end without a connection failure and preserves a known time limit";
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
-export const applies = (declaration, seat) =>
-  declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null &&
-  (seat.window.to_ms === null || seat.window.to_ms >= declaration.window.to_ms - BEFORE_MS);
+export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null && (seat.window.to_ms === null || seat.window.to_ms >= declaration.window.to_ms - BEFORE_MS);
 
 /**
  * @param {DecideInput} input
@@ -40,9 +38,7 @@ export function decide({ readings }) {
   const at = server.window.from_ms;
   const nearEnd = screen.observations.filter((o) => o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
   if (nearEnd.length === 0) return { status: "unknown", reason: "no terminal classification is timed near the Episode end" };
-  const wrong = nearEnd.find((o) => FAILURE_SCREENS.has(o.claim) || (
-    server.claim === "maximum_duration" && o.value.episode_end_reason === "maximum_duration" && o.claim === "episode_ended"
-  ));
+  const wrong = nearEnd.find((o) => FAILURE_SCREENS.has(o.claim) || (server.claim === "maximum_duration" && o.value.episode_end_reason === "maximum_duration" && o.claim === "episode_ended"));
   if (!wrong) return { status: "pass" };
   return {
     status: "finding",

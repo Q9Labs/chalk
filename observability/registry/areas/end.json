@@ -73,6 +73,10 @@
         {
           "path": "sdks/typescript/client/src/connection/telemetry.ts",
           "literal": "type: \"call_ended\""
+        },
+        {
+          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "literal": "end_reason: \"page_closed\""
         }
       ],
       "legacy": {

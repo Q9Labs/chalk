@@ -61,7 +61,8 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
     assert ended_event_reason(ctx) == "tenant_recovery"
   end
 
-  test "end.time_limit: a maximum duration end stores, replicates and observes the same reason", ctx do
+  test "end.time_limit: a maximum duration end stores, replicates and observes the same reason",
+       ctx do
     observe_episode_end()
 
     assert {:ok, %{result: :applied}} =
@@ -69,7 +70,10 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
 
     assert stored_reason(ctx) == "maximum_duration"
     assert ended_event_reason(ctx) == "maximum_duration"
-    assert_receive {:observed_end, %{"episode_id" => episode_id, "end_reason" => "maximum_duration"}}
+
+    assert_receive {:observed_end,
+                    %{"episode_id" => episode_id, "end_reason" => "maximum_duration"}}
+
     assert episode_id == ctx.seed.episode.episode_id
   end
 
@@ -84,6 +88,7 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
 
   test "an end that reports another reason than the request carried is refused", ctx do
     observe_episode_end()
+
     assert {:error, _} =
              end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "maximum_duration")
 

@@ -1,5 +1,5 @@
 {
-  "schema_ver": "616a914b35d1",
+  "schema_ver": "7e8e1528b693",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -1198,6 +1198,10 @@
         {
           "path": "sdks/typescript/client/src/connection/telemetry.ts",
           "literal": "type: \"call_ended\""
+        },
+        {
+          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "literal": "end_reason: \"page_closed\""
         }
       ],
       "legacy": {
