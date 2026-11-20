@@ -4,10 +4,10 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { canonicalBucketProps, poolFirewallProps, recorderControlPorts } from "../recorder/resources.ts";
+import { canonicalBucketProps, poolFirewallProps, recorderControlPorts, stackOutput } from "../recorder/resources.ts";
 import { CaptureFirewall, CaptureTag, RenderFirewall, RenderTag } from "../providers/digitalocean-recorder-pools.ts";
 import { RecordingBucket } from "../providers/cloudflare-recording-bucket.ts";
-import { checkFirewall, firewallProps, tofuFirewall } from "./sfu.ts";
+import { checkFirewall, firewallDifference, firewallProps, tofuFirewall } from "./sfu.ts";
 import { expectResources, getResource, lookup, observe, row, semanticJson, type TofuState } from "./opentofu.ts";
 
 const nullable = <S extends Schema.Top>(schema: S) => Schema.optional(Schema.NullOr(schema));
@@ -124,18 +124,32 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
       ...(rule.abort_multipart_uploads_transition?.condition?.type !== "Age" ? {} : { abortMultipartUploadsTransition: { condition: { type: "Age", maxAge: rule.abort_multipart_uploads_transition.condition.max_age } } }),
       ...(rule.delete_objects_transition?.condition?.type !== "Age" ? {} : { deleteObjectsTransition: { condition: { type: "Age", maxAge: rule.delete_objects_transition.condition.max_age } } }),
     }));
-    const bucketDrift = [
-      ...(bucketAttr.bucketName !== bucket.name || bucketAttr.accountId !== bucket.account_id || bucketAttr.location !== "apac" || bucketAttr.storageClass !== bucket.storage_class ? ["identity/location/storage class"] : []),
-      ...(bucketAttr.publicDomain !== undefined || bucketAttr.domains.length ? ["public access"] : []),
-      ...(semanticJson(bucketAttr.cors) !== semanticJson(corsProps) ? ["CORS"] : []),
-      ...(semanticJson(bucketAttr.lifecycleRules) !== semanticJson(lifecycleProps) ? ["lifecycle"] : []),
-    ];
-    if (bucketDrift.length) return yield* Effect.die(`Live R2 differs from tofu state: ${bucketDrift.join(", ")}; resolve drift before seeding.`);
-    return row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: corsProps, lifecycleRules: lifecycleProps }), bucketAttr, [], "protect");
+    if (bucketAttr.bucketName !== bucket.name || bucketAttr.accountId !== bucket.account_id || bucketAttr.location !== "apac" || bucketAttr.storageClass !== bucket.storage_class) return yield* Effect.die("Live R2 bucket identity, location or storage class differs from tofu state.");
+    if (bucketAttr.publicDomain !== undefined || bucketAttr.domains.length) return yield* Effect.die("Live R2 bucket has public access; resolve it before seeding.");
+    const liveCors: Cloudflare.R2.BucketCorsRule[] = bucketAttr.cors.map((rule) => ({
+      ...(rule.id === undefined ? {} : { id: rule.id }),
+      allowedOrigins: rule.allowedOrigins,
+      allowedMethods: rule.allowedMethods,
+      ...(rule.allowedHeaders === undefined ? {} : { allowedHeaders: rule.allowedHeaders }),
+      ...(rule.exposeHeaders === undefined ? {} : { exposeHeaders: rule.exposeHeaders }),
+      ...(rule.maxAgeSeconds === undefined ? {} : { maxAgeSeconds: rule.maxAgeSeconds }),
+    }));
+    const liveLifecycle: Cloudflare.R2.BucketLifecycleRule[] = bucketAttr.lifecycleRules.map((rule) => ({
+      id: rule.id,
+      enabled: rule.enabled,
+      prefix: rule.prefix,
+      ...(rule.abortMultipartUploadsTransition?.condition === undefined ? {} : { abortMultipartUploadsTransition: { condition: rule.abortMultipartUploadsTransition.condition } }),
+      ...(rule.deleteObjectsTransition?.condition === undefined ? {} : { deleteObjectsTransition: { condition: rule.deleteObjectsTransition.condition } }),
+      ...(rule.storageClassTransitions === undefined ? {} : { storageClassTransitions: rule.storageClassTransitions }),
+    }));
+    // CORS and lifecycle are seeded as they are live. A difference from the definition
+    // then shows in the first plan as an in-place bucket update to review.
+    const stale = [...(semanticJson(bucketAttr.cors) === semanticJson(corsProps) ? [] : ["CORS"]), ...(semanticJson(bucketAttr.lifecycleRules) === semanticJson(lifecycleProps) ? [] : ["lifecycle"])];
+    if (stale.length) yield* Effect.logWarning(`Live R2 ${stale.join(" and ")} differ from tofu state; seeded as live.`);
+    return row(RecordingBucket.Type, "RecordingBucket", bucket.id, canonicalBucketProps({ name: bucket.name, locationHint: "apac", publicAccess: false, domains: [], cors: liveCors, lifecycleRules: liveLifecycle }), bucketAttr, [], "protect");
   });
   rows.push(yield* seedBucket());
   let capture = 0;
-  const roles: ("capture" | "render")[] = ["capture", "render"];
   const seedPool = Effect.fn(function* (role: "capture" | "render") {
     const identity = role === "capture" ? { firewall: "CaptureFirewall", tag: "CaptureTag", desired: applied.desired_capture_nodes } : { firewall: "RenderFirewall", tag: "RenderTag", desired: applied.desired_render_nodes };
     const contract = getResource(source, `module.${role}.terraform_data.runtime_capacity_contract`, runtime).input.value;
@@ -157,17 +171,27 @@ export const seedRecorder = Effect.fn(function* (source: TofuState, stage: strin
     const hasInvalidPoolPolicy = () => [tag.name !== contract.pool, tag.id !== tag.name, fw.name !== `chalk-recorder-${role}-${stage}`, fw.droplet_ids.length, fw.inbound_rule.length, fw.tags?.length].some(Boolean);
     if (hasInvalidPoolPolicy()) return yield* Effect.die("Recorder policies must remain outbound-only, unattached and correctly named.");
     const sourceProps = firewallProps(fw);
-    const props = poolFirewallProps({ environment: Schema.decodeUnknownSync(Schema.Literals(["nightly", "production"]))(stage), control_addresses: fw.outbound_rule.find((rule) => rule.protocol === "tcp" && rule.port_range === recorderControlPorts)?.destination_addresses ?? [] }, role);
+    const environment = Schema.decodeUnknownSync(Schema.Literals(["nightly", "production"]))(stage);
+    const sourceControl = fw.outbound_rule.find((rule) => rule.protocol === "tcp" && rule.port_range === recorderControlPorts)?.destination_addresses ?? [];
     const fwResource = role === "capture" ? CaptureFirewall : RenderFirewall;
     const tagResource = role === "capture" ? CaptureTag : RenderTag;
-    const fwAttr = yield* role === "capture" ? observe(CaptureFirewall, props, "CaptureFirewall") : observe(RenderFirewall, props, "RenderFirewall");
+    const declared = poolFirewallProps({ environment, control_addresses: sourceControl }, role);
+    const fwAttr = yield* role === "capture" ? observe(CaptureFirewall, declared, "CaptureFirewall") : observe(RenderFirewall, declared, "RenderFirewall");
     const tagAttr = yield* role === "capture" ? observe(CaptureTag, { name: tag.name }, "CaptureTag") : observe(RenderTag, { name: tag.name }, "RenderTag");
     if (fwAttr.firewallId !== fw.id || tagAttr.name !== tag.name) return yield* Effect.die("Recorder DigitalOcean resource identity differs from state.");
-    checkFirewall(sourceProps, fwAttr);
+    // The control destination is an operator input that may have moved since the last
+    // OpenTofu apply. Seed it as live; every other rule must still match the definition.
+    const liveControl = fwAttr.outboundRules.find((rule) => rule.protocol === "tcp" && rule.ports === recorderControlPorts)?.addresses ?? [];
+    const props = poolFirewallProps({ environment, control_addresses: [...liveControl] }, role);
     checkFirewall(props, fwAttr);
+    const stale = firewallDifference(sourceProps, fwAttr);
+    if (stale.length) yield* Effect.logWarning(`Live ${role} pool firewall differs from tofu state (${stale.join("; ")}); seeded as live.`);
     rows.push(row(fwResource.Type, identity.firewall, fw.id, props, fwAttr, [], "protect"), row(tagResource.Type, identity.tag, tag.id, { name: tag.name }, tagAttr, [], "protect"));
+    return fwAttr.firewallId;
   });
-  for (const role of roles) yield* seedPool(role);
+  const captureFirewallId = yield* seedPool("capture");
+  const renderFirewallId = yield* seedPool("render");
   if (applied.global_recorder_node_count !== capture + applied.desired_render_nodes || applied.global_recorder_node_count > 20) return yield* Effect.die("Recorder compute demand exceeds or disagrees with the global contract.");
-  return rows;
+  const capacity = { desired_capture_nodes: applied.desired_capture_nodes, desired_render_nodes: applied.desired_render_nodes, global_recorder_compute_nodes: applied.global_recorder_node_count, bucket_name: bucket.name };
+  return { rows, output: stackOutput(capacity, { keyArn: keyAttr.keyArn, captureFirewallId, renderFirewallId }) };
 });

@@ -1,4 +1,5 @@
 import type * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { isIP } from "node:net";
 import { readFile } from "node:fs/promises";
@@ -68,3 +69,6 @@ export const firewallConfig = (config: Pick<SfuConfig, "control_addresses" | "ss
     ],
   };
 };
+
+// The seed writes the same output a deploy writes, so both build it here.
+export const stackOutput = (node: Pick<DigitalOcean.DropletAttributes, "name" | "ipv4" | "dropletId">) => ({ name: node.name, public_ip: Redacted.make(node.ipv4), droplet_id: String(node.dropletId) });

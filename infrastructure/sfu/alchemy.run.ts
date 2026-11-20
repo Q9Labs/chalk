@@ -7,12 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { productionStageName } from "../platform/stages.ts";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { credential } from "../platform/credentials.ts";
 import { environment, providers, state } from "../platform/config.ts";
 import { SfuDroplet, sfuClient, sfuDropletProvider } from "../providers/digitalocean-sfu-droplet.ts";
-import { loadConfig, firewallConfig, renderCloudInit } from "./config.ts";
+import { loadConfig, firewallConfig, renderCloudInit, stackOutput } from "./config.ts";
 
 const digitalocean = DigitalOcean.providers();
 const stack = process.env.CHALK_SFU_STACK ?? "sfu";
@@ -47,6 +46,6 @@ export default Alchemy.Stack(
       userData: yield* Effect.tryPromise(() => renderCloudInit(config)),
     }).pipe(RemovalPolicy.protect());
     yield* DigitalOcean.Firewall("Firewall", node.dropletId.pipe(Output.map((id) => firewallConfig(config, name, id)))).pipe(RemovalPolicy.protect());
-    return { name: node.name, public_ip: node.ipv4.pipe(Output.map(Redacted.make)), droplet_id: node.dropletId.pipe(Output.map(String)) };
+    return Output.all(node.name, node.ipv4, node.dropletId).pipe(Output.map(([name, ipv4, dropletId]) => stackOutput({ name, ipv4, dropletId })));
   }).pipe(Effect.provide(sfuClient), Effect.orDie),
 );

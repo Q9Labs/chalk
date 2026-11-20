@@ -15,17 +15,19 @@ export const checkBootstrap = Effect.fn(function* (plan: Alchemist.StackPlan) {
   if (resources.length !== expected.length || resources.some((row) => row.action !== "create" || !expected.some(([name, type]) => row.resource.FQN === name && row.resource.Type === type))) return yield* Effect.die("Ephemeral bootstrap must create exactly the isolated dispatcher resource set");
 });
 
+export const requireSeededState = Effect.fn(function* (plan: Alchemist.StackPlan) {
+  const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
+  const identity = { stack: plan.stack.name, stage: plan.stack.stage };
+  if (!(yield* store.list(identity)).length || (yield* store.getOutput(identity)) === undefined) return yield* Effect.die("Deploy refused: missing seeded production resources/outputs");
+});
+
 export const prepareDeployment = Effect.fn(function* (name: string | undefined, stageName: string | undefined) {
   const { target, stage } = selectStack(name, stageName);
   requireDeployable(target);
   const stack = yield* Alchemist.importStack(entryFile(target));
   const plan = yield* Alchemist.plan({ stack, stage: stage.name, operation: "deploy" });
   if (stage.kind === "ephemeral") yield* checkBootstrap(plan);
-  else {
-    const store = yield* Effect.flatten(State).pipe(Effect.provide(plan.context));
-    const identity = { stack: target.stackName, stage: stage.name };
-    if (!(yield* store.list(identity)).length || (yield* store.getOutput(identity)) === undefined) return yield* Effect.die("Deploy refused: missing seeded production resources/outputs");
-  }
+  else yield* requireSeededState(plan);
   return { plan, target, stage };
 });
 
