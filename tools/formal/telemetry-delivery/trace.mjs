@@ -125,5 +125,5 @@ writeFileSync(
 );
 
 const maxRecords = Math.max(1, ...made);
-if (boot > 3 || maxRecords > 4) fail(`the trace needs ${boot} boots and ${maxRecords} records per boot; the model allows 3 and 4`);
+if (boot > 3 || maxRecords > 8) fail(`the trace needs ${boot} boots and ${maxRecords} records per boot; the model allows 3 and 8`);
 console.log(JSON.stringify({ steps: steps.length, boots: boot, records: maxRecords }));

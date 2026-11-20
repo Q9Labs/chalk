@@ -56,7 +56,7 @@ BreakNames == {
     "ignore_journal_on_reload"   \* a reloaded client keeps the journal but never sends what it holds
 }
 
-ASSUME MaxBoots \in 1..3 /\ MaxRecords \in 1..4 /\ Cap \in 1..4 /\ MaxFaults \in 0..9
+ASSUME MaxBoots \in 1..3 /\ MaxRecords \in 1..8 /\ Cap \in 1..4 /\ MaxFaults \in 0..9
 ASSUME CheckCap \in BOOLEAN /\ MayVanish \in BOOLEAN
 ASSUME Break \in BreakNames
 
@@ -157,12 +157,11 @@ Evict(v) ==
     /\ UNCHANGED <<boot, alive, src, closed, made, next, jnext, jclosing, toEnd, out, netVars, serverVars, assigned, durable, faultVars>>
 
 \* A drain turns the drop list into a telemetry_dropped record of the current source, one
-\* named source at a time (dropped_source_id names a predecessor). At most one drop record
-\* is unsettled at a time, so the drop list, not a pile of records, absorbs a long outage.
-\* Drop records are never evicted.
+\* named source at a time (dropped_source_id names a predecessor). The outbox emits a drop
+\* record only while no earlier one is unsettled, except as it disposes; the model lets it
+\* emit at any time, which covers both. Drop records are never evicted.
 EmitDrop ==
     /\ alive /\ ~closed /\ pdrops # {}
-    /\ ~\E d \in mem : IsDrop(d)
     /\ \E s \in {k[1] : k \in pdrops} :
          LET C == {k \in pdrops : k[1] = s}
              d == [src |-> src, seq |-> next[src], eid |-> boot, p0 |-> TRUE, covers |-> C]

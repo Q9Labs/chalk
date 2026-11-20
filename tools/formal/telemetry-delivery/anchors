@@ -2,3 +2,24 @@
 # fragment is gone, so a change to these guards forces a fresh look at the model.
 # Format: <action><TAB><path from repo root><TAB><fragment>. Whitespace runs in
 # the file and the fragment compare as one space.
+Record	sdks/typescript/client/src/telemetry/outbox.ts	if (entry.priority === "p0") { stream.saved = stream.next; this.#persist(true);
+Record	sdks/typescript/client/src/telemetry/outbox.ts	`now` writes before returning, which a P0 record and a closing mark need.
+Victim	sdks/typescript/client/src/telemetry/queue.ts	const tooMuchLow = lowBytes > this.#maxBytes / 2;
+Victim	sdks/typescript/client/src/telemetry/queue.ts	return this.#entries.find((entry) => entry.priority === "p0" && !isDropRecord(entry));
+Evict	sdks/typescript/client/src/telemetry/outbox.ts	this.#drops.add(stream.id, event.seq, reason);
+EmitDrop	sdks/typescript/client/src/telemetry/outbox.ts	(!closing && this.#dropRecordUnsettled())) return false;
+Checkpoint	sdks/typescript/client/src/telemetry/outbox.ts	drops: stream.live ? this.#drops.groups() : [],
+Ack	sdks/typescript/client/src/telemetry/outbox.ts	const settled = batch.entries.filter((entry) => acks.some((range) => entry.event.seq >= range.from && entry.event.seq < range.to));
+Ack	sdks/typescript/client/src/telemetry/outbox.ts	this.#settleAcked(stream, batch, result?.acks ?? []);
+PageHide	sdks/typescript/client/src/telemetry/outbox.ts	this.#step({ a: "pagehide" });
+Dispose	sdks/typescript/client/src/telemetry/outbox.ts	stream.end = "closed"; stream.closing = true; stream.saved = stream.next;
+Reboot	sdks/typescript/client/src/telemetry/outbox.ts	this.#live = newStream(options.platform.uuid(), true);
+Reboot	sdks/typescript/client/src/telemetry/outbox.ts	for (const { event, subject } of saved.records) stream.queue.push(entryOf(event, subject));
+Reboot	sdks/typescript/client/src/telemetry/outbox.ts	stream.end = saved.end ?? (saved.closing ? "closed" : "abandoned");
+Receive	apps/api/db/queries/telemetry_sources.sql	where tenant_id = $1 and participant_id = $2 and source_id = any(@source_ids::uuid[]) order by source_id for update;
+Receive	apps/api/internal/telemetrydelivery/admit.go	if own.Ranges.Stored.Contains(seq) || own.Ranges.Rejected.Contains(seq) {
+Receive	apps/api/internal/telemetrydelivery/admit.go	case r.End == EndClosed && reported == EndAbandoned:
+Write	apps/api/internal/adapters/postgres/telemetry_ledger.go	if err := write(ctx, admission); err != nil {
+Commit	apps/api/internal/adapters/postgres/telemetry_ledger.go	if err := tx.Commit(ctx); err != nil {
+Respond	apps/api/internal/httpapi/telemetry.go	written.Acks = telemetrydelivery.Acks(request.Batch, admission.Settled)
+GapsHonest	apps/api/internal/telemetrydelivery/gaps.go	gaps = append(gaps, gap(mark.SourceID, max(high, accounted.End()), nil, GapTailUnknown, "", status))

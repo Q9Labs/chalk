@@ -279,6 +279,30 @@ describe("disposal", () => {
     expectConservation(world);
     writeTrace(world);
   });
+
+  it("names the whole drop list while offline, even past an unsettled drop record, and the next boot delivers it", async () => {
+    const world = createWorld("dispose-offline");
+    const first = world.boot();
+    const before = first.outbox.sessionId;
+    first.state.online = false;
+    first.outbox.record(ended);
+    first.outbox.record(bigStats());
+    first.outbox.record(bigStats());
+    await first.outbox.flush();
+    first.outbox.record(bigStats());
+    first.outbox.record(bigStats());
+    await first.outbox.dispose();
+    const actions = world.steps.map((step) => step.a);
+    expect(actions.filter((action) => action === "emit_drop")).toHaveLength(2);
+    expect(actions.at(-1)).toBe("dispose");
+    first.crash();
+    world.boot();
+    await seconds(5);
+    expect(world.server.ledger(before)).toMatchObject({ end: "closed", endNext: 7, stored: new Set([0, 3, 6]), dropped: new Set([1, 2]) });
+    expect(world.storage.length).toBe(0);
+    expectConservation(world, [keyOf(before, 4), keyOf(before, 5)]);
+    writeTrace(world);
+  });
 });
 
 describe("a journal that fails", () => {

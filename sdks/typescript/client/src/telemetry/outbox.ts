@@ -201,9 +201,10 @@ export class TelemetryOutbox implements TelemetrySink {
     this.#cancelCheckpoint();
     this.#closing.clear();
     for (let round = 0; round < MAX_DISPOSE_ROUNDS && !this.#drops.empty; round++) {
-      if (!this.#dropRecordUnsettled() && !this.#emitDrops(true)) break;
+      this.#emitAllDrops();
       await this.flush();
     }
+    this.#emitAllDrops();
     const stream = this.#live;
     this.#disposed = true;
     stream.end = "closed";
@@ -438,10 +439,16 @@ export class TelemetryOutbox implements TelemetrySink {
     if (entries.length > 0) this.#persist(true);
   }
 
-  /** The drop list becomes one `telemetry_dropped` record: one source and one reason, at most 64 ranges, and never while an earlier drop record is unsettled. Without `force` it waits for a real record to travel with. */
-  #emitDrops(force: boolean): boolean {
+  /** At disposal no later drain will name the drop list, so it all becomes drop records now, unsettled ones or not. */
+  #emitAllDrops(): void {
+    let more = true;
+    while (more) more = this.#emitDrops(true, true);
+  }
+
+  /** The drop list becomes one `telemetry_dropped` record: one source and one reason, at most 64 ranges, and never while an earlier drop record is unsettled unless the source is closing. Without `force` it waits for a real record to travel with. */
+  #emitDrops(force: boolean, closing = false): boolean {
     const stream = this.#live;
-    if (this.#disposed || this.#drops.empty || (!force && stream.queue.length === 0) || this.#dropRecordUnsettled()) return false;
+    if (this.#disposed || this.#drops.empty || (!force && stream.queue.length === 0) || (!closing && this.#dropRecordUnsettled())) return false;
     const group = this.#drops.take(MAX_DROP_RANGES);
     if (!group) return false;
     const draft: TelemetryDraft = {
