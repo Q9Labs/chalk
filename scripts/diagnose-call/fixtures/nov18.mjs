@@ -4,7 +4,7 @@
  * items around it that `day`, `check`, `participant` and lookup need. Every name, id and number is invented.
  *
  * - ep_9feb (TH, 14:45 local, 60 min, 4 seats): Haris unmuted at +07:10 for 3.5 min while SFU ingress counted 10480 packets and
- *   0 voiced; Sana reported "Haris's audio not audible" at +11:30; the time limit ended the Episode and Zara's leave failed 2 s later;
+ *   0 voiced; Sana reported "Haris's audio not audible" at +11:30; the time limit ended the Episode;
  *   the clients (3.1.0) cannot emit board camera evidence. Checked, current, broken, coverage partial(board).
  * - ep_7a21: never checked. Healthy once someone checks it.
  * - ep_31aa: checked healthy in the morning; a problem report arrived later, so it is stale, and a recheck finds a BLIND_SPOT.
@@ -64,7 +64,7 @@ export const IDS = Object.freeze({
 });
 
 const CLIENT_BUILD = "client 3.1.0";
-const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen"]);
+const CLIENT_EMITS = Object.freeze(["audio.mic_state", "join.leave", "end.client_screen", "rejoin.release"]);
 
 /**
  * @param {string} participant
@@ -128,6 +128,11 @@ function quietEpisode(id, tenant, from, minutes, people) {
     mic(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 1}`, from + 30_000, to - 30_000, "unmuted"),
     ingress(id, s.participant, `${id.slice(0, 8)}-0000-4000-8000-00000000000${index * 2 + 2}`, from + 30_000, to - 30_000, 24_000, 9_000),
   ]);
+  observations.push(row(`${id.slice(0, 8)}-0000-4000-8000-000000000010`, {
+    fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode: id },
+    window: { from_ms: to, to_ms: to }, claim: "ended_by_participant", value: {}, failure: false,
+  }));
+  for (const [index, s] of seats.entries()) observations.push(terminalScreen(`${id.slice(0, 8)}-0000-4000-8000-00000000002${index}`, id, s, to, "episode_ended"));
   return {
     declaration: { kind: /** @type {const} */ ("episode"), id, tenant, features: ["media"], window: { from_ms: from, to_ms: to }, seats },
     evidence: {
@@ -138,6 +143,18 @@ function quietEpisode(id, tenant, from, minutes, people) {
       ),
     },
   };
+}
+
+/**
+ * @param {string} id @param {string} episode @param {Seat} seat @param {number} at @param {string} claim
+ * @returns {Observation}
+ */
+function terminalScreen(id, episode, seat, at, claim) {
+  return row(id, {
+    fact: "end.client_screen", source: "client", origin: origin.measured("client", seat.participant),
+    subject: { episode, participant: seat.participant, generation: seat.generations[0], connection: seat.connections[0] },
+    window: { from_ms: at, to_ms: at }, claim, value: {}, failure: false,
+  });
 }
 
 /** @returns {World} */
@@ -160,15 +177,16 @@ export function nov18() {
     ingress(ep, IDS.ptSana, "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c", at("2026-11-18T09:45:30Z"), at("2026-11-18T10:44:50Z"), 176_000, 61_500),
     mic(ep, IDS.ptBilal, "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e", at("2026-11-18T09:46:00Z"), at("2026-11-18T10:44:00Z"), "muted"),
     row(IDS.evEnd, { fact: "end.episode", source: "sync", origin: origin.measured("sync"), subject: { episode: ep }, window: { from_ms: end, to_ms: end }, claim: "maximum_duration", value: {}, failure: false }),
+    ...seats.map((s, index) => terminalScreen(`9feb0000-0000-4000-8000-00000000000${index}`, ep, s, end, "time_limit")),
     row(IDS.evLeave, {
       fact: "join.leave",
       source: "client",
       origin: origin.measured("client", IDS.ptZara),
       subject: { episode: ep, participant: IDS.ptZara, generation: 1, connection: connectionOf(IDS.ptZara) },
       window: { from_ms: end + 2_000, to_ms: end + 2_000 },
-      claim: "failed",
-      value: { error: "socket_closed" },
-      failure: true,
+      claim: "confirmed",
+      value: {},
+      failure: false,
     }),
     row(IDS.evReport, {
       fact: "report.problem",

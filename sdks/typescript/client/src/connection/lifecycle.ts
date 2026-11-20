@@ -14,7 +14,7 @@ import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode
 import { streamFromTracks } from "./media-devices";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
-import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
+import { callEnded, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
 import { diagnosticEvent, transportEvent } from "../telemetry/events";
 import { deviceFailedEvent } from "../media/capture-error";
@@ -272,7 +272,7 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           const from = model.state;
           model.state = state;
           if (state === "left" || state === "failed") {
-            telemetry?.record({ type: "call_ended", end_reason: callEndReason(from, state, model) });
+            telemetry?.record(callEnded(from, state, model));
             void telemetry?.flush();
           }
           diagnostics.record({ event: "state_changed", state, epoch: model.epoch });

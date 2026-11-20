@@ -1,5 +1,5 @@
 {
-  "schema_ver": "72216cc081c8",
+  "schema_ver": "616a914b35d1",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -748,6 +748,15 @@
       "doc": "The environment."
     },
     {
+      "name": "episode_end_reason",
+      "type": "enum",
+      "values": ["ended_by_participant", "tenant_recovery", "maximum_duration"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/end",
+      "doc": "The authoritative Sync control reason available to the SDK at terminal settlement."
+    },
+    {
       "name": "episode_id",
       "type": "id",
       "id_kind": "episode",
@@ -973,6 +982,15 @@
       "doc": "The recording."
     },
     {
+      "name": "rejoin_release",
+      "type": "enum",
+      "values": ["released", "release_failed"],
+      "required": false,
+      "sensitivity": null,
+      "owner": "areas/end",
+      "doc": "Whether the previous arrival was released when its Participant asked to rejoin the Space."
+    },
+    {
       "name": "release_sha",
       "type": "string",
       "required": false,
@@ -1131,7 +1149,7 @@
       "outcome": "expected",
       "area": "end",
       "test_only": false,
-      "doc": "The Episode reached its time limit and the API ended it. The client failures the end itself caused are expected."
+      "doc": "The Episode reached its time limit and the API ended it."
     },
     {
       "code": "selftest.broken",
@@ -1168,6 +1186,9 @@
         "client_session_id": {
           "required": true
         },
+        "episode_end_reason": {
+          "required": false
+        },
         "end_reason": {
           "required": true,
           "values": ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"]
@@ -1175,7 +1196,7 @@
       },
       "emit_sites": [
         {
-          "path": "sdks/typescript/client/src/connection/lifecycle.ts",
+          "path": "sdks/typescript/client/src/connection/telemetry.ts",
           "literal": "type: \"call_ended\""
         }
       ],
@@ -1305,6 +1326,36 @@
         }
       ],
       "doc": "Sync saw the Episode's authoritative end, with the reason the API stored in episodes.end_reason."
+    },
+    {
+      "name": "web.rejoin.release",
+      "kind": "fact",
+      "dataset": "lifecycle",
+      "side": "client",
+      "modules": ["web"],
+      "area": "end",
+      "test_only": false,
+      "fields": {
+        "client_session_id": {
+          "required": true
+        },
+        "rejoin_release": {
+          "required": true
+        }
+      },
+      "emit_sites": [
+        {
+          "path": "sdks/typescript/client/src/telemetry/app.ts",
+          "literal": "type: \"rejoin_release\""
+        }
+      ],
+      "legacy": {
+        "match": {
+          "event": "sdk.telemetry",
+          "type": "rejoin_release"
+        }
+      },
+      "doc": "The previous arrival's release gate completed during an explicit Rejoin."
     }
   ],
   "machines": [
@@ -1415,7 +1466,7 @@
           "source": "client",
           "claim": "end_reason",
           "failure_claims": ["connection_lost", "join_failed"],
-          "fields": ["episode_id", "participant_id", "client_session_id", "end_reason", "est_server_ms", "clock_err_ms"]
+          "fields": ["episode_id", "participant_id", "client_session_id", "end_reason", "episode_end_reason", "est_server_ms", "clock_err_ms"]
         }
       ],
       "doc": "The end screen a client chose for its call. Claim: the client's end reason. A failure screen (connection lost, join failed) is a failure some finding must explain."
@@ -1451,6 +1502,22 @@
       "per": "item",
       "events": [],
       "doc": "The terminal state of a post-call job, read from its Postgres row. Claim: succeeded or the failure state."
+    },
+    {
+      "name": "rejoin.release",
+      "area": "end",
+      "kind": "event",
+      "per": "seat",
+      "events": [
+        {
+          "event": "web.rejoin.release",
+          "source": "client",
+          "claim": "rejoin_release",
+          "failure_claims": ["release_failed"],
+          "fields": ["episode_id", "participant_id", "client_session_id", "rejoin_release", "est_server_ms", "clock_err_ms"]
+        }
+      ],
+      "doc": "Whether the previous arrival's release let a new arrival start."
     },
     {
       "name": "report.problem",
@@ -1591,7 +1658,7 @@
       "slice": 8,
       "item": "episode",
       "per": "item",
-      "doc": "The Episode reached its time limit and ended. Expected, and it claims the client failures the end itself caused.",
+      "doc": "The Episode reached its maximum duration and ended. This is expected.",
       "user_words": ["the call cut off"],
       "witnesses": [
         {
@@ -1608,7 +1675,7 @@
         "positive": "observability/fixtures/end.time_limit/positive.json",
         "healthy": "observability/fixtures/end.time_limit/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "apps/sync/test/chalk_sync/stateholder/episode_end_reason_postgres_test.exs"
     },
     {
       "code": "end.wrong_screen",
@@ -1616,8 +1683,8 @@
       "slice": 8,
       "item": "episode",
       "per": "seat",
-      "doc": "The Episode ended for an authoritative reason, but the client showed a failure end screen (connection lost or join failed) instead of the Episode-ended screen.",
-      "user_words": ["it said I lost connection when the class ended", "the call ended with an error"],
+      "doc": "The Episode ended authoritatively, but the client chose a failure classification or did not use the time-limit classification after learning the maximum-duration reason.",
+      "user_words": ["it said I lost connection when the call ended", "the call ended with an error", "it did not say the call ran out of time"],
       "witnesses": [
         {
           "fact": "end.episode",
@@ -1706,15 +1773,24 @@
       "slice": 8,
       "item": "episode",
       "per": "seat",
-      "doc": "A Participant who left or dropped could not rejoin an Episode that was still active.",
+      "doc": "The app could not release the Participant's previous arrival, so Rejoin could not start a new arrival in the Space.",
       "user_words": ["it won't let me back in"],
-      "witnesses": [],
+      "witnesses": [
+        {
+          "fact": "rejoin.release",
+          "from": ["client"],
+          "required": true,
+          "independent": 1,
+          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.telemetry' and type == 'rejoin_release'",
+          "doc": "The authenticated previous seat's release result on Rejoin."
+        }
+      ],
       "rule": "observability/rules/rejoin.refused.mjs",
       "fixtures": {
         "positive": "observability/fixtures/rejoin.refused/positive.json",
         "healthy": "observability/fixtures/rejoin.refused/healthy.json"
       },
-      "fault_scenario": null
+      "fault_scenario": "apps/web/src/components/space/rejoin-release.fault.test.mjs"
     },
     {
       "code": "share.wont_stop",
@@ -1771,10 +1847,6 @@
       "slice": 6
     },
     {
-      "code": "end.time_limit",
-      "slice": 8
-    },
-    {
       "code": "join.no_media",
       "slice": 2
     },
@@ -1785,10 +1857,6 @@
     {
       "code": "recording.not_ready",
       "slice": 10
-    },
-    {
-      "code": "rejoin.refused",
-      "slice": 8
     },
     {
       "code": "share.wont_stop",

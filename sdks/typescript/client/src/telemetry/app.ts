@@ -7,6 +7,8 @@ export type AppTelemetry = {
   readonly sessionId: string;
   readonly problemReported: () => void;
   readonly renderCrashed: (cause: NonNullable<TelemetryEvent["render_cause"]>) => void;
+  /** Records the release gate for an explicit Rejoin, under the previous seat's credential. */
+  readonly rejoinRelease?: (result: NonNullable<TelemetryEvent["rejoin_release"]>) => void;
 };
 
 export const appTelemetry = (outbox: TelemetryOutbox): AppTelemetry => ({
@@ -17,6 +19,10 @@ export const appTelemetry = (outbox: TelemetryOutbox): AppTelemetry => ({
   },
   renderCrashed: (cause) => {
     outbox.record({ type: "render_crashed", render_cause: cause });
+    void outbox.flush();
+  },
+  rejoinRelease: (result) => {
+    outbox.record({ type: "rejoin_release", rejoin_release: result });
     void outbox.flush();
   },
 });

@@ -98,6 +98,8 @@ type Event struct {
 	ErrorName        string         `json:"error_name,omitempty"`
 	PlatformState    string         `json:"platform_state,omitempty"`
 	EndReason        string         `json:"end_reason,omitempty"`
+	EpisodeEndReason string         `json:"episode_end_reason,omitempty"`
+	RejoinRelease    string         `json:"rejoin_release,omitempty"`
 	Stats            *StatsWindow   `json:"stats,omitempty"`
 	// Dropped is how many events the client's outbox lost to its byte bound.
 	Dropped *int64 `json:"dropped,omitempty"`

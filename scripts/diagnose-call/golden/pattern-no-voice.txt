@@ -1,8 +1,9 @@
-pattern audio.not_heard tenant=TH range=10-20..11-19 outcome=broken coverage=partial checked=5/7 partial=2 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=d7d52b11
+pattern audio.not_heard tenant=TH range=10-20..11-19 outcome=broken coverage=partial checked=5/7 partial=3 stale=1 unchecked=1 asof=2026-11-19T01:00Z rules=807d705f
 anchor=2026-10-20T01:00Z local=2026-10-20T06:00+05:00 tz=Asia/Karachi
 audio.not_heard broken episodes=2 people=1 ep_9feb ep_2d4e
 f_d12a broken audio.not_heard pt_2d4e(Haris) 11-11 15:05 hop=sfu_ingress module=unknown upstream=unknown ev=ev_2a3b of=ep_2d4e
 f_5b55 broken audio.not_heard pt_4c1e(Haris) 11-18 14:52 hop=sfu_ingress module=unknown upstream=unknown ev=ev_a1f3 of=ep_9feb
+gap: partial ep_2d4e 11-11 15:00 missing=end
 gap: stale ep_31aa 11-18 11:00 was=healthy
 gap: partial ep_9feb 11-18 14:45 missing=board
 gap: partial job_4a3b 11-18 15:45 missing=open

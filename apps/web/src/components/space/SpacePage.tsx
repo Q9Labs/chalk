@@ -270,9 +270,13 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   }, [entrance, send]);
   const onEnded = useCallback(
     (call: EndedCall) => {
-      if (!send({ type: "callEnded", call })) return;
+      if (!send({ type: "callEnded", call })) return false;
       const { attempt } = latest.current;
-      call.release().catch(() => send({ type: "failed", attempt, failure: { message: "Couldn’t leave the call. Try Home again.", retryable: true } }));
+      (call.releaseArrival ?? call.release)().catch(() => {
+        const current = latest.current;
+        if (current.phase === "ended" && !current.rejoining) send({ type: "failed", attempt, failure: { message: "Couldn’t leave the call. Try Home again.", retryable: true } });
+      });
+      return true;
     },
     [latest, send],
   );

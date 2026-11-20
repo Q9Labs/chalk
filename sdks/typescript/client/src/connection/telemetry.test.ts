@@ -15,7 +15,7 @@ describe("callEndReason", () => {
     ["live", "left", facts, "left"],
     ["live", "left", { ...facts, removedByHost: true }, "removed"],
     ["live", "left", { ...facts, episodeEndConfirmed: true }, "episode_ended"],
-    ["live", "left", { ...facts, episodeEndConfirmed: true, episodeEndReason: "time_limit" }, "time_limit"],
+    ["live", "left", { ...facts, episodeEndConfirmed: true, episodeEndReason: "maximum_duration" }, "time_limit"],
     ["reconnecting", "left", { ...facts, timedOut: true }, "connection_lost"],
   ] as const)("names %s to %s with %j as %s", (from, to, given, expected) => {
     expect(callEndReason(from, to, given)).toBe(expected);

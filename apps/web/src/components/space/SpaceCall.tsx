@@ -9,6 +9,7 @@ import { CallErrorBoundary } from "./CallErrorBoundary";
 import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
 import { useTheme } from "../../lib/theme-context";
 import type { EndedCall, ExitPhase } from "./entrance-machine";
+import { releaseForRejoin } from "./rejoin-release";
 
 // The call UI and media stack, which SpacePage loads only once the participant asks to join.
 export { ReportProblemDialog, StatusSurface } from "@q9labsai/chalk-react";
@@ -32,7 +33,7 @@ export function LocalSpace({
   readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
   readonly inviteLink?: string;
   readonly spaceName?: string;
-  readonly onEnded: (call: EndedCall) => void;
+  readonly onEnded: (call: EndedCall) => boolean;
 }) {
   const { mode, setPreference } = useTheme();
   const { session, credential, arrival } = admission;
@@ -40,6 +41,10 @@ export function LocalSpace({
   const offerSignUp = accountWouldAllowLonger(maximumSeconds);
   const client = useMemo(() => createLocalSpaceClient({ credential, getAccess: session.getAccess, connectionAccess: session.connectionAccess }), [credential, session]);
   const signUp = { label: "Sign up free", onClick: () => globalThis.location.assign("/dashboard/sign-in") };
+  const releaseArrival = useCallback(async () => {
+    if (client.getSnapshot().connection.status !== "left") await client.leave().catch(() => undefined);
+    await session.leave();
+  }, [client, session]);
   const release = useCallback(async () => {
     await client.close();
     await session.leave();
@@ -51,6 +56,7 @@ export function LocalSpace({
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
+  const handedOff = useRef(false);
   const releaseFromLifecycle = useCallback(
     (phase: ExitPhase, failure?: ClientFailure | null) => {
       if (endObserved.current) return;
@@ -62,10 +68,12 @@ export function LocalSpace({
         /* Storage may be disabled. */
       }
       const terminalProof = session.mediaProof();
-      onEnded({
+      const canRejoin = phase !== "episode-ended" && phase !== "removed";
+      handedOff.current = onEnded({
         phase,
         failure,
         release,
+        ...(canRejoin ? { releaseArrival, releaseForRejoin: () => releaseForRejoin(releaseArrival, client) } : {}),
         offerSignUp,
         tenantId,
         callName: spaceName,
@@ -74,7 +82,7 @@ export function LocalSpace({
         reportExpiresAt: session.mediaExpiresAt(),
       });
     },
-    [client, onEnded, release, credential.apiBaseURL, tenantId, session, offerSignUp, spaceName],
+    [client, onEnded, release, releaseArrival, credential.apiBaseURL, tenantId, session, offerSignUp, spaceName],
   );
   useEffect(() => {
     const exit = sessionExit(connection);
@@ -89,7 +97,8 @@ export function LocalSpace({
     return () => {
       pendingRelease.current = globalThis.setTimeout(() => {
         pendingRelease.current = undefined;
-        void release().catch(() => undefined);
+        // Once the end screen accepts ownership, it closes the old client's telemetry source.
+        if (!handedOff.current) void release().catch(() => undefined);
       }, 0);
     };
   }, [release]);

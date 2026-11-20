@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   @moduledoc false
 
   alias ChalkSync.Database
+  alias ChalkSync.Obs
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.ExternalOperationClaims
@@ -107,7 +108,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
         case Postgrex.query(
                Database.alternate_connection(episode),
                """
-               select episodes.end_reason, operations.journey_id, operations.producing_trace_id,
+               select episodes.end_reason, episodes.ended_at, operations.journey_id, operations.producing_trace_id,
                       operations.producing_span_id
                from episodes
                join sync_external_operations operations
@@ -125,15 +126,25 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
                ],
                timeout: 1_000
              ) do
-          {:ok, %{rows: [[end_reason, journey_id, trace_id, span_id]]}}
+          {:ok, %{rows: [[end_reason, %DateTime{} = ended_at, journey_id, trace_id, span_id]]}}
           when is_binary(end_reason) ->
+            fields = %{
+              episode_id: episode.episode_id,
+              space_id: episode.space_id,
+              tenant_id: episode.tenant_id,
+              end_reason: end_reason
+            }
+
+            Obs.fact("sync.episode.ended", fields)
+
             Observability.linked_phase(
               ended_context(journey_id, trace_id, span_id),
               "sync.episode.ended",
-              %{
-                episode_id: episode.episode_id,
-                end_reason: end_reason
-              }
+              Map.merge(fields, %{
+                event_id: external_operation_id,
+                est_server_ms: DateTime.to_unix(ended_at, :millisecond),
+                clock_state: "server"
+              })
             )
 
           _ ->

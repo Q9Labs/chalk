@@ -1,5 +1,5 @@
 {
-  "description": "The Episode hit its maximum duration and every client showed an end screen for the Episode ending: one the time limit, one the Episode ended. Every source is complete, so both seats are checked and the Episode is healthy.",
+  "description": "The Episode hit its maximum duration. Seat A received the reason and selected the time limit; Seat B confirmed the end without a specific reason.",
   "asof_ms": 1795600300000,
   "declaration": {
     "kind": "episode",
@@ -69,7 +69,8 @@
       "end_reason": "time_limit",
       "est_server_ms": 1795600000400,
       "clock_err_ms": 40,
-      "clock_state": "synced"
+      "clock_state": "synced",
+      "episode_end_reason": "maximum_duration"
     },
     {
       "event": "client.call_ended",

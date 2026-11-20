@@ -3,7 +3,7 @@
 package obs
 
 // SchemaVer is the registry's content hash, stamped on every record as schema_ver.
-const SchemaVer = "72216cc081c8"
+const SchemaVer = "616a914b35d1"
 
 // Event names.
 const (
@@ -15,6 +15,7 @@ const (
 	EventSelftestNote     = "selftest.note"
 	EventSelftestWork     = "selftest.work"
 	EventSyncEpisodeEnded = "sync.episode.ended"
+	EventWebRejoinRelease = "web.rejoin.release"
 )
 
 // Machine names.
@@ -59,6 +60,7 @@ const (
 	FieldEnd                = "end"
 	FieldEndReason          = "end_reason"
 	FieldEnv                = "env"
+	FieldEpisodeEndReason   = "episode_end_reason"
 	FieldEpisodeID          = "episode_id"
 	FieldEstServerMs        = "est_server_ms"
 	FieldEventID            = "event_id"
@@ -85,6 +87,7 @@ const (
 	FieldProviderMediaID    = "provider_media_id"
 	FieldReasonCode         = "reason_code"
 	FieldRecordingID        = "recording_id"
+	FieldRejoinRelease      = "rejoin_release"
 	FieldReleaseSHA         = "release_sha"
 	FieldRequestID          = "request_id"
 	FieldSchemaVer          = "schema_ver"
@@ -129,6 +132,7 @@ var registryFields = map[string]fieldSpec{
 	"end":                  {typ: "enum", group: "delivery", required: false, values: []string{"closed", "abandoned"}},
 	"end_reason":           {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration", "left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}},
 	"env":                  {typ: "enum", group: "build", required: true, values: []string{"local", "test", "nightly", "staging", "production"}},
+	"episode_end_reason":   {typ: "enum", group: "event", required: false, values: []string{"ended_by_participant", "tenant_recovery", "maximum_duration"}},
 	"episode_id":           {typ: "id", group: "trail", required: false},
 	"est_server_ms":        {typ: "int", group: "clock", required: false},
 	"event_id":             {typ: "id", group: "delivery", required: true},
@@ -155,6 +159,7 @@ var registryFields = map[string]fieldSpec{
 	"provider_media_id":    {typ: "id", group: "trail", required: false},
 	"reason_code":          {typ: "string", group: "record", required: false},
 	"recording_id":         {typ: "id", group: "trail", required: false},
+	"rejoin_release":       {typ: "enum", group: "event", required: false, values: []string{"released", "release_failed"}},
 	"release_sha":          {typ: "string", group: "build", required: false},
 	"request_id":           {typ: "id", group: "trail", required: false},
 	"schema_ver":           {typ: "string", group: "build", required: true},
@@ -175,7 +180,7 @@ var registryFields = map[string]fieldSpec{
 }
 
 var registryEvents = map[string]eventSpec{
-	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
+	"client.call_ended":  {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "episode_end_reason": {required: false}, "end_reason": {required: true, values: []string{"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"}}}},
 	"obs.clock_jump":     {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"jump_ms": {required: true}}},
 	"obs.flags_snapshot": {kind: "fact", dataset: "infra", testOnly: false, fields: map[string]fieldRule{"flags": {required: true}}},
 	"selftest.admit":     {kind: "decision", dataset: "lifecycle", testOnly: true, decisions: []string{"admitted", "refused"}, fields: map[string]fieldRule{}},
@@ -183,6 +188,7 @@ var registryEvents = map[string]eventSpec{
 	"selftest.note":      {kind: "fact", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"note_kind": {required: true, values: []string{"a"}}}},
 	"selftest.work":      {kind: "op", dataset: "lifecycle", testOnly: true, fields: map[string]fieldRule{"item_count": {required: false}}},
 	"sync.episode.ended": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"episode_id": {required: true}, "end_reason": {required: true, values: []string{"ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"}}}},
+	"web.rejoin.release": {kind: "fact", dataset: "lifecycle", testOnly: false, fields: map[string]fieldRule{"client_session_id": {required: true}, "rejoin_release": {required: true}}},
 }
 
 var registryMachines = map[string]machineSpec{

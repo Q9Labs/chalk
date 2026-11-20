@@ -11,7 +11,7 @@ Each file here is the spec for one vertical slice of the [hyper-observability pl
 | 5 | Screen share | [05-screen-share.md](05-screen-share.md) | SWE-2 | `observability/registry/areas/share.json` | `share.` |
 | 6 | Whiteboard | (Opus) | Opus | `observability/registry/areas/board.json` | `board.` |
 | 7 | Access, reconnection, background | (Opus) | Opus | `observability/registry/areas/access.json` | `access.` `reconnect.` `background.` |
-| 8 | Call end and rejoin | (Opus) | Opus | `observability/registry/areas/end.json` | `end.` `rejoin.` |
+| 8 | Call end and rejoin | [08-end-rejoin.md](08-end-rejoin.md) | Sol | `observability/registry/areas/end.json` | `end.` `rejoin.` |
 | 9 | Crashes and performance, web and native | [09-crashes-performance.md](09-crashes-performance.md) | SWE-2 | `observability/registry/areas/crash.json` | `page.` `app.` `perf.` |
 | 10 | Recording and rendering | [10-recording.md](10-recording.md) | SWE-2 | `observability/registry/areas/recording.json` | `recording.` `render.` `playback.` |
 | 11 | Transcription | [11-transcription.md](11-transcription.md) | SWE-2 | `observability/registry/areas/transcription.json` | `transcript.` |

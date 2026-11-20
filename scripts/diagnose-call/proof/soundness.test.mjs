@@ -96,8 +96,19 @@ describe("baseline", () => {
     assert.equal(silent?.upstream, "unknown");
     assert.equal(silent?.hypothesis, null, "zero voiced packets alone must not become a cause");
     assert.equal(verdict.findings.find((finding) => finding.code === "end.time_limit")?.outcome, "expected");
-    assert.equal(verdict.findings.filter((finding) => finding.backstop === "UNEXPLAINED").length, 0, "the time-limit end claims Zara's failed leave");
+    assert.equal(verdict.findings.filter((finding) => finding.backstop === "UNEXPLAINED").length, 0);
     assert.equal(verdict.reports[0].explained_by, silent?.id);
+  });
+
+  it("does not explain a failed Leave by a nearby time-limit end alone", () => {
+    const { declaration, evidence } = base(IDS.ep9feb);
+    const leave = evidence.observations.findIndex((event) => event.id === IDS.evLeave);
+    const row = evidence.observations[leave];
+    assert.ok(row);
+    evidence.observations[leave] = { ...row, claim: "failed", failure: true };
+    const verdict = verdictOf(declaration, evidence);
+    assert.ok(verdict.findings.some((finding) => finding.outcome === "expected" && finding.code === "end.time_limit"));
+    assert.ok(verdict.findings.some((finding) => finding.backstop === "UNEXPLAINED"));
   });
 });
 
@@ -356,7 +367,7 @@ describe("backstops and the empty profile", () => {
   it("never calls an item with no applicable check healthy", () => {
     const { declaration, evidence } = base(IDS.ep5c0d);
     const bare = /** @type {Declaration} */ ({ ...declaration, features: [], seats: [] });
-    const verdict = verdictOf(bare, { observations: [], watermarks: evidence.watermarks });
+    const verdict = verdictOf(bare, { observations: [], watermarks: evidence.watermarks }, { catalogue: CATALOGUE.filter((check) => check.per === "seat") });
     assert.equal(verdict.outcome, "unknown");
     assert.ok(verdict.coverage.gaps.some((gap) => gap.kind === "empty"));
   });

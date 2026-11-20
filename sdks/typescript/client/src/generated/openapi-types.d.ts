@@ -2780,6 +2780,8 @@ export interface components {
         /** @enum {string} */
         end_reason?: "left" | "episode_ended" | "time_limit" | "removed" | "connection_lost" | "join_failed" | "page_closed";
         /** @enum {string} */
+        episode_end_reason?: "ended_by_participant" | "tenant_recovery" | "maximum_duration";
+        /** @enum {string} */
         error_name?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "TypeError" | "unknown";
         event_id?: components["schemas"]["UUID"];
         /** @enum {string} */
@@ -2824,6 +2826,8 @@ export interface components {
         /** @enum {string} */
         receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
         receivers_stopped?: number | null;
+        /** @enum {string} */
+        rejoin_release?: "released" | "release_failed";
         /** @enum {string} */
         render_cause?: "render_error" | "chunk_reload" | "unhandled_error" | "unhandled_rejection";
         seq: number;
@@ -2897,6 +2901,7 @@ export interface components {
           | "recovery_attempt"
           | "recovery_exhausted"
           | "recovery_succeeded"
+          | "rejoin_release"
           | "render_crashed"
           | "space_join_span"
           | "state_changed"

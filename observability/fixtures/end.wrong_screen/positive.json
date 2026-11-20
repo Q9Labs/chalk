@@ -77,10 +77,11 @@
       "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
       "participant_id": "a1000000-0000-4000-8000-000000000002",
       "client_session_id": "9b2f3c1d-1111-4222-8333-944455556666",
-      "end_reason": "episode_ended",
+      "end_reason": "time_limit",
       "est_server_ms": 1795600000300,
       "clock_err_ms": 25,
-      "clock_state": "synced"
+      "clock_state": "synced",
+      "episode_end_reason": "maximum_duration"
     }
   ]
 }

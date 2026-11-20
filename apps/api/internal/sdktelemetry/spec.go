@@ -53,7 +53,8 @@ var specs = map[string]spec{
 	"chat_upload_failed":        connection("upload_failure"),
 
 	// The end of a call, and what the platform did to the client around it.
-	"call_ended":       {allowed: []string{"end_reason"}, required: []string{"end_reason"}},
+	"call_ended":       {allowed: []string{"end_reason", "episode_end_reason"}, required: []string{"end_reason"}},
+	"rejoin_release":   {allowed: []string{"rejoin_release"}, required: []string{"rejoin_release"}},
 	"platform_changed": {allowed: []string{"platform_state"}, required: []string{"platform_state"}},
 
 	// One window of stats, or the marker of a window that could not be measured.
@@ -104,6 +105,8 @@ var fieldEnums = map[string][]string{
 	"permission_state":      {"granted", "denied", "prompt", "unknown"},
 	"render_cause":          {"render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"},
 	"end_reason":            {"left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"},
+	"episode_end_reason":    {"ended_by_participant", "tenant_recovery", "maximum_duration"},
+	"rejoin_release":        {"released", "release_failed"},
 	"platform_state":        {"online", "offline", "hidden", "visible", "background", "foreground"},
 	"gap":                   {"offline", "hidden", "poll_failed", "dropped"},
 	"connection_type":       {"udp", "tcp", "turn", "unknown"},

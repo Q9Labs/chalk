@@ -5,6 +5,7 @@ export type Priority = "p0" | "routine" | "stats";
 
 export const PRIORITY: Record<TelemetryEventType, Priority> = {
   call_ended: "p0",
+  rejoin_release: "p0",
   connection_failed: "p0",
   render_crashed: "p0",
   problem_reported: "p0",

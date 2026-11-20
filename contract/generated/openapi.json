@@ -18190,6 +18190,10 @@
                   "enum": ["left", "episode_ended", "time_limit", "removed", "connection_lost", "join_failed", "page_closed"],
                   "type": "string"
                 },
+                "episode_end_reason": {
+                  "enum": ["ended_by_participant", "tenant_recovery", "maximum_duration"],
+                  "type": "string"
+                },
                 "error_name": {
                   "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "TypeError", "unknown"],
                   "type": "string"
@@ -18322,6 +18326,10 @@
                   "maximum": 10000,
                   "minimum": 0,
                   "type": ["integer", "null"]
+                },
+                "rejoin_release": {
+                  "enum": ["released", "release_failed"],
+                  "type": "string"
                 },
                 "render_cause": {
                   "enum": ["render_error", "chunk_reload", "unhandled_error", "unhandled_rejection"],
@@ -18508,6 +18516,7 @@
                     "recovery_attempt",
                     "recovery_exhausted",
                     "recovery_succeeded",
+                    "rejoin_release",
                     "render_crashed",
                     "space_join_span",
                     "state_changed",

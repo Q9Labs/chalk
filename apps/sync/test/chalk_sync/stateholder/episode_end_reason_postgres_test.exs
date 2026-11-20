@@ -36,6 +36,23 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
     {:ok, seed: seed}
   end
 
+  defp observe_episode_end do
+    test = self()
+    handler = {__MODULE__, test}
+
+    :ok =
+      :telemetry.attach(
+        handler,
+        [:chalk_sync, :obs, :record],
+        fn _event, _measurements, record, pid ->
+          if record["name"] == "sync.episode.ended", do: send(pid, {:observed_end, record})
+        end,
+        test
+      )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+  end
+
   test "a linger end stores its own reason and tells clients the v1 recovery reason", ctx do
     assert {:ok, %{result: :applied}} =
              end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "tenant_recovery")
@@ -44,26 +61,34 @@ defmodule ChalkSync.Stateholder.EpisodeEndReasonPostgresTest do
     assert ended_event_reason(ctx) == "tenant_recovery"
   end
 
-  test "a maximum duration end stores and replicates the same reason", ctx do
+  test "end.time_limit: a maximum duration end stores, replicates and observes the same reason", ctx do
+    observe_episode_end()
+
     assert {:ok, %{result: :applied}} =
              end_episode(ctx.seed.episode, %{"reason" => "maximum_duration"}, "maximum_duration")
 
     assert stored_reason(ctx) == "maximum_duration"
     assert ended_event_reason(ctx) == "maximum_duration"
+    assert_receive {:observed_end, %{"episode_id" => episode_id, "end_reason" => "maximum_duration"}}
+    assert episode_id == ctx.seed.episode.episode_id
   end
 
   test "an end with no reason is a host end", ctx do
+    observe_episode_end()
     assert {:ok, %{result: :applied}} = end_episode(ctx.seed.episode, %{}, "tenant_recovery")
 
     assert stored_reason(ctx) == "tenant_recovery"
     assert ended_event_reason(ctx) == "tenant_recovery"
+    assert_receive {:observed_end, %{"end_reason" => "tenant_recovery"}}
   end
 
   test "an end that reports another reason than the request carried is refused", ctx do
+    observe_episode_end()
     assert {:error, _} =
              end_episode(ctx.seed.episode, %{"reason" => "linger_expired"}, "maximum_duration")
 
     assert stored_reason(ctx) == nil
+    refute_receive {:observed_end, _}, 0
   end
 
   defp end_episode(episode, payload, wire_reason) do

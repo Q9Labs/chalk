@@ -28,6 +28,9 @@ export type EndedCall = {
   readonly callName: string | undefined;
   readonly failure: ClientFailure | null | undefined;
   readonly release: () => Promise<void>;
+  /** Eagerly releases a retryable call without closing its telemetry source. */
+  readonly releaseArrival?: () => Promise<void>;
+  readonly releaseForRejoin?: () => Promise<void>;
   readonly reportProblem?: ReportProblem;
   readonly reportExpiresAt?: number;
 };
@@ -72,7 +75,7 @@ export function initialEntrance(options: { readonly resuming: boolean; readonly 
 
 /** What a new arrival must wait for: the old call or admission still being given back. */
 export function pendingRelease(entrance: Entrance): Release | undefined {
-  if (entrance.phase === "ended") return entrance.call.release;
+  if (entrance.phase === "ended") return entrance.call.releaseForRejoin ?? entrance.call.release;
   return entrance.phase === "failed" ? entrance.held : undefined;
 }
 

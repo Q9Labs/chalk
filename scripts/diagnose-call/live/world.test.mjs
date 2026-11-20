@@ -112,7 +112,7 @@ test("a seat with an open gap, and a seat with no ledger source, stay unchecked,
   const text = await run(["--live", "--tenant", TENANT, "--episode", EPISODE, "episode", EPISODE], { stores: fakeStores(), now: NOW });
   const gaps = text.out.split("\n").filter((line) => line.startsWith("gap:"));
   assert.ok(gaps.some((line) => line.includes("end.wrong_screen")), `the open and quiet seats' end checks are gaps:\n${text.out}`);
-  assert.match(text.out, /checked=1\//u, "only the closed seat's end check could decide");
+  assert.match(text.out, /checked=2\//u, "only the item-wide end and the closed seat's end check could decide");
 });
 
 test("an unreadable ledger leaves every seat's client source not read", async () => {

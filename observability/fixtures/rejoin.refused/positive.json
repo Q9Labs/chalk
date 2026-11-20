@@ -1,0 +1,48 @@
+{
+  "description": "The previous arrival could not be released when a Participant tried to rejoin.",
+  "asof_ms": 1795600300000,
+  "declaration": {
+    "kind": "episode",
+    "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "tenant": "c1000000-0000-4000-8000-000000000001",
+    "features": [],
+    "window": {
+      "from_ms": 1795596400000,
+      "to_ms": 1795600120000
+    },
+    "seats": [
+      {
+        "participant": "a1000000-0000-4000-8000-000000000001",
+        "name": "Seat A",
+        "role": "participant",
+        "can_publish": true,
+        "generations": [
+          1
+        ],
+        "connections": [],
+        "window": {
+          "from_ms": 1795596400000,
+          "to_ms": 1795600000000
+        },
+        "person": {
+          "kind": "user",
+          "id": "b1000000-0000-4000-8000-000000000001",
+          "name": "Seat A"
+        }
+      }
+    ]
+  },
+  "rows": [
+    {
+      "event": "web.rejoin.release",
+      "event_id": "6e1d3b63-7a2f-4a8b-8d2c-3a5d9f8b0002",
+      "episode_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+      "participant_id": "a1000000-0000-4000-8000-000000000001",
+      "client_session_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "est_server_ms": 1795600000400,
+      "clock_err_ms": 40,
+      "clock_state": "synced",
+      "rejoin_release": "release_failed"
+    }
+  ]
+}

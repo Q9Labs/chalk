@@ -1,11 +1,7 @@
 // @ts-check
 /**
- * end.wrong_screen: the Episode ended for an authoritative reason, but a seat's client chose a failure end screen (connection lost
- * or join failed) instead of the Episode-ended screen.
- *
- * The witnesses are in areas/end.json: `end.episode` from Sync (sync.episode.ended) and `end.client_screen` from the seat's client
- * (client.call_ended). A client screen counts when it is a failure screen and its time, widened by the row's clock error, falls in a
- * window around the end. A client row with no server time can't be placed, so the adapter drops it and the seat stays unchecked.
+ * Compare the authoritative Episode end and the SDK's terminal classification.
+ * A status-only confirmation can select the generic screen; it cannot claim the specific Sync reason.
  */
 
 /** @typedef {import("../../scripts/diagnose-call/proof/profile.mjs").Declaration} Declaration */
@@ -24,10 +20,12 @@ const AFTER_MS = 120_000;
 /** Records about the end arrive after it, so the check reads this far past the Episode's end. */
 export const settle_ms = AFTER_MS;
 
-export const expected = `when the Episode ends, every seat's client shows the Episode-ended screen, and none shows a failure screen from ${BEFORE_MS / 1000} s before the end to ${AFTER_MS / 1000} s after it`;
+export const expected = "the SDK classifies the authoritative Episode end without a connection failure and preserves a known time limit";
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
-export const applies = (declaration, seat) => declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null;
+export const applies = (declaration, seat) =>
+  declaration.kind === "episode" && declaration.window.to_ms !== null && seat !== null &&
+  (seat.window.to_ms === null || seat.window.to_ms >= declaration.window.to_ms - BEFORE_MS);
 
 /**
  * @param {DecideInput} input
@@ -36,13 +34,15 @@ export const applies = (declaration, seat) => declaration.kind === "episode" && 
 export function decide({ readings }) {
   const end = readings["end.episode"];
   const screen = readings["end.client_screen"];
-  if (end.kind === "unknown") return { status: "unknown", reason: "the Episode's end is not witnessed" };
-  if (end.kind === "absent") return { status: "pass" };
-  const [server] = [...end.observations].sort((a, b) => a.window.from_ms - b.window.from_ms);
-  if (screen.kind === "unknown") return { status: "unknown", reason: "the seat's end screen is not witnessed" };
-  if (screen.kind === "absent") return { status: "pass" };
+  if (end.kind !== "present") return { status: "unknown", reason: "the Episode's end is not witnessed" };
+  const [server] = end.observations;
+  if (screen.kind !== "present") return { status: "unknown", reason: "the seat's terminal classification is not witnessed" };
   const at = server.window.from_ms;
-  const wrong = screen.observations.find((o) => FAILURE_SCREENS.has(o.claim) && o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
+  const nearEnd = screen.observations.filter((o) => o.window.to_ms >= at - BEFORE_MS && o.window.from_ms <= at + AFTER_MS);
+  if (nearEnd.length === 0) return { status: "unknown", reason: "no terminal classification is timed near the Episode end" };
+  const wrong = nearEnd.find((o) => FAILURE_SCREENS.has(o.claim) || (
+    server.claim === "maximum_duration" && o.value.episode_end_reason === "maximum_duration" && o.claim === "episode_ended"
+  ));
   if (!wrong) return { status: "pass" };
   return {
     status: "finding",
@@ -57,7 +57,7 @@ export function decide({ readings }) {
       { text: `Sync saw the Episode end: ${server.claim}`, evidence: [server.id], window: server.window, absent: null },
       { text: `the client showed the ${wrong.claim} screen`, evidence: [wrong.id], window: wrong.window, absent: null },
     ],
-    hypothesis: { text: "the client lost the end notice and read a stale Episode status", falsified_by: "an end notice delivered on the seat's Sync connection before the client chose its screen" },
-    falsify: { absence: null, attribution: `an Episode-ended screen for this seat, or a failure screen more than ${BEFORE_MS / 1000} s before the end` },
+    hypothesis: null,
+    falsify: { absence: null, attribution: "the SDK classified the end correctly for the reason it knew, or the failure was outside the end window" },
   };
 }

@@ -11,7 +11,9 @@ import { judgeFixture, ruleResult } from "../../../../../scripts/diagnose-call/p
 import { CloudflareSFUError } from "../media";
 import { legacyEventName } from "../obs/legacy.ts";
 import type { ConnectionDependencies, ConnectionMediaFactoryInput } from "./dependencies";
-import { joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "../space-client/terminal.test.helpers";
+import { control, joinWithTerminalControl, terminalTestClient, terminalTestPlatform } from "../space-client/terminal.test.helpers";
+import { callEndNotice } from "../space-client/call-length";
+import type { TelemetryDraft } from "../telemetry/types";
 
 type Row = { readonly event: string; readonly [field: string]: unknown };
 type Fixture = Parameters<typeof judgeFixture>[0] & { readonly rows: Row[] };
@@ -25,11 +27,13 @@ const judged = (input: Fixture) => {
 };
 
 // The fixture with its client row that ended like the draft replaced by the row the client really recorded.
-function withRecorded(name: "positive" | "healthy", draft: { readonly type: string; readonly end_reason?: string } | undefined): Fixture {
+function withRecorded(name: "positive" | "healthy", draft: TelemetryDraft | undefined): Fixture {
   const input = fixture(name);
-  const index = input.rows.findIndex((row) => row.event === "client.call_ended" && row.end_reason === draft?.end_reason);
+  if (input.declaration.kind !== "episode") throw new Error("the fault fixture must describe an Episode");
+  const firstSeat = input.declaration.seats[0]?.participant;
+  const index = input.rows.findIndex((row) => row.event === "client.call_ended" && row.participant_id === firstSeat);
   const like = input.rows[index];
-  if (!draft || !like) throw new Error(`the ${name} fixture has no client row ending with ${draft?.end_reason}`);
+  if (!draft || !like) throw new Error(`the ${name} fixture needs the first seat's terminal record`);
   return { ...input, rows: input.rows.map((row, at) => (at === index ? clientRow(draft, like) : row)) };
 }
 
@@ -60,13 +64,30 @@ function scenario(statusRead: "active" | "ended") {
 
 // The client's row as the reader sees it: the recorded draft under its legacy name, placed where the fixture's
 // client row sits in time, in the fixture's Episode.
-function clientRow(draft: { readonly type: string; readonly end_reason?: string }, like: Row): Row {
+function clientRow(draft: TelemetryDraft, like: Row): Row {
   const event = legacyEventName({ event: "sdk.telemetry", type: draft.type });
   if (!event) throw new Error(`no registry event for ${draft.type}`);
-  return { ...like, event, end_reason: draft.end_reason };
+  return { ...like, event, end_reason: draft.end_reason, episode_end_reason: draft.episode_end_reason };
 }
 
 describe(symptom, () => {
+  it("keeps Sync's maximum-duration reason through terminal settlement", async () => {
+    const test = scenario("active");
+    try {
+      await joinWithTerminalControl(test.client, test.platform);
+      test.platform.emitSync({ ...test.platform.sync.getSnapshot(), control: { ...control, status: "ended", endReason: "maximum_duration", participants: [] } });
+      await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
+      expect(callEndNotice(test.client.getSnapshot().connection.episodeEndReason).title).toBe("The call reached its time limit");
+      const drafts = test.callEnded();
+      expect(drafts).toEqual([{ type: "call_ended", end_reason: "time_limit", episode_end_reason: "maximum_duration" }]);
+      expect(judged(withRecorded("healthy", drafts[0]))).toMatchObject({ findings: 0, checked: 2, eligible: 2 });
+      const recorded = withRecorded("healthy", { type: "call_ended", episode_end_reason: "maximum_duration", end_reason: "episode_ended" });
+      expect(judged(recorded).findings).toBe(1);
+    } finally {
+      test.client.dispose();
+    }
+  });
+
   it("positive: a stale active status and a lost end notice make the client show connection lost", async () => {
     const test = scenario("active");
     try {

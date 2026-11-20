@@ -2,7 +2,7 @@
 defmodule ChalkSync.Obs.Registry do
   @moduledoc "The observability registry tables. See observability/registry/README.md."
 
-  @schema_ver "72216cc081c8"
+  @schema_ver "616a914b35d1"
 
   @events %{
     "client.call_ended" => %{
@@ -13,6 +13,9 @@ defmodule ChalkSync.Obs.Registry do
       "fields" => %{
         "client_session_id" => %{
           "required" => true
+        },
+        "episode_end_reason" => %{
+          "required" => false
         },
         "end_reason" => %{
           "required" => true,
@@ -95,6 +98,20 @@ defmodule ChalkSync.Obs.Registry do
         "end_reason" => %{
           "required" => true,
           "values" => ["ended_by_participant", "tenant_recovery", "linger_expired", "maximum_duration"]
+        }
+      }
+    },
+    "web.rejoin.release" => %{
+      "kind" => "fact",
+      "dataset" => "lifecycle",
+      "test_only" => false,
+      "decisions" => [],
+      "fields" => %{
+        "client_session_id" => %{
+          "required" => true
+        },
+        "rejoin_release" => %{
+          "required" => true
         }
       }
     }
@@ -244,6 +261,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "build",
       "required" => true,
       "values" => ["local", "test", "nightly", "staging", "production"]
+    },
+    "episode_end_reason" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["ended_by_participant", "tenant_recovery", "maximum_duration"]
     },
     "episode_id" => %{
       "type" => "id",
@@ -400,6 +423,12 @@ defmodule ChalkSync.Obs.Registry do
       "group" => "trail",
       "required" => false,
       "values" => nil
+    },
+    "rejoin_release" => %{
+      "type" => "enum",
+      "group" => "event",
+      "required" => false,
+      "values" => ["released", "release_failed"]
     },
     "release_sha" => %{
       "type" => "string",
