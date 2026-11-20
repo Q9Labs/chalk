@@ -4,19 +4,23 @@ Delete this directory when the last registered OpenTofu stack is cut over and
 legacy Nightly retirement is complete. No runtime declaration or provider imports
 from it. The command router invokes its explicit migration entrypoints only.
 
-## Import a production root
+## Seed a production stack
 
-`seed.ts` is the sole import entrypoint, called through the registry:
+`seed.ts` imports a production stack from its OpenTofu state, called through the
+registry:
 
 ```sh
 pnpm infra seed sfu production /private/sfu-state.json --dry-run
 ```
 
-Dry-run validates mappings and reads cloud resources but never writes the store;
-it is not an offline test. It rejects unexpected, duplicate/deposed resources
-and conflicting destination records. Matching completed writes resume safely.
-A dry-run is not production cutover authorization. Never seed stale retired
-Nightly state. Original state and dated backups remain untouched.
+It writes the resource records and the stack output a deploy would write, so a
+seeded stack deploys like any other. A dry-run reads the cloud but never writes
+the store. The seed rejects unexpected or deposed resources, identity mismatches
+and conflicting destination records or outputs; a rerun over its own completed
+writes is a no-op. Production `sfu`, `sfu-standby` and `recorder` were seeded on
+2026-11-20 ([what it found and how to roll back](digitalocean.md)). Delete
+`seed.ts`, `sfu.ts`, `recorder.ts` and `opentofu.ts` with the OpenTofu roots once
+the rollback window closes.
 
 ## Offline declaration comparison
 
@@ -69,10 +73,9 @@ not run them. First save private state/output snapshots and complete the other
 lane's current no-op proof. All commands below are **future operator writes**.
 No active operation accepts bare `nightly`; only retirement can address it.
 
-Recorder runtime downloads (`archive-cdn/nightly`) is **not** retired. Its
-CloudFront distribution is referenced by the production SSM recorder settings
-(`CHALK_RECORDER_FLEET_ARCHIVE_CDN_*`), so `pnpm infra retire
-recorder-runtime-downloads` refuses.
+Recorder runtime downloads (`archive-cdn/nightly`) is **not** retired. It is a
+production stack that serves both environments' recorder bundles, so `pnpm infra
+retire recorder-runtime-downloads` refuses.
 
 For the two remaining Alchemy stages, preview first, then apply sequentially.
 Every preview prints each resource's type and physical name, so an operator sees
@@ -125,7 +128,7 @@ forbidden. Destroy reads saved state
 without evaluating retired declarations. Cleanup refuses retained/orphaned
 resources and refuses to forget state while any resources remain.
 
-The Sync trial, SFU variants and legacy recorder policy are still OpenTofu-owned. `pnpm infra retire`
+The retired Nightly Sync trial, SFU variants and recorder roots are still OpenTofu-owned. `pnpm infra retire`
 refuses them rather than falsely reporting an empty Alchemy store as cleanup.
 Use their original protected backend and variable files, not a new state root:
 
@@ -186,20 +189,3 @@ AWS_PROFILE=q9labs pnpm infra destroy transcription-dispatcher nightly-123456
 The proof has **not** been run live here. Its successful result replaces the
 obsolete "one persistent Nightly release" production-cutover gate. Production
 is already cut over: it is seeded and Alchemy-owned, and its seed tooling was removed afterwards.
-
-## Recorder runtime downloads plan check
-
-The CloudFront distribution behind recorder runtime downloads serves production,
-so it is never retired. Its state sits under `recorder-runtime-downloads/production`
-and the registry marks it seeded. Physical names do not change: the distribution
-keeps its `chalk:environment = nightly` tag and the bucket stays
-`chalk-nightly-artifacts-<account>`, because renaming either would replace a live
-resource (see the stack's README). Prove the plan at `production` is all no-ops.
-The plan needs the private public-key input (`CHALK_INFRA_INPUTS`, a file with `{public_key_file}`):
-
-```sh
-AWS_PROFILE=q9labs CHALK_INFRA_INPUTS=<private inputs file> pnpm infra plan recorder-runtime-downloads production
-```
-
-Every resource must plan as a no-op. Any update or replacement means the
-declaration differs from the seeded state: stop, and do not apply.

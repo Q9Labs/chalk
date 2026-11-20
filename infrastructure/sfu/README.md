@@ -2,19 +2,26 @@
 
 This root applies the [SFU node module](node) once per environment, staging and production, each with its own state. Real addresses, state settings and certificates stay outside Git, in `~/.config/chalk-sfu/<env>` and 1Password.
 
-## Prepared Alchemy definition
+## Alchemy owns production
 
-`alchemy.run.ts` supports `sfu` and `sfu-standby`, with private JSON inputs and
-Nightly-to-staging environment mapping. It is not deployed. Both Nightly legacy
-states currently name missing resources, so their create plans must not run.
-Production standby passes seed dry-run. Primary refuses a missing TCP media rule
-relative to the current definition; its state and live rules agree. No production
-state was written. See the
-[migration reference](../migration/digitalocean.md) and
-[cutover commands](../migration/cutover-digitalocean.md).
+Alchemy owns the production `sfu` and `sfu-standby` stacks (`alchemy.run.ts`,
+selected with `CHALK_SFU_STACK`). Plan and deploy them with their private inputs
+file, described in the [migration reference](../migration/digitalocean.md):
 
-The original root below remains runnable until a verified cutover. The new
-cloud-init renderer is checked byte-for-byte against its OpenTofu rendering.
+```sh
+AWS_PROFILE=q9labs DIGITALOCEAN_TOKEN="$(doctl auth token)" CHALK_INFRA_INPUTS=$HOME/.config/chalk-sfu/production/sfu-inputs.json pnpm infra plan sfu production
+AWS_PROFILE=q9labs DIGITALOCEAN_TOKEN="$(doctl auth token)" CHALK_INFRA_INPUTS=$HOME/.config/chalk-sfu/production/sfu-inputs.json pnpm infra deploy sfu production
+```
+
+A deploy never replaces or reboots a node: the provider ignores cloud-init and
+image changes after creation and refuses region, monitoring and IPv6 changes and
+unplanned resizes. It changes the cloud firewall in place. The stack output holds
+the node's `name`, `public_ip` and `droplet_id`.
+
+The OpenTofu root below stays as the rollback path until one more clean Alchemy
+production release has run. Don't apply it to production meanwhile: it would
+undo firewall changes Alchemy made. The cloud-init renderer is checked
+byte-for-byte against its OpenTofu rendering.
 
 ## Build or rebuild a node
 
