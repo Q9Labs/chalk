@@ -89,7 +89,7 @@ const user = (p) => ({ kind: p.kind, id: p.id, name: p.name });
  * @param {Omit<Observation, "id" | "query">} rest
  * @returns {Observation}
  */
-const row = (id, rest) => ({ id, ...rest, query: `axiom chalk-logs | where event_id == '${id}'` });
+const row = (id, rest) => ({ id, ...rest, query: `axiom <api-log-dataset> | where event_id == '${id}'` });
 
 /** @param {string} episode @param {string} participant @param {string} id @param {number} from @param {number} to @param {"unmuted" | "muted"} claim */
 const mic = (episode, participant, id, from, to, claim) =>

@@ -28,7 +28,7 @@
           "fact": "admission.decision",
           "from": ["api"],
           "required": true,
-          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
+          "query": "axiom <api-log-dataset> | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
           "doc": "The decision that admits or refuses the attempt."
         }
       ],

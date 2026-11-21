@@ -42,14 +42,14 @@
           "fact": "audio.mic_state",
           "from": ["client"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
           "doc": "When the seat's microphone was unmuted."
         },
         {
           "fact": "audio.ingress",
           "from": ["sfu"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
           "doc": "Whether voiced packets reached the SFU while it was unmuted."
         },
         {

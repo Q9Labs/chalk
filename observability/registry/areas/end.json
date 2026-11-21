@@ -130,14 +130,14 @@
           "fact": "end.episode",
           "from": ["sync"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
           "fact": "end.client_screen",
           "from": ["client"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
           "doc": "The end screen the seat's client chose."
         }
       ],
@@ -154,7 +154,7 @@
           "fact": "end.episode",
           "from": ["sync"],
           "required": true,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],

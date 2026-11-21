@@ -1484,7 +1484,7 @@
           "from": ["api"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
+          "query": "axiom <api-log-dataset> | where client_session_id == '{attempt}' and kind == 'decision' and name in ('invite.resolve', 'admission.decided')",
           "doc": "The decision that admits or refuses the attempt."
         }
       ],
@@ -1525,7 +1525,7 @@
           "from": ["client"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sdk.mic_state' | where _time between (datetime({from}) .. datetime({to}))",
           "doc": "When the seat's microphone was unmuted."
         },
         {
@@ -1533,7 +1533,7 @@
           "from": ["sfu"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and event == 'sfu.media.ingress' and media_kind == 'audio' | where _time between (datetime({from}) .. datetime({to}))",
           "doc": "Whether voiced packets reached the SFU while it was unmuted."
         },
         {
@@ -1591,7 +1591,7 @@
           "from": ["sync"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end Sync saw, with the reason the API stored. A time-limit end has the reason maximum_duration."
         }
       ],
@@ -1616,7 +1616,7 @@
           "from": ["sync"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and name == 'sync.episode.ended'",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and name == 'sync.episode.ended'",
           "doc": "The authoritative end and when it happened."
         },
         {
@@ -1624,7 +1624,7 @@
           "from": ["client"],
           "required": true,
           "independent": 1,
-          "query": "axiom chalk-logs | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
+          "query": "axiom <api-log-dataset> | where episode_id == '{episode}' and participant_id == '{participant}' and (name == 'client.call_ended' or (event == 'sdk.telemetry' and type == 'call_ended'))",
           "doc": "The end screen the seat's client chose."
         }
       ],
