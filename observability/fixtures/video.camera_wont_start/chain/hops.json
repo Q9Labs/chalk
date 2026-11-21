@@ -1,0 +1,16 @@
+{
+  "hops": [
+    {
+      "hop": "a",
+      "test": "sdks/typescript/client/src/space-client/media-controller.fault.test.ts",
+      "command": "pnpm -C sdks/typescript/client exec vitest run src/space-client/media-controller.fault.test.ts",
+      "writes": ["client-frames.wont_start.json", "client-frames.stopped.json", "client-frames.healthy.json"]
+    },
+    {
+      "hop": "b",
+      "test": "scripts/diagnose-call/proof/video-camera-chain.test.mjs",
+      "command": "node --test scripts/diagnose-call/proof/video-camera-chain.test.mjs",
+      "writes": ["rows.wont_start.json", "rows.stopped.json", "rows.healthy.json", "../positive.json", "../healthy.json"]
+    }
+  ]
+}

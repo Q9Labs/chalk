@@ -12,7 +12,7 @@ import { ConnectionPlatformService, makeConnectionPlatformLayer, type Connection
 import { acquireInitialMedia, releaseLocalTracks, type InitialMedia } from "./initial-media";
 import { ConnectionLifecycleFailure, lifecycleFailure, type LifecycleFailureCode } from "./lifecycle-failure";
 import { streamFromTracks } from "./media-devices";
-import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
+import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia, type MediaFailureDiagnostic } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
 import { callEndReason, createOutageClock, telemetryCredential } from "./telemetry";
 import type { TelemetrySink } from "../telemetry/types";
@@ -1118,7 +1118,9 @@ const makeConnectionLifecycleLayerFromServices = (options: Omit<ConnectionOption
           const phase = mediaDiagnosticPhase(snapshot);
           if (phase !== mediaDiagnosticPhase(model.mediaSnapshot)) {
             onTransportDiagnostic({ event: "media_state", phase });
-            telemetry?.obs.fact("video.media_state", { device_state: phase, ...(phase === "failed" ? { media_state_code: "media_capture_failed" as const } : {}) });
+            const step = snapshot.failure?.diagnostic?.media_error_step;
+            const code = step === undefined ? undefined : MEDIA_STATE_CODES[step];
+            if (code !== undefined) telemetry?.obs.fact("video.media_state", { device_state: phase, media_state_code: code });
           }
           model.mediaSnapshot = snapshot;
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
@@ -1412,6 +1414,18 @@ const TRANSPORT_PHASES = new Map<string | undefined, ConnectionConnectionPhase>(
 function transportPhase(phase: string | undefined): ConnectionConnectionPhase {
   return TRANSPORT_PHASES.get(phase) ?? "idle";
 }
+// The media_error_step where the failure was raised maps to the video.media_state failure code; a
+// failure with no diagnostic emits nothing, since the code is the claim.
+const MEDIA_STATE_CODES: Record<MediaFailureDiagnostic["media_error_step"], "media_capture_failed" | "media_decode_failed" | "connection_dropped"> = {
+  local_capture: "media_capture_failed",
+  peer_connection: "connection_dropped",
+  access_refresh: "connection_dropped",
+  sfu_tracks: "connection_dropped",
+  sfu_close_tracks: "connection_dropped",
+  sfu_renegotiate: "connection_dropped",
+  sfu_publications: "connection_dropped",
+  sfu_subscriptions: "connection_dropped",
+};
 function mediaDiagnosticPhase(snapshot: ConnectionMediaSnapshot | null) {
   return snapshot?.connection.peerConnectionState ?? snapshot?.connection.phase;
 }

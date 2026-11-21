@@ -47,17 +47,25 @@ export function decide({ readings }) {
 
   if (camera.kind !== "present") return { status: "unknown", reason: "the camera machine is not witnessed for this seat" };
 
-  const transitions = [...camera.observations].sort(byTime);
-  const everLive = transitions.some((o) => o.claim === "live" && o.value.camera_bound === true);
+  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim: camera_bound).
+  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(byTime);
+  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(byTime);
+  const boundAt = (ms) => {
+    const b = bounds.filter((o) => o.window.from_ms <= ms).at(-1);
+    return b !== undefined && b.claim === "true";
+  };
+  const last = transitions[transitions.length - 1];
+  /** Was the camera live with the bound bit true in the stretch that ended at `ms`? */
+  const liveBoundAt = (i) => transitions[i].claim === "live" && boundAt(i + 1 < transitions.length ? transitions[i + 1].window.from_ms : last.window.to_ms);
+  const everLive = transitions.some((o, i) => liveBoundAt(i));
   if (!everLive) return { status: "pass" };
 
-  // The stop: the first transition that leaves live while bound, and stays out of live+bound.
+  // The stop: the first transition that leaves a live+bound stretch, and stays out of live+bound.
   let stop = null;
-  for (const o of transitions) {
-    if (o.claim === "ended" || o.claim === "idle" || (o.claim === "live" && o.value.camera_bound !== true)) {
-      const back = transitions.slice(transitions.indexOf(o) + 1).some((n) => n.claim === "live" && n.value.camera_bound === true);
-      if (!back) { stop = o; break; }
-    }
+  for (const [i, o] of transitions.entries()) {
+    if (i === 0 || transitions[i - 1].claim !== "live" || !boundAt(o.window.from_ms)) continue;
+    const back = transitions.slice(i + 1).some((n, j) => liveBoundAt(i + 1 + j));
+    if (!back) { stop = o; break; }
   }
   if (!stop) return { status: "pass" };
 
@@ -72,15 +80,18 @@ export function decide({ readings }) {
     const rec = rows.find((o) => o.claim === "reconnecting" && o.window.from_ms <= at && o.value.trigger !== "receive_stalled");
     if (rec) {
       const recovered = rows.find((o) => o.claim === "live" && o.window.from_ms >= rec.window.from_ms);
-      const back = transitions.find((o) => o.claim === "live" && o.value.camera_bound === true && o.window.from_ms >= rec.window.from_ms);
+      const back = transitions.find((o, i) => liveBoundAt(i) && o.window.from_ms >= rec.window.from_ms);
       if (recovered && back && back.window.from_ms - recovered.window.from_ms <= RECONNECT_GRACE_MS) return { status: "pass" };
     }
   }
 
   const ended = episodeEnded.kind === "present" && episodeEnded.observations.some((o) => Math.abs(o.window.from_ms - at) <= CALL_ENDED_MS);
   const intentOff = intent.kind === "present" && intent.observations.some((o) => o.claim === "false" && o.value.source === "camera" && o.window.from_ms <= at);
+  const intentOn = intent.kind === "present" && intent.observations.some((o) => o.claim === "true" && o.value.source === "camera" && o.window.from_ms <= at);
   const trigger = String(stop.value.trigger ?? "");
-  const deliberate = DELIBERATE.has(trigger) && (intentOff || trigger !== "cancelled" || intentOff);
+  // A deliberate trigger names the product path that ended the camera; it is a fault only when the
+  // participant's intent said the camera should still be on.
+  const deliberate = DELIBERATE.has(trigger);
 
   if (ended) {
     return {
@@ -100,7 +111,7 @@ export function decide({ readings }) {
       falsify: { absence: null, attribution: "the Episode continuing while the camera stayed down" },
     };
   }
-  if (deliberate && intentOff) return { status: "pass" };
+  if (deliberate && !intentOn) return { status: "pass" };
 
   return {
     status: "finding",
@@ -109,13 +120,13 @@ export function decide({ readings }) {
     hop: "client_capture",
     module: "sdk.media",
     reason: null,
-    upstream: "none",
+    upstream: null,
     observed: `a live+bound camera ended (trigger ${trigger || "none"}) and stayed down`,
     facts: [
       { text: `video.camera ${stop.value.from_state} -> ${stop.claim} (trigger ${trigger || "none"})`, evidence: [stop.id], window: stop.window, absent: null },
       ...(intentOff ? [{ text: "the participant's camera intent was off", evidence: intent.observations.filter((o) => o.claim === "false").map((o) => o.id), window: stop.window, absent: null }] : []),
     ],
-    hypothesis: { text: "the camera track ended without the participant asking", falsified_by: "a released/unbound/cleared trigger, a sync intent off, or an Episode end near the stop" },
+    hypothesis: null,
     falsify: { absence: null, attribution: "a trigger the participant caused, or a live+bound transition after the stop" },
   };
 }

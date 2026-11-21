@@ -2496,6 +2496,15 @@
           "required": false,
           "query": "video.camera_track_muted rows for {participant}",
           "doc": "A muted camera."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": [
+            "sync"
+          ],
+          "required": false,
+          "doc": "The Episode's durable end, for the call_ended expected clause.",
+          "query": "sync.episode.ended rows for the Episode"
         }
       ]
     },
@@ -2545,6 +2554,15 @@
           "required": false,
           "query": "sync.media.intent rows for {participant}",
           "doc": "Whether the participant asked it off."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": [
+            "sync"
+          ],
+          "required": false,
+          "doc": "The Episode's durable end, for the call_ended expected clause.",
+          "query": "sync.episode.ended rows for the Episode"
         }
       ]
     },
@@ -2620,6 +2638,15 @@
           "required": false,
           "query": "sfu.source.lease rows for {participant}",
           "doc": "A lease_lost excluding the finding."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": [
+            "sync"
+          ],
+          "required": false,
+          "doc": "The Episode's durable end, for the call_ended expected clause.",
+          "query": "sync.episode.ended rows for the Episode"
         }
       ]
     },

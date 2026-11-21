@@ -50,7 +50,13 @@ export function decide({ readings }) {
     return { status: "unknown", reason: "no capture op or camera transition is witnessed for this seat" };
   }
 
-  const transitions = [...camera.observations].sort(byTime);
+  // video.camera_state carries machine transitions (claim: to_state) and bound-bit flips (claim: camera_bound).
+  const transitions = camera.observations.filter((o) => o.claim !== "true" && o.claim !== "false").sort(byTime);
+  const bounds = camera.observations.filter((o) => o.claim === "true" || o.claim === "false").sort(byTime);
+  const boundAt = (ms) => {
+    const b = bounds.filter((o) => o.window.from_ms <= ms).at(-1);
+    return b !== undefined && b.claim === "true";
+  };
   const ops = [...capture.observations].sort(byTime);
   const last = transitions[transitions.length - 1];
   const at = last.window.from_ms;
@@ -61,7 +67,8 @@ export function decide({ readings }) {
     return { status: "unknown", reason: `the seat is ${conn.claim}` };
   }
 
-  const liveBound = transitions.some((o) => o.claim === "live" && o.value.camera_bound === true);
+  // A live stretch was bound when the bound bit read true at any point before it left live.
+  const liveBound = transitions.some((o, i) => o.claim === "live" && boundAt(i + 1 < transitions.length ? transitions[i + 1].window.from_ms : at));
   if (liveBound) return { status: "pass" };
   if (!transitions.some((o) => o.claim === "capturing")) return { status: "unknown", reason: "the camera never entered capturing" };
 
@@ -86,13 +93,13 @@ export function decide({ readings }) {
       hop: "client_capture",
       module: "sdk.media",
       reason: "video.permission_denied",
-      upstream: "none",
+      upstream: null,
       observed: `the capture op ended expected(video.permission_denied); the person refused the prompt`,
       facts: [
         { text: `the capture op ended ${refusal.claim}(${refusal.value.reason_code})`, evidence: [refusal.id], window: refusal.window, absent: null },
         ...(refusal.value.permission_after ? [{ text: `permission_after=${refusal.value.permission_after}`, evidence: [refusal.id], window: refusal.window, absent: null }] : []),
       ],
-      hypothesis: { text: "the Participant refused the camera prompt", falsified_by: "a capture op reaching ok after the refusal" },
+      hypothesis: null,
       falsify: { absence: null, attribution: "a later capture reaching live, or permission probes showing a system block" },
     };
   }
@@ -131,14 +138,14 @@ export function decide({ readings }) {
     hop: "client_capture",
     module,
     reason: null,
-    upstream: "none",
+    upstream: null,
     observed: `the camera never reached live+bound: ${reasons.join("; ")}`,
     facts: [
       ...transitions.slice(-3).map((o) => ({ text: `video.camera ${o.value.from_state} -> ${o.claim} (trigger ${o.value.trigger})`, evidence: [o.id], window: o.window, absent: null })),
       ...(worst ? [{ text: `capture op ${worst.claim}(${worst.value.reason_code ?? "unclassified"})`, evidence: [worst.id], window: worst.window, absent: null }] : []),
       ...(deviceRow ? [{ text: "device_failed(camera)", evidence: [deviceRow.id], window: deviceRow.window, absent: null }] : []),
     ],
-    hypothesis: { text: "the capture path failed before a live frame could be bound", falsified_by: "a video.camera transition to live with bound=true after the stretch" },
+    hypothesis: null,
     falsify: { absence: null, attribution: "a live+bound transition, or an expected() terminal the refusal probe witnessed" },
   };
 }

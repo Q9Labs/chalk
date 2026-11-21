@@ -1,5 +1,5 @@
 {
-  "schema_ver": "e38da80c5410",
+  "schema_ver": "873f7f8dc427",
   "kinds": ["op", "transition", "decision", "surface", "fact"],
   "outcomes": ["ok", "expected", "error"],
   "surface_states": ["shown", "dismissed"],
@@ -4414,6 +4414,14 @@
           "independent": 1,
           "query": "sync.media.intent rows for {participant}",
           "doc": "Whether the participant asked it off."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "independent": 1,
+          "query": "sync.episode.ended rows for the Episode",
+          "doc": "The Episode's durable end, for the call_ended expected clause."
         }
       ],
       "rule": "observability/rules/video.camera_stopped.mjs",
@@ -4479,6 +4487,14 @@
           "independent": 1,
           "query": "video.camera_track_muted rows for {participant}",
           "doc": "A muted camera."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "independent": 1,
+          "query": "sync.episode.ended rows for the Episode",
+          "doc": "The Episode's durable end, for the call_ended expected clause."
         }
       ],
       "rule": "observability/rules/video.camera_wont_start.mjs",
@@ -4722,6 +4738,14 @@
           "independent": 1,
           "query": "sfu.source.lease rows for {participant}",
           "doc": "A lease_lost excluding the finding."
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "independent": 1,
+          "query": "sync.episode.ended rows for the Episode",
+          "doc": "The Episode's durable end, for the call_ended expected clause."
         }
       ],
       "rule": "observability/rules/video.not_published.mjs",

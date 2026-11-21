@@ -1,6 +1,6 @@
 {
   "doc": "Generated: the chain each catalogued symptom must have. scripts/gates/obs-coverage.mjs checks that every link exists.",
-  "schema_ver": "e38da80c5410",
+  "schema_ver": "873f7f8dc427",
   "symptoms": [
     {
       "code": "access.connection_lost",
@@ -364,6 +364,18 @@
               "fields": ["enabled", "source", "operation_id"]
             }
           ]
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "events": [
+            {
+              "event": "sync.episode.ended",
+              "source": "sync",
+              "fields": ["episode_id", "end_reason", "est_server_ms"]
+            }
+          ]
         }
       ],
       "events": [
@@ -414,6 +426,16 @@
             {
               "path": "apps/sync/lib/chalk_sync/transport/socket/live_requests.ex",
               "literal": "sync.media.intent"
+            }
+          ]
+        },
+        {
+          "name": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+              "literal": "\"sync.episode.ended\""
             }
           ]
         }
@@ -509,6 +531,18 @@
               "fields": ["muted"]
             }
           ]
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "events": [
+            {
+              "event": "sync.episode.ended",
+              "source": "sync",
+              "fields": ["episode_id", "end_reason", "est_server_ms"]
+            }
+          ]
         }
       ],
       "events": [
@@ -579,6 +613,16 @@
             {
               "path": "sdks/typescript/client/src/space-client/media-controller.ts",
               "literal": "video.camera_track_muted"
+            }
+          ]
+        },
+        {
+          "name": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+              "literal": "\"sync.episode.ended\""
             }
           ]
         }
@@ -1341,6 +1385,18 @@
               "fields": ["source", "revision"]
             }
           ]
+        },
+        {
+          "fact": "video.episode_ended",
+          "from": ["sync"],
+          "required": false,
+          "events": [
+            {
+              "event": "sync.episode.ended",
+              "source": "sync",
+              "fields": ["episode_id", "end_reason", "est_server_ms"]
+            }
+          ]
         }
       ],
       "events": [
@@ -1453,6 +1509,16 @@
             {
               "path": "features/media/sfu/internal/media/events.go",
               "literal": "sfu.source.lease_opened"
+            }
+          ]
+        },
+        {
+          "name": "sync.episode.ended",
+          "fields": ["episode_id", "end_reason"],
+          "emit_sites": [
+            {
+              "path": "apps/sync/lib/chalk_sync/stateholder/postgres/webhook_observation.ex",
+              "literal": "\"sync.episode.ended\""
             }
           ]
         }
