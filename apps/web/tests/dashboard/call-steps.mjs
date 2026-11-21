@@ -2,6 +2,5 @@
 export async function startAndJoinCall(page, origin) {
   await page.goto(`${origin}/dashboard`);
   await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
-  await page.getByRole("button", { name: "Join call", exact: true }).click();
   await page.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
 }
