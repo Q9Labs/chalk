@@ -86,6 +86,8 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     if (/retry_exhausted|retryable_failure|screen/i.test(text)) socketFrames.push({ at: new Date().toISOString(), frame: text.slice(0, 400) });
   }));
 
+  // While sharing, the stage also shows a "Stop sharing" pill; the toolbar toggle is the one with the aria-label.
+  const toolbarStop = sharer.page.getByLabel("Stop sharing", { exact: true });
   const screenLabel = "Screen share tile for Sharer";
   const state = async (who) => who.page.evaluate(shareTile, "Sharer");
   const hasLiveShare = async (who) => {
@@ -108,7 +110,7 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
     note("Sharer presses Share screen");
     await control(sharer, "Share screen");
     await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
-    await sharer.page.getByRole("button", { name: "Stop sharing", exact: true }).waitFor({ timeout: 30_000 });
+    await toolbarStop.waitFor({ timeout: 30_000 });
     note("Sharer shows Stop sharing");
   };
   const everyoneSeesShare = async (label) => {
@@ -123,8 +125,9 @@ await runJourney(`screen-share-${sharerEngine}${fault ? "-fault" : ""}`, async (
   const stopShare = async (label) => {
     const started = Date.now();
     note("Sharer presses Stop sharing");
-    await control(sharer, "Stop sharing");
-    const stopped = sharer.page.getByRole("button", { name: "Share screen", exact: true });
+    await sharer.page.getByRole("region", { name: "Space stage", exact: true }).hover();
+    await toolbarStop.click();
+    const stopped = sharer.page.getByLabel("Share screen", { exact: true });
     try {
       await stopped.waitFor({ timeout: stopMs });
     } catch (error) {
