@@ -2476,6 +2476,10 @@
     display: none;
   }
 
+  .site .dash .fcol {
+    flex: none;
+  }
+
   .site .dash .secth.hhead {
     flex-direction: column;
     align-items: stretch;
@@ -2995,17 +2999,15 @@
   color: var(--chalk-muted-text);
 }
 
-/* Home's loaded list, its empty state and its failure fade in where the placeholders were, instead of cutting in. */
+/* Home's loaded list and its empty state fade in where the placeholders were, instead of cutting in. */
 .site .dash .list.calls,
-.site .dash .list > .empty,
-.site .dash .hfail {
+.site .dash .list > .empty {
   animation: dash-fade 180ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .site .dash .list.calls,
-  .site .dash .list > .empty,
-  .site .dash .hfail {
+  .site .dash .list > .empty {
     animation: none;
   }
 }
