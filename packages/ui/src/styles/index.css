@@ -866,7 +866,7 @@
   .chalk-toast > [data-part="pill-button"],
   .chalk-toast > [data-part="toast-actions"] > * {
     flex: 1;
-    height: 40px;
+    height: 44px;
   }
 }
 /* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon and a thin border tint only. */
