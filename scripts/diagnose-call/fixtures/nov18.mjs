@@ -246,7 +246,7 @@ export function nov18() {
     evidence: { observations: [], watermarks: [{ source: "api", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["admission.decision"], build: "api 2026.11.18" }] },
   };
   const job = {
-    declaration: { kind: /** @type {const} */ ("job"), id: IDS.job, tenant: TH, episode: ep, job_kind: "recording", window: { from_ms: end, to_ms: null } },
+    declaration: { kind: /** @type {const} */ ("job"), id: IDS.job, tenant: TH, episode: ep, job_kind: "render", window: { from_ms: end, to_ms: null } },
     evidence: { observations: [], watermarks: [{ source: "db", subject: "*", complete_to_ms: ASOF, evidence_gaps: [], emits: ["recording.job_state"], build: "postgres" }] },
   };
 

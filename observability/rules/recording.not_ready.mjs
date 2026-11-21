@@ -21,7 +21,7 @@ const RECORDING_READY_MS = 30 * 60_000;
 export const expected = `a recording job reaches a terminal state within ${RECORDING_READY_MS / 60_000} min, and the state is succeeded`;
 
 /** @param {Declaration} declaration @param {Seat | null} seat */
-export const applies = (declaration) => declaration.kind === "job" && declaration.job_kind === "recording";
+export const applies = (declaration, seat) => seat === null && declaration.kind === "job" && declaration.job_kind === "render";
 
 /**
  * @param {DecideInput} input
